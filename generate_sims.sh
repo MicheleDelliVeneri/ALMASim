@@ -4,6 +4,7 @@ input_dir="$PWD/"$2
 output_dir="$PWD/"$3
 main_path="$PWD"
 mkdir -p "sim_$i"
+mkdir -p $output_dir
 cp alma.cycle9.3.cfg sim_$i/
 cd "sim_$i"
 ls -l

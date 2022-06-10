@@ -1,4 +1,4 @@
-# ALMASim
+# PyALMASim
 
 A python package to make realistic simulations of ALMA observations of galaxies and point sources.
 
@@ -43,8 +43,10 @@ In order to generate the simulations, we are going to run the <b>alma_simulator.
 First, after running the generate_models.py script, you can see that script not only populated the models directory with the sky models .fits files, but also created the <b>sim_parameters.txt</b> text file.
 This file can be used in combination with the <b>generate_sims.sh</b> bash script to generate the simulations in parallel using all available cores. To do so type the following:
 
-<pre><code>parallel  --eta --colsep ' ' -a sims_parameters.txt  sh generate_sims.sh </code></pre>
+<pre><code>parallel  --jobs n --joblog log.txt  --eta --colsep ' ' -a sims_parameters.txt  sh generate_sims.sh
+ </code></pre>
 
+where n should be the number of cores on your machine divided by 4.
 The script assumes that you have used all the default parameter name outlined in this README and that the conda environment is called conda6.5. If this is not the case, modity the generate_sims.sh script accordingly.
 9 Now that the simulations are concluded, we neet to update the parameters in the <b>params.csv</b> file with the fluxes and continuum values. To do so run the following command:
 

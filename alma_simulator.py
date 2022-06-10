@@ -59,7 +59,5 @@ args = parser.parse_args()
 input_dir = args.model_dir
 output_dir = args.output_dir
 i = args.i
-if not os.path.exists(output_dir):
-    os.mkdir(output_dir)
 
 generate_sims(i, input_dir, output_dir)
