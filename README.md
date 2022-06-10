@@ -17,7 +17,7 @@ Instructions:
 3 Move to the folder where you want to store the results
 4 Clone the GitHub repository:
 
-<pre><code>git clone https://github.com/lukasztychoniec/ALMASim.git</pre></code>
+<pre><code>git clone https://github.com/MicheleDelliVeneri/PyALMASim.git </code></pre>
 
 5 Make sure that the required libraries are installed, we are supposing to be on a centos system:
 
