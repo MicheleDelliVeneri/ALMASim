@@ -163,6 +163,9 @@ n = args.n
 if not os.path.exists(data_dir):
     os.mkdir(data_dir)
 
+if not os.path.exists(output_dir):
+    os.mkdir(output_dir)
+
 n_cores = multiprocessing.cpu_count() // 4
 
 if __name__ == '__main__':
@@ -179,9 +182,9 @@ if __name__ == '__main__':
     df = df.sort_values(by="ID")
     df.to_csv(os.path.join(data_dir, csv_name), index=False)
     print('Creating textfile for simulations')
-    df = open('sims_parameters.txt', 'w')
+    df = open('sims_param.csv', 'w')
     for i in range(n):
-        df.write(str(i) + ' ' + data_dir + ' ' + output_dir)
+        df.write(str(i) + ',' + data_dir + ',' + output_dir)
         df.write('\n')
     df.close()
     print(f'Execution took {time.time() - start} seconds')
