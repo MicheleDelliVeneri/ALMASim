@@ -41,13 +41,13 @@ modify the create_models.sh script with the number of cpus-per-task you want to 
 where the first parameter <b>models</b> is the name of the directory in which to store the <b>sky models</b> cubes, the second <b>sims</b> is the name of the directory in which to store the simulations, the third <b>params.csv</b> is the name of the .csv file which holds the sources parameters and the fourth <b>n</b> is the number of cubes to generate
 8 Generate the ALMA simulations:
 In order to generate the simulations, we are going to run the <b>run_simulations.sh</b> script in parallel with sbatch.
-First, after running the create_models script, you shoudl first see the models directory0 populated with sky models .fits files, but also a <b>sim_param.csv</b> file in the root folder.
-This file is used by the <b>run_simulations.sh</b> bash script to generate the simulations in parallel through sbatch. To do so first modify the --aray field with the number of sky-models you have previously generated and then run it with the following command:
+First, after running the create_models script, you should first see the models directory populated with sky models .fits files, but also a <b>sim_param.csv</b> file in the root folder.
+This file is used by the <b>run_simulations.sh</b> bash script to generate the simulations in parallel through sbatch. To do so first modify the --aray field with the number of parallel tasks you want to use and modify NUMLINES so that NUMLINES * array equals the number of .fits file in the models folder, and then run it with the following command:
 
 <pre><code>sbatch run_simulations.sh
  </code></pre>
 
-The script assumes that your conda environment is called conda6.5, otherwise modify its name in the script.
+The script assumes that your conda environment is called conda6.5, otherwise modify its name in the script at line 9.
 9 Now that the simulations are concluded, we neet to update the parameters in the <b>params.csv</b> file with the fluxes and continuum values. To do so run the following command:
 
 <pre><code>python generate_parameters.py models sims </code></pre>
