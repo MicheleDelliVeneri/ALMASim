@@ -1,7 +1,7 @@
 #! /bin/bash
 #
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=48
 MAIN_PATH="$PWD"
 source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate casa6.5
