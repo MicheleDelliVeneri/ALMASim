@@ -47,9 +47,14 @@ This file is used by the <b>run_simulations.sh</b> bash script to generate the s
 <pre><code>sbatch run_simulations.sh
  </code></pre>
 
-The script assumes that your conda environment is called conda6.5, otherwise modify its name in the script at line 9.
-9 Now that the simulations are concluded, we neet to update the parameters in the <b>params.csv</b> file with the fluxes and continuum values. To do so run the following command:
+The script assumes that your conda environment is called conda6.5, otherwise, modify its name in the script at line 9.
+9 Now that the simulations are concluded, we need to update the parameters in the <b>params.csv</b> file with the fluxes and continuum values. To do so, run the following command:
 
 <pre><code>python generate_parameters.py models sims </code></pre>
+
+or if you want to run it via slurm: 
+<pre><code>srun -n 1 -c 32 python generate_params.py models sims params.csv</code></pre>
+
+
 
 10 You are all ready to train and test your models.

@@ -1,5 +1,9 @@
 import os
 import argparse
+import tempfile
+temp_dir = tempfile.TemporaryDirectory()
+os.environ['MPLCONFIGDIR'] = temp_dir.name
+
 from casatasks import simobserve, tclean, exportfits
 
 def generate_sims(i, input_dir, output_dir):
