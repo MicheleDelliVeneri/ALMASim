@@ -10,7 +10,11 @@ Babel==2.10.1
 backcall==0.2.0
 beautifulsoup4==4.11.1
 bleach==5.0.0
+<<<<<<< HEAD
 casadata==2022.9.5
+=======
+casadata
+>>>>>>> b4f6d2cc1ca6cc02fe06441b2a20937dc4bd0e6b
 casaplotms==1.6.2
 casaplotserver==1.2.1
 casashell==6.5.0.15
