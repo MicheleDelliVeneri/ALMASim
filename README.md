@@ -1,6 +1,12 @@
 # ALMASim
 
-A python package to make realistic simulations of ALMA observations of galaxies and point sources.
+A python package to make realistic simulations of ALMA observations of galaxies and point sources. For now, only simple point-like sources are generated, but soon more complex Galaxy models will be added. The project, at its current status, is able to:
+- Create Sky Model Cubes of randomly scattered point-like sources;
+- Generate corresponding calibrated Dirty Cubes;
+- Generate tCLEAN cleaned counterparts to the Dirty Cubes;
+- Generate a .csv file containing all source positions and morphological properties.
+
+The main scope of this repository is to let scientistis generate their own simple ALMA simulions on which to train and test their models.
 
 ## Generating ALMA simulations for the ML imaging purposes
 
@@ -57,4 +63,16 @@ or if you want to run it via slurm:
 where 0. is an examplary value for the noise rms. In case you want to add additional white noise to the simulations, increase this value. 
 
 
-10 You are all ready to train and test your models.
+10 create also the tCLEAN counterparts by running
+<pre><code>sbatch run_tclean.sh
+ </code></pre>
+
+ you are set, enjoy your simulations!
+
+ ## Work in progress
+ - Introduce single target observations;
+ - Introduce different array configurations;
+ - Store the dirty beam;
+ - Introduce Galaxy dynamic and complex spectral profiles;
+ - Introduce multi-line emissions / absorptions;
+ - Introduce source classes;

@@ -1,4 +1,4 @@
-almatasks==1.5.2
+almatasks
 anyio==3.6.1
 argon2-cffi==21.3.0
 argon2-cffi-bindings==21.2.0
@@ -10,17 +10,13 @@ Babel==2.10.1
 backcall==0.2.0
 beautifulsoup4==4.11.1
 bleach==5.0.0
-<<<<<<< HEAD
-casadata==2022.9.5
-=======
 casadata
->>>>>>> b4f6d2cc1ca6cc02fe06441b2a20937dc4bd0e6b
 casaplotms==1.6.2
 casaplotserver==1.2.1
-casashell==6.5.0.15
-casatasks==6.5.0.15
-casatestutils==6.5.0.15
-casatools==6.5.0.15
+casashell==6.5.2.26
+casatasks==6.5.2.26
+casatestutils==6.5.2.26
+casatools==6.5.2.26
 casaviewer==1.5.2
 certifi==2022.5.18.1
 cffi==1.15.0
@@ -94,7 +90,7 @@ psutil==5.9.1
 ptyprocess==0.7.0
 pure-eval==0.2.2
 py==1.11.0
-pycodestyle==2.8.0
+pycodestyle==2.8.0s
 pycparser==2.21
 pyerfa==2.0.0.1
 Pygments==2.12.0

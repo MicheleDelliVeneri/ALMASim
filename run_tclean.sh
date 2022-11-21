@@ -18,7 +18,7 @@ echo "STOP=$STOP"
 
 for (( N = $START; N <= $STOP; N++))
 do
-    LINE=$(sed -n "$N"p tclean_param.csv)
+    LINE=$(sed -n "$N"p sims_param.csv)
     IFS=',' read INDEX INPUT_DIR OUTPUT_DIR <<< "$LINE"
     #INPUT_DIR="$MAIN_PATH/$INPUT_DIR"
     #OUTPUT_DIR="$MAIN_PATH/$OUTPUT_DIR"
