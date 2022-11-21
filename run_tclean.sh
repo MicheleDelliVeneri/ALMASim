@@ -26,7 +26,7 @@ do
     cp alma.cycle9.3.cfg $MAIN_PATH/sim_$INDEX
     cd "$MAIN_PATH/sim_$INDEX"
     echo $CONDA_PREFIX
-    conda run -n casa6.5 python $MAIN_PATH/run_tclean.py $INDEX $INPUT_DIR $OUTPUT_DIR
+    conda run -n casa6.5 python $MAIN_PATH/clean_simulator.py $INDEX $INPUT_DIR $OUTPUT_DIR
     cd ..
     rm -r "$MAIN_PATH/sim_$INDEX"
     conda deactivate
