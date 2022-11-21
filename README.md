@@ -1,4 +1,5 @@
 # ALMASim
+![](images/Icon.png)
 
 A python package to make realistic simulations of ALMA observations of galaxies and point sources. For now, only simple point-like sources are generated, but soon more complex Galaxy models will be added. The project, at its current status, is able to:
 - Create Sky Model Cubes of randomly scattered point-like sources;
