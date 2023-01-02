@@ -1,5 +1,5 @@
 # ALMASim
-[![arXiv](https://img.shields.io/badge/arXiv-2211.11462-00ff00.svg)](https://arxiv.org/abs/2211.11462)
+[![arXiv](https://img.shields.io/badge/arXiv-2211.11462-00ff00.svg)](https://arxiv.org/abs/2211.11462) \\
 ![](images/Icon.png)
 
 A python package to make realistic simulations of ALMA observations of galaxies and point sources. 
