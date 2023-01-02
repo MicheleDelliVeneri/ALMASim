@@ -1,7 +1,9 @@
 # ALMASim
+[![arXiv](https://img.shields.io/badge/arXiv-2211.11462.svg)](https://arxiv.org/abs/2211.11462)
 ![](images/Icon.png)
 
-A python package to make realistic simulations of ALMA observations of galaxies and point sources. For now, only simple point-like sources are generated, but soon more complex Galaxy models will be added. The project, at its current status, is able to:
+A python package to make realistic simulations of ALMA observations of galaxies and point sources. 
+For now, only simple point-like sources are generated, but soon more complex Galaxy models will be added. The project, at its current status, is able to:
 - Create Sky Model Cubes of randomly scattered point-like sources;
 - Generate corresponding calibrated Dirty Cubes;
 - Generate tCLEAN cleaned counterparts to the Dirty Cubes;
@@ -71,7 +73,6 @@ where 0. is an examplary value for the noise rms. In case you want to add additi
  you are set, enjoy your simulations!
 
  ## Work in progress
- - Introduce single target observations;
  - Introduce different array configurations;
  - Store the dirty beam;
  - Introduce Galaxy dynamic and complex spectral profiles;
