@@ -21,9 +21,9 @@ Instructions:
 <pre><code>conda create --name casa6.5 python=3.8 </code></pre>
 
 2 Move to the folder where you want to store the results
-3 Clone the GitHub repository:
 
-<pre><code>git clone https://github.com/MicheleDelliVeneri/PyALMASim.git </code></pre>
+3 Clone the GitHub repository:
+<pre><code>git clone https://github.com/MicheleDelliVeneri/ALMASim.git</code></pre>
 
 4 Make sure that the required libraries are installed, we are supposing to be on a centos system:
 
@@ -46,23 +46,25 @@ modify the create_models.sh script with the number of cpus-per-task you want to 
 where the first parameter <b>models</b> is the name of the directory in which to store the <b>sky models</b> cubes, the second <b>sims</b> is the name of the directory in which to store the simulations, the third <b>params.csv</b> is the name of the .csv file which holds the sources parameters and the fourth <b>n</b> is the number of cubes to generate
 8 Generate the ALMA simulations, and configuration_file is teh path of one of the .cfg files stored in the antenna_config folder. For example this creates 10,000 sky model cubes in the models folder using the 9.3.1 configuration file. 
 
-<pre><code>sbatch create_models.sh models sims params.csv 10000 antenna_config/alma.cycle9.3.1.cfg
+<pre><code>sbatch create_models.sh models sims params.csv 10000 antenna_config/alma.cycle9.3.1.cfg</code></pre>
 
 7 Generate the dirty cubes: 
 In order to generate the simulations, we are going to run the <b>run_simulations.sh</b> script in parallel with sbatch.
-To do so first modify the --aray field with the number of parallel tasks you want to use and modify NUMLINES so that NUMLINES * array equals the number of .fits file in the models folder, and then run it with the following command:
+To do so first modify the --array field with the number of parallel tasks you want to use and modify NUMLINES so that NUMLINES * array equals the number of .fits file in the models folder, and then run it with the following command:
 
 <pre><code>sbatch run_simulations.sh
  </code></pre>
 
 8 Generate tclean cleaned cubes:
+also modify the --array field to be consistent with previous value
 <pre><code>sbatch run_tclean.sh
  </code></pre>
 
 
 The script assumes that your conda environment is called conda6.5, otherwise, modify its name in the script at line 9.
-9 Now that the simulations are concluded, we need to update the parameters in the <b>params.csv</b> file with the fluxes and continuum values. To do so, run the following command:
 
+9 Update the parameters in the <b>params.csv</b> file with the fluxes and continuum values:
+To do so, run the following command:
 <pre><code>python generate_gaussian_parameters.py models sims params.csv 0.</code></pre>
 
 or if you want to run it via slurm: 
