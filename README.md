@@ -16,10 +16,11 @@ The main scope of this repository is to let scientistis generate their own simpl
 
 Instructions:
 
-1 Create a conda environment:
+1 Create a conda environment and activate it:
 
 <pre><code>conda create --name casa6.5 python=3.8 </code></pre>
 
+<pre><code>conda activate casa6.5 </code></pre>
 
 
 2 Clone the GitHub repository:
