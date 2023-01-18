@@ -43,6 +43,10 @@ Instructions:
 
 <pre><code>pip install -r requirements.txt</code></pre>
 
+activate the base casa environment
+
+<pre><code> casa activate base </code></pre>
+
 6 Generate the sky model cubes:
 modify the create_models.sh script with the number of cpus-per-task you want to use, and the number of tasks you want to run in parallel.
 <pre><code>sbatch create_models.sh inputs_dir outputs_dir params.csv n configuration_file</code></pre>
@@ -63,22 +67,36 @@ To do so first modify the --array field with the number of parallel tasks you wa
 also modify the --array field to be consistent with previous value
 <pre><code>sbatch run_tclean.sh
  </code></pre>
-
+ this function will take the dirty cubes generated and run them through tclean, it will also write in each sim_i folder a .txt called running_params.txt containin the time of execution. 
 
 The script assumes that your conda environment is called conda6.5, otherwise, modify its name in the script at line 9.
 
 9 Update the parameters in the <b>params.csv</b> file with the fluxes and continuum values:
 To do so, run the following command:
-<pre><code>python generate_gaussian_parameters.py models sims params.csv 0.</code></pre>
+<pre><code>conda activate casa6.5</code></pre>
+<pre><code>python generate_gaussian_params.py models sims params.csv 0.</code></pre>
 
-or if you want to run it via slurm: 
+or if you want to run it via slurm: ß
+<pre><code>conda activate casa6.5</code></pre>
 <pre><code>srun -n 1 -c 32 python generate_params.py models sims params.csv 0.15</code></pre>
 where 0. is an examplary value for the noise rms. In case you want to add additional white noise to the simulations, increase this value. 
 
- you are set, enjoy your simulations!
+10 If you plan to use a Machine Learning model and you need to split the data into train, validation and test sets, you can use the split_data.py script. 
+<pre><code>python split_data.py data_folder tclean_flag train_size</code></pre>
+where <b>data_folder</b> is the path to the directory containing the output_dir containing the fits (for example sims), <b>tclean_flag</b> is a boolean flag indicating if tclean cleaned fits were also created, and train_size is the training size as a float between 0 and 1. Validation is created from the 25% of the remaining training set. 
+If you followed the default exaple, simply run:
+<pre><code>python split_data.py "" True 0.8</code></pre>
+
+
+11. If you do not want to store them for later use and you want to save space, now you can safely delete the models and sim_* and sims folders, and all the .out and .log files or use the provided cleanup.sh script which takes as input the input and output dir defined at the beginning.
+
+<pre><code>sh cleanup.sh models sims</code></pre>
+
+
+
+You are set, enjoy your simulations!
 
  ## Work in progress
- - Store the dirty beam;
  - Introduce Galaxy dynamic and complex spectral profiles;
  - Introduce multi-line emissions / absorptions;
  - Introduce source classes;

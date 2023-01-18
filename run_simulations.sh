@@ -2,14 +2,14 @@
 #
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --array=1-4
+#SBATCH --array=1-100
 MAIN_PATH="$PWD"
 
 source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate casa6.5
 
 START=$SLURM_ARRAY_TASK_ID
-NUMLINES=2
+NUMLINES=50
 STOP=$((SLURM_ARRAY_TASK_ID*NUMLINES))
 START="$(($STOP - $(($NUMLINES - 1))))"
 echo "START=$START"
