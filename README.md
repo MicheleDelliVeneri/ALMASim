@@ -20,10 +20,13 @@ Instructions:
 
 <pre><code>conda create --name casa6.5 python=3.8 </code></pre>
 
-2 Move to the folder where you want to store the results
 
-3 Clone the GitHub repository:
+
+2 Clone the GitHub repository:
 <pre><code>git clone https://github.com/MicheleDelliVeneri/ALMASim.git</code></pre>
+
+3 Move to the repository:
+<pre><code>cd ALMASim</code></pre>
 
 4 Make sure that the required libraries are installed, we are supposing to be on a centos system:
 
