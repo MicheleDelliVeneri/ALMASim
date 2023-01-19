@@ -134,6 +134,14 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     df['y1'] = boxes[:, 2]
     df.to_csv(os.path.join(data_dir, 'params_' + str(i) + '.csv'), index=False)
 
+def get_band_central_freq(band):
+    if band == 3:
+        return '100GHz'
+    elif band == 6:
+        return '250GHz'
+    elif band == 9:
+        return '650GHz'
+
 
 xyposs = np.arange(100, 250).astype(float)
 fwhms = np.linspace(2., 8., num=100).astype(float)
@@ -143,6 +151,8 @@ line_fwhms = np.linspace(3, 10, num=100).astype(float)
 spectral_indexes = np.linspace(-2, 2, num=100).astype(float)
 amps = np.arange(1, 5, 0.1)
 
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("data_dir", type=str,
                     help='The directory in wich the simulated model cubes are stored;')
@@ -151,8 +161,21 @@ parser.add_argument("output_dir", type=str,
 parser.add_argument("csv_name", type=str,
                     help='The name of the .csv file in which to store the simulated source parameters;')
 parser.add_argument('n', type=int, help='The number of cubes to generate;')
-parser.add_argument('antenna_config', type=str, 
-        help="The antenna configuration file")
+parser.add_argument('antenna_config', type=str, default='antenna_config/alma.cycle9.3.1.cfg',
+        help="The antenna configuration file, if set to None random antenna configurations are sampled from the list of available configurations")
+parser.add_argument('spatial_resolution', type=float, default=0.1, 
+        help='Spatial resolution in arcseconds, if set to None random resolutions are sampled from real observations')
+parser.add_argument('integration_time', type=int, default=2400,
+        help='Total observation time, if set to None random observation times are sampled from real observations')
+parser.add_argument('coordinates', type=str, default="J2000 03h59m59.96s -34d59m59.50s",
+        help='Coordinates of the target in the sky as a J2000 string, if set to None a random direction is sampled from real observations')
+parser.add_argument('band', type=int, default=6,
+        help='ALMA Observing band which determines the central frequency of observation')
+parser.add_argument('bandwidth', type=int, default=1000, 
+                    help='observation bandwidht in MHz')
+parser.add_argument('frequency_resolution', type=float, default=10,
+                    help='frequency resolution in MHz')
+
 
 
 args = parser.parse_args()
@@ -162,6 +185,34 @@ output_dir = args.output_dir
 csv_name = args.csv_name
 n = args.n
 antenna_config = args.antenna_config
+spatial_resolution = args.spatial_resolution
+integration_time = args.integration_time
+coordinates = args.coordinates
+band = args.band
+bandwidth = args.bandwidth
+frequency_resolution = args.frequency_resolution
+\
+antenna_configs = os.listdir('antenna_config')
+
+# Selecting the Antenna Configuration
+get_antennas = False               
+if antenna_config is None:
+    get_antennas = True
+
+get_spatial_resolution = False
+if spatial_resolution is None:
+    get_spatial_resolution = True
+
+get_integration_time = False
+if integration_time is None:
+    get_integration_time = True
+
+# Select Central Frequency From Band
+if band is not None:
+    central_freq = get_band_central_freq(band)
+else:
+    central_freq = get_band_central_freq(np.random.choice([3, 6, 9]))
+
 
 if not os.path.exists(data_dir):
     os.mkdir(data_dir)
@@ -177,7 +228,8 @@ if __name__ == '__main__':
     Parallel(n_cores)(delayed(make_cube)(i, data_dir,
                                          amps, xyposs, fwhms, angles, line_centres,
                                          line_fwhms, spectral_indexes) for i in tqdm(range(n)))
-    print('Cubes Generated, aggregating parameters.csv')
+    print('Cubes Generated, aggregating parameters.csv and loading observational parameters')
+    obs_db = pd.read_csv('obs_configuration.csv')
     files = os.path.join(data_dir, 'params_*.csv')
     files = glob.glob(files)
     df = pd.concat(map(pd.read_csv, files), ignore_index=True)
@@ -187,7 +239,25 @@ if __name__ == '__main__':
     print('Creating textfile for simulations')
     df = open('sims_param.csv', 'w')
     for i in range(n):
-        df.write(str(i) + ',' + data_dir + ',' + output_dir + ',' + antenna_config)
+        sampled_obs_parameters = obs_db.sample(n=1, axis=0)
+        if get_antennas:
+            ac = os.path.join(os.getcwd(), np.random.choice(antenna_configs))
+        else:
+            ac = antenna_config
+        if get_spatial_resolution:
+            sp = str(sampled_obs_parameters['spatial_resolution'].values)+'arcsec'
+        else:
+            sp = str(spatial_resolution)+'arcsec'
+        if get_integration_time:
+            it = str(sampled_obs_parameters['integration_time'].values)+'s'
+        else:
+            it = str(integration_time)+'s'
+        
+        
+
+        
+        
+        df.write(str(i) + ',' + data_dir + ',' + output_dir + ',' + ac)
         df.write('\n')
     df.close()
     print(f'Execution took {time.time() - start} seconds')
