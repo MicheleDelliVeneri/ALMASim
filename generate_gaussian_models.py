@@ -151,6 +151,8 @@ parser.add_argument("output_dir", type=str,
 parser.add_argument("csv_name", type=str,
                     help='The name of the .csv file in which to store the simulated source parameters;')
 parser.add_argument('n', type=int, help='The number of cubes to generate;')
+parser.add_argument('antenna_config', type=str, 
+        help="The antenna configuration file")
 
 
 args = parser.parse_args()
@@ -159,6 +161,7 @@ data_dir = args.data_dir
 output_dir = args.output_dir
 csv_name = args.csv_name
 n = args.n
+antenna_config = args.antenna_config
 
 if not os.path.exists(data_dir):
     os.mkdir(data_dir)
@@ -184,7 +187,7 @@ if __name__ == '__main__':
     print('Creating textfile for simulations')
     df = open('sims_param.csv', 'w')
     for i in range(n):
-        df.write(str(i) + ',' + data_dir + ',' + output_dir)
+        df.write(str(i) + ',' + data_dir + ',' + output_dir + ',' + antenna_config)
         df.write('\n')
     df.close()
     print(f'Execution took {time.time() - start} seconds')

@@ -1,41 +1,20 @@
 import os
 import argparse
 import tempfile
+import time
 temp_dir = tempfile.TemporaryDirectory()
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 
 from casatasks import simobserve, tclean, exportfits
 
-def run_tclean(i, input_dir, output_dir):
+def run_tclean(i, input_dir, output_dir, antennalist):
     filename = os.path.join(input_dir, "gauss_cube_" + str(i) + ".fits")
+    antenna_name = '.'.join(antennalist.split("/")[-1].split(".")[0:-1])
     project = 'sim'
-    antennalist = "alma.cycle9.3.cfg"
-    simobserve(
-        project=project, 
-        skymodel=filename,
-        inbright="0.001Jy/pix",
-        indirection="J2000 03h59m59.96s -34d59m59.50s",
-        incell="0.1arcsec",
-        incenter="230GHz",
-        inwidth="10MHz",
-        setpointings=True,
-        integration="10s",
-        direction="J2000 03h59m59.96s -34d59m59.50s",
-        mapsize=["10arcsec"],
-        maptype="hexagonal",
-        obsmode="int",
-        antennalist=antennalist,
-        totaltime="2400s",
-        thermalnoise="tsys-atm",
-        user_pwv=0.8,
-        seed=11111,
-        graphics="none",
-        verbose=False,
-        overwrite=True)
-
+    start_time = time.time()
     tclean(
-        vis=os.path.join(project, "{}.alma.cycle9.3.noisy.ms".format(project)),
-        imagename=project+'/{}.alma.cycle9.3'.format(project),
+        vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
+        imagename=project+'/{}.{}'.format(project, antenna_name),
         imsize=[360, 360],
         cell=["0.1arcsec"],
         phasecenter="",
@@ -45,10 +24,12 @@ def run_tclean(i, input_dir, output_dir):
         calcpsf=True,
         pbcor=False
         )
-    exportfits(imagename=project+'/{}.alma.cycle9.3.image'.format(project), 
+    exportfits(imagename=project+'/{}.{}.image'.format(project, antenna_name), 
            fitsimage=output_dir + "/tcleaned_cube_" + str(i) + ".fits")
-    os.system('rm -r {}'.format(project))
-
+    time_of_execution = time.time() - start_time
+    with open('running_params.txt', 'w') as f:
+        f.write('Execution took {} seconds'.format(time_of_execution))
+    f.close()
 parser =argparse.ArgumentParser()
 parser.add_argument("i", type=str, 
         help='the index of the simulation to be run;')
@@ -56,9 +37,11 @@ parser.add_argument("model_dir", type=str,
         help='The directory in wich the simulated model cubes are stored;')
 parser.add_argument("output_dir", type=str, 
          help='The directory in wich to store the tcleaned cubes;')
-
+parser.add_argument('antenna_config', type=str, 
+        help="The antenna configuration file")
 args = parser.parse_args()
 input_dir = args.model_dir
 output_dir = args.output_dir
 i = args.i
-run_tclean(i, input_dir, output_dir)
+antenna_config = args.antenna_config
+run_tclean(i, input_dir, output_dir, antenna_config)

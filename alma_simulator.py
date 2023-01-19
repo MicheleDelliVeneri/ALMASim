@@ -6,10 +6,10 @@ os.environ['MPLCONFIGDIR'] = temp_dir.name
 
 from casatasks import simobserve, tclean, exportfits
 
-def generate_sims(i, input_dir, output_dir):
+def generate_sims(i, input_dir, output_dir, antennalist):
     filename = os.path.join(input_dir, "gauss_cube_" + str(i) + ".fits")
+    antenna_name = '.'.join(antennalist.split("/")[-1].split(".")[0:-1])
     project = 'sim'
-    antennalist = "alma.cycle9.3.cfg"
     simobserve(
         project=project, 
         skymodel=filename,
@@ -34,8 +34,8 @@ def generate_sims(i, input_dir, output_dir):
         overwrite=True)
 
     tclean(
-        vis=os.path.join(project, "{}.alma.cycle9.3.noisy.ms".format(project)),
-        imagename=project+'/{}.alma.cycle9.3'.format(project),
+        vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
+        imagename=project+'/{}.{}'.format(project, antenna_name),
         imsize=[360, 360],
         cell=["0.1arcsec"],
         phasecenter="",
@@ -45,23 +45,25 @@ def generate_sims(i, input_dir, output_dir):
         calcpsf=True,
         pbcor=False
         )
-    exportfits(imagename=project+'/{}.alma.cycle9.3.image'.format(project), 
-           fitsimage=output_dir + "/dirty_cube_" + str(i) +".fits")
-    exportfits(imagename=project+'/{}.alma.cycle9.3.skymodel'.format(project), 
-           fitsimage=output_dir + "/clean_cube_" + str(i) +".fits")
-    os.system('rm -r {}'.format(project))
+    exportfits(imagename=project+'/{}.{}.image'.format(project, antenna_name), 
+           fitsimage=output_dir + "/dirty_cube_" + str(i) +".fits", overwrite=True)
+    exportfits(imagename=project+'/{}.{}.skymodel'.format(project, antenna_name), 
+           fitsimage=output_dir + "/clean_cube_" + str(i) +".fits", overwrite=True)
+    #os.system('rm -r {}'.format(project))
 
-parser =argparse.ArgumentParser()
+parser = argparse.ArgumentParser()
 parser.add_argument("i", type=str, 
         help='the index of the simulation to be run;')
 parser.add_argument("model_dir", type=str, 
         help='The directory in wich the simulated model cubes are stored;')
 parser.add_argument("output_dir", type=str, 
          help='The directory in wich to store the simulated dirty cubes and corresponding skymodels;')
-
+parser.add_argument('antenna_config', type=str, 
+        help="The antenna configuration file")
 args = parser.parse_args()
 input_dir = args.model_dir
 output_dir = args.output_dir
 i = args.i
+antenna_config = args.antenna_config
 
-generate_sims(i, input_dir, output_dir)
+generate_sims(i, input_dir, output_dir, antenna_config)
