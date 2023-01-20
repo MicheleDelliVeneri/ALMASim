@@ -6,26 +6,27 @@ os.environ['MPLCONFIGDIR'] = temp_dir.name
 
 from casatasks import simobserve, tclean, exportfits
 
-def generate_sims(i, input_dir, output_dir, antennalist):
-    filename = os.path.join(input_dir, "gauss_cube_" + str(i) + ".fits")
+def generate_sims(i, input_dir, output_dir, antennalist, coordinates, spatial_resolution, central_frequency, 
+                  frequency_resolution, integration_time, map_size, n_px):
+    filename = os.path.join(input_dir, "skymodel_cube_" + str(i) + ".fits")
     antenna_name = '.'.join(antennalist.split("/")[-1].split(".")[0:-1])
     project = 'sim'
     simobserve(
         project=project, 
         skymodel=filename,
         inbright="0.001Jy/pix",
-        indirection="J2000 03h59m59.96s -34d59m59.50s",
-        incell="0.1arcsec",
-        incenter="230GHz",
-        inwidth="10MHz",
+        indirection=coordinates,
+        incell=spatial_resolution,
+        incenter=central_frequency,
+        inwidth=frequency_resolution,
         setpointings=True,
         integration="10s",
-        direction="J2000 03h59m59.96s -34d59m59.50s",
-        mapsize=["10arcsec"],
+        direction=coordinates,
+        mapsize=map_size,
         maptype="hexagonal",
         obsmode="int",
         antennalist=antennalist,
-        totaltime="2400s",
+        totaltime=integration_time,
         thermalnoise="tsys-atm",
         user_pwv=0.8,
         seed=11111,
@@ -36,8 +37,8 @@ def generate_sims(i, input_dir, output_dir, antennalist):
     tclean(
         vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
         imagename=project+'/{}.{}'.format(project, antenna_name),
-        imsize=[360, 360],
-        cell=["0.1arcsec"],
+        imsize=[n_px, n_px],
+        cell=[spatial_resolution],
         phasecenter="",
         specmode="cube",
         niter=0,
@@ -60,10 +61,33 @@ parser.add_argument("output_dir", type=str,
          help='The directory in wich to store the simulated dirty cubes and corresponding skymodels;')
 parser.add_argument('antenna_config', type=str, 
         help="The antenna configuration file")
+parser.add_argument('coordinates', type=str, 
+                    help="The coordinates of the simulated source")
+parser.add_argument('spatial_resolution', type=str,
+                    help="The spatial resolution of the simulated cube")
+parser.add_argument('central_frequency', type=str,
+                    help="The central frequency of the simulated cube")
+parser.add_argument('frequency_resolution', type=str,
+                    help="The frequency resolution of the simulated cube")
+parser.add_argument('integration_time', type=str,
+                    help="The integration time of the simulated cube")
+parser.add_argument('map_size', type=str,
+                    help="The map size of the simulated cube")
+parser.add_argument('n_px', type=str,
+                    help="The number of pixels of the simulated cube")
+
 args = parser.parse_args()
 input_dir = args.model_dir
 output_dir = args.output_dir
 i = args.i
 antenna_config = args.antenna_config
+coordinates = args.coordinates
+spatial_resolution = args.spatial_resolution
+central_frequency = args.central_frequency
+frequency_resolution = args.frequency_resolution
+integration_time = args.integration_time
+map_size = args.map_size
+n_px = args.n_px
 
-generate_sims(i, input_dir, output_dir, antenna_config)
+generate_sims(i, input_dir, output_dir, antenna_config, coordinates, spatial_resolution, central_frequency, frequency_resolution, 
+              integration_time, map_size, n_px)
