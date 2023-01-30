@@ -271,44 +271,45 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("data_dir", type=str,
+parser.add_argument("--data_dir", type=str, default='models',
                     help='The directory in wich the simulated model cubes are stored;')
-parser.add_argument("output_dir", type=str,
+parser.add_argument("--output_dir", type=str, default='sims', 
                     help='The directory in which the alma simulations will be stored;')
-parser.add_argument("plot_dir", type=str, help='The plot directory')
-parser.add_argument("csv_name", type=str,
+parser.add_argument("--plot_dir", type=str, help='The plot directory', default='plots')
+parser.add_argument("--csv_name", type=str, default='params.csv', 
                     help='The name of the .csv file in which to store the simulated source parameters;')
-parser.add_argument("mode", type=str, default='gauss',
+parser.add_argument("--mode", type=str, default='gauss',  choices=['gauss', 'extended'],
                     help='The type of model to simulate, either gauss or extended;')
-parser.add_argument('n', type=int, help='The number of cubes to generate;')
-parser.add_argument('antenna_config', type=str, default='antenna_config/alma.cycle9.3.1.cfg',
-        help="The antenna configuration file, if set to None random antenna configurations are sampled from the list of available configurations")
-parser.add_argument('spatial_resolution', type=float, default=0.1, 
-        help='Spatial resolution in arcseconds, if set to None random resolutions are sampled from real observations')
-parser.add_argument('integration_time', type=int, default=2400,
-        help='Total observation time, if set to None random observation times are sampled from real observations')
-parser.add_argument('coordinates', type=str, default="J2000 03h59m59.96s -34d59m59.50s",
-        help='Coordinates of the target in the sky as a J2000 string, if set to None a random direction is sampled from real observations')
-parser.add_argument('band', type=int, default=6,
-        help='ALMA Observing band which determines the central frequency of observation')
-parser.add_argument('bandwidth', type=int, default=1000, 
-                    help='observation bandwidht in MHz')
-parser.add_argument('frequency_resolution', type=float, default=10,
-                    help='frequency resolution in MHz')
-parser.add_argument('velocity_resolution', type=float, default=10,
-                    help='velocity resolution in km/s')
-parser.add_argument("TNGSnap", type=int, help='The TNG snapshot', default=99)
-parser.add_argument('TNGSubhaloID', type=int, help='The TNG subhalo ID', default=385350)
-parser.add_argument("n_px", type=int, help='The number of pixels', default=256)
-parser.add_argument("n_chan", type=int, help='The number of channels', default=128)
-parser.add_argument("n_level", type=float, help='The noise level', default=0.3)
-parser.add_argument('ra', type=float, help='The right ascension of the source in degrees', default=0.0)
-parser.add_argument('dec', type=float, help='The declination of the source in degrees', default=0.0)
-parser.add_argument('distance', type=float, help='The distance of the source in Mpc', default=0.0)
-parser.add_argument('noise_level', type=float, help='The noise level as percentage of peak flux', default=0.3)
-parser.add_argument('save_plots', type=bool, help='Whether to save plots of the simulated cubes', default=False)
-args = parser.parse_args()
+parser.add_argument('--n', type=int, help='The number of cubes to generate;', default=10, )
 
+parser.add_argument('--antenna_config', type=str, default='antenna_config/alma.cycle9.3.1.cfg', 
+        help="The antenna configuration file, if --sample params is set to True, random antenna configurations are sampled from the list of available configurations")
+parser.add_argument('--spatial_resolution', type=float, default=0.1, 
+        help='Spatial resolution in arcseconds, if --sample params is set to True random resolutions are sampled from real observations')
+parser.add_argument('--integration_time', type=int, default=2400, 
+        help='Total observation time, iif --sample params is set to True, random observation times are sampled from real observations')
+parser.add_argument('--coordinates', type=str, default="J2000 03h59m59.96s -34d59m59.50s", 
+        help='Coordinates of the target in the sky as a J2000 string, if --sample params is set to True a random direction is sampled from real observations')
+parser.add_argument('--band', type=int, default=6,
+        help='ALMA Observing band which determines the central frequency of observation')
+parser.add_argument('--bandwidth', type=int, default=1000, 
+                    help='observation bandwidht in MHz')
+parser.add_argument('--frequency_resolution', type=float, default=10,
+                    help='frequency resolution in MHz')
+parser.add_argument('--velocity_resolution', type=float, default=10,
+                    help='velocity resolution in km/s')
+parser.add_argument('--TNGBasePath', type=str, default='TNG100-1/output/',)
+parser.add_argument("--TNGSnap", type=int, help='The TNG snapshot', default=99,)
+parser.add_argument('--TNGSubhaloID', type=int, help='The TNG subhalo ID', default=385350, )
+parser.add_argument("--n_px", type=int, help='The number of pixels', default=256, )
+parser.add_argument("--n_chan", type=int, help='The number of channels', default=128, )
+parser.add_argument('--ra', type=float, help='The right ascension of the source in degrees', default=0.0,)
+parser.add_argument('--dec', type=float, help='The declination of the source in degrees', default=0.0, )
+parser.add_argument('--distance', type=float, help='The distance of the source in Mpc', default=0.0, )
+parser.add_argument('--noise_level', type=float, help='The noise level as percentage of peak flux', default=0.3, )
+parser.add_argument('--sample_params', type=bool, help='Whether to sample the parameters from real observations', default=False, choices=[True, False])
+parser.add_argument('--save_plots', type=bool, help='Whether to save plots of the simulated cubes', default=False, choices=[True, False])
+args = parser.parse_args()
 data_dir = args.data_dir
 output_dir = args.output_dir
 csv_name = args.csv_name
@@ -327,56 +328,41 @@ TNGSnap = args.TNGSnap
 TNGSubhaloID = args.TNGSubhaloID
 n_px = args.n_px
 n_chan = args.n_chan
-n_level = args.n_level
 velocity_resolution = args.velocity_resolution
 Ra = args.ra
 Dec = args.dec
 distances = args.distance
 noise_level = args.noise_level
 save_plots = args.save_plots
+sample_params = args.sample_params
+tngpath = args.TNGBasePath
+
 
 antenna_configs = os.listdir('antenna_config')
 
 # Selecting the Antenna Configuration
-get_antennas = False               
-if antenna_config is None:
-    get_antennas = True
-
+get_antennas = False    
 get_spatial_resolution = False
-if spatial_resolution is None:
-    get_spatial_resolution = True
-
 get_integration_time = False
-if integration_time is None:
-    get_integration_time = True
-
-get_bandwidth = False
-if bandwidth is None:
-   get_bandwidth = True
-
 get_velocity_resolution = False
-if velocity_resolution is None:
-    get_velocity_resolution = True
-
+get_bandwidth = False
 get_frequency_resolution = False
-if frequency_resolution is None:
-    get_frequency_resolution = True
-
-get_TNGSNap = False
-if TNGSnap is None:
-    get_TNGSnap = True
+get_TNGSnap = False
 get_TNGSubhalo = False
-if TNGSubhaloID is None:
-    get_TNGSubhalo = True
-
-get_ra = False
-if Ra is None:
-    get_ra = True
+get_ra_dec = False
 get_noise_level = False
-if noise_level is None:
-    get_noise_level = True
 get_distance = False
-if distances is None:
+if sample_params is True:
+    get_antennas = True
+    get_spatial_resolution = True
+    get_integration_time = True
+    get_bandwidth = True
+    get_velocity_resolution = True
+    get_frequency_resolution = True
+    get_TNGSnap = True
+    get_TNGSubhalo = True
+    get_ra_dec = True
+    get_noise_level = True
     get_distance = True
 
 # Select Central Frequency From Band
@@ -397,8 +383,47 @@ n_cores = multiprocessing.cpu_count() // 4
 if __name__ == '__main__':
     start = time.time()
     print('Generating Model Cubes ...')
-    print("loading observational parameters ...")
-    obs_db = pd.read_csv('obs_configuration.csv')
+    print("loading observational parameters ...\n")
+    print("-------------------------------------\n")
+    obs_db = pd.read_csv('obs_configurations.csv')
+    if sample_params is True:
+        print('Sampling Observational Parameters ...')
+        print('Using the following parameters:')
+        print('Models Directory: ', data_dir)
+        print('Simulations Directory: ', output_dir)
+        print('Plots Directory: ', plot_dir)
+        print('Simulations Parameters File Name: ', csv_name)
+        print('Simulation Mode: ', mode)
+        print('Number of Simulations: ', n)
+        print('Plot Flag: ', save_plots)
+        print('-------------------------------------\n')
+
+    else:
+        print('Using the following parameters:')
+        print('Models Directory: ', data_dir)
+        print('Simulations Directory: ', output_dir)
+        print('Plots Directory: ', plot_dir)
+        print('Simulations Parameters File Name: ', csv_name)
+        print('Simulation Mode: ', mode)
+        print('Number of Simulations: ', n)
+        print('Antenna Configuration: ', antenna_config)
+        print('Spatial Resolution: ', spatial_resolution)
+        print('Integration Time: ', integration_time)
+        print('Coordinates: ', coordinates)
+        print('ALMA Band: ', alma_band)
+        print('Bandwidth: ', bandwidth)
+        print('Frequency Resolution: ', frequency_resolution)
+        print('Velocity Resolution: ', velocity_resolution)
+        print('TNG Snapshot: ', TNGSnap)
+        print('TNG Subhalo ID: ', TNGSubhaloID)
+        print('Number of Pixels: ', n_px)
+        print('Number of Channels: ', n_chan)
+        print('RA: ', Ra)
+        print('Dec: ', Dec)
+        print('Distance: ', distances)
+        print('Noise Level: ', noise_level)
+        print('Plot Flag: ', save_plots)
+        print('-------------------------------------\n')
 
     if mode == 'gauss':
         xyposs = np.arange(100, 250).astype(float)
@@ -411,6 +436,10 @@ if __name__ == '__main__':
         Parallel(n_cores)(delayed(make_cube)(i, data_dir,
                                          amps, xyposs, fwhms, angles, line_centres,
                                          line_fwhms, spectral_indexes) for i in tqdm(range(n)))
+        coords = np.array([coordinates for i in range(n)])
+        sps = np.array([spatial_resolution for i in range(n)])
+        frs = np.array([frequency_resolution for i in range(n)])
+        ints = np.array([integration_time for i in range(n)])
     elif mode == 'extended':
         params = obs_db.sample(n=n, axis=0)
         if get_spatial_resolution:
@@ -446,7 +475,7 @@ if __name__ == '__main__':
             subhaloIDs = np.random.choice([385350, 385351, 385352, 385353], n)
         else:
             subhaloIDs = np.array([TNGSubhaloID for i in range(n)])
-        if get_ra:
+        if get_ra_dec:
             ras = params['right ascension [deg]'].values
             decs = params['declination [deg]'].values
         else:
@@ -464,15 +493,17 @@ if __name__ == '__main__':
         x_rots = np.random.choice(np.arange(0, 360, 1), n)
         y_rots = np.random.choice(np.arange(0, 360, 1), n)
         n_channels = list(np.array(bws / frs).astype(int))
+        print(x_rots.shape, y_rots.shape)
         n_channel = max(set(n_channels), key = n_channels.count)
-        Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, output_dir, data_dir, snapIDs, 
-                                                      sps, ras, decs, n_levels, distances, x_rots, y_rots,
+        Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
+                                                      sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
                                                           n_px, n_channel, save_plots) for i in tqdm(range(n)))
 
         
 
-    print('Cubes Generated, aggregating parameters.csv')
+    
     if mode == 'gauss':
+        print('Cubes Generated, aggregating all params_*.csv into a single parameters.csv file')
         files = os.path.join(data_dir, 'params_*.csv')
         files = glob.glob(files)
         df = pd.concat(map(pd.read_csv, files), ignore_index=True)
@@ -491,10 +522,11 @@ if __name__ == '__main__':
         c = coords[i]
         sp = str(sps[i]) + 'arcsec'
         fr = str(frs[i]) + 'MHz'
-        map_size = [str(n_px * sps[i]) + 'arcsec']
+        map_size = str(n_px * sps[i]) + 'arcsec'
         it = str(ints[i]) + 's'
+        #print(data_dir, output_dir, ac, c, sp, central_freq, fr, it, map_size, n_px)
         df.write(str(i) + ',' + data_dir + ',' + output_dir + ',' + ac + ',' + c + ',' + sp + ',' +
-                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + n_px)
+                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + str(n_px))
         df.write('\n')
     df.close()
     print(f'Execution took {time.time() - start} seconds')
