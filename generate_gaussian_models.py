@@ -230,8 +230,7 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
         source=source,
         datacube=datacube,
         sph_kernel=sph_kernel,
-        spectral_model=spectral_model,
-        sph_kernel = sph_kernel)
+        spectral_model=spectral_model)
 
     print('Creating noiseless sky cube....')
     M.insert_source_in_cube(printfreq=10)
@@ -256,8 +255,7 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
         datacube=datacube,
         noise=noise,
         sph_kernel=sph_kernel,
-        spectral_model=spectral_model,
-        sph_kernel = sph_kernel)
+        spectral_model=spectral_model)
 
     M.insert_source_in_cube(printfreq=10)
     M.add_noise()
