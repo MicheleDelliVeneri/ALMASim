@@ -307,27 +307,27 @@ parser.add_argument('--ra', type=float, help='The right ascension of the source 
 parser.add_argument('--dec', type=float, help='The declination of the source in degrees', default=0.0, )
 parser.add_argument('--distance', type=float, help='The distance of the source in Mpc', default=0.0, )
 parser.add_argument('--noise_level', type=float, help='The noise level as percentage of peak flux', default=0.3, )
-parser.add_argument('--sample_params', type=bool, help='Whether to sample the parameters from real observations', default=False, choices=[True, False])
-parser.add_argument('--save_plots', type=bool, help='Whether to save plots of the simulated cubes', default=False, choices=[True, False])
+parser.add_argument('--sample_params', type=str, help='Whether to sample the parameters from real observations', default=False)
+parser.add_argument('--save_plots', type=str, help='Whether to save plots of the simulated cubes', default="False")
 args = parser.parse_args()
-data_dir = args.data_dir
-output_dir = args.output_dir
-csv_name = args.csv_name
-n = args.n_simulations
-antenna_config = args.antenna_config
-spatial_resolution = args.spatial_resolution
-integration_time = args.integration_time
-coordinates = args.coordinates
-alma_band = args.band
-bandwidth = args.bandwidth
-frequency_resolution = args.frequency_resolution
-velocuty_resolution = args.velocity_resolution
+data_dir = str(args.data_dir)
+output_dir = str(args.output_dir)
+csv_name = str(args.csv_name)
+n = int(args.n_simulations)
+antenna_config = str(args.antenna_config)
+spatial_resolution = float(args.spatial_resolution)
+integration_time = float(args.integration_time)
+coordinates = str(args.coordinates)
+alma_band = int(args.band)
+bandwidth = int(args.bandwidth)
+frequency_resolution = float(args.frequency_resolution)
+velocuty_resolution = float(args.velocity_resolution)
 mode = args.mode
 plot_dir = args.plot_dir
 TNGSnap = args.TNGSnap
 TNGSubhaloID = args.TNGSubhaloID
-n_px = args.n_px
-n_chan = args.n_chan
+n_px = int(args.n_px)
+n_chan = int(args.n_chan)
 velocity_resolution = args.velocity_resolution
 Ra = args.ra
 Dec = args.dec
@@ -336,7 +336,10 @@ noise_level = args.noise_level
 save_plots = args.save_plots
 sample_params = args.sample_params
 tngpath = args.TNGBasePath
-
+if save_plots == 'False':
+    save_plots = False
+else:
+    save_plots = True
 
 antenna_configs = os.listdir('antenna_config')
 
@@ -352,7 +355,7 @@ get_TNGSubhalo = False
 get_ra_dec = False
 get_noise_level = False
 get_distance = False
-if sample_params is True:
+if sample_params == "True":
     get_antennas = True
     get_spatial_resolution = True
     get_integration_time = True
@@ -386,7 +389,7 @@ if __name__ == '__main__':
     print("loading observational parameters ...\n")
     print("-------------------------------------\n")
     obs_db = pd.read_csv('obs_configurations.csv')
-    if sample_params is True:
+    if sample_params == "True":
         print('Sampling Observational Parameters ...')
         print('Using the following parameters:')
         print('Models Directory: ', data_dir)
@@ -398,32 +401,33 @@ if __name__ == '__main__':
         print('Plot Flag: ', save_plots)
         print('-------------------------------------\n')
 
-    else:
-        print('Using the following parameters:')
-        print('Models Directory: ', data_dir)
-        print('Simulations Directory: ', output_dir)
-        print('Plots Directory: ', plot_dir)
-        print('Simulations Parameters File Name: ', csv_name)
-        print('Simulation Mode: ', mode)
-        print('Number of Simulations: ', n)
-        print('Antenna Configuration: ', antenna_config)
-        print('Spatial Resolution: ', spatial_resolution)
-        print('Integration Time: ', integration_time)
-        print('Coordinates: ', coordinates)
-        print('ALMA Band: ', alma_band)
-        print('Bandwidth: ', bandwidth)
-        print('Frequency Resolution: ', frequency_resolution)
-        print('Velocity Resolution: ', velocity_resolution)
-        print('TNG Snapshot: ', TNGSnap)
-        print('TNG Subhalo ID: ', TNGSubhaloID)
-        print('Number of Pixels: ', n_px)
-        print('Number of Channels: ', n_chan)
-        print('RA: ', Ra)
-        print('Dec: ', Dec)
-        print('Distance: ', distances)
-        print('Noise Level: ', noise_level)
-        print('Plot Flag: ', save_plots)
-        print('-------------------------------------\n')
+    print('These are the default values, but some of these may be sampled')
+    print('Using the following parameters:')
+    print('Models Directory: ', data_dir)
+    print('Simulations Directory: ', output_dir)
+    print('Plots Directory: ', plot_dir)
+    print('Simulations Parameters File Name: ', csv_name)
+    print('Simulation Mode: ', mode)
+    print('Number of Simulations: ', n)
+    print('Antenna Configuration: ', antenna_config)
+    print('Spatial Resolution: ', spatial_resolution)
+    print('Integration Time: ', integration_time)
+    print('Coordinates: ', coordinates)
+    print('ALMA Band: ', alma_band)
+    print('Bandwidth: ', bandwidth)
+    print('Frequency Resolution: ', frequency_resolution)
+    print('Velocity Resolution: ', velocity_resolution)
+    print('TNG Snapshot: ', TNGSnap)
+    print('TNG Subhalo ID: ', TNGSubhaloID)
+    print('Number of Pixels: ', n_px)
+    print('Number of Channels: ', n_chan)
+    print('RA: ', Ra)
+    print('Dec: ', Dec)
+    print('Distance: ', distances)
+    print('Noise Level: ', noise_level)
+    print('Plot Flag: ', save_plots)
+    print('Sample Parameters Flag: ', sample_params)
+    print('-------------------------------------\n')
 
     if mode == 'gauss':
         xyposs = np.arange(100, 250).astype(float)
@@ -514,7 +518,7 @@ if __name__ == '__main__':
     print('Creating textfile for simulations')
     df = open('sims_param.csv', 'w')
     for i in range(n):
-        if get_antennas:
+        if get_antennas is True:
             ac = os.path.join(os.getcwd(), np.random.choice(antenna_configs))
         else:
             ac = antenna_config

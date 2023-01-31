@@ -37,7 +37,7 @@ def generate_sims(i, input_dir, output_dir, antennalist, coordinates, spatial_re
     tclean(
         vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
         imagename=project+'/{}.{}'.format(project, antenna_name),
-        imsize=[n_px, n_px],
+        imsize=[int(n_px), int(n_px)],
         cell=[spatial_resolution],
         phasecenter="",
         specmode="cube",
