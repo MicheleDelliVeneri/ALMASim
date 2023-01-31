@@ -280,7 +280,7 @@ parser.add_argument("--csv_name", type=str, default='params.csv',
                     help='The name of the .csv file in which to store the simulated source parameters;')
 parser.add_argument("--mode", type=str, default='gauss',  choices=['gauss', 'extended'],
                     help='The type of model to simulate, either gauss or extended;')
-parser.add_argument('--n', type=int, help='The number of cubes to generate;', default=10, )
+parser.add_argument('--n_simulations', type=int, help='The number of cubes to generate;', default=10, )
 
 parser.add_argument('--antenna_config', type=str, default='antenna_config/alma.cycle9.3.1.cfg', 
         help="The antenna configuration file, if --sample params is set to True, random antenna configurations are sampled from the list of available configurations")
@@ -313,7 +313,7 @@ args = parser.parse_args()
 data_dir = args.data_dir
 output_dir = args.output_dir
 csv_name = args.csv_name
-n = args.n
+n = args.n_simulations
 antenna_config = args.antenna_config
 spatial_resolution = args.spatial_resolution
 integration_time = args.integration_time
