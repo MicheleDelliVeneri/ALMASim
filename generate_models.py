@@ -201,12 +201,25 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     tngid = subhaloID[i]
     tngsnap = TNGSnap[i]
     n_chan = n_channels[i]
+
+    print('Generating source from subhalo {} at snapshot {}'.format(tngid, tngsnap))
+
     source = TNGSource(TNGBasePath, tngsnap, tngid,
                        distance=distance * U.Mpc,
                        rotation = {'L_coords': (x_rot * U.deg, y_rot * U.deg)},
                        ra = ra * U.deg,
                        dec = dec * U.deg,
                        )
+    
+    print('Source Generated')
+    print('Distance: {} Mpc'.format(distance))
+    print('Spatial Resolution: {} arcsec'.format(spatial_resolution))
+    print('Velocity Resolution: {} km/s'.format(velocity_resolution))
+    print('Number of channels: {}'.format(n_chan))
+    print('Number of pixels: {}'.format(n_px))
+
+    print('Initializing datacube....')
+
     datacube = DataCube(
         n_px_x = n_px,
         n_px_y = n_px,
@@ -513,7 +526,7 @@ if __name__ == '__main__':
     print('Get Band: ', get_band)
     print('Get Channels: ', get_channels)
     print('Get Coordinates: ', get_coordinates)
-    
+
     print('-------------------------------------\n')
   
     if mode == 'gauss':
@@ -589,6 +602,7 @@ if __name__ == '__main__':
             n_channels = list(np.array(bws / frs).astype(int))
         else:
             n_channels = np.array([n_chan for i in range(n)])
+
 
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
