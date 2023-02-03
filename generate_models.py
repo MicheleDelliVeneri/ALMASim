@@ -537,8 +537,8 @@ if __name__ == '__main__':
         else:
             subhaloIDs = np.array([TNGSubhaloID for i in range(n)])
         if get_ra_dec:
-            ras = params['right ascension [deg]'].values
-            decs = params['declination [deg]'].values
+            ras = params['ra [deg]'].values
+            decs = params['dec [deg]'].values
         else:
             ras = np.array([Ra for i in range(n)])
             decs = np.array([Dec for i in range(n)])
