@@ -219,7 +219,7 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
         dec = source.dec,
     )
     spectral_model = GaussianSpectrum(
-        signa="thermal"
+        sigma="thermal"
     )
     sph_kernel = AdaptiveKernel(
     (
