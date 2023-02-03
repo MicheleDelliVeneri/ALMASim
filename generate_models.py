@@ -299,8 +299,8 @@ parser.add_argument('--coordinates', type=str, default="J2000 03h59m59.96s -34d5
         help='Coordinates of the target in the sky as a J2000 string, if --sample params is set to True a random direction is sampled from real observations')
 parser.add_argument('--band', type=int, default=6,
         help='ALMA Observing band which determines the central frequency of observation')
-#parser.add_argument('--bandwidth', type=int, default=1000, 
-#                    help='observation bandwidht in MHz')
+parser.add_argument('--bandwidth', type=int, default=1000, 
+                    help='observation bandwidht in MHz')
 parser.add_argument('--frequency_resolution', type=float, default=10,
                     help='frequency resolution in MHz')
 parser.add_argument('--velocity_resolution', type=float, default=10,
