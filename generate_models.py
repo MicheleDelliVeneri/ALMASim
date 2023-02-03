@@ -511,6 +511,9 @@ if __name__ == '__main__':
     print('Get Noise Level: ', get_noise_level)
     print('Get Distance: ', get_distance)
     print('Get Band: ', get_band)
+    print('Get Channels: ', get_channels)
+    print('Get Coordinates: ', get_coordinates)
+    
     print('-------------------------------------\n')
   
     if mode == 'gauss':
