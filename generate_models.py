@@ -527,7 +527,6 @@ if __name__ == '__main__':
         print('Generating Extended Model Cubes using TNG Simulations ...')
         params = obs_db.sample(n=n, axis=0)
         if get_spatial_resolution:
-            print('WOrkig Flag')
             sps = params['spatial_resolution [arcsec]'].values
         else:
             sps = np.array([spatial_resolution for i in range(n)])
@@ -552,10 +551,10 @@ if __name__ == '__main__':
         else:
             coords = np.array([coordinates for i in range(n)])
         if get_TNGSnap:
-            snapID  = np.random.choice([99, 98, 97], n)
+            snapIDs  = np.random.choice([99, 98, 97], n)
         else:
             snapID = TNGSnap
-        snapIDs = np.array([snapID for i in range(n)])
+            snapIDs = np.array([snapID for i in range(n)])
         if get_TNGSubhalo:
             subhaloIDs = np.random.choice([385350, 385351, 385352, 385353], n)
         else:
