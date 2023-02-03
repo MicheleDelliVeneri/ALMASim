@@ -266,11 +266,18 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
 
 
 
+class SmartFormatter(argparse.HelpFormatter):
+
+    def _split_lines(self, text, width):
+        if text.startswith('R|'):
+            return text[2:].splitlines()  
+        # this is the RawTextHelpFormatter._split_lines
+        return argparse.HelpFormatter._split_lines(self, text, width)
 
 
 
-
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description='Simulate ALMA data cubes from TNG data cubes and Gaussian Simulations',
+                                 formatter_class=SmartFormatter)
 parser.add_argument("--data_dir", type=str, default='models',
                     help='The directory in wich the simulated model cubes are stored;')
 parser.add_argument("--output_dir", type=str, default='sims', 
@@ -309,7 +316,29 @@ parser.add_argument('--distance', type=float, help='The distance of the source i
 parser.add_argument('--noise_level', type=float, help='The noise level as percentage of peak flux', default=0.3, )
 parser.add_argument('--sample_params', type=str, help='Whether to sample the parameters from real observations', default=False)
 parser.add_argument('--save_plots', type=str, help='Whether to save plots of the simulated cubes', default="False")
-parser.add_argument('--sample_selection', type=str, help='Which Parameters to sample as a sequence of characters\nPossible values are:\n 1. a: wheter to sample the antenna configuration', default=False)
+parser.add_argument('--sample_selection', type=str, 
+                    help="R|"
+                          "Flags to select, in case of sampling, which paramters to sample from "
+                          "real observations.\n"
+                          "The flags are:\n"
+                          " a = sample antenna configuration\n"
+                          " r = sample spatial resolution\n"
+                          " t = sample integration time\n"
+                          " c = sample coordinates\n"
+                          " b = sample band\n"
+                          " f = sample frequency resolution\n"
+                          " v = sample velocity resolution\n"
+                          " s = sample Snapshot\n"
+                          " i = sample SubhaloID\n"
+                          " C = sample Ra and Dec\n"
+                          " D = sample Distance\n"
+                          " N = sample Noise Level\n"
+                          " e = sample all parameters\n\n"   
+                          "Example: --sample_selection 'art' will sample the antenna configuration,"
+                          "the spatial resolution and the integration time and take the remaining"
+                          "parameters from the stdin or from the default values. ",
+                          default="e"
+                          )
 args = parser.parse_args()
 data_dir = str(args.data_dir)
 output_dir = str(args.output_dir)
@@ -337,6 +366,7 @@ noise_level = args.noise_level
 save_plots = args.save_plots
 sample_params = args.sample_params
 tngpath = args.TNGBasePath
+sample_selection = args.sample_selection
 if save_plots == 'False':
     save_plots = False
 else:
@@ -356,22 +386,46 @@ get_TNGSubhalo = False
 get_ra_dec = False
 get_noise_level = False
 get_distance = False
+get_band = False
 if sample_params == "True":
-
-    get_antennas = True
-    get_spatial_resolution = True
-    get_integration_time = True
+    if 'e' in sample_selection:
+        get_antennas = True
+        get_spatial_resolution = True
+        get_integration_time = True
     #get_bandwidth = True
-    get_velocity_resolution = True
-    get_frequency_resolution = True
-    get_TNGSnap = True
-    get_TNGSubhalo = True
-    get_ra_dec = True
-    get_noise_level = True
-    get_distance = True
+        get_velocity_resolution = True
+        get_frequency_resolution = True
+        get_TNGSnap = True
+        get_TNGSubhalo = True
+        get_ra_dec = True
+        get_noise_level = True
+        get_distance = True
+    if 'a' in sample_selection:
+        get_antennas = True
+    if 'r' in sample_selection:
+        get_spatial_resolution = True
+    if 't' in sample_selection:
+        get_integration_time = True
+    if 'v' in sample_selection:
+        get_velocity_resolution = True
+    if 'f' in sample_selection:
+        get_frequency_resolution = True
+    if 'b' in sample_selection:
+        get_band = True
+    if 's' in sample_selection:
+        get_TNGSnap = True
+    if 'i' in sample_selection:
+        get_TNGSubhalo = True
+    if 'C' in sample_selection:
+        get_ra_dec = True
+    if 'N' in sample_selection:
+        get_noise_level = True
+    if 'D' in sample_selection:
+        get_distance = True
+    
 
 # Select Central Frequency From Band
-if alma_band is not None:
+if get_band is False:
     central_freq = get_band_central_freq(alma_band)
 else:
     central_freq = get_band_central_freq(np.random.choice([3, 6, 9]))
@@ -403,7 +457,7 @@ if __name__ == '__main__':
         print('Plot Flag: ', save_plots)
         print('-------------------------------------\n')
 
-    print('These are the default values, but some of these may be sampled')
+    print('These are the default values, but some of these may be sampled depending on your choice of the --sample_selection flags.')
     print('Using the following parameters:')
     print('Models Directory: ', data_dir)
     print('Simulations Directory: ', output_dir)
@@ -429,6 +483,7 @@ if __name__ == '__main__':
     print('Noise Level: ', noise_level)
     print('Plot Flag: ', save_plots)
     print('Sample Parameters Flag: ', sample_params)
+    print('Sample Selection Flag: ', sample_selection)
     print('-------------------------------------\n')
 
     if mode == 'gauss':
