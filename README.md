@@ -47,6 +47,13 @@ activate the base casa environment
 
 <pre><code> casa activate base </code></pre>
 
+<pre><code> git clone https://github.com/kyleaoman/Hdecompose.git </code></pre>
+<pre><code> cd Hdecompose </code></pre>
+<pre><code> python setup.py install </code></pre>
+
+<pre><code> git clone 
+
+
 6 Generate the sky model cubes:
 modify the create_models.sh script with the number of cpus-per-task you want to use, and the number of tasks you want to run in parallel.
 <pre><code>sbatch create_models.sh inputs_dir outputs_dir params.csv n configuration_file</code></pre>

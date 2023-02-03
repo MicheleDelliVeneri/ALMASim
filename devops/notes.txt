@@ -1,0 +1,14 @@
+Number of WCS axes: 4
+CTYPE : 'RA---TAN'  'DEC--TAN'  'VOPT'  'STOKES'  
+CRVAL : 0.0  0.0  2032200.0  0.0  
+CRPIX : 64.5  64.5  32.0  0.0  
+PC1_1 PC1_2 PC1_3 PC1_4  : 1.0  0.0  0.0  0.0  
+PC2_1 PC2_2 PC2_3 PC2_4  : 0.0  1.0  0.0  0.0  
+PC3_1 PC3_2 PC3_3 PC3_4  : 0.0  0.0  1.0  0.0  
+PC4_1 PC4_2 PC4_3 PC4_4  : 0.0  0.0  0.0  1.0  
+CDELT : -0.0027777777777778  0.0027777777777778  40000.0  1.0  
+NAXIS : 128  128  64  1
+
+
+NAXIS sono n_pix_x, n_pix_y e n_channels
+cdelt 

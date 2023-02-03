@@ -401,6 +401,10 @@ get_distance = False
 get_band = False
 get_channels = False
 get_coordinates = False
+
+if sample_selection != "e":
+    sample_params = True
+
 if sample_params == "True":
     if 'e' in sample_selection:
         get_antennas = True
@@ -528,7 +532,62 @@ if __name__ == '__main__':
     print('Get Coordinates: ', get_coordinates)
 
     print('-------------------------------------\n')
-  
+    params = obs_db.sample(n=n, axis=0)
+    if get_spatial_resolution:
+        sps = params['spatial_resolution [arcsec]'].values
+    else:
+        sps = np.array([spatial_resolution for i in range(n)])
+    if get_velocity_resolution:
+        vrs = params['velocity_resolution [Km/s]'].values
+    else:
+        vrs = np.array([velocity_resolution for i in range(n)])
+    if get_bandwidth:
+        bws = params['bandwidth [MHz]'].values
+    else:
+        bws = np.array([bandwidth for i in range(n)])
+    if get_frequency_resolution:
+        frs = params['frequency_resolution [MHz]'].values
+    else:
+        frs = np.array([frequency_resolution for i in range(n)])
+    if get_integration_time:
+        ints = params['integration_time [s]'].values
+    else:
+        ints = np.array([integration_time for i in range(n)])
+    if get_coordinates:
+        coords = params['J2000 coordinates'].values
+    else:
+        coords = np.array([coordinates for i in range(n)])
+    if get_TNGSnap:
+        snapIDs  = np.random.choice([99, 98, 97], n)
+    else:
+        snapID = TNGSnap
+        snapIDs = np.array([snapID for i in range(n)])
+    if get_TNGSubhalo:
+        subhaloIDs = np.random.choice([385350, 385351, 385352, 385353], n)
+    else:
+        subhaloIDs = np.array([TNGSubhaloID for i in range(n)])
+    if get_ra_dec:
+        ras = params['ra [deg]'].values
+        decs = params['dec [deg]'].values
+    else:
+        ras = np.array([Ra for i in range(n)])
+        decs = np.array([Dec for i in range(n)])
+    if get_distance:
+        distances = np.random.choice(np.arange(3, 30, 1), n)
+    else:
+        distances = np.array([distances for i in range(n)])
+    if get_noise_level:
+        n_levels = np.random.choice(np.arange(1/20, 0.3, 0.01), n)
+    else:
+        n_levels = np.array([noise_level for i in range(n)])
+    
+    x_rots = np.random.choice(np.arange(0, 360, 1), n)
+    y_rots = np.random.choice(np.arange(0, 360, 1), n)
+    if get_channels:
+        n_channels = list(np.array(bws / frs).astype(int))
+    else:
+        n_channels = np.array([n_chan for i in range(n)])
+
     if mode == 'gauss':
         print('Generating Gaussian Model Cubes ...')
         xyposs = np.arange(100, 250).astype(float)
@@ -541,69 +600,9 @@ if __name__ == '__main__':
         Parallel(n_cores)(delayed(make_cube)(i, data_dir,
                                          amps, xyposs, fwhms, angles, line_centres,
                                          line_fwhms, spectral_indexes) for i in tqdm(range(n)))
-        coords = np.array([coordinates for i in range(n)])
-        sps = np.array([spatial_resolution for i in range(n)])
-        frs = np.array([frequency_resolution for i in range(n)])
-        ints = np.array([integration_time for i in range(n)])
+
     elif mode == 'extended':
         print('Generating Extended Model Cubes using TNG Simulations ...')
-        params = obs_db.sample(n=n, axis=0)
-        if get_spatial_resolution:
-            sps = params['spatial_resolution [arcsec]'].values
-        else:
-            sps = np.array([spatial_resolution for i in range(n)])
-        if get_velocity_resolution:
-            vrs = params['velocity_resolution [Km/s]'].values
-        else:
-            vrs = np.array([velocity_resolution for i in range(n)])
-        if get_bandwidth:
-            bws = params['bandwidth [MHz]'].values
-        else:
-            bws = np.array([bandwidth for i in range(n)])
-        if get_frequency_resolution:
-            frs = params['frequency_resolution [MHz]'].values
-        else:
-            frs = np.array([frequency_resolution for i in range(n)])
-        if get_integration_time:
-            ints = params['integration_time [s]'].values
-        else:
-            ints = np.array([integration_time for i in range(n)])
-        if get_coordinates:
-            coords = params['J2000 coordinates'].values
-        else:
-            coords = np.array([coordinates for i in range(n)])
-        if get_TNGSnap:
-            snapIDs  = np.random.choice([99, 98, 97], n)
-        else:
-            snapID = TNGSnap
-            snapIDs = np.array([snapID for i in range(n)])
-        if get_TNGSubhalo:
-            subhaloIDs = np.random.choice([385350, 385351, 385352, 385353], n)
-        else:
-            subhaloIDs = np.array([TNGSubhaloID for i in range(n)])
-        if get_ra_dec:
-            ras = params['ra [deg]'].values
-            decs = params['dec [deg]'].values
-        else:
-            ras = np.array([Ra for i in range(n)])
-            decs = np.array([Dec for i in range(n)])
-        if get_distance:
-            distances = np.random.choice(np.arange(3, 30, 1), n)
-        else:
-            distances = np.array([distances for i in range(n)])
-        if get_noise_level:
-            n_levels = np.random.choice(np.arange(1/20, 0.3, 0.01), n)
-        else:
-            n_levels = np.array([noise_level for i in range(n)])
-        
-        x_rots = np.random.choice(np.arange(0, 360, 1), n)
-        y_rots = np.random.choice(np.arange(0, 360, 1), n)
-        if get_channels:
-            n_channels = list(np.array(bws / frs).astype(int))
-        else:
-            n_channels = np.array([n_chan for i in range(n)])
-
-
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
                                                           n_channels, n_px, save_plots) for i in tqdm(range(n)))
@@ -645,10 +644,12 @@ if __name__ == '__main__':
 
 
         #print(data_dir, output_dir, ac, c, sp, central_freq, fr, it, map_size, n_px)
-        df.write(str(i) + ',' + data_dir + ',' + output_dir + ',' + ac + ',' + c + ',' + sp + ',' +
-                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + str(n_px) +
-                      ',' + vr + ',' + ra + ',' + dec + ',' + dl + ',' + nl + ',' + x_rot + ',' +
-                      y_rot + ',' + n_c, ',' + sID + ',' + snapID)
+        string = str(i) + ',' + data_dir + ',' + output_dir + ',' + ac + ',' + c + ',' + sp + ',' + \
+                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + str(n_px) + \
+                      ',' + vr + ',' + ra + ',' + dec + ',' + dl + ',' + nl + ',' + x_rot + ',' + \
+                      y_rot + ',' + n_c + ',' + sID + ',' + snapID
+        
+        df.write(string)
         df.write('\n')
     df.close()
 

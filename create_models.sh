@@ -34,7 +34,8 @@ Help()
    echo "D     The declination of the source."
    echo "T     The distance of the source."
    echo "l     The noise level of the simulation."
-   echo "e    Whether to sample the parameters of the simulation or use input parameters / default ones."
+   echo "e     Whether to sample the parameters of the simulation or use input parameters / default ones."
+   echo "w     Flags controlling which parameters to sample. See -V for more details."
    echo "k    Whether to save the plots of the simulation."
    echo "h     Print this Help."
    echo "V     Detailed parameters description and default values     "
@@ -47,36 +48,8 @@ Help()
 
 ShowParams()
 {
-    echo "Default values:"
-    echo 
-    echo "Input directory: $MODEL_DIR"
-    echo "Output directory: $OUTPUT_DIR"
-    echo "Plot directory: $PLOT_DIR"
-    echo "CSV name: $PARAM_NAME"
-    echo "Mode: $MODE"
-    echo "Number of models: $N"
-    echo "Antenna config: $ANTENNA_CONFIG"
-    echo "Spatial resolution: $SPATIAL_RESOLUTION"
-    echo "Integration time: $INTEGRATION_TIME"
-    echo "Coordinates: $COORDINATES"
-    echo "Bandwidth: $BANDWIDTH"
-    echo "ALMA band: $ALMA_BAND"
-    echo "Frequency resolution: $FREQUENCY_RESOLUTION"
-    echo "Velocity resolution: $VELOCITY_RESOLUTION"
-    echo "TNGbase path: $TNGBASE_PATH"
-    echo "TNG snapshot: $TNG_SNAP"
-    echo "TNG subhalo ID: $TNG_SUBHALO_ID"
-    echo "Number of pixels: $N_PIXELS"
-    echo "Number of channels: $N_CHANNELS"
-    echo "RA: $RA"
-    echo "DEC: $DEC"
-    echo "Distance: $DISTANCE"
-    echo "Noise level: $NOISE_LEVEL"
-    echo "Sample params: $SAMPLE_PARAMS"
-    echo "Save plots: $SAVE_PLOTS"
-    echo 
-    echo "The .sh scripts calls this function, here is the help to get a sense of the parameters"
-    conda run -n casa6.5 python $MAIN_PATH/generate_models.py --h
+    # Display Help
+    conda run -n casa6.5 python $MAIN_PATH/generate_models.py -h
 }
 
 MODEL_DIR="models";
@@ -104,8 +77,9 @@ DISTANCE="0.0"
 NOISE_LEVEL="0.3"
 SAMPLE_PARAMS="False"
 SAVE_PLOTS="False"
+SAMPLE_PARAMS_FLAGS="e"
 
-while getopts ":h;:V;d:;o:;p:;c:;m:;n:;a:;s:;i:;C:;b:;B:;f:;v:;t:;S:;I:;P:;N:;R:;D:;T:;l:;e:;k:" option; do
+while getopts ":h;:V;d:;o:;p:;c:;m:;n:;a:;s:;i:;C:;b:;B:;f:;v:;t:;S:;I:;P:;N:;R:;D:;T:;l:;e:;k:;w:" option; do
    case $option in
       h) # display Help
          Help
@@ -160,6 +134,8 @@ while getopts ":h;:V;d:;o:;p:;c:;m:;n:;a:;s:;i:;C:;b:;B:;f:;v:;t:;S:;I:;P:;N:;R:
           SAMPLE_PARAMS="$OPTARG";;
       k) # Enter a save plots
           SAVE_PLOTS="$OPTARG";;
+      w) # Enter sample params flags
+          SAMPLE_PARAMS_FLAGS="$OPTARG";;
       \?) # incorrect option
           echo "Error: Invalid option"
           exit;;
@@ -171,5 +147,5 @@ while getopts ":h;:V;d:;o:;p:;c:;m:;n:;a:;s:;i:;C:;b:;B:;f:;v:;t:;S:;I:;P:;N:;R:
 done
 
 
-conda run -n casa6.5 python $MAIN_PATH/generate_models.py  --coordinates "$COORDINATES" --data_dir $MODEL_DIR --output_dir $OUTPUT_DIR --plot_dir $PLOT_DIR --csv_name $PARAM_NAME --mode $MODE --n_simulations $N --antenna_config $ANTENNA_CONFIG --spatial_resolution $SPATIAL_RESOLUTION --integration_time $INTEGRATION_TIME  --bandwidth $BANDWIDTH --band $ALMA_BAND --frequency_resolution $FREQUENCY_RESOLUTION --velocity_resolution $VELOCITY_RESOLUTION --TNGBasePath $TNGBASE_PATH --TNGSnap $TNG_SNAP --TNGSubhaloID $TNG_SUBHALO_ID --n_px $N_PIXELS --n_chan $N_CHANNELS --ra $RA --dec $DEC --distance $DISTANCE --noise_level $NOISE_LEVEL --sample_params $SAMPLE_PARAMS --save_plots $SAVE_PLOTS 
+conda run -n casa6.5 python $MAIN_PATH/generate_models.py  --coordinates "$COORDINATES" --data_dir $MODEL_DIR --output_dir $OUTPUT_DIR --plot_dir $PLOT_DIR --csv_name $PARAM_NAME --mode $MODE --n_simulations $N --antenna_config $ANTENNA_CONFIG --spatial_resolution $SPATIAL_RESOLUTION --integration_time $INTEGRATION_TIME  --bandwidth $BANDWIDTH --band $ALMA_BAND --frequency_resolution $FREQUENCY_RESOLUTION --velocity_resolution $VELOCITY_RESOLUTION --TNGBasePath $TNGBASE_PATH --TNGSnap $TNG_SNAP --TNGSubhaloID $TNG_SUBHALO_ID --n_px $N_PIXELS --n_chan $N_CHANNELS --ra $RA --dec $DEC --distance $DISTANCE --noise_level $NOISE_LEVEL --sample_params $SAMPLE_PARAMS --sample_selection $SAMPLE_PARAMS_FLAGS --save_plots $SAVE_PLOTS  
 echo "Finished generating models, please use the create_simulation.sh script to create the simulations."
