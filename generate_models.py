@@ -200,8 +200,6 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     velocity_resolution = velocity_resolutions[i]
     tngid = subhaloID[i]
     tngsnap = TNGSnap[i]
-    print(tngid, tngsnap, distance, x_rot, y_rot, ra, dec, spatial_resolution, velocity_resolution)
-    print(type(tngid), type(tngsnap), type(distance), type(x_rot), type(y_rot), type(ra), type(dec), type(spatial_resolution), type(velocity_resolution))
     source = TNGSource(TNGBasePath, tngsnap, tngid,
                        distance=distance * U.Mpc,
                        rotation = {'L_coords': (x_rot * U.deg, y_rot * U.deg)},
@@ -579,6 +577,7 @@ if __name__ == '__main__':
         y_rots = np.random.choice(np.arange(0, 360, 1), n)
         n_channels = list(np.array(bws / frs).astype(int))
         n_channel = max(set(n_channels), key=n_channels.count)
+        print('n_channel: ', n_channel)
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
                                                           n_px, n_channel, save_plots) for i in tqdm(range(n)))
@@ -626,6 +625,34 @@ if __name__ == '__main__':
                       y_rot + ',' + n_c, ',' + sID + ',' + snapID)
         df.write('\n')
     df.close()
+
+    df = open('sim_info.csv', 'w')
+    df.write('The sims_param.csv file contains the parameters of the simulations. The columns are as follows:\n')
+    df.write('1. ID: The ID of the simulation\n')
+    df.write('2. data_dir: The directory where the data is stored\n')
+    df.write('3. output_dir: The directory where the output sky models and dirty cubes pairs will be stored\n')
+    df.write('4. antenna_config: The antenna configuration used for the simulation\n')
+    df.write('5. J2000 coordinates: The coordinates of the simulated source\n')
+    df.write('6. pixel_size: The pixel size in arcsecond of the simulated cube\n')
+    df.write('7. central_freq: The central frequency of the simulated cube\n')
+    df.write('8. channel_width: The channel width of the simulated cube in MHz\n')
+    df.write('9. integration_time: The integration time of the simulated cube in seconds\n')
+    df.write('10. map_size: The spatial size of the simulated cube in arcseconds\n')
+    df.write('11. n_px: The number of pixels in the spatial dimensions of the cube\n')
+    df.write('12. vlsr: The systemic velocity of the simulated source in km/s\n')
+    df.write('13. ra: The right ascension of the simulated source in degrees\n')
+    df.write('14. dec: The declination of the simulated source in degrees\n')
+    df.write('15. distance: The distance of the simulated source in Mpc\n')
+    df.write('16. noise_level: The noise level of the simulated cube as a fraction of the peak brightness\n')
+    df.write('17. x_rot: The rotation of the simulated cube in the x direction in degrees\n')
+    df.write('18. y_rot: The rotation of the simulated cube in the y direction in degrees\n')
+    df.write('19. n_channel: The number of channels in the simulated cube\n')
+    df.write('20. subhaloID: The ID of the subhalo from which the simulated source was taken\n')
+    df.write('21. snapID: The ID of the snapshot from which the subhalo was taken\n')
+    df.write('\n')
+    df.write('In order to produce the dirty cubes, run the create_simulations.sh script!\n')
+    df.close()
+
     print(f'Execution took {time.time() - start} seconds')
     print('To see the parameters of the simulations, run: cat sims_param.csv')
 
