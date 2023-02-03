@@ -177,7 +177,7 @@ def plot_moments(FluxCube, vch, path):
 
 def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
                            spatial_resolutions, velocity_resolutions, ras, decs,
-                           n_levels, distances, x_rots, y_rots, n_px=256, n_chan=1024, save_plots=False):
+                           n_levels, distances, x_rots, y_rots, n_channels, n_px=256, save_plots=False):
     # Generate a cube from the parameters
     # params is a dictionary with the following keys
     # spatial_resolution [arcsec]
@@ -200,6 +200,7 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     velocity_resolution = velocity_resolutions[i]
     tngid = subhaloID[i]
     tngsnap = TNGSnap[i]
+    n_chan = n_channels[i]
     source = TNGSource(TNGBasePath, tngsnap, tngid,
                        distance=distance * U.Mpc,
                        rotation = {'L_coords': (x_rot * U.deg, y_rot * U.deg)},
@@ -384,6 +385,8 @@ get_ra_dec = False
 get_noise_level = False
 get_distance = False
 get_band = False
+get_channels = False
+get_coordinates = False
 if sample_params == "True":
     if 'e' in sample_selection:
         get_antennas = True
@@ -398,6 +401,8 @@ if sample_params == "True":
         get_noise_level = True
         get_distance = True
         get_band = True
+        get_channels = True
+        get_coordinates = True
     if 'a' in sample_selection:
         get_antennas = True
     if 'r' in sample_selection:
@@ -422,6 +427,11 @@ if sample_params == "True":
         get_distance = True
     if 'B' in sample_selection:
         get_bandwidth = True
+    if 'c' in sample_selection:
+        get_channels = True
+    if 'x' in sample_selection:
+        get_coordinates = True
+    
 
 
 
@@ -541,7 +551,7 @@ if __name__ == '__main__':
             ints = params['integration_time [s]'].values
         else:
             ints = np.array([integration_time for i in range(n)])
-        if coordinates is None:
+        if get_coordinates:
             coords = params['J2000 coordinates'].values
         else:
             coords = np.array([coordinates for i in range(n)])
@@ -571,13 +581,14 @@ if __name__ == '__main__':
         
         x_rots = np.random.choice(np.arange(0, 360, 1), n)
         y_rots = np.random.choice(np.arange(0, 360, 1), n)
-        n_channels = list(np.array(bws / frs).astype(int))
-        print(n_channels)
-        n_channel = max(set(n_channels), key=n_channels.count)
-        print('n_channel: ', n_channel)
+        if get_channels:
+            n_channels = list(np.array(bws / frs).astype(int))
+        else:
+            n_channels = np.array([n_chan for i in range(n)])
+
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
-                                                          n_px, n_channel, save_plots) for i in tqdm(range(n)))
+                                                          n_channels, n_px, save_plots) for i in tqdm(range(n)))
         
 
     
@@ -610,7 +621,7 @@ if __name__ == '__main__':
         nl = str(n_levels[i]) 
         x_rot = str(x_rots[i]) + 'deg'
         y_rot = str(y_rots[i]) + 'deg'
-        n_c = str(n_channel) + 'ch'
+        n_c = str(n_channels[i]) + 'ch'
         sID = str(subhaloIDs[i])
         snapID = str(snapIDs[i])
 
