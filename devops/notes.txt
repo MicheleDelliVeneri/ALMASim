@@ -12,3 +12,48 @@ NAXIS : 128  128  64  1
 
 NAXIS sono n_pix_x, n_pix_y e n_channels
 cdelt 
+
+
+1. Create the maartini datacube for gaussians
+2. generate properties vector out of make cube
+
+### MARTINI DATA CUBE
+
+https://martini.readthedocs.io/en/latest/_modules/martini/datacube.html#DataCube
+
+
+datacube_unit = U.Jy * U.pix**-2
+        self._array = np.zeros((n_px_x, n_px_y, n_channels, 1)) * datacube_unit
+        self.n_px_x, self.n_px_y, self.n_channels = n_px_x, n_px_y, n_channels
+        self.px_size = px_size
+        self.channel_width = channel_width
+        self.velocity_centre = velocity_centre
+        self.ra = ra
+        self.dec = dec
+        self.padx = 0
+        self.pady = 0
+        self.wcs = wcs.WCS(naxis=3)
+        self.wcs.wcs.crpix = [
+            self.n_px_x / 2.0 + 0.5,
+            self.n_px_y / 2.0 + 0.5,
+            self.n_channels // 2,
+        ]
+        self.units = [U.deg, U.deg, U.m * U.s**-1]
+        self.wcs.wcs.cunit = [unit.to_string("fits") for unit in self.units]
+        self.wcs.wcs.cdelt = [
+            -self.px_size.to(self.units[0]).value,
+            self.px_size.to(self.units[1]).value,
+            self.channel_width.to(self.units[2]).value,
+        ]
+        self.wcs.wcs.crval = [
+            self.ra.to(self.units[0]).value,
+            self.dec.to(self.units[1]).value,
+            self.velocity_centre.to(self.units[2]).value,
+        ]
+        self.wcs.wcs.ctype = ["RA---TAN", "DEC--TAN", "VELO-OBS"]
+        self.wcs = wcs.utils.add_stokes_axis_to_wcs(
+            self.wcs, self.wcs.wcs.naxis
+        )
+        self._channel_mids()
+        self._channel_edges()
+        self._freq_channel_mode = False

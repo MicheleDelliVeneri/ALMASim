@@ -77,6 +77,23 @@ def distance(p1, p2):
     return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
 
+
+ def make_gaussian_cube(i, data_dir, amps, xyposs, fwhms, angles, 
+                        line_centres, line_fwhms, spectral_indexes,
+                        spatial_resolutions, velocity_resolutions, 
+                        n_channels, n_px):
+    spatial_resolution = spatial_resolutions[i]
+    velocity_resolution = velocity_resolutions[i]
+    n_chan = n_channels[i]
+    pa = angles[i]
+    amp = amps[i]
+    line_amp = amps[i]
+    limit = amp + line_amp * amp
+    pos_x, pos_y = xyposs[i]
+    return 
+
+
+
 def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms, spectral_indexes):
     n_components = random.randint(2, 5)
     params = []
