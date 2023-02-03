@@ -451,7 +451,7 @@ if __name__ == '__main__':
         else:
             sps = np.array([spatial_resolution for i in range(n)])
         if get_velocity_resolution:
-            vrs = params['velocity_resolution [km/s]'].values
+            vrs = params['velocity_resolution [Km/s]'].values
         else:
             vrs = np.array([velocity_resolution for i in range(n)])
         if get_bandwidth:
