@@ -322,6 +322,7 @@ parser.add_argument('--sample_selection', type=str,
                           " r = sample spatial resolution\n"
                           " t = sample integration time\n"
                           " c = sample coordinates\n"
+                          " x = sample number of channels\n"
                           " b = sample band\n"
                           " B = sample bandwidth\n"
                           " f = sample frequency resolution\n"
@@ -427,9 +428,9 @@ if sample_params == "True":
         get_distance = True
     if 'B' in sample_selection:
         get_bandwidth = True
-    if 'c' in sample_selection:
-        get_channels = True
     if 'x' in sample_selection:
+        get_channels = True
+    if 'c' in sample_selection:
         get_coordinates = True
     
 
