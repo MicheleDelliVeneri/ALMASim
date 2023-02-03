@@ -572,6 +572,7 @@ if __name__ == '__main__':
         x_rots = np.random.choice(np.arange(0, 360, 1), n)
         y_rots = np.random.choice(np.arange(0, 360, 1), n)
         n_channels = list(np.array(bws / frs).astype(int))
+        print(n_channels)
         n_channel = max(set(n_channels), key=n_channels.count)
         print('n_channel: ', n_channel)
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
