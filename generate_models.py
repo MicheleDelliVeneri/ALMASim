@@ -242,11 +242,7 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     os.remove('skymodel_{}.hdf5'.format(str(i)))
     line = np.sum(SkyCube, axis=(0, 1))
     max_line = np.max(line)
-    if n_level is not None:
-        noise_level = n_level * max_line
-    else:
-        n_level = np.random.uniform(1/20, 0.3)
-        noise_level = n_level * max_line
+    noise_level = n_level * max_line
     noise = GaussianNoise(
         rms=noise_level * U.Jy * U.arcsec**-2)
 
