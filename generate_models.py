@@ -555,9 +555,10 @@ if __name__ == '__main__':
         x_rots = np.random.choice(np.arange(0, 360, 1), n)
         y_rots = np.random.choice(np.arange(0, 360, 1), n)
         n_channels = list(np.array(bws / frs).astype(int))
-        print(x_rots.shape, y_rots.shape)
         n_channel = max(set(n_channels), key=n_channels.count)
         print(snapIDs.shape, subhaloIDs.shape)
+        print(snapIDs)
+        print(subhaloIDs)
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
                                                           n_px, n_channel, save_plots) for i in tqdm(range(n)))
