@@ -423,7 +423,8 @@ if sample_params == "True":
         get_noise_level = True
     if 'D' in sample_selection:
         get_distance = True
-    
+
+
 
 # Select Central Frequency From Band
 if get_band is False:
@@ -487,7 +488,23 @@ if __name__ == '__main__':
     print('Sample Selection Flag: ', sample_selection)
     print('-------------------------------------\n')
 
+    print('Sampling Flags:')
+    print('Get Antennas: ', get_antennas)
+    print('Get Spatial Resolution: ', get_spatial_resolution)
+    print('Get Integration Time: ', get_integration_time)
+    print('Get Velocity Resolution: ', get_velocity_resolution)
+    print('Get Bandwidth: ', get_bandwidth)
+    print('Get Frequency Resolution: ', get_frequency_resolution)
+    print('Get TNG Snap: ', get_TNGSnap)
+    print('Get TNG Subhalo: ', get_TNGSubhalo)
+    print('Get Ra Dec: ', get_ra_dec)
+    print('Get Noise Level: ', get_noise_level)
+    print('Get Distance: ', get_distance)
+    print('Get Band: ', get_band)
+    print('-------------------------------------\n')
+  
     if mode == 'gauss':
+        print('Generating Gaussian Model Cubes ...')
         xyposs = np.arange(100, 250).astype(float)
         fwhms = np.linspace(2., 8., num=100).astype(float)
         angles = np.linspace(0, 90, num=100).astype(float)
@@ -503,6 +520,7 @@ if __name__ == '__main__':
         frs = np.array([frequency_resolution for i in range(n)])
         ints = np.array([integration_time for i in range(n)])
     elif mode == 'extended':
+        print('Generating Extended Model Cubes using TNG Simulations ...')
         params = obs_db.sample(n=n, axis=0)
         if get_spatial_resolution:
             sps = params['spatial_resolution [arcsec]'].values
