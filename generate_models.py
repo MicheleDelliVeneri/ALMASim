@@ -327,6 +327,7 @@ parser.add_argument('--sample_selection', type=str,
                           " t = sample integration time\n"
                           " c = sample coordinates\n"
                           " b = sample band\n"
+                          " B = sample bandwidth\n"
                           " f = sample frequency resolution\n"
                           " v = sample velocity resolution\n"
                           " s = sample Snapshot\n"
@@ -401,6 +402,7 @@ if sample_params == "True":
         get_ra_dec = True
         get_noise_level = True
         get_distance = True
+        get_band = True
     if 'a' in sample_selection:
         get_antennas = True
     if 'r' in sample_selection:
@@ -423,6 +425,8 @@ if sample_params == "True":
         get_noise_level = True
     if 'D' in sample_selection:
         get_distance = True
+    if 'B' in sample_selection:
+        get_bandwidth = True
 
 
 
@@ -523,6 +527,7 @@ if __name__ == '__main__':
         print('Generating Extended Model Cubes using TNG Simulations ...')
         params = obs_db.sample(n=n, axis=0)
         if get_spatial_resolution:
+            print('WOrkig Flag')
             sps = params['spatial_resolution [arcsec]'].values
         else:
             sps = np.array([spatial_resolution for i in range(n)])
