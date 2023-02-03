@@ -391,7 +391,7 @@ if __name__ == '__main__':
     obs_db = pd.read_csv('obs_configurations.csv')
     if sample_params == "True":
         print('Sampling Observational Parameters ...')
-        print('Using the following parameters:')
+        print('Using the following additional parameters:')
         print('Models Directory: ', data_dir)
         print('Simulations Directory: ', output_dir)
         print('Plots Directory: ', plot_dir)
@@ -498,11 +498,10 @@ if __name__ == '__main__':
         y_rots = np.random.choice(np.arange(0, 360, 1), n)
         n_channels = list(np.array(bws / frs).astype(int))
         print(x_rots.shape, y_rots.shape)
-        n_channel = max(set(n_channels), key = n_channels.count)
+        n_channel = max(set(n_channels), key=n_channels.count)
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
                                                           n_px, n_channel, save_plots) for i in tqdm(range(n)))
-
         
 
     
@@ -528,9 +527,25 @@ if __name__ == '__main__':
         fr = str(frs[i]) + 'MHz'
         map_size = str(n_px * sps[i]) + 'arcsec'
         it = str(ints[i]) + 's'
+        vr = str(vrs[i]) + 'km/s'
+        ra = str(ras[i]) + 'deg'
+        dec = str(decs[i]) + 'deg'
+        dl = str(distances[i]) + 'Mpc'
+        nl = str(n_levels[i]) 
+        x_rot = str(x_rots[i]) + 'deg'
+        y_rot = str(y_rots[i]) + 'deg'
+        n_c = str(n_channel) + 'ch'
+        sID = str(subhaloIDs[i])
+        snapID = str(snapIDs[i])
+
+
         #print(data_dir, output_dir, ac, c, sp, central_freq, fr, it, map_size, n_px)
         df.write(str(i) + ',' + data_dir + ',' + output_dir + ',' + ac + ',' + c + ',' + sp + ',' +
-                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + str(n_px))
+                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + str(n_px) +
+                      ',' + vr + ',' + ra + ',' + dec + ',' + dl + ',' + nl + ',' + x_rot + ',' +
+                      y_rot + ',' + n_c, ',' + sID + ',' + snapID)
         df.write('\n')
     df.close()
     print(f'Execution took {time.time() - start} seconds')
+    print('To see the parameters of the simulations, run: cat sims_param.csv')
+
