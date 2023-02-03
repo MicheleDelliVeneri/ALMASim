@@ -379,7 +379,7 @@ get_antennas = False
 get_spatial_resolution = False
 get_integration_time = False
 get_velocity_resolution = False
-#get_bandwidth = False
+get_bandwidth = False
 get_frequency_resolution = False
 get_TNGSnap = False
 get_TNGSubhalo = False
@@ -392,7 +392,7 @@ if sample_params == "True":
         get_antennas = True
         get_spatial_resolution = True
         get_integration_time = True
-    #get_bandwidth = True
+        get_bandwidth = True
         get_velocity_resolution = True
         get_frequency_resolution = True
         get_TNGSnap = True
@@ -470,7 +470,7 @@ if __name__ == '__main__':
     print('Integration Time: ', integration_time)
     print('Coordinates: ', coordinates)
     print('ALMA Band: ', alma_band)
-    #print('Bandwidth: ', bandwidth)
+    print('Bandwidth: ', bandwidth)
     print('Frequency Resolution: ', frequency_resolution)
     print('Velocity Resolution: ', velocity_resolution)
     print('TNG Snapshot: ', TNGSnap)
@@ -511,10 +511,10 @@ if __name__ == '__main__':
             vrs = params['velocity_resolution [Km/s]'].values
         else:
             vrs = np.array([velocity_resolution for i in range(n)])
-        #if get_bandwidth:
-        #    bws = params['bandwidth [MHz]'].values
-        #else:
-        #    bws = np.array([bandwidth for i in range(n)])
+        if get_bandwidth:
+            bws = params['bandwidth [MHz]'].values
+        else:
+            bws = np.array([bandwidth for i in range(n)])
         if get_frequency_resolution:
             frs = params['frequency_resolution [MHz]'].values
         else:
