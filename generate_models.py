@@ -198,9 +198,10 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     dec = decs[i]
     spatial_resolution = spatial_resolutions[i]
     velocity_resolution = velocity_resolutions[i]
-
-
-    source = TNGSource(TNGBasePath, TNGSnap, subhaloID,
+    tngid = subhaloID[i]
+    tngsnap = TNGSnap[i]
+    print(tngid, tngsnap)
+    source = TNGSource(TNGBasePath, tngsnap, tngid,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
                        ra = ra * U.deg,
