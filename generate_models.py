@@ -292,8 +292,8 @@ parser.add_argument('--coordinates', type=str, default="J2000 03h59m59.96s -34d5
         help='Coordinates of the target in the sky as a J2000 string, if --sample params is set to True a random direction is sampled from real observations')
 parser.add_argument('--band', type=int, default=6,
         help='ALMA Observing band which determines the central frequency of observation')
-parser.add_argument('--bandwidth', type=int, default=1000, 
-                    help='observation bandwidht in MHz')
+#parser.add_argument('--bandwidth', type=int, default=1000, 
+#                    help='observation bandwidht in MHz')
 parser.add_argument('--frequency_resolution', type=float, default=10,
                     help='frequency resolution in MHz')
 parser.add_argument('--velocity_resolution', type=float, default=10,
@@ -309,6 +309,7 @@ parser.add_argument('--distance', type=float, help='The distance of the source i
 parser.add_argument('--noise_level', type=float, help='The noise level as percentage of peak flux', default=0.3, )
 parser.add_argument('--sample_params', type=str, help='Whether to sample the parameters from real observations', default=False)
 parser.add_argument('--save_plots', type=str, help='Whether to save plots of the simulated cubes', default="False")
+parser.add_argument('--sample_selection', type=str, help='Which Parameters to sample as a sequence of characters\nPossible values are:\n 1. a: wheter to sample the antenna configuration', default=False)
 args = parser.parse_args()
 data_dir = str(args.data_dir)
 output_dir = str(args.output_dir)
@@ -319,7 +320,7 @@ spatial_resolution = float(args.spatial_resolution)
 integration_time = float(args.integration_time)
 coordinates = str(args.coordinates)
 alma_band = int(args.band)
-bandwidth = int(args.bandwidth)
+#bandwidth = int(args.bandwidth)
 frequency_resolution = float(args.frequency_resolution)
 velocuty_resolution = float(args.velocity_resolution)
 mode = args.mode
@@ -348,7 +349,7 @@ get_antennas = False
 get_spatial_resolution = False
 get_integration_time = False
 get_velocity_resolution = False
-get_bandwidth = False
+#get_bandwidth = False
 get_frequency_resolution = False
 get_TNGSnap = False
 get_TNGSubhalo = False
@@ -356,10 +357,11 @@ get_ra_dec = False
 get_noise_level = False
 get_distance = False
 if sample_params == "True":
+
     get_antennas = True
     get_spatial_resolution = True
     get_integration_time = True
-    get_bandwidth = True
+    #get_bandwidth = True
     get_velocity_resolution = True
     get_frequency_resolution = True
     get_TNGSnap = True
@@ -414,7 +416,7 @@ if __name__ == '__main__':
     print('Integration Time: ', integration_time)
     print('Coordinates: ', coordinates)
     print('ALMA Band: ', alma_band)
-    print('Bandwidth: ', bandwidth)
+    #print('Bandwidth: ', bandwidth)
     print('Frequency Resolution: ', frequency_resolution)
     print('Velocity Resolution: ', velocity_resolution)
     print('TNG Snapshot: ', TNGSnap)
@@ -454,10 +456,10 @@ if __name__ == '__main__':
             vrs = params['velocity_resolution [Km/s]'].values
         else:
             vrs = np.array([velocity_resolution for i in range(n)])
-        if get_bandwidth:
-            bws = params['bandwidth [MHz]'].values
-        else:
-            bws = np.array([bandwidth for i in range(n)])
+        #if get_bandwidth:
+        #    bws = params['bandwidth [MHz]'].values
+        #else:
+        #    bws = np.array([bandwidth for i in range(n)])
         if get_frequency_resolution:
             frs = params['frequency_resolution [MHz]'].values
         else:
