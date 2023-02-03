@@ -200,7 +200,8 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     velocity_resolution = velocity_resolutions[i]
     tngid = subhaloID[i]
     tngsnap = TNGSnap[i]
-    print(tngid, tngsnap)
+    print(tngid, tngsnap, distance, x_rot, y_rot, ra, dec, spatial_resolution, velocity_resolution)
+    print(type(tngid), type(tngsnap), type(distance), type(x_rot), type(y_rot), type(ra), type(dec), type(spatial_resolution), type(velocity_resolution))
     source = TNGSource(TNGBasePath, tngsnap, tngid,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
@@ -578,9 +579,6 @@ if __name__ == '__main__':
         y_rots = np.random.choice(np.arange(0, 360, 1), n)
         n_channels = list(np.array(bws / frs).astype(int))
         n_channel = max(set(n_channels), key=n_channels.count)
-        print(snapIDs.shape, subhaloIDs.shape)
-        print(snapIDs)
-        print(subhaloIDs)
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
                                                           n_px, n_channel, save_plots) for i in tqdm(range(n)))
