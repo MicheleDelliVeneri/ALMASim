@@ -21,6 +21,7 @@ from martini.sph_kernels import AdaptiveKernel, GaussianKernel, CubicSplineKerne
 import astropy.units as U
 import matplotlib.pyplot as plt
 import h5py
+from astropy.constants import c
 
 def threedgaussian(amplitude, spind, chan, center_x, center_y, width_x, width_y, angle, idxs):
     angle = pi/180. * angle
@@ -47,11 +48,11 @@ def gaussian(x, amp, cen, fwhm):
     return amp*np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
 
 
-def generate_component(master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind):
-    z_idxs = np.arange(0, 128)
-    idxs = np.indices([360, 360])
+def generate_component(master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind, n_px, n_channels):
+    z_idxs = np.arange(0, n_channels)
+    idxs = np.indices([n_px, n_px])
     g = gaussian(z_idxs, line_amp, pos_z, fwhm_z)
-    cube = np.zeros((128, 360, 360))
+    cube = np.zeros((n_channels, n_px, n_px))
     for z in range(cube.shape[0]):
         ts = threedgaussian(amp, spind, z, pos_x, pos_y,
                             fwhm_x, fwhm_y, pa, idxs)
@@ -78,7 +79,7 @@ def distance(p1, p2):
 
 
 
- def make_gaussian_cube(i, data_dir, amps, xyposs, fwhms, angles, 
+def make_gaussian_cube(i, data_dir, amps, xyposs, fwhms, angles, 
                         line_centres, line_fwhms, spectral_indexes,
                         spatial_resolutions, velocity_resolutions, 
                         n_channels, n_px):
@@ -94,7 +95,7 @@ def distance(p1, p2):
 
 
 
-def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms, spectral_indexes):
+def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms, spectral_indexes, n_pxs, n_channels):
     n_components = random.randint(2, 5)
     params = []
     columns = ['ID', 'amp', 'line_amp', 'pa', 'spind',
@@ -109,10 +110,13 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     fwhm_x = np.random.choice(fwhms)
     fwhm_y = np.random.choice(fwhms)
     spind = np.random.choice(spectral_indexes)
-    master_cube = np.zeros((128, 360, 360))
+    n_px = n_pxs[i]
+    n_channel = n_channels[i]
+    master_cube = np.zeros((n_channel, n_px, n_px))
+    
     boxes = []
     master_cube = generate_component(
-        master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind)
+        master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind, n_px, n_channel)
     params.append([int(i), round(amp, 2), round(line_amp, 2), round(pa, 2), round(spind, 2),
                    round(fwhm_x, 2), round(fwhm_y, 2), round(fwhm_z, 2), round(pos_z, 2)])
     mindist = 20
@@ -140,7 +144,7 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
             line_amp = np.random.choice(amps)
             temp = amp + line_amp * amp
         master_cube = generate_component(
-            master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind)
+            master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind, n_px, n_channel)
         params.append([int(i), round(amp, 2), round(line_amp, 2), round(pa, 2), round(spind, 2),
                        round(fwhm_x, 2), round(fwhm_y, 2), round(fwhm_z, 2), round(pos_z, 2)])
     hdu = fits.PrimaryHDU(data=master_cube.astype(np.float32))
@@ -159,13 +163,29 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     df['y1'] = boxes[:, 2]
     df.to_csv(os.path.join(data_dir, 'params_' + str(i) + '.csv'), index=False)
 
-def get_band_central_freq(band):
+def get_band_central_freq_and_fov(band):
+    light_speed = c.to(U.m / U.s).value
     if band == 3:
-        return '100GHz'
+        central_freq = 100 * U.GHz
+        central_freq = central_freq.to(U.Hz).value
+        central_freq_s = 1 / central_freq
+        amplitude = light_speed * central_freq_s
+        fov = 1.2 * amplitude / 12
+        return '100GHz', fov
     elif band == 6:
-        return '250GHz'
+        central_freq = 250 * U.GHz
+        central_freq = central_freq.to(U.Hz).value
+        central_freq_s = 1 / central_freq
+        amplitude = light_speed * central_freq_s
+        fov = 1.2 * amplitude / 12
+        return '250GHz', fov
     elif band == 9:
-        return '650GHz'
+        central_freq = 650 * U.GHz
+        central_freq = central_freq.to(U.Hz).value
+        central_freq_s = 1 / central_freq
+        amplitude = light_speed * central_freq_s
+        fov = 1.2 * amplitude / 12
+        return '650GHz', fov
     
 def plot_moments(FluxCube, vch, path):
     np.seterr(all='ignore')
@@ -194,7 +214,7 @@ def plot_moments(FluxCube, vch, path):
 
 def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
                            spatial_resolutions, velocity_resolutions, ras, decs,
-                           n_levels, distances, x_rots, y_rots, n_channels, n_px=256, save_plots=False):
+                           n_levels, distances, x_rots, y_rots, n_channels, n_pxs, save_plots=False):
     # Generate a cube from the parameters
     # params is a dictionary with the following keys
     # spatial_resolution [arcsec]
@@ -213,11 +233,12 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     y_rot = y_rots[i]
     ra = ras[i]
     dec = decs[i]
-    spatial_resolution = spatial_resolutions[i]
+    spatial_resolution = spatial_resolutions[i] / 6
     velocity_resolution = velocity_resolutions[i]
     tngid = subhaloID[i]
     tngsnap = TNGSnap[i]
     n_chan = n_channels[i]
+    n_px = n_pxs[i]
 
     print('Generating source from subhalo {} at snapshot {}'.format(tngid, tngsnap))
 
@@ -420,7 +441,7 @@ get_channels = False
 get_coordinates = False
 
 if sample_selection != "e":
-    sample_params = True
+    sample_params = "True"
 
 if sample_params == "True":
     if 'e' in sample_selection:
@@ -472,9 +493,9 @@ if sample_params == "True":
 
 # Select Central Frequency From Band
 if get_band is False:
-    central_freq = get_band_central_freq(alma_band)
+    central_freq, fov = get_band_central_freq_and_fov(alma_band)
 else:
-    central_freq = get_band_central_freq(np.random.choice([3, 6, 9]))
+    central_freq, fov = get_band_central_freq_and_fov(np.random.choice([3, 6, 9]))
 
 
 if not os.path.exists(data_dir):
@@ -604,7 +625,15 @@ if __name__ == '__main__':
         n_channels = list(np.array(bws / frs).astype(int))
     else:
         n_channels = np.array([n_chan for i in range(n)])
-
+    
+    pixel_size = sps / 6
+    t_n_px = np.array([fov for i in range(len(pixel_size))]) // pixel_size
+    n_pxs = np.array([n_px for i in range(len(pixel_size))])
+    print('Pixel Size: ', pixel_size[:10])
+    print('Field of View: ', fov)
+    print('Number of Pixels: ', n_pxs[:10])
+    print('Number of Channels: ', n_channels[:10])
+    print('True Number of Pixels: ', t_n_px[:10])
     if mode == 'gauss':
         print('Generating Gaussian Model Cubes ...')
         xyposs = np.arange(100, 250).astype(float)
@@ -616,13 +645,13 @@ if __name__ == '__main__':
         amps = np.arange(1, 5, 0.1)
         Parallel(n_cores)(delayed(make_cube)(i, data_dir,
                                          amps, xyposs, fwhms, angles, line_centres,
-                                         line_fwhms, spectral_indexes) for i in tqdm(range(n)))
+                                         line_fwhms, spectral_indexes, n_pxs, n_channels) for i in tqdm(range(n)))
 
     elif mode == 'extended':
         print('Generating Extended Model Cubes using TNG Simulations ...')
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
-                                                          n_channels, n_px, save_plots) for i in tqdm(range(n)))
+                                                          n_channels, n_pxs, save_plots) for i in tqdm(range(n)))
         
 
     
@@ -639,14 +668,14 @@ if __name__ == '__main__':
     df = open('sims_param.csv', 'w')
     for i in range(n):
         if get_antennas is True:
-            ac = os.path.join(os.getcwd(), np.random.choice(antenna_configs))
+            ac = os.path.join(os.getcwd(), 'antenna_config',  np.random.choice(antenna_configs))
         else:
-            ac = antenna_config
+            ac = os.path.join(os.getcwd(), antenna_config)
 
         c = coords[i]
-        sp = str(sps[i]) + 'arcsec'
+        sp = str(sps[i] / 6) + 'arcsec'
         fr = str(frs[i]) + 'MHz'
-        map_size = str(n_px * sps[i]) + 'arcsec'
+        map_size = str(n_px * (sps[i] / 6)) + 'arcsec'
         it = str(ints[i]) + 's'
         vr = str(vrs[i]) + 'km/s'
         ra = str(ras[i]) + 'deg'
@@ -658,11 +687,12 @@ if __name__ == '__main__':
         n_c = str(n_channels[i]) + 'ch'
         sID = str(subhaloIDs[i])
         snapID = str(snapIDs[i])
+        n_p = str(n_pxs[i])
 
 
         #print(data_dir, output_dir, ac, c, sp, central_freq, fr, it, map_size, n_px)
         string = str(i) + ',' + data_dir + ',' + output_dir + ',' + ac + ',' + c + ',' + sp + ',' + \
-                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + str(n_px) + \
+                      central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + n_p + \
                       ',' + vr + ',' + ra + ',' + dec + ',' + dl + ',' + nl + ',' + x_rot + ',' + \
                       y_rot + ',' + n_c + ',' + sID + ',' + snapID
         
