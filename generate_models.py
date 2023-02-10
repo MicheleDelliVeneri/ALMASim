@@ -505,7 +505,7 @@ n_cores = multiprocessing.cpu_count() // 4
 
 if __name__ == '__main__':
     start = time.time()
-    print('Generating Model Cubes ...')
+    print('Generating Model Cubes ...', flush=True)
     print("loading observational parameters ...\n")
     print("-------------------------------------\n")
     obs_db = pd.read_csv('obs_configurations.csv')
