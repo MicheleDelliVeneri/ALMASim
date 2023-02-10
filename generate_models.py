@@ -317,48 +317,48 @@ class SmartFormatter(argparse.HelpFormatter):
 parser = argparse.ArgumentParser(description='Simulate ALMA data cubes from TNG data cubes and Gaussian Simulations',
                                  formatter_class=SmartFormatter)
 parser.add_argument("--data_dir", type=str, default='models',
-                    help='The directory in wich the simulated model cubes are stored;')
+                    help='The directory in wich the simulated model cubes are stored, set with the -d flag;')
 parser.add_argument("--output_dir", type=str, default='sims', 
-                    help='The directory in which the alma simulations will be stored;')
-parser.add_argument("--plot_dir", type=str, help='The plot directory', default='plots')
+                    help='The directory in which the alma simulations will be stored, set with the -o flag;')
+parser.add_argument("--plot_dir", type=str, help='The plot directory, set with the -p flag', default='plots')
 parser.add_argument("--csv_name", type=str, default='params.csv', 
-                    help='The name of the .csv file in which to store the simulated source parameters;')
+                    help='The name of the .csv file in which to store the simulated source parameters, set with the -c flag;')
 parser.add_argument("--mode", type=str, default='gauss',  choices=['gauss', 'extended'],
-                    help='The type of model to simulate, either gauss or extended;')
-parser.add_argument('--n_simulations', type=int, help='The number of cubes to generate;', default=10, )
+                    help='The type of model to simulate, either gauss or extended, set with the -m flag;')
+parser.add_argument('--n_simulations', type=int, help='The number of cubes to generate, set with the -n flag;', default=10, )
 
 parser.add_argument('--antenna_config', type=str, default='antenna_config/alma.cycle9.3.1.cfg', 
-        help="The antenna configuration file, if --sample params is set to True, random antenna configurations are sampled from the list of available configurations")
+        help="The antenna configuration file, set with the -a flag")
 parser.add_argument('--spatial_resolution', type=float, default=0.1, 
-        help='Spatial resolution in arcseconds, if --sample params is set to True random resolutions are sampled from real observations')
+        help='Spatial resolution in arcseconds, set with the -s flag')
 parser.add_argument('--integration_time', type=int, default=2400, 
-        help='Total observation time, iif --sample params is set to True, random observation times are sampled from real observations')
+        help='Total observation time, set with the -i flag')
 parser.add_argument('--coordinates', type=str, default="J2000 03h59m59.96s -34d59m59.50s", 
-        help='Coordinates of the target in the sky as a J2000 string, if --sample params is set to True a random direction is sampled from real observations')
+        help='Coordinates of the target in the sky as a J2000 string, set with the -C flag')
 parser.add_argument('--band', type=int, default=6,
-        help='ALMA Observing band which determines the central frequency of observation')
+        help='ALMA Observing band which determines the central frequency of observation, set with the -B flag')
 parser.add_argument('--bandwidth', type=int, default=1000, 
-                    help='observation bandwidht in MHz')
+                    help='observation bandwidht in MHz, set with the -b flag')
 parser.add_argument('--frequency_resolution', type=float, default=10,
-                    help='frequency resolution in MHz')
+                    help='frequency resolution in MHz, set with the -f flag')
 parser.add_argument('--velocity_resolution', type=float, default=10,
-                    help='velocity resolution in km/s')
-parser.add_argument('--TNGBasePath', type=str, default='TNG100-1/output/',)
-parser.add_argument("--TNGSnap", type=int, help='The TNG snapshot', default=99,)
-parser.add_argument('--TNGSubhaloID', type=int, help='The TNG subhalo ID', default=385350, )
-parser.add_argument("--n_px", type=int, help='The number of pixels', default=256, )
-parser.add_argument("--n_chan", type=int, help='The number of channels', default=128, )
-parser.add_argument('--ra', type=float, help='The right ascension of the source in degrees', default=0.0,)
-parser.add_argument('--dec', type=float, help='The declination of the source in degrees', default=0.0, )
-parser.add_argument('--distance', type=float, help='The distance of the source in Mpc', default=0.0, )
-parser.add_argument('--noise_level', type=float, help='The noise level as percentage of peak flux', default=0.3, )
-parser.add_argument('--sample_params', type=str, help='Whether to sample the parameters from real observations', default=False)
-parser.add_argument('--save_plots', type=str, help='Whether to save plots of the simulated cubes', default="False")
+                    help='velocity resolution in km/s, set with the -v flag')
+parser.add_argument('--TNGBasePath', type=str, default='TNG100-1/output/', help='The TNG base path, set with the -t flag')
+parser.add_argument("--TNGSnap", type=int, help='The TNG snapshot', default=99, help='The TNG snapshot number, set with the -S flag')
+parser.add_argument('--TNGSubhaloID', type=int, help='The TNG subhalo ID', default=385350, help='The TNG subhalo ID, set with the -I flag')
+parser.add_argument("--n_px", type=int, help='The number of pixels in the spatial dimensions of the cube, set with the -P flag', default=256, )
+parser.add_argument("--n_chan", type=int, help='The number of channels in the frequency dimensiion of the cube, set with the -N flag', default=128, )
+parser.add_argument('--ra', type=float, help='The right ascension of the source in degrees, set with the -R flag', default=0.0,)
+parser.add_argument('--dec', type=float, help='The declination of the source in degrees, set with the -D flag', default=0.0, )
+parser.add_argument('--distance', type=float, help='The distance of the source in Mpc, set with the -D flag', default=0.0, )
+parser.add_argument('--noise_level', type=float, help='The noise level as percentage of peak flux, set with the -l flag', default=0.3, )
+parser.add_argument('--sample_params', type=str, help='Whether to sample the parameters from real observations, set with the -e flag', default=False)
+parser.add_argument('--save_plots', type=str, help='Whether to save plots of the simulated cubes, set with the -k flag', default="False")
 parser.add_argument('--sample_selection', type=str, 
                     help="R|"
                           "Flags to select, in case of sampling, which paramters to sample from "
-                          "real observations.\n"
-                          "The flags are:\n"
+                          "real observations, set with the -w flag followed by a string of subflag/s.\n"
+                          "The subflags are:\n"
                           " a = sample antenna configuration\n"
                           " r = sample spatial resolution\n"
                           " t = sample integration time\n"
@@ -375,7 +375,7 @@ parser.add_argument('--sample_selection', type=str,
                           " N = sample Noise Level\n"
                           " p = sample number of pixels\n"
                           " e = sample all parameters\n\n"   
-                          "Example: --sample_selection 'art' will sample the antenna configuration,"
+                          "Example: -w 'art' will sample the antenna configuration,"
                           "the spatial resolution and the integration time and take the remaining"
                           "parameters from the stdin or from the default values. ",
                           default="e"
