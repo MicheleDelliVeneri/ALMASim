@@ -36,7 +36,7 @@ Help()
    echo "l     The noise level of the simulation."
    echo "e     Whether to sample the parameters of the simulation or use input parameters / default ones."
    echo "w     Flags controlling which parameters to sample. See -V for more details."
-   echo "k    Whether to save the plots of the simulation."
+   echo "k     Whether to save the plots of the simulation."
    echo "h     Print this Help."
    echo "V     Detailed parameters description and default values     "
    echo

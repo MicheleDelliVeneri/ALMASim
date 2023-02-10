@@ -104,6 +104,7 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     spind = np.random.choice(spectral_indexes)
     n_px = n_pxs[i]
     n_channel = n_channels[i]
+    print(n_channel, n_px)
     master_cube = np.zeros((n_channel, n_px, n_px))
     
     boxes = []
@@ -163,21 +164,21 @@ def get_band_central_freq_and_fov(band):
         central_freq_s = 1 / central_freq
         amplitude = light_speed * central_freq_s
         fov = 1.2 * amplitude / 12
-        return '100GHz', fov
+        return '100GHz', fov, band
     elif band == 6:
         central_freq = 250 * U.GHz
         central_freq = central_freq.to(U.Hz).value
         central_freq_s = 1 / central_freq
         amplitude = light_speed * central_freq_s
         fov = 1.2 * amplitude / 12
-        return '250GHz', fov
+        return '250GHz', fov, band
     elif band == 9:
         central_freq = 650 * U.GHz
         central_freq = central_freq.to(U.Hz).value
         central_freq_s = 1 / central_freq
         amplitude = light_speed * central_freq_s
         fov = 1.2 * amplitude / 12
-        return '650GHz', fov
+        return '650GHz', fov, band
     
 def plot_moments(FluxCube, vch, path):
     np.seterr(all='ignore')
@@ -372,6 +373,7 @@ parser.add_argument('--sample_selection', type=str,
                           " C = sample Ra and Dec\n"
                           " D = sample Distance\n"
                           " N = sample Noise Level\n"
+                          " p = sample number of pixels\n"
                           " e = sample all parameters\n\n"   
                           "Example: --sample_selection 'art' will sample the antenna configuration,"
                           "the spatial resolution and the integration time and take the remaining"
@@ -428,6 +430,7 @@ get_distance = False
 get_band = False
 get_channels = False
 get_coordinates = False
+get_number_of_pixels = False
 
 if sample_selection != "e":
     sample_params = "True"
@@ -448,6 +451,7 @@ if sample_params == "True":
         get_band = True
         get_channels = True
         get_coordinates = True
+        get_number_of_pixels = True
     if 'a' in sample_selection:
         get_antennas = True
     if 'r' in sample_selection:
@@ -476,15 +480,18 @@ if sample_params == "True":
         get_channels = True
     if 'c' in sample_selection:
         get_coordinates = True
+    if 'p' in sample_selection:
+        get_number_of_pixels = True
     
 
 
 
 # Select Central Frequency From Band
 if get_band is False:
-    central_freq, fov = get_band_central_freq_and_fov(alma_band)
+    central_freq, fov, alma_band = get_band_central_freq_and_fov(alma_band)
 else:
-    central_freq, fov = get_band_central_freq_and_fov(np.random.choice([3, 6, 9]))
+    central_freq, fov, alma_band = get_band_central_freq_and_fov(np.random.choice([3, 6, 9]))
+
 # transform FoV from rad to arcsec
 fov = fov * 180 / np.pi * 3600
 
@@ -502,19 +509,7 @@ if __name__ == '__main__':
     print("loading observational parameters ...\n")
     print("-------------------------------------\n")
     obs_db = pd.read_csv('obs_configurations.csv')
-    if sample_params == "True":
-        print('Sampling Observational Parameters ...')
-        print('Using the following additional parameters:')
-        print('Models Directory: ', data_dir)
-        print('Simulations Directory: ', output_dir)
-        print('Plots Directory: ', plot_dir)
-        print('Simulations Parameters File Name: ', csv_name)
-        print('Simulation Mode: ', mode)
-        print('Number of Simulations: ', n)
-        print('Plot Flag: ', save_plots)
-        print('-------------------------------------\n')
 
-    print('These are the default values, but some of these may be sampled depending on your choice of the --sample_selection flags.')
     print('Using the following parameters:')
     print('Models Directory: ', data_dir)
     print('Simulations Directory: ', output_dir)
@@ -522,27 +517,13 @@ if __name__ == '__main__':
     print('Simulations Parameters File Name: ', csv_name)
     print('Simulation Mode: ', mode)
     print('Number of Simulations: ', n)
-    print('Antenna Configuration: ', antenna_config)
-    print('Spatial Resolution: ', spatial_resolution)
-    print('Integration Time: ', integration_time)
-    print('Coordinates: ', coordinates)
     print('ALMA Band: ', alma_band)
-    print('Bandwidth: ', bandwidth)
-    print('Frequency Resolution: ', frequency_resolution)
-    print('Velocity Resolution: ', velocity_resolution)
-    print('TNG Snapshot: ', TNGSnap)
-    print('TNG Subhalo ID: ', TNGSubhaloID)
-    print('Number of Pixels: ', n_px)
-    print('Number of Channels: ', n_chan)
-    print('RA: ', Ra)
-    print('Dec: ', Dec)
-    print('Distance: ', distances)
-    print('Noise Level: ', noise_level)
+    print('Central Frequency: ', central_freq)
+    print('Field of View {} in arcsec'.format(fov))
     print('Plot Flag: ', save_plots)
     print('Sample Parameters Flag: ', sample_params)
     print('Sample Selection Flag: ', sample_selection)
     print('-------------------------------------\n')
-
     print('Sampling Flags:')
     print('Get Antennas: ', get_antennas)
     print('Get Spatial Resolution: ', get_spatial_resolution)
@@ -563,67 +544,95 @@ if __name__ == '__main__':
     params = obs_db.sample(n=n, axis=0)
     if get_spatial_resolution:
         sps = params['spatial_resolution [arcsec]'].values
+        print('Sampled Spatial Resolutions {} in arcsec'.format(sps))
     else:
         sps = np.array([spatial_resolution for i in range(n)])
+        print('Using Spatial Resolution {} in arcsec'.format(sps[0]))
     if get_velocity_resolution:
         vrs = params['velocity_resolution [Km/s]'].values
+        print('Sampled Velocity Resolutions {} in Km/s'.format(vrs))
     else:
         vrs = np.array([velocity_resolution for i in range(n)])
+        print('Using Velocity Resolution {} in Km/s'.format(vrs[0]))
     if get_bandwidth:
         bws = params['bandwidth [MHz]'].values
+        print('Sampled Bandwidths {} in MHz'.format(bws))
     else:
         bws = np.array([bandwidth for i in range(n)])
+        print('Using Bandwidth {} in MHz'.format(bws[0]))
     if get_frequency_resolution:
         frs = params['frequency_resolution [MHz]'].values
+        print('Sampled Frequency Resolutions {} in MHz'.format(frs))
     else:
         frs = np.array([frequency_resolution for i in range(n)])
+        print('Using Frequency Resolution {} in MHz'.format(frs[0]))
     if get_integration_time:
         ints = params['integration_time [s]'].values
+        print('Sampled Integration Times {} in s'.format(ints))
     else:
         ints = np.array([integration_time for i in range(n)])
+        print('Using Integration Time {} in s'.format(ints[0]))
     if get_coordinates:
         coords = params['J2000 coordinates'].values
+        print('Sampled Coordinates {}'.format(coords))
     else:
         coords = np.array([coordinates for i in range(n)])
+        print('Using Coordinates {}'.format(coords[0]))
     if get_TNGSnap:
         snapIDs  = np.random.choice([99, 98, 97], n)
+        print('Sampled Snap IDs {}'.format(snapIDs))
     else:
         snapID = TNGSnap
         snapIDs = np.array([snapID for i in range(n)])
+        print('Using Snap ID {}'.format(snapID))
     if get_TNGSubhalo:
         subhaloIDs = np.random.choice([385350, 385351, 385352, 385353], n)
+        print('Sampled Subhalo IDs {}'.format(subhaloIDs))
     else:
         subhaloIDs = np.array([TNGSubhaloID for i in range(n)])
+        print('Using Subhalo ID {}'.format(TNGSubhaloID))
     if get_ra_dec:
         ras = params['ra [deg]'].values
         decs = params['dec [deg]'].values
+        print('Sampled Ra Decs {} {}'.format(ras, decs))
     else:
         ras = np.array([Ra for i in range(n)])
         decs = np.array([Dec for i in range(n)])
+        print('Using Ra Decs {} {}'.format(Ra, Dec))
     if get_distance:
         distances = np.random.choice(np.arange(3, 30, 1), n)
+        print('Sampled Distances {} in Mpc'.format(distances))
     else:
         distances = np.array([distances for i in range(n)])
+        print('Using Distance {} in Mpc'.format(distances[0]))
     if get_noise_level:
         n_levels = np.random.choice(np.arange(1/20, 0.3, 0.01), n)
+        print('Sampled Noise Levels {} as fraction of the max flux'.format(n_levels))
     else:
         n_levels = np.array([noise_level for i in range(n)])
-    
+        print('Using Noise Level {} as fraction of the max flux'.format(n_levels[0]))
+    print('Sampling spatial Rotations .....')
     x_rots = np.random.choice(np.arange(0, 360, 1), n)
     y_rots = np.random.choice(np.arange(0, 360, 1), n)
+    print('Sampled Rotations {} {}'.format(x_rots, y_rots))
     if get_channels:
         n_channels = list(np.array(bws / frs).astype(int))
+        print('Sampled Number of Channels {}'.format(n_channels))
     else:
         n_channels = np.array([n_chan for i in range(n)])
+        print('Using Number of Channels {}'.format(n_channels[0]))
     
-    pixel_size = sps / 6
-    t_n_px = np.array([fov for i in range(len(pixel_size))]) // pixel_size
-    n_pxs = np.array([n_px for i in range(len(pixel_size))])
-    print('Pixel Size: ', pixel_size[:10])
-    print('Field of View: ', fov)
-    print('Number of Pixels: ', n_pxs[:10])
-    print('Number of Channels: ', n_channels[:10])
-    print('True Number of Pixels: ', t_n_px[:10])
+    
+    if get_number_of_pixels:
+        pixel_size = sps / 6
+        print('Sampled Pixel Sizes {} in arcsec'.format(pixel_size))
+        n_pxs = np.array([1.5 * fov for i in range(len(pixel_size))]) // pixel_size
+        print('Sampled Number of Pixels {}'.format(n_pxs))
+    else:
+        n_pxs = np.array([1.5 * n_px for i in range(n)])
+        print('Using Number of Pixels {}'.format(n_pxs[0]))
+    n_pxs = n_pxs.astype(int)
+    print('-------------------------------------\n')
     if mode == 'gauss':
         print('Generating Gaussian Model Cubes ...')
         xyposs = np.arange(100, 250).astype(float)
@@ -663,18 +672,18 @@ if __name__ == '__main__':
             ac = os.path.join(os.getcwd(), antenna_config)
 
         c = coords[i]
-        sp = str(sps[i] / 6) + 'arcsec'
-        fr = str(frs[i]) + 'MHz'
-        map_size = str(n_px * (sps[i] / 6)) + 'arcsec'
-        it = str(ints[i]) + 's'
-        vr = str(vrs[i]) + 'km/s'
-        ra = str(ras[i]) + 'deg'
-        dec = str(decs[i]) + 'deg'
-        dl = str(distances[i]) + 'Mpc'
+        sp = str(sps[i] / 6) + ' arcsec'
+        fr = str(frs[i]) + ' MHz'
+        map_size = str(n_px * (sps[i] / 6)) + ' arcsec'
+        it = str(ints[i]) + ' s'
+        vr = str(vrs[i]) + ' km/s'
+        ra = str(ras[i]) + ' deg'
+        dec = str(decs[i]) + ' deg'
+        dl = str(distances[i]) + ' Mpc'
         nl = str(n_levels[i]) 
-        x_rot = str(x_rots[i]) + 'deg'
-        y_rot = str(y_rots[i]) + 'deg'
-        n_c = str(n_channels[i]) + 'ch'
+        x_rot = str(x_rots[i]) + ' deg'
+        y_rot = str(y_rots[i]) + ' deg'
+        n_c = str(n_channels[i]) + ' ch'
         sID = str(subhaloIDs[i])
         snapID = str(snapIDs[i])
         n_p = str(n_pxs[i])
