@@ -36,7 +36,6 @@ def threedgaussian(amplitude, spind, chan, center_x, center_y, width_x, width_y,
         np.exp(-(((rcen_x-xp)/width_x)**2+((rcen_y-yp)/width_y)**2)/2.)
     return g
 
-
 def gaussian(x, amp, cen, fwhm):
     """
     Generates a 1D Gaussian given the following input parameters:
@@ -46,7 +45,6 @@ def gaussian(x, amp, cen, fwhm):
     level: level
     """
     return amp*np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
-
 
 def generate_component(master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind, n_px, n_channels):
     z_idxs = np.arange(0, n_channels)
@@ -69,15 +67,11 @@ def generate_component(master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, 
     master_cube += cube
     return master_cube
 
-
 def genpt(posxy):
     return (random.choice(posxy), random.choice(posxy))
 
-
 def distance(p1, p2):
     return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
-
-
 
 def make_gaussian_cube(i, data_dir, amps, xyposs, fwhms, angles, 
                         line_centres, line_fwhms, spectral_indexes,
@@ -92,8 +86,6 @@ def make_gaussian_cube(i, data_dir, amps, xyposs, fwhms, angles,
     limit = amp + line_amp * amp
     pos_x, pos_y = xyposs[i]
     return 
-
-
 
 def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms, spectral_indexes, n_pxs, n_channels):
     n_components = random.randint(2, 5)
@@ -211,7 +203,6 @@ def plot_moments(FluxCube, vch, path):
     plt.subplots_adjust(wspace=.3)
     plt.savefig(path)
 
-
 def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
                            spatial_resolutions, velocity_resolutions, ras, decs,
                            n_levels, distances, x_rots, y_rots, n_channels, n_pxs, save_plots=False):
@@ -311,8 +302,6 @@ def make_extended_cube(i, subhaloID, plot_dir, output_dir, TNGBasePath, TNGSnap,
     SkyCube = M.datacube._array.value.T
     if save_plots:
         plot_moments(SkyCube, vch, os.path.join(plot_dir, 'skymodel_{}.png'.format(str(i))))
-
-
 
 class SmartFormatter(argparse.HelpFormatter):
 
@@ -496,7 +485,8 @@ if get_band is False:
     central_freq, fov = get_band_central_freq_and_fov(alma_band)
 else:
     central_freq, fov = get_band_central_freq_and_fov(np.random.choice([3, 6, 9]))
-
+# transform FoV from rad to arcsec
+fov = fov * 180 / np.pi * 3600
 
 if not os.path.exists(data_dir):
     os.mkdir(data_dir)
