@@ -344,8 +344,8 @@ parser.add_argument('--frequency_resolution', type=float, default=10,
 parser.add_argument('--velocity_resolution', type=float, default=10,
                     help='velocity resolution in km/s, set with the -v flag')
 parser.add_argument('--TNGBasePath', type=str, default='TNG100-1/output/', help='The TNG base path, set with the -t flag')
-parser.add_argument("--TNGSnap", type=int, help='The TNG snapshot', default=99, help='The TNG snapshot number, set with the -S flag')
-parser.add_argument('--TNGSubhaloID', type=int, help='The TNG subhalo ID', default=385350, help='The TNG subhalo ID, set with the -I flag')
+parser.add_argument("--TNGSnap", type=int, default=99, help='The TNG snapshot number, set with the -S flag')
+parser.add_argument('--TNGSubhaloID', type=int, default=385350, help='The TNG subhalo ID, set with the -I flag')
 parser.add_argument("--n_px", type=int, help='The number of pixels in the spatial dimensions of the cube, set with the -P flag', default=256, )
 parser.add_argument("--n_chan", type=int, help='The number of channels in the frequency dimensiion of the cube, set with the -N flag', default=128, )
 parser.add_argument('--ra', type=float, help='The right ascension of the source in degrees, set with the -R flag', default=0.0,)

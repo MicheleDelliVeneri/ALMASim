@@ -50,6 +50,7 @@ def generate_sims(i, input_dir, output_dir, antennalist, coordinates, spatial_re
            fitsimage=output_dir + "/dirty_cube_" + str(i) +".fits", overwrite=True)
     exportfits(imagename=project+'/{}.{}.skymodel'.format(project, antenna_name), 
            fitsimage=output_dir + "/clean_cube_" + str(i) +".fits", overwrite=True)
+    
     #os.system('rm -r {}'.format(project))
 
 parser = argparse.ArgumentParser()
