@@ -76,7 +76,20 @@ The options are:
     - a sample antenna configuration;
     - r sample spatial resolution;
     -t sample total integration time;
-    -c 
+    -c sample coordinates;
+    -N sample number of channels;
+    -b sample ALMA band;
+    -B sample bandwidth;
+    -f sample frequency resolution;
+    -v sample velocity resolution;
+    -s sample TNG Snapshot;
+    -i sample TNG Subhalo ID;
+    -C sample RA and DEC;
+    -D sample Distance;
+    -N sample noise level;
+    -p sample the number of pixels;
+    -e sample all parameters;
+    
 
 
 You are set, enjoy your simulations!
