@@ -89,9 +89,14 @@ The options are:
     -N sample noise level;
     -p sample the number of pixels;
     -e sample all parameters;
-    
 
+After the script has been executed you will see that the data directory contains the simulated models, plus two .csv. 
+The first one named sims_params.csv contains the parameters that must be fed to the create_simulations.sh script, the second one named sims_info.csv contains information about the sims_params.csv file such as the name of the columns and the units of the parameters.
 
+Generate the dirsty models by modifying the create_simulations.sh script to reflect your hardware and then by running it through slurm:
+<pre><code>sbatch create_simulations.sh</code></pre>
+
+The create_simulations.sh script will generate the dirty cubes and the measurement sets, which will be stored in the output directory. The plots of the dirty cubes and the sky model cubes will be stored in the plot directory. To clean up the temporary files, run the clean.sh script:
 You are set, enjoy your simulations!
 
  ## Work in progress
