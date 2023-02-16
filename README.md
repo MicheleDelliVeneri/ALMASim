@@ -73,22 +73,22 @@ The options are:
 23. -l : (Noise Level) the noise level of the simulated observations as a fraction of the primary peak max flux, default value is 0.3;
 24. -e : (Sample Parameter Flag): if set to True, some of the parameters can be sampled from ALMA real observations. Must be combined with the sample selection flags -w;
 25. -w : (Sample Selection Flag) : flags that determine which parameters to sample from real observations and which to set from the user defined or default values. The flags must be set as a continuous string, as an example [ -w acNbf] will sample for each observation the antenna, the coordinates, the number of channels, the ALMA band and the frequency resolution. The flags are:
-    - a sample antenna configuration;
-    - r sample spatial resolution;
-    -t sample total integration time;
-    -c sample coordinates;
-    -N sample number of channels;
-    -b sample ALMA band;
-    -B sample bandwidth;
-    -f sample frequency resolution;
-    -v sample velocity resolution;
-    -s sample TNG Snapshot;
-    -i sample TNG Subhalo ID;
-    -C sample RA and DEC;
-    -D sample Distance;
-    -N sample noise level;
-    -p sample the number of pixels;
-    -e sample all parameters;
+    - -a sample antenna configuration;
+    - -r sample spatial resolution;
+    - -t sample total integration time;
+    - -c sample coordinates;
+    - -N sample number of channels;
+    - -b sample ALMA band;
+    - -B sample bandwidth;
+    - -f sample frequency resolution;
+    - -v sample velocity resolution;
+    - -s sample TNG Snapshot;
+    - -i sample TNG Subhalo ID;
+    - -C sample RA and DEC;
+    - -D sample Distance;
+    - -N sample noise level;
+    - -p sample the number of pixels;
+    - -e sample all parameters;
 
 After the script has been executed you will see that the data directory contains the simulated models, plus two .csv. 
 The first one named sims_params.csv contains the parameters that must be fed to the create_simulations.sh script, the second one named sims_info.csv contains information about the sims_params.csv file such as the name of the columns and the units of the parameters.
