@@ -350,7 +350,7 @@ parser.add_argument("--n_px", type=int, help='The number of pixels in the spatia
 parser.add_argument("--n_chan", type=int, help='The number of channels in the frequency dimensiion of the cube, set with the -N flag', default=128, )
 parser.add_argument('--ra', type=float, help='The right ascension of the source in degrees, set with the -R flag', default=0.0,)
 parser.add_argument('--dec', type=float, help='The declination of the source in degrees, set with the -D flag', default=0.0, )
-parser.add_argument('--distance', type=float, help='The distance of the source in Mpc, set with the -D flag', default=0.0, )
+parser.add_argument('--distance', type=float, help='The distance of the source in Mpc, set with the -T flag', default=0.0, )
 parser.add_argument('--noise_level', type=float, help='The noise level as percentage of peak flux, set with the -l flag', default=0.3, )
 parser.add_argument('--sample_params', type=str, help='Whether to sample the parameters from real observations, set with the -e flag', default=False)
 parser.add_argument('--save_plots', type=str, help='Whether to save plots of the simulated cubes, set with the -k flag', default="False")
@@ -363,7 +363,7 @@ parser.add_argument('--sample_selection', type=str,
                           " r = sample spatial resolution\n"
                           " t = sample integration time\n"
                           " c = sample coordinates\n"
-                          " x = sample number of channels\n"
+                          " N = sample number of channels\n"
                           " b = sample band\n"
                           " B = sample bandwidth\n"
                           " f = sample frequency resolution\n"
