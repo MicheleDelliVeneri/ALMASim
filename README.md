@@ -48,31 +48,31 @@ Both the model creation and the simulation creation are performed through the ex
 parameters are set in the model simuation, so that is the tricky part, the rest is just about running another bash script. The model creation is performed by the script create_model.sh, which can be executed as follows:
 <pre><code>bash create_model.sh -option value</code></pre>
 The options are:
-* -d : (data directory) the directory in which the simulated models cubes are temporarily stored;
-* -o : (output directory) the directory in which the simulated sky model cubes, dirty cubes, and measurement sets will be stored stored;
-* -p : (plot directory) the directory in which the plots of the simulated sky model cubes and dirty cubes will be stored;
-* -c : (csv name) the name of the .csv file containing the source positions and morphological properties;
-* -m : (mode) the mode of the simulation, it can be either "gauss" or "extended";
-* -n : (number of sources) the number of output simulated cubes;
-* -a : (Antenna Configuration) the antenna configuration file path, default value is antenna_config/alma.cycle9.3.1.cfg;
-* -s : (Spatial Resolution) the spatial resolution of the simulated observations in arcseconds, default value is 0.1;
-* -i : (Total Integration Time): the total integration time of the simulated observations, default value is 2400 seconds;
-* -C : (Coordinates) the coordinates of the simulated observations, default value is J2000 03h59m59.96s -34d59m59.50s;
-* -B : (Band) the ALMA observation band, which determines the central frequency of observation and thus the beam size, default value is 6;
-* -b : (Bandwidth) the bandwidth of the simulated observations in MHz, default value is 10 MHz;
-* -f ; (Frequency Resolution) the frequency resolution of the simulated observations in MHz, default value is 10 MHz; 
-* -v : (Velocity Resolution) the velocity resolution of the simulated observations in km/s, default value is 10 km/s;
-* -t : (TNG Base Path) the path to the TNG100-1 snapshot, default value is  TNG100-1/output;
-* -S : (TNG Snapshot) the TNG100-1 snapshot number, default value is 99;
-* -I : (TNG Subhalo ID) the TNG100-1 subhalo ID, default value is 385350, this parameter can be set as a list if multiple subhalos are to be used as extended models for simulations;
-* -P : (Number of Pixels) the number of pixels of the simualated observations, default value is 256. The final output cubes will have a size roughly equal to 1.5 times the number of pixels. This is done in order to ensure that the primary beam fits the spatial dimensions of the cube;
-* -N : (Number of Channels) the number of channels in the frequency dimension of the cube, default value is 128;
-* -R : (Right Ascension) the right ascension of the simulated observation in degrees, default value is 0;
-* -D : (Declination) the declination of the simulated observation in degrees, default value is 0;
-* -T : (Distance) the distance of the simulated observation in Mpc, default value is 30;
-* -l : (Noise Level) the noise level of the simulated observations as a fraction of the primary peak max flux, default value is 0.3;
-* -e : (Sample Parameter Flag): if set to True, some of the parameters can be sampled from ALMA real observations. Must be combined with the sample selection flags -w;
-* -w : (Sample Selection Flag) : flags that determine which parameters to sample from real observations and which to set from the user defined or default values. The flags must be set as a continuous string, as an example [ -w acNbf] will sample for each observation the antenna, the coordinates, the number of channels, the ALMA band and the frequency resolution. The flags are:
+* -d (data directory) the directory in which the simulated models cubes are temporarily stored;
+* -o (output directory) the directory in which the simulated sky model cubes, dirty cubes, and measurement sets will be stored stored;
+* -p (plot directory) the directory in which the plots of the simulated sky model cubes and dirty cubes will be stored;
+* -c (csv name) the name of the .csv file containing the source positions and morphological properties;
+* -m (mode) the mode of the simulation, it can be either "gauss" or "extended";
+* -n (number of sources) the number of output simulated cubes;
+* -a (Antenna Configuration) the antenna configuration file path, default value is antenna_config/alma.cycle9.3.1.cfg;
+* -s (Spatial Resolution) the spatial resolution of the simulated observations in arcseconds, default value is 0.1;
+* -i (Total Integration Time): the total integration time of the simulated observations, default value is 2400 seconds;
+* -C (Coordinates) the coordinates of the simulated observations, default value is J2000 03h59m59.96s -34d59m59.50s;
+* -B (Band) the ALMA observation band, which determines the central frequency of observation and thus the beam size, default value is 6;
+* -b (Bandwidth) the bandwidth of the simulated observations in MHz, default value is 10 MHz;
+* -f (Frequency Resolution) the frequency resolution of the simulated observations in MHz, default value is 10 MHz; 
+* -v (Velocity Resolution) the velocity resolution of the simulated observations in km/s, default value is 10 km/s;
+* -t (TNG Base Path) the path to the TNG100-1 snapshot, default value is  TNG100-1/output;
+* -S (TNG Snapshot) the TNG100-1 snapshot number, default value is 99;
+* -I (TNG Subhalo ID) the TNG100-1 subhalo ID, default value is 385350, this parameter can be set as a list if multiple subhalos are to be used as extended models for simulations;
+* -P (Number of Pixels) the number of pixels of the simualated observations, default value is 256. The final output cubes will have a size roughly equal to 1.5 times the number of pixels. This is done in order to ensure that the primary beam fits the spatial dimensions of the cube;
+* -N (Number of Channels) the number of channels in the frequency dimension of the cube, default value is 128;
+* -R (Right Ascension) the right ascension of the simulated observation in degrees, default value is 0;
+* -D (Declination) the declination of the simulated observation in degrees, default value is 0;
+* -T (Distance) the distance of the simulated observation in Mpc, default value is 30;
+* -l (Noise Level) the noise level of the simulated observations as a fraction of the primary peak max flux, default value is 0.3;
+* -e (Sample Parameter Flag): if set to True, some of the parameters can be sampled from ALMA real observations. Must be combined with the sample selection flags -w;
+* -w (Sample Selection Flag) : flags that determine which parameters to sample from real observations and which to set from the user defined or default values. The flags must be set as a continuous string, as an example [ -w acNbf] will sample for each observation the antenna, the coordinates, the number of channels, the ALMA band and the frequency resolution. The flags are:
     - -a sample antenna configuration;
     - -r sample spatial resolution;
     - -t sample total integration time;
