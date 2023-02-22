@@ -73,18 +73,26 @@ def genpt(posxy):
 def distance(p1, p2):
     return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
-def make_gaussian_cube(i, data_dir, amps, xyposs, fwhms, angles, 
+def make_gaussian_cube(i, data_dir, amps, xyposs, fwhmxs, fwhmys,  angles, 
                         line_centres, line_fwhms, spectral_indexes,
-                        spatial_resolutions, velocity_resolutions, 
+                        spatial_resolutions, velocity_resolutions,
+                        n_components,  
                         n_channels, n_px):
     spatial_resolution = spatial_resolutions[i]
     velocity_resolution = velocity_resolutions[i]
+    n_component = n_components[i] 
     n_chan = n_channels[i]
     pa = angles[i]
     amp = amps[i]
     line_amp = amps[i]
     limit = amp + line_amp * amp
     pos_x, pos_y = xyposs[i]
+    pos_z = line_centres[i]
+    fwhm_z = line_fwhms[i]
+    fwhm_x = fwhmxs[i]
+    fwhm_y = fwhmys[i]
+    
+
     return 
 
 def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms, spectral_indexes, n_pxs, n_channels):
@@ -106,7 +114,6 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     n_channel = n_channels[i]
     print(n_channel, n_px)
     master_cube = np.zeros((n_channel, n_px, n_px))
-    
     boxes = []
     master_cube = generate_component(
         master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, fwhm_y, pos_z, fwhm_z, pa, spind, n_px, n_channel)
@@ -316,10 +323,8 @@ class SmartFormatter(argparse.HelpFormatter):
 
 parser = argparse.ArgumentParser(description='Simulate ALMA data cubes from TNG data cubes and Gaussian Simulations',
                                  formatter_class=SmartFormatter)
-parser.add_argument("--data_dir", type=str, default='models',
-                    help='The directory in wich the simulated model cubes are stored, set with the -d flag;')
-parser.add_argument("--output_dir", type=str, default='sims', 
-                    help='The directory in which the alma simulations will be stored, set with the -o flag;')
+parser.add_argument("--data_dir", type=str, default='ALMAsims',
+                    help='The directory in wich the simulated mock data is stored;')
 parser.add_argument("--plot_dir", type=str, help='The plot directory, set with the -p flag', default='plots')
 parser.add_argument("--csv_name", type=str, default='params.csv', 
                     help='The name of the .csv file in which to store the simulated source parameters, set with the -c flag;')
@@ -381,8 +386,7 @@ parser.add_argument('--sample_selection', type=str,
                           default="e"
                           )
 args = parser.parse_args()
-data_dir = str(args.data_dir)
-output_dir = str(args.output_dir)
+master_dir = str(args.data_dir)
 csv_name = str(args.csv_name)
 n = int(args.n_simulations)
 antenna_config = str(args.antenna_config)
@@ -495,8 +499,15 @@ else:
 # transform FoV from rad to arcsec
 fov = fov * 180 / np.pi * 3600
 
+if not os.path.exists(master_dir):
+    os.mkdir(master_dir)
+data_dir = master_dir + '/models'
 if not os.path.exists(data_dir):
     os.mkdir(data_dir)
+output_dir = master_dir + '/sims'
+if not os.path.exists(output_dir):
+    os.mkdir(output_dir)
+
 
 if not os.path.exists(output_dir):
     os.mkdir(output_dir)
@@ -511,7 +522,8 @@ if __name__ == '__main__':
     obs_db = pd.read_csv('obs_configurations.csv')
 
     print('Using the following parameters:')
-    print('Models Directory: ', data_dir)
+    print('Selected Directory: ', master_dir)
+    print('Sky Models Directory: ', data_dir)
     print('Simulations Directory: ', output_dir)
     print('Plots Directory: ', plot_dir)
     print('Simulations Parameters File Name: ', csv_name)
@@ -664,7 +676,7 @@ if __name__ == '__main__':
         df.to_csv(os.path.join(data_dir, csv_name), index=False)
     
     print('Creating textfile for simulations')
-    df = open('sims_param.csv', 'w')
+    df = open(os.path.join(master_dir, 'sims_param.csv'), 'w')
     for i in range(n):
         if get_antennas is True:
             ac = os.path.join(os.getcwd(), 'antenna_config',  np.random.choice(antenna_configs))
@@ -699,7 +711,7 @@ if __name__ == '__main__':
         df.write('\n')
     df.close()
 
-    df = open('sim_info.csv', 'w')
+    df = open(os.path.join(master_dir, 'sim_info.csv'), 'w')
     df.write('The sims_param.csv file contains the parameters of the simulations. The columns are as follows:\n')
     df.write('1. ID: The ID of the simulation\n')
     df.write('2. data_dir: The directory where the data is stored\n')

@@ -16,14 +16,16 @@ def load_fits(inFile):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--data_dir", type=str, help='The directory containing the sims;', default='sims')
+parser.add_argument("--data_dir", type=str, help='The directory containing the mock data;', default='ALMASim')
 parser.add_argument("--plot_dir", type=str, help='The directory to save the plots;', default="plots")
 parser.add_argument("--n_samples", type=int, help='Number of samples to plot', default=10)
 
+
+
 args = parser.parse_args()
-data_dir = args.data_dir
+data_dir = args.data_dir + '/sims'
 n_samples = args.n_samples
-plot_dir = args.plot_dir
+plot_dir = os.path.join(args.data_dir, args.plot_dir)
 if not os.path.exists(plot_dir):
     os.mkdir(plot_dir)
 
@@ -44,3 +46,4 @@ for idx in idxs:
     plt.colorbar()
     plt.title('Dirty')
     plt.savefig(os.path.join(plot_dir, 'sample_{}.png'.format(idx)))
+    plt.close()

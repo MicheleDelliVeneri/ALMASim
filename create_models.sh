@@ -11,8 +11,7 @@ Help()
    echo
    echo "Syntax: create_models.sh -d models -p plots [-o options]"
    echo "options:"
-   echo "d     The directory in which to temporary store model cubes default: models."
-   echo "o     The directory in which to store the final simulations."
+   echo "d     The directory in which the mock data is stored"
    echo "p     The directory in which to store the plots."
    echo "c     The name of the .csv file in which to store the simulated source parameters."
    echo "m     The mode in which to run the simulation. Options are: gauss, extended."
@@ -52,8 +51,7 @@ ShowParams()
     conda run -n casa6.5 python $MAIN_PATH/generate_models.py -h
 }
 
-MODEL_DIR="models";
-OUTPUT_DIR="sims";
+MASTER_DIR="ALMASim";
 PLOT_DIR="plots";
 PARAM_NAME="params.csv";
 MODE="gauss";
@@ -79,15 +77,13 @@ SAMPLE_PARAMS="False"
 SAVE_PLOTS="False"
 SAMPLE_PARAMS_FLAGS="e"
 
-while getopts ":h;:V;d:;o:;p:;c:;m:;n:;a:;s:;i:;C:;b:;B:;f:;v:;t:;S:;I:;P:;N:;R:;D:;T:;l:;e:;k:;w:" option; do
+while getopts ":h;:V;d:;p:;c:;m:;n:;a:;s:;i:;C:;b:;B:;f:;v:;t:;S:;I:;P:;N:;R:;D:;T:;l:;e:;k:;w:" option; do
    case $option in
       h) # display Help
          Help
          exit;;
       d) # Enter a input directory
-         MODEL_DIR="$OPTARG";;
-      o) # Enter a output directory
-         OUTPUT_DIR="$OPTARG";;
+         MASTER_DIR="$OPTARG";;
       p) # Enter a plot directory
           PLOT_DIR="$OPTARG";;
       c) # Enter a csv name
@@ -147,5 +143,5 @@ while getopts ":h;:V;d:;o:;p:;c:;m:;n:;a:;s:;i:;C:;b:;B:;f:;v:;t:;S:;I:;P:;N:;R:
 done
 
 
-conda run -n casa6.5 python $MAIN_PATH/generate_models.py  --coordinates "$COORDINATES" --data_dir $MODEL_DIR --output_dir $OUTPUT_DIR --plot_dir $PLOT_DIR --csv_name $PARAM_NAME --mode $MODE --n_simulations $N --antenna_config $ANTENNA_CONFIG --spatial_resolution $SPATIAL_RESOLUTION --integration_time $INTEGRATION_TIME  --bandwidth $BANDWIDTH --band $ALMA_BAND --frequency_resolution $FREQUENCY_RESOLUTION --velocity_resolution $VELOCITY_RESOLUTION --TNGBasePath $TNGBASE_PATH --TNGSnap $TNG_SNAP --TNGSubhaloID $TNG_SUBHALO_ID --n_px $N_PIXELS --n_chan $N_CHANNELS --ra $RA --dec $DEC --distance $DISTANCE --noise_level $NOISE_LEVEL --sample_params $SAMPLE_PARAMS --sample_selection $SAMPLE_PARAMS_FLAGS --save_plots $SAVE_PLOTS  
+conda run -n casa6.5 python $MAIN_PATH/generate_models.py  --coordinates "$COORDINATES" --data_dir $MASTER_DIR --plot_dir $PLOT_DIR --csv_name $PARAM_NAME --mode $MODE --n_simulations $N --antenna_config $ANTENNA_CONFIG --spatial_resolution $SPATIAL_RESOLUTION --integration_time $INTEGRATION_TIME  --bandwidth $BANDWIDTH --band $ALMA_BAND --frequency_resolution $FREQUENCY_RESOLUTION --velocity_resolution $VELOCITY_RESOLUTION --TNGBasePath $TNGBASE_PATH --TNGSnap $TNG_SNAP --TNGSubhaloID $TNG_SUBHALO_ID --n_px $N_PIXELS --n_chan $N_CHANNELS --ra $RA --dec $DEC --distance $DISTANCE --noise_level $NOISE_LEVEL --sample_params $SAMPLE_PARAMS --sample_selection $SAMPLE_PARAMS_FLAGS --save_plots $SAVE_PLOTS  
 echo "Finished generating models, please use the create_simulation.sh script to create the simulations."

@@ -1,11 +1,38 @@
 #! /bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=8
-MAIN_PATH="$PWD"
+MAIN_PATH="ALMASim"
+MASTER_PATH="$PWD"
 END=10
+PARAM_PATH="$MAIN_PATH/sims_param.csv"
+
+Help()
+{
+    echo 'Hello welcome to the ALMASim Create Simulations help function.'
+    echo 
+    echo 'Syntax: create_simulations.sh -p pathto/sims_param.csv'
+    echo 'options:'
+    echo 'd     The directory in which the mock data is stored'
+    echo 'h     Print this Help.'
+}
+while getopts ":h;d:" option; do
+    case $option in
+        h) # display Help
+            Help
+            exit;;
+        d) # Path to the .csv file containing the parameters of the simulations
+            MAIN_PATH=$OPTARG
+            ;;
+        \?) # incorrect option
+            echo "Error: Invalid option"
+            exit;;
+    esac
+done
+PARAM_PATH="$MAIN_PATH/sims_param.csv"
+echo $PARAM_PATH
 for i in $(seq 1 $END);
 do  
-    LINE=$(sed -n "$i"p sims_param.csv)
+    LINE=$(sed -n "$i"p $PARAM_PATH)
     IFS=',' read INDEX INPUT_DIR OUTPUT_DIR ANTENNA_CONFIG COORDINATES SPATIAL_RESOLUTION CENTRAL_FREQUENCY FREQUENCY_RESOLUTION INTEGRATION_TIME MAP_SIZE N_PX VELOCITY_RESOLUTION RA DEC DISTANCE NOISE_LEVEL X_ROT Y_ROT N_CHANNELS SUBHALO_ID SNAPSHOT_ID<<< "$LINE"
     echo "Sampling Sky model: $INDEX"
     echo "From Directory: $INPUT_DIR"
@@ -31,6 +58,6 @@ do
 
     mkdir "$MAIN_PATH/sim_$INDEX"
     cd "$MAIN_PATH/sim_$INDEX"
-    conda run -n casa6.5 python $MAIN_PATH/alma_simulator.py $INDEX "$MAIN_PATH/$INPUT_DIR" "$MAIN_PATH/$OUTPUT_DIR" "$ANTENNA_CONFIG" "$COORDINATES" "$SPATIAL_RESOLUTION" "$CENTRAL_FREQUENCY" "$FREQUENCY_RESOLUTION" "$INTEGRATION_TIME" "$MAP_SIZE" "$N_PX" 
+    conda run -n casa6.5 python "$MASTER_PATH/alma_simulator.py" $INDEX "$INPUT_DIR" "$OUTPUT_DIR" "$ANTENNA_CONFIG" "$COORDINATES" "$SPATIAL_RESOLUTION" "$CENTRAL_FREQUENCY" "$FREQUENCY_RESOLUTION" "$INTEGRATION_TIME" "$MAP_SIZE" "$N_PX" 
     cd ..
 done
