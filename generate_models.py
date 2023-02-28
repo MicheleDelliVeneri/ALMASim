@@ -163,6 +163,88 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     df['y1'] = boxes[:, 2]
     df.to_csv(os.path.join(data_dir, 'params_' + str(i) + '.csv'), index=False)
 
+def compute_band(central_freuency):
+    if central_frequency >= 37 and central_frequency <= 50:
+        return 1
+    elif central_frequency >= 84 and central_frequency <= 116:
+        return 3
+    elif central_frequency >= 125 and central_frequency < 163:
+        return 4
+    elif central_frequency >= 163 and central_frequency < 211:
+        return 5
+    elif central_frequency >= 211 and central_frequency < 275:
+        return 6
+    elif central_frequency >= 275 and central_frequency < 373:
+        return 7
+    elif central_frequency >= 385 and central_frequency < 500:
+        return 8 
+    elif central_frequency >= 602 and central_frequency < 720:
+        return 9
+    elif central_frequency >= 787 and central_frequency < 950:
+        return 10
+
+def get_band_and_fov(cfs):
+    light_speed = c.to(U.m / U.s).value
+    bands, fovs = [], []
+    for central_freq in cfs:
+        band = compute_band(central_freq)
+        central_freq = (central_freq * U.GHz).to(U.Hz).value
+        central_freq = central_freq.to(U.Hz).value
+        central_freq_s = 1 / central_freq
+        amplitude = light_speed * central_freq_s
+        fov = 1.2 * amplitude / 12
+        fov = fov * 180 / np.pi * 3600
+        bands.append(band)
+        fovs.append(fov)
+    return np.array(bands), np.array(fovs)
+
+def get_fov(bands):
+    light_speed = c.to(U.m / U.s).value
+    fovs = []
+    for band in bands:
+        if band == 1:
+            central_freq = 43 * U.GHz  
+        elif band == 3:
+            central_freq = 100 * U.GHz
+        elif band == 4:
+            central_freq = 143 * U.GHz
+        elif band == 5:
+            central_freq = 217 * U.GHz
+        elif band == 6:
+            central_freq = 250 * U.GHz
+        elif band == 7:
+            central_freq = 353 * U.GHz
+        elif band == 8:
+            central_freq = 545 * U.GHz
+        elif band == 9:
+            central_freq = 650 * U.GHz    
+        elif band == 10:
+            central_freq = 850 * U.GHz
+           
+        central_freq = central_freq.to(U.Hz).value
+        central_freq_s = 1 / central_freq
+        amplitude = light_speed * central_freq_s
+        fov = 1.2 * amplitude / 12
+        fov = fov * 180 / np.pi * 3600
+        fovs.append(fov)
+    return np.array(fovs)
+
+def create_antennas_dict():
+    antenna_file = open('/Users/michele/Documents/GitHub/ALMASim/alma.all.cfg', 'r')
+    antenna_dict = {}
+    for line in antenna_file:
+        if '#' not in line:
+            x, y, z, dim, pad = line.split()
+            antenna_dict[pad] = [x, y, z, dim]
+    antenna_file.close()
+    return antenna_dict
+
+def generate_antenna_cfg_file(id, antenna_dict):
+
+
+    return 
+
+
 def get_band_central_freq_and_fov(band):
     light_speed = c.to(U.m / U.s).value
     if band == 3:
@@ -340,6 +422,7 @@ parser.add_argument('--integration_time', type=int, default=2400,
         help='Total observation time, set with the -i flag')
 parser.add_argument('--coordinates', type=str, default="J2000 03h59m59.96s -34d59m59.50s", 
         help='Coordinates of the target in the sky as a J2000 string, set with the -C flag')
+parser.add_argument('--central_frequency', type=float, default=250, help='Central frequency of observation in GHz, set with the -F flag')
 parser.add_argument('--band', type=int, default=6,
         help='ALMA Observing band which determines the central frequency of observation, set with the -B flag')
 parser.add_argument('--bandwidth', type=int, default=1000, 
@@ -372,6 +455,7 @@ parser.add_argument('--sample_selection', type=str,
                           " b = sample band\n"
                           " B = sample bandwidth\n"
                           " f = sample frequency resolution\n"
+                          " F = sample central frequency\n"
                           " v = sample velocity resolution\n"
                           " s = sample Snapshot\n"
                           " i = sample SubhaloID\n"
@@ -394,6 +478,7 @@ spatial_resolution = float(args.spatial_resolution)
 integration_time = float(args.integration_time)
 coordinates = str(args.coordinates)
 alma_band = int(args.band)
+central_frequency = float(args.central_frequency)
 bandwidth = int(args.bandwidth)
 frequency_resolution = float(args.frequency_resolution)
 velocuty_resolution = float(args.velocity_resolution)
@@ -435,6 +520,7 @@ get_band = False
 get_channels = False
 get_coordinates = False
 get_number_of_pixels = False
+get_central_frequency = False
 
 if sample_selection != "e":
     sample_params = "True"
@@ -456,6 +542,7 @@ if sample_params == "True":
         get_channels = True
         get_coordinates = True
         get_number_of_pixels = True
+        get_central_frequency = True
     if 'a' in sample_selection:
         get_antennas = True
     if 'r' in sample_selection:
@@ -466,6 +553,8 @@ if sample_params == "True":
         get_velocity_resolution = True
     if 'f' in sample_selection:
         get_frequency_resolution = True
+    if 'F' in sample_selection:
+        get_central_frequency = True
     if 'b' in sample_selection:
         get_band = True
     if 's' in sample_selection:
@@ -491,13 +580,13 @@ if sample_params == "True":
 
 
 # Select Central Frequency From Band
-if get_band is False:
-    central_freq, fov, alma_band = get_band_central_freq_and_fov(alma_band)
-else:
-    central_freq, fov, alma_band = get_band_central_freq_and_fov(np.random.choice([3, 6, 9]))
+#if get_band is False:
+#    central_freq, fov, alma_band = get_band_central_freq_and_fov(alma_band)
+#else:
+#    central_freq, fov, alma_band = get_band_central_freq_and_fov(np.random.choice([3, 6, 9]))
 
 # transform FoV from rad to arcsec
-fov = fov * 180 / np.pi * 3600
+
 
 if not os.path.exists(master_dir):
     os.mkdir(master_dir)
@@ -530,8 +619,6 @@ if __name__ == '__main__':
     print('Simulation Mode: ', mode)
     print('Number of Simulations: ', n)
     print('ALMA Band: ', alma_band)
-    print('Central Frequency: ', central_freq)
-    print('Field of View {} in arcsec'.format(fov))
     print('Plot Flag: ', save_plots)
     print('Sample Parameters Flag: ', sample_params)
     print('Sample Selection Flag: ', sample_selection)
@@ -542,6 +629,7 @@ if __name__ == '__main__':
     print('Get Integration Time: ', get_integration_time)
     print('Get Velocity Resolution: ', get_velocity_resolution)
     print('Get Bandwidth: ', get_bandwidth)
+    print('Get Central Frequency: ', get_central_frequency)
     print('Get Frequency Resolution: ', get_frequency_resolution)
     print('Get TNG Snap: ', get_TNGSnap)
     print('Get TNG Subhalo: ', get_TNGSubhalo)
@@ -554,6 +642,24 @@ if __name__ == '__main__':
 
     print('-------------------------------------\n')
     params = obs_db.sample(n=n, axis=0)
+
+    if get_central_frequency:
+        cfs = params['central_frequency [GHz]'].values
+        print('Sampled Central Frequencies {} in GHz'.format(cfs))
+    else:
+        cfs = np.array([central_frequency for i in range(n)])
+        print('Using Central Frequency {} in GHz'.format(cfs[0]))
+
+    if get_band:
+        bands, fovs = get_band_and_fov(cfs)
+        print('Sampled Bands {} in GHz'.format(bands))
+        print('Sampled FoVs {} in arcsec'.format(fovs))
+    else:
+        bands = np.array([alma_band for i in range(n)])
+        fovs = get_fov(bands)
+        print('Using Band {} in GHz'.format(bands[0]))
+        print('Using FoV {} in arcsec'.format(fovs[0]))
+
     if get_spatial_resolution:
         sps = params['spatial_resolution [arcsec]'].values
         print('Sampled Spatial Resolutions {} in arcsec'.format(sps))
@@ -638,12 +744,21 @@ if __name__ == '__main__':
     if get_number_of_pixels:
         pixel_size = sps / 6
         print('Sampled Pixel Sizes {} in arcsec'.format(pixel_size))
-        n_pxs = np.array([1.5 * fov for i in range(len(pixel_size))]) // pixel_size
+        n_pxs = np.array([1.5 * fovs[i] for i in range(len(pixel_size))]) // pixel_size
         print('Sampled Number of Pixels {}'.format(n_pxs))
     else:
         n_pxs = np.array([1.5 * n_px for i in range(n)])
         print('Using Number of Pixels {}'.format(n_pxs[0]))
     n_pxs = n_pxs.astype(int)
+
+    if get_antennas:
+        acs = params['pads'].values
+        acs = [ac[1:-1].split(',') for ac in acs]
+            
+    else:
+        acs = np.array([os.path.join(os.getcwd(), antenna_config) for i in range(n)])
+
+
     print('-------------------------------------\n')
     if mode == 'gauss':
         print('Generating Gaussian Model Cubes ...')
@@ -678,10 +793,7 @@ if __name__ == '__main__':
     print('Creating textfile for simulations')
     df = open(os.path.join(master_dir, 'sims_param.csv'), 'w')
     for i in range(n):
-        if get_antennas is True:
-            ac = os.path.join(os.getcwd(), 'antenna_config',  np.random.choice(antenna_configs))
-        else:
-            ac = os.path.join(os.getcwd(), antenna_config)
+        
 
         c = coords[i]
         sp = str(sps[i] / 6) + ' arcsec'
@@ -699,6 +811,7 @@ if __name__ == '__main__':
         sID = str(subhaloIDs[i])
         snapID = str(snapIDs[i])
         n_p = str(n_pxs[i])
+        central_freq = str(cfs[i]) + ' GHz'
 
 
         #print(data_dir, output_dir, ac, c, sp, central_freq, fr, it, map_size, n_px)
