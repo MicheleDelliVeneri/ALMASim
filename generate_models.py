@@ -22,6 +22,7 @@ import astropy.units as U
 import matplotlib.pyplot as plt
 import h5py
 from astropy.constants import c
+from natsort import natsorted
 
 def threedgaussian(amplitude, spind, chan, center_x, center_y, width_x, width_y, angle, idxs):
     angle = pi/180. * angle
@@ -239,11 +240,33 @@ def create_antennas_dict():
     antenna_file.close()
     return antenna_dict
 
-def generate_antenna_cfg_file(id, antenna_dict):
+def generate_antenna_cfg_file(id, acs, master_dir, antenna_dict):
+    ac = acs[id]
+    ac = ac[1:-1].split(', ' )
+    ac = [a[1:-1] for a in ac]
+    beginning_lines = ['# observatory=ALMA', '# coordsys=LOC (local tangent plane)', '# x y z diam pad#']
+    cfg_path = os.path.join(master_dir, 'antenna_config', 'antenna_config_{}.cfg'.format(str(i)))
+    with open(cfg_path, 'w') as f:
+        for line in beginning_lines:
+            f.write(line)
+            f.write('\n')
+    for antenna in natsorted(np.unique(ac)):
+        x, y, z, dim = antenna_dict[antenna]
+        f.write('{} {} {} {} {}'.format(x, y, z, dim, antenna))
+        f.write('\n')
+    f.close()
 
+    return cfg_path
 
-    return 
-
+def create_antennas_dict(master_dir):
+    antenna_file = open(os.path.join(master_dir, 'alma.all.cfg'), 'r')
+    antenna_dict = {}
+    for line in antenna_file:
+        if '#' not in line:
+            x, y, z, dim, pad = line.split()
+            antenna_dict[pad] = [x, y, z, dim]
+    antenna_file.close()
+    return antenna_dict
 
 def get_band_central_freq_and_fov(band):
     light_speed = c.to(U.m / U.s).value
@@ -596,11 +619,6 @@ if not os.path.exists(data_dir):
 output_dir = master_dir + '/sims'
 if not os.path.exists(output_dir):
     os.mkdir(output_dir)
-
-
-if not os.path.exists(output_dir):
-    os.mkdir(output_dir)
-
 n_cores = multiprocessing.cpu_count() // 4
 
 if __name__ == '__main__':
@@ -659,7 +677,6 @@ if __name__ == '__main__':
         fovs = get_fov(bands)
         print('Using Band {} in GHz'.format(bands[0]))
         print('Using FoV {} in arcsec'.format(fovs[0]))
-
     if get_spatial_resolution:
         sps = params['spatial_resolution [arcsec]'].values
         print('Sampled Spatial Resolutions {} in arcsec'.format(sps))
@@ -758,6 +775,8 @@ if __name__ == '__main__':
     else:
         acs = np.array([os.path.join(os.getcwd(), antenna_config) for i in range(n)])
 
+    # Generating dictionary containing all antenna coordinates and pad numbers
+    antenna_dict = create_antennas_dict(master_dir)
 
     print('-------------------------------------\n')
     if mode == 'gauss':
@@ -772,15 +791,11 @@ if __name__ == '__main__':
         Parallel(n_cores)(delayed(make_cube)(i, data_dir,
                                          amps, xyposs, fwhms, angles, line_centres,
                                          line_fwhms, spectral_indexes, n_pxs, n_channels) for i in tqdm(range(n)))
-
     elif mode == 'extended':
         print('Generating Extended Model Cubes using TNG Simulations ...')
         Parallel(n_cores)(delayed(make_extended_cube)(i, subhaloIDs, plot_dir, data_dir, tngpath, snapIDs, 
                                                       sps, vrs, ras, decs, n_levels, distances, x_rots, y_rots,
                                                           n_channels, n_pxs, save_plots) for i in tqdm(range(n)))
-        
-
-    
     if mode == 'gauss':
         print('Cubes Generated, aggregating all params_*.csv into a single parameters.csv file')
         files = os.path.join(data_dir, 'params_*.csv')
@@ -793,7 +808,10 @@ if __name__ == '__main__':
     print('Creating textfile for simulations')
     df = open(os.path.join(master_dir, 'sims_param.csv'), 'w')
     for i in range(n):
-        
+        if get_antennas:
+            antenna_cfg = generate_antenna_cfg_file(i, acs, master_dir, antenna_dict)
+        else:
+            antenna_cfg = acs[i]
 
         c = coords[i]
         sp = str(sps[i] / 6) + ' arcsec'
@@ -815,7 +833,7 @@ if __name__ == '__main__':
 
 
         #print(data_dir, output_dir, ac, c, sp, central_freq, fr, it, map_size, n_px)
-        string = str(i) + ',' + data_dir + ',' + output_dir + ',' + ac + ',' + c + ',' + sp + ',' + \
+        string = str(i) + ',' + data_dir + ',' + output_dir + ',' + antenna_cfg + ',' + c + ',' + sp + ',' + \
                       central_freq + ',' + fr + ',' + it + ','  + map_size + ',' + n_p + \
                       ',' + vr + ',' + ra + ',' + dec + ',' + dl + ',' + nl + ',' + x_rot + ',' + \
                       y_rot + ',' + n_c + ',' + sID + ',' + snapID
