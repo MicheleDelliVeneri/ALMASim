@@ -241,10 +241,11 @@ def create_antennas_dict():
 
 def generate_antenna_cfg_file(id, acs, master_dir, antenna_dict):
     ac = acs[id]
-    ac = ac[1:-1].split(', ' )
     ac = [a[1:-1] for a in ac]
     beginning_lines = ['# observatory=ALMA', '# coordsys=LOC (local tangent plane)', '# x y z diam pad#']
     cfg_path = os.path.join(master_dir, 'antenna_config', 'antenna_config_{}.cfg'.format(str(i)))
+    if not os.path.exists(os.path.join(master_dir, 'antenna_config')):
+        os.makedirs(os.path.join(master_dir, 'antenna_config'))
     with open(cfg_path, 'w') as f:
         for line in beginning_lines:
             f.write(line)
@@ -257,8 +258,8 @@ def generate_antenna_cfg_file(id, acs, master_dir, antenna_dict):
 
     return cfg_path
 
-def create_antennas_dict(master_dir):
-    antenna_file = open(os.path.join(master_dir, 'alma.all.cfg'), 'r')
+def create_antennas_dict():
+    antenna_file = open('alma.all.cfg', 'r')
     antenna_dict = {}
     for line in antenna_file:
         if '#' not in line:
@@ -712,7 +713,7 @@ if __name__ == '__main__':
         ints = np.array([integration_time for i in range(n)])
         print('Using Integration Time {} in s'.format(ints[0]))
     if get_coordinates:
-        coords = params['coords [J200]'].values
+        coords = params['coords [J2000]'].values
         print('Sampled Coordinates {}'.format(coords))
     else:
         coords = np.array([coordinates for i in range(n)])
@@ -774,13 +775,13 @@ if __name__ == '__main__':
 
     if get_antennas:
         acs = params['pads'].values
-        acs = [ac[1:-1].split(',') for ac in acs]
+        acs = [ac[1:-1].split(', ') for ac in acs]
             
     else:
         acs = np.array([os.path.join(os.getcwd(), antenna_config) for i in range(n)])
 
     # Generating dictionary containing all antenna coordinates and pad numbers
-    antenna_dict = create_antennas_dict(master_dir)
+    antenna_dict = create_antennas_dict()
 
     print('-------------------------------------\n')
     if mode == 'gauss':
@@ -810,7 +811,7 @@ if __name__ == '__main__':
         df.to_csv(os.path.join(data_dir, csv_name), index=False)
     
     print('Creating textfile for simulations')
-    df = open(os.path.join(master_dir, 'sims_param.csv'), 'w')
+    df = open(os.path.join(master_dir, 'sims_param.csv'), 'wr')
     for i in range(n):
         if get_antennas:
             antenna_cfg = generate_antenna_cfg_file(i, acs, master_dir, antenna_dict)
