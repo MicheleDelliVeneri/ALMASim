@@ -73,4 +73,9 @@ to_save = observation_metadata[['spatial_resolution [arcsec]', 'integration_time
                                 'velocity_resolution [Km/s]', 'ra [deg]', 'dec [deg]', 
                                 'bandwidth [MHz]', 'frequency [GHz]', 'pads', 
                                 'frequency_resolution [MHz]', 'coords [J2000]']]
+to_save = to_save[(to_save['spatial_resolution [arcsec]'] >= 0.5) & (to_save['spatial_resolution [arcsec]'] <= 5)]
+
+to_save = to_save[to_save['frequency_resolution [MHz]'] <= 20]
+to_save = to_save[to_save['integration_time [s]'] >= 1000]
+print('Number of observations: ', len(to_save))
 to_save.to_csv(outpath, index=False)
