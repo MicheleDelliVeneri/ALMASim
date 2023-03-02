@@ -164,7 +164,7 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     df['y1'] = boxes[:, 2]
     df.to_csv(os.path.join(data_dir, 'params_' + str(i) + '.csv'), index=False)
 
-def compute_band(central_freuency):
+def compute_band(central_frequency):
     if central_frequency >= 37 and central_frequency <= 50:
         return 1
     elif central_frequency >= 84 and central_frequency <= 116:
@@ -190,7 +190,6 @@ def get_band_and_fov(cfs):
     for central_freq in cfs:
         band = compute_band(central_freq)
         central_freq = (central_freq * U.GHz).to(U.Hz).value
-        central_freq = central_freq.to(U.Hz).value
         central_freq_s = 1 / central_freq
         amplitude = light_speed * central_freq_s
         fov = 1.2 * amplitude / 12
@@ -619,7 +618,12 @@ if not os.path.exists(data_dir):
 output_dir = master_dir + '/sims'
 if not os.path.exists(output_dir):
     os.mkdir(output_dir)
+plot_dir = os.path.join(master_dir, plot_dir)
+if not os.path.exists(plot_dir):
+    os.mkdir(plot_dir)
+
 n_cores = multiprocessing.cpu_count() // 4
+
 
 if __name__ == '__main__':
     start = time.time()
@@ -662,7 +666,7 @@ if __name__ == '__main__':
     params = obs_db.sample(n=n, axis=0)
 
     if get_central_frequency:
-        cfs = params['central_frequency [GHz]'].values
+        cfs = params['frequency [GHz]'].values
         print('Sampled Central Frequencies {} in GHz'.format(cfs))
     else:
         cfs = np.array([central_frequency for i in range(n)])
@@ -708,7 +712,7 @@ if __name__ == '__main__':
         ints = np.array([integration_time for i in range(n)])
         print('Using Integration Time {} in s'.format(ints[0]))
     if get_coordinates:
-        coords = params['J2000 coordinates'].values
+        coords = params['coords [J200]'].values
         print('Sampled Coordinates {}'.format(coords))
     else:
         coords = np.array([coordinates for i in range(n)])

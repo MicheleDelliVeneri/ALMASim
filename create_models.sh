@@ -21,7 +21,7 @@ Help()
    echo "i     The integration time of the simulation."
    echo "C     The coordinates of source in the sky."
    echo "b     The bandwidth of the simulation in MHz, default 1000 Mhz."
-   echo "B     The ALMA band to simulate. Options are the following bands: 3, 6, 9."
+   echo "B     The ALMA band to simulate. Options are the following bands: 1, 3, 4, 5, 6, 7, 8, 9, 10."
    echo "f     The frequency resolution of the simulation."
    echo "v     The velocity resolution of the simulation."
    echo "t     The path to the TNGbase directory."
