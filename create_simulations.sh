@@ -60,4 +60,5 @@ do
     cd "$MAIN_PATH/sim_$INDEX"
     conda run -n casa6.5 python "$MASTER_PATH/alma_simulator.py" $INDEX "$INPUT_DIR" "$OUTPUT_DIR" "$ANTENNA_CONFIG" "$COORDINATES" "$SPATIAL_RESOLUTION" "$CENTRAL_FREQUENCY" "$FREQUENCY_RESOLUTION" "$INTEGRATION_TIME" "$MAP_SIZE" "$N_PX" 
     cd ..
+    rm -r "$MAIN_PATH/sim_$INDEX"
 done

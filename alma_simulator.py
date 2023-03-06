@@ -2,6 +2,7 @@ import os
 import argparse
 import tempfile
 temp_dir = tempfile.TemporaryDirectory()
+import shutil
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 
 from casatasks import simobserve, tclean, exportfits
@@ -51,8 +52,11 @@ def generate_sims(i, input_dir, output_dir, antennalist, coordinates, spatial_re
     exportfits(imagename=project+'/{}.{}.skymodel'.format(project, antenna_name), 
            fitsimage=output_dir + "/clean_cube_" + str(i) +".fits", overwrite=True)
     
-    #os.system('rm -r {}'.format(project))
+    # Export Measurement Set and Noise Measuremnt Set (Compressed? )    
+    
+    shutil.rmtree(project)    
 
+    
 parser = argparse.ArgumentParser()
 parser.add_argument("i", type=str, 
         help='the index of the simulation to be run;')
