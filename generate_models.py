@@ -57,7 +57,10 @@ def generate_component(master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, 
                             fwhm_x, fwhm_y, pa, idxs)
         cube[z] += ts + g[z] * ts
     img = np.sum(cube, axis=0)
-    tseg = (img - np.min(img)) / (np.max(img) - np.min(img))
+    if np.min(img) != 0:
+        tseg = (img - np.min(img)) / (np.max(img) - np.min(img))
+    else:
+        tseg = img / np.max(img)
     std = np.std(tseg)
     tseg[tseg >= 3 * std] = 1
     tseg = tseg.astype(int)
@@ -113,7 +116,7 @@ def make_cube(i, data_dir, amps, xyposs, fwhms, angles, line_centres, line_fwhms
     spind = np.random.choice(spectral_indexes)
     n_px = n_pxs[i]
     n_channel = n_channels[i]
-    print(n_channel, n_px)
+    print('Generating cube {} with {} channels and {} x {} pixels'.format(i, n_channel, n_px, n_px))
     master_cube = np.zeros((n_channel, n_px, n_px))
     boxes = []
     master_cube = generate_component(
@@ -250,12 +253,11 @@ def generate_antenna_cfg_file(id, acs, master_dir, antenna_dict):
         for line in beginning_lines:
             f.write(line)
             f.write('\n')
-    for antenna in natsorted(np.unique(ac)):
-        x, y, z, dim = antenna_dict[antenna]
-        f.write('{} {} {} {} {}'.format(x, y, z, dim, antenna))
-        f.write('\n')
+        for antenna in natsorted(np.unique(ac)):
+            x, y, z, dim = antenna_dict[antenna]
+            f.write('{} {} {} {} {}'.format(x, y, z, dim, antenna))
+            f.write('\n')
     f.close()
-
     return cfg_path
 
 def create_antennas_dict():
@@ -811,7 +813,7 @@ if __name__ == '__main__':
         df.to_csv(os.path.join(data_dir, csv_name), index=False)
     
     print('Creating textfile for simulations')
-    df = open(os.path.join(master_dir, 'sims_param.csv'), 'wr')
+    df = open(os.path.join(master_dir, 'sims_param.csv'), 'w')
     for i in range(n):
         if get_antennas:
             antenna_cfg = generate_antenna_cfg_file(i, acs, master_dir, antenna_dict)
