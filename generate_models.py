@@ -57,7 +57,7 @@ def generate_component(master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, 
                             fwhm_x, fwhm_y, pa, idxs)
         cube[z] += ts + g[z] * ts
     img = np.sum(cube, axis=0)
-    if np.min(img) != 0:
+    if (np.min(img) != 0) and (np.max(img) != 0):
         tseg = (img - np.min(img)) / (np.max(img) - np.min(img))
     else:
         tseg = img / np.max(img)
