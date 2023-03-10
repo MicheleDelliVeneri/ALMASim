@@ -57,6 +57,7 @@ def generate_component(master_cube, boxes, amp, line_amp, pos_x, pos_y, fwhm_x, 
                             fwhm_x, fwhm_y, pa, idxs)
         cube[z] += ts + g[z] * ts
     img = np.sum(cube, axis=0)
+    img[np.isnan(img)] = 0
     if (np.min(img) != 0) and (np.max(img) != 0):
         tseg = (img - np.min(img)) / (np.max(img) - np.min(img))
     else:
@@ -476,7 +477,6 @@ parser.add_argument('--sample_selection', type=str,
                           " r = sample spatial resolution\n"
                           " t = sample integration time\n"
                           " c = sample coordinates\n"
-                          " N = sample number of channels\n"
                           " b = sample band\n"
                           " B = sample bandwidth\n"
                           " f = sample frequency resolution\n"
@@ -487,6 +487,7 @@ parser.add_argument('--sample_selection', type=str,
                           " C = sample Ra and Dec\n"
                           " D = sample Distance\n"
                           " N = sample Noise Level\n"
+                          " x = sample number of channels\n"
                           " p = sample number of pixels\n"
                           " e = sample all parameters\n\n"   
                           "Example: -w 'art' will sample the antenna configuration,"
