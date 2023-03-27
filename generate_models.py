@@ -78,13 +78,16 @@ def genpt(posxy):
 def distance(p1, p2):
     return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
+def distance_3d(p1, p2):
+    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2)
+
 def make_gaussian_cube(i, data_dir, amps, xyposs, fwhmxs, fwhmys,  angles, 
                         line_centres, line_fwhms, spectral_indexes,
-                        spatial_resolutions, velocity_resolutions,
-                        n_components,  
-                        n_channels, n_px):
+                        spatial_resolutions, frequency_resolutions, 
+                        n_components, central_frequencies, 
+                        n_channels, n_px, ras, decs):
     spatial_resolution = spatial_resolutions[i]
-    velocity_resolution = velocity_resolutions[i]
+    frequency_resolution = frequency_resolutions[i]
     n_component = n_components[i] 
     n_chan = n_channels[i]
     pa = angles[i]
@@ -96,6 +99,28 @@ def make_gaussian_cube(i, data_dir, amps, xyposs, fwhmxs, fwhmys,  angles,
     fwhm_z = line_fwhms[i]
     fwhm_x = fwhmxs[i]
     fwhm_y = fwhmys[i]
+    ra = ras[i]
+    dec = decs[i]
+    central_frequency = central_frequencies[i]
+    spectral_index = spectral_indexes[i]
+    datacube_unit = U.Jy * U.pix**-2
+    hI_rest_frequency = 1420.4 * U.MHz
+    radio_hI_equivalence = U.doppler_radiuo(hI_rest_frequency)
+    central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    datacube = DataCube(
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_chan, 
+        px_size = spatial_resolution * U.arcsec,
+        channel_width = velocity_resolution * U.km / U.s,
+        velocity_centre=central_velocity, 
+        ra = ra,
+        dec = dec,
+    )
+    spectral_model = GaussianSpectrum(
+        sigma="thermal"
+    )
+    print(datacube._array.shape)
     
 
     return 
@@ -439,7 +464,6 @@ parser.add_argument("--csv_name", type=str, default='params.csv',
 parser.add_argument("--mode", type=str, default='gauss',  choices=['gauss', 'extended'],
                     help='The type of model to simulate, either gauss or extended, set with the -m flag;')
 parser.add_argument('--n_simulations', type=int, help='The number of cubes to generate, set with the -n flag;', default=10, )
-
 parser.add_argument('--antenna_config', type=str, default='antenna_config/alma.cycle9.3.1.cfg', 
         help="The antenna configuration file, set with the -a flag")
 parser.add_argument('--spatial_resolution', type=float, default=0.1, 
