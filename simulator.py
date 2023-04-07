@@ -504,8 +504,8 @@ def generate_extended_skymodel():
 
 def simulator(i, data_dir, main_path, project_name, 
               output_dir, band, antenna_name, inbright, 
-              bandwidth, inwidth, integration, totaltime, pwv, snr, get_skymodel=False,
-              extended=False, plot=False):
+              bandwidth, inwidth, integration, totaltime, pwv, snr, 
+              get_skymodel, extended, plot):
     """
     Input:
     i: index of the file to be simulated
