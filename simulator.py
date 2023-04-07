@@ -309,7 +309,7 @@ def gaussian(x, amp, cen, fwhm):
     """
     return amp*np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
 
-def insert_gaussian(id, c_id, datacube, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_chan, plot, plot_dir):
+def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_chan, plot, plot_dir):
     z_idxs = np.arange(0, n_chan)
     idxs = np.indices([n_px, n_px])
     g = gaussian(z_idxs, 1, pos_z, fwhm_z)
@@ -321,7 +321,7 @@ def insert_gaussian(id, c_id, datacube, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwh
         plt.title('Spectrum of Source {} along the spectral axis'.format(c_id))
         plt.savefig(os.path.join(plot_dir, 'gaussian_{}_{}.png'.format(id, c_id)))
     for z in range(datacube._array.shape[2]):
-        ts = threedgaussian(1, 0, z, pos_x, pos_y, fwhm_x, fwhm_y, pa, idxs)
+        ts = threedgaussian(amplitude, 0, z, pos_x, pos_y, fwhm_x, fwhm_y, pa, idxs)
         slice_ = ts + g[z] * ts
         datacube._array[:, :, z, 0] += slice_ * U.Jy * U.pix**-2
     return datacube
@@ -473,7 +473,7 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_velocity, 0)
     pos_z = n_channels // 2
     c_id = 0
-    datacube = insert_gaussian(id, c_id, datacube, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_channels, plot, plot_dir)
+    datacube = insert_gaussian(id, c_id, datacube, 1, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_channels, plot, plot_dir)
     xy_radius = fov / pixel_size * 0.3
     z_radius = 0.3 * bandwidth * U.MHz / frequency_resolution
     print('Generating sources in a radius of {} pixels in the x and y directions and {} pixels in the z direction\n'.format(xy_radius, z_radius))
@@ -482,6 +482,7 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     fwhm_xs = np.random.randint(2, 10, n_sources)
     fwhm_ys = np.random.randint(2, 10, n_sources)
     fwhm_zs = np.random.randint(2, 30, n_sources)
+    amplitudes = np.random.rand(n_sources)
     sample_coords = sample_positions(pos_x, pos_y, pos_z, 
                                      fwhm_x, fwhm_y, fwhm_z,
                                      n_sources, fwhm_xs, fwhm_ys, fwhm_zs,
@@ -490,7 +491,7 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     pas = np.random.randint(0, 360, n_sources)
     for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords),):
         print('{}:\nLocation: {}\nSize X: {} Y: {} Z: {}'.format(c_id, choords, fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id]))
-        datacube = insert_gaussian(id, c_id + 1, datacube, choords[0], choords[1], choords[2], fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_channels, plot, plot_dir)
+        datacube = insert_gaussian(id, c_id + 1, datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_channels, plot, plot_dir)
         print('\n')
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
     write_datacube_to_fits(datacube, filename)
@@ -709,11 +710,13 @@ def plotter(i, output_dir, plot_dir):
         clean_spectrum = np.sum(clean[0, :, :, :], axis=(1, 2))
         dirty_spectrum = np.nansum(dirty[0, :, :, :], axis=(1, 2))
         print(clean_spectrum.shape, dirty_spectrum.shape)
+        print(np.min(clean_spectrum), np.max(clean_spectrum), np.min(dirty_spectrum), np.max(dirty_spectrum))
         clean = np.sum(clean[0, :, :, :], axis=0)
         dirty = np.nansum(dirty[0, :, :, :], axis=0)
     else:
         clean = clean[0, 0, :, :]
         dirty = dirty[0, 0, :, :]
+    print(np.min(clean), np.max(clean), np.min(dirty), np.max(dirty))
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     ax[0].imshow(clean, origin='lower')
     ax[1].imshow(dirty, origin='lower')
@@ -731,7 +734,7 @@ def plotter(i, output_dir, plot_dir):
         plt.close()
     
 
-
+"""
 i = 0
 datadir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
@@ -758,3 +761,4 @@ if __name__ == '__main__':
               bandwidth, inwidth, integration, totaltime, 
               pwv, snr, get_skymodel, extended, plot)
 
+"""
