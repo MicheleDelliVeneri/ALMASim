@@ -646,6 +646,7 @@ def simulator(i, data_dir, main_path, project_name,
     noise_rmse = np.sqrt(np.nanmean(noise**2))
     print('Noise RMSE ', noise_rmse)
     inbright = snr * noise_rmse
+    print('Setting new inbright to: ', inbright)
     print('Simulating ALMA Observation of the Skymodel')
     simobserve(
         project=project, 
@@ -735,14 +736,14 @@ def plotter(i, output_dir, plot_dir):
     
 
 
-i = 0
+i = 10
 datadir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
 output_dir = 'sims'
 project_name = 'sim'
 band = 6
 antenna_name = 'alma.cycle9.3.3'
-inbright = 0.001
+inbright = 0.01
 bandwidth = 1280
 inwidth = 10
 integration = 10
