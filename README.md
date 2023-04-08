@@ -4,33 +4,17 @@
 ![](images/Icon.png)
 
 A python package to make realistic simulations of ALMA observations of galaxies and point sources. 
-For now, only simple point-like sources are generated, but soon more complex Galaxy models will be added. The project, at its current status, is able to:
-- Create Sky Model Cubes of randomly scattered point-like sources;
-- Generate corresponding calibrated Dirty Cubes;
-- Generate tCLEAN cleaned counterparts to the Dirty Cubes;
-- Generate a .csv file containing all source positions and morphological properties.
+The project, at its current status, is able to generate both point like and extended line emission sources, and to simulate the ALMA observations of these sources.
+This can be done by both using user defined simulation and observational parameters or by sampling from known ALMA observations of galaxies and point sources. The package generates 
+simulations using the CASA6.5 framework, the TNG100-1 simulation of the IllustrisTNG project, the ALMA archive and the Martini HI simulation package and it procedes as follows:
+- Sky Models are Generated;
+- Dirty Cubes counterparts are generated based on the sky models and the chosen observational parameters;
+- A a .csv file containing all source positions and morphological properties is generated.
 
-The main scope of this repository is to let scientistis generate their own simple ALMA simulions on which to train and test their models.
+The main scope of this repository is to let scientistis generate their own simple ALMA simulions on which to train and test their deconvolution and source detection and characterization models.
 
-## Generating ALMA simulations for the ML imaging purposes
-
-Instructions:
-
-1 Create a conda environment and activate it:
-
-<pre><code>conda create --name casa6.5 python=3.8 </code></pre>
-
-<pre><code>conda activate casa6.5 </code></pre>
-
-
-2 Clone the GitHub repository:
-<pre><code>git clone https://github.com/MicheleDelliVeneri/ALMASim.git</code></pre>
-
-3 Move to the repository:
-<pre><code>cd ALMASim</code></pre>
-
-4 Make sure that the required libraries are installed, we are supposing to be on a centos system:
-
+## Pre-requisites
+You should install the conda package manager available at https://docs.conda.io/en/latest/miniconda.html and the following libraries. Those provided are for CentOS, for other systems please refer to the official documentation:
 <pre><code>sudo yum install ImageMagick*</code></pre>
 <pre><code>sudo yum install xorg-x11-server-Xvfb</code></pre>
 <pre><code>sudo yum install compat-libgfortran-48</code></pre>
@@ -39,65 +23,83 @@ Instructions:
 <pre><code>sudo yum install mpich-devel</code></pre>
 <pre><code>sudo yum install parallel</code></pre>
 
-5 Install the required python libraries
+## Installation
+1 Clone the GitHub repository and move into it:
+<pre><code>git clone https://github.com/MicheleDelliVeneri/ALMASim.git</code></pre>
+<pre><code>cd ALMASim</code></pre>
 
-<pre><code>pip install -r requirements.txt</code></pre>
+2 Create a conda environment from the provided requirements and activate it:
+<pre><code>conda create --name casa6.5 --file requirements.txt </code></pre>
+<pre><code>conda activate casa6.5 </code></pre>
 
-activate the base casa environment
+3 Install the Hdecompose package:
+<pre><code> git clone https://github.com/kyleaoman/Hdecompose.git </code></pre>
+<pre><code> cd Hdecompose </code></pre>
+<pre><code> python setup.py install </code></pre>
 
-<pre><code> casa activate base </code></pre>
+4 Install the MARTINI package:
+<pre><code> git clone https://github.com/kyleaoman/martini.git</code></pre>
 
-6 Generate the sky model cubes:
-modify the create_models.sh script with the number of cpus-per-task you want to use, and the number of tasks you want to run in parallel.
-<pre><code>sbatch create_models.sh inputs_dir outputs_dir params.csv n configuration_file</code></pre>
+5 If you are interested in simulating Extended sources, you need to download the 99 snapshot of the TNG100-1 simulation from the IllustrisTNG project.
+<pre><code> wget https://www.illustris-project.org/data/TNG100-1/output/snapdir_099/snap_099.0.hdf5 </code></pre>
+also download 
+## Usage
+Both the model creation and the simulation creation are performed through the exectution bash scripts which can be executed both through bash or though the slurm workload manager with sbatch. All simulation
+parameters are set in the model simuation, so that is the tricky part, the rest is just about running another bash script. The model creation is performed by the script create_model.sh, which can be executed as follows:
+<pre><code>bash create_model.sh -option value</code></pre>
+The options are:
+* -d (data directory) the directory in which the simulated models cubes are temporarily stored;
+* -o (output directory) the directory in which the simulated sky model cubes, dirty cubes, and measurement sets will be stored stored;
+* -p (plot directory) the directory in which the plots of the simulated sky model cubes and dirty cubes will be stored;
+* -c (csv name) the name of the .csv file containing the source positions and morphological properties;
+* -m (mode) the mode of the simulation, it can be either "gauss" or "extended";
+* -n (number of sources) the number of output simulated cubes;
+* -a (Antenna Configuration) the antenna configuration file path, default value is antenna_config/alma.cycle9.3.1.cfg;
+* -s (Spatial Resolution) the spatial resolution of the simulated observations in arcseconds, default value is 0.1;
+* -i (Total Integration Time): the total integration time of the simulated observations, default value is 2400 seconds;
+* -C (Coordinates) the coordinates of the simulated observations, default value is J2000 03h59m59.96s -34d59m59.50s;
+* -B (Band) the ALMA observation band, which determines the central frequency of observation and thus the beam size, default value is 6;
+* -b (Bandwidth) the bandwidth of the simulated observations in MHz, default value is 10 MHz;
+* -f (Frequency Resolution) the frequency resolution of the simulated observations in MHz, default value is 10 MHz; 
+* -v (Velocity Resolution) the velocity resolution of the simulated observations in km/s, default value is 10 km/s;
+* -t (TNG Base Path) the path to the TNG100-1 snapshot, default value is  TNG100-1/output;
+* -S (TNG Snapshot) the TNG100-1 snapshot number, default value is 99;
+* -I (TNG Subhalo ID) the TNG100-1 subhalo ID, default value is 385350, this parameter can be set as a list if multiple subhalos are to be used as extended models for simulations;
+* -P (Number of Pixels) the number of pixels of the simualated observations, default value is 256. The final output cubes will have a size roughly equal to 1.5 times the number of pixels. This is done in order to ensure that the primary beam fits the spatial dimensions of the cube;
+* -N (Number of Channels) the number of channels in the frequency dimension of the cube, default value is 128;
+* -R (Right Ascension) the right ascension of the simulated observation in degrees, default value is 0;
+* -D (Declination) the declination of the simulated observation in degrees, default value is 0;
+* -T (Distance) the distance of the simulated observation in Mpc, default value is 30;
+* -l (Noise Level) the noise level of the simulated observations as a fraction of the primary peak max flux, default value is 0.3;
+* -e (Sample Parameter Flag): if set to True, some of the parameters can be sampled from ALMA real observations. Must be combined with the sample selection flags -w;
+* -w (Sample Selection Flag) : flags that determine which parameters to sample from real observations and which to set from the user defined or default values. The flags must be set as a continuous string, as an example [ -w acNbf] will sample for each observation the antenna, the coordinates, the number of channels, the ALMA band and the frequency resolution. The flags are:
+    - -a sample antenna configuration;
+    - -r sample spatial resolution;
+    - -t sample total integration time;
+    - -c sample coordinates;
+    - -N sample number of channels;
+    - -b sample ALMA band;
+    - -B sample bandwidth;
+    - -f sample frequency resolution;
+    - -v sample velocity resolution;
+    - -s sample TNG Snapshot;
+    - -i sample TNG Subhalo ID;
+    - -C sample RA and DEC;
+    - -D sample Distance;
+    - -N sample noise level;
+    - -p sample the number of pixels;
+    - -e sample all parameters;
 
-where the first parameter <b>models</b> is the name of the directory in which to store the <b>sky models</b> cubes, the second <b>sims</b> is the name of the directory in which to store the simulations, the third <b>params.csv</b> is the name of the .csv file which holds the sources parameters and the fourth <b>n</b> is the number of cubes to generate
-8 Generate the ALMA simulations, and configuration_file is teh path of one of the .cfg files stored in the antenna_config folder. For example this creates 10,000 sky model cubes in the models folder using the 9.3.1 configuration file. 
+After the script has been executed you will see that the data directory contains the simulated models, plus two .csv. 
+The first one named sims_params.csv contains the parameters that must be fed to the create_simulations.sh script, the second one named sims_info.csv contains information about the sims_params.csv file such as the name of the columns and the units of the parameters.
 
-<pre><code>sbatch create_models.sh models sims params.csv 10000 antenna_config/alma.cycle9.3.1.cfg</code></pre>
+Generate the dirsty models by modifying the create_simulations.sh script to reflect your hardware and then by running it through slurm:
+<pre><code>sbatch create_simulations.sh</code></pre>
 
-7 Generate the dirty cubes: 
-In order to generate the simulations, we are going to run the <b>run_simulations.sh</b> script in parallel with sbatch.
-To do so first modify the --array field with the number of parallel tasks you want to use and modify NUMLINES so that NUMLINES * array equals the number of .fits file in the models folder, and then run it with the following command:
-
-<pre><code>sbatch run_simulations.sh
- </code></pre>
-
-8 Generate tclean cleaned cubes:
-also modify the --array field to be consistent with previous value
-<pre><code>sbatch run_tclean.sh
- </code></pre>
- this function will take the dirty cubes generated and run them through tclean, it will also write in each sim_i folder a .txt called running_params.txt containin the time of execution. 
-
-The script assumes that your conda environment is called conda6.5, otherwise, modify its name in the script at line 9.
-
-9 Update the parameters in the <b>params.csv</b> file with the fluxes and continuum values:
-To do so, run the following command:
-<pre><code>conda activate casa6.5</code></pre>
-<pre><code>python generate_gaussian_params.py models sims params.csv 0.</code></pre>
-
-or if you want to run it via slurm: ß
-<pre><code>conda activate casa6.5</code></pre>
-<pre><code>srun -n 1 -c 32 python generate_params.py models sims params.csv 0.15</code></pre>
-where 0. is an examplary value for the noise rms. In case you want to add additional white noise to the simulations, increase this value. 
-
-10 If you plan to use a Machine Learning model and you need to split the data into train, validation and test sets, you can use the split_data.py script. 
-<pre><code>python split_data.py data_folder tclean_flag train_size</code></pre>
-where <b>data_folder</b> is the path to the directory containing the output_dir containing the fits (for example sims), <b>tclean_flag</b> is a boolean flag indicating if tclean cleaned fits were also created, and train_size is the training size as a float between 0 and 1. Validation is created from the 25% of the remaining training set. 
-If you followed the default exaple, simply run:
-<pre><code>python split_data.py "" True 0.8</code></pre>
-
-
-11. If you do not want to store them for later use and you want to save space, now you can safely delete the models and sim_* and sims folders, and all the .out and .log files or use the provided cleanup.sh script which takes as input the input and output dir defined at the beginning.
-
-<pre><code>sh cleanup.sh models sims</code></pre>
-
-
-
+The create_simulations.sh script will generate the dirty cubes and the measurement sets, which will be stored in the output directory. The plots of the dirty cubes and the sky model cubes will be stored in the plot directory. To clean up the temporary files, run the clean.sh script:
 You are set, enjoy your simulations!
 
  ## Work in progress
- - Introduce Galaxy dynamic and complex spectral profiles;
  - Introduce multi-line emissions / absorptions;
  - Introduce source classes;
 
