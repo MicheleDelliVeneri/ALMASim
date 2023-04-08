@@ -734,7 +734,7 @@ def plotter(i, output_dir, plot_dir):
         plt.close()
     
 
-"""
+
 i = 0
 datadir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
@@ -753,12 +753,9 @@ get_skymodel = False
 extended = False
 plot = True
 
-
 if __name__ == '__main__':
 
     simulator(i, datadir, main_path, project_name, 
               output_dir, band, antenna_name, inbright,
               bandwidth, inwidth, integration, totaltime, 
               pwv, snr, get_skymodel, extended, plot)
-
-"""

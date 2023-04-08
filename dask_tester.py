@@ -27,7 +27,7 @@ if __name__ == '__main__':
     extended = [False for i in idxs]
     plot = [True for i in idxs]
     
-    input_params = pd.DataFrame(zip(idxs, data_dir, main_path, output_dir, project_name, bands, antenna_name, inbright, bandwidth, inwidth, integration, totaltime, pwv, snr, get_skymodel, extended, plot), columns=['idx', 'data_dir', 'main_path', 'output_dir', 'project_name', 'bands', 'antenna_name', 'inbright', 'bandwidth', 'inwidth', 'integration', 'totaltime', 'pwv', 'snr', 'get_skymodel', 'extended', 'plot'])
+    input_params = pd.DataFrame(zip(idxs, data_dir, main_path, project_name, output_dir,  bands, antenna_name, inbright, bandwidth, inwidth, integration, totaltime, pwv, snr, get_skymodel, extended, plot), columns=['idx', 'data_dir', 'main_path', 'project_name', 'output_dir', 'bands', 'antenna_name', 'inbright', 'bandwidth', 'inwidth', 'integration', 'totaltime', 'pwv', 'snr', 'get_skymodel', 'extended', 'plot'])
     input_params.info()
     futures = client.map(sm.simulator, *input_params.values.T)
     client.gather(futures)
