@@ -739,8 +739,8 @@ def plotter(i, output_dir, plot_dir):
 
 
 i = 0
-datadir = '/mnt/f/DataLoading_Simulations'
-main_path = '/home/michele/GitHub/ALMASim'
+datadir = '/media/storage'
+main_path = '/home/deepfocus/ALMASim'
 output_dir = 'sims'
 project_name = 'sim'
 band = 6
