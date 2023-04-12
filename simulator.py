@@ -313,13 +313,6 @@ def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, 
     z_idxs = np.arange(0, n_chan)
     idxs = np.indices([n_px, n_px])
     g = gaussian(z_idxs, 1, pos_z, fwhm_z)
-    if plot is True:
-        plt.figure(figsize=(10, 5))
-        plt.plot(z_idxs, g)
-        plt.xlabel('Channel')
-        plt.ylabel('Amplitude')
-        plt.title('Spectrum of Source {} along the spectral axis'.format(c_id))
-        plt.savefig(os.path.join(plot_dir, 'gaussian_{}_{}.png'.format(id, c_id)))
     for z in range(datacube._array.shape[2]):
         ts = threedgaussian(amplitude, 0, z, pos_x, pos_y, fwhm_x, fwhm_y, pa, idxs)
         slice_ = ts + g[z] * ts
@@ -492,7 +485,6 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords),):
         print('{}:\nLocation: {}\nSize X: {} Y: {} Z: {}'.format(c_id, choords, fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id]))
         datacube = insert_gaussian(id, c_id + 1, datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_channels, plot, plot_dir)
-        print('\n')
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
     write_datacube_to_fits(datacube, filename)
     print('Skymodel saved to {}'.format(filename))
@@ -555,8 +547,9 @@ def simulator(i, data_dir, main_path, project_name,
     print('fov ', fov, ' arcsec')
     print('spatial_resolution ', spatial_resolution, ' arcsec')
     print('Antenna Configuration ', antenna_name)
-    print('\n\n')
-
+    print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
+    print('# ------------------------ #')
+    skymodel_time = time.time()
     if get_skymodel is True:
         print('Reading Skymodel from {}'.format(data_dir))
         print('\n')
@@ -570,7 +563,6 @@ def simulator(i, data_dir, main_path, project_name,
             filename = generate_extended_skymodel() 
         else:
             print('Generating Gaussian Skymodel')
-            print('\n')
             n_sources = np.random.randint(1, 5)
             fwhm_x = (0.1 * fov - 0.01 * fov)*np.random.rand() + 0.01 * fov
             fwhm_y = (0.1 * fov - 0.01 * fov)*np.random.rand() + 0.01 * fov
@@ -581,7 +573,7 @@ def simulator(i, data_dir, main_path, project_name,
             print('FWHM_y ', fwhm_y, ' arcsec')
             print('FWHM_z ', fwhm_z, ' MHz')
             print('PA ', pa, ' deg')
-            print('\n')
+
             min_sep_spatial = 1.5 * pixel_size
             min_sep_frequency = 1.5 * inwidth
             filename = generate_gaussian_skymodel(i, output_dir, n_sources,
@@ -599,13 +591,14 @@ def simulator(i, data_dir, main_path, project_name,
                                                   plot, 
                                                   plot_dir)
     
+    final_skymodel_time = time.time()
     data, header =  load_fits(filename)
+    noise_time = time.time()
     blank_data = np.zeros(data.shape)
     blankname = os.path.join(project,'blank.fits')
-
     save_fits(blankname, blank_data, header)
-
     antennalist = os.path.join(main_path, "antenna_config", antenna_name + '.cfg')
+    print('# ------------------------ #')
     print('Generating Noise')
     simobserve(
         project=project, 
@@ -645,9 +638,12 @@ def simulator(i, data_dir, main_path, project_name,
     noise, header = load_fits(os.path.join(output_dir, "noise_cube_" + str(i) +".fits"))
     noise_rmse = np.sqrt(np.nanmean(noise**2))
     print('Noise RMSE ', noise_rmse)
+    final_noise_time = time.time()
     inbright = snr * noise_rmse
     print('Setting new inbright to: ', inbright)
+    print('# ------------------------ #')
     print('Simulating ALMA Observation of the Skymodel')
+    sim_time = time.time()
     simobserve(
         project=project, 
         skymodel=filename,
@@ -688,11 +684,15 @@ def simulator(i, data_dir, main_path, project_name,
            fitsimage=os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), overwrite=True)
     exportfits(imagename=os.path.join(project, '{}.{}.skymodel'.format(project, antenna_name)), 
            fitsimage=os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
+    final_sim_time = time.time()
+    print('# ------------------------ #')
     print('Saving Measurement Set')
+    save_time = time.time()
     ms_to_npz(os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
               dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"),
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "{}.{}.noisy_".format(project, antenna_name) + str(i) +".npz"))
+    final_Save_time = time.time()
     print('Deleting junk files')
     shutil.rmtree(project)
     os.remove(os.path.join(output_dir, "noise_cube_" + str(i) +".fits"))
@@ -701,26 +701,28 @@ def simulator(i, data_dir, main_path, project_name,
         print('Saving Plots')
         plotter(i, output_dir, plot_dir)
     stop = time.time()
+    print('Skymodel Generated in {} seconds'.format(strftime("%H:%M:%S", gmtime(final_skymodel_time - skymodel_time))))
+    print('Noise Computation Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_noise_time - noise_time))))
+    print('Simulation Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_sim_time - sim_time))))
+    print('Saving Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_Save_time - save_time))))
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
     
 def plotter(i, output_dir, plot_dir):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))
     dirty, _ = load_fits(os.path.join(output_dir, 'dirty_cube_{}.fits'.format(i)))
-    print(clean.shape, dirty.shape)
     if clean.shape[1] > 1:
         clean_spectrum = np.sum(clean[0, :, :, :], axis=(1, 2))
         dirty_spectrum = np.nansum(dirty[0, :, :, :], axis=(1, 2))
-        print(clean_spectrum.shape, dirty_spectrum.shape)
-        print(np.min(clean_spectrum), np.max(clean_spectrum), np.min(dirty_spectrum), np.max(dirty_spectrum))
         clean = np.sum(clean[0, :, :, :], axis=0)
         dirty = np.nansum(dirty[0, :, :, :], axis=0)
     else:
         clean = clean[0, 0, :, :]
         dirty = dirty[0, 0, :, :]
-    print(np.min(clean), np.max(clean), np.min(dirty), np.max(dirty))
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     ax[0].imshow(clean, origin='lower')
     ax[1].imshow(dirty, origin='lower')
+    plt.colorbar(ax[0].imshow(clean, origin='lower'), ax=ax[0])
+    plt.colorbar(ax[1].imshow(dirty, origin='lower'), ax=ax[1])
     ax[0].set_title('Clean Sky Model Image')
     ax[1].set_title('ALMA Simulated Image')
     plt.savefig(os.path.join(plot_dir, 'sim_{}.png'.format(i)))
@@ -736,18 +738,18 @@ def plotter(i, output_dir, plot_dir):
     
 
 
-i = 10
-datadir = '/media/storage'
-main_path = '/home/deepfocus/ALMASim'
+i = 0
+datadir = '/mnt/f/DataLoading_Simulations'
+main_path = '/home/michele/GitHub/ALMASim'
 output_dir = 'sims'
 project_name = 'sim'
 band = 6
-antenna_name = 'alma.cycle9.3.3'
+antenna_name = 'alma.cycle9.3.7'
 inbright = 0.01
-bandwidth = 1280
+bandwidth = 50000
 inwidth = 10
 integration = 10
-totaltime = 2500
+totaltime = 3600
 pwv = 0.3
 snr = 30
 get_skymodel = False
