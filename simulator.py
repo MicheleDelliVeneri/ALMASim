@@ -24,6 +24,7 @@ from tqdm import tqdm
 import time
 from time import strftime, gmtime
 import dask
+from typing import Optional
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 
 def load_fits(inFile):
@@ -71,7 +72,7 @@ def ms_to_npz(ms, dirty_cube, datacolumn='CORRECTED_DATA', output_file='test.npz
     
     #get frequency info from dirty cube
     with fits.open(dirty_cube, memmap=False) as hdulist: 
-            npol, nz,nx, ny = np.shape(hdulist[0].data)
+            npol, nz, nx, ny = np.shape(hdulist[0].data)
             header=hdulist[0].header
     crdelt3 = header['CDELT3']
     crval3 = header['CRVAL3']
@@ -122,8 +123,8 @@ def get_fov(bands):
            
         central_freq = central_freq.to(U.Hz).value
         central_freq_s = 1 / central_freq
-        amplitude = light_speed * central_freq_s
-        fov = 1.13 * amplitude / 12
+        wavelength = light_speed * central_freq_s
+        fov = 2.44 * wavelength / 12
         fov = fov * 180 / np.pi * 3600
         fovs.append(fov)
     return np.array(fovs)
@@ -232,13 +233,15 @@ def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
                      xy_radius, z_radius, sep_xy, sep_z):
     sample = []
     i = 0
-    while len(sample) < n_components:
+    n = 0
+    while (len(sample) < n_components) and (n < 1000):
         new_p = get_pos(xy_radius, xy_radius, z_radius)
         new_p = int(new_p[0] + pos_x), int(new_p[1] + pos_y), int(new_p[2] + pos_z)
         if len(sample) == 0:
             spatial_dist = distance_2d((new_p[0],new_p[1]), (pos_x, pos_y))
             freq_dist = distance_1d(new_p[2], pos_z)
             if  spatial_dist < sep_xy or freq_dist < sep_z:
+                n += 1
                 continue
             else:
                 spatial_iou = get_iou(
@@ -254,16 +257,19 @@ def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
                         {'z1': new_p[2] - fwhm_zs[i], 'z2': new_p[2] + fwhm_zs[i]}, 
                         {'z1': pos_z - fwhm_z, 'z2': pos_z + fwhm_z})
                 if spatial_iou > 0.1 or freq_iou > 0.1:
+                    n += 1
                     continue
                 else:
                     sample.append(new_p)
                     i += 1
+                    n = 0
                     print('Found {}st component'.format(len(sample)))
         else:
             spatial_distances = [distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample]
             freq_distances = [distance_1d(new_p[2], p[2]) for p in sample]
             checks = [spatial_dist < sep_xy or freq_dist < sep_z for spatial_dist, freq_dist in zip(spatial_distances, freq_distances)]
             if any(checks) is True:
+                n += 1
                 continue
             else:
                 spatial_iou = [get_iou(
@@ -280,9 +286,13 @@ def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
                         {'z1': p[2] - fwhm_zs[j], 'z2': p[2] + fwhm_zs[j]}) for j, p in enumerate(sample)]
                 checks = [spatial_iou > 0.1 or freq_iou > 0.1 for spatial_iou, freq_iou in zip(spatial_iou, freq_iou)]
                 if any(checks) is True:
+                    n += 1
                     continue
-                sample.append(new_p)
-                print('Found {}st component'.format(len(sample)))
+                else:
+                    i += 1
+                    n = 0
+                    sample.append(new_p)
+                    print('Found {}st component'.format(len(sample)))
           
     return sample
 
@@ -494,10 +504,12 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
 def generate_extended_skymodel():
     return
 
-def simulator(i, data_dir, main_path, project_name, 
-              output_dir, band, antenna_name, inbright, 
-              bandwidth, inwidth, integration, totaltime, pwv, snr, 
-              get_skymodel, extended, plot):
+def simulator(i: int, data_dir: str, main_path: str, project_name: str, 
+              output_dir: str, band: int, antenna_name: str, inbright: float, 
+              bandwidth: int, inwidth: float, integration: int, totaltime: int, 
+              pwv: float, snr: float, get_skymodel: bool, 
+              extended: bool, plot: bool, save_ms: bool, n_px: Optional[int] = None, 
+              n_channels: Optional[int] = None):
     """
     Input:
     i: index of the file to be simulated
@@ -526,6 +538,8 @@ def simulator(i, data_dir, main_path, project_name,
     output_dir = os.path.join(data_dir, output_dir)
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
+    #Changing working directory to the output directory
+    os.chdir(output_dir)
     project = project_name + '_{}'.format(i)
     if not os.path.exists(project):
         os.mkdir(project)
@@ -536,13 +550,19 @@ def simulator(i, data_dir, main_path, project_name,
     central_freq= get_band_central_freq(band)
     fov = get_fov([band])[0]
     pixel_size = spatial_resolution / 7
-    n_px = int(1.5 * fov / pixel_size)
-    n_channels = int(bandwidth / inwidth)
+    if n_px is None:
+        n_px = int(fov / pixel_size)
+    else:
+        if n_px < int(fov / pixel_size):
+            print('n_px must be larger than {}'.format(int(fov / pixel_size)))
+            print('Setting n_px to {}'.format(int(fov / pixel_size)))
+            n_px = int(fov / pixel_size)
+    if n_channels is None:
+        n_channels = int(bandwidth / inwidth)
     print('Simulation Parameters given Band and Spatial Resolution')
     print('Band ', band)
     print('Bandwidth ', bandwidth, ' MHz')
     print('Central Frequency ', central_freq, ' GHz')
-    print('n_px ', n_px)
     print('pixel_size ', pixel_size, ' arcsec')
     print('fov ', fov, ' arcsec')
     print('spatial_resolution ', spatial_resolution, ' arcsec')
@@ -592,17 +612,17 @@ def simulator(i, data_dir, main_path, project_name,
                                                   plot_dir)
     
     final_skymodel_time = time.time()
-    data, header =  load_fits(filename)
+    #data, header =  load_fits(filename)
     noise_time = time.time()
-    blank_data = np.zeros(data.shape)
-    blankname = os.path.join(project,'blank.fits')
-    save_fits(blankname, blank_data, header)
+    #blank_data = np.zeros(data.shape)
+    #blankname = os.path.join(project,'blank.fits')
+    #save_fits(blankname, blank_data, header)
     antennalist = os.path.join(main_path, "antenna_config", antenna_name + '.cfg')
     print('# ------------------------ #')
     print('Generating Noise')
     simobserve(
         project=project, 
-        skymodel=blankname,
+        skymodel=filename,
         inbright="{}Jy/pix".format(inbright),
         incell="{}arcsec".format(pixel_size),
         indirection="J2000 19h30m00 -40d00m00",
@@ -621,6 +641,7 @@ def simulator(i, data_dir, main_path, project_name,
         graphics="none",
         verbose=False,
         overwrite=True)
+    
     tclean(
         vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
         imagename=os.path.join(project, '{}.{}'.format(project, antenna_name)),
@@ -631,7 +652,8 @@ def simulator(i, data_dir, main_path, project_name,
         niter=0,
         fastnoise=False,
         calcpsf=True,
-        pbcor=False
+        pbcor=True,
+        pblimit=0.2, 
         )
     exportfits(imagename=os.path.join(project, '{}.{}.image'.format(project, antenna_name)), 
            fitsimage=os.path.join(output_dir, "noise_cube_" + str(i) +".fits"), overwrite=True)
@@ -676,7 +698,8 @@ def simulator(i, data_dir, main_path, project_name,
         niter=0,
         fastnoise=False,
         calcpsf=True,
-        pbcor=False
+        pbcor=True,
+        pblimit=0.2,
         )
 
     print('Saving Dirty and Clean Cubes')
@@ -685,14 +708,16 @@ def simulator(i, data_dir, main_path, project_name,
     exportfits(imagename=os.path.join(project, '{}.{}.skymodel'.format(project, antenna_name)), 
            fitsimage=os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
     final_sim_time = time.time()
-    print('# ------------------------ #')
-    print('Saving Measurement Set')
-    save_time = time.time()
-    ms_to_npz(os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
+    if save_ms is True:
+        print('# ------------------------ #')
+        print('Saving Measurement Set')
+        save_time = time.time()
+        ms_to_npz(os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
               dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"),
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "{}.{}.noisy_".format(project, antenna_name) + str(i) +".npz"))
-    final_Save_time = time.time()
+        final_Save_time = time.time()
+
     print('Deleting junk files')
     shutil.rmtree(project)
     os.remove(os.path.join(output_dir, "noise_cube_" + str(i) +".fits"))
@@ -704,7 +729,8 @@ def simulator(i, data_dir, main_path, project_name,
     print('Skymodel Generated in {} seconds'.format(strftime("%H:%M:%S", gmtime(final_skymodel_time - skymodel_time))))
     print('Noise Computation Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_noise_time - noise_time))))
     print('Simulation Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_sim_time - sim_time))))
-    print('Saving Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_Save_time - save_time))))
+    if save_ms is True:
+        print('Saving Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_Save_time - save_time))))
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
     
 def plotter(i, output_dir, plot_dir):
@@ -738,27 +764,31 @@ def plotter(i, output_dir, plot_dir):
     
 
 
-i = 0
+i = 1
 datadir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
 output_dir = 'sims'
 project_name = 'sim'
 band = 6
-antenna_name = 'alma.cycle9.3.7'
+antenna_name = 'alma.cycle9.3.3'
 inbright = 0.01
-bandwidth = 50000
+bandwidth = 1280
 inwidth = 10
 integration = 10
-totaltime = 3600
+totaltime = 4500
 pwv = 0.3
 snr = 30
 get_skymodel = False
 extended = False
 plot = True
+save_ms = False
+n_px = None
+n_channels = 128
 
 if __name__ == '__main__':
 
     simulator(i, datadir, main_path, project_name, 
               output_dir, band, antenna_name, inbright,
               bandwidth, inwidth, integration, totaltime, 
-              pwv, snr, get_skymodel, extended, plot)
+              pwv, snr, get_skymodel, extended, 
+              plot, save_ms, n_px, n_channels)
