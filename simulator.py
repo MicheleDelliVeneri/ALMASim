@@ -25,6 +25,9 @@ import time
 from time import strftime, gmtime
 import dask
 from typing import Optional
+from astropy.nddata import Cutout2D
+from astropy.wcs import WCS
+from spectral_cube import SpectralCube
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 
 def load_fits(inFile):
@@ -124,7 +127,7 @@ def get_fov(bands):
         central_freq = central_freq.to(U.Hz).value
         central_freq_s = 1 / central_freq
         wavelength = light_speed * central_freq_s
-        fov = 2.44 * wavelength / 12
+        fov = 1.13 * wavelength / 12
         fov = fov * 180 / np.pi * 3600
         fovs.append(fov)
     return np.array(fovs)
@@ -472,14 +475,14 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     dec = dec,
     )
     wcs = datacube.wcs
-    print('Generating central source and {} serendipitous companions\n'.format(n_sources))
+    
     pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_velocity, 0)
     pos_z = n_channels // 2
     c_id = 0
     datacube = insert_gaussian(id, c_id, datacube, 1, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_channels, plot, plot_dir)
     xy_radius = fov / pixel_size * 0.3
     z_radius = 0.3 * bandwidth * U.MHz / frequency_resolution
-    print('Generating sources in a radius of {} pixels in the x and y directions and {} pixels in the z direction\n'.format(xy_radius, z_radius))
+    print('Generating central source and {} serendipitous companions in a radius of {} pixels in the x and y directions and {} pixels in the z direction\n'.format(n_sources, xy_radius, z_radius))
     min_sep_xy = min_sep_spatial / pixel_size
     min_sep_z = min_sep_frequency / frequency_resolution
     fwhm_xs = np.random.randint(2, 10, n_sources)
@@ -508,7 +511,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               output_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, 
               pwv: float, snr: float, get_skymodel: bool, 
-              extended: bool, plot: bool, save_ms: bool, n_px: Optional[int] = None, 
+              extended: bool, plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
               n_channels: Optional[int] = None):
     """
     Input:
@@ -529,6 +532,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     get_skymodel (bool): if True, skymodels are loaded from the data_dir, else they are generated
     extended (bool): if True, extended sources are simulated, else point sources
     plot (bool): if True, simulations plots are stored
+    save_ms (bool): if True, measurement sets are stored
+    crop (bool): if True, cubes are cropped to the size of the beam times 1.5 or to n_pxs
+    n_pxs (int): Optional number of pixels in the x and y direction, if present crop is set to True
+    n_channels (int): Optional number of channels in the z direction
     Output:
     None
     """
@@ -550,15 +557,16 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     central_freq= get_band_central_freq(band)
     fov = get_fov([band])[0]
     pixel_size = spatial_resolution / 7
-    if n_px is None:
-        n_px = int(fov / pixel_size)
-    else:
-        if n_px < int(fov / pixel_size):
-            print('n_px must be larger than {}'.format(int(fov / pixel_size)))
-            print('Setting n_px to {}'.format(int(fov / pixel_size)))
-            n_px = int(fov / pixel_size)
+    n_px = int(1.5 * fov / pixel_size)
     if n_channels is None:
         n_channels = int(bandwidth / inwidth)
+    # number of pixels must be even
+    if n_px % 2 != 0:
+        n_px += 1
+    xy_radius = n_px // 2
+    length = int(math.sqrt(2) * xy_radius)
+    
+
     print('Simulation Parameters given Band and Spatial Resolution')
     print('Band ', band)
     print('Bandwidth ', bandwidth, ' MHz')
@@ -568,6 +576,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('spatial_resolution ', spatial_resolution, ' arcsec')
     print('Antenna Configuration ', antenna_name)
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
+    print('Final size will be {} x {} x {} pixels'.format(length, length, n_channels))
     print('# ------------------------ #')
     skymodel_time = time.time()
     if get_skymodel is True:
@@ -659,10 +668,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
            fitsimage=os.path.join(output_dir, "noise_cube_" + str(i) +".fits"), overwrite=True)
     noise, header = load_fits(os.path.join(output_dir, "noise_cube_" + str(i) +".fits"))
     noise_rmse = np.sqrt(np.nanmean(noise**2))
-    print('Noise RMSE ', noise_rmse)
+    print('Measured Noise RMSE is {} Jy/pix'.format(noise_rmse))
     final_noise_time = time.time()
     inbright = snr * noise_rmse
-    print('Setting new inbright to: ', inbright)
+    print('Setting new inbright to: {} Jy/pix'.format(round(inbright, 4)))
     print('# ------------------------ #')
     print('Simulating ALMA Observation of the Skymodel')
     sim_time = time.time()
@@ -708,6 +717,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     exportfits(imagename=os.path.join(project, '{}.{}.skymodel'.format(project, antenna_name)), 
            fitsimage=os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
     final_sim_time = time.time()
+    
     if save_ms is True:
         print('# ------------------------ #')
         print('Saving Measurement Set')
@@ -717,6 +727,29 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "{}.{}.noisy_".format(project, antenna_name) + str(i) +".npz"))
         final_Save_time = time.time()
+
+    # Cutting out the central region of the dirty and clean cubes
+    clean, clean_header = load_fits(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"))
+    dirty, dirty_header = load_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
+    if n_pxs is not None:
+        crop = True
+    if crop is True:
+        if dirty.shape[1] > 1:
+            clean_cube = SpectralCube(clean[0], wcs=WCS(clean_header).dropaxis(3))
+            dirty_cube = SpectralCube(dirty[0], wcs=WCS(dirty_header).dropaxis(3))
+            if n_pxs is not None:
+                length = n_pxs
+            left = int((clean_cube.shape[1] - length) / 2)
+            clean_cube = clean_cube[:, left:left+length, left:left+length]
+            dirty_cube = dirty_cube[:, left:left+length, left:left+length]
+            clean_cube.write(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
+            dirty_cube.write(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), overwrite=True)
+        else:
+            left = int((clean_cube.shape[1] - length) / 2)
+            clean_cube = clean_cube[0, left:left+length, left:left+length]
+            dirty_cube = dirty_cube[0, left:left+length, left:left+length]
+            save_fits(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), clean_cube, WCS(clean_header).dropaxis(2).to_header())
+            save_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), dirty_cube, WCS(dirty_header).dropaxis(2).to_header())
 
     print('Deleting junk files')
     shutil.rmtree(project)
@@ -736,24 +769,24 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
 def plotter(i, output_dir, plot_dir):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))
     dirty, _ = load_fits(os.path.join(output_dir, 'dirty_cube_{}.fits'.format(i)))
-    if clean.shape[1] > 1:
-        clean_spectrum = np.sum(clean[0, :, :, :], axis=(1, 2))
-        dirty_spectrum = np.nansum(dirty[0, :, :, :], axis=(1, 2))
-        clean = np.sum(clean[0, :, :, :], axis=0)
-        dirty = np.nansum(dirty[0, :, :, :], axis=0)
+    if clean.shape[0] > 1:
+        clean_spectrum = np.sum(clean[:, :, :], axis=(1, 2))
+        dirty_spectrum = np.nansum(dirty[:, :, :], axis=(1, 2))
+        clean_image = np.sum(clean[:, :, :], axis=0)
+        dirty_image = np.nansum(dirty[:, :, :], axis=0)
     else:
-        clean = clean[0, 0, :, :]
-        dirty = dirty[0, 0, :, :]
+        clean_image = clean.copy()
+        dirty_image = dirty.copy()
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    ax[0].imshow(clean, origin='lower')
-    ax[1].imshow(dirty, origin='lower')
-    plt.colorbar(ax[0].imshow(clean, origin='lower'), ax=ax[0])
-    plt.colorbar(ax[1].imshow(dirty, origin='lower'), ax=ax[1])
+    ax[0].imshow(clean_image, origin='lower')
+    ax[1].imshow(dirty_image, origin='lower')
+    plt.colorbar(ax[0].imshow(clean_image, origin='lower'), ax=ax[0])
+    plt.colorbar(ax[1].imshow(dirty_image, origin='lower'), ax=ax[1])
     ax[0].set_title('Clean Sky Model Image')
     ax[1].set_title('ALMA Simulated Image')
     plt.savefig(os.path.join(plot_dir, 'sim_{}.png'.format(i)))
     plt.close()
-    if clean.shape[1] > 1:
+    if clean.shape[0] > 1:
         fig, ax = plt.subplots(1, 2, figsize=(10, 5))
         ax[0].plot(clean_spectrum)
         ax[1].plot(dirty_spectrum)
@@ -764,7 +797,7 @@ def plotter(i, output_dir, plot_dir):
     
 
 
-i = 1
+i = 3
 datadir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
 output_dir = 'sims'
@@ -782,7 +815,7 @@ get_skymodel = False
 extended = False
 plot = True
 save_ms = False
-n_px = None
+n_pxs = None
 n_channels = 128
 
 if __name__ == '__main__':
@@ -791,4 +824,4 @@ if __name__ == '__main__':
               output_dir, band, antenna_name, inbright,
               bandwidth, inwidth, integration, totaltime, 
               pwv, snr, get_skymodel, extended, 
-              plot, save_ms, n_px, n_channels)
+              plot, save_ms, n_pxs, n_channels)
