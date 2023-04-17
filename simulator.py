@@ -565,6 +565,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         n_px += 1
     xy_radius = n_px // 2
     length = int(math.sqrt(2) * xy_radius)
+    if length % 2 != 0:
+        length += 1
     
 
     print('Simulation Parameters given Band and Spatial Resolution')
