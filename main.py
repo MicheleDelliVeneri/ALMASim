@@ -57,7 +57,9 @@ parser.add_argument('--threads_per_worker', type=int, default=4, help='R|Number 
 if __name__ == '__main__':
     args = parser.parse_args()
     dask.config.set(scheduler='threads')
-    client = Client(threads_per_worker=args.threads_per_worker, n_workers=args.n_workers)
+    client = Client(threads_per_worker=args.threads_per_worker, 
+                    n_workers=args.n_workers )
+    dask.config.set({'temporary_directory': '/media/storage'})
     idxs = np.arange(0, args.n_sims)
     data_dir = [args.data_dir for i in idxs]
     main_path = [args.main_path for i in idxs]
