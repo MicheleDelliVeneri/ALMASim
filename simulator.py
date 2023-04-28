@@ -508,7 +508,7 @@ def generate_extended_skymodel():
     return
 
 def simulator(i: int, data_dir: str, main_path: str, project_name: str, 
-              output_dir: str, band: int, antenna_name: str, inbright: float, 
+              output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, 
               pwv: float, snr: float, get_skymodel: bool, 
               extended: bool, plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
@@ -520,6 +520,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     main_path: path to the ALMASim Folder on your machine
     project_name: name of the project
     output_dir: directory where the output is stored
+    plot_dir: directory where the plots are stored
     band (int): band to be simulated (3 - 10)
     antenna_name (str): name of the antenna configuration (alma.cycle9.3.1 - alma.cycle9.3.10)
     inbright (float): brightness of the source in Jy/px (0.000001 - 0.1)
@@ -540,19 +541,19 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     None
     """
     start = time.time()
-    if not os.path.exists(data_dir):
-        os.mkdir(data_dir)
-    output_dir = os.path.join(data_dir, output_dir)
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
+    #if not os.path.exists(data_dir):
+    #    os.mkdir(data_dir)
+    #output_dir = os.path.join(data_dir, output_dir)
+    #if not os.path.exists(output_dir):
+    #    os.mkdir(output_dir)
     #Changing working directory to the output directory
     os.chdir(output_dir)
     project = project_name + '_{}'.format(i)
     if not os.path.exists(project):
         os.mkdir(project)
-    plot_dir = os.path.join(data_dir, 'plots')
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
+    #plot_dir = os.path.join(data_dir, 'plots')
+    #if not os.path.exists(plot_dir):
+    #    os.makedirs(plot_dir)
     spatial_resolution = get_spatial_resolution(band, antenna_name)
     central_freq= get_band_central_freq(band)
     fov = get_fov([band])[0]
@@ -767,7 +768,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     if save_ms is True:
         print('Saving Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_Save_time - save_time))))
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
-    
+    return
+
+
 def plotter(i, output_dir, plot_dir):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))
     dirty, _ = load_fits(os.path.join(output_dir, 'dirty_cube_{}.fits'.format(i)))

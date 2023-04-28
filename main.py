@@ -6,6 +6,7 @@ import pandas as pd
 import os
 import argparse
 from random import choices
+MALLOC_TRIM_THRESHOLD_ = 0
 
 class SmartFormatter(argparse.HelpFormatter):
 
@@ -57,13 +58,21 @@ parser.add_argument('--threads_per_worker', type=int, default=4, help='R|Number 
 if __name__ == '__main__':
     args = parser.parse_args()
     dask.config.set(scheduler='threads')
-    client = Client(threads_per_worker=args.threads_per_worker, 
-                    n_workers=args.n_workers )
     dask.config.set({'temporary_directory': '/media/storage'})
+    if not os.path.exists(args.data_dir):
+        os.mkdir(args.data_dir)
+    output_dir = os.path.join(args.data_dir, args.output_dir)
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    plot_dir = os.path.join(args.data_dir, 'plots')
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+    
     idxs = np.arange(0, args.n_sims)
     data_dir = [args.data_dir for i in idxs]
     main_path = [args.main_path for i in idxs]
-    output_dir = [args.output_dir for i in idxs]
+    output_dir = [output_dir for i in idxs]
+    plot_dir = [plot_dir for i in idxs]
     project_name = [args.project_name for i in idxs]
     bands = choices(args.bands, k=len(idxs))
     antenna_ids = choices(args.antenna_config, k=len(idxs))
@@ -89,7 +98,8 @@ if __name__ == '__main__':
                                     data_dir, 
                                     main_path,
                                     project_name, 
-                                    output_dir,  
+                                    output_dir,
+                                    plot_dir, 
                                     bands, 
                                     antenna_names, 
                                     inbrights, 
@@ -106,16 +116,20 @@ if __name__ == '__main__':
                                     n_pxs, 
                                     n_channels), 
                                     columns=['idx', 'data_dir', 'main_path', 
-                                            'project_name', 'output_dir', 'band',
+                                            'project_name', 'output_dir', 'plot_dir', 'band',
                                             'antenna_name', 'inbright', 'bandwidth',
                                             'inwidth', 'integration', 'totaltime', 
                                             'pwv', 'snr', 'get_skymodel', 'extended',
                                             'plot', 'save_ms', 'crop',
                                             'n_px', 'n_channels'])
     input_params.info()
-    futures = client.map(sm.simulator, *input_params.values.T)
-    client.gather(futures)
-    client.close()
+    dbs = np.array_split(input_params, len(input_params) / args.n_workers)
+    for db in dbs:
+        client = Client(threads_per_worker=args.threads_per_worker, 
+                    n_workers=args.n_workers, memory_limit='10GB' )
+        futures = client.map(sm.simulator, *db.values.T)
+        client.gather(futures)
+        client.close()
     files = os.listdir(args.main_path)
     for item in files:
         if item.endswith(".log"):
