@@ -45,6 +45,9 @@ parser.add_argument('--snr', type=int, default=[30], nargs='+', help='R|SNR, if 
                     the given value, otherwise values are randomly extracted from the provided values list.')
 parser.add_argument('--get_skymodel', type=bool, default=False, help='R|If True, the skymodel is laoded from the data_path.')
 parser.add_argument('--extended', type=bool, default=False, help='R|If True, extended skymodel using the TNG simulations are used, otherwise point like gaussians.')
+parser.add_argument('--TNGBasePath', type=str, default='/media/storage/TNG100-1', help='R|Path to the TNG data on your folder.')
+parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.')
+parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data.')
 parser.add_argument('--plot', type=bool, default=False, help='R|If True, the simulation results are plotted.')
 parser.add_argument('--save_ms', type=bool, default=False, help='R|If True, the measurement sets are preserved and stored as numpy arrays.')
 parser.add_argument('--crop', type=bool, default=False, help='R|If True, the simulation results are cropped to the size of the beam times 1.5.')
@@ -89,6 +92,9 @@ if __name__ == '__main__':
     snrs = np.random.uniform(min_snr, max_snr, size=len(idxs))
     get_skymodel = [args.get_skymodel for i in idxs]
     extended = [args.extended for i in idxs]
+    tng_basepaths = [args.TNGBasePath for i in idxs]
+    tng_snapids = choices(args.TNGSnapID, k=len(idxs))
+    tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
     plot = [args.plot for i in idxs]
     save_ms = [args.save_ms for i in idxs]
     crop = [args.crop for i in idxs]
@@ -110,7 +116,11 @@ if __name__ == '__main__':
                                     pwvs, 
                                     snrs, 
                                     get_skymodel, 
-                                    extended, plot, 
+                                    extended, 
+                                    tng_basepaths, 
+                                    tng_snapids,
+                                    tng_subhaloids,
+                                    plot, 
                                     save_ms, 
                                     crop,
                                     n_pxs, 
@@ -120,6 +130,7 @@ if __name__ == '__main__':
                                             'antenna_name', 'inbright', 'bandwidth',
                                             'inwidth', 'integration', 'totaltime', 
                                             'pwv', 'snr', 'get_skymodel', 'extended',
+                                            'tng_basepath', 'tng_snapid', 'tng_subhaloid',
                                             'plot', 'save_ms', 'crop',
                                             'n_px', 'n_channels'])
     input_params.info()

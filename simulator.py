@@ -517,6 +517,7 @@ def plot_moments(FluxCube, vch, path):
     clip = np.where(FluxCube > 5 * rms, 1, 0)
     mom0 = np.sum(FluxCube, axis=-1)
     mask = np.where(mom0 > .02, 1, np.nan)
+    print(FluxCube.shape, clip.shape, vch.shape, mom0.shape)
     mom1 = np.sum(FluxCube * clip * vch, axis=-1) / mom0
     mom2 = np.sqrt(np.sum(FluxCube * clip * np.power(vch - mom1[..., np.newaxis], 2), axis=-1)) / mom0
     im1 = sp1.imshow(mom0.T, cmap='Greys', aspect=1.0, origin='lower')
@@ -532,19 +533,21 @@ def plot_moments(FluxCube, vch, path):
     plt.savefig(path)
 
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
-                               spatial_resolution, frequency_resolution, 
-                               TNGBasePath, TNGSnap, subhaloID, plot, plot_dir):
+                               spatial_resolution, central_frequency, frequency_resolution, 
+                               TNGBasePath, TNGSnap, subhaloID, api_key, plot, plot_dir):
     distance = np.random.randint(3, 30) * U.Mpc
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
     source = TNGSource(TNGBasePath, TNGSnap, subhaloID,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
+                       api_key = api_key,
                        ra = 0. * U.deg,
                        dec = 0. * U.deg,)
     hI_rest_frequency = 1420.4 * U.MHz
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     datacube = DataCube(
         n_px_x = n_px,
         n_px_y = n_px,
@@ -556,7 +559,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
         dec = source.dec,
     )
     spectral_model = GaussianSpectrum(
-        signa="thermal"
+        sigma="thermal"
     )
     sph_kernel = AdaptiveKernel(
     (
@@ -569,21 +572,21 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
         source=source,
         datacube=datacube,
         sph_kernel=sph_kernel,
-        spectral_model=spectral_model,
-        sph_kernel = sph_kernel)
+        spectral_model=spectral_model)
     
-    M.insert_source_in_cube(printfreq=10)
+    M.insert_source_in_cube()
     M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))), channels='velocity')
     f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))),'r')
     vch = f['channel_mids'][()] / 1E3 - source.distance.to(U.Mpc).value*70  # m/s to km/s
     f.close()
     os.remove(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))))
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
-    M.write_fits(filename, channels='velocity')
+    #M.write_fits(filename, channels='velocity')
+    write_datacube_to_fits(M.datacube, filename)
     print('Skymodel saved to {}'.format(filename))
     if plot is True:
-        SkyCube = M.datacube._array.value.T
-        plot_moments(SkyCube, vch, os.path.join(plot_dir, 'skymodel_{}.png'.format(str(i))))
+        SkyCube = M.datacube._array.value
+        plot_moments(SkyCube[:, :, :, 0], vch, os.path.join(plot_dir, 'skymodel_{}.png'.format(str(i))))
     del datacube
     del M
     return filename
@@ -592,7 +595,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, 
               pwv: float, snr: float, get_skymodel: bool, 
-              extended: bool, plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
+              extended: bool, TNGBasePath: str, TNGSnaphotID: int, 
+              TNGSubhaloID: int, TNG_api_key: str,
+              plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
               n_channels: Optional[int] = None):
     """
     Input:
@@ -613,6 +618,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     snr (float): signal to noise ratio (5 - 30)
     get_skymodel (bool): if True, skymodels are loaded from the data_dir, else they are generated
     extended (bool): if True, extended sources are simulated, else point sources
+    TNGBasePath (str): path to the IllustrisTNG folder on your machine,
+    TNGSnapshotID (int): snapshot of the IllustrisTNG simulation,
+    TNGsubhaloID (int): subhaloID of the source in the IllustrisTNG simulation,
+    TNG_api_key (str): your API key to access the IllustrisTNG simulation,
     plot (bool): if True, simulations plots are stored
     save_ms (bool): if True, measurement sets are stored
     crop (bool): if True, cubes are cropped to the size of the beam times 1.5 or to n_pxs
@@ -673,7 +682,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         if extended is True:
             print('Generating Extended Emission Skymodel from TNG')
             print('\n')
-            filename = generate_extended_skymodel() 
+            filename = generate_extended_skymodel(i, output_dir, n_px, n_channels, 
+                                                  spatial_resolution * U.arcsec, central_freq * U.GHz,
+                                                  inwidth * U.MHz, TNGBasePath, TNGSnaphotID, TNGSubhaloID, 
+                                                  TNG_api_key, plot, plot_dir) 
         else:
             print('Generating Gaussian Skymodel')
             n_sources = np.random.randint(1, 5)
@@ -883,9 +895,10 @@ def plotter(i, output_dir, plot_dir):
     
 
 
-i = 3
-datadir = '/media/storage'
+i = 2
+data_dir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
+plot_dir = 'extended_plots'
 output_dir = 'sims'
 project_name = 'sim'
 band = 6
@@ -898,16 +911,29 @@ totaltime = 4500
 pwv = 0.3
 snr = 30
 get_skymodel = False
-extended = False
+extended = True
+TNGBasePath = 'TNG100-1'
+TNGSnapshotID = 99
+TNGSubhaloID = 385350
+api_key = "8f578b92e700fae3266931f4d785f82c"
 plot = True
 save_ms = False
+crop = False
 n_pxs = None
-n_channels = 128
+n_channels = None
 
 if __name__ == '__main__':
-
-    simulator(i, datadir, main_path, project_name, 
-              output_dir, band, antenna_name, inbright,
+    if not os.path.exists(data_dir):
+        os.mkdir(data_dir)
+    output_dir = os.path.join(data_dir, output_dir)
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    plot_dir = os.path.join(data_dir, plot_dir)
+    if not os.path.exists(plot_dir):
+        os.mkdir(plot_dir)
+    simulator(i, data_dir, main_path, project_name, 
+              output_dir, plot_dir, band, antenna_name, inbright,
               bandwidth, inwidth, integration, totaltime, 
-              pwv, snr, get_skymodel, extended, 
-              plot, save_ms, n_pxs, n_channels)
+              pwv, snr, get_skymodel, extended, TNGBasePath, 
+              TNGSnapshotID, TNGSubhaloID, api_key,
+              plot, save_ms, crop, n_pxs, n_channels)
