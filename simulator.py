@@ -28,6 +28,7 @@ from typing import Optional
 from astropy.nddata import Cutout2D
 from astropy.wcs import WCS
 from spectral_cube import SpectralCube
+import h5py
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 
 def load_fits(inFile):
@@ -454,6 +455,8 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     pa (float): position angle in degrees\
     min_sep_spatial (float): minimum separation between sources in arcsec
     min_sep_frequency (float): minimum separation between sources in MHz
+    plot (bool): if True, plots the skymodel
+    plot_dir (str): directory where the plots will be saved
     """
     fwhm_x = int(fwhm_x.value / pixel_size.value)
     fwhm_y = int(fwhm_y.value / pixel_size.value)
@@ -504,8 +507,86 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     del datacube
     return filename
 
-def generate_extended_skymodel():
-    return
+def plot_moments(FluxCube, vch, path):
+    np.seterr(all='ignore')
+    fig = plt.figure(figsize=(16, 5))
+    sp1 = fig.add_subplot(1,3,1)
+    sp2 = fig.add_subplot(1,3,2)
+    sp3 = fig.add_subplot(1,3,3)
+    rms = np.std(FluxCube[:16, :16])  # noise in a corner patch where there is little signal
+    clip = np.where(FluxCube > 5 * rms, 1, 0)
+    mom0 = np.sum(FluxCube, axis=-1)
+    mask = np.where(mom0 > .02, 1, np.nan)
+    mom1 = np.sum(FluxCube * clip * vch, axis=-1) / mom0
+    mom2 = np.sqrt(np.sum(FluxCube * clip * np.power(vch - mom1[..., np.newaxis], 2), axis=-1)) / mom0
+    im1 = sp1.imshow(mom0.T, cmap='Greys', aspect=1.0, origin='lower')
+    plt.colorbar(im1, ax=sp1, label='mom0 [Jy/beam]')
+    im2 = sp2.imshow((mom1*mask).T, cmap='RdBu', aspect=1.0, origin='lower')
+    plt.colorbar(im2, ax=sp2, label='mom1 [km/s]')
+    im3 = sp3.imshow((mom2*mask).T, cmap='magma', aspect=1.0, origin='lower', vmin=0, vmax=300)
+    plt.colorbar(im3, ax=sp3, label='mom2 [km/s]')
+    for sp in sp1, sp2, sp3:
+        sp.set_xlabel('x [px = arcsec/10]')
+        sp.set_ylabel('y [px = arcsec/10]')
+    plt.subplots_adjust(wspace=.3)
+    plt.savefig(path)
+
+def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
+                               spatial_resolution, frequency_resolution, 
+                               TNGBasePath, TNGSnap, subhaloID, plot, plot_dir):
+    distance = np.random.randint(3, 30) * U.Mpc
+    x_rot = np.random.randint(0, 360) * U.deg
+    y_rot = np.random.randint(0, 360) * U.deg
+    source = TNGSource(TNGBasePath, TNGSnap, subhaloID,
+                       distance=distance,
+                       rotation = {'L_coords': (x_rot, y_rot)},
+                       ra = 0. * U.deg,
+                       dec = 0. * U.deg,)
+    hI_rest_frequency = 1420.4 * U.MHz
+    radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
+    velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    datacube = DataCube(
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_channels, 
+        px_size = spatial_resolution,
+        channel_width = velocity_resolution,
+        velocity_centre=source.vsys, 
+        ra = source.ra,
+        dec = source.dec,
+    )
+    spectral_model = GaussianSpectrum(
+        signa="thermal"
+    )
+    sph_kernel = AdaptiveKernel(
+    (
+        CubicSplineKernel(),
+        GaussianKernel(truncate=6)
+    )
+    )
+
+    M = Martini(
+        source=source,
+        datacube=datacube,
+        sph_kernel=sph_kernel,
+        spectral_model=spectral_model,
+        sph_kernel = sph_kernel)
+    
+    M.insert_source_in_cube(printfreq=10)
+    M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))), channels='velocity')
+    f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))),'r')
+    vch = f['channel_mids'][()] / 1E3 - source.distance.to(U.Mpc).value*70  # m/s to km/s
+    f.close()
+    os.remove(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))))
+    filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
+    M.write_fits(filename, channels='velocity')
+    print('Skymodel saved to {}'.format(filename))
+    if plot is True:
+        SkyCube = M.datacube._array.value.T
+        plot_moments(SkyCube, vch, os.path.join(plot_dir, 'skymodel_{}.png'.format(str(i))))
+    del datacube
+    del M
+    return filename
 
 def simulator(i: int, data_dir: str, main_path: str, project_name: str, 
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
