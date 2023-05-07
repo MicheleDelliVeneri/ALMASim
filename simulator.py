@@ -599,6 +599,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
    
 
     print('Generating datacube with {} channels with width of {} km/s resolution around {} km/s and with {} {} pixels with a pixel size of {}'.format(n_channels, velocity_resolution, central_velocity, n_px, n_px, spatial_resolution))
+    
     datacube = DataCube(
         n_px_x = n_px,
         n_px_y = n_px,
