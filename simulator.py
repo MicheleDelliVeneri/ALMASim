@@ -562,6 +562,7 @@ def plot_moments(FluxCube, vch, path):
     clip = np.where(FluxCube > 5 * rms, 1, 0)
     mom0 = np.sum(FluxCube, axis=-1)
     mask = np.where(mom0 > .02, 1, np.nan)
+    mask = np.ones_like(mom0)
     mom1 = np.sum(FluxCube * clip * vch, axis=-1) / mom0
     mom2 = np.sqrt(np.sum(FluxCube * clip * np.power(vch - mom1[..., np.newaxis], 2), axis=-1)) / mom0
     im1 = sp1.imshow(mom0.T, cmap='Greys', aspect=1.0, origin='lower')
@@ -576,14 +577,109 @@ def plot_moments(FluxCube, vch, path):
     plt.subplots_adjust(wspace=.3)
     plt.savefig(path)
 
+def _gen_particle_coords(source, datacube):
+    # pixels indexed from 0 (not like in FITS!) for better use with numpy
+    origin = 0
+    skycoords = source.sky_coordinates
+    return (
+        np.vstack(
+            datacube.wcs.sub(3).wcs_world2pix(
+                skycoords.ra.to(datacube.units[0]),
+                skycoords.dec.to(datacube.units[1]),
+                skycoords.radial_velocity.to(datacube.units[2]),
+                origin,
+            )
+        )
+        * U.pix
+    )
+
+def get_distance(n_px, n_channels, 
+                 x_rot, y_rot, simulation_str, TNGSnapshotID, TNGSubhaloID, 
+                 api_key, data_dir):
+    distance = 1 * U.Mpc
+    source = TNGSource(simulation_str, TNGSnapshotID, TNGSubhaloID,
+                       distance=distance,
+                       rotation = {'L_coords': (x_rot, y_rot)},
+                       cutout_dir = data_dir,
+                       api_key = api_key,
+                       ra = 0. * U.deg,
+                       dec = 0. * U.deg,
+                       )
+    datacube = DataCube(
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_channels, 
+        px_size = 10.0 * U.arcsec,
+        channel_width=10.0 * U.km * U.s**-1,
+        velocity_centre=source.vsys, 
+        ra = source.ra,
+        dec = source.dec,
+    )
+    coordinates = _gen_particle_coords(source, datacube)
+    min_x, max_x = np.min(coordinates[0,:]), np.max(coordinates[0,:])
+    min_y, max_y = np.min(coordinates[1,:]), np.max(coordinates[1,:])
+    min_z, max_z = np.min(coordinates[2,:]), np.max(coordinates[2,:])
+    while (min_x < - 0.5 * n_px * U.pix) or (max_x > 0.5 *n_px * U.pix) or (min_y < 0.5 * n_px * U.pix) or (max_y > 0.5 * n_px * U.pix):
+        distance += 10 * U.Mpc
+        source = TNGSource(simulation_str, TNGSnapshotID, TNGSubhaloID,
+                       distance=distance,
+                       rotation = {'L_coords': (x_rot, y_rot)},
+                       cutout_dir = os. getcwd(),
+                       api_key = api_key,
+                       ra = 0. * U.deg,
+                       dec = 0. * U.deg,)
+    
+        datacube = DataCube(
+            n_px_x = n_px,
+            n_px_y = n_px,
+            n_channels = n_channels, 
+            px_size = 10.0 * U.arcsec,
+            channel_width=10.0 * U.km * U.s**-1,
+            velocity_centre=source.vsys, 
+            ra = source.ra,
+            dec = source.dec,
+        )
+        coordinates = _gen_particle_coords(source, datacube)
+        min_x, max_x = np.min(coordinates[0,:]), np.max(coordinates[0,:])
+        min_y, max_y = np.min(coordinates[1,:]), np.max(coordinates[1,:])
+    source = TNGSource(simulation_str, TNGSnapshotID, TNGSubhaloID,
+                       distance=distance,
+                       rotation = {'L_coords': (x_rot, y_rot)},
+                       cutout_dir = os. getcwd(),
+                       api_key = api_key,
+                       ra = 0. * U.deg,
+                       dec = 0. * U.deg,)
+    channel_width=10.0 * U.km * U.s**-1
+    while (min_z < 0 * U.pix) or (max_z > n_channels * U.pix):
+        channel_width += 1.0 * U.km * U.s**-1
+        datacube = DataCube(
+            n_px_x = n_px,
+            n_px_y = n_px,
+            n_channels = n_channels, 
+            px_size = 10.0 * U.arcsec,
+            channel_width=channel_width,
+            velocity_centre=source.vsys, 
+            ra = source.ra,
+            dec = source.dec,
+        )
+        coordinates = _gen_particle_coords(source, datacube)
+        min_z, max_z = np.min(coordinates[2,:]), np.max(coordinates[2,:])
+        
+    return distance, channel_width
+
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
                                spatial_resolution, central_frequency, frequency_resolution, 
                                TNGBasePath, TNGSnap, subhaloID, api_key, plot, plot_dir):
-    distance = np.random.randint(1, 5) * U.Mpc
+    #distance = np.random.randint(1, 5) * U.Mpc
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
     simulation_str = TNGBasePath.split('/')[-1]
-    print('Generating extended source from subhalo {} - {} at {} Mpc with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
+
+    distance, channel_width = get_distance(n_px, n_channels, x_rot, y_rot,
+                         simulation_str, TNGSnap, subhaloID, api_key, data_dir)
+
+
+    print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
     
     source = TNGSource(simulation_str, TNGSnap, subhaloID,
                        distance=distance,
@@ -597,15 +693,13 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
    
-
-    print('Generating datacube with {} channels with width of {} km/s resolution around {} km/s and with {} {} pixels with a pixel size of {}'.format(n_channels, velocity_resolution, central_velocity, n_px, n_px, spatial_resolution))
     
     datacube = DataCube(
         n_px_x = n_px,
         n_px_y = n_px,
         n_channels = n_channels, 
         px_size = 10.0 * U.arcsec,
-        channel_width=16.0 * U.km * U.s**-1,
+        channel_width=channel_width,
         velocity_centre=source.vsys, 
         ra = source.ra,
         dec = source.dec,
@@ -616,8 +710,10 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     sph_kernel = AdaptiveKernel(
     (
         CubicSplineKernel(),
-        GaussianKernel(truncate=6)
-    )
+        GaussianKernel(truncate=6),
+    ),
+    vebose=False,
+
     )
 
     M = Martini(
@@ -626,7 +722,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
         sph_kernel=sph_kernel,
         spectral_model=spectral_model)
     
-    M.insert_source_in_cube()
+    M.insert_source_in_cube(skip_validation=True)
     M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))), channels='velocity')
     f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))),'r')
     vch = f['channel_mids'][()] / 1E3 - source.distance.to(U.Mpc).value*70  # m/s to km/s
@@ -935,8 +1031,8 @@ def plotter(i, output_dir, plot_dir):
         plt.close()
     
 
-"""
-i = 2
+
+i = 3
 data_dir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
 plot_dir = 'extended_plots'
@@ -978,4 +1074,3 @@ if __name__ == '__main__':
               pwv, snr, get_skymodel, extended, TNGBasePath, 
               TNGSnapshotID, TNGSubhaloID, api_key,
               plot, save_ms, crop, n_pxs, n_channels)
-"""
