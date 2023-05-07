@@ -30,6 +30,13 @@ from astropy.wcs import WCS
 from spectral_cube import SpectralCube
 import h5py
 from random import choices
+import illustris_python as il
+from illustris_python.snapshot import loadSubset, getSnapOffsets
+from Hdecompose.atomic_frac import atomic_frac
+import astropy.constants as C
+from martini.sph_kernels import find_fwhm
+from martini.sources.sph_source import SPHSource
+import h5py
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
 
@@ -552,6 +559,396 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     del datacube
     return filename
 
+def partTypeNum(partType):
+    """
+    Mapping between common names and numeric particle types.
+
+    Reproduced from the illustris_python toolkit.
+    """
+    if str(partType).isdigit():
+        return int(partType)
+
+    if str(partType).lower() in ["gas", "cells"]:
+        return 0
+    if str(partType).lower() in ["dm", "darkmatter"]:
+        return 1
+    if str(partType).lower() in ["tracer", "tracers", "tracermc", "trmc"]:
+        return 3
+    if str(partType).lower() in ["star", "stars", "stellar"]:
+        return 4  # only those with GFM_StellarFormationTime>0
+    if str(partType).lower() in ["wind"]:
+        return 4  # only those with GFM_StellarFormationTime<0
+    if str(partType).lower() in ["bh", "bhs", "blackhole", "blackholes"]:
+        return 5
+
+    raise Exception("Unknown particle type name.")
+
+def getNumPart(header):
+    """
+    Calculate number of particles of all types given a snapshot header.
+
+    Reproduced from the illustris_python toolkit.
+    """
+    nTypes = 6
+
+    nPart = np.zeros(nTypes, dtype=np.int64)
+    for j in range(nTypes):
+        nPart[j] = header["NumPart_Total"][j] | (
+            header["NumPart_Total_HighWord"][j] << 32
+        )
+
+    return nPart
+
+def gcPath(basePath, snapNum, chunkNum=0):
+    """
+    Return absolute path to a group catalog HDF5 file (modify as needed).
+
+    Reproduced from the illustris_python toolkit.
+    """
+    gcPath = basePath + "/groups_%03d/" % snapNum
+    filePath1 = gcPath + "groups_%03d.%d.hdf5" % (snapNum, chunkNum)
+    filePath2 = gcPath + "fof_subhalo_tab_%03d.%d.hdf5" % (snapNum, chunkNum)
+
+    if os.path.isfile(filePath1):
+        return filePath1
+    return filePath2
+
+def offsetPath(basePath, snapNum):
+    """
+    Return absolute path to a separate offset file (modify as needed).
+
+    Reproduced from the illustris_python toolkit.
+    """
+    offsetPath = basePath + "/../postprocessing/offsets/offsets_%03d.hdf5" % snapNum
+
+    return offsetPath
+
+def snapPath(basePath, snapNum, chunkNum=0):
+    """Return absolute path to a snapshot HDF5 file (modify as needed)."""
+    snapPath = basePath + "/snapdir_" + str(snapNum).zfill(3) + "/"
+    filePath = snapPath + "snap_" + str(snapNum).zfill(3)
+    filePath += "." + str(chunkNum) + ".hdf5"
+    return filePath
+
+def loadSingle(basePath, snapNum, haloID=-1, subhaloID=-1):
+    """
+    Return complete group catalog information for one halo or subhalo.
+
+    Reproduced from the illustris_python toolkit.
+    """
+    import h5py
+
+    if (haloID < 0 and subhaloID < 0) or (haloID >= 0 and subhaloID >= 0):
+        raise Exception("Must specify either haloID or subhaloID (and not both).")
+
+    gName = "Subhalo" if subhaloID >= 0 else "Group"
+    searchID = subhaloID if subhaloID >= 0 else haloID
+
+    # old or new format
+    if "fof_subhalo" in gcPath(basePath, snapNum):
+        # use separate 'offsets_nnn.hdf5' files
+        with h5py.File(offsetPath(basePath, snapNum), "r") as f:
+            offsets = f["FileOffsets/" + gName][()]
+    else:
+        # use header of group catalog
+        with h5py.File(gcPath(basePath, snapNum), "r") as f:
+            offsets = f["Header"].attrs["FileOffsets_" + gName]
+
+    offsets = searchID - offsets
+    fileNum = np.max(np.where(offsets >= 0))
+    groupOffset = offsets[fileNum]
+
+    # load halo/subhalo fields into a dict
+    result = {}
+
+    with h5py.File(gcPath(basePath, snapNum, fileNum), "r") as f:
+        for haloProp in f[gName].keys():
+            result[haloProp] = f[gName][haloProp][groupOffset]
+
+    return result
+
+def loadSubset(
+    basePath,
+    snapNum,
+    partType,
+    fields=None,
+    subset=None,
+    mdi=None,
+    sq=True,
+    float32=False,
+):
+    """
+    Load a subset of fields for all particles/cells of a given partType.
+    If offset and length specified, load only that subset of the partType.
+    If mdi is specified, must be a list of integers of the same length as fields,
+    giving for each field the multi-dimensional index (on the second dimension) to load.
+      For example, fields=['Coordinates', 'Masses'] and mdi=[1, None] returns a 1D array
+      of y-Coordinates only, together with Masses.
+    If sq is True, return a numpy array instead of a dict if len(fields)==1.
+    If float32 is True, load any float64 datatype arrays directly as float32
+    (save memory).
+
+    Reproduced from the illustris_python toolkit.
+    """
+    import h5py
+    import six
+
+    result = {}
+
+    ptNum = partTypeNum(partType)
+    gName = "PartType" + str(ptNum)
+
+    # make sure fields is not a single element
+    if isinstance(fields, six.string_types):
+        fields = [fields]
+
+    # load header from first chunk
+    with h5py.File(snapPath(basePath, snapNum), "r") as f:
+        header = dict(f["Header"].attrs.items())
+        nPart = getNumPart(header)
+
+        # decide global read size, starting file chunk, and starting file chunk offset
+        if subset:
+            offsetsThisType = (
+                subset["offsetType"][ptNum] - subset["snapOffsets"][ptNum, :]
+            )
+
+            fileNum = np.max(np.where(offsetsThisType >= 0))
+            fileOff = offsetsThisType[fileNum]
+            numToRead = subset["lenType"][ptNum]
+        else:
+            fileNum = 0
+            fileOff = 0
+            numToRead = nPart[ptNum]
+
+        result["count"] = numToRead
+
+        if not numToRead:
+            # print('warning: no particles of requested type, empty return.')
+            return result
+
+        # find a chunk with this particle type
+        i = 1
+        while gName not in f:
+            f = h5py.File(snapPath(basePath, snapNum, i), "r")
+            i += 1
+
+        # if fields not specified, load everything
+        if not fields:
+            fields = list(f[gName].keys())
+
+        for i, field in enumerate(fields):
+            # verify existence
+            if field not in f[gName].keys():
+                raise Exception(
+                    "Particle type ["
+                    + str(ptNum)
+                    + "] does not have field ["
+                    + field
+                    + "]"
+                )
+
+            # replace local length with global
+            shape = list(f[gName][field].shape)
+            shape[0] = numToRead
+
+            # multi-dimensional index slice load
+            if mdi is not None and mdi[i] is not None:
+                if len(shape) != 2:
+                    raise Exception(
+                        "Read error: mdi requested on non-2D field [" + field + "]"
+                    )
+                shape = [shape[0]]
+
+            # allocate within return dict
+            dtype = f[gName][field].dtype
+            if dtype == np.float64 and float32:
+                dtype = np.float32
+            result[field] = np.zeros(shape, dtype=dtype)
+
+    # loop over chunks
+    wOffset = 0
+    origNumToRead = numToRead
+
+    while numToRead:
+        f = h5py.File(snapPath(basePath, snapNum, fileNum), "r")
+
+        # no particles of requested type in this file chunk?
+        if gName not in f:
+            f.close()
+            fileNum += 1
+            fileOff = 0
+            continue
+
+        # set local read length for this file chunk, truncate to be within the local size
+        numTypeLocal = f["Header"].attrs["NumPart_ThisFile"][ptNum]
+
+        numToReadLocal = numToRead
+
+        if fileOff + numToReadLocal > numTypeLocal:
+            numToReadLocal = numTypeLocal - fileOff
+
+        # loop over each requested field for this particle type
+        for i, field in enumerate(fields):
+            # read data local to the current file
+            if mdi is None or mdi[i] is None:
+                result[field][wOffset : wOffset + numToReadLocal] = f[gName][field][
+                    fileOff : fileOff + numToReadLocal
+                ]
+            else:
+                result[field][wOffset : wOffset + numToReadLocal] = f[gName][field][
+                    fileOff : fileOff + numToReadLocal, mdi[i]
+                ]
+
+        wOffset += numToReadLocal
+        numToRead -= numToReadLocal
+        fileNum += 1
+        fileOff = 0  # start at beginning of all file chunks other than the first
+
+        f.close()
+
+    # verify we read the correct number
+    if origNumToRead != wOffset:
+        raise Exception(
+            "Read ["
+            + str(wOffset)
+            + "] particles, but was expecting ["
+            + str(origNumToRead)
+            + "]"
+        )
+
+    # only a single field? then return the array instead of a single item dict
+    if sq and len(fields) == 1:
+        return result[fields[0]]
+
+    return result
+
+def loadHeader(basePath, snapNum):
+    """
+    Load the group catalog header.
+
+    Reproduced from the illustris_python toolkit.
+    """
+    import h5py
+
+    with h5py.File(gcPath(basePath, snapNum), "r") as f:
+        header = dict(f["Header"].attrs.items())
+
+    return header
+
+class myTNGSource(SPHSource):
+    def __init__(
+        self,
+        snapNum,
+        subID,
+        basePath=None,
+        distance=3.0 * U.Mpc,
+        vpeculiar=0 * U.km / U.s,
+        rotation={"rotmat": np.eye(3)},
+        ra=0.0 * U.deg,
+        dec=0.0 * U.deg,
+    ):
+        X_H = 0.76
+
+        full_fields_g = (
+            "Masses",
+            "Velocities",
+            "InternalEnergy",
+            "ElectronAbundance",
+            "Density",
+            "CenterOfMass",
+            "GFM_Metals",
+        )
+        mdi_full = [None, None, None, None, None, None, 0]
+        mini_fields_g = (
+            "Masses",
+            "Velocities",
+            "InternalEnergy",
+            "ElectronAbundance",
+            "Density",
+            "Coordinates",
+        )
+        data_header = loadHeader(basePath, snapNum)
+        data_sub = loadSingle(basePath, snapNum, subhaloID=subID)
+        haloID = data_sub["SubhaloGrNr"]
+        subset_g = getSnapOffsets(basePath, snapNum, haloID, "Group")
+        try:
+            data_g = loadSubset(
+                    basePath,
+                    snapNum,
+                    "gas",
+                    fields=full_fields_g,
+                    subset=subset_g,
+                    mdi=mdi_full,
+                )
+            minisnap = False
+        except Exception as exc:
+            if ("Particle type" in exc.args[0]) and ("does not have field" in exc.args[0]):
+                data_g.update(
+                        loadSubset(
+                            basePath,
+                            snapNum,
+                            "gas",
+                            fields=("CenterOfMass",),
+                            subset=subset_g,
+                            sq=False,
+                        )
+                    )
+                minisnap = True
+                X_H_g = X_H
+            else:
+                raise
+        X_H_g = (
+                X_H if minisnap else data_g["GFM_Metals"])  # only loaded column 0: Hydrogen
+        a = data_header["Time"]
+        z = data_header["Redshift"]
+        h = data_header["HubbleParam"]
+        xe_g = data_g["ElectronAbundance"]
+        rho_g = data_g["Density"] * 1e10 / h * U.Msun * np.power(a / h * U.kpc, -3)
+        u_g = data_g["InternalEnergy"]  # unit conversion handled in T_g
+        mu_g = 4 * C.m_p.to(U.g).value / (1 + 3 * X_H_g + 4 * X_H_g * xe_g)
+        gamma = 5.0 / 3.0  # see http://www.tng-project.org/data/docs/faq/#gen4
+        T_g = (gamma - 1) * u_g / C.k_B.to(U.erg / U.K).value * 1e10 * mu_g * U.K
+        m_g = data_g["Masses"] * 1e10 / h * U.Msun
+        # cast to float64 to avoid underflow error
+        nH_g = U.Quantity(rho_g * X_H_g / mu_g, dtype=np.float64) / C.m_p
+        # In TNG_corrections I set f_neutral = 1 for particles with density
+        # > .1cm^-3. Might be possible to do a bit better here, but HI & H2
+        # tables for TNG will be available soon anyway.
+        fatomic_g = atomic_frac(
+            z, nH_g, T_g, rho_g, X_H_g, onlyA1=True, TNG_corrections=True
+            )
+        mHI_g = m_g * X_H_g * fatomic_g
+        try:
+            xyz_g = data_g["CenterOfMass"] * a / h * U.kpc
+        except KeyError:
+            xyz_g = data_g["Coordinates"] * a / h * U.kpc
+        vxyz_g = data_g["Velocities"] * np.sqrt(a) * U.km / U.s
+        V_cell = (
+            data_g["Masses"] / data_g["Density"] * np.power(a / h * U.kpc, 3)
+            )  # Voronoi cell volume
+        r_cell = np.power(3.0 * V_cell / 4.0 / np.pi, 1.0 / 3.0).to(U.kpc)
+        # hsm_g has in mind a cubic spline that =0 at r=h, I think
+        hsm_g = 2.5 * r_cell * find_fwhm(CubicSplineKernel().kernel)
+        xyz_centre = data_sub["SubhaloPos"] * a / h * U.kpc
+        xyz_g -= xyz_centre
+        vxyz_centre = data_sub["SubhaloVel"] * np.sqrt(a) * U.km / U.s
+        vxyz_g -= vxyz_centre
+        super().__init__(
+            distance=distance,
+            vpeculiar=vpeculiar,
+            rotation=rotation,
+            ra=ra,
+            dec=dec,
+            h=h,
+            T_g=T_g,
+            mHI_g=mHI_g,
+            xyz_g=xyz_g,
+            vxyz_g=vxyz_g,
+            hsm_g=hsm_g,
+        )
+        return
+
 def plot_moments(FluxCube, vch, path):
     np.seterr(all='ignore')
     fig = plt.figure(figsize=(16, 5))
@@ -594,17 +991,16 @@ def _gen_particle_coords(source, datacube):
     )
 
 def get_distance(n_px, n_channels, 
-                 x_rot, y_rot, simulation_str, TNGSnapshotID, TNGSubhaloID, 
-                 api_key, data_dir):
+                 x_rot, y_rot, TNGSnapshotID, TNGSubhaloID, 
+                 TNGBasePath, factor):
     distance = 1 * U.Mpc
-    source = TNGSource(simulation_str, TNGSnapshotID, TNGSubhaloID,
+    i = 0
+    source = myTNGSource(TNGSnapshotID, TNGSubhaloID,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
-                       cutout_dir = data_dir,
-                       api_key = api_key,
+                       basePath = TNGBasePath,
                        ra = 0. * U.deg,
-                       dec = 0. * U.deg,
-                       )
+                       dec = 0. * U.deg,)
     datacube = DataCube(
         n_px_x = n_px,
         n_px_y = n_px,
@@ -619,16 +1015,21 @@ def get_distance(n_px, n_channels,
     min_x, max_x = np.min(coordinates[0,:]), np.max(coordinates[0,:])
     min_y, max_y = np.min(coordinates[1,:]), np.max(coordinates[1,:])
     min_z, max_z = np.min(coordinates[2,:]), np.max(coordinates[2,:])
-    while (min_x < - 0.5 * n_px * U.pix) or (max_x > 0.5 *n_px * U.pix) or (min_y < 0.5 * n_px * U.pix) or (max_y > 0.5 * n_px * U.pix):
-        distance += 10 * U.Mpc
-        source = TNGSource(simulation_str, TNGSnapshotID, TNGSubhaloID,
+    dist_x = max_x - min_x
+    dist_y = max_y - min_y
+    dist_z = max_z - min_z
+    while (dist_x > factor * n_px* U.pix) or (dist_y > factor * n_px* U.pix):
+        i += 1
+        if i < 10:
+            distance += 10 * U.Mpc
+        elif i > 10 and i < 20:
+            distance += 100 * U.Mpc
+        source = myTNGSource(TNGSnapshotID, TNGSubhaloID,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
-                       cutout_dir = os. getcwd(),
-                       api_key = api_key,
+                       basePath = TNGBasePath,
                        ra = 0. * U.deg,
                        dec = 0. * U.deg,)
-    
         datacube = DataCube(
             n_px_x = n_px,
             n_px_y = n_px,
@@ -642,15 +1043,16 @@ def get_distance(n_px, n_channels,
         coordinates = _gen_particle_coords(source, datacube)
         min_x, max_x = np.min(coordinates[0,:]), np.max(coordinates[0,:])
         min_y, max_y = np.min(coordinates[1,:]), np.max(coordinates[1,:])
-    source = TNGSource(simulation_str, TNGSnapshotID, TNGSubhaloID,
+        dist_x = max_x - min_x
+        dist_y = max_y - min_y
+    source = myTNGSource(TNGSnapshotID, TNGSubhaloID,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
-                       cutout_dir = os. getcwd(),
-                       api_key = api_key,
+                       basePath = TNGBasePath,
                        ra = 0. * U.deg,
                        dec = 0. * U.deg,)
     channel_width=10.0 * U.km * U.s**-1
-    while (min_z < 0 * U.pix) or (max_z > n_channels * U.pix):
+    while dist_z > factor * n_channels * U.pix:
         channel_width += 1.0 * U.km * U.s**-1
         datacube = DataCube(
             n_px_x = n_px,
@@ -664,6 +1066,7 @@ def get_distance(n_px, n_channels,
         )
         coordinates = _gen_particle_coords(source, datacube)
         min_z, max_z = np.min(coordinates[2,:]), np.max(coordinates[2,:])
+        dist_z = max_z - min_z
         
     return distance, channel_width
 
@@ -675,20 +1078,19 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     y_rot = np.random.randint(0, 360) * U.deg
     simulation_str = TNGBasePath.split('/')[-1]
 
-    distance, channel_width = get_distance(n_px, n_channels, x_rot, y_rot,
-                         simulation_str, TNGSnap, subhaloID, api_key, data_dir)
+    distance, channel_width = get_distance(n_px, n_channels, x_rot, y_rot, 
+                                           TNGSnapshotID, TNGSubhaloID, TNGBasePath, factor=4)
 
 
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
     
-    source = TNGSource(simulation_str, TNGSnap, subhaloID,
+    source = myTNGSource(TNGSnap, subhaloID,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
-                       cutout_dir = TNGBasePath,
-                       api_key = api_key,
+                       basePath = TNGBasePath,
                        ra = 0. * U.deg,
                        dec = 0. * U.deg,)
-    hI_rest_frequency = 115.27120*U.GHz 
+    hI_rest_frequency = 1.42*U.GHz 
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
@@ -711,8 +1113,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     (
         CubicSplineKernel(),
         GaussianKernel(truncate=6),
-    ),
-    vebose=False,
+    )
 
     )
 
@@ -720,9 +1121,10 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
         source=source,
         datacube=datacube,
         sph_kernel=sph_kernel,
-        spectral_model=spectral_model)
+        spectral_model=spectral_model,
+        quiet=True)
     
-    M.insert_source_in_cube(skip_validation=True)
+    M.insert_source_in_cube(skip_validation=True, progressbar=True)
     M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))), channels='velocity')
     f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))),'r')
     vch = f['channel_mids'][()] / 1E3 - source.distance.to(U.Mpc).value*70  # m/s to km/s
@@ -808,7 +1210,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('spatial_resolution ', spatial_resolution, ' arcsec')
     print('Antenna Configuration ', antenna_name)
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
-    print('Final size will be {} x {} x {} pixels'.format(length, length, n_channels))
+    if n_pxs is not None:
+        print('Cube will be cropped to {} x {} x {} pixels'.format(n_pxs, n_pxs, n_channels))
+    else:
+        print('Final size will be {} x {} x {} pixels'.format(length, length, n_channels))
     print('# ------------------------ #')
     skymodel_time = time.time()
     if get_skymodel is True:
@@ -1032,14 +1437,14 @@ def plotter(i, output_dir, plot_dir):
     
 
 
-i = 3
+i = 0
 data_dir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
 plot_dir = 'extended_plots'
-output_dir = 'extended_sims_test_0'
+output_dir = 'extended_sims'
 project_name = 'sim'
 band = 6
-antenna_name = 'alma.cycle9.3.3'
+antenna_name = 'alma.cycle9.3.4'
 inbright = 0.01
 bandwidth = 1280
 inwidth = 10
@@ -1049,7 +1454,7 @@ pwv = 0.3
 snr = 30
 get_skymodel = False
 extended = True
-TNGBasePath = '/media/storage/TNG100-1'
+TNGBasePath = '/media/storage/TNG100-1/output'
 TNGSnapshotID = 99
 TNGSubhaloID = 487363
 api_key = "8f578b92e700fae3266931f4d785f82c"

@@ -68,7 +68,7 @@ if __name__ == '__main__':
     output_dir = os.path.join(args.data_dir, args.output_dir)
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
-    plot_dir = os.path.join(args.output_dir, 'plots')
+    plot_dir = os.path.join(output_dir, 'plots')
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
     
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     dbs = np.array_split(input_params, len(input_params) / args.n_workers)
     for db in dbs:
         client = Client(threads_per_worker=args.threads_per_worker, 
-                    n_workers=args.n_workers, memory_limit='30GB' )
+                    n_workers=args.n_workers, memory_limit='50GB' )
         futures = client.map(sm.simulator, *db.values.T)
         client.gather(futures)
         client.close()
