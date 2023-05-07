@@ -1369,7 +1369,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     dirty, dirty_header = load_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
     if n_pxs is not None:
         crop = True
-    if crop is True:
+    if crop == True:
         if dirty.shape[1] > 1:
             clean_cube = SpectralCube(clean[0], wcs=WCS(clean_header).dropaxis(3))
             dirty_cube = SpectralCube(dirty[0], wcs=WCS(dirty_header).dropaxis(3))
@@ -1436,7 +1436,7 @@ def plotter(i, output_dir, plot_dir):
         plt.close()
     
 
-
+"""
 i = 0
 data_dir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
@@ -1479,3 +1479,5 @@ if __name__ == '__main__':
               pwv, snr, get_skymodel, extended, TNGBasePath, 
               TNGSnapshotID, TNGSubhaloID, api_key,
               plot, save_ms, crop, n_pxs, n_channels)
+
+"""
