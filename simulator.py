@@ -29,7 +29,9 @@ from astropy.nddata import Cutout2D
 from astropy.wcs import WCS
 from spectral_cube import SpectralCube
 import h5py
+from random import choices
 os.environ['MPLCONFIGDIR'] = temp_dir.name
+pd.options.mode.chained_assignment = None  
 
 def load_fits(inFile):
     hdu_list = fits.open(inFile)
@@ -42,6 +44,49 @@ def save_fits(outfile, data, header):
     hdu = fits.PrimaryHDU(data, header=header)
     hdul = fits.HDUList([hdu])
     hdul.writeto(outfile, overwrite=True)
+
+def get_data_from_hdf(file):
+    data = list()
+    column_names = list()
+    r = h5py.File(file, 'r')
+    for key in r.keys():
+        if key == 'Snapshot_99':
+            group = r[key]
+            for key2 in group.keys():
+                column_names.append(key2)
+                data.append(group[key2])
+    values = np.array(data)
+    r.close()
+    db = pd.DataFrame(values.T, columns=column_names)     
+    return db   
+
+def get_subhaloids_from_db(n):
+    file = 'morphologies_deeplearn.hdf5'
+    db = get_data_from_hdf(file)
+    catalogue = db[['SubhaloID', 'P_Late', 'P_S0', 'P_Sab']]
+    catalogue.sort_values(by=['P_Late'], inplace=True, ascending=False)
+    catalogue.head(10)
+    ellipticals = catalogue[(catalogue['P_Late'] > 0.6) & (catalogue['P_S0'] < 0.5) & (catalogue['P_Sab'] < 0.5)]
+    lenticulars = catalogue[(catalogue['P_S0'] > 0.6) & (catalogue['P_Late'] < 0.5) & (catalogue['P_Sab'] < 0.5)]
+    spirals = catalogue[(catalogue['P_Sab'] > 0.6) & (catalogue['P_Late'] < 0.5) & (catalogue['P_S0'] < 0.5)]
+
+    ellipticals['sum'] = ellipticals['P_S0'].values + ellipticals['P_Sab'].values
+    lenticulars['sum'] = lenticulars['P_Late'].values + lenticulars['P_Sab'].values
+
+    spirals['sum'] = spirals['P_Late'].values + spirals['P_S0'].values
+    ellipticals.sort_values(by=['sum'], inplace=True, ascending=True)
+    lenticulars.sort_values(by=['sum'], inplace=True, ascending=True)
+    spirals.sort_values(by=['sum'], inplace=True, ascending=True)
+    ellipticals_ids = ellipticals['SubhaloID'].values
+    lenticulars_ids = lenticulars['SubhaloID'].values
+    spirals_ids = spirals['SubhaloID'].values
+    sample_n = 100 // 3
+
+    n_0 = choices(ellipticals_ids, k=sample_n)
+    n_1 = choices(spirals_ids, k=sample_n)
+    n_2 = choices(lenticulars_ids, k=n - 2 * sample_n)
+    ids = np.concatenate((n_0, n_1, n_2)).astype(int)
+    return ids
 
 def get_band_central_freq(band):
     if band == 3:
@@ -517,7 +562,6 @@ def plot_moments(FluxCube, vch, path):
     clip = np.where(FluxCube > 5 * rms, 1, 0)
     mom0 = np.sum(FluxCube, axis=-1)
     mask = np.where(mom0 > .02, 1, np.nan)
-    print(FluxCube.shape, clip.shape, vch.shape, mom0.shape)
     mom1 = np.sum(FluxCube * clip * vch, axis=-1) / mom0
     mom2 = np.sqrt(np.sum(FluxCube * clip * np.power(vch - mom1[..., np.newaxis], 2), axis=-1)) / mom0
     im1 = sp1.imshow(mom0.T, cmap='Greys', aspect=1.0, origin='lower')
@@ -535,25 +579,32 @@ def plot_moments(FluxCube, vch, path):
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
                                spatial_resolution, central_frequency, frequency_resolution, 
                                TNGBasePath, TNGSnap, subhaloID, api_key, plot, plot_dir):
-    distance = np.random.randint(3, 30) * U.Mpc
+    distance = np.random.randint(1, 5) * U.Mpc
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
-    source = TNGSource(TNGBasePath, TNGSnap, subhaloID,
+    simulation_str = TNGBasePath.split('/')[-1]
+    print('Generating extended source from subhalo {} - {} at {} Mpc with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
+    
+    source = TNGSource(simulation_str, TNGSnap, subhaloID,
                        distance=distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
+                       cutout_dir = TNGBasePath,
                        api_key = api_key,
                        ra = 0. * U.deg,
                        dec = 0. * U.deg,)
-    hI_rest_frequency = 1420.4 * U.MHz
+    hI_rest_frequency = 115.27120*U.GHz 
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
-    velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+   
+
+    print('Generating datacube with {} channels with width of {} km/s resolution around {} km/s and with {} {} pixels with a pixel size of {}'.format(n_channels, velocity_resolution, central_velocity, n_px, n_px, spatial_resolution))
     datacube = DataCube(
         n_px_x = n_px,
         n_px_y = n_px,
         n_channels = n_channels, 
-        px_size = spatial_resolution,
-        channel_width = velocity_resolution,
+        px_size = 10.0 * U.arcsec,
+        channel_width=16.0 * U.km * U.s**-1,
         velocity_centre=source.vsys, 
         ra = source.ra,
         dec = source.dec,
@@ -575,18 +626,18 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
         spectral_model=spectral_model)
     
     M.insert_source_in_cube()
-    M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))), channels='velocity')
-    f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))),'r')
+    M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))), channels='velocity')
+    f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))),'r')
     vch = f['channel_mids'][()] / 1E3 - source.distance.to(U.Mpc).value*70  # m/s to km/s
     f.close()
-    os.remove(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(i))))
+    os.remove(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))))
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
     #M.write_fits(filename, channels='velocity')
     write_datacube_to_fits(M.datacube, filename)
     print('Skymodel saved to {}'.format(filename))
     if plot is True:
         SkyCube = M.datacube._array.value
-        plot_moments(SkyCube[:, :, :, 0], vch, os.path.join(plot_dir, 'skymodel_{}.png'.format(str(i))))
+        plot_moments(SkyCube[:, :, :, 0], vch, os.path.join(plot_dir, 'skymodel_{}.png'.format(str(id))))
     del datacube
     del M
     return filename
@@ -631,19 +682,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     None
     """
     start = time.time()
-    #if not os.path.exists(data_dir):
-    #    os.mkdir(data_dir)
-    #output_dir = os.path.join(data_dir, output_dir)
-    #if not os.path.exists(output_dir):
-    #    os.mkdir(output_dir)
-    #Changing working directory to the output directory
     os.chdir(output_dir)
     project = project_name + '_{}'.format(i)
     if not os.path.exists(project):
         os.mkdir(project)
-    #plot_dir = os.path.join(data_dir, 'plots')
-    #if not os.path.exists(plot_dir):
-    #    os.makedirs(plot_dir)
     spatial_resolution = get_spatial_resolution(band, antenna_name)
     central_freq= get_band_central_freq(band)
     fov = get_fov([band])[0]
@@ -717,11 +759,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                   plot_dir)
     
     final_skymodel_time = time.time()
-    #data, header =  load_fits(filename)
     noise_time = time.time()
-    #blank_data = np.zeros(data.shape)
-    #blankname = os.path.join(project,'blank.fits')
-    #save_fits(blankname, blank_data, header)
     antennalist = os.path.join(main_path, "antenna_config", antenna_name + '.cfg')
     print('# ------------------------ #')
     print('Generating Noise')
@@ -863,10 +901,12 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
     return
 
-
 def plotter(i, output_dir, plot_dir):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))
     dirty, _ = load_fits(os.path.join(output_dir, 'dirty_cube_{}.fits'.format(i)))
+    if len(clean.shape) > 3:
+        clean = clean[0]
+        dirty = dirty[0]
     if clean.shape[0] > 1:
         clean_spectrum = np.sum(clean[:, :, :], axis=(1, 2))
         dirty_spectrum = np.nansum(dirty[:, :, :], axis=(1, 2))
@@ -894,12 +934,12 @@ def plotter(i, output_dir, plot_dir):
         plt.close()
     
 
-
+"""
 i = 2
 data_dir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
 plot_dir = 'extended_plots'
-output_dir = 'sims'
+output_dir = 'extended_sims_test_0'
 project_name = 'sim'
 band = 6
 antenna_name = 'alma.cycle9.3.3'
@@ -912,9 +952,9 @@ pwv = 0.3
 snr = 30
 get_skymodel = False
 extended = True
-TNGBasePath = 'TNG100-1'
+TNGBasePath = '/media/storage/TNG100-1'
 TNGSnapshotID = 99
-TNGSubhaloID = 385350
+TNGSubhaloID = 487363
 api_key = "8f578b92e700fae3266931f4d785f82c"
 plot = True
 save_ms = False
@@ -928,7 +968,7 @@ if __name__ == '__main__':
     output_dir = os.path.join(data_dir, output_dir)
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
-    plot_dir = os.path.join(data_dir, plot_dir)
+    plot_dir = os.path.join(output_dir, plot_dir)
     if not os.path.exists(plot_dir):
         os.mkdir(plot_dir)
     simulator(i, data_dir, main_path, project_name, 
@@ -937,3 +977,4 @@ if __name__ == '__main__':
               pwv, snr, get_skymodel, extended, TNGBasePath, 
               TNGSnapshotID, TNGSubhaloID, api_key,
               plot, save_ms, crop, n_pxs, n_channels)
+"""
