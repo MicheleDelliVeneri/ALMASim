@@ -1071,15 +1071,15 @@ def get_distance(n_px, n_channels,
     return distance, channel_width
 
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
-                               spatial_resolution, central_frequency, frequency_resolution, 
-                               TNGBasePath, TNGSnap, subhaloID, api_key, plot, plot_dir):
+                               central_frequency, frequency_resolution, 
+                               TNGBasePath, TNGSnap, subhaloID,  plot, plot_dir):
     #distance = np.random.randint(1, 5) * U.Mpc
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
     simulation_str = TNGBasePath.split('/')[-1]
 
     distance, channel_width = get_distance(n_px, n_channels, x_rot, y_rot, 
-                                           TNGSnapshotID, TNGSubhaloID, TNGBasePath, factor=4)
+                                           TNGSnap, subhaloID, TNGBasePath, factor=4)
 
 
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
@@ -1145,7 +1145,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, 
               pwv: float, snr: float, get_skymodel: bool, 
-              extended: bool, TNGBasePath: str, TNGSnaphotID: int, 
+              extended: bool, TNGBasePath: str, TNGSnapshotID: int, 
               TNGSubhaloID: int, TNG_api_key: str,
               plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
               n_channels: Optional[int] = None):
@@ -1209,6 +1209,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('fov ', fov, ' arcsec')
     print('spatial_resolution ', spatial_resolution, ' arcsec')
     print('Antenna Configuration ', antenna_name)
+    print('TNG Base Path ', TNGBasePath)
+    print('TNG Snapshot ID ', TNGSnapshotID)
+    print('TNG Subhalo ID ', TNGSubhaloID)
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
     if n_pxs is not None:
         print('Cube will be cropped to {} x {} x {} pixels'.format(n_pxs, n_pxs, n_channels))
@@ -1227,9 +1230,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
             print('Generating Extended Emission Skymodel from TNG')
             print('\n')
             filename = generate_extended_skymodel(i, output_dir, n_px, n_channels, 
-                                                  spatial_resolution * U.arcsec, central_freq * U.GHz,
-                                                  inwidth * U.MHz, TNGBasePath, TNGSnaphotID, TNGSubhaloID, 
-                                                  TNG_api_key, plot, plot_dir) 
+                                                  central_freq * U.GHz,
+                                                  inwidth * U.MHz, TNGBasePath, TNGSnapshotID, TNGSubhaloID, 
+                                                  plot, plot_dir) 
         else:
             print('Generating Gaussian Skymodel')
             n_sources = np.random.randint(1, 5)
@@ -1435,8 +1438,8 @@ def plotter(i, output_dir, plot_dir):
         plt.savefig(os.path.join(plot_dir, 'sim_spectrum_{}.png'.format(i)))
         plt.close()
     
-
 """
+
 i = 0
 data_dir = '/media/storage'
 main_path = '/home/deepfocus/ALMASim'
@@ -1456,7 +1459,7 @@ get_skymodel = False
 extended = True
 TNGBasePath = '/media/storage/TNG100-1/output'
 TNGSnapshotID = 99
-TNGSubhaloID = 487363
+TNGSubhaloID = 281703
 api_key = "8f578b92e700fae3266931f4d785f82c"
 plot = True
 save_ms = False
@@ -1479,5 +1482,4 @@ if __name__ == '__main__':
               pwv, snr, get_skymodel, extended, TNGBasePath, 
               TNGSnapshotID, TNGSubhaloID, api_key,
               plot, save_ms, crop, n_pxs, n_channels)
-
 """

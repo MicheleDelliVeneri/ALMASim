@@ -45,7 +45,7 @@ parser.add_argument('--snr', type=int, default=[30], nargs='+', help='R|SNR, if 
                     the given value, otherwise values are randomly extracted from the provided values list.')
 parser.add_argument('--get_skymodel', type=bool, default=False, help='R|If True, the skymodel is laoded from the data_path.')
 parser.add_argument('--extended', type=bool, default=False, help='R|If True, extended skymodel using the TNG simulations are used, otherwise point like gaussians.')
-parser.add_argument('--TNGBasePath', type=str, default='/media/storage/TNG100-1', help='R|Path to the TNG data on your folder.')
+parser.add_argument('--TNGBasePath', type=str, default='/media/storage/TNG100-1/output', help='R|Path to the TNG data on your folder.')
 parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.')
 parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data.')
 parser.add_argument('--TNGApiKey', type=str, default='8f578b92e700fae3266931f4d785f82c', help='R|API key to access the TNG data.')
