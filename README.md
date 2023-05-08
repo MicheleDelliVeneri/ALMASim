@@ -1,7 +1,7 @@
 # ALMASim
 [![arXiv](https://img.shields.io/badge/arXiv-2211.11462-00ff00.svg)](https://arxiv.org/abs/2211.11462) 
 
-![](images/Icon.png)
+![](images/extended_sim_0.png)
 
 ALMASim is a package to generate mock observations of HI line galaxies as observed by the Atacama Large Millimetre/Submillimetre Array (ALMA). ALMASim primary goal is to allow users to generate simulated datasets on which to test deconvolution and source detection models. ALMASim is intended to leverage MPI parallel computing on modern HPC clusters to generate thousands of ALMA data cubes. Users are free to set both source and observational parameters such as antenna configuration, bandwidth, integration time and so on, or completely generate data using random configuration and sources.
 ALMASim is built upon the CASA PiP Wheels (https://casadocs.readthedocs.io/en/latest/index.html), the MARTINI Package (https://github.com/kyleaoman/martini), and the Illustris Python Package (https://github.com/illustristng/illustris_python) to be able to generate observations of both high redshift point-like sources and close extendend sources in all possible ALMA configurations. 
@@ -30,7 +30,9 @@ For every observed target ALMASim generates:
 <pre><code> git clone https://github.com/kyleaoman/martini.git</code></pre>
 
 5 If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
+
 ![](images/TNGStructure.png)
+
 The picture shows an example for Snapshot-99, reproduce this for every Snapshot you are interested i. You can check more at the Illustris TNG official website: https://www.tng-project.org/data/
 
 6. Install the required packages 
