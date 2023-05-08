@@ -31,7 +31,7 @@ For every observed target ALMASim generates:
 
 5 If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
 
-![](images/TNGStructure.png)
+![](images/TNGStructure.PNG)
 
 The picture shows an example for Snapshot-99, reproduce this for every Snapshot you are interested i. You can check more at the Illustris TNG official website: https://www.tng-project.org/data/
 
