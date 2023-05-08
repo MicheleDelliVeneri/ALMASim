@@ -1146,7 +1146,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               bandwidth: int, inwidth: float, integration: int, totaltime: int, 
               pwv: float, snr: float, get_skymodel: bool, 
               extended: bool, TNGBasePath: str, TNGSnapshotID: int, 
-              TNGSubhaloID: int, TNG_api_key: str,
+              TNGSubhaloID: int,
               plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
               n_channels: Optional[int] = None):
     """
@@ -1213,6 +1213,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('TNG Snapshot ID ', TNGSnapshotID)
     print('TNG Subhalo ID ', TNGSubhaloID)
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
+    print(extended)
     if n_pxs is not None:
         print('Cube will be cropped to {} x {} x {} pixels'.format(n_pxs, n_pxs, n_channels))
     else:
@@ -1225,8 +1226,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         files = natsorted(os.listdir(data_dir))
         files = [os.path.join(data_dir, file) for file in files if '.fits' in file]
         filename = files[i]
+
     else:
-        if extended is True:
+        if extended == True:
             print('Generating Extended Emission Skymodel from TNG')
             print('\n')
             filename = generate_extended_skymodel(i, output_dir, n_px, n_channels, 

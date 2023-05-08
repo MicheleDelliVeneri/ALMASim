@@ -16,6 +16,16 @@ class SmartFormatter(argparse.HelpFormatter):
         # this is the RawTextHelpFormatter._split_lines
         return argparse.HelpFormatter._split_lines(self, text, width)
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 'True', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'False', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 parser = argparse.ArgumentParser(description='Simulate ALMA data cubes from TNG data cubes and Gaussian Simulations',
                                  formatter_class=SmartFormatter)
 
@@ -43,15 +53,14 @@ parser.add_argument('--pwv', type=float, default=[0.3], nargs='+', help='R|PWV i
                     the given value, otherwise alues are randomly sampled from a uniform distribution between the min and max values in the list.')
 parser.add_argument('--snr', type=int, default=[30], nargs='+', help='R|SNR, if a single value is given all simulations will be performed with \
                     the given value, otherwise values are randomly extracted from the provided values list.')
-parser.add_argument('--get_skymodel', type=bool, default=False, help='R|If True, the skymodel is laoded from the data_path.')
-parser.add_argument('--extended', type=bool, default=False, help='R|If True, extended skymodel using the TNG simulations are used, otherwise point like gaussians.')
+parser.add_argument('--get_skymodel', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the skymodel is laoded from the data_path.')
+parser.add_argument('--extended', type=str2bool, default=False, const=True, nargs='?', help='R|If True, extended skymodel using the TNG simulations are used, otherwise point like gaussians.')
 parser.add_argument('--TNGBasePath', type=str, default='/media/storage/TNG100-1/output', help='R|Path to the TNG data on your folder.')
 parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.')
 parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data.')
-parser.add_argument('--TNGApiKey', type=str, default='8f578b92e700fae3266931f4d785f82c', help='R|API key to access the TNG data.')
-parser.add_argument('--plot', type=bool, default=False, help='R|If True, the simulation results are plotted.')
-parser.add_argument('--save_ms', type=bool, default=False, help='R|If True, the measurement sets are preserved and stored as numpy arrays.')
-parser.add_argument('--crop', type=bool, default=False, help='R|If True, the simulation results are cropped to the size of the beam times 1.5.')
+parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted.')
+parser.add_argument('--save_ms', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the measurement sets are preserved and stored as numpy arrays.')
+parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?',  help='R|If True, the simulation results are cropped to the size of the beam times 1.5.')
 parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels in the simulation.')
 parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation.')
 parser.add_argument('--n_workers', type=int, default=10, help='R|Number of workers to use.')
@@ -93,19 +102,18 @@ if __name__ == '__main__':
     snrs = np.random.uniform(min_snr, max_snr, size=len(idxs))
     get_skymodel = [args.get_skymodel for i in idxs]
     extended = [args.extended for i in idxs]
-    tng_basepaths = [args.TNGBasePath for i in idxs]
+    tng_basepaths = [bool(args.TNGBasePath) for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if len(args.TNGSubhaloID) > args.n_sims:
         tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
     else:
         tng_subhaloids = sm.get_subhaloids_from_db(args.n_sims)
-    tng_api_keys = [args.TNGApiKey for i in idxs]
     plot = [args.plot for i in idxs]
     save_ms = [args.save_ms for i in idxs]
     crop = [args.crop for i in idxs]
     n_pxs = [args.n_px for i in idxs]
     n_channels = [args.n_channels for i in idxs]
-
+    print(extended)
 
 
 
@@ -129,7 +137,6 @@ if __name__ == '__main__':
                                     tng_basepaths, 
                                     tng_snapids,
                                     tng_subhaloids,
-                                    tng_api_keys,
                                     plot, 
                                     save_ms, 
                                     crop,
@@ -141,7 +148,6 @@ if __name__ == '__main__':
                                             'inwidth', 'integration', 'totaltime', 
                                             'pwv', 'snr', 'get_skymodel', 'extended',
                                             'tng_basepath', 'tng_snapid', 'tng_subhaloid',
-                                            'tng_api_key',
                                             'plot', 'save_ms', 'crop',
                                             'n_px', 'n_channels'])
     input_params.info()
