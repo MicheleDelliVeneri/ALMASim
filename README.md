@@ -34,11 +34,16 @@ For every observed target ALMASim generates:
 The picture shows an example for Snapshot-99, reproduce this for every Snapshot you are interested i. You can check more at the Illustris TNG official website: https://www.tng-project.org/data/
 
 6. Install the required packages 
-<pre><code> pip install -r requirements.txt <pre><code>
+<pre><code> pip install -r requirements.txt  </code></pre>
 
 ## Usage
-To run the simulation, just navigate to the ALMASim folder and run the main.py
-In order to 
+To run the simulation, just navigate to the ALMASim folder and execute 
+<pre><code> python main.py --option value --option1 value1 value2  </code></pre>
+to check the available option run 
+<pre><code> python main.py -h </code></pre>
+
+
+**Happy Simulations**
 
 
 ### Cite us
