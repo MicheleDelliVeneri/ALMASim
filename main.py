@@ -1,5 +1,5 @@
 import dask
-from dask.distributed import Client, progress
+from dask.distributed import Client
 import simulator as sm
 import numpy as np
 import pandas as pd

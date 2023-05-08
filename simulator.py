@@ -11,21 +11,16 @@ from casatools import table
 from astropy.constants import c
 from astropy.time import Time
 import astropy.units as U
-from martini.sources import TNGSource
 from martini import DataCube, Martini
-from martini.beams import GaussianBeam
-from martini.noise import GaussianNoise
 from martini.spectral_models import GaussianSpectrum
-from martini.sph_kernels import AdaptiveKernel, GaussianKernel, CubicSplineKernel, DiracDeltaKernel
+from martini.sph_kernels import AdaptiveKernel, GaussianKernel, CubicSplineKernel
 from natsort import natsorted
 import math
 from math import pi
 from tqdm import tqdm
 import time
 from time import strftime, gmtime
-import dask
 from typing import Optional
-from astropy.nddata import Cutout2D
 from astropy.wcs import WCS
 from spectral_cube import SpectralCube
 import h5py
