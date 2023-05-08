@@ -6,6 +6,7 @@ import pandas as pd
 import os
 import argparse
 from random import choices
+
 MALLOC_TRIM_THRESHOLD_ = 0
 
 class SmartFormatter(argparse.HelpFormatter):
@@ -26,45 +27,39 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-parser = argparse.ArgumentParser(description='Simulate ALMA data cubes from TNG data cubes and Gaussian Simulations',
+parser = argparse.ArgumentParser(description='Welcome to ALMASim, the ALMA simulation package.\
+                                 This is the main script to run the simulations. To use it you need to provide the following required arguments:\
+                                --data_dir /full/path/to/where/you/want/to/store/the/simulations/outputs/ \
+                                --main_path /full/path/to/ALMASim/ \
+                                 The rest are set to default as follows:' ,
                                  formatter_class=SmartFormatter)
 
-parser.add_argument('--n_sims', type=int, default=10, help='R|Number of simulations to perform.')
-parser.add_argument('--data_dir', type=str, default='/media/storage', help='R|Directory where the all the simulations outputs are stored.')
-parser.add_argument('--main_path', type=str, default='/home/deepfocus/ALMASim', help='R|Directory where the ALMASim package is stored.')
-parser.add_argument('--output_dir', type=str, default='sims', help='R|Directory where the simulation fits outputs are within the data_dir.')
+parser.add_argument('--n_sims', type=int, default=10, help='R|Number of simulations to perform, default 10.')
+parser.add_argument('--data_dir', type=str, required=True, help='R|Directory where the all the simulations outputs are stored.')
+parser.add_argument('--main_path', type=str, required=True,  help='R|Directory where the ALMASim package is stored.')
+parser.add_argument('--output_dir', type=str, default='sims', help='R|Directory where the simulation fits outputs are within the data_dir, default sims.')
 parser.add_argument('--project_name', type=str, default='sim', help='R|Name of the simalma project, leave it to default.')
-parser.add_argument('--bands', type=int, default=[6],  nargs='+',  help='R|Bands to simulate, if a single band is given all simulations will be performed with \
-                    the given band, otherwise bands are randomly extracted from the provided bands list.')
-parser.add_argument('--antenna_config', type=int, default=[3],  nargs='+', help='R|Antenna configurations as a list of integers in the interval [1, 10]. \
-                    if a single antenna configuration is given all simulations will be performed with the given configuration, otherwise \
-                     configurations are randomly extracted from the provided configurations list.')
-parser.add_argument('--inbright', type=float, default=[0.01], nargs='+', help='R|Input brightness in Jy/beam, if a single value is given all simulations will be performed with \
-                    the given value, otherwise values are randomly sampled from a uniform distribution between the min and max values in the list.')
-parser.add_argument('--bandwidth', type=int, default=[1280], nargs='+', help='R|Bandwidth in MHz, if a single value is given all simulations will be performed with \
-                    the given value, otherwise values are randomly extracted from the provided values list.')
-parser.add_argument('--inwidth', type=int, default=[10], nargs='+', help='R|Input width in km/s, if a single value is given all simulations will be performed with \
-                    the given value, otherwise values are randomly extracted from the provided values list.')
-parser.add_argument('--integration', type=int, default=[10], nargs='+', help='R|Integration time in seconds, if a single value is given all simulations will be performed with \
-                    the given value, otherwise values are randomly extracted from the provided values list.')
-parser.add_argument('--totaltime', type=int, default=[4500], nargs='+', help='R|Total time in seconds, if a single value is given all simulations will be performed with \
-                    the given value, otherwise values are randomly extracted from the provided values list.')
-parser.add_argument('--pwv', type=float, default=[0.3], nargs='+', help='R|PWV in mm between 0 and 1, if a single value is given all simulations will be performed with \
-                    the given value, otherwise alues are randomly sampled from a uniform distribution between the min and max values in the list.')
-parser.add_argument('--snr', type=int, default=[30], nargs='+', help='R|SNR, if a single value is given all simulations will be performed with \
-                    the given value, otherwise values are randomly extracted from the provided values list.')
-parser.add_argument('--get_skymodel', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the skymodel is laoded from the data_path.')
-parser.add_argument('--extended', type=str2bool, default=False, const=True, nargs='?', help='R|If True, extended skymodel using the TNG simulations are used, otherwise point like gaussians.')
-parser.add_argument('--TNGBasePath', type=str, default='/media/storage/TNG100-1/output', help='R|Path to the TNG data on your folder.')
-parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.')
-parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data.')
-parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted.')
-parser.add_argument('--save_ms', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the measurement sets are preserved and stored as numpy arrays.')
-parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?',  help='R|If True, the simulation results are cropped to the size of the beam times 1.5.')
-parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels in the simulation.')
-parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation.')
-parser.add_argument('--n_workers', type=int, default=10, help='R|Number of workers to use.')
-parser.add_argument('--threads_per_worker', type=int, default=4, help='R|Number of threads per worker to use.')
+parser.add_argument('--bands', type=int, default=[6],  nargs='+',  help='R|Bands to simulate, if a single band is given all simulations will be performed with the given band, otherwise bands are randomly extracted from the provided bands list. Default 6')
+parser.add_argument('--antenna_config', type=int, default=[3],  nargs='+', help='R|Antenna configurations as a list of integers in the interval [1, 10]. If a single antenna configuration is given all simulations will be performed with the given configuration, otherwise configurations are randomly extracted from the provided configurations list. Default 3')
+parser.add_argument('--inbright', type=float, default=[0.01], nargs='+', help='R|Input brightness in Jy/beam, if a single value is given all simulations will be performed with the given value, otherwise values are randomly sampled from a uniform distribution between the min and max values in the list. Defaylt 0.01')
+parser.add_argument('--bandwidth', type=int, default=[1280], nargs='+', help='R|Bandwidth in MHz, if a single value is given all simulations will be performed with the given value, otherwise values are randomly extracted from the provided values list. Default 1280')
+parser.add_argument('--inwidth', type=int, default=[10], nargs='+', help='R|Input width in km/s, if a single value is given all simulations will be performed with the given value, otherwise values are randomly extracted from the provided values list. Default 10')
+parser.add_argument('--integration', type=int, default=[10], nargs='+', help='R|Integration time in seconds, if a single value is given all simulations will be performed with the given value, otherwise values are randomly extracted from the provided values list. Default 10')
+parser.add_argument('--totaltime', type=int, default=[4500], nargs='+', help='R|Total time in seconds, if a single value is given all simulations will be performed with the given value, otherwise values are randomly extracted from the provided values list. Default 4500')
+parser.add_argument('--pwv', type=float, default=[0.3], nargs='+', help='R|PWV in mm between 0 and 1, if a single value is given all simulations will be performed with the given value, otherwise alues are randomly sampled from a uniform distribution between the min and max values in the list. Default 0.3')
+parser.add_argument('--snr', type=int, default=[30], nargs='+', help='R|SNR, if a single value is given all simulations will be performed with the given value, otherwise values are randomly extracted from the provided values list. Default 30')
+parser.add_argument('--get_skymodel', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the skymodel is laoded from the data_path. Default False.')
+parser.add_argument('--extended', type=str2bool, default=False, const=True, nargs='?', help='R|If True, extended skymodel using the TNG simulations are used, otherwise point like gaussians. Default False.')
+parser.add_argument('--TNGBasePath', type=str, default='/media/storage/TNG100-1/output', help='R|Path to the TNG data on your folder. Default /media/storage/TNG100-1/output')
+parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.  Default 99')
+parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data. Default 0')
+parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted. Default False.')
+parser.add_argument('--save_ms', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the measurement sets are preserved and stored as numpy arrays. Default False.')
+parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?',  help='R|If True, the simulation results are cropped to the size of the beam times 1.5. Default False.')
+parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels in the simulation. Default None, if set simulations are spatially cropped to the given number of pixels.')
+parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation. Default None, if set simulations are spectrally cropped to the given number of channels.')
+parser.add_argument('--n_workers', type=int, default=10, help='R|Number of workers to use. Default 10.')
+parser.add_argument('--threads_per_worker', type=int, default=4, help='R|Number of threads per worker to use ~ 1  per physical CPU. Default 4.')
 
 
 
