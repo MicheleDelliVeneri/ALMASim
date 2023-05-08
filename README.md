@@ -24,7 +24,7 @@ For every observed target ALMASim generates:
 3 Install the Hdecompose package:
 <pre><code> git clone https://github.com/kyleaoman/Hdecompose.git </code></pre>
 <pre><code> cd Hdecompose </code></pre>
-<pre><code> python setup.py install <pre><code>
+<pre><code> python setup.py install </code></pre>
 
 4 Install the MARTINI package:
 <pre><code> git clone https://github.com/kyleaoman/martini.git</code></pre>
