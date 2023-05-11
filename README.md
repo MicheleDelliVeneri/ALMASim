@@ -21,15 +21,12 @@ For every observed target ALMASim generates:
 <pre><code>conda create --name casa6.5 --file requirements.txt </code></pre>
 <pre><code>conda activate casa6.5 </code></pre>
 
-3 Install the Hdecompose package:
-<pre><code> git clone https://github.com/kyleaoman/Hdecompose.git </code></pre>
-<pre><code> cd Hdecompose </code></pre>
-<pre><code> python setup.py install </code></pre>
+3 Install the illustris_python package:
+<pre><code> git clone git@github.com:illustristng/illustris_python.git </code></pre>
+<pre><code> cd illustris_python </code></pre>
+<pre><code> pip install . </code></pre>
 
-4 Install the MARTINI package:
-<pre><code> git clone https://github.com/kyleaoman/martini.git</code></pre>
-
-5 If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
+4 If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
 
 ![](images/TNGStructure.PNG)
 
