@@ -25,8 +25,8 @@ from astropy.wcs import WCS
 from spectral_cube import SpectralCube
 import h5py
 from random import choices
-import illustris_python as il
-from illustris_python.snapshot import loadSubset, getSnapOffsets
+import illustris_python.illustris_python as il
+from illustris_python.illustris_python.snapshot import loadSubset, getSnapOffsets
 from Hdecompose.atomic_frac import atomic_frac
 import astropy.constants as C
 from martini.sph_kernels import find_fwhm
