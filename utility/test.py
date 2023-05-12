@@ -15,3 +15,9 @@ import pandas as pd
 import os
 import argparse
 from random import choices
+
+def test_imports():
+    print('All imports completed')
+
+
+test_imports()
