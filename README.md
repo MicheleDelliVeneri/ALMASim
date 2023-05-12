@@ -1,7 +1,7 @@
 # ALMASim
 [![arXiv](https://img.shields.io/badge/arXiv-2211.11462-00ff00.svg)](https://arxiv.org/abs/2211.11462) 
 ![build](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-package.yml/badge.svg)
-
+[![Upload Python Package](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml/badge.svg?branch=main&event=release)](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml)
 ![](images/extended_sim_0.png)
 
 ALMASim is a package to generate mock observations of HI line galaxies as observed by the Atacama Large Millimetre/Submillimetre Array (ALMA). ALMASim primary goal is to allow users to generate simulated datasets on which to test deconvolution and source detection models. ALMASim is intended to leverage MPI parallel computing on modern HPC clusters to generate thousands of ALMA data cubes. Users are free to set both source and observational parameters such as antenna configuration, bandwidth, integration time and so on, or completely generate data using random configuration and sources.
