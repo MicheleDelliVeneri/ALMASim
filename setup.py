@@ -3,8 +3,7 @@ from setuptools import setup, find_namespace_packages
 setup(
     name='ALMASim',
     version='1.1.0',
-    packages=['illustris_python'],
-    package_dir={'submodules/illustris_python': 'illustris_python'},
+    packages=find_namespace_packages(),
     install_requires=["numpy", "h5py", "six", 
                       "astropy==5.1.1", "scipy", "matplotlib", "pandas", "tqdm",
                       "h5py", "hdecompose", "spectral_cube", "astromartini", 
