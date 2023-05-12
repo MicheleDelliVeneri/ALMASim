@@ -38,4 +38,4 @@ jobs:
     - name: Test with pytest
       run: |
         pip install pytest
-        pytest /home/runner/work/ALMASim/ALMASim/utils/test.py
+        pytest /home/runner/work/ALMASim/utils/test.py
