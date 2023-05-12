@@ -50,7 +50,7 @@ parser.add_argument('--pwv', type=float, default=[0.3], nargs='+', help='R|PWV i
 parser.add_argument('--snr', type=int, default=[30], nargs='+', help='R|SNR, if a single value is given all simulations will be performed with the given value, otherwise values are randomly extracted from the provided values list. Default 30')
 parser.add_argument('--get_skymodel', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the skymodel is laoded from the data_path. Default False.')
 parser.add_argument('--extended', type=str2bool, default=False, const=True, nargs='?', help='R|If True, extended skymodel using the TNG simulations are used, otherwise point like gaussians. Default False.')
-parser.add_argument('--TNGBasePath', type=str, default='/media/storage/TNG100-1/output', help='R|Path to the TNG data on your folder. Default /media/storage/TNG100-1/output')
+parser.add_argument('--TNGBasePath', type=str, default=None, help='R|Path to the TNG data on your folder. Default /media/storage/TNG100-1/output')
 parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.  Default 99')
 parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data. Default 0')
 parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted. Default False.')
@@ -66,7 +66,7 @@ parser.add_argument('--threads_per_worker', type=int, default=4, help='R|Number 
 if __name__ == '__main__':
     args = parser.parse_args()
     dask.config.set(scheduler='threads')
-    dask.config.set({'temporary_directory': '/media/storage'})
+    dask.config.set({'temporary_directory': args.data_dir})
     if not os.path.exists(args.data_dir):
         os.mkdir(args.data_dir)
     output_dir = os.path.join(args.data_dir, args.output_dir)
@@ -108,9 +108,6 @@ if __name__ == '__main__':
     crop = [args.crop for i in idxs]
     n_pxs = [args.n_px for i in idxs]
     n_channels = [args.n_channels for i in idxs]
-    print(extended)
-
-
 
     input_params = pd.DataFrame(zip(idxs, 
                                     data_dir, 
