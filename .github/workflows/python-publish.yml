@@ -39,9 +39,9 @@ jobs:
         python -m pip install flake8 pytest 
 
     - name: Build package
-
       run: |
           pwd
+          ls
           python -m pip install build==0.9
           ls
           python -m build --sdist --wheel --outdir dist/.
