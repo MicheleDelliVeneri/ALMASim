@@ -36,7 +36,7 @@ jobs:
         python setup.py install
         cd ..
         python setup.py install
-        python -m pip install flake8 pytest build<0.10.0
+        python -m pip install flake8 pytest build==0.9
 
     - name: Build package
       run: python -m build
