@@ -1,6 +1,6 @@
 # ALMASim
 [![arXiv](https://img.shields.io/badge/arXiv-2211.11462-00ff00.svg)](https://arxiv.org/abs/2211.11462) 
-![build](https://github.com/github/docs/actions/workflows/main.yml/badge.svg)
+![build](https://github.com/github/docs/actions/workflows/python_package.yml/badge.svg)
 
 ![](images/extended_sim_0.png)
 
