@@ -14,27 +14,14 @@ For every observed target ALMASim generates:
 
 
 ## Installation
-1 Clone the GitHub repository and move into it:
-<pre><code>git clone https://github.com/MicheleDelliVeneri/ALMASim.git</code></pre>
-<pre><code>cd ALMASim</code></pre>
+<pre><code> pip install ALMASim </code></pre>
 
-2 Create a conda environment from the provided requirements and activate it:
-<pre><code>conda create --name casa6.5 --file requirements.txt </code></pre>
-<pre><code>conda activate casa6.5 </code></pre>
 
-3 Install the illustris_python package:
-<pre><code> git clone git@github.com:illustristng/illustris_python.git </code></pre>
-<pre><code> cd illustris_python </code></pre>
-<pre><code> pip install . </code></pre>
-
-4 If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
+If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
 
 ![](images/TNGStructure.PNG)
 
 The picture shows an example for Snapshot-99, reproduce this for every Snapshot you are interested i. You can check more at the Illustris TNG official website: https://www.tng-project.org/data/
-
-6. Install the required packages 
-<pre><code> pip install -r requirements.txt  </code></pre>
 
 ## Usage
 To run the simulation, just navigate to the ALMASim folder and execute 
