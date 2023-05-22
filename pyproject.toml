@@ -10,8 +10,8 @@ authors = [
     {name="L. Tychoniec", email="lukasz.tychoniec@eso.org"},
     {name="F. Guglielmetti", email="fgugliel@eso.org"},
     {name="I. Baronchelli", email="ivano.baronchelli@inaf.it"},
-    {name="E. Villard", email="evillard@eso.org},
-    {name="G. Longo", email="giuseppe.longo@unina.it}
+    {name="E. Villard", email="evillard@eso.org"},
+    {name="G. Longo", email="giuseppe.longo@unina.it"}
     ]
 description = "Simulation code for ALMA observations of both high redshift and local galaxies."
 readme = "README.rst"
