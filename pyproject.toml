@@ -39,6 +39,6 @@ dependencies = [
     "dask",
 ]
 [project.urls]
-"Homepage" = "https://github.com/MicheleDelliVeneri/ALMASim"s
+"Homepage" = "https://github.com/MicheleDelliVeneri/ALMASim"
 "Documentation" = "https://almasim.readthedocs.io/en/latest/"
 "Bug Tracker" = "https://github.com/MicheleDelliVeneri/ALMASim/issues"
