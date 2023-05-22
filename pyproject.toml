@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ALMASim"
+version = "1.1.1"
+authors = [
+    {name="M. Delli Veneri", email="micheledelliveneri@gmail.com"},
+    {name="L. Tychoniec", email="lukasz.tychoniec@eso.org"},
+    {name="F. Guglielmetti", email="fgugliel@eso.org"},
+    {name="I. Baronchelli" email="ivano.baronchelli@inaf.it"},
+    {name="E. Villard", email="evillard@eso.org},
+    {name="G. Longo", email="giuseppe.longo@unina.it}
+    ]
+description = "Simulation code for ALMA observations of both high redshift and local galaxies."
+readme = "README.rst"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    ]
+dependencies = [
+    "numpy",
+    "scipy",
+    "astropy",
+    "tqdm",
+    "casatools",
+    "casatasks",
+    "casadata",
+    "dask",
+]
+[project.urls]
+"Homepage" = "https://github.com/MicheleDelliVeneri/ALMASim"s
+"Documentation" = "https://almasim.readthedocs.io/en/latest/"
+"Bug Tracker" = "https://github.com/MicheleDelliVeneri/ALMASim/issues"
