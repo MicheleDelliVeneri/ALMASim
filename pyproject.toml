@@ -31,12 +31,22 @@ classifiers = [
 dependencies = [
     "numpy",
     "scipy",
-    "astropy",
+    "astropy==5.1.1",
+    "astromartini",
+    "pandas",
     "tqdm",
-    "casatools",
-    "casatasks",
-    "casadata",
+    "h5py",
+    "natsort",
+    "casatools==6.5.5.21",
+    "casatasks==6.5.5.21",
+    "casadata=2023.4.10",
     "dask",
+    "dask[distributed]",
+    "distributed",
+    "hdecompose",
+    "matplotlib",
+    "spectral-cube",
+
 ]
 [project.urls]
 "Homepage" = "https://github.com/MicheleDelliVeneri/ALMASim"
