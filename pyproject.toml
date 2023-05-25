@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ALMASim"
-version = "2.0"
+version = "2.1"
 authors = [
     {name="M. Delli Veneri", email="micheledelliveneri@gmail.com"},
     {name="L. Tychoniec", email="lukasz.tychoniec@eso.org"},

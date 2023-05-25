@@ -2,7 +2,7 @@ from setuptools import setup, find_namespace_packages
 
 setup(
     name='ALMASim',
-    version='2.0',
+    version='2.1',
     description='ALMA Simulator for synthetic observations of galaxies. To know more about the code, please visit https://github.com/MicheleDelliVeneri/ALMASim',
     long_description="fobar",
     packages=find_namespace_packages(),
