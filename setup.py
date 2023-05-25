@@ -4,6 +4,7 @@ setup(
     name='ALMASim',
     version='1.4',
     description='ALMA Simulator for synthetic observations of galaxies. To know more about the code, please visit https://github.com/MicheleDelliVeneri/ALMASim',
+    long_description="fobar",
     packages=find_namespace_packages(),
     install_requires=["numpy", "h5py", "six", 
                       "astropy==5.1.1", "scipy", "matplotlib", "pandas", "tqdm",
