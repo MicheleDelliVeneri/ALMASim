@@ -6,12 +6,12 @@ build-backend = "setuptools.build_meta"
 name = "ALMASim"
 version = "0.1.1"
 authors = [
-    "M. Delli Veneri <micheledelliveneri@gmail.com>",
-    "L. Tychoniec <lukasz.tychoniec@eso.org>",
-    "F. Guglielmetti <fgugliel@eso.org>",
-    "I. Baronchelli <ivano.baronchelli@inaf.it>",
-    "E. Villard <evillard@eso.org>",
-    "G. Longo <giuseppe.longo@unina.it>"
+    {name = "M. Delli Veneri, email = "micheledelliveneri@gmail.com"},
+    {name = "L. Tychoniec, email = "lukasz.tychoniec@eso.org"},
+    {name = "F. Guglielmetti, email = "fgugliel@eso.org"},
+    {name = "I. Baronchelli, email = "ivano.baronchelli@inaf.it"},
+    {name = "E. Villard, email = "evillard@eso.org"},
+    {name = "G. Longo, email = "giuseppe.longo@unina.it"}
     ]
 description = "Simulation code for ALMA observations of both high redshift and local galaxies."
 readme = "README.rst"
