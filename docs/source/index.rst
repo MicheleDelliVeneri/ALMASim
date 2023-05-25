@@ -20,7 +20,7 @@ Overview
    :start-after: INTRO_START_LABEL
    :end-before: INTRO_END_LABEL
 
-Citing Martini
+Citing ALMASim
 --------------
 
 .. include:: ../../README.rst
