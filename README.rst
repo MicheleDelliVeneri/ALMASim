@@ -21,7 +21,9 @@ Citing ALMASim
 .. CITING_START_LABEL
    
 If you use ALMASim in your research, please cite the following paper:
+
 .. code-block:: bibtex
+
 @ARTICLE{10.1093/mnras/stac3314,
 author = {Delli Veneri, Michele and Tychoniec, Łukasz and Guglielmetti, Fabrizia and Longo, Giuseppe and Villard, Eric},
 title = "{3D Detection and Characterisation of ALMA Sources through Deep Learning}",
@@ -63,8 +65,7 @@ To run the simulation, just navigate to the ALMASim folder and execute
 to check the available option run 
 ``python main.py -h``
 If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
-.. image:: TNGStructure.PNG
 The picture shows an example for Snapshot-99, reproduce this for every Snapshot you are interested i. You can check more at the Illustris TNG official website: https://www.tng-project.org/data/  
 
 .. QUICKSTART_END_LABEL
-
+.. image:: TNGStructure.PNG

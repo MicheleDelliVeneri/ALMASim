@@ -9,8 +9,10 @@ Welcome to ALMASim's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-   
-.. image:: images/TNGStructure.PNG
+
+.. image:: images/ALMASim_banner.png
+   :width: 100%
+   :align: center
 
 Overview
 ========
@@ -34,6 +36,7 @@ Installation Notes
 Quickstart
 ==========
 .. include:: ../../README.rst
+   .. image:: image/TNGStructure.PNG
    :start-after: QUICKSTART_START_LABEL
    :end-before: QUICKSTART_END_LABEL
 
