@@ -1,4 +1,4 @@
-.. image:: images/extended_sim_0.png
+.. image:: ALMASim_banner.png
 
 Overview
 ========
@@ -63,7 +63,7 @@ To run the simulation, just navigate to the ALMASim folder and execute
 to check the available option run 
 ``python main.py -h``
 If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
-.. image:: images/TNGStructure.PNG
+.. image:: TNGStructure.PNG
 The picture shows an example for Snapshot-99, reproduce this for every Snapshot you are interested i. You can check more at the Illustris TNG official website: https://www.tng-project.org/data/  
 
 .. QUICKSTART_END_LABEL
