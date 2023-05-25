@@ -1,12 +1,13 @@
-# ALMASim required package list
+sphinx
+sphinx-rtd-theme
+recommonmark
+numpydoc
 numpy
-h5py
-six
-astropy == 5.1.1
 scipy
+astropy == 5.1.1
+tqdm
 matplotlib
 pandas
-tqdm
 hdecompose
 spectral-cube
 astromartini
