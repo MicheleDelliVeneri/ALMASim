@@ -36,8 +36,6 @@ Installation Notes
 Quickstart
 ==========
 .. include:: ../../README.rst
-   .. image:: image/TNGStructure.PNG
    :start-after: QUICKSTART_START_LABEL
    :end-before: QUICKSTART_END_LABEL
-
 """

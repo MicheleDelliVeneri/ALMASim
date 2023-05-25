@@ -19,7 +19,7 @@ copyright = "2023, Michele Delli Veneri"
 author = "Michele Delli Veneri"
 
 # The full version, including alpha/beta/rc tags
-release = "2.4"
+release = "2.5"
 
 
 # -- General configuration ---------------------------------------------------
