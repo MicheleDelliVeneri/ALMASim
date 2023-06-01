@@ -1352,6 +1352,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
            fitsimage=os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), overwrite=True)
     exportfits(imagename=os.path.join(project, '{}.{}.skymodel'.format(project, antenna_name)), 
            fitsimage=os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
+    exportfits(imagename=os.path.join(project, '{}.{}.psf'.format(project, antenna_name)),
+              fitsimage=os.path.join(output_dir, "psf_" + str(i) +".fits"), overwrite=True)
+    exportfits(imagename=os.path.join(project, '{}.{}.pb'.format(project, antenna_name)),
+                fitsimage=os.path.join(output_dir, "pb_" + str(i) +".fits"), overwrite=True)
     final_sim_time = time.time()
     
     if save_ms is True:
@@ -1388,7 +1392,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
             save_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), dirty_cube, WCS(dirty_header).dropaxis(2).to_header())
 
     print('Deleting junk files')
-    shutil.rmtree(project)
+    #shutil.rmtree(project)
     os.remove(os.path.join(output_dir, "noise_cube_" + str(i) +".fits"))
     os.remove(os.path.join(output_dir, "skymodel_" + str(i) +".fits"))
     if plot is True:
