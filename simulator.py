@@ -370,6 +370,33 @@ def gaussian(x, amp, cen, fwhm):
     """
     return amp*np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
 
+def diffuse_signal(cfgname, n_px, fov):
+    ift.random.push_sseq(random.randint(1, 1000))
+    cfg = configparser.ConfigParser()
+    cfg['sky'] = {'space npix x': str(n_px),
+                     'space npix y': str(n_px),
+                     'space fov x': str(fov.to(U.deg).value)+'deg',
+                     'space fov y': str(fov.to(U.deg).value)+'deg',
+                     'polarization': 'I',
+                     'freq mode': 'single',
+                     'frequencies':'data',
+                     'stokesI diffuse space i0 zero mode offset': '24',
+                     'stokesI diffuse space i0 zero mode mean': '1',
+                     'stokesI diffuse space i0 zero mode stddev': '0.1',
+                     'stokesI diffuse space i0 fluctuations mean': '5',
+                     'stokesI diffuse space i0 fluctuations stddev': '1',
+                     'stokesI diffuse space i0 loglogavgslope mean': '-3.5',
+                     'stokesI diffuse space i0 loglogavgslope stddev': '0.5',
+                     'stokesI diffuse space i0 flexibility mean':   '1.2',
+                     'stokesI diffuse space i0 flexibility stddev': '0.4',
+                     'stokesI diffuse space i0 asperity mean':  '0.2',
+                     'stokesI diffuse space i0 asperity stddev': '0.2'}
+    diffuse = rve.sky_model_diffuse(cfg["sky"])[0]   
+    random_pos=ift.from_random(diffuse.domain)
+    sample=diffuse(random_pos)
+    data = sample.val[0,0,0,:,:]
+    return data
+
 def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_chan, plot, plot_dir):
     z_idxs = np.arange(0, n_chan)
     idxs = np.indices([n_px, n_px])
@@ -377,6 +404,21 @@ def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, 
     for z in range(datacube._array.shape[2]):
         ts = threedgaussian(amplitude, 0, z, pos_x, pos_y, fwhm_x, fwhm_y, pa, idxs)
         slice_ = ts + g[z] * ts
+        datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
+    return datacube
+
+def insert_diffuse(datacube, pos_z, fwhm_z, fov):
+    n_px_x = datacube._array.shape[0]
+    n_px_y = datacube._array.shape[1]
+    n_chan = datacube._array.shape[2]
+    z_idxs = np.arange(0, n_chan)
+    idxs = np.indices([n_px_x, n_px_y])
+    g = gaussian(z_idxs, 1, pos_z, fwhm_z)
+    cube = np.zeros([n_chan,n_px_x,n_px_y])
+    ts = diffuse_signal('ift.cfg', n_px_x, fov)
+    ts = ts/np.nanmax(ts)
+    for z in range(datacube._array.shape[2]):
+        slice_ = g[z] * ts
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
     return datacube
 
@@ -500,6 +542,107 @@ def write_datacube_to_fits(
             datacube.velocity_channels()
         return
 
+def write_diffuse_datacube_to_fits(
+    datacube,
+    wcs,
+    filename, 
+    channels='frequency',
+    overwrite=True
+    ):
+    """
+        Output the DataCube to a FITS-format file.
+
+        Parameters
+        ----------
+        filename : string
+            Name of the file to write. '.fits' will be appended if not already
+            present.
+
+        channels : {'frequency', 'velocity'}, optional
+            Type of units used along the spectral axis in output file.
+            (Default: 'frequency'.)
+
+        overwrite: bool, optional
+            Whether to allow overwriting existing files. (Default: True.)
+    """
+    filename = filename if filename[-5:] == ".fits" else filename + ".fits"
+    wcs_header = wcs.to_header()
+    wcs_header.rename_keyword("WCSAXES", "NAXIS")
+    header = fits.Header()
+    if len(datacube._array.shape) == 3: 
+        header.append(("SIMPLE", "T"))
+        header.append(("BITPIX", 16))
+        header.append(("NAXIS", wcs_header["NAXIS"]))
+        header.append(("NAXIS1", datacube.n_px_x))
+        header.append(("NAXIS2", datacube.n_px_y))
+        header.append(("NAXIS3", datacube.n_channels))
+        header.append(("EXTEND", "T"))
+        header.append(("CDELT1", wcs_header["CDELT1"]))
+        header.append(("CRPIX1", wcs_header["CRPIX1"]))
+        header.append(("CRVAL1", wcs_header["CRVAL1"]))
+        header.append(("CTYPE1", wcs_header["CTYPE1"]))
+        header.append(("CUNIT1", wcs_header["CUNIT1"]))
+        header.append(("CDELT2", wcs_header["CDELT2"]))
+        header.append(("CRPIX2", wcs_header["CRPIX2"]))
+        header.append(("CRVAL2", wcs_header["CRVAL2"]))
+        header.append(("CTYPE2", wcs_header["CTYPE2"]))
+        header.append(("CUNIT2", wcs_header["CUNIT2"]))
+        header.append(("CDELT3", 6.105420846558E+04))
+        header.append(("CRPIX3", 1))
+        header.append(("CRVAL3", 1.098740492600E+11))
+        header.append(("CTYPE3", 'FREQ'))
+        header.append(("CUNIT3", 'Hz'))
+        header.append(("EPOCH", 2000))
+        header.append(("VELREF", 257))
+        header.append(("OBJECT", "MOCK"))
+        header.append(("MJD-OBS", Time.now().to_value("mjd")))
+        header.append(("BTYPE", "Intensity"))
+        header.append(("SPECSYS",'LSRK'))
+        header.append(("RESTFREQ", 1.099060000000E+11 ))
+    else:
+         header.append(("SIMPLE", "T"))
+        header.append(("BITPIX", 16))
+        header.append(("NAXIS", wcs_header["NAXIS"]))
+        header.append(("NAXIS1", cube.n_px_x))
+        header.append(("NAXIS2", cube.n_px_y))
+        header.append(("NAXIS3", cube.n_channels))
+        header.append(("NAXIS4", 1))
+        header.append(("EXTEND", "T"))
+        header.append(("CDELT1", wcs_header["CDELT1"]))
+        header.append(("CRPIX1", wcs_header["CRPIX1"]))
+        header.append(("CRVAL1", wcs_header["CRVAL1"]))
+        header.append(("CTYPE1", wcs_header["CTYPE1"]))
+        header.append(("CUNIT1", wcs_header["CUNIT1"]))
+        header.append(("CDELT2", wcs_header["CDELT2"]))
+        header.append(("CRPIX2", wcs_header["CRPIX2"]))
+        header.append(("CRVAL2", wcs_header["CRVAL2"]))
+        header.append(("CTYPE2", wcs_header["CTYPE2"]))
+        header.append(("CUNIT2", wcs_header["CUNIT2"]))
+        header.append(("CDELT3", 6.105420846558E+04))
+        header.append(("CRPIX3", 1))
+        header.append(("CRVAL3", 1.098740492600E+11))
+        header.append(("CTYPE3", 'FREQ'))
+        header.append(("CUNIT3", 'Hz'))
+        header.append(("CDELT4", wcs_header["CDELT4"]))
+        header.append(("CRPIX4", wcs_header["CRPIX4"]))
+        header.append(("CRVAL4", wcs_header["CRVAL4"]))
+        header.append(("CTYPE4", wcs_header["CTYPE4"]))
+        header.append(("CUNIT4", "PAR"))
+        header.append(("EPOCH", 2000))
+        header.append(("VELREF", 257))
+        header.append(("BSCALE", 1.0))
+        header.append(("BZERO", 0.0))
+        header.append(("OBJECT", "MOCK"))
+        header.append(("MJD-OBS", Time.now().to_value("mjd")))
+        header.append(("BTYPE", "Intensity"))
+        header.append(("SPECSYS",'LSRK'))
+        header.append(("RESTFREQ", 1.099060000000E+11 ))
+    datacube_array_units = datacube._array.unit
+    hdu = fits.PrimaryHDU(
+            header=header, data=cube._array.to_value(datacube_array_units).T
+        )
+    hdu.writeto(filename, overwrite=overwrite)
+
 def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwidth, 
                                fwhm_x, fwhm_y, fwhm_z, pixel_size, fov,
                                spatial_resolution, central_frequency, 
@@ -576,6 +719,61 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     print('Skymodel saved to {}'.format(filename))
     del datacube
     return filename
+
+def generate_diffuse_skymodel(id, data_dir, n_px, n_channels, bandwidth, 
+                              fwhm_z, pixel_size, fov,
+                              spatial_resolution, central_frequency, 
+                              frequency_resolution, plot, plot_dir):
+    """
+    Generates a gaussian skymodel with n_sources sources
+    Input:
+    id (int): id of the skymodel
+    data_dir (str): directory where the skymodel will be saved
+    n_sources (int): number of sources
+    n_px (int): number of pixels in the image
+    n_channels (int): number of channels in the image
+    bandwidth (float): bandwidth in MHz
+    distance (float): distance of the source from the observer in Mpc
+    fwhm_x (float): fwhm in x direction in arcsec
+    fwhm_y (float): fwhm in y direction in arcsec
+    fwhm_z (float): fwhm in z direction in MHz
+    pixel_size (float): pixel size in arcsec
+    fov (float): field of view in arcsec
+    spatial_resolution (float): spatial resolution in arcsec
+    central_frequency (float): central frequency in GHz
+    frequency_resolution (float): frequency resolution in MHz
+    pa (float): position angle in degrees\
+    min_sep_spatial (float): minimum separation between sources in arcsec
+    min_sep_frequency (float): minimum separation between sources in MHz
+    plot (bool): if True, plots the skymodel
+    plot_dir (str): directory where the plots will be saved
+    """
+    print (fwhm_z.value, frequency_resolution)
+    fwhm_z = int(fwhm_z.value / frequency_resolution.value)
+    print ('fwhm_z', fwhm_z)
+    ra = 0 * U.deg
+    dec = 0 * U.deg
+    hI_rest_frequency = 1420.4 * U.MHz
+    radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
+    central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    datacube = DataCube(
+    n_px_x = n_px,
+    n_px_y = n_px,
+    n_channels = n_channels, 
+    px_size = spatial_resolution,
+    channel_width = velocity_resolution,
+    velocity_centre=central_velocity, 
+    ra = ra,
+    dec = dec,
+    )
+    wcs = datacube.wcs
+    pos_z = n_channels // 2
+    cube = insert_diffuse(datacube, pos_z, fwhm_z, fov)
+    filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
+    write_diffuse_datacube_to_fits(cube, wcs, filename)
+    print('Skymodel saved to {}'.format(filename))
+    del cube
 
 def partTypeNum(partType):
     """
@@ -1163,7 +1361,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, 
               pwv: float, snr: float, get_skymodel: bool, 
-              extended: bool, TNGBasePath: str, TNGSnapshotID: int, 
+              source_type: str, TNGBasePath: str, TNGSnapshotID: int, 
               TNGSubhaloID: int,
               plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
               n_channels: Optional[int] = None):
@@ -1185,7 +1383,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     pwv (float): precipitable water vapor in mm (0.1 - 1)
     snr (float): signal to noise ratio (5 - 30)
     get_skymodel (bool): if True, skymodels are loaded from the data_dir, else they are generated
-    extended (bool): if True, extended sources are simulated, else point sources
+    source_type (str): type of source to generate: "point", "diffuse" or "extended"
     TNGBasePath (str): path to the IllustrisTNG folder on your machine,
     TNGSnapshotID (int): snapshot of the IllustrisTNG simulation,
     TNGsubhaloID (int): subhaloID of the source in the IllustrisTNG simulation,
@@ -1231,7 +1429,6 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('TNG Snapshot ID ', TNGSnapshotID)
     print('TNG Subhalo ID ', TNGSubhaloID)
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
-    print(extended)
     if n_pxs is not None:
         print('Cube will be cropped to {} x {} x {} pixels'.format(n_pxs, n_pxs, n_channels))
     else:
@@ -1246,14 +1443,14 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         filename = files[i]
 
     else:
-        if extended == True:
+        if source_type == "extended":
             print('Generating Extended Emission Skymodel from TNG')
             print('\n')
             filename = generate_extended_skymodel(i, output_dir, n_px, n_channels, 
                                                   central_freq * U.GHz,
                                                   inwidth * U.MHz, TNGBasePath, TNGSnapshotID, TNGSubhaloID, 
                                                   plot, plot_dir) 
-        else:
+        elif source_type == "point":
             print('Generating Gaussian Skymodel')
             n_sources = np.random.randint(1, 5)
             fwhm_x = (0.1 * fov - 0.01 * fov)*np.random.rand() + 0.01 * fov
@@ -1282,7 +1479,15 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                   min_sep_frequency, 
                                                   plot, 
                                                   plot_dir)
-    
+        elif source_type == "diffuse":
+            fwhm_z = (0.1 * bandwidth - 0.01 * bandwidth)*np.random.rand() + 0.01 * bandwidth
+            print('FWHM_z ', fwhm_z, ' MHz')
+            filename = generate_diffuse_skymodel(i, output_dir, n_px, n_channels, bandwidth, 
+                                                 fwhm_z * U.MHz, pixel_size * U.arcsec, 
+                                                 fov * U.arcsec, spatial_resolution * U.arcsec, 
+                                                 central_freq * U.GHz, inwidth * U.MHz, plot, 
+                                                 plot_dir)
+
     final_skymodel_time = time.time()
     noise_time = time.time()
     antennalist = os.path.join(main_path, "antenna_config", antenna_name + '.cfg')
