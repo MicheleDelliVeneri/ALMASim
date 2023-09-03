@@ -600,7 +600,7 @@ def write_diffuse_datacube_to_fits(
         header.append(("SPECSYS",'LSRK'))
         header.append(("RESTFREQ", 1.099060000000E+11 ))
     else:
-         header.append(("SIMPLE", "T"))
+        header.append(("SIMPLE", "T"))
         header.append(("BITPIX", 16))
         header.append(("NAXIS", wcs_header["NAXIS"]))
         header.append(("NAXIS1", cube.n_px_x))
