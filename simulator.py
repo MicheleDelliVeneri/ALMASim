@@ -32,6 +32,8 @@ import astropy.constants as C
 from martini.sph_kernels import find_fwhm
 from martini.sources.sph_source import SPHSource
 import h5py
+import nifty8 as ift
+import resolve as rve
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
 
