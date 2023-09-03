@@ -1443,6 +1443,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         filename = files[i]
 
     else:
+        print('Generating {} Skymodel'.format(source_type))
         if source_type == "extended":
             print('Generating Extended Emission Skymodel from TNG')
             print('\n')
