@@ -96,7 +96,7 @@ if __name__ == '__main__':
     min_snr, max_snr = np.min(args.snr), np.max(args.snr)
     snrs = np.random.uniform(min_snr, max_snr, size=len(idxs))
     get_skymodel = [args.get_skymodel for i in idxs]
-    extended = [args.extended for i in idxs]
+    source_type = [args.source_type for i in idxs]
     tng_basepaths = [bool(args.TNGBasePath) for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if len(args.TNGSubhaloID) > args.n_sims:
@@ -125,7 +125,7 @@ if __name__ == '__main__':
                                     pwvs, 
                                     snrs, 
                                     get_skymodel, 
-                                    extended, 
+                                    source_type, 
                                     tng_basepaths, 
                                     tng_snapids,
                                     tng_subhaloids,
@@ -138,7 +138,7 @@ if __name__ == '__main__':
                                             'project_name', 'output_dir', 'plot_dir', 'band',
                                             'antenna_name', 'inbright', 'bandwidth',
                                             'inwidth', 'integration', 'totaltime', 
-                                            'pwv', 'snr', 'get_skymodel', 'extended',
+                                            'pwv', 'snr', 'get_skymodel', 'source_type',
                                             'tng_basepath', 'tng_snapid', 'tng_subhaloid',
                                             'plot', 'save_ms', 'crop',
                                             'n_px', 'n_channels'])
