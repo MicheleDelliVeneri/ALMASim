@@ -34,6 +34,11 @@ from martini.sources.sph_source import SPHSource
 import h5py
 import nifty8 as ift
 import resolve as rve
+import random
+import configparser
+from os.path import join
+from astropy.convolution import Gaussian2DKernel
+from astropy.convolution import interpolate_replace_nans
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
 
@@ -393,7 +398,7 @@ def diffuse_signal(cfgname, n_px, fov):
                      'stokesI diffuse space i0 flexibility stddev': '0.4',
                      'stokesI diffuse space i0 asperity mean':  '0.2',
                      'stokesI diffuse space i0 asperity stddev': '0.2'}
-    diffuse = rve.sky_model_diffuse(cfg["sky"])[0]   
+    diffuse = rve.sky_model.sky_model_diffuse(cfg["sky"])[0]   
     random_pos=ift.from_random(diffuse.domain)
     sample=diffuse(random_pos)
     data = sample.val[0,0,0,:,:]
@@ -409,18 +414,15 @@ def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, 
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
     return datacube
 
-def insert_diffuse(datacube, pos_z, fwhm_z, fov):
-    n_px_x = datacube._array.shape[0]
-    n_px_y = datacube._array.shape[1]
-    n_chan = datacube._array.shape[2]
+def insert_diffuse(datacube, pos_z, fwhm_z, fov, n_chan, n_px_x, n_px_y):
     z_idxs = np.arange(0, n_chan)
     idxs = np.indices([n_px_x, n_px_y])
     g = gaussian(z_idxs, 1, pos_z, fwhm_z)
-    cube = np.zeros([n_chan,n_px_x,n_px_y])
     ts = diffuse_signal('ift.cfg', n_px_x, fov)
     ts = ts/np.nanmax(ts)
+    ts = np.nan_to_num(ts)
     for z in range(datacube._array.shape[2]):
-        slice_ = g[z] * ts
+        slice_ = ts + g[z] * ts
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
     return datacube
 
@@ -546,7 +548,6 @@ def write_datacube_to_fits(
 
 def write_diffuse_datacube_to_fits(
     datacube,
-    wcs,
     filename, 
     channels='frequency',
     overwrite=True
@@ -567,8 +568,19 @@ def write_diffuse_datacube_to_fits(
         overwrite: bool, optional
             Whether to allow overwriting existing files. (Default: True.)
     """
+    datacube.drop_pad()
+    if channels == "frequency":
+        datacube.freq_channels()
+    elif channels == "velocity":
+        datacube.velocity_channels()
+    else:
+        raise ValueError(
+            "Unknown 'channels' value "
+            "(use 'frequency' or 'velocity'."
+        )
+    
     filename = filename if filename[-5:] == ".fits" else filename + ".fits"
-    wcs_header = wcs.to_header()
+    wcs_header = datacube.wcs.to_header()
     wcs_header.rename_keyword("WCSAXES", "NAXIS")
     header = fits.Header()
     if len(datacube._array.shape) == 3: 
@@ -641,7 +653,7 @@ def write_diffuse_datacube_to_fits(
         header.append(("RESTFREQ", 1.099060000000E+11 ))
     datacube_array_units = datacube._array.unit
     hdu = fits.PrimaryHDU(
-            header=header, data=cube._array.to_value(datacube_array_units).T
+            header=header, data=datacube._array.to_value(datacube_array_units).T
         )
     hdu.writeto(filename, overwrite=overwrite)
 
@@ -750,9 +762,7 @@ def generate_diffuse_skymodel(id, data_dir, n_px, n_channels, bandwidth,
     plot (bool): if True, plots the skymodel
     plot_dir (str): directory where the plots will be saved
     """
-    print (fwhm_z.value, frequency_resolution)
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
-    print ('fwhm_z', fwhm_z)
     ra = 0 * U.deg
     dec = 0 * U.deg
     hI_rest_frequency = 1420.4 * U.MHz
@@ -769,13 +779,13 @@ def generate_diffuse_skymodel(id, data_dir, n_px, n_channels, bandwidth,
     ra = ra,
     dec = dec,
     )
-    wcs = datacube.wcs
     pos_z = n_channels // 2
-    cube = insert_diffuse(datacube, pos_z, fwhm_z, fov)
+    datacube = insert_diffuse(datacube, pos_z, fwhm_z, fov, n_channels, n_px, n_px)
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
-    write_diffuse_datacube_to_fits(cube, wcs, filename)
+    write_diffuse_datacube_to_fits(datacube, filename)
     print('Skymodel saved to {}'.format(filename))
-    del cube
+    del datacube
+    return filename
 
 def partTypeNum(partType):
     """
