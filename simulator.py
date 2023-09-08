@@ -379,29 +379,21 @@ def gaussian(x, amp, cen, fwhm):
 
 def diffuse_signal(cfgname, n_px, fov):
     ift.random.push_sseq(random.randint(1, 1000))
-    cfg = configparser.ConfigParser()
-    cfg['sky'] = {'space npix x': str(n_px),
-                     'space npix y': str(n_px),
-                     'space fov x': str(fov.to(U.deg).value)+'deg',
-                     'space fov y': str(fov.to(U.deg).value)+'deg',
-                     'polarization': 'I',
-                     'freq mode': 'single',
-                     'frequencies':'data',
-                     'stokesI diffuse space i0 zero mode offset': '24',
-                     'stokesI diffuse space i0 zero mode mean': '1',
-                     'stokesI diffuse space i0 zero mode stddev': '0.1',
-                     'stokesI diffuse space i0 fluctuations mean': '5',
-                     'stokesI diffuse space i0 fluctuations stddev': '1',
-                     'stokesI diffuse space i0 loglogavgslope mean': '-3.5',
-                     'stokesI diffuse space i0 loglogavgslope stddev': '0.5',
-                     'stokesI diffuse space i0 flexibility mean':   '1.2',
-                     'stokesI diffuse space i0 flexibility stddev': '0.4',
-                     'stokesI diffuse space i0 asperity mean':  '0.2',
-                     'stokesI diffuse space i0 asperity stddev': '0.2'}
-    diffuse = rve.sky_model.sky_model_diffuse(cfg["sky"])[0]   
-    random_pos=ift.from_random(diffuse.domain)
-    sample=diffuse(random_pos)
-    data = sample.val[0,0,0,:,:]
+    space = ift.RGSpace((2*n_px, 2*n_px))
+    args = {
+        'offset_mean': 24,
+        'offset_std': (1, 0.1),
+        'fluctuations': (5., 1.),
+        'loglogavgslope': (-3.5, 0.5),
+        'flexibility': (1.2, 0.4),
+        'asperity': (0.2, 0.2)
+    }
+
+    cf = ift.SimpleCorrelatedField(space, **args)
+    exp_cf = ift.exp(cf)
+    random_pos = ift.from_random(exp_cf.domain)
+    sample = exp_cf(random_pos)
+    data = sample.val[0:n_px, 0:n_px]
     return data
 
 def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_chan, plot, plot_dir):
