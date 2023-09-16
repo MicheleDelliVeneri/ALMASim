@@ -6,7 +6,6 @@ import tempfile
 temp_dir = tempfile.TemporaryDirectory()
 from casatasks import simobserve, tclean, exportfits
 import os
-import shutil
 from casatools import table
 from astropy.constants import c
 from astropy.time import Time
@@ -33,12 +32,7 @@ from martini.sph_kernels import find_fwhm
 from martini.sources.sph_source import SPHSource
 import h5py
 import nifty8 as ift
-import resolve as rve
 import random
-import configparser
-from os.path import join
-from astropy.convolution import Gaussian2DKernel
-from astropy.convolution import interpolate_replace_nans
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
 
