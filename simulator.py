@@ -1,38 +1,38 @@
-import numpy as np 
-import pandas as pd
-import matplotlib.pyplot as plt
-from astropy.io import fits
 import tempfile
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from astropy.io import fits
 temp_dir = tempfile.TemporaryDirectory()
-from casatasks import simobserve, tclean, exportfits
+import math
 import os
-from casatools import table
+import random
+import time
+from math import pi
+from random import choices
+from time import gmtime, strftime
+from typing import Optional
+import astropy.constants as C
+import astropy.units as U
+import h5py
+import illustris_python as il
+import nifty8 as ift
 from astropy.constants import c
 from astropy.time import Time
-import astropy.units as U
-from martini import DataCube, Martini
-from martini.spectral_models import GaussianSpectrum
-from martini.sph_kernels import AdaptiveKernel, GaussianKernel, CubicSplineKernel
-from natsort import natsorted
-import math
-from math import pi
-from tqdm import tqdm
-import time
-from time import strftime, gmtime
-from typing import Optional
 from astropy.wcs import WCS
-from spectral_cube import SpectralCube
-import h5py
-from random import choices
-import illustris_python as il
-from illustris_python.snapshot import loadSubset, getSnapOffsets
+from casatasks import exportfits, simobserve, tclean
+from casatools import table
 from Hdecompose.atomic_frac import atomic_frac
-import astropy.constants as C
-from martini.sph_kernels import find_fwhm
+from illustris_python.snapshot import getSnapOffsets, loadSubset
+from martini import DataCube, Martini
 from martini.sources.sph_source import SPHSource
-import h5py
-import nifty8 as ift
-import random
+from martini.spectral_models import GaussianSpectrum
+from martini.sph_kernels import (AdaptiveKernel, CubicSplineKernel,
+                                 GaussianKernel, find_fwhm)
+from natsort import natsorted
+from spectral_cube import SpectralCube
+from tqdm import tqdm
+
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
 
@@ -890,7 +890,7 @@ def loadSubset(
     mdi=None,
     sq=True,
     float32=False,
-):
+    ):
     """
     Load a subset of fields for all particles/cells of a given partType.
     If offset and length specified, load only that subset of the partType.
