@@ -40,6 +40,7 @@ parser.add_argument('--main_path', type=str, required=True,  help='R|Directory w
 parser.add_argument('--output_dir', type=str, default='sims', help='R|Directory where the simulation fits outputs are within the data_dir, default sims.')
 parser.add_argument('--project_name', type=str, default='sim', help='R|Name of the simalma project, leave it to default.')
 parser.add_argument('--bands', type=int, default=[6],  nargs='+',  help='R|Bands to simulate, if a single band is given all simulations will be performed with the given band, otherwise bands are randomly extracted from the provided bands list. Default 6')
+parser.add_argument('--cycle', type=int, default=[9], nargs='+', help='R|Cycle of the ALMA project, if a single cycle is given all simulations will be performed with the given cycle, otherwise cycles are randomly extracted from the provided cycles list. Default 9')
 parser.add_argument('--antenna_config', type=int, default=[3],  nargs='+', help='R|Antenna configurations as a list of integers in the interval [1, 10]. If a single antenna configuration is given all simulations will be performed with the given configuration, otherwise configurations are randomly extracted from the provided configurations list. Default 3')
 parser.add_argument('--inbright', type=float, default=[0.01], nargs='+', help='R|Input brightness in Jy/beam, if a single value is given all simulations will be performed with the given value, otherwise values are randomly sampled from a uniform distribution between the min and max values in the list. Defaylt 0.01')
 parser.add_argument('--bandwidth', type=int, default=[1280], nargs='+', help='R|Bandwidth in MHz, if a single value is given all simulations will be performed with the given value, otherwise values are randomly extracted from the provided values list. Default 1280')
@@ -84,7 +85,8 @@ if __name__ == '__main__':
     project_name = [args.project_name for i in idxs]
     bands = choices(args.bands, k=len(idxs))
     antenna_ids = choices(args.antenna_config, k=len(idxs))
-    antenna_names = ['alma.cycle9.3.{}'.format(k) for k in antenna_ids]
+    cycles = choices(args.cycle, k=len(idxs))
+    antenna_names = [os.path.join('cycle{}'.format(j), 'alma.cycle{}.0.{}'.format(j, k)) for j, k in zip(cycles, antenna_ids)]
     min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
     inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
     bandwidths = choices(args.bandwidth, k=len(idxs))

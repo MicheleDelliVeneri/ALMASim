@@ -182,25 +182,25 @@ def get_fov(bands):
     return np.array(fovs)
 
 spatial_resolution_dict = {
-    'alma.cycle9.3.1' : [3.38, 2.25, 1.83, 1.47, 0.98, 0.74, 0.52, 0.39],
-    'alma.cycle9.3.2' : [2.30, 1.53, 1.24, 1.00, 0.67, 0.50, 0.35, 0.26],
-    'alma.cycle9.3.3' : [1.42, 0.94, 0.77, 0.62, 0.41, 0.31, 0.22, 0.16],
-    'alma.cycle9.3.4' : [0.92, 0.61, 0.50, 0.40, 0.27, 0.20, 0.14, 0.11],
-    'alma.cycle9.3.5' : [0.55, 0.36, 0.30, 0.24, 0.16, 0.12, 0.084, 0.063],
-    'alma.cycle9.3.6' : [0.31, 0.20, 0.17, 0.13, 0.089, 0.067, 0.047, 0.035],
-    'alma.cycle9.3.7' : [0.21, 0.14, 0.11, 0.092, 0.061, 0.046, 0.033, 0.024],
-    'alma.cycle9.3.8' : [0.096, 0.064, 0.052, 0.042, 0.028, 0.021, 0.015, 0.011],
-    'alma.cycle9.3.9' : [0.057, 0.038, 0.031, 0.025, 0.017, 0.012, 0.088],
-    'alma.cycle9.3.10' : [0.042, 0.028, 0.023, 0.018, 0.012, 0.0091]
+    1 : [3.38, 2.25, 1.83, 1.47, 0.98, 0.74, 0.52, 0.39],
+    2 : [2.30, 1.53, 1.24, 1.00, 0.67, 0.50, 0.35, 0.26],
+    3 : [1.42, 0.94, 0.77, 0.62, 0.41, 0.31, 0.22, 0.16],
+    4 : [0.92, 0.61, 0.50, 0.40, 0.27, 0.20, 0.14, 0.11],
+    5 : [0.55, 0.36, 0.30, 0.24, 0.16, 0.12, 0.084, 0.063],
+    6 : [0.31, 0.20, 0.17, 0.13, 0.089, 0.067, 0.047, 0.035],
+    7 : [0.21, 0.14, 0.11, 0.092, 0.061, 0.046, 0.033, 0.024],
+    8 : [0.096, 0.064, 0.052, 0.042, 0.028, 0.021, 0.015, 0.011],
+    9 : [0.057, 0.038, 0.031, 0.025, 0.017, 0.012, 0.088],
+    10 : [0.042, 0.028, 0.023, 0.018, 0.012, 0.0091]
    
 }
 
-def get_spatial_resolution(band, antenna_name):
-    if antenna_name == 'alma.cycle.9.3.9':
+def get_spatial_resolution(band, config_number):
+    if config_number == 9:
         assert band <= 9, 'band should be less than 9 for antenna configuration 9'
-    elif antenna_name == 'alma.cycle.9.3.10':
+    elif config_number == 10:
         assert band <= 8, 'band should be less than 8 for antenna configuration 10'
-    return spatial_resolution_dict[antenna_name][band - 3]
+    return spatial_resolution_dict[config_number][band - 3]
 
 def get_pos(x_radius, y_radius, z_radius):
     x = np.random.randint(-x_radius , x_radius)
@@ -1399,7 +1399,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     project = project_name + '_{}'.format(i)
     if not os.path.exists(project):
         os.mkdir(project)
-    spatial_resolution = get_spatial_resolution(band, antenna_name)
+    cycle = os.path.split(antenna_name)[0]
+    antenna_name = os.path.split(antenna_name)[1]
+    config_number = int(antenna_name.split('.')[-2])
+    spatial_resolution = get_spatial_resolution(band, config_number)
     central_freq= get_band_central_freq(band)
     fov = get_fov([band])[0]
     pixel_size = spatial_resolution / 7
@@ -1419,9 +1422,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Band ', band)
     print('Bandwidth ', bandwidth, ' MHz')
     print('Central Frequency ', central_freq, ' GHz')
-    print('pixel_size ', pixel_size, ' arcsec')
-    print('fov ', fov, ' arcsec')
-    print('spatial_resolution ', spatial_resolution, ' arcsec')
+    print('Pixel size ', pixel_size, ' arcsec')
+    print('Fov ', fov, ' arcsec')
+    print('Spatial_resolution ', spatial_resolution, ' arcsec')
+    print('Cycle ', cycle)
     print('Antenna Configuration ', antenna_name)
     print('TNG Base Path ', TNGBasePath)
     print('TNG Snapshot ID ', TNGSnapshotID)
@@ -1489,7 +1493,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
 
     final_skymodel_time = time.time()
     noise_time = time.time()
-    antennalist = os.path.join(main_path, "antenna_config", antenna_name + '.cfg')
+    antennalist = os.path.join(main_path, "antenna_config", cycle, antenna_name + '.cfg')
     print('# ------------------------ #')
     print('Generating Noise')
     simobserve(
