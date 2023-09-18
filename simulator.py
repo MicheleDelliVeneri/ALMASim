@@ -1,3 +1,4 @@
+from datetime import date 
 import tempfile
 import matplotlib.pyplot as plt
 import numpy as np
@@ -181,7 +182,8 @@ def get_fov(bands):
         fovs.append(fov)
     return np.array(fovs)
 
-spatial_resolution_dict = {
+def get_spatial_resolution(band, config_number):
+    spatial_resolution_dict = {
     1 : [3.38, 2.25, 1.83, 1.47, 0.98, 0.74, 0.52, 0.39],
     2 : [2.30, 1.53, 1.24, 1.00, 0.67, 0.50, 0.35, 0.26],
     3 : [1.42, 0.94, 0.77, 0.62, 0.41, 0.31, 0.22, 0.16],
@@ -191,16 +193,128 @@ spatial_resolution_dict = {
     7 : [0.21, 0.14, 0.11, 0.092, 0.061, 0.046, 0.033, 0.024],
     8 : [0.096, 0.064, 0.052, 0.042, 0.028, 0.021, 0.015, 0.011],
     9 : [0.057, 0.038, 0.031, 0.025, 0.017, 0.012, 0.088],
-    10 : [0.042, 0.028, 0.023, 0.018, 0.012, 0.0091]
-   
-}
-
-def get_spatial_resolution(band, config_number):
+    10 : [0.042, 0.028, 0.023, 0.018, 0.012, 0.0091] 
+    }
     if config_number == 9:
         assert band <= 9, 'band should be less than 9 for antenna configuration 9'
     elif config_number == 10:
         assert band <= 8, 'band should be less than 8 for antenna configuration 10'
     return spatial_resolution_dict[config_number][band - 3]
+
+def get_info_from_reference(reference_path):
+    date_to_cycle = [
+        (date(2022, 9, 30), date(2023, 10, 1), 9),
+        (date(2021, 10, 1), date(2022, 10, 1), 8),
+        (date(2019, 9, 30), date(2021, 10, 1), 7),
+        (date(2018, 10, 1), date(2019, 9, 30), 6),
+        (date(2017, 10, 1), date(2018, 10, 1), 5),
+        (date(2016, 9, 30), date(2017, 10, 1), 4),
+        (date(2015, 10, 1), date(2016, 10, 1), 3),
+     ]
+    date_to_conf = [
+        (date(2015, 10, 13), date(2015, 12, 7), 8),
+        (date(2015, 12, 7), date(2016, 3, 7), 1),
+        (date(2016, 3, 7), date(2016, 5, 2), 2),
+        (date(2016, 5, 2), date(2016, 5, 30), 3),
+        (date(2016, 5, 30), date(2016, 7, 18), 4),
+        (date(2016, 7, 18), date(2016, 8, 22), 5),
+        (date(2016, 8, 22), date(2016, 9, 30), 6),
+        (date(2016, 9, 30), date(2016, 11, 14), 4),
+        (date(2016, 11, 14), date(2016, 12, 5), 3),
+        (date(2016, 12, 5), date(2017, 3, 5), 2),
+        (date(2017, 3, 5), date(2017, 4, 9), 1),
+        (date(2017, 4, 9), date(2017, 4, 30), 3),
+        (date(2017, 4, 30), date(2017, 7, 31), 5),
+        (date(2017, 7, 31), date(2017, 9, 4), 7),
+        (date(2017, 9, 4), date(2017, 9, 11), 8),
+        (date(2017, 9, 11), date(2017, 10, 1), 9),
+        (date(2017, 10, 1), date(2017, 10, 23), 10),
+        (date(2017, 10, 23), date(2017, 11, 6), 9),
+        (date(2017, 11, 6), date(2017, 11, 27), 8),
+        (date(2017, 11, 27), date(2017, 12, 11), 7),
+        (date(2017, 12, 11), date(2018, 1, 8), 6),
+        (date(2018, 1, 8), date(2018, 2, 1), 5),
+        (date(2018, 2, 1), date(2018, 4, 2), 4),
+        (date(2018, 4, 2), date(2018, 5, 7), 3),
+        (date(2018, 5, 7), date(2018, 6, 4), 2),
+        (date(2018, 6, 4), date(2018, 7, 23), 1),
+        (date(2018, 7, 23), date(2018, 8, 20), 2),
+        (date(2018, 8, 20), date(2018, 9, 3), 3),
+        (date(2018, 9, 3), date(2018, 9, 17), 4),
+        (date(2018, 9, 17), date(2018, 10, 1), 5),
+        (date(2018, 10, 1), date(2018, 10, 15), 6),
+        (date(2018, 10, 15), date(2018, 11, 26), 5),
+        (date(2018, 11, 26), date(2018, 12, 17), 4),
+        (date(2018, 12, 17), date(2019, 1, 7), 3),
+        (date(2019, 1, 7), date(2019, 1, 21), 2),
+        (date(2019, 1, 21), date(2019, 3, 18), 1),
+        (date(2019, 3, 18), date(2019, 4, 1), 2),
+        (date(2019, 4, 1), date(2019, 4, 15), 3),
+        (date(2019, 4, 15), date(2019, 5, 6), 4),
+        (date(2019, 6, 3), date(2019, 7, 8), 9),
+        (date(2019, 7, 8), date(2019, 7, 29), 8),
+        (date(2019, 7, 29), date(2019, 9, 16), 7),
+        (date(2019, 9, 16), date(2019, 9, 30), 6),
+        (date(2019, 9, 30), date(2019, 10, 21), 4),
+        (date(2019, 10, 21), date(2019, 11, 18), 3),
+        (date(2019, 11, 18), date(2019, 12, 2), 2),
+        (date(2019, 12, 2), date(2019, 12, 23), 1),
+        (date(2019, 12, 23), date(2020, 1, 13), 2),
+        (date(2020, 1, 13), date(2020, 3, 3), 3),
+        (date(2020, 3, 3), date(2020, 3, 19), 4),
+        (date(2020, 3, 19), date(2021, 5, 10), 5),
+        (date(2021, 5, 10), date(2021, 7, 21), 6),
+        (date(2021, 7, 21), date(2021, 8, 2), 7),
+        (date(2021, 8, 2), date(2021, 8, 23), 8),
+        (date(2021, 8, 23), date(2021, 10, 1), 9),
+        (date(2021, 10, 1), date(2021, 11, 1), 8),
+        (date(2021, 11, 1), date(2021, 11, 29), 7),
+        (date(2021, 11, 29), date(2021, 12, 13), 6),
+        (date(2021, 12, 13), date(2021, 12, 20), 5),
+        (date(2021, 12, 20), date(2022, 1, 17), 4),
+        (date(2022, 1, 17), date(2022, 2, 1), 3),
+        (date(2022, 3, 1), date(2022, 3, 21), 1),
+        (date(2022, 3, 21), date(2022, 4, 18), 2),
+        (date(2022, 4, 18), date(2022, 5, 23), 3),
+        (date(2022, 5, 23), date(2022, 6, 20), 4),
+        (date(2022, 6, 20), date(2022, 7, 11), 5),
+        (date(2022, 7, 11), date(2022, 8, 1), 6),
+        (date(2022, 8, 1), date(2022, 8, 22), 5),
+        (date(2022, 8, 22), date(2022, 9, 12), 4),
+        (date(2022, 9,  30), date(2023, 1, 9), 3),
+        (date(2023, 1, 9), date(2023, 3, 20), 4),
+        (date(2023, 3, 20), date(2023, 4, 17), 5),
+        (date(2023, 4, 17), date(2023, 5, 22), 6),
+        (date(2023, 5, 22), date(2023, 6, 19), 7),
+        (date(2023, 6, 19), date(2023, 7, 10), 8),
+        (date(2023, 7, 10), date(2023, 7, 31), 9),
+        (date(2023, 7, 31), date(2023, 9, 30), 10),
+        (date(2023, 8, 21), date(2023, 9, 11), 8),
+        (date(2023, 9, 11), date(2023, 10, 1), 9),
+    ]
+
+
+    img, header = load_fits(reference_path)
+    shape = [s for s in img.shape if s != 1]
+    unique, counts = np.unique(shape, return_counts=True)
+    if len(unique) > 1:
+        unique = unique[np.argsort(counts)]
+        n_channels, n_pix = unique[0], unique[1]
+    else:
+        n_channels, n_pix = 1, unique[0]
+    ra = header['CRVAL1']
+    dec = header['CRVAL2']
+    inbright = np.max(img)
+    obs_date = header["DATE-OBS"].split('-')
+    obs_date = date(int(obs_date[0]), int(obs_date[1]), int(obs_date[2][:2]))
+    restfreq = header['RESTFRQ']
+    for start, end, cycle in date_to_cycle:
+        if start <= obs_date < end:
+            break
+    for start, end, antenna_config in date_to_conf:
+        if start <= obs_date < end:
+            break
+    return [ra, dec, n_pix, n_channels, inbright, restfreq, cycle, antenna_config]
 
 def get_pos(x_radius, y_radius, z_radius):
     x = np.random.randint(-x_radius , x_radius)
@@ -390,7 +504,7 @@ def diffuse_signal(cfgname, n_px, fov):
     data = sample.val[0:n_px, 0:n_px]
     return data
 
-def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_chan, plot, plot_dir):
+def insert_gaussian(id, c_id, datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_chan):
     z_idxs = np.arange(0, n_chan)
     idxs = np.indices([n_px, n_px])
     g = gaussian(z_idxs, 1, pos_z, fwhm_z)
@@ -646,7 +760,8 @@ def write_diffuse_datacube_to_fits(
 def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwidth, 
                                fwhm_x, fwhm_y, fwhm_z, pixel_size, fov,
                                spatial_resolution, central_frequency, 
-                               frequency_resolution, pa, min_sep_spatial, min_sep_frequency, plot, plot_dir):
+                               frequency_resolution, ra, dec, pa, min_sep_spatial, 
+                               min_sep_frequency, rest_frequency, serendipitous):
     """
     Generates a gaussian skymodel with n_sources sources
     Input:
@@ -668,62 +783,62 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     pa (float): position angle in degrees\
     min_sep_spatial (float): minimum separation between sources in arcsec
     min_sep_frequency (float): minimum separation between sources in MHz
-    plot (bool): if True, plots the skymodel
-    plot_dir (str): directory where the plots will be saved
     """
     fwhm_x = int(fwhm_x.value / pixel_size.value)
     fwhm_y = int(fwhm_y.value / pixel_size.value)
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
-    ra = 0 * U.deg
-    dec = 0 * U.deg
-    hI_rest_frequency = 1420.4 * U.MHz
+    if rest_frequency == 1420.4:
+        hI_rest_frequency = rest_frequency * U.MHz
+    else:
+        hI_rest_frequency = rest_frequency * 10 ** -6 * U.MHz
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    print('Number of Pixels', n_px)
     datacube = DataCube(
-    n_px_x = n_px,
-    n_px_y = n_px,
-    n_channels = n_channels, 
-    px_size = spatial_resolution,
-    channel_width = velocity_resolution,
-    velocity_centre=central_velocity, 
-    ra = ra,
-    dec = dec,
-    )
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_channels, 
+        px_size = spatial_resolution,
+        channel_width = velocity_resolution,
+        velocity_centre=central_velocity, 
+        ra = ra,
+        dec = dec,
+        )
     wcs = datacube.wcs
-    
     pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_velocity, 0)
     pos_z = n_channels // 2
     c_id = 0
-    datacube = insert_gaussian(id, c_id, datacube, 1, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_channels, plot, plot_dir)
+    datacube = insert_gaussian(id, c_id, datacube, 1, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_channels)
     xy_radius = fov / pixel_size * 0.3
     z_radius = 0.3 * bandwidth * U.MHz / frequency_resolution
     print('Generating central source and {} serendipitous companions in a radius of {} pixels in the x and y directions and {} pixels in the z direction\n'.format(n_sources, xy_radius, z_radius))
     min_sep_xy = min_sep_spatial / pixel_size
     min_sep_z = min_sep_frequency / frequency_resolution
-    fwhm_xs = np.random.randint(2, 10, n_sources)
-    fwhm_ys = np.random.randint(2, 10, n_sources)
-    fwhm_zs = np.random.randint(2, 30, n_sources)
-    amplitudes = np.random.rand(n_sources)
-    sample_coords = sample_positions(pos_x, pos_y, pos_z, 
+    if serendipitous is True:
+        fwhm_xs = np.random.randint(2, 10, n_sources)
+        fwhm_ys = np.random.randint(2, 10, n_sources)
+        fwhm_zs = np.random.randint(2, 30, n_sources)
+        amplitudes = np.random.rand(n_sources)
+        sample_coords = sample_positions(pos_x, pos_y, pos_z, 
                                      fwhm_x, fwhm_y, fwhm_z,
                                      n_sources, fwhm_xs, fwhm_ys, fwhm_zs,
                                      xy_radius.value, z_radius.value, min_sep_xy.value, min_sep_z.value)
     
-    pas = np.random.randint(0, 360, n_sources)
-    for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords),):
-        print('{}:\nLocation: {}\nSize X: {} Y: {} Z: {}'.format(c_id, choords, fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id]))
-        datacube = insert_gaussian(id, c_id + 1, datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_channels, plot, plot_dir)
+        pas = np.random.randint(0, 360, n_sources)
+        for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords),):
+            print('{}:\nLocation: {}\nSize X: {} Y: {} Z: {}'.format(c_id, choords, fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id]))
+            datacube = insert_gaussian(id, c_id + 1, datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_channels)
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
     write_datacube_to_fits(datacube, filename)
     print('Skymodel saved to {}'.format(filename))
     del datacube
     return filename
 
-def generate_diffuse_skymodel(id, data_dir, n_px, n_channels, bandwidth, 
-                              fwhm_z, pixel_size, fov,
+def generate_diffuse_skymodel(id, data_dir, n_px, n_channels,
+                              fwhm_z, fov,
                               spatial_resolution, central_frequency, 
-                              frequency_resolution, plot, plot_dir):
+                              frequency_resolution, ra, dec, rest_frequency):
     """
     Generates a gaussian skymodel with n_sources sources
     Input:
@@ -749,9 +864,10 @@ def generate_diffuse_skymodel(id, data_dir, n_px, n_channels, bandwidth,
     plot_dir (str): directory where the plots will be saved
     """
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
-    ra = 0 * U.deg
-    dec = 0 * U.deg
-    hI_rest_frequency = 1420.4 * U.MHz
+    if rest_frequency == 1420.4:
+        hI_rest_frequency = rest_frequency * U.MHz
+    else:
+        hI_rest_frequency = rest_frequency * 10 ** -6 * U.MHz
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
@@ -1286,7 +1402,7 @@ def get_distance(n_px, n_channels,
 
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
                                central_frequency, frequency_resolution, 
-                               TNGBasePath, TNGSnap, subhaloID,  plot, plot_dir):
+                               TNGBasePath, TNGSnap, subhaloID, ra, dec, rest_frequency):
     #distance = np.random.randint(1, 5) * U.Mpc
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
@@ -1304,11 +1420,17 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
                        basePath = TNGBasePath,
                        ra = 0. * U.deg,
                        dec = 0. * U.deg,)
-    hI_rest_frequency = 1.42*U.GHz 
+    if rest_frequency == 1420.4:
+        hI_rest_frequency = rest_frequency * U.MHz
+    else:
+        hI_rest_frequency = rest_frequency * 10 ** -6 * U.MHz
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
-   
+    
+    if ra == 0.0 * U.deg and dec == 0.0 * U.deg:
+        ra = source.ra
+        dec = source.dec
     
     datacube = DataCube(
         n_px_x = n_px,
@@ -1317,8 +1439,8 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
         px_size = 10.0 * U.arcsec,
         channel_width=channel_width,
         velocity_centre=source.vsys, 
-        ra = source.ra,
-        dec = source.dec,
+        ra = ra,
+        dec = dec,
     )
     spectral_model = GaussianSpectrum(
         sigma="thermal"
@@ -1348,21 +1470,19 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     #M.write_fits(filename, channels='velocity')
     write_datacube_to_fits(M.datacube, filename)
     print('Skymodel saved to {}'.format(filename))
-    if plot is True:
-        SkyCube = M.datacube._array.value
-        plot_moments(SkyCube[:, :, :, 0], vch, os.path.join(plot_dir, 'skymodel_{}.png'.format(str(id))))
     del datacube
     del M
     return filename
 
 def simulator(i: int, data_dir: str, main_path: str, project_name: str, 
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
-              bandwidth: int, inwidth: float, integration: int, totaltime: int, 
-              pwv: float, snr: float, get_skymodel: bool, 
+              bandwidth: int, inwidth: float, integration: int, totaltime: int, ra: float, dec: float,
+              pwv: float, rest_frequency: float, snr: float, get_skymodel: bool, 
               source_type: str, TNGBasePath: str, TNGSnapshotID: int, 
               TNGSubhaloID: int,
-              plot: bool, save_ms: bool, crop: bool, n_pxs: Optional[int] = None, 
-              n_channels: Optional[int] = None):
+              plot: bool, save_ms: bool, crop: bool, serendipitous: bool, 
+              n_pxs: Optional[int] = None, 
+              n_channels: Optional[int] = None, ):
     """
     Input:
     i: index of the file to be simulated
@@ -1395,19 +1515,21 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     None
     """
     start = time.time()
+    flatten = False
     os.chdir(output_dir)
     project = project_name + '_{}'.format(i)
     if not os.path.exists(project):
         os.mkdir(project)
     cycle = os.path.split(antenna_name)[0]
     antenna_name = os.path.split(antenna_name)[1]
-    config_number = int(antenna_name.split('.')[-2])
+    config_number = int(antenna_name.split('.')[-1])
     spatial_resolution = get_spatial_resolution(band, config_number)
     central_freq= get_band_central_freq(band)
     fov = get_fov([band])[0]
     pixel_size = spatial_resolution / 7
     n_px = int(1.5 * fov / pixel_size)
-    if n_channels is None:
+    if n_channels is None or n_channels == 1:
+        flatten = True
         n_channels = int(bandwidth / inwidth)
     # number of pixels must be even
     if n_px % 2 != 0:
@@ -1433,8 +1555,6 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
     if n_pxs is not None:
         print('Cube will be cropped to {} x {} x {} pixels'.format(n_pxs, n_pxs, n_channels))
-    else:
-        print('Final size will be {} x {} x {} pixels'.format(length, length, n_channels))
     print('# ------------------------ #')
     skymodel_time = time.time()
     if get_skymodel is True:
@@ -1451,11 +1571,15 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
             print('\n')
             filename = generate_extended_skymodel(i, output_dir, n_px, n_channels, 
                                                   central_freq * U.GHz,
-                                                  inwidth * U.MHz, TNGBasePath, TNGSnapshotID, TNGSubhaloID, 
-                                                  plot, plot_dir) 
+                                                  inwidth * U.MHz, TNGBasePath, 
+                                                  TNGSnapshotID, TNGSubhaloID, 
+                                                  ra * U.deg, dec * U.deg, rest_frequency)
         elif source_type == "point":
             print('Generating Gaussian Skymodel')
-            n_sources = np.random.randint(1, 5)
+            if serendipitous == True:
+                n_sources = np.random.randint(1, 5)
+            else:
+                n_sources = 0
             fwhm_x = (0.1 * fov - 0.01 * fov)*np.random.rand() + 0.01 * fov
             fwhm_y = (0.1 * fov - 0.01 * fov)*np.random.rand() + 0.01 * fov
             fwhm_z = (0.1 * bandwidth - 0.01 * bandwidth)*np.random.rand() + 0.01 * bandwidth
@@ -1476,20 +1600,21 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                   fov * U.arcsec, 
                                                   spatial_resolution * U.arcsec, 
                                                   central_freq * U.GHz,
-                                                  inwidth * U.MHz, 
+                                                  inwidth * U.MHz,
+                                                  ra * U.deg, dec * U.deg,
                                                   pa, 
                                                   min_sep_spatial, 
-                                                  min_sep_frequency, 
-                                                  plot, 
-                                                  plot_dir)
+                                                  min_sep_frequency,
+                                                  rest_frequency, 
+                                                  serendipitous)
         elif source_type == "diffuse":
             fwhm_z = (0.1 * bandwidth - 0.01 * bandwidth)*np.random.rand() + 0.01 * bandwidth
             print('FWHM_z ', fwhm_z, ' MHz')
             filename = generate_diffuse_skymodel(i, output_dir, n_px, n_channels, bandwidth, 
                                                  fwhm_z * U.MHz, pixel_size * U.arcsec, 
                                                  fov * U.arcsec, spatial_resolution * U.arcsec, 
-                                                 central_freq * U.GHz, inwidth * U.MHz, plot, 
-                                                 plot_dir)
+                                                 central_freq * U.GHz, inwidth * U.MHz, ra * U.deg, 
+                                                 dec * U.deg, rest_frequency)
 
     final_skymodel_time = time.time()
     noise_time = time.time()
@@ -1602,25 +1727,15 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     # Cutting out the central region of the dirty and clean cubes
     clean, clean_header = load_fits(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"))
     dirty, dirty_header = load_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
-    if n_pxs is not None:
-        crop = True
     if crop == True:
-        if dirty.shape[1] > 1:
-            clean_cube = SpectralCube(clean[0], wcs=WCS(clean_header).dropaxis(3))
-            dirty_cube = SpectralCube(dirty[0], wcs=WCS(dirty_header).dropaxis(3))
-            if n_pxs is not None:
-                length = n_pxs
-            left = int((clean_cube.shape[1] - length) / 2)
-            clean_cube = clean_cube[:, left:left+length, left:left+length]
-            dirty_cube = dirty_cube[:, left:left+length, left:left+length]
-            clean_cube.write(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
-            dirty_cube.write(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), overwrite=True)
-        else:
-            left = int((clean_cube.shape[1] - length) / 2)
-            clean_cube = clean_cube[0, left:left+length, left:left+length]
-            dirty_cube = dirty_cube[0, left:left+length, left:left+length]
-            save_fits(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), clean_cube, WCS(clean_header).dropaxis(2).to_header())
-            save_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), dirty_cube, WCS(dirty_header).dropaxis(2).to_header())
+        left = int((clean.shape[-1] - n_pxs) / 2)
+        clean_cube = clean[:, :,  left:left+n_pxs, left:left+n_pxs]
+        dirty_cube = dirty[:, :, left:left+n_pxs, left:left+n_pxs]
+        if flatten == True:
+            clean_cube = np.expand_dims(np.sum(clean_cube, axis=1), axis=1)
+            dirty_cube = np.expand_dims(np.sum(dirty_cube, axis=1),axis=1) 
+        clean_cube.write(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
+        dirty_cube.write(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), overwrite=True)
 
     print('Deleting junk files')
     #shutil.rmtree(project)

@@ -6,6 +6,8 @@ import pandas as pd
 import os
 import argparse
 from random import choices
+from natsort import natsorted
+import math
 
 MALLOC_TRIM_THRESHOLD_ = 0
 
@@ -34,7 +36,7 @@ parser = argparse.ArgumentParser(description='Welcome to ALMASim, the ALMA simul
                                  The rest are set to default as follows:' ,
                                  formatter_class=SmartFormatter)
 
-parser.add_argument('--n_sims', type=int, default=10, help='R|Number of simulations to perform, default 10.')
+parser.add_argument('--n_sims', type=int, default=10, help='R|Number of simulations to perform, default 10. If reference images are provided, this is the number of simulations will be performed for each reference image.')
 parser.add_argument('--data_dir', type=str, required=True, help='R|Directory where the all the simulations outputs are stored.')
 parser.add_argument('--main_path', type=str, required=True,  help='R|Directory where the ALMASim package is stored.')
 parser.add_argument('--output_dir', type=str, default='sims', help='R|Directory where the simulation fits outputs are within the data_dir, default sims.')
@@ -56,6 +58,7 @@ parser.add_argument('--source_type', type=str, default='point', nargs='?', help=
 parser.add_argument('--TNGBasePath', type=str, default=None, help='R|Path to the TNG data on your folder. Default /media/storage/TNG100-1/output')
 parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.  Default 99')
 parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data. Default 0')
+parser.add_argument('--insert_serendipitous', type=str2bool, default=True, const=True, nargs='?', help='R|If True, serendipitous sources are injected in the simulation. Default True.')
 parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted. Default False.')
 parser.add_argument('--save_ms', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the measurement sets are preserved and stored as numpy arrays. Default False.')
 parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?',  help='R|If True, the simulation results are cropped to the size of the beam times 1.5. Default False.')
@@ -79,18 +82,54 @@ if __name__ == '__main__':
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
     
-    idxs = np.arange(0, args.n_sims)
+    if args.reference_source == True:
+        idxs = np.arange(0, args.n_sims * len(os.listdir(args.reference_dir)))
+    else:
+        idxs = np.arange(0, args.n_sims)
     data_dir = [args.data_dir for i in idxs]
     main_path = [args.main_path for i in idxs]
     output_dir = [output_dir for i in idxs]
     plot_dir = [plot_dir for i in idxs]
     project_name = [args.project_name for i in idxs]
-    bands = choices(args.bands, k=len(idxs))
-    antenna_ids = choices(args.antenna_config, k=len(idxs))
-    cycles = choices(args.cycle, k=len(idxs))
-    antenna_names = [os.path.join('cycle{}'.format(j), 'alma.cycle{}.0.{}'.format(j, k)) for j, k in zip(cycles, antenna_ids)]
-    min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
-    inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
+
+    # Getting the observing bands
+    if args.reference_source == False:
+        bands = choices(args.bands, k=len(idxs))
+    else:
+        if len(args.bands) == len(os.listdir(args.reference_dir)):
+            bands = np.repeat(args.bands, args.n_sims)
+        else:   
+            bands = choices(args.bands, k=len(idxs))
+    
+    # Getting the parameters from the reference sources
+    if args.reference_source == True:
+        files = natsorted(os.listdir(args.reference_dir))
+        reference_params = []
+        for file_ in files:
+            for i in range(args.n_sims):
+                reference_params.append(sm.get_info_from_reference(os.path.join(args.reference_dir, file_)))
+        reference_params = np.array(reference_params)   
+        ras = reference_params[:, 0]
+        decs = reference_params[:, 1]
+        n_pxs = reference_params[:, 2]
+        n_channels = reference_params[:, 3]
+        inbrights = reference_params[:, 4]
+        rest_frequencies = reference_params[:, 5]
+        cycles = reference_params[:, 6]
+        antenna_ids = reference_params[:, 7]
+    else:
+        ras = [0.0 for i in idxs]
+        decs = [0.0 for i in idxs]
+        n_pxs = [args.n_px for i in idxs]
+        n_channels = [args.n_channels for i in idxs]
+        min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
+        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
+        rest_frequencies = [1420.4 for i in idxs]
+        cycles = choices(args.cycle, k=len(idxs))
+        antenna_ids = choices(args.antenna_config, k=len(idxs))
+    
+
+    antenna_names = [os.path.join('cycle{}'.format(int(j)), 'alma.cycle{}.0.{}'.format(int(j), int(k))) for j, k in zip(cycles, antenna_ids)]    
     bandwidths = choices(args.bandwidth, k=len(idxs))
     inwidths = choices(args.inwidth, k=len(idxs))
     integrations = choices(args.integration, k=len(idxs))
@@ -107,11 +146,11 @@ if __name__ == '__main__':
         tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
     else:
         tng_subhaloids = sm.get_subhaloids_from_db(args.n_sims)
+    insert_serendipitous = [args.insert_serendipitous for i in idxs]
     plot = [args.plot for i in idxs]
     save_ms = [args.save_ms for i in idxs]
     crop = [args.crop for i in idxs]
-    n_pxs = [args.n_px for i in idxs]
-    n_channels = [args.n_channels for i in idxs]
+    
 
     input_params = pd.DataFrame(zip(idxs, 
                                     data_dir, 
@@ -125,8 +164,11 @@ if __name__ == '__main__':
                                     bandwidths, 
                                     inwidths, 
                                     integrations, 
-                                    totaltimes, 
-                                    pwvs, 
+                                    totaltimes,
+                                    ras,
+                                    decs,
+                                    pwvs,
+                                    rest_frequencies,
                                     snrs, 
                                     get_skymodel, 
                                     source_type, 
@@ -136,24 +178,29 @@ if __name__ == '__main__':
                                     plot, 
                                     save_ms, 
                                     crop,
+                                    insert_serendipitous,
                                     n_pxs, 
-                                    n_channels), 
+                                    n_channels
+                                    ), 
                                     columns=['idx', 'data_dir', 'main_path', 
                                             'project_name', 'output_dir', 'plot_dir', 'band',
                                             'antenna_name', 'inbright', 'bandwidth',
-                                            'inwidth', 'integration', 'totaltime', 
-                                            'pwv', 'snr', 'get_skymodel', 'source_type',
-                                            'tng_basepath', 'tng_snapid', 'tng_subhaloid',
-                                            'plot', 'save_ms', 'crop',
+                                            'inwidth', 'integration', 'totaltime', 'ra', 'dec',
+                                            'pwv', 'rest_frequency', 'snr', 'get_skymodel', 
+                                            'source_type', 'tng_basepath', 'tng_snapid', 'tng_subhaloid',
+                                            'plot', 'save_ms', 'crop', 'serendipitous',
                                             'n_px', 'n_channels'])
     input_params.info()
-    dbs = np.array_split(input_params, len(input_params) / args.n_workers)
+    dbs = np.array_split(input_params, math.ceil(len(input_params) / args.n_workers))
     for db in dbs:
-        client = Client(threads_per_worker=args.threads_per_worker, 
+        if len(db) > 1:
+            client = Client(threads_per_worker=args.threads_per_worker, 
                     n_workers=args.n_workers, memory_limit='50GB' )
-        futures = client.map(sm.simulator, *db.values.T)
-        client.gather(futures)
-        client.close()
+            futures = client.map(sm.simulator, *db.values.T)
+            client.gather(futures)
+            client.close()
+        else:
+            sm.simulator(*db.values.T) 
     files = os.listdir(args.main_path)
     for item in files:
         if item.endswith(".log"):
