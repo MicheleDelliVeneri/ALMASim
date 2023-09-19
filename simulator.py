@@ -1652,7 +1652,6 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
 
     final_skymodel_time = time.time()
 
-    noise_time = time.time()
     antennalist = os.path.join(main_path, "antenna_config", cycle, antenna_name + '.cfg')
     print('# ------------------------ #')
     print('Simulating ALMA Observation of the Skymodel')
@@ -1681,7 +1680,6 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         imagename=os.path.join(project, '{}.{}'.format(project, antenna_name)),
         imsize=[int(n_px), int(n_px)],
         cell="{}arcsec".format(cell_size),
-        phasecenter="J2000 19h30m00 -40d00m00",
         specmode="cube",
         niter=0,
         fastnoise=False,
