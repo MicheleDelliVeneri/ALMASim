@@ -818,7 +818,6 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     fwhm_x = int(fwhm_x.value / pixel_size.value)
     fwhm_y = int(fwhm_y.value / pixel_size.value)
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
-    print(fwhm_x, fwhm_y, fwhm_z)
     if rest_frequency == 1420.4:
         hI_rest_frequency = rest_frequency * U.MHz
     else:
@@ -1559,6 +1558,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     config_number = int(antenna_name.split('.')[-1])
     spatial_resolution = get_spatial_resolution(band, config_number)
     central_freq= get_band_central_freq(band)
+    antennalist = os.path.join(main_path, "antenna_config", cycle, antenna_name + '.cfg')
     max_baseline = get_max_baseline_from_antenna_config(antennalist)
     beam_size = compute_beam_size_from_max_baseline(max_baseline, central_freq)
     cell_size = beam_size / 5
@@ -1569,9 +1569,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         flatten = True
         n_channels = int(bandwidth / inwidth)
     if n_pxs is None:
-        n_px = fov / cell_size
+        n_px = int(fov / cell_size)
     else:
-        n_px = n_pxs
+        n_px = int(n_pxs)
     # number of pixels must be even
     print('Simulation Parameters given Band and Spatial Resolution')
     print('Band ', band)
@@ -1613,8 +1613,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                 n_sources = np.random.randint(1, 5)
             else:
                 n_sources = 0
-            fwhm_x = 10 * cell_size * np.random.rand() + cell_size
-            fwhm_y = 10 * cell_size  * np.random.rand() + cell_size
+            fwhm_x = 3 * cell_size * np.random.rand() + cell_size
+            fwhm_y = 3 * cell_size  * np.random.rand() + cell_size
             fwhm_z = 0.1 * bandwidth * np.random.rand() + inwidth
             pa = np.random.randint(0, 360)
             print('Number of Sources ', n_sources)
@@ -1652,7 +1652,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
 
     final_skymodel_time = time.time()
 
-    antennalist = os.path.join(main_path, "antenna_config", cycle, antenna_name + '.cfg')
+    
     print('# ------------------------ #')
     print('Simulating ALMA Observation of the Skymodel')
     sim_time = time.time()
@@ -1725,7 +1725,6 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
 
     print('Deleting junk files')
     #shutil.rmtree(project)
-    os.remove(os.path.join(output_dir, "noise_cube_" + str(i) +".fits"))
     os.remove(os.path.join(output_dir, "skymodel_" + str(i) +".fits"))
     if plot is True:
         print('Saving Plots')

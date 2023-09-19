@@ -129,11 +129,35 @@ if __name__ == '__main__':
         antenna_ids = choices(args.antenna_config, k=len(idxs))
     
 
-    antenna_names = [os.path.join('cycle{}'.format(int(j)), 'alma.cycle{}.0.{}'.format(int(j), int(k))) for j, k in zip(cycles, antenna_ids)]    
-    bandwidths = choices(args.bandwidth, k=len(idxs))
-    inwidths = choices(args.inwidth, k=len(idxs))
-    integrations = choices(args.integration, k=len(idxs))
-    totaltimes = choices(args.totaltime, k=len(idxs))
+    antenna_names = [os.path.join('cycle{}'.format(int(j)), 'alma.cycle{}.0.{}'.format(int(j), int(k))) for j, k in zip(cycles, antenna_ids)]
+
+    if len(args.bandwidth) == len(idxs):
+        bandwidths = args.bandwidth
+    elif len(args.bandwidth) != len(idxs) and len(args.bandwidth) == len(os.listdir(args.reference_dir)) and args.reference_source == True:
+        bandwidths = [np.repeat(args.bandwidth, args.n_sims)]
+    else:
+        bandwidths = choices(args.bandwidth, k=len(idxs))
+    if args.n_channels != None:
+        inwidths = [bw / args.n_channels for bw in bandwidths]
+    else:
+        if len(args.inwidth) == len(idxs):
+            inwidths = args.inwidth
+        elif len(args.inwidth) != len(idxs) and len(args.inwidth) ==  len(os.listdir(args.reference_dir)) and args.reference_source == True:
+            inwidths = [np.repeat(args.inwidth, args.n_sims)]
+        else:
+            inwidths = choices(args.inwidth, k=len(idxs))
+    if len(args.integration) == len(idxs):
+        integrations = args.integration
+    elif len(args.integration) != len(idxs) and args.reference_source == True:
+        integrations = [np.repeat(args.integration, args.n_sims)]
+    else:
+        integrations = choices(args.integration, k=len(idxs))
+    if len(args.totaltime) == len(idxs):
+        totaltimes = args.totaltime
+    elif len(args.totaltime) != len(idxs) and args.reference_source == True:
+        totaltimes = [np.repeat(args.totaltime, args.n_sims)]
+    else:
+        totaltimes = choices(args.totaltime, k=len(idxs))
     min_pwv, max_pwv = np.min(args.pwv), np.max(args.pwv)
     pwvs = np.random.uniform(min_pwv, max_pwv, size=len(idxs))
     min_snr, max_snr = np.min(args.snr), np.max(args.snr)
@@ -151,7 +175,36 @@ if __name__ == '__main__':
     save_ms = [args.save_ms for i in idxs]
     crop = [args.crop for i in idxs]
     
-
+    print('Data directory: {}'.format(data_dir[0]))
+    print('Main path: {}'.format(main_path[0]))
+    print('Output directory: {}'.format(output_dir[0]))
+    print('Plot directory: {}'.format(plot_dir[0]))
+    print('Project name: {}'.format(project_name[0]))
+    print('Bands: {}'.format(bands))
+    print('Antenna names: {}'.format(antenna_names))
+    print('Input brightness: {}'.format(inbrights))
+    print('Bandwidths: {}'.format(bandwidths))
+    print('Frequency Channel Widths: {}'.format(inwidths))
+    print('Integration Times: {}'.format(integrations))
+    print('Total Times: {}'.format(totaltimes))
+    print('Right Ascensions: {}'.format(ras))
+    print('Declinations: {}'.format(decs))
+    print('PWVs: {}'.format(pwvs))
+    print('Rest Frequencies: {}'.format(rest_frequencies))
+    print('SNRs: {}'.format(snrs))
+    print('Get Skymodel: {}'.format(get_skymodel[0]))
+    print('Source Type: {}'.format(source_type[0]))
+    print('TNG Basepaths: {}'.format(tng_basepaths[0]))
+    print('TNG Snapshots: {}'.format(tng_snapids))
+    print('TNG Subhaloids: {}'.format(tng_subhaloids))
+    print('Plot: {}'.format(plot[0]))
+    print('Save MS: {}'.format(save_ms[0]))
+    print('Crop: {}'.format(crop[0]))
+    print('Insert Serendipitous: {}'.format(insert_serendipitous[0]))
+    print('Number of pixels: {}'.format(n_pxs))
+    print('Number of channels: {}'.format(n_channels))
+    print('Number of workers: {}'.format(args.n_workers))
+    print('Threads per worker: {}'.format(args.threads_per_worker))
     input_params = pd.DataFrame(zip(idxs, 
                                     data_dir, 
                                     main_path,
@@ -205,6 +258,7 @@ if __name__ == '__main__':
     for item in files:
         if item.endswith(".log"):
             os.remove(os.path.join(args.main_path, item))
-    for dir in os.listdir(args.output_dir):
+    for dir in os.listdir(output_dir[0]):
+        print(dir)
         if os.path.isdir(os.path.join(args.output_dir, dir)) and 'sim' in dir:
             os.system('rm -rf {}'.format(os.path.join(args.output_dir, dir)))
