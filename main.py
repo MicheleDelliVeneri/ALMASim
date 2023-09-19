@@ -259,6 +259,5 @@ if __name__ == '__main__':
         if item.endswith(".log"):
             os.remove(os.path.join(args.main_path, item))
     for dir in os.listdir(output_dir[0]):
-        print(dir)
-        if os.path.isdir(os.path.join(args.output_dir, dir)) and 'sim' in dir:
+        if os.path.isdir(os.path.join(output_dir[0], dir)) and dir != 'plots':
             os.system('rm -rf {}'.format(os.path.join(args.output_dir, dir)))
