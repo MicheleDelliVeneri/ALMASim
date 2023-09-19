@@ -105,9 +105,9 @@ if __name__ == '__main__':
     if args.reference_source == True:
         files = natsorted(os.listdir(args.reference_dir))
         reference_params = []
-        for file_ in files:
+        for id, file_ in enumerate(files):
             for i in range(args.n_sims):
-                reference_params.append(sm.get_info_from_reference(os.path.join(args.reference_dir, file_)))
+                reference_params.append(sm.get_info_from_reference(os.path.join(args.reference_dir, file_), plot_dir[0], id))
         reference_params = np.array(reference_params)   
         ras = reference_params[:, 0]
         decs = reference_params[:, 1]
@@ -205,3 +205,6 @@ if __name__ == '__main__':
     for item in files:
         if item.endswith(".log"):
             os.remove(os.path.join(args.main_path, item))
+    for dir in os.listdir(args.output_dir):
+        if os.path.isdir(os.path.join(args.output_dir, dir)) and 'sim' in dir:
+            os.system('rm -rf {}'.format(os.path.join(args.output_dir, dir)))
