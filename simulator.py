@@ -1856,8 +1856,8 @@ def plot_skymodel(path, i, plot_dir):
     skymodel, _ = load_fits(path)
     if len(skymodel.shape) > 3:
         skymodel = skymodel[0]
-    skymodel_spectrum = np.sum(skymodel[:, :, :], axis=(0, 1))
-    skymodel_image = np.sum(skymodel[:, :, :], axis=2)[np.newaxis, :, :]
+    skymodel_spectrum = np.sum(skymodel[:, :, :], axis=(1, 2))
+    skymodel_image = np.sum(skymodel[:, :, :], axis=0)[np.newaxis, :, :]
     plt.figure(figsize=(5, 5))
     plt.imshow(skymodel_image[0], origin='lower')
     plt.colorbar()
