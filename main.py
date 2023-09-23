@@ -54,7 +54,7 @@ parser.add_argument('--snr', type=int, default=[30], nargs='+', help='R|SNR, if 
 parser.add_argument('--get_skymodel', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the skymodel is laoded from the data_path. Default False.')
 parser.add_argument('--reference_source', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the reference sources are searched for within the reference folder from which to sample the observing parameters. This is performed in order to generate similar sources. Default False.')
 parser.add_argument('--reference_dir', type=str, default=None, help='R|Path to the reference sources folder. Default None.')
-parser.add_argument('--source_type', type=str, default='point', nargs='?', help='R|SOURCE_TYPE, type of source to generate: "point", "diffuse" or "extended"')
+parser.add_argument('--source_type', type=str, default='point', nargs='?', help='R|SOURCE_TYPE, type of source to generate: "point", "gaussian", "diffuse" or "extended"')
 parser.add_argument('--TNGBasePath', type=str, default=None, help='R|Path to the TNG data on your folder. Default /media/storage/TNG100-1/output')
 parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.  Default 99')
 parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data. Default 0')

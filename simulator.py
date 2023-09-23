@@ -182,10 +182,12 @@ def get_fov(bands):
     for band in bands:
         if band == 1:
             central_freq = 43 * U.GHz  
+        elif band == 2:
+            central_freq = 67 * U.GHz
         elif band == 3:
             central_freq = 100 * U.GHz
         elif band == 4:
-            central_freq = 143 * U.GHz
+            central_freq = 150 * U.GHz
         elif band == 5:
             central_freq = 217 * U.GHz
         elif band == 6:
@@ -197,13 +199,15 @@ def get_fov(bands):
         elif band == 9:
             central_freq = 650 * U.GHz    
         elif band == 10:
-            central_freq = 850 * U.GHz
+            central_freq = 868.5 * U.GHz
            
         central_freq = central_freq.to(U.Hz).value
         central_freq_s = 1 / central_freq
         wavelength = light_speed * central_freq_s
-        fov = 1.13 * wavelength / 12
-        fov = fov * 180 / np.pi * 3600
+        # this is the field of view in Radians
+        fov = 1.22 * wavelength / 12
+        # fov in arcsec
+        fov = fov * 206264.806
         fovs.append(fov)
     return np.array(fovs)
 
@@ -510,7 +514,7 @@ def gaussian(x, amp, cen, fwhm):
     """
     return amp*np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
 
-def diffuse_signal(cfgname, n_px, fov):
+def diffuse_signal(n_px):
     ift.random.push_sseq(random.randint(1, 1000))
     space = ift.RGSpace((2*n_px, 2*n_px))
     args = {
@@ -529,6 +533,16 @@ def diffuse_signal(cfgname, n_px, fov):
     data = sample.val[0:n_px, 0:n_px]
     return data
 
+def insert_pointlike(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_z, n_px, n_chan):
+    z_idxs = np.arange(0, n_chan)
+    g = gaussian(z_idxs, 1, pos_z, fwhm_z)
+    ts = np.zeros((n_px, n_px))
+    ts[int(pos_x), int(pos_y)] = amplitude
+    for z in range(datacube._array.shape[2]):
+        slice_ = ts + g[z] * ts
+        datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
+    return datacube
+
 def insert_gaussian(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_chan):
     z_idxs = np.arange(0, n_chan)
     idxs = np.indices([n_px, n_px])
@@ -543,7 +557,7 @@ def insert_diffuse(datacube, pos_z, fwhm_z, fov, n_chan, n_px_x, n_px_y):
     z_idxs = np.arange(0, n_chan)
     idxs = np.indices([n_px_x, n_px_y])
     g = gaussian(z_idxs, 1, pos_z, fwhm_z)
-    ts = diffuse_signal('ift.cfg', n_px_x, fov)
+    ts = diffuse_signal( n_px_x)
     ts = ts/np.nanmax(ts)
     ts = np.nan_to_num(ts)
     for z in range(datacube._array.shape[2]):
@@ -863,15 +877,49 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
             datacube = insert_gaussian(datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_channels)
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
     write_datacube_to_fits(datacube, filename)
-    plot_skymodel(datacube._array, id, plot_dir)
+    plot_skymodel(filename, id, plot_dir)
     print('Skymodel saved to {}'.format(filename))
     del datacube
     return filename
 
+def generate_pointlike_skymodel(id, data_dir, rest_frequency, 
+                                frequency_resolution, fwhm_z, central_frequency, 
+                                n_px, n_channels, ra, dec, 
+                                spatial_resolution, plot_dir):
+    fwhm_z = int(fwhm_z.value / frequency_resolution.value)
+    if rest_frequency == 1420.4:
+        hI_rest_frequency = rest_frequency * U.MHz
+    else:
+        hI_rest_frequency = rest_frequency * 10 ** -6 * U.MHz
+    radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
+    central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
+    datacube = DataCube(
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_channels, 
+        px_size = spatial_resolution,
+        channel_width = velocity_resolution,
+        velocity_centre=central_velocity, 
+        ra = ra,
+        dec = dec,
+        )
+    wcs = datacube.wcs
+    pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_velocity, 0)
+    pos_z = n_channels // 2
+    print('Generating point-like source at position ({}, {}, {})'.format(int(pos_x), int(pos_y), int(pos_z)))
+    datacube = insert_pointlike(datacube, 1, pos_x, pos_y, pos_z, fwhm_z, n_px, n_channels)
+    filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
+    write_datacube_to_fits(datacube, filename)
+    plot_skymodel(filename, id, plot_dir)
+    print('Skymodel saved to {}'.format(filename))
+    del datacube
+    return filename
+     
 def generate_diffuse_skymodel(id, data_dir, n_px, n_channels,
                               fwhm_z, fov,
                               spatial_resolution, central_frequency, 
-                              frequency_resolution, ra, dec, rest_frequency):
+                              frequency_resolution, ra, dec, rest_frequency, plot_dir):
     """
     Generates a gaussian skymodel with n_sources sources
     Input:
@@ -919,6 +967,7 @@ def generate_diffuse_skymodel(id, data_dir, n_px, n_channels,
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
     write_diffuse_datacube_to_fits(datacube, filename)
     print('Skymodel saved to {}'.format(filename))
+    plot_skymodel(filename, id, plot_dir)
     del datacube
     return filename
 
@@ -1435,7 +1484,8 @@ def get_distance(n_px, n_channels,
 
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
                                central_frequency, frequency_resolution, 
-                               TNGBasePath, TNGSnap, subhaloID, ra, dec, rest_frequency):
+                               TNGBasePath, TNGSnap, subhaloID, ra, dec, 
+                               rest_frequency, plot_dir):
     #distance = np.random.randint(1, 5) * U.Mpc
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
@@ -1503,6 +1553,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     #M.write_fits(filename, channels='velocity')
     write_datacube_to_fits(M.datacube, filename)
     print('Skymodel saved to {}'.format(filename))
+    plot_skymodel(filename, id, plot_dir)
     del datacube
     del M
     return filename
@@ -1570,8 +1621,10 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         n_channels = int(bandwidth / inwidth)
     if n_pxs is None:
         n_px = int(fov / cell_size)
-    else:
+    elif n_pxs is not None and crop is False:
         n_px = int(n_pxs)
+    else:
+        n_px = int(fov / cell_size)
     # number of pixels must be even
     print('Simulation Parameters given Band and Spatial Resolution')
     print('Band ', band)
@@ -1606,8 +1659,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                   central_freq * U.GHz,
                                                   inwidth * U.MHz, TNGBasePath, 
                                                   TNGSnapshotID, TNGSubhaloID, 
-                                                  ra * U.deg, dec * U.deg, rest_frequency)
-        elif source_type == "point":
+                                                  ra * U.deg, dec * U.deg, 
+                                                  rest_frequency, plot_dir)
+        elif source_type == "gaussian":
             print('Generating Gaussian Skymodel')
             if serendipitous == True:
                 n_sources = np.random.randint(1, 5)
@@ -1642,13 +1696,21 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                   serendipitous,
                                                   plot_dir)
         elif source_type == "diffuse":
+            print('Generating Diffuse Emission Skymodel')
             fwhm_z = (0.1 * bandwidth - 0.01 * bandwidth)*np.random.rand() + 0.01 * bandwidth
             print('FWHM_z ', fwhm_z, ' MHz')
             filename = generate_diffuse_skymodel(i, output_dir, n_px, n_channels, bandwidth, 
                                                  fwhm_z * U.MHz, cell_size * U.arcsec, 
                                                  fov * U.arcsec, spatial_resolution * U.arcsec, 
                                                  central_freq * U.GHz, inwidth * U.GHz, ra * U.deg, 
-                                                 dec * U.deg, rest_frequency)
+                                                 dec * U.deg, rest_frequency, plot_dir)
+        elif source_type == "point":
+            print('Generating Point Source Skymodel')
+            filename = generate_pointlike_skymodel(i, output_dir, rest_frequency, 
+                                                   inwidth * U.MHz, fwhm_z * U.MHz,
+                                                   central_freq * U.GHz, n_px, 
+                                                   n_channels, ra * U.deg, dec * U.deg,
+                                                   spatial_resolution * U.arcsec, plot_dir)
 
     final_skymodel_time = time.time()
 
@@ -1790,7 +1852,8 @@ def plot_reference(reference, i, plot_dir):
         plt.savefig(os.path.join(plot_dir, 'reference_spectrum_{}.png'.format(i)))
         plt.close()
 
-def plot_skymodel(skymodel, i, plot_dir):
+def plot_skymodel(path, i, plot_dir):
+    skymodel, _ = load_fits(path)
     if len(skymodel.shape) > 3:
         skymodel = skymodel[0]
     skymodel_spectrum = np.sum(skymodel[:, :, :], axis=(0, 1))
