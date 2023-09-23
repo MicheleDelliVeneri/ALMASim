@@ -971,6 +971,9 @@ def generate_diffuse_skymodel(id, data_dir, n_px, n_channels,
     del datacube
     return filename
 
+def generate_lensing_skymodel(id, data_dir):
+    return
+
 def partTypeNum(partType):
     """
     Mapping between common names and numeric particle types.
@@ -1711,7 +1714,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                    central_freq * U.GHz, n_px, 
                                                    n_channels, ra * U.deg, dec * U.deg,
                                                    spatial_resolution * U.arcsec, plot_dir)
-
+        elif source_type == "lens":
+            print('Generating Lensing Skymodel')
+            filename = generate_lensing_skymodel()
     final_skymodel_time = time.time()
 
     
