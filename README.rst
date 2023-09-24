@@ -46,12 +46,19 @@ Installation Notes
 .. INSTALLATION_NOTES_START_LABEL
 
 ALMASim works with ``python3`` (version ``3.8``), and does not support ``python2``.
-
-Stable releases are available via PyPI_ (``pip install ALMASim``) or GitHub .
-The github main branch is actively developed: things will change, bugs will happen. Any feedback is greatly appreciated via github or micheledelliveneri@gmail.com.
-
-.. _PyPI: https://pypi.org/
-.. _micheledelliveneri@gmail.com: mailto:micheledelliveneri@gmail.com
+First create a virtual environment with ``python3`` and activate it. Then install the required packages with ``pip``:
+- python3.8 -m venv astro-env
+- source astro-env/bin/activate
+- pip install --upgrade --extra-index-url https://go.nrao.edu/pypi casadata
+- pip install casatools==6.5.6.22
+- pip install casatasks==6.5.6.22
+- pip install numpy h5py astropy scipy matplotlib pandas tqdm hdecompose spectral-cube astromartini dask distributed dask[distributed]  natsort nose coverage nifty8 notebook
+- git clone https://github.com/illustristng/illustris_python.git
+- cd illustris_python
+- pip install .
+- cd ..
+- git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+- cd ALMASim
 
 .. INSTALLATION_NOTES_END_LABEL
 
