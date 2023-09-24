@@ -37,6 +37,10 @@ from tqdm import tqdm
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
 
+def closest_power_of_2(x):
+    op = math.floor if bin(x)[3] != "1" else math.ceil
+    return 2 ** op(math.log(x, 2))
+
 def load_fits(inFile):
     hdu_list = fits.open(inFile)
     data = hdu_list[0].data
@@ -1250,7 +1254,6 @@ def loadHeader(basePath, snapNum):
         header = dict(f["Header"].attrs.items())
 
     return header
-
 class myTNGSource(SPHSource):
     def __init__(
         self,
