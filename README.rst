@@ -8,6 +8,7 @@ Overview
 ALMASim is a package to generate mock observations of HI line galaxies as observed by the Atacama Large Millimetre/Submillimetre Array (ALMA). ALMASim primary goal is to allow users to generate simulated datasets on which to test deconvolution and source detection models. ALMASim is intended to leverage MPI parallel computing on modern HPC clusters to generate thousands of ALMA data cubes. Users are free to set both source and observational parameters such as antenna configuration, bandwidth, integration time and so on, or completely generate data using random configuration and sources.
 ALMASim is built upon the CASA PiP Wheels (https://casadocs.readthedocs.io/en/latest/index.html), the MARTINI Package (https://github.com/kyleaoman/martini), and the Illustris Python Package (https://github.com/illustristng/illustris_python) to be able to generate observations of both high redshift point-like sources and close extendend sources in all possible ALMA configurations. 
 For every observed target ALMASim generates:
+
 - A Sky model .fits cube containing the source without any source of noise or instrumental effects;
 - A Dirty .fits cube, i.e. the Fourier inversion of the observed visibilities 
 - A Measurements set .npy file containing the measured visibilities as a numpy array 
@@ -47,6 +48,7 @@ Installation Notes
 
 ALMASim works with ``python3`` (version ``3.8``), and does not support ``python2``.
 First create a virtual environment with ``python3`` and activate it. Then install the required packages with ``pip``:
+
 - python3.8 -m venv astro-env
 - source astro-env/bin/activate
 - pip install --upgrade --extra-index-url https://go.nrao.edu/pypi casadata
