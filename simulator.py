@@ -33,6 +33,7 @@ from martini.sph_kernels import (AdaptiveKernel, CubicSplineKernel,
 from natsort import natsorted
 from spectral_cube import SpectralCube
 from tqdm import tqdm
+import psutil
 
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
@@ -328,6 +329,7 @@ def get_info_from_reference(reference_path, plot_dir, i):
 
 
     img, header = load_fits(reference_path)
+
     shape = [s for s in img.shape if s != 1]
     unique, counts = np.unique(shape, return_counts=True)
     if len(unique) > 1:
@@ -1564,13 +1566,86 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     del M
     return filename
 
+def get_mem_gb():
+    mem_bytes = psutil.virtual_memory ().total # total physical memory in bytes
+    mem_gib = mem_bytes / (1024.**3) # convert to gigabytes
+    return str(mem_gib)
+
+def check_parameters(i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name
+                     , inbright, bandwidth, inwidth, integration, totaltime, ra, dec, pwv, rest_frequency, snr,
+                     get_skymodel, source_type, TNGBasePath, TNGSnapshotID, TNGSubhaloID, plot, save_ms, save_psf,
+                     save_pb, crop, serendipitous, n_pxs, n_channels):
+    if isinstance(i, list) or isinstance(i, np.ndarray):
+        i = i[0]
+    if isinstance(data_dir, list) or isinstance(data_dir, np.ndarray):
+        data_dir = data_dir[0]
+    if isinstance(main_path, list) or isinstance(main_path, np.ndarray):
+        main_path = main_path[0]
+    if isinstance(project_name, list) or isinstance(project_name, np.ndarray):
+        project_name = project_name[0]
+    if isinstance(output_dir, list) or isinstance(output_dir, np.ndarray):
+        output_dir = output_dir[0]
+    if isinstance(plot_dir, list) or isinstance(plot_dir, np.ndarray):
+        plot_dir = plot_dir[0]
+    if isinstance(band, list) or isinstance(band, np.ndarray):
+        band = band[0]
+    if isinstance(antenna_name, list) or isinstance(antenna_name, np.ndarray):
+        antenna_name = antenna_name[0]
+    if isinstance(inbright, list) or isinstance(inbright, np.ndarray):
+        inbright = inbright[0]
+    if isinstance(bandwidth, list) or isinstance(bandwidth, np.ndarray):
+        bandwidth = bandwidth[0]
+    if isinstance(inwidth, list) or isinstance(inwidth, np.ndarray):
+        inwidth = inwidth[0]
+    if isinstance(integration, list) or isinstance(integration, np.ndarray):
+        integration = integration[0]
+    if isinstance(totaltime, list) or isinstance(totaltime, np.ndarray):
+        totaltime = totaltime[0]
+    if isinstance(ra, list) or isinstance(ra, np.ndarray):
+        ra = ra[0]
+    if isinstance(dec, list) or isinstance(dec, np.ndarray):
+        dec = dec[0]
+    if isinstance(pwv, list) or isinstance(pwv, np.ndarray):
+        pwv = pwv[0]
+    if isinstance(rest_frequency, list) or isinstance(rest_frequency, np.ndarray):
+        rest_frequency = rest_frequency[0]
+    if isinstance(snr, list) or isinstance(snr, np.ndarray):
+        snr = snr[0]
+    if isinstance(get_skymodel, list) or isinstance(get_skymodel, np.ndarray):
+        get_skymodel = get_skymodel[0]
+    if isinstance(source_type, list) or isinstance(source_type, np.ndarray):
+        source_type = source_type[0]
+    if isinstance(TNGBasePath, list) or isinstance(TNGBasePath, np.ndarray):
+        TNGBasePath = TNGBasePath[0]
+    if isinstance(TNGSnapshotID, list) or isinstance(TNGSnapshotID, np.ndarray):
+        TNGSnapshotID = TNGSnapshotID[0]
+    if isinstance(TNGSubhaloID, list) or isinstance(TNGSubhaloID, np.ndarray):
+        TNGSubhaloID = TNGSubhaloID[0]
+    if isinstance(plot, list) or isinstance(plot, np.ndarray):
+        plot = plot[0]
+    if isinstance(save_ms, list) or isinstance(save_ms, np.ndarray):
+        save_ms = save_ms[0]
+    if isinstance(crop, list) or isinstance(crop, np.ndarray):
+        crop = crop[0]
+    if isinstance(n_pxs, list) or isinstance(n_pxs, np.ndarray):
+        n_pxs = n_pxs[0]
+    if isinstance(n_channels, list) or isinstance(n_channels, np.ndarray):
+        n_channels = n_channels[0]
+    if isinstance(save_psf, list) or isinstance(save_psf, np.ndarray):
+        save_psf = save_psf[0]
+    if isinstance(save_pb, list) or isinstance(save_pb, np.ndarray):
+        save_pb = save_pb[0]
+    if isinstance(serendipitous, list) or isinstance(serendipitous, np.ndarray):
+        serendipitous = serendipitous[0]
+    return i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name, inbright, bandwidth, inwidth, integration, totaltime, ra, dec, pwv, rest_frequency, snr, get_skymodel, source_type, TNGBasePath, TNGSnapshotID, TNGSubhaloID, plot, save_ms, save_psf, save_pb, crop, serendipitous, n_pxs, n_channels
+
 def simulator(i: int, data_dir: str, main_path: str, project_name: str, 
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, ra: float, dec: float,
               pwv: float, rest_frequency: float, snr: float, get_skymodel: bool, 
               source_type: str, TNGBasePath: str, TNGSnapshotID: int, 
               TNGSubhaloID: int,
-              plot: bool, save_ms: bool, crop: bool, serendipitous: bool, 
+              plot: bool, save_ms: bool, save_psf: bool, save_pb: bool, crop: bool, serendipitous: bool, 
               n_pxs: Optional[int] = None, 
               n_channels: Optional[int] = None ):
     """
@@ -1606,7 +1681,19 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     """
     start = time.time()
     flatten = False
+    i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name, inbright, \
+        bandwidth, inwidth, integration, totaltime, ra, dec, pwv, rest_frequency, snr, get_skymodel, \
+        source_type, TNGBasePath, TNGSnapshotID, TNGSubhaloID, plot, save_ms, save_psf, save_pb, crop, \
+        serendipitous, n_pxs, n_channels = check_parameters(i, data_dir, main_path, project_name, 
+                                                            output_dir, plot_dir, band, antenna_name, 
+                                                            inbright, bandwidth, inwidth, integration, 
+                                                            totaltime, ra, dec, pwv, rest_frequency, snr, 
+                                                            get_skymodel, source_type, TNGBasePath, 
+                                                            TNGSnapshotID, TNGSubhaloID, plot, save_ms, 
+                                                            save_psf, save_pb, crop, serendipitous, n_pxs, 
+                                                            n_channels)
     os.chdir(output_dir)
+    
     project = project_name + '_{}'.format(i)
     if not os.path.exists(project):
         os.mkdir(project)
@@ -1625,6 +1712,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     if n_channels is None or n_channels == 1:
         flatten = True
         n_channels = int(bandwidth / inwidth)
+        inbright = inbright / n_channels
     if n_pxs is None:
         n_px = int(fov / cell_size)
     elif n_pxs is not None and crop is False:
@@ -1673,8 +1761,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                 n_sources = np.random.randint(1, 5)
             else:
                 n_sources = 0
-            fwhm_x = 3 * cell_size * np.random.rand() + cell_size
-            fwhm_y = 3 * cell_size  * np.random.rand() + cell_size
+            fwhm_x = 1.5 * cell_size * np.random.rand() + cell_size
+            fwhm_y = 1.5 * cell_size  * np.random.rand() + cell_size
             fwhm_z = 0.1 * bandwidth * np.random.rand() + inwidth
             pa = np.random.randint(0, 360)
             print('Number of Sources ', n_sources)
@@ -1765,9 +1853,11 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
            fitsimage=os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"), overwrite=True)
     exportfits(imagename=os.path.join(project, '{}.{}.skymodel'.format(project, antenna_name)), 
            fitsimage=os.path.join(output_dir, "clean_cube_" + str(i) +".fits"), overwrite=True)
-    exportfits(imagename=os.path.join(project, '{}.{}.psf'.format(project, antenna_name)),
+    if save_psf is True:
+        exportfits(imagename=os.path.join(project, '{}.{}.psf'.format(project, antenna_name)),
               fitsimage=os.path.join(output_dir, "psf_" + str(i) +".fits"), overwrite=True)
-    exportfits(imagename=os.path.join(project, '{}.{}.pb'.format(project, antenna_name)),
+    if save_pb is True:
+        exportfits(imagename=os.path.join(project, '{}.{}.pb'.format(project, antenna_name)),
                 fitsimage=os.path.join(output_dir, "pb_" + str(i) +".fits"), overwrite=True)
     final_sim_time = time.time()
     
@@ -1817,7 +1907,8 @@ def plotter(i, output_dir, plot_dir):
         dirty = dirty[0]
     if clean.shape[0] > 1:
         clean_spectrum = np.sum(clean[:, :, :], axis=(1, 2))
-        dirty_spectrum = np.nansum(dirty[:, :, :], axis=(1, 2))
+        dirty_spectrum = np.where(dirty < 0, 0, dirty)
+        dirty_spectrum = np.nansum(dirty_spectrum[:, :, :], axis=(1, 2))
         clean_image = np.sum(clean[:, :, :], axis=0)[np.newaxis, :, :]
         dirty_image = np.nansum(dirty[:, :, :], axis=0)[np.newaxis, :, :]
     else:

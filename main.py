@@ -61,6 +61,8 @@ parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|
 parser.add_argument('--insert_serendipitous', type=str2bool, default=True, const=True, nargs='?', help='R|If True, serendipitous sources are injected in the simulation. Default True.')
 parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted. Default False.')
 parser.add_argument('--save_ms', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the measurement sets are preserved and stored as numpy arrays. Default False.')
+parser.add_argument('--save_psf', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the PSF is stored as a numpy array. Default False.')
+parser.add_argument('--save_pb', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the primary beam is stored as a numpy array. Default False.')
 parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?',  help='R|If True, the simulation results are cropped to the size of the beam times 1.5. Default False.')
 parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels in the simulation. Default None, if set simulations are spatially cropped to the given number of pixels.')
 parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation. Default None, if set simulations are spectrally cropped to the given number of channels.')
@@ -174,6 +176,8 @@ if __name__ == '__main__':
     insert_serendipitous = [args.insert_serendipitous for i in idxs]
     plot = [args.plot for i in idxs]
     save_ms = [args.save_ms for i in idxs]
+    save_psf = [args.save_psf for i in idxs]
+    save_pb = [args.save_pb for i in idxs]
     crop = [args.crop for i in idxs]
     
     print('Data directory: {}'.format(data_dir[0]))
@@ -200,6 +204,8 @@ if __name__ == '__main__':
     print('TNG Subhaloids: {}'.format(tng_subhaloids))
     print('Plot: {}'.format(plot[0]))
     print('Save MS: {}'.format(save_ms[0]))
+    print('Save PSF: {}'.format(save_psf[0]))
+    print('Save PB: {}'.format(save_pb[0]))
     print('Crop: {}'.format(crop[0]))
     print('Insert Serendipitous: {}'.format(insert_serendipitous[0]))
     print('Number of pixels: {}'.format(n_pxs))
@@ -230,7 +236,9 @@ if __name__ == '__main__':
                                     tng_snapids,
                                     tng_subhaloids,
                                     plot, 
-                                    save_ms, 
+                                    save_ms,
+                                    save_psf,
+                                    save_pb,
                                     crop,
                                     insert_serendipitous,
                                     n_pxs, 
@@ -242,14 +250,14 @@ if __name__ == '__main__':
                                             'inwidth', 'integration', 'totaltime', 'ra', 'dec',
                                             'pwv', 'rest_frequency', 'snr', 'get_skymodel', 
                                             'source_type', 'tng_basepath', 'tng_snapid', 'tng_subhaloid',
-                                            'plot', 'save_ms', 'crop', 'serendipitous',
+                                            'plot', 'save_ms', 'save_psf', 'save_pb', 'crop', 'serendipitous',
                                             'n_px', 'n_channels'])
     input_params.info()
     dbs = np.array_split(input_params, math.ceil(len(input_params) / args.n_workers))
     for db in dbs:
         if len(db) > 1:
             client = Client(threads_per_worker=args.threads_per_worker, 
-                    n_workers=args.n_workers, memory_limit='50GB' )
+                    n_workers=args.n_workers, memory_limit='{}GB'.format(sm.get_mem_gb()) )
             futures = client.map(sm.simulator, *db.values.T)
             client.gather(futures)
             client.close()
