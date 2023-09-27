@@ -1572,7 +1572,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               TNGSubhaloID: int,
               plot: bool, save_ms: bool, crop: bool, serendipitous: bool, 
               n_pxs: Optional[int] = None, 
-              n_channels: Optional[int] = None, ):
+              n_channels: Optional[int] = None ):
     """
     Input:
     i: index of the file to be simulated
@@ -1712,6 +1712,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                  dec * U.deg, rest_frequency, plot_dir)
         elif source_type == "point":
             print('Generating Point Source Skymodel')
+            fwhm_z = 0.1 * bandwidth * np.random.rand() + inwidth
+            print('FWHM_z ', fwhm_z, ' MHz')
             filename = generate_pointlike_skymodel(i, output_dir, rest_frequency, 
                                                    inwidth * U.MHz, fwhm_z * U.MHz,
                                                    central_freq * U.GHz, n_px, 

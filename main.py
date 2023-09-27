@@ -137,7 +137,7 @@ if __name__ == '__main__':
         bandwidths = [np.repeat(args.bandwidth, args.n_sims)]
     else:
         bandwidths = choices(args.bandwidth, k=len(idxs))
-    if args.n_channels != None:
+    if args.n_channels != None and args.n_channels != 1:
         inwidths = [bw / args.n_channels for bw in bandwidths]
     else:
         if len(args.inwidth) == len(idxs):
@@ -148,8 +148,6 @@ if __name__ == '__main__':
             inwidths = choices(args.inwidth, k=len(idxs))
     if len(args.integration) == len(idxs):
         integrations = args.integration
-    elif len(args.integration) != len(idxs) and args.reference_source == True:
-        integrations = [np.repeat(args.integration, args.n_sims)]
     else:
         integrations = choices(args.integration, k=len(idxs))
     if len(args.totaltime) == len(idxs):
@@ -166,10 +164,13 @@ if __name__ == '__main__':
     source_type = [args.source_type for i in idxs]
     tng_basepaths = [bool(args.TNGBasePath) for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
-    if len(args.TNGSubhaloID) > args.n_sims:
-        tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
+    if source_type[0] == 'extended':
+        if len(args.TNGSubhaloID) > args.n_sims:
+            tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
+        else:
+            tng_subhaloids = sm.get_subhaloids_from_db(args.n_sims)
     else:
-        tng_subhaloids = sm.get_subhaloids_from_db(args.n_sims)
+        tng_subhaloids = [0 for i in idxs]
     insert_serendipitous = [args.insert_serendipitous for i in idxs]
     plot = [args.plot for i in idxs]
     save_ms = [args.save_ms for i in idxs]
