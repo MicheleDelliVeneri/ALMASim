@@ -1913,7 +1913,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     
     # Adding atmosphere noise
     print('Adding Atmosphere Noise')
-    # scale is a multiplicative phactor for the thropospheric phase 
+    # scale is a multiplicative factor for the thropospheric phase 
     # which is a delay in the propagation of radio waves in the atmosphere
     # caused by the refractive index of the throphosphere
     scale = random.uniform(0.3, 1)

@@ -65,3 +65,5 @@ TNGStructure.PNG shows an example for Snapshot-99, reproduce this for every Snap
 
 
 ## Notes
+
+1. In which range should I set the multiplicative factor to the throphosperic phase used by the generate_prms function?
