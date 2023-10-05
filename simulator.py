@@ -1623,9 +1623,8 @@ def simulate_atmospheric_noise(project, scale, ms, antennalist):
         calmode="p", #phase
         solint='inf', #solution interval
     )
-    print(project + "_atmosphere.gcal")
     tb = table()
-    tb.open(project + ".atmosphere.gcal", nomodify=False)
+    tb.open(project + "_atmosphere.gcal", nomodify=False)
     yant = tb.getcol('ANTENNA1')
     ytime = tb.getcol('TIME')
     ycparam = tb.getcol('CPARAM')
@@ -1647,8 +1646,9 @@ def simulate_atmospheric_noise(project, scale, ms, antennalist):
     tb.close()
     applycal(
         vis = ms,
-        gaintable = project + ".atmosphere.gcal"
+        gaintable = project + "_atmosphere.gcal"
     )
+    os.system("rm -rf " + project + "_atmosphere.gcal")
     return 
 
 def check_parameters(i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name
@@ -1914,13 +1914,15 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         overwrite=True)
     
     # Adding atmosphere noise
-    print('Adding Atmosphere Noise')
+    scale = random.uniform(0.3, 1)
+    print('Adding Atmospheric Noise using a scale factor of {} for thropospheric phase'.format(scale))
     # scale is a multiplicative factor for the thropospheric phase 
     # which is a delay in the propagation of radio waves in the atmosphere
     # caused by the refractive index of the throphosphere
-    scale = random.uniform(0.3, 1)
-    simulate_atmospheric_noise(project, scale, 
-        os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)), 
+    simulate_atmospheric_noise(
+        os.path.join(output_dir, project), 
+        scale, 
+        os.path.join(output_dir, project, "{}.{}.noisy.ms".format(project, antenna_name)), 
         antennalist)
 
     tclean(
