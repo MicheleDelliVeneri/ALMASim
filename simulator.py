@@ -1911,6 +1911,16 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         verbose=False,
         overwrite=True)
     
+    # Adding atmosphere noise
+    print('Adding Atmosphere Noise')
+    # scale is a multiplicative phactor for the thropospheric phase 
+    # which is a delay in the propagation of radio waves in the atmosphere
+    # caused by the refractive index of the throphosphere
+    scale = random.uniform(0.3, 1)
+    simulate_atmosphere_noise(project, scale, 
+        os.path.join(project, "{}.noisy.ms".format(project)), 
+        antennalist)
+
     tclean(
         vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
         imagename=os.path.join(project, '{}.{}'.format(project, antenna_name)),
