@@ -21,7 +21,7 @@ import nifty8 as ift
 from astropy.constants import c
 from astropy.time import Time
 from astropy.wcs import WCS
-from casatasks import exportfits, simobserve, tclean
+from casatasks import exportfits, simobserve, tclean, gaincal, applycal
 from casatools import table
 from Hdecompose.atomic_frac import atomic_frac
 from illustris_python.snapshot import getSnapOffsets, loadSubset
@@ -1571,6 +1571,84 @@ def get_mem_gb():
     mem_gib = mem_bytes / (1024.**3) # convert to gigabytes
     return str(mem_gib)
 
+def get_antennas_distances_from_reference(antenna_config):
+    f = open(antenna_config)
+    lines = f.readlines()
+    nlines = len(lines)
+    frefant = int((nlines - 1) // 2)
+    f.close()
+    zx, zy, zz, zztot = [], [], [], []
+    for i in range(3,nlines):
+        stuff = lines[i].split()
+        zx.append(float(stuff[0]))
+        zy.append(float(stuff[1]))
+        zz.append(float(stuff[2]))
+    nant = len(zx)
+    nref = int(frefant)
+    for i in range(0,nant):
+        zxref = zx[i]-zx[nref]
+        zyref = zy[i]-zy[nref]
+        zzref = zz[i]-zz[nref]
+        zztot.append(np.sqrt(zxref**2+zyref**2+zzref**2))
+    return zztot, frefant
+    
+def generate_prms(antbl,scaleF):
+    """
+    This function generates the phase rms for the atmosphere
+    as a function of antenna baseline length.
+    It is based on the structure function of the atmosphere and 
+    it gives 30 deg phase rms at 10000m = 10km.
+
+    Input: 
+    antbl = antenna baseline length in meters
+    scaleF = scale factor for the phase rms
+    Output:
+    prms = phase rms
+    """
+    Lrms = 1.0/52.83 * antbl**0.8     # phase rms ~0.8 power to 10 km
+    Hrms = 3.0 * antbl**0.25          # phase rms `0.25 power beyond 10 km
+    if antbl < 10000.0:
+        prms = scaleF*Lrms
+    if antbl > 10000.0:
+        prms = scaleF*Hrms
+    return prms
+
+def simulate_atmosphere_noise(project, scale, ms, antennalist):
+    zztot, frefant = get_antennas_distances_from_reference(antennalist)
+    gaincal(
+        vis=ms,
+        caltable=project + ".atmosphere.gcal",
+        refant=str(frefant), #name of the reference antenna
+        minsnr=0.01, #ignore solution with SNR below this
+        calmode="p", #phase
+        solint='inf', #solution interval
+    )
+    table.open(project + ".atmosphere.gcal", nomodify=False)
+    yant = table.getcol('ANTENNA1')
+    ytime = table.getcol('TIME')
+    ycparam = table.getcol('CPARAM')
+    nycparam = ycparam.copy()
+    nant = len(yant)
+    for i in range(nant):
+        antbl = zztot[yant[i]]
+        # get rms phase for each antenna
+        prms = generate_prms(antbl,scale)
+        # determine random GAUSSIAN phase error from rms phase
+        perror = random.gauss(0,prms)
+         # put random phase in gaintable column CPARAM
+        rperror = np.cos(perror*pi/180.0)
+        iperror = np.sin(perror*pi/180.0)
+        Nycparam[0][0][i] = 1.0*np.complex(rperror,iperror)  #X POL
+        Nycparam[1][0][i] = 1.0*np.complex(rperror,iperror)  #Y POL  ASSUMED SAME
+    table.putcol('CPARAM',Nycparam)
+    table.flush()
+    table.close()
+    applycal(
+        vis = ms,
+        gaintable = project + ".atmosphere.gcal"
+    )
+    return 
+
 def check_parameters(i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name
                      , inbright, bandwidth, inwidth, integration, totaltime, ra, dec, pwv, rest_frequency, snr,
                      get_skymodel, source_type, TNGBasePath, TNGSnapshotID, TNGSubhaloID, plot, save_ms, save_psf,
@@ -1811,8 +1889,6 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
             print('Generating Lensing Skymodel')
             filename = generate_lensing_skymodel()
     final_skymodel_time = time.time()
-
-    
     print('# ------------------------ #')
     print('Simulating ALMA Observation of the Skymodel')
     sim_time = time.time()
