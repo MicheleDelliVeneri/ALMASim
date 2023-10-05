@@ -1613,20 +1613,22 @@ def generate_prms(antbl,scaleF):
         prms = scaleF*Hrms
     return prms
 
-def simulate_atmosphere_noise(project, scale, ms, antennalist):
+def simulate_atmospheric_noise(project, scale, ms, antennalist):
     zztot, frefant = get_antennas_distances_from_reference(antennalist)
     gaincal(
         vis=ms,
-        caltable=project + ".atmosphere.gcal",
+        caltable=project + "_atmosphere.gcal",
         refant=str(frefant), #name of the reference antenna
         minsnr=0.01, #ignore solution with SNR below this
         calmode="p", #phase
         solint='inf', #solution interval
     )
-    table.open(project + ".atmosphere.gcal", nomodify=False)
-    yant = table.getcol('ANTENNA1')
-    ytime = table.getcol('TIME')
-    ycparam = table.getcol('CPARAM')
+    print(project + "_atmosphere.gcal")
+    tb = table()
+    tb.open(project + ".atmosphere.gcal", nomodify=False)
+    yant = tb.getcol('ANTENNA1')
+    ytime = tb.getcol('TIME')
+    ycparam = tb.getcol('CPARAM')
     nycparam = ycparam.copy()
     nant = len(yant)
     for i in range(nant):
@@ -1638,11 +1640,11 @@ def simulate_atmosphere_noise(project, scale, ms, antennalist):
          # put random phase in gaintable column CPARAM
         rperror = np.cos(perror*pi/180.0)
         iperror = np.sin(perror*pi/180.0)
-        Nycparam[0][0][i] = 1.0*np.complex(rperror,iperror)  #X POL
-        Nycparam[1][0][i] = 1.0*np.complex(rperror,iperror)  #Y POL  ASSUMED SAME
-    table.putcol('CPARAM',Nycparam)
-    table.flush()
-    table.close()
+        nycparam[0][0][i] = 1.0*np.complex(rperror,iperror)  #X POL
+        nycparam[1][0][i] = 1.0*np.complex(rperror,iperror)  #Y POL  ASSUMED SAME
+    tb.putcol('CPARAM', nycparam)
+    tb.flush()
+    tb.close()
     applycal(
         vis = ms,
         gaintable = project + ".atmosphere.gcal"
@@ -1917,8 +1919,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     # which is a delay in the propagation of radio waves in the atmosphere
     # caused by the refractive index of the throphosphere
     scale = random.uniform(0.3, 1)
-    simulate_atmosphere_noise(project, scale, 
-        os.path.join(project, "{}.noisy.ms".format(project)), 
+    simulate_atmospheric_noise(project, scale, 
+        os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)), 
         antennalist)
 
     tclean(
