@@ -1609,7 +1609,7 @@ def generate_prms(antbl,scaleF):
     Hrms = 3.0 * antbl**0.25          # phase rms `0.25 power beyond 10 km
     if antbl < 10000.0:
         prms = scaleF*Lrms
-    if antbl > 10000.0:
+    if antbl >= 10000.0:
         prms = scaleF*Hrms
     return prms
 
@@ -1914,7 +1914,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         overwrite=True)
     
     # Adding atmosphere noise
-    scale = random.uniform(0.3, 1)
+    #scale = random.uniform(0.3, 1)
+    scale = 0.5
     print('Adding Atmospheric Noise using a scale factor of {} for thropospheric phase'.format(scale))
     # scale is a multiplicative factor for the thropospheric phase 
     # which is a delay in the propagation of radio waves in the atmosphere
