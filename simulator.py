@@ -23,6 +23,7 @@ from astropy.time import Time
 from astropy.wcs import WCS
 from casatasks import exportfits, simobserve, tclean, gaincal, applycal
 from casatools import table
+from casatools import simulator as casa_simulator
 from Hdecompose.atomic_frac import atomic_frac
 from illustris_python.snapshot import getSnapOffsets, loadSubset
 from martini import DataCube, Martini
@@ -1636,7 +1637,8 @@ def simulate_atmospheric_noise(project, scale, ms, antennalist):
         prms = generate_prms(antbl,scale)
         # determine random GAUSSIAN phase error from rms phase
         perror = random.gauss(0,prms)
-         # put random phase in gaintable column CPARAM
+        # put random phase in gaintable column CPARAM
+        # convert phase error to complex number
         rperror = np.cos(perror*pi/180.0)
         iperror = np.sin(perror*pi/180.0)
         nycparam[0][0][i] = 1.0*np.complex(rperror,iperror)  #X POL
@@ -1650,6 +1652,16 @@ def simulate_atmospheric_noise(project, scale, ms, antennalist):
     )
     os.system("rm -rf " + project + "_atmosphere.gcal")
     return 
+
+def simulate_gain_errors(ms, amplitude: float = 0.01):
+    sm = casa_simulator()
+    sm.openfromms(ms)
+    sm.setseed(42)
+    sm.setgain(mode='fbm', amplitude=[amplitude])
+    sm.corrupt()
+    sm.close()
+    return
+
 
 def check_parameters(i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name
                      , inbright, bandwidth, inwidth, integration, totaltime, ra, dec, pwv, rest_frequency, snr,
@@ -1925,6 +1937,11 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         scale, 
         os.path.join(output_dir, project, "{}.{}.noisy.ms".format(project, antenna_name)), 
         antennalist)
+    gain_error_amplitude = random.gauss(0.001, 0.1)
+    simulate_gain_errors(
+        os.path.join(output_dir, project, "{}.{}.noisy.ms".format(project, antenna_name)),
+        gain_error_amplitude
+    )
 
     tclean(
         vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
