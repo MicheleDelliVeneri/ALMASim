@@ -1637,7 +1637,10 @@ def simulate_atmospheric_noise(project, scale, ms, antennalist):
         prms = generate_prms(antbl,scale)
         # determine random GAUSSIAN phase error from rms phase
         perror = random.gauss(0,prms)
-        # put random phase in gaintable column CPARAM
+        # adding a random phase error to the solution, it will be 
+        # substituted by a frequency that depends from frequency
+        # of observation and baseline length
+        perror = perror + random.gauss(0, 0.05 * perror)
         # convert phase error to complex number
         rperror = np.cos(perror*pi/180.0)
         iperror = np.sin(perror*pi/180.0)
@@ -1662,6 +1665,10 @@ def simulate_gain_errors(ms, amplitude: float = 0.01):
     sm.close()
     return
 
+def simulate_antenna_position_errors(antenna_list, amplitude):
+    
+    
+    return
 
 def check_parameters(i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name
                      , inbright, bandwidth, inwidth, integration, totaltime, ra, dec, pwv, rest_frequency, snr,
