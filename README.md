@@ -60,10 +60,8 @@ To run the simulation, just navigate to the ALMASim folder and execute
 ``python main.py --option value --option1 value1 value2``
 to check the available option run 
 ``python main.py -h``
-If you are interested in simulating Extended sources, you need to download and configure the Illustris TNG100-1 simulation folder.
-TNGStructure.PNG shows an example for Snapshot-99, reproduce this for every Snapshot you are interested i. You can check more at the Illustris TNG official website: https://www.tng-project.org/data/  
 
 
 ## Notes
 
-1. In which range should I set the multiplicative factor to the throphosperic phase used by the generate_prms function?
+
