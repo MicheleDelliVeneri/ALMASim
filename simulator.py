@@ -35,6 +35,7 @@ from natsort import natsorted
 from spectral_cube import SpectralCube
 from tqdm import tqdm
 import psutil
+import subprocess
 
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
@@ -2086,3 +2087,43 @@ def plot_skymodel(path, i, plot_dir):
         plt.title('skymodel Spectrum')
         plt.savefig(os.path.join(plot_dir, 'skymodel_spectrum_{}.png'.format(i)))
         plt.close()
+
+def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c'):
+    """
+    Downloads TNG100-1 simulation data from the TNG project website using the specified API key.
+    
+    Args:
+    - path (str): The path to the directory where the data will be downloaded.
+    - api_key (str): The API key to use for downloading the data. Defaults to a public key.
+    
+    Returns:
+    - None
+    """
+
+    # Define the URLs for the simulation data
+    urls = [
+        ('http://www.tng-project.org/api/TNG100-1/files/snapshot-99/?format=api', os.path.join('output', 'snapdir_099'), 'Snapshots'),
+        ('http://www.tng-project.org/api/TNG100-1/files/groupcat-99/?format=api', os.path.join('output', 'groups_099'), 'Group Catalogs'),
+        ('http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5', '', 'Simulation File'),
+        ('https://www.tng-project.org/api/TNG100-1/files/offsets.99.hdf5', 'postprocessing/offsets', 'Offsets File'),
+    ]
+    
+    # Create the main directory for the downloaded data
+    main_path = os.path.join(path, 'TNG100-1')
+    os.mkdir(main_path)
+    print(f'Downloading TNG100-1 data to {main_path}...')
+    # Download the simulation data
+    for i, url, subdir, message in enumerate(urls):
+        output_path = os.path.join(main_path,  subdir)
+        os.makedirs(output_path, exist_ok=True)
+        os.chdir(output_path)
+        if i <= 2:
+            cmd = f'wget -nd -nc -nv -e robots=off -l 1 -r -A hdf5 --content-disposition --header="API-Key:{api_key}" "{url}"'
+        else:
+            cmd = f'wget -nv --content-disposition --header="API-Key:{api_key}" {url}'
+        print(f'Downloading {message}...')
+        subprocess.check_call(cmd, shell=True)
+        print('Done.')
+    print('All downloads complete.')
+    
+    return
