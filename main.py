@@ -164,6 +164,9 @@ if __name__ == '__main__':
     snrs = np.random.uniform(min_snr, max_snr, size=len(idxs))
     get_skymodel = [args.get_skymodel for i in idxs]
     source_type = [args.source_type for i in idxs]
+    if args.source_type == 'extended':
+        if sm.check_tng(args.TNGBasePath) == False:
+            sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=args.TNGSnapID)
     tng_basepaths = [bool(args.TNGBasePath) for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if source_type[0] == 'extended':

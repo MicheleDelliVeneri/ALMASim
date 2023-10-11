@@ -2088,13 +2088,14 @@ def plot_skymodel(path, i, plot_dir):
         plt.savefig(os.path.join(plot_dir, 'skymodel_spectrum_{}.png'.format(i)))
         plt.close()
 
-def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c'):
+def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c', TNGSnapshotID: int=99, TNGSubhaloID: list=[0]):
     """
-    Downloads TNG100-1 simulation data from the TNG project website using the specified API key.
+    Downloads TNG100-1 simulation data for a given snapshot from the TNG project website using the specified API key.
     
     Args:
     - path (str): The path to the directory where the data will be downloaded.
     - api_key (str): The API key to use for downloading the data. Defaults to a public key.
+    - TNGSnapshotID (int): The snapshot ID of the simulation data to download. Defaults to 99.
     
     Returns:
     - None
@@ -2102,10 +2103,10 @@ def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c'):
 
     # Define the URLs for the simulation data
     urls = [
-        ('http://www.tng-project.org/api/TNG100-1/files/snapshot-99/?format=api', os.path.join('output', 'snapdir_099'), 'Snapshots'),
-        ('http://www.tng-project.org/api/TNG100-1/files/groupcat-99/?format=api', os.path.join('output', 'groups_099'), 'Group Catalogs'),
-        ('http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5', '', 'Simulation File'),
-        ('https://www.tng-project.org/api/TNG100-1/files/offsets.99.hdf5', 'postprocessing/offsets', 'Offsets File'),
+        (f'http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(TNGSnapshotID)}', os.path.join('output', 'snapdir_099'), 'Snapshots'),
+        (f'http://www.tng-project.org/api/TNG100-1/files/groupcat-{str(TNGSnapshotID)}', os.path.join('output', 'groups_099'), 'Group Catalogs'),
+        (f'http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5', '', 'Simulation File'),
+        (f'https://www.tng-project.org/api/TNG100-1/files/offsets.{str(TNGSnapshotID)}.hdf5', 'postprocessing/offsets', 'Offsets File'),
     ]
     
     # Create the main directory for the downloaded data
@@ -2118,12 +2119,37 @@ def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c'):
         os.makedirs(output_path, exist_ok=True)
         os.chdir(output_path)
         if i <= 2:
-            cmd = f'wget -nd -nc -nv -e robots=off -l 1 -r -A hdf5 --content-disposition --header="API-Key:{api_key}" "{url}"'
+            for id in TNGSubhaloID:
+                cmd = f'wget -nv --content-disposition --header="API-Key:{api_key}" {url}.{id}.hdf5'
+                print(f'Downloading {message} {id} ...')
+                subprocess.check_call(cmd, shell=True)
+                print('Done.')
         else:
             cmd = f'wget -nv --content-disposition --header="API-Key:{api_key}" {url}'
-        print(f'Downloading {message}...')
-        subprocess.check_call(cmd, shell=True)
-        print('Done.')
+            subprocess.check_call(cmd, shell=True)
+            print('Done.')
     print('All downloads complete.')
     
     return
+
+def check_TNGBasePath(args):
+    """
+    Check if TNGBasePath exists and contains the following subfolders: output and postprocessing.
+    """
+    if args.TNGBasePath:
+        if os.path.exists(args.TNGBasePath):
+            subfolders = ['output', 'postprocessing']
+            for subfolder in subfolders:
+                if not os.path.exists(os.path.join(args.TNGBasePath, subfolder)):
+                    print(f"Error: {subfolder} subfolder not found in TNGBasePath.")
+                    return False
+                elif len(os.listdir(os.path.join(args.TNGBasePath, subfolder))) == 0:
+                    print(f"Error: {subfolder} subfolder is empty.")
+                    return False
+            return True
+        else:
+            print("Error: TNGBasePath does not exist.")
+            return False
+    else:
+        print("Error: TNGBasePath not specified.")
+        return False
