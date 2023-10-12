@@ -8,9 +8,9 @@ ALMASim is built upon the CASA PiP Wheels (https://casadocs.readthedocs.io/en/la
 For every observed target ALMASim generates:
 
 - A Sky model .fits cube containing the source without any source of noise or instrumental effects;
-- A Dirty .fits cube, i.e. the Fourier inversion of the observed visibilities 
-- A Measurements set .npy file containing the measured visibilities as a numpy array 
-- A parameters.csv containing the observational and source parameters
+- A Dirty .fits cube, i.e. the Fourier inversion of the observed visibilities;
+
+Optionally ALMASim can also output the PSFs, Measurement Sets and plots of the 2D integrated cubes and 1D spectra for all simulated data. 
 
 ## Citing ALMASim
 
@@ -63,5 +63,3 @@ to check the available option run
 
 
 ## Notes
-
-
