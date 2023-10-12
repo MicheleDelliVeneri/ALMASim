@@ -2096,54 +2096,58 @@ def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c', TNG
     - path (str): The path to the directory where the data will be downloaded.
     - api_key (str): The API key to use for downloading the data. Defaults to a public key.
     - TNGSnapshotID (int): The snapshot ID of the simulation data to download. Defaults to 99.
-    
+    - TNGSubhaloID (list): The subhalo IDs of the simulation data to download. Defaults to [0].
     Returns:
     - None
     """
 
     # Define the URLs for the simulation data
     urls = [
-        (f'http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(TNGSnapshotID)}', os.path.join('output', 'snapdir_099'), 'Snapshots'),
-        (f'http://www.tng-project.org/api/TNG100-1/files/groupcat-{str(TNGSnapshotID)}', os.path.join('output', 'groups_099'), 'Group Catalogs'),
+        (f'http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(TNGSnapshotID)}', os.path.join('output', 'snapdir_0{}'.format(str(TNGSnapshotID))), 'Snapshot'),
+        (f'http://www.tng-project.org/api/TNG100-1/files/groupcat-{str(TNGSnapshotID)}', os.path.join('output', 'groups_0{}'.format(str(TNGSnapshotID))), 'Group Catalog'),
         (f'http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5', '', 'Simulation File'),
-        (f'https://www.tng-project.org/api/TNG100-1/files/offsets.{str(TNGSnapshotID)}.hdf5', 'postprocessing/offsets', 'Offsets File'),
+        (f'https://www.tng-project.org/api/TNG100-1/files/offsets.{str(TNGSnapshotID)}.hdf5', os.path.join('postprocessing', 'offsets'), 'Offsets File'),
     ]
     
     # Create the main directory for the downloaded data
+    if not os.path.exists(path):
+        os.mkdir(path)
     main_path = os.path.join(path, 'TNG100-1')
-    os.mkdir(main_path)
+    if not os.path.exists(main_path):
+        os.mkdir(main_path)
     print(f'Downloading TNG100-1 data to {main_path}...')
     # Download the simulation data
-    for i, url, subdir, message in enumerate(urls):
+    for i, (url, subdir, message) in enumerate(urls):
         output_path = os.path.join(main_path,  subdir)
         os.makedirs(output_path, exist_ok=True)
         os.chdir(output_path)
-        if i <= 2:
+        if i < 2:
             for id in TNGSubhaloID:
-                cmd = f'wget -nv --content-disposition --header="API-Key:{api_key}" {url}.{id}.hdf5'
+                cmd = f'wget -q --show-progress  -nv --content-disposition --header="API-Key:{api_key}" {url}.{id}.hdf5'
                 print(f'Downloading {message} {id} ...')
                 subprocess.check_call(cmd, shell=True)
                 print('Done.')
         else:
-            cmd = f'wget -nv --content-disposition --header="API-Key:{api_key}" {url}'
+            print(f'Downloading {message} ...')
+            cmd = f'wget -q --show-progress  -nv --content-disposition --header="API-Key:{api_key}" {url}'
             subprocess.check_call(cmd, shell=True)
             print('Done.')
     print('All downloads complete.')
     
     return
 
-def check_TNGBasePath(args):
+def check_TNGBasePath(TNGBasePath: str):
     """
     Check if TNGBasePath exists and contains the following subfolders: output and postprocessing.
     """
-    if args.TNGBasePath:
-        if os.path.exists(args.TNGBasePath):
+    if TNGBasePath is not None:
+        if os.path.exists(TNGBasePath):
             subfolders = ['output', 'postprocessing']
             for subfolder in subfolders:
-                if not os.path.exists(os.path.join(args.TNGBasePath, subfolder)):
+                if not os.path.exists(os.path.join(TNGBasePath, subfolder)):
                     print(f"Error: {subfolder} subfolder not found in TNGBasePath.")
                     return False
-                elif len(os.listdir(os.path.join(args.TNGBasePath, subfolder))) == 0:
+                elif len(os.listdir(os.path.join(TNGBasePath, subfolder))) == 0:
                     print(f"Error: {subfolder} subfolder is empty.")
                     return False
             return True
@@ -2152,4 +2156,4 @@ def check_TNGBasePath(args):
             return False
     else:
         print("Error: TNGBasePath not specified.")
-        return False
+        return None

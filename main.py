@@ -58,6 +58,7 @@ parser.add_argument('--source_type', type=str, default='point', nargs='?', help=
 parser.add_argument('--TNGBasePath', type=str, default=None, help='R|Path to the TNG data on your folder. Default /media/storage/TNG100-1/output')
 parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.  Default 99')
 parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data. Default 0')
+parser.add_argument('--TNGAPIKey', type=str, default='8f578b92e700fae3266931f4d785f82c', help='R|API Key to download the TNG data. Default None')
 parser.add_argument('--insert_serendipitous', type=str2bool, default=True, const=True, nargs='?', help='R|If True, serendipitous sources are injected in the simulation. Default True.')
 parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted. Default False.')
 parser.add_argument('--save_ms', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the measurement sets are preserved and stored as numpy arrays. Default False.')
@@ -164,12 +165,18 @@ if __name__ == '__main__':
     snrs = np.random.uniform(min_snr, max_snr, size=len(idxs))
     get_skymodel = [args.get_skymodel for i in idxs]
     source_type = [args.source_type for i in idxs]
-    if args.source_type == 'extended':
-        if sm.check_tng(args.TNGBasePath) == False:
-            sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=args.TNGSnapID)
     tng_basepaths = [bool(args.TNGBasePath) for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
-    if source_type[0] == 'extended':
+    if args.source_type == 'extended':
+        if sm.check_TNGBasePath(args.TNGBasePath) == False:
+            print('TNG Data not found')
+            for snapID in args.TNGSnapID:
+                sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
+                                    TNGSubhaloID=args.TNGSubhaloID, 
+                                    api_key=args.TNGAPIKey)
+        elif sm.check_TNGBasePath(args.TNGBasePath) == None:
+            print('Warning: if source_type is extended, TNGBasePath must be provided.')
+            exit()
         if len(args.TNGSubhaloID) > args.n_sims:
             tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
         else:
