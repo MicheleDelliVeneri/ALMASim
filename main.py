@@ -168,15 +168,22 @@ if __name__ == '__main__':
     tng_basepaths = [bool(args.TNGBasePath) for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if args.source_type == 'extended':
-        if sm.check_TNGBasePath(args.TNGBasePath) == False:
-            print('TNG Data not found')
-            for snapID in args.TNGSnapID:
+        print('TNG Data not found')
+        for snapID in args.TNGSnapID:
+            if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
+                                TNGSnapshotID=snapID, 
+                                TNGSubhaloID=args.TNGSubhaloID) == False:
                 sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
                                     TNGSubhaloID=args.TNGSubhaloID, 
                                     api_key=args.TNGAPIKey)
-        elif sm.check_TNGBasePath(args.TNGBasePath) == None:
-            print('Warning: if source_type is extended, TNGBasePath must be provided.')
-            exit()
+            elif sm.check_TNGBasePath(pTNGBasePath=args.TNGBasePath, 
+                                  TNGSnapshotID=snapID, 
+                                  TNGSubhaloID=args.TNGSubhaloID) == None:
+                print('Warning: if source_type is extended, TNGBasePath must be provided.')
+                exit()
+        # setting the working directory to the ALMASim directory, 
+        # needed if the TNG data is downloaded
+        os.chdir(args.main_path)
         if len(args.TNGSubhaloID) > args.n_sims:
             tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
         else:
