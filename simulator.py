@@ -2123,26 +2123,32 @@ def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c', TNG
         os.chdir(output_path)
         if i < 2:
             for id in TNGSubhaloID:
-                cmd = f'wget -q --show-progress  -nv --content-disposition --header="API-Key:{api_key}" {url}.{id}.hdf5'
-                print(f'Downloading {message} {id} ...')
-                subprocess.check_call(cmd, shell=True)
-                print('Done.')
+                cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{id}.hdf5'
+                if not os.path.isfile('{url}.{id}.hdf5'):
+                    print(f'Downloading {message} {id} ...')
+                    subprocess.check_call(cmd, shell=True)
+                    print('Done.')
         else:
             print(f'Downloading {message} ...')
-            cmd = f'wget -q --show-progress  -nv --content-disposition --header="API-Key:{api_key}" {url}'
-            subprocess.check_call(cmd, shell=True)
-            print('Done.')
+            cmd = f'wget -q  --progress=bar   --content-disposition --header="API-Key:{api_key}" {url}'
+            if not os.path.isfile(url):
+                subprocess.check_call(cmd, shell=True)
+                print('Done.')
     print('All downloads complete.')
     
     return
 
-def check_TNGBasePath(TNGBasePath: str):
+def check_files(path, ):
+    return False
+
+def check_TNGBasePath(TNGBasePath: str, TNGSnapshotID: int, TNGSubhaloID: list):
     """
     Check if TNGBasePath exists and contains the following subfolders: output and postprocessing.
     """
     if TNGBasePath is not None:
         if os.path.exists(TNGBasePath):
-            subfolders = ['output', 'postprocessing']
+            subfolders = [os.path.joint('TNG100-1', 'output'), 
+                          os.path.join('TNG100-1', 'postprocessing')]
             for subfolder in subfolders:
                 if not os.path.exists(os.path.join(TNGBasePath, subfolder)):
                     print(f"Error: {subfolder} subfolder not found in TNGBasePath.")
@@ -2150,6 +2156,27 @@ def check_TNGBasePath(TNGBasePath: str):
                 elif len(os.listdir(os.path.join(TNGBasePath, subfolder))) == 0:
                     print(f"Error: {subfolder} subfolder is empty.")
                     return False
+                
+            # Check if the files relative to the specified snapshot and subhalo IDs exist
+
+            # Check if the snapdir exists
+            snapdir = os.path.join(TNGBasePath, 'TNG100-1', 'output', f'snapdir_0{TNGSnapshotID}')
+            if not os.path.exists(snapdir):
+                print(f"Error: snapdir_0{TNGSnapshotID} not found in TNGBasePath.")
+                return False
+            elif len(os.listdir(snapdir)) == 0:
+                print(f"Error: snapdir_0{TNGSnapshotID} is empty.")
+                return False
+            # Check if all the files relative to the specified subhalo IDs exist
+            elif len(os.listdir(snapdir)) > 0:
+                filelist = [os.path.join(snapdir, 'snap_0{}.{}.hdf5'.format(TNGSnapshotID, id)) for id in TNGSubhaloID]
+                for file_ in filelist:
+                    if not os.path.exists(file_):
+                        print(f"Error: {file_} not found in TNGBasePath.")
+                        return False
+                    elif os.path.getsize(file_) == 0:
+                        print(f"Error: {file_} is empty.")
+                        return False
             return True
         else:
             print("Error: TNGBasePath does not exist.")
