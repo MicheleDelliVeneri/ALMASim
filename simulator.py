@@ -1521,7 +1521,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
     
     source = myTNGSource(TNGSnap, subhaloID,
-                       distance= distance * U.Mpc,
+                       distance= distance,
                        rotation = {'L_coords': (x_rot, y_rot)},
                        basePath = TNGBasePath,
                        ra = 0. * U.deg,
