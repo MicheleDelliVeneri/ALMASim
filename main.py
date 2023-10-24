@@ -168,11 +168,11 @@ if __name__ == '__main__':
     tng_basepaths = [args.TNGBasePath for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if args.source_type == 'extended':
-        print('TNG Data not found')
         for snapID in args.TNGSnapID:
             if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                 TNGSnapshotID=snapID, 
                                 TNGSubhaloID=args.TNGSubhaloID) == False:
+                print('TNG Data not found, downloading...')
                 sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
                                     TNGSubhaloID=args.TNGSubhaloID, 
                                     api_key=args.TNGAPIKey)
@@ -184,10 +184,11 @@ if __name__ == '__main__':
         # setting the working directory to the ALMASim directory, 
         # needed if the TNG data is downloaded
         os.chdir(args.main_path)
+        subhalo_limit = sm.get_subhalorange(args.TNGBasePath, args.TNGSnapID[0], args.TNGSubhaloID)
         if len(args.TNGSubhaloID) > args.n_sims:
-            tng_subhaloids = choices(args.TNGSubhaloID, k=len(idxs))
+            tng_subhaloids = np.random.randint(0, subhalo_limit, size=args.n_sims).tolist()
         else:
-            tng_subhaloids = sm.get_subhaloids_from_db(args.n_sims)
+            tng_subhaloids = sm.get_subhaloids_from_db(args.n_sims, subhalo_limit)
     else:
         tng_subhaloids = [0 for i in idxs]
     insert_serendipitous = [args.insert_serendipitous for i in idxs]

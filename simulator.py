@@ -96,7 +96,7 @@ def get_data_from_hdf(file):
     db = pd.DataFrame(values.T, columns=column_names)     
     return db   
 
-def get_subhaloids_from_db(n):
+def get_subhaloids_from_db(n, limit):
     file = 'morphologies_deeplearn.hdf5'
     db = get_data_from_hdf(file)
     catalogue = db[['SubhaloID', 'P_Late', 'P_S0', 'P_Sab']]
@@ -116,11 +116,11 @@ def get_subhaloids_from_db(n):
     ellipticals_ids = ellipticals['SubhaloID'].values
     lenticulars_ids = lenticulars['SubhaloID'].values
     spirals_ids = spirals['SubhaloID'].values
-    sample_n = 100 // 3
-
-    n_0 = choices(ellipticals_ids, k=sample_n)
-    n_1 = choices(spirals_ids, k=sample_n)
-    n_2 = choices(lenticulars_ids, k=n - 2 * sample_n)
+    sample_n = n // 3
+    
+    n_0 = choices(ellipticals_ids[ellipticals_ids < limit], k=sample_n)
+    n_1 = choices(spirals_ids[spirals_ids < limit], k=sample_n)
+    n_2 = choices(lenticulars_ids[lenticulars_ids < limit], k=n - 2 * sample_n)
     ids = np.concatenate((n_0, n_1, n_2)).astype(int)
     return ids
 
@@ -1271,7 +1271,6 @@ class myTNGSource(SPHSource):
         dec=0.0 * U.deg,
     ):
         X_H = 0.76
-
         full_fields_g = (
             "Masses",
             "Velocities",
@@ -1303,6 +1302,7 @@ class myTNGSource(SPHSource):
                     subset=subset_g,
                     mdi=mdi_full,
                 )
+
             minisnap = False
         except Exception as exc:
             if ("Particle type" in exc.args[0]) and ("does not have field" in exc.args[0]):
@@ -1415,14 +1415,16 @@ def _gen_particle_coords(source, datacube):
 def get_distance(n_px, n_channels, 
                  x_rot, y_rot, TNGSnapshotID, TNGSubhaloID, 
                  TNGBasePath, factor):
+    
     distance = 1 * U.Mpc
     i = 0
-    source = myTNGSource(TNGSnapshotID, TNGSubhaloID,
-                       distance=distance,
-                       rotation = {'L_coords': (x_rot, y_rot)},
-                       basePath = TNGBasePath,
-                       ra = 0. * U.deg,
-                       dec = 0. * U.deg,)
+    source = myTNGSource(snapNum=TNGSnapshotID, 
+                        subID=TNGSubhaloID,
+                        distance=distance,
+                        rotation = {'L_coords': (x_rot, y_rot)},
+                        basePath = TNGBasePath,
+                        ra = 0. * U.deg,
+                        dec = 0. * U.deg,)
     datacube = DataCube(
         n_px_x = n_px,
         n_px_y = n_px,
@@ -1446,12 +1448,14 @@ def get_distance(n_px, n_channels,
             distance += 10 * U.Mpc
         elif i > 10 and i < 20:
             distance += 100 * U.Mpc
-        source = myTNGSource(TNGSnapshotID, TNGSubhaloID,
-                       distance=distance,
-                       rotation = {'L_coords': (x_rot, y_rot)},
-                       basePath = TNGBasePath,
-                       ra = 0. * U.deg,
-                       dec = 0. * U.deg,)
+        source = myTNGSource(
+                        snapNum=TNGSnapshotID, 
+                        subID=TNGSubhaloID,
+                        distance=distance,
+                        rotation = {'L_coords': (x_rot, y_rot)},
+                        basePath = TNGBasePath,
+                        ra = 0. * U.deg,
+                        dec = 0. * U.deg,)
         datacube = DataCube(
             n_px_x = n_px,
             n_px_y = n_px,
@@ -1467,12 +1471,14 @@ def get_distance(n_px, n_channels,
         min_y, max_y = np.min(coordinates[1,:]), np.max(coordinates[1,:])
         dist_x = max_x - min_x
         dist_y = max_y - min_y
-    source = myTNGSource(TNGSnapshotID, TNGSubhaloID,
-                       distance=distance,
-                       rotation = {'L_coords': (x_rot, y_rot)},
-                       basePath = TNGBasePath,
-                       ra = 0. * U.deg,
-                       dec = 0. * U.deg,)
+    source = myTNGSource(
+                        snapNum=TNGSnapshotID, 
+                        subID=TNGSubhaloID,
+                        distance=distance,
+                        rotation = {'L_coords': (x_rot, y_rot)},
+                        basePath = TNGBasePath,
+                        ra = 0. * U.deg,
+                        dec = 0. * U.deg,)
     channel_width=10.0 * U.km * U.s**-1
     while dist_z > factor * n_channels * U.pix:
         channel_width += 1.0 * U.km * U.s**-1
@@ -1500,6 +1506,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
     simulation_str = TNGBasePath.split('/')[-1]
+    TNGBasePath = os.path.join(TNGBasePath, 'TNG100-1', 'output')
 
     distance, channel_width = get_distance(n_px, n_channels, x_rot, y_rot, 
                                            TNGSnap, subhaloID, TNGBasePath, factor=4)
@@ -2205,3 +2212,11 @@ def check_TNGBasePath(TNGBasePath: str, TNGSnapshotID: int, TNGSubhaloID: list):
     else:
         print("Error: TNGBasePath not specified.")
         return None
+
+def get_subhalorange(basePath, snapNum, subhaloIDs):
+    basePath = os.path.join(basePath, "TNG100-1", "postprocessing/offsets/offsets_%03d.hdf5" % snapNum)
+    gName = "Subhalo" if max(subhaloIDs) >= 0 else "Group"
+    with h5py.File(basePath, "r") as f:
+        offsets = f["FileOffsets/" + gName][()]
+    limit = offsets[max(subhaloIDs) + 1]
+    return limit
