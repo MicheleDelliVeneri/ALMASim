@@ -169,22 +169,24 @@ if __name__ == '__main__':
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if args.source_type == 'extended':
         for snapID in args.TNGSnapID:
+            subhalo_limit, n_subhalo = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
+            TNGsubhaloIDs = np.arange(0, n_subhalo)
             if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                 TNGSnapshotID=snapID, 
-                                TNGSubhaloID=args.TNGSubhaloID) == False:
+                                TNGSubhaloID=TNGsubhaloIDs) == False:
                 print('TNG Data not found, downloading...')
                 sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
-                                    TNGSubhaloID=args.TNGSubhaloID, 
+                                    TNGSubhaloID=TNGsubhaloIDs, 
                                     api_key=args.TNGAPIKey)
             elif sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                   TNGSnapshotID=snapID, 
-                                  TNGSubhaloID=args.TNGSubhaloID) == None:
+                                  TNGSubhaloID=TNGsubhaloIDs) == None:
                 print('Warning: if source_type is extended, TNGBasePath must be provided.')
                 exit()
         # setting the working directory to the ALMASim directory, 
         # needed if the TNG data is downloaded
         os.chdir(args.main_path)
-        subhalo_limit = sm.get_subhalorange(args.TNGBasePath, args.TNGSnapID[0], args.TNGSubhaloID)
+        subhalo_limit, n_subhalo = sm.get_subhalorange(args.TNGBasePath, args.TNGSnapID[0], args.TNGSubhaloID)
         if len(args.TNGSubhaloID) > args.n_sims:
             tng_subhaloids = np.random.randint(0, subhalo_limit, size=args.n_sims).tolist()
         else:
@@ -270,7 +272,6 @@ if __name__ == '__main__':
                                             'source_type', 'tng_basepath', 'tng_snapid', 'tng_subhaloid',
                                             'plot', 'save_ms', 'save_psf', 'save_pb', 'crop', 'serendipitous',
                                             'n_px', 'n_channels'])
-    input_params.info()
     dbs = np.array_split(input_params, math.ceil(len(input_params) / args.n_workers))
     for db in dbs:
         if len(db) > 1:

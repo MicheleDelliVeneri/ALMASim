@@ -19,6 +19,8 @@ import h5py
 import illustris_python as il
 import nifty8 as ift
 from astropy.constants import c
+import astropy.cosmology.units as cu
+from astropy.cosmology import Planck13
 from astropy.time import Time
 from astropy.wcs import WCS
 from casatasks import exportfits, simobserve, tclean, gaincal, applycal
@@ -1305,6 +1307,7 @@ class myTNGSource(SPHSource):
 
             minisnap = False
         except Exception as exc:
+            print(exc.args)
             if ("Particle type" in exc.args[0]) and ("does not have field" in exc.args[0]):
                 data_g.update(
                         loadSubset(
@@ -1498,7 +1501,7 @@ def get_distance(n_px, n_channels,
         
     return distance, channel_width
 
-def generate_extended_skymodel(id, data_dir, n_px, n_channels, 
+def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
                                central_frequency, frequency_resolution, 
                                TNGBasePath, TNGSnap, subhaloID, ra, dec, 
                                rest_frequency, plot_dir):
@@ -1508,9 +1511,12 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
     simulation_str = TNGBasePath.split('/')[-1]
     TNGBasePath = os.path.join(TNGBasePath, 'TNG100-1', 'output')
 
-    distance, channel_width = get_distance(n_px, n_channels, x_rot, y_rot, 
-                                           TNGSnap, subhaloID, TNGBasePath, factor=4)
-
+    #distance, channel_width = get_distance(n_px, n_channels, x_rot, y_rot, 
+    #                                       TNGSnap, subhaloID, TNGBasePath, factor=4)
+    data_header = loadHeader(TNGBasePath, TNGSnap)
+    z = data_header["Redshift"] * cu.redshift
+    
+    distance = z.to(U.Mpc, cu.redshift_distance(Planck13, kind="comoving"))
 
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
     
@@ -1536,8 +1542,8 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels,
         n_px_x = n_px,
         n_px_y = n_px,
         n_channels = n_channels, 
-        px_size = 10.0 * U.arcsec,
-        channel_width=channel_width,
+        px_size = pixel_size,
+        channel_width=frequency_resolution,
         velocity_centre=source.vsys, 
         ra = ra,
         dec = dec,
@@ -1857,6 +1863,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
             print('Generating Extended Emission Skymodel from TNG')
             print('\n')
             filename = generate_extended_skymodel(i, output_dir, n_px, n_channels, 
+                                                  spatial_resolution * U.arcsec,
                                                   central_freq * U.GHz,
                                                   inwidth * U.MHz, TNGBasePath, 
                                                   TNGSnapshotID, TNGSubhaloID, 
@@ -2219,4 +2226,5 @@ def get_subhalorange(basePath, snapNum, subhaloIDs):
     with h5py.File(basePath, "r") as f:
         offsets = f["FileOffsets/" + gName][()]
     limit = offsets[max(subhaloIDs) + 1]
-    return limit
+    n_subhalo = np.max(np.where(offsets == limit))
+    return limit, n_subhalo
