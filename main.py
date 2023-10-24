@@ -176,7 +176,7 @@ if __name__ == '__main__':
                 sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
                                     TNGSubhaloID=args.TNGSubhaloID, 
                                     api_key=args.TNGAPIKey)
-            elif sm.check_TNGBasePath(pTNGBasePath=args.TNGBasePath, 
+            elif sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                   TNGSnapshotID=snapID, 
                                   TNGSubhaloID=args.TNGSubhaloID) == None:
                 print('Warning: if source_type is extended, TNGBasePath must be provided.')
