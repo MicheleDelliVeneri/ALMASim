@@ -165,7 +165,7 @@ if __name__ == '__main__':
     snrs = np.random.uniform(min_snr, max_snr, size=len(idxs))
     get_skymodel = [args.get_skymodel for i in idxs]
     source_type = [args.source_type for i in idxs]
-    tng_basepaths = [bool(args.TNGBasePath) for i in idxs]
+    tng_basepaths = [args.TNGBasePath for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if args.source_type == 'extended':
         print('TNG Data not found')
