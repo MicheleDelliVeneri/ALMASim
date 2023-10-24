@@ -1521,11 +1521,12 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
     
     source = myTNGSource(TNGSnap, subhaloID,
-                       distance=distance,
+                       distance=3 * U.Mpc,
                        rotation = {'L_coords': (x_rot, y_rot)},
                        basePath = TNGBasePath,
                        ra = 0. * U.deg,
                        dec = 0. * U.deg,)
+    print('Source generated, injecting into datacube')
     if rest_frequency == 1420.4:
         hI_rest_frequency = rest_frequency * U.MHz
     else:
@@ -1542,12 +1543,13 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
         n_px_x = n_px,
         n_px_y = n_px,
         n_channels = n_channels, 
-        px_size = pixel_size,
+        px_size = 10 * U.arcsec,
         channel_width=frequency_resolution,
         velocity_centre=source.vsys, 
         ra = ra,
         dec = dec,
     )
+    print('Datacube generated, inserting source')
     spectral_model = GaussianSpectrum(
         sigma="thermal"
     )
@@ -1567,6 +1569,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
         quiet=True)
     
     M.insert_source_in_cube(skip_validation=True, progressbar=True)
+    print('Source inserted, saving skymodel')
     M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))), channels='velocity')
     f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))),'r')
     vch = f['channel_mids'][()] / 1E3 - source.distance.to(U.Mpc).value*70  # m/s to km/s
