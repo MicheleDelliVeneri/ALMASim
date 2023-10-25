@@ -1260,6 +1260,7 @@ def loadHeader(basePath, snapNum):
         header = dict(f["Header"].attrs.items())
 
     return header
+
 class myTNGSource(SPHSource):
     def __init__(
         self,
@@ -1543,7 +1544,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
         n_px_x = n_px,
         n_px_y = n_px,
         n_channels = n_channels, 
-        px_size = pixel_size * U.arcsec,
+        px_size = pixel_size,
         channel_width=frequency_resolution,
         velocity_centre=source.vsys, 
         ra = ra,
