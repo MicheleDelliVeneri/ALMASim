@@ -38,6 +38,7 @@ from spectral_cube import SpectralCube
 from tqdm import tqdm
 import psutil
 import subprocess
+import bisect
 
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
@@ -98,7 +99,7 @@ def get_data_from_hdf(file):
     db = pd.DataFrame(values.T, columns=column_names)     
     return db   
 
-def get_subhaloids_from_db(n, limit):
+def get_subhaloids_from_db(n, limit0, limit1):
     file = 'morphologies_deeplearn.hdf5'
     db = get_data_from_hdf(file)
     catalogue = db[['SubhaloID', 'P_Late', 'P_S0', 'P_Sab']]
@@ -120,9 +121,9 @@ def get_subhaloids_from_db(n, limit):
     spirals_ids = spirals['SubhaloID'].values
     sample_n = n // 3
     
-    n_0 = choices(ellipticals_ids[ellipticals_ids < limit], k=sample_n)
-    n_1 = choices(spirals_ids[spirals_ids < limit], k=sample_n)
-    n_2 = choices(lenticulars_ids[lenticulars_ids < limit], k=n - 2 * sample_n)
+    n_0 = choices(ellipticals_ids[(elliptical_ids > limit0) & ( ellipticals_ids < limit1)], k=sample_n)
+    n_1 = choices(spirals_ids[(spirals_ids > limit0) & (spirals_ids < limit1)], k=sample_n)
+    n_2 = choices(lenticulars_ids[(lenticulars_ids > limit0) & (lenticular_ids < limit1)], k=n - 2 * sample_n)
     ids = np.concatenate((n_0, n_1, n_2)).astype(int)
     return ids
 
@@ -2223,25 +2224,31 @@ def check_TNGBasePath(TNGBasePath: str, TNGSnapshotID: int, TNGSubhaloID: list):
 
 def get_subhalorange(basePath, snapNum, subhaloIDs):
     partType = 'gas'
-    fileNumns, limits = [], []
+    filenums, limits = [], []
     offsetPath = os.path.join(basePath, "TNG100-1", "postprocessing/offsets/offsets_%03d.hdf5" % snapNum)
     basePath = os.path.join(basePath, "TNG100-1", "output", )
     with h5py.File(offsetPath, "r") as f:
         offsets = f["FileOffsets/" + 'Subhalo'][()]
-        print(len(offsets))
-        print(offsets)
-        limit = offsets[max(subhaloIDs) + 1]
-        limits.append(limit)
-    with h5py.File(il.snapshot.snapPath(basePath, snapNum), 'r') as f:
+        unique, counts = np.unique(offsets, return_counts=True)
         for subhaloID in subhaloIDs:
-            subset = il.snapshot.getSnapOffsets(basePath, snapNum, subhaloID, "Subhalo")
-            header = dict(f['Header'].attrs.items())
-            nPart = il.snapshot.getNumPart(header)
-            ptNum = il.snapshot.partTypeNum(partType)
-            gName = "PartType" + str(ptNum)
-            offsetsThisType = subset['offsetType'][ptNum] - subset['snapOffsets'][ptNum, :]
-            fileNum = np.max(np.where(offsetsThisType >= 0))
-            fileOff = offsetsThisType[fileNum]
-            numToRead = subset['lenType'][ptNum]
-            fileNumns.append(fileNum)
-    return fileNumns, limits
+            index = bisect.bisect(unique, subhaloID)
+            limits.append([offsets[index - 1], offsets[index + counts[index]]])
+            filenums.append(np.arange(index, index + counts[index]))
+
+    #with h5py.File(il.snapshot.snapPath(basePath, snapNum), 'r') as f:
+    #   for subhaloID in subhaloIDs:
+    #        subset = il.snapshot.getSnapOffsets(basePath, snapNum, subhaloID, "Subhalo")
+    #        header = dict(f['Header'].attrs.items())
+    #        nPart = il.snapshot.getNumPart(header)
+    ##        ptNum = il.snapshot.partTypeNum(partType)
+    #        gName = "PartType" + str(ptNum)
+    #        offsetsThisType = subset['offsetType'][ptNum] - subset['snapOffsets'][ptNum, :]
+    #        fileNum = np.max(np.where(offsetsThisType >= 0))
+    #        fileOff = offsetsThisType[fileNum]
+    #        numToRead = subset['lenType'][ptNum]
+    #        print(fileNum)
+    #        print(np.where(unique == fileNum))
+    #        filenums.append(np.arange(fileNum, fileNum + counts[][0]))
+            
+    filenums = np.array(filenums).flatten().tolist()
+    return filenums, limits

@@ -166,15 +166,21 @@ if __name__ == '__main__':
     source_type = [args.source_type for i in idxs]
     tng_basepaths = [args.TNGBasePath for i in idxs]
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
+    
     if args.source_type == 'extended':
+        tng_subhaloids = []
+        n_snap = len(idxs) % len(args.TNGSnapID)
+        print(n_snap)
         for snapID in args.TNGSnapID:
             filenums, limits = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
-            print(filenums, limits)
-            filenums = np.arange(0, np.max(filenums))
+            limit = limits[np.random.randint(0, len(limits) - 1)]
+            tng_subhaloids.append(random.randint(limit[0], limit[1]))
+            #filenums = np.arange(np.min(filenums), np.max(filenums))
+            filenums = np.concatenate(filenums, axis=0)
             if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                 TNGSnapshotID=snapID, 
                                 TNGSubhaloID=filenums) == False:
-                print('TNG Data not found, downloading...')
+                print('TNG Data not found, downloading the following subhalos: {}...'.format(filenums))
                 sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
                                     TNGSubhaloID=filenums, 
                                     api_key=args.TNGAPIKey)
@@ -186,14 +192,8 @@ if __name__ == '__main__':
         # setting the working directory to the ALMASim directory, 
         # needed if the TNG data is downloaded
         os.chdir(args.main_path)
-        subahols = []
-        for snapID in args.TNGSnapID:
-            subhaloIDs = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
-            subahols.append(subhaloIDs)
-        subhaloIDs = np.concatenate(subahols)
-        subahoIDs = np.arange(0, np.max(subhaloIDs)).tolist()
-        print('Subhalo IDs: {}'.format(subhaloIDs))
-        tng_subhaloids = random.choice(subhaloIDs, k=len(idxs))
+        tng_subhaloids = np.array(tng_subhaloids).flatten().tolist()
+       
     else:
         tng_subhaloids = [0 for i in idxs]
     insert_serendipitous = [args.insert_serendipitous for i in idxs]
