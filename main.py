@@ -1,5 +1,5 @@
 import dask
-from dask.distributed import Client
+from distributed import Client, LocalCluster
 import simulator as sm
 import numpy as np
 import pandas as pd
@@ -8,6 +8,7 @@ import argparse
 from random import choices
 from natsort import natsorted
 import math
+import random
 
 MALLOC_TRIM_THRESHOLD_ = 0
 
@@ -67,14 +68,12 @@ parser.add_argument('--save_pb', type=str2bool, default=False, const=True, nargs
 parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?',  help='R|If True, the simulation results are cropped to the size of the beam times 1.5. Default False.')
 parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels in the simulation. Default None, if set simulations are spatially cropped to the given number of pixels.')
 parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation. Default None, if set simulations are spectrally cropped to the given number of channels.')
-parser.add_argument('--n_workers', type=int, default=10, help='R|Number of workers to use. Default 10.')
-parser.add_argument('--threads_per_worker', type=int, default=4, help='R|Number of threads per worker to use ~ 1  per physical CPU. Default 4.')
-
+parser.add_argument('--ncpu', type=int, default=10, help='R|Number of cpus to use. Default 10.')
+parser.add_argument('--ip', type=str, default=None, help='R|IP address of the cluster. Default None.')
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    dask.config.set(scheduler='threads')
     dask.config.set({'temporary_directory': args.data_dir})
     if not os.path.exists(args.data_dir):
         os.mkdir(args.data_dir)
@@ -169,28 +168,32 @@ if __name__ == '__main__':
     tng_snapids = choices(args.TNGSnapID, k=len(idxs))
     if args.source_type == 'extended':
         for snapID in args.TNGSnapID:
-            subhalo_limit, n_subhalo = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
-            TNGsubhaloIDs = np.arange(0, n_subhalo)
+            filenums, limits = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
+            print(filenums, limits)
+            filenums = np.arange(0, np.max(filenums))
             if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                 TNGSnapshotID=snapID, 
-                                TNGSubhaloID=TNGsubhaloIDs) == False:
+                                TNGSubhaloID=filenums) == False:
                 print('TNG Data not found, downloading...')
                 sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
-                                    TNGSubhaloID=TNGsubhaloIDs, 
+                                    TNGSubhaloID=filenums, 
                                     api_key=args.TNGAPIKey)
             elif sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                   TNGSnapshotID=snapID, 
-                                  TNGSubhaloID=TNGsubhaloIDs) == None:
+                                  TNGSubhaloID=filenums) == None:
                 print('Warning: if source_type is extended, TNGBasePath must be provided.')
                 exit()
         # setting the working directory to the ALMASim directory, 
         # needed if the TNG data is downloaded
         os.chdir(args.main_path)
-        subhalo_limit, n_subhalo = sm.get_subhalorange(args.TNGBasePath, args.TNGSnapID[0], args.TNGSubhaloID)
-        if len(args.TNGSubhaloID) > args.n_sims:
-            tng_subhaloids = np.random.randint(0, subhalo_limit, size=args.n_sims).tolist()
-        else:
-            tng_subhaloids = sm.get_subhaloids_from_db(args.n_sims, subhalo_limit)
+        subahols = []
+        for snapID in args.TNGSnapID:
+            subhaloIDs = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
+            subahols.append(subhaloIDs)
+        subhaloIDs = np.concatenate(subahols)
+        subahoIDs = np.arange(0, np.max(subhaloIDs)).tolist()
+        print('Subhalo IDs: {}'.format(subhaloIDs))
+        tng_subhaloids = random.choice(subhaloIDs, k=len(idxs))
     else:
         tng_subhaloids = [0 for i in idxs]
     insert_serendipitous = [args.insert_serendipitous for i in idxs]
@@ -199,7 +202,7 @@ if __name__ == '__main__':
     save_psf = [args.save_psf for i in idxs]
     save_pb = [args.save_pb for i in idxs]
     crop = [args.crop for i in idxs]
-    
+    ncpu = [args.ncpu for i in idxs]
     print('Data directory: {}'.format(data_dir[0]))
     print('Main path: {}'.format(main_path[0]))
     print('Output directory: {}'.format(output_dir[0]))
@@ -230,8 +233,7 @@ if __name__ == '__main__':
     print('Insert Serendipitous: {}'.format(insert_serendipitous[0]))
     print('Number of pixels: {}'.format(n_pxs))
     print('Number of channels: {}'.format(n_channels))
-    print('Number of workers: {}'.format(args.n_workers))
-    print('Threads per worker: {}'.format(args.threads_per_worker))
+    print('Number of cpus: {}'.format(ncpu[0]))
     input_params = pd.DataFrame(zip(idxs, 
                                     data_dir, 
                                     main_path,
@@ -262,7 +264,8 @@ if __name__ == '__main__':
                                     crop,
                                     insert_serendipitous,
                                     n_pxs, 
-                                    n_channels
+                                    n_channels,
+                                    ncpu
                                     ), 
                                     columns=['idx', 'data_dir', 'main_path', 
                                             'project_name', 'output_dir', 'plot_dir', 'band',
@@ -271,17 +274,32 @@ if __name__ == '__main__':
                                             'pwv', 'rest_frequency', 'snr', 'get_skymodel', 
                                             'source_type', 'tng_basepath', 'tng_snapid', 'tng_subhaloid',
                                             'plot', 'save_ms', 'save_psf', 'save_pb', 'crop', 'serendipitous',
-                                            'n_px', 'n_channels'])
-    dbs = np.array_split(input_params, math.ceil(len(input_params) / args.n_workers))
+                                            'n_px', 'n_channels', 'ncpu'])
+    if args.source_type == 'extended':
+        dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))
+    else:
+        dbs = input_params
     for db in dbs:
-        if len(db) > 1:
-            client = Client(threads_per_worker=args.threads_per_worker, 
-                    n_workers=args.n_workers, memory_limit='{}GB'.format(sm.get_mem_gb()) )
+        if (len(db) > 1) and (args.ncpu > 1) and  (args.source_type != 'extended'):
+            print('Running multiple simulations in parallel...')
+            cluster = LocalCluster(
+                n_workers=args.ncpu, 
+                processes=True,
+                scheduler_port=8786,
+                host=args.ip,
+                memory_limit='{}GB'.format(sm.get_mem_gb()),
+                dashboard_address='{}:8787'.format(args.ip)
+                )
+            client = Client(
+                cluster
+               )
             futures = client.map(sm.simulator, *db.values.T)
             client.gather(futures)
             client.close()
         else:
-            sm.simulator(*db.values.T) 
+            print('Running simulations sequentially each with multiple workers...')
+            for i in range(len(db.values.T)):
+                sm.simulator(*db.values[i].T) 
     files = os.listdir(args.main_path)
     for item in files:
         if item.endswith(".log"):

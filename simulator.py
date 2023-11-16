@@ -32,7 +32,7 @@ from martini import DataCube, Martini
 from martini.sources.sph_source import SPHSource
 from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import (AdaptiveKernel, CubicSplineKernel,
-                                 GaussianKernel, find_fwhm)
+                                 GaussianKernel, find_fwhm,  WendlandC2Kernel)
 from natsort import natsorted
 from spectral_cube import SpectralCube
 from tqdm import tqdm
@@ -1505,7 +1505,7 @@ def get_distance(n_px, n_channels,
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
                                central_frequency, frequency_resolution, 
                                TNGBasePath, TNGSnap, subhaloID, ra, dec, 
-                               rest_frequency, plot_dir):
+                               rest_frequency, plot_dir, ncpu):
     #distance = np.random.randint(1, 5) * U.Mpc
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
@@ -1522,7 +1522,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
     
     source = myTNGSource(TNGSnap, subhaloID,
-                       distance= distance,
+                       distance= 5 * U.Mpc,
                        rotation = {'L_coords': (x_rot, y_rot)},
                        basePath = TNGBasePath,
                        ra = 0. * U.deg,
@@ -1544,32 +1544,25 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
         n_px_x = n_px,
         n_px_y = n_px,
         n_channels = n_channels, 
-        px_size = pixel_size,
+        px_size = 10 * U.arcsec,
         channel_width=frequency_resolution,
         velocity_centre=source.vsys, 
         ra = ra,
         dec = dec,
     )
-    print('Datacube generated, inserting source')
+    
     spectral_model = GaussianSpectrum(
         sigma="thermal"
     )
-    sph_kernel = AdaptiveKernel(
-    (
-        CubicSplineKernel(),
-        GaussianKernel(truncate=6),
-    )
-
-    )
-
+    sph_kernel =  WendlandC2Kernel()
     M = Martini(
         source=source,
         datacube=datacube,
         sph_kernel=sph_kernel,
         spectral_model=spectral_model,
-        quiet=True)
-    
-    M.insert_source_in_cube(skip_validation=True, progressbar=True)
+        quiet=False)
+    print('Datacube generated, inserting source')
+    M.insert_source_in_cube(skip_validation=True, progressbar=False, ncpu=ncpu)
     print('Source inserted, saving skymodel')
     M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))), channels='velocity')
     f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))),'r')
@@ -1764,7 +1757,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               TNGSubhaloID: int,
               plot: bool, save_ms: bool, save_psf: bool, save_pb: bool, crop: bool, serendipitous: bool, 
               n_pxs: Optional[int] = None, 
-              n_channels: Optional[int] = None ):
+              n_channels: Optional[int] = None,
+              n_workers: Optional[int] = 1,
+              ncpu: Optional[int] = 1):
     """
     Input:
     i: index of the file to be simulated
@@ -1793,6 +1788,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     crop (bool): if True, cubes are cropped to the size of the beam times 1.5 or to n_pxs
     n_pxs (int): Optional number of pixels in the x and y direction, if present crop is set to True
     n_channels (int): Optional number of channels in the z direction
+    ncpu (int): number of cpu to use in parallel
     Output:
     None
     """
@@ -1872,7 +1868,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                   inwidth * U.MHz, TNGBasePath, 
                                                   TNGSnapshotID, TNGSubhaloID, 
                                                   ra * U.deg, dec * U.deg, 
-                                                  rest_frequency, plot_dir)
+                                                  rest_frequency, plot_dir, ncpu)
         elif source_type == "gaussian":
             print('Generating Gaussian Skymodel')
             if serendipitous == True:
@@ -2122,7 +2118,6 @@ def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c', TNG
     # Define the URLs for the simulation data
     urls = [
         (f'http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(TNGSnapshotID)}', os.path.join('output', 'snapdir_0{}'.format(str(TNGSnapshotID))), 'Snapshot'),
-        (f'http://www.tng-project.org/api/TNG100-1/files/groupcat-{str(TNGSnapshotID)}', os.path.join('output', 'groups_0{}'.format(str(TNGSnapshotID))), 'Group Catalog'),
         (f'http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5', '', 'Simulation File'),
         (f'https://www.tng-project.org/api/TNG100-1/files/offsets.{str(TNGSnapshotID)}.hdf5', os.path.join('postprocessing', 'offsets'), 'Offsets File'),
     ]
@@ -2139,25 +2134,27 @@ def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c', TNG
         output_path = os.path.join(main_path,  subdir)
         os.makedirs(output_path, exist_ok=True)
         os.chdir(output_path)
-        if i < 2:
+        if i == 0:
             for id in TNGSubhaloID:
                 cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{id}.hdf5'
-                if 'snapdir' in output_path:
-                    if not os.path.isfile(os.path.join(output_path, f'snap_0{TNGSnapshotID}.{id}.hdf5')):
-                        print(f'Downloading {message} {id} ...')
-                        subprocess.check_call(cmd, shell=True)
-                        print('Done.')
-                else:
-                    if not os.path.isfile(os.path.join(output_path, f'fof_subhalo_tab_0{TNGSnapshotID}.{id}.hdf5')):
-                        print(f'Downloading {message} {id} ...')
-                        subprocess.check_call(cmd, shell=True)
-                        print('Done.')
+                if not os.path.isfile(os.path.join(output_path, f'snap_0{TNGSnapshotID}.{id}.hdf5')):
+                    print(f'Downloading {message} {id} ...')
+                    subprocess.check_call(cmd, shell=True)
+                    print('Done.')
+        elif i == 1:
+            print(f'Downloading {message} ...')
+            if not os.path.isfile(os.path.join(output_path, 'simulation.hdf5')):
+                cmd = f'wget -q  --progress=bar   --content-disposition --header="API-Key:{api_key}" {url}'
+                if not os.path.isfile(url.split('/')[-1]):
+                    subprocess.check_call(cmd, shell=True)
+                    print('Done.')
         else:
             print(f'Downloading {message} ...')
-            cmd = f'wget -q  --progress=bar   --content-disposition --header="API-Key:{api_key}" {url}'
-            if not os.path.isfile(url.split('/')[-1]):
-                subprocess.check_call(cmd, shell=True)
-                print('Done.')
+            if not os.path.isfile(os.path.join(output_path, f'offsets_{TNGSnapshotID}.hdf5')):
+                cmd = f'wget -q  --progress=bar   --content-disposition --header="API-Key:{api_key}" {url}'
+                if not os.path.isfile(url.split('/')[-1]):
+                    subprocess.check_call(cmd, shell=True)
+                    print('Done.')
     print('All downloads complete.')
     
     return
@@ -2225,10 +2222,26 @@ def check_TNGBasePath(TNGBasePath: str, TNGSnapshotID: int, TNGSubhaloID: list):
         return None
 
 def get_subhalorange(basePath, snapNum, subhaloIDs):
-    basePath = os.path.join(basePath, "TNG100-1", "postprocessing/offsets/offsets_%03d.hdf5" % snapNum)
-    gName = "Subhalo" if max(subhaloIDs) >= 0 else "Group"
-    with h5py.File(basePath, "r") as f:
-        offsets = f["FileOffsets/" + gName][()]
-    limit = offsets[max(subhaloIDs) + 1]
-    n_subhalo = np.max(np.where(offsets == limit))
-    return limit, n_subhalo
+    partType = 'gas'
+    fileNumns, limits = [], []
+    offsetPath = os.path.join(basePath, "TNG100-1", "postprocessing/offsets/offsets_%03d.hdf5" % snapNum)
+    basePath = os.path.join(basePath, "TNG100-1", "output", )
+    with h5py.File(offsetPath, "r") as f:
+        offsets = f["FileOffsets/" + 'Subhalo'][()]
+        print(len(offsets))
+        print(offsets)
+        limit = offsets[max(subhaloIDs) + 1]
+        limits.append(limit)
+    with h5py.File(il.snapshot.snapPath(basePath, snapNum), 'r') as f:
+        for subhaloID in subhaloIDs:
+            subset = il.snapshot.getSnapOffsets(basePath, snapNum, subhaloID, "Subhalo")
+            header = dict(f['Header'].attrs.items())
+            nPart = il.snapshot.getNumPart(header)
+            ptNum = il.snapshot.partTypeNum(partType)
+            gName = "PartType" + str(ptNum)
+            offsetsThisType = subset['offsetType'][ptNum] - subset['snapOffsets'][ptNum, :]
+            fileNum = np.max(np.where(offsetsThisType >= 0))
+            fileOff = offsetsThisType[fileNum]
+            numToRead = subset['lenType'][ptNum]
+            fileNumns.append(fileNum)
+    return fileNumns, limits
