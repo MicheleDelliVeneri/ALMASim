@@ -169,14 +169,18 @@ if __name__ == '__main__':
     
     if args.source_type == 'extended':
         tng_subhaloids = []
-        n_snap = len(idxs) % len(args.TNGSnapID)
-        print(n_snap)
+        n_snap = len(idxs) // len(args.TNGSnapID)
         for snapID in args.TNGSnapID:
             filenums, limits = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
             limit = limits[np.random.randint(0, len(limits) - 1)]
-            tng_subhaloids.append(random.randint(limit[0], limit[1]))
+            print(len(idxs), n_snap)
+            for i in range(n_snap):
+                tng_subhaloids.append(random.randint(limit[0], limit[1]))
             #filenums = np.arange(np.min(filenums), np.max(filenums))
-            filenums = np.concatenate(filenums, axis=0)
+            print('Checking TNG data for the following subhalos: {}...'.format(filenums))
+            if len(np.array(filenums).shape) > 1:
+                filenums = np.concatenate(filenums, axis=0)
+            
             if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
                                 TNGSnapshotID=snapID, 
                                 TNGSubhaloID=filenums) == False:
@@ -298,7 +302,7 @@ if __name__ == '__main__':
             client.close()
         else:
             print('Running simulations sequentially each with multiple workers...')
-            for i in range(len(db.values.T)):
+            for i in range(len(db)):
                 sm.simulator(*db.values[i].T) 
     files = os.listdir(args.main_path)
     for item in files:

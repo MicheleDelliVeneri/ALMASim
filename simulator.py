@@ -1563,7 +1563,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
         spectral_model=spectral_model,
         quiet=False)
     print('Datacube generated, inserting source')
-    M.insert_source_in_cube(skip_validation=True, progressbar=False, ncpu=ncpu)
+    M.insert_source_in_cube(skip_validation=True, progressbar=True, ncpu=ncpu)
     print('Source inserted, saving skymodel')
     M.write_hdf5(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))), channels='velocity')
     f = h5py.File(os.path.join(data_dir, 'skymodel_{}.hdf5'.format(str(id))),'r')
