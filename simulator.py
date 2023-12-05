@@ -1068,15 +1068,32 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
     print('Mass ratio: {}%'.format(initial_mass_ratio))
     mass_ratio = initial_mass_ratio
+    orevious_mass_ratio = initial_mass_ratio
+    improvement = 1
     if mass_ratio < 50:
         print('Injected mass ratio is less than 50%, increasing distance')
+    elif mass_ratio >= 50 and mass_ratio < 80:
+        print('Injected mass ratio is sufficient, saving skymodel')
+    elif mass_ratio >= 80:
+        print('Injected mass ratio is optimal')
     while mass_ratio < 50:
-        distance += 5
+        if improvement <= 1:
+            print('No significant improvement in mass ratio, increasing distance')
+            distance += 20
+        elif improvement > 1 and improvement <= 10: 
+            print('Small improvement in mass ratio, increasing distance')
+            distance += 5
+        elif improvement > 10:
+            print('Significant improvement in mass ratio, increasing distance')
+            distance += 1
         M = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                                 frequency_resolution, 
                                 ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
+        previous_mass_ratio = mass_ratio
         mass_ratio = M.inserted_mass / M.source.input_mass * 100
         print('Mass ratio: {}%'.format(mass_ratio))
+        improvement = mass_ratio - previous_mass_ratio
+        print('Mass Ratio after shifting: {}%'.format(improvement))
 
     print('Datacube generated, inserting source')
     
