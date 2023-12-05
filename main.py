@@ -57,8 +57,8 @@ parser.add_argument('--reference_source', type=str2bool, default=False, const=Tr
 parser.add_argument('--reference_dir', type=str, default=None, help='R|Path to the reference sources folder. Default None.')
 parser.add_argument('--source_type', type=str, default='point', nargs='?', help='R|SOURCE_TYPE, type of source to generate: "point", "gaussian", "diffuse" or "extended"')
 parser.add_argument('--TNGBasePath', type=str, default=None, help='R|Path to the TNG data on your folder. Default /media/storage/TNG100-1/output')
-parser.add_argument('--TNGSnapID', type=int, default=[99], nargs='+', help='R|Snapshot ID of the TNG data.  Default 99')
-parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data. Default 0')
+parser.add_argument('--TNGSnapID', type=int, default=99, help='R|Snapshot ID of the TNG data.  Default 99')
+#parser.add_argument('--TNGSubhaloID', type=int, default=[0], nargs='+', help='R|Subhalo ID of the TNG data. Default 0')
 parser.add_argument('--TNGAPIKey', type=str, default='8f578b92e700fae3266931f4d785f82c', help='R|API Key to download the TNG data. Default None')
 parser.add_argument('--insert_serendipitous', type=str2bool, default=True, const=True, nargs='?', help='R|If True, serendipitous sources are injected in the simulation. Default True.')
 parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation results are plotted. Default False.')
@@ -165,38 +165,45 @@ if __name__ == '__main__':
     get_skymodel = [args.get_skymodel for i in idxs]
     source_type = [args.source_type for i in idxs]
     tng_basepaths = [args.TNGBasePath for i in idxs]
-    tng_snapids = choices(args.TNGSnapID, k=len(idxs))
-    
+    tng_snapids = [args.TNGSnapID for i in idxs]
     if args.source_type == 'extended':
-        tng_subhaloids = []
-        n_snap = len(idxs) // len(args.TNGSnapID)
-        for snapID in args.TNGSnapID:
-            filenums, limits = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
-            limit = limits[np.random.randint(0, len(limits) - 1)]
-            print(len(idxs), n_snap)
-            for i in range(n_snap):
-                tng_subhaloids.append(random.randint(limit[0], limit[1]))
-            #filenums = np.arange(np.min(filenums), np.max(filenums))
-            print('Checking TNG data for the following subhalos: {}...'.format(filenums))
-            if len(np.array(filenums).shape) > 1:
-                filenums = np.concatenate(filenums, axis=0)
+        #tng_subhaloids = []
+        #n_snap = len(idxs) // len(args.TNGSnapID)
+        #for snapID in args.TNGSnapID:
+        #    filenums, limits = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
+        #    limit = limits[np.random.randint(0, len(limits) - 1)]
+        #    print(len(idxs), n_snap)
+        #    for i in range(n_snap):
+        #        tng_subhaloids.append(random.randint(limit[0], limit[1]))
+        #    #filenums = np.arange(np.min(filenums), np.max(filenums))
+        #    print('Checking TNG data for the following subhalos: {}...'.format(filenums))
+        #    if len(np.array(filenums).shape) > 1:
+        #        filenums = np.concatenate(filenums, axis=0)
             
-            if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
-                                TNGSnapshotID=snapID, 
-                                TNGSubhaloID=filenums) == False:
-                print('TNG Data not found, downloading the following subhalos: {}...'.format(filenums))
-                sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
-                                    TNGSubhaloID=filenums, 
-                                    api_key=args.TNGAPIKey)
-            elif sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
-                                  TNGSnapshotID=snapID, 
-                                  TNGSubhaloID=filenums) == None:
-                print('Warning: if source_type is extended, TNGBasePath must be provided.')
-                exit()
+        #    if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
+        #                        TNGSnapshotID=snapID, 
+        #                        TNGSubhaloID=filenums) == False:
+        #        print('TNG Data not found, downloading the following subhalos: {}...'.format(filenums))
+        #        sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
+        #                            TNGSubhaloID=filenums, 
+        #                            api_key=args.TNGAPIKey)
+        #    elif sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
+        #                          TNGSnapshotID=snapID, 
+        #                          TNGSubhaloID=filenums) == None:
+        #        print('Warning: if source_type is extended, TNGBasePath must be provided.')
+        #        exit()
         # setting the working directory to the ALMASim directory, 
         # needed if the TNG data is downloaded
+        print('Beginning simulation of Extended Sources...')
+        print('Before Injecting sources into the datacubes, I need to check if the TNG data is available on disk, if not, I will download it.')
+        print("\n\n")
         os.chdir(args.main_path)
-        tng_subhaloids = np.array(tng_subhaloids).flatten().tolist()
+        tng_subhaloids = sm.get_subhaloids_from_db(len(idxs))
+        outPath = os.path.join(args.TNGBasePath, 'TNG100-1', 'output', 'snapdir_0{}'.format(args.TNGSnapID))
+        part_num = [sm.get_particles_num(args.TNGBasePath, outPath, args.TNGSnapID, int(subhalo_id)) for subhalo_id in tng_subhaloids]
+        for i, num in enumerate(part_num):
+            print('Subhalo {} has {} particles'.format(tng_subhaloids[i], num))
+        #tng_subhaloids = np.array(tng_subhaloids).flatten().tolist()
        
     else:
         tng_subhaloids = [0 for i in idxs]
