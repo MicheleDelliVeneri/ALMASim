@@ -1031,7 +1031,7 @@ def insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels,
         spectral_model=spectral_model,
         quiet=False)
     M.insert_source_in_cube(skip_validation=True, progressbar=True, ncpu=ncpu)
-    return M
+    return M, source, datacube
 
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
                                central_frequency, frequency_resolution, 
@@ -1061,15 +1061,15 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
-    distance = 5
-    M = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
+    distance = 30
+    M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                                 frequency_resolution, 
                                 ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
     initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
     print('Mass ratio: {}%'.format(initial_mass_ratio))
     mass_ratio = initial_mass_ratio
     orevious_mass_ratio = initial_mass_ratio
-    improvement, increment, i = 1, 1, 0
+    improvement, increment, i = 1, 5, 0
     if mass_ratio < 50:
         print('Injected mass ratio is less than 50%, increasing distance')
     elif mass_ratio >= 50 and mass_ratio < 80:
@@ -1087,10 +1087,10 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
             elif improvement > 10:
                 print('Significant improvement in mass ratio, increasing distance')
                 incremet = 5
-        if i >= 3 and improvement < 5:
-            increment += 30
+        if i >= 3 and (improvement < 10 or mass_ratio < 20):
+            increment += 100
         distance += increment
-        M = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
+        M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                                 frequency_resolution, 
                                 ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
         previous_mass_ratio = mass_ratio
