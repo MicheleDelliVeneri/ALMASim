@@ -3460,15 +3460,18 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('# ------------------------ #')
     print('Simulating ALMA Observation of the Skymodel')
     print('Brightness', inbright, ' Jy/px')
-    skymodel, _ = load_fits(filename)
+    skymodel, sky_header = load_fits(filename)
     true_brightness = np.max(skymodel)
     min_brightness = np.min(skymodel)
     print('True Brightness', true_brightness, ' Jy/px')
     print('Minimum Brightness', min_brightness, ' Jy/px')
     if inbright != true_brightness:
         flattened_skymodel = np.ravel(skymodel)
-        arr_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
-
+        t_min = 0
+        t_max = inbright
+        skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
+        skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
+        write_numpy_to_fits(skymodel, sky_header, filename)
     sim_time = time.time()
     simobserve(
         project=project, 
@@ -3794,6 +3797,3 @@ def get_subhalorange(basePath, snapNum, subhaloIDs):
     filenums = np.array(filenums).flatten().tolist()
     return filenums, limits
 
-
-
-#
