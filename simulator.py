@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.time import Time
+from astropy import wcs
 temp_dir = tempfile.TemporaryDirectory()
 import math
 import os
@@ -1070,7 +1071,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     if mass_ratio < 50:
         print('Injected mass ratio is less than 50%, increasing distance')
     while mass_ratio < 50:
-        distance += 1
+        distance += 5
         M = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                                 frequency_resolution, 
                                 ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
@@ -1438,7 +1439,7 @@ def loadSubset(basePath, snapNum, partType, fields=None, subset=None, mdi=None, 
 def getSnapOffsets(basePath, snapNum, id, type):
     """ Compute offsets within snapshot for a particular group/subgroup. """
     r = {}
-    print(f'Checking offset in Snapshot {snapNum} for subhalo {id}')
+    print(f'Checking offset in Snapshot {snapNum} for grouphalo {id}')
     # old or new format
     if 'fof_subhalo' in gcPath(basePath, snapNum):
         # use separate 'offsets_nnn.hdf5' files
@@ -1531,7 +1532,6 @@ def get_particles_num(basePath, outputPath, snapNum, subhaloID):
     subhalo = loadSubset(basePath, snapNum, partType, subset=subset)
     os.chdir(basePath)
     gas = il.snapshot.loadSubhalo(basePath, snapNum, subhaloID, partType)
-    print(subhaloID)
     if 'Coordinates' in gas.keys():
         gas_num = len(gas['Coordinates'])
     else:
@@ -1713,7 +1713,7 @@ class DataCube(object):
         dec=0.0 * U.deg,
         stokes_axis=False,
     ):
-        HIfreq = 1.420405751e9 * U.Hz
+        self.HIfreq = 1.420405751e9 * U.Hz
         self.stokes_axis = stokes_axis
         datacube_unit = U.Jy * U.pix**-2
         self._array = np.zeros((n_px_x, n_px_y, n_channels)) * datacube_unit
@@ -1728,21 +1728,21 @@ class DataCube(object):
             lambda x: x * self.px_size**2,
         )
         self.velocity_centre = velocity_centre.to(
-            U.m / U.s, equivalencies=U.doppler_radio(HIfreq)
+            U.m / U.s, equivalencies=U.doppler_radio(self.HIfreq)
         )
         self.channel_width = np.abs(
             (
                 velocity_centre.to(
-                    channel_width.unit, equivalencies=U.doppler_radio(HIfreq)
+                    channel_width.unit, equivalencies=U.doppler_radio(self.HIfreq)
                 )
                 + 0.5 * channel_width
-            ).to(U.m / U.s, equivalencies=U.doppler_radio(HIfreq))
+            ).to(U.m / U.s, equivalencies=U.doppler_radio(self.HIfreq))
             - (
                 velocity_centre.to(
-                    channel_width.unit, equivalencies=U.doppler_radio(HIfreq)
+                    channel_width.unit, equivalencies=U.doppler_radio(self.HIfreq)
                 )
                 - 0.5 * channel_width
-            ).to(U.m / U.s, equivalencies=U.doppler_radio(HIfreq))
+            ).to(U.m / U.s, equivalencies=U.doppler_radio(self.HIfreq))
         )
         self.ra = ra
         self.dec = dec
@@ -1768,14 +1768,14 @@ class DataCube(object):
             -self.px_size.to_value(self.units[0]),
             self.px_size.to_value(self.units[1]),
             self.channel_width.to_value(
-                self.units[2], equivalencies=U.doppler_radio(HIfreq)
+                self.units[2], equivalencies=U.doppler_radio(self.HIfreq)
             ),
         ]
         self.wcs.wcs.crval = [
             self.ra.to_value(self.units[0]),
             self.dec.to_value(self.units[1]),
             self.velocity_centre.to_value(
-                self.units[2], equivalencies=U.doppler_radio(HIfreq)
+                self.units[2], equivalencies=U.doppler_radio(self.HIfreq)
             ),
         ]
         self.wcs.wcs.ctype = ["RA---TAN", "DEC--TAN", "VRAD"]
@@ -1858,13 +1858,13 @@ class DataCube(object):
         self.wcs.wcs.cdelt[2] = -np.abs(
             (
                 (self.wcs.wcs.crval[2] + 0.5 * self.wcs.wcs.cdelt[2]) * self.units[2]
-            ).to_value(U.Hz, equivalencies=U.doppler_radio(HIfreq))
+            ).to_value(U.Hz, equivalencies=U.doppler_radio(self.HIfreq))
             - (
                 (self.wcs.wcs.crval[2] - 0.5 * self.wcs.wcs.cdelt[2]) * self.units[2]
-            ).to_value(U.Hz, equivalencies=U.doppler_radio(HIfreq))
+            ).to_value(U.Hz, equivalencies=U.doppler_radio(self.HIfreq))
         )
         self.wcs.wcs.crval[2] = (self.wcs.wcs.crval[2] * self.units[2]).to_value(
-            U.Hz, equivalencies=U.doppler_radio(HIfreq)
+            U.Hz, equivalencies=U.doppler_radio(self.HIfreq)
         )
         self.wcs.wcs.ctype[2] = "FREQ"
         self.units[2] = U.Hz
@@ -1884,13 +1884,13 @@ class DataCube(object):
         self.wcs.wcs.cdelt[2] = np.abs(
             (
                 (self.wcs.wcs.crval[2] - 0.5 * self.wcs.wcs.cdelt[2]) * self.units[2]
-            ).to_value(U.m / U.s, equivalencies=U.doppler_radio(HIfreq))
+            ).to_value(U.m / U.s, equivalencies=U.doppler_radio(self.HIfreq))
             - (
                 (self.wcs.wcs.crval[2] + 0.5 * self.wcs.wcs.cdelt[2]) * self.units[2]
-            ).to_value(U.m / U.s, equivalencies=U.doppler_radio(HIfreq))
+            ).to_value(U.m / U.s, equivalencies=U.doppler_radio(self.HIfreq))
         )
         self.wcs.wcs.crval[2] = (self.wcs.wcs.crval[2] * self.units[2]).to_value(
-            U.m / U.s, equivalencies=U.doppler_radio(HIfreq)
+            U.m / U.s, equivalencies=U.doppler_radio(self.HIfreq)
         )
         self.wcs.wcs.ctype[2] = "VRAD"
         self.units[2] = U.m * U.s**-1
@@ -2455,7 +2455,7 @@ class Martini:
         result = list()
         rank, ij_pxs = ranks_and_ij_pxs
         if progressbar:
-            ij_pxs = tqdm.tqdm(ij_pxs, position=rank)
+            ij_pxs = tqdm(ij_pxs, position=rank)
         for ij_px in ij_pxs:
             ij = np.array(ij_px)[..., np.newaxis] * U.pix
             mask = (
@@ -2982,7 +2982,7 @@ class Martini:
             self.datacube.add_pad(self.beam.needs_pad())
         return
 
-
+# ------------------------ #
 def plot_moments(FluxCube, vch, path):
     np.seterr(all='ignore')
     fig = plt.figure(figsize=(16, 5))
@@ -3549,6 +3549,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     # Cutting out the central region of the dirty and clean cubes
     clean, clean_header = load_fits(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"))
     dirty, dirty_header = load_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
+    print('Sky Model total flux: ', np.sum(skymodel), ' Jy')
+    print('Dirty Cube total flux: ', np.sum(dirty), ' Jy')
     if crop == True:
         left = int((clean.shape[-1] - n_pxs) / 2)
         clean_cube = clean[:, :,  left:left+int(n_pxs), left:left+int(n_pxs)]
