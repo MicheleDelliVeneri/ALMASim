@@ -1069,7 +1069,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     print('Mass ratio: {}%'.format(initial_mass_ratio))
     mass_ratio = initial_mass_ratio
     orevious_mass_ratio = initial_mass_ratio
-    improvement = 1
+    improvement, increment, i = 1, 1, 0
     if mass_ratio < 50:
         print('Injected mass ratio is less than 50%, increasing distance')
     elif mass_ratio >= 50 and mass_ratio < 80:
@@ -1077,15 +1077,19 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     elif mass_ratio >= 80:
         print('Injected mass ratio is optimal')
     while mass_ratio < 50:
-        if improvement <= 1:
-            print('No significant improvement in mass ratio, increasing distance')
-            distance += 20
-        elif improvement > 1 and improvement <= 10: 
-            print('Small improvement in mass ratio, increasing distance')
-            distance += 5
-        elif improvement > 10:
-            print('Significant improvement in mass ratio, increasing distance')
-            distance += 1
+        if i > 0:
+            if improvement <= 5:
+                print('No significant improvement in mass ratio, increasing distance')
+                increment = 30
+            elif improvement > 5 and improvement <= 10: 
+                print('Small improvement in mass ratio, increasing distance')
+                increment = 10
+            elif improvement > 10:
+                print('Significant improvement in mass ratio, increasing distance')
+                incremet = 5
+        if i >= 3 and improvement < 5:
+            increment += 30
+        distance += increment
         M = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                                 frequency_resolution, 
                                 ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
@@ -1093,7 +1097,8 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
         mass_ratio = M.inserted_mass / M.source.input_mass * 100
         print('Mass ratio: {}%'.format(mass_ratio))
         improvement = mass_ratio - previous_mass_ratio
-        print('Mass Ratio after shifting: {}%'.format(improvement))
+        print('Mass Ratio after shifting: {}%\n'.format(mass_ratio + improvement))
+        i += 1
 
     print('Datacube generated, inserting source')
     
@@ -1407,7 +1412,7 @@ def loadSubset(basePath, snapNum, partType, fields=None, subset=None, mdi=None, 
             print(f'Downloading Snapshot {fileNum} in {savePath}...')
             subprocess.check_call(cmd, shell=True)
             print('Done.')
-        
+        print('Checking File {}...'.format(fileNum))
         f = h5py.File(snapPath(basePath, snapNum, fileNum), 'r')
 
         # no particles of requested type in this file chunk?
@@ -1440,7 +1445,7 @@ def loadSubset(basePath, snapNum, partType, fields=None, subset=None, mdi=None, 
         numToRead -= numToReadLocal
         fileNum   += 1
         fileOff    = 0  # start at beginning of all file chunks other than the first
-
+        print('Loading File {}...'.format(fileNum))
         f.close()
 
     # verify we read the correct number
@@ -1478,7 +1483,7 @@ def getSnapOffsets(basePath, snapNum, id, type):
     with h5py.File(gcPath(basePath, snapNum, fileNum), 'r') as f:
         r['lenType'] = f[type][type+'LenType'][groupOffset, :]
 
-    # old or new format: load the offset (by type) of this group/subgroup within the snapshot
+    # old or new format: load the offset (by type) of  this group/subgroup within the snapshot
     if 'fof_subhalo' in gcPath(basePath, snapNum):
         with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
             r['offsetType'] = f[type+'/SnapByType'][id, :]
@@ -1543,7 +1548,7 @@ def loadOriginalZoom(basePath, snapNum, id, partType, fields=None):
 
 def get_particles_num(basePath, outputPath, snapNum, subhaloID):
     basePath = os.path.join(basePath, "TNG100-1", "output", )
-    print('Looking for subhalo %d in snapshot %d' % (subhaloID, snapNum))
+    print('Looking for Subhalo %d in snapshot %d' % (subhaloID, snapNum))
     partType = 'gas'
     subset = getSnapOffsets(basePath, snapNum, subhaloID, "Subhalo")
     subhalo = loadSubset(basePath, snapNum, partType, subset=subset)
@@ -2937,8 +2942,8 @@ class Martini:
             c.attrs["BeamMajor_in_deg"] = self.beam.bmaj.to_value(U.deg)
             c.attrs["BeamMinor_in_deg"] = self.beam.bmin.to_value(U.deg)
         c.attrs["DateCreated"] = str(Time.now())
-        c.attrs["MartiniVersion"] = martini_version
-        c.attrs["AstropyVersion"] = astropy_version
+        #c.attrs["MartiniVersion"] = martini_version
+        #c.attrs["AstropyVersion"] = astropy_version
         if self.beam is not None:
             if self.beam.kernel is None:
                 raise ValueError(
@@ -2968,8 +2973,8 @@ class Martini:
             b.attrs["BeamMajor_in_deg"] = self.beam.bmaj.to_value(U.deg)
             b.attrs["BeamMinor_in_deg"] = self.beam.bmin.to_value(U.deg)
             b.attrs["DateCreated"] = str(Time.now())
-            b.attrs["MartiniVersion"] = martini_version
-            b.attrs["AstropyVersion"] = astropy_version
+            #b.attrs["MartiniVersion"] = martini_version
+            #b.attrs["AstropyVersion"] = astropy_version
 
         if channels == "frequency":
             self.datacube.velocity_channels()
@@ -3398,7 +3403,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
     if n_pxs is not None:
         print('Cube will be cropped to {} x {} x {} pixels'.format(n_pxs, n_pxs, n_channels))
-    print('# ------------------------ #')
+    print('\n# ------------------------ #\n')
     skymodel_time = time.time()
     if get_skymodel is True:
         print('Reading Skymodel from {}'.format(data_dir))
@@ -3784,6 +3789,16 @@ def check_TNGBasePath(TNGBasePath: str, TNGSnapshotID: int, TNGSubhaloID: list):
     else:
         print("Error: TNGBasePath not specified.")
         return None
+
+def check_TNGData(path, api_key: str='8f578b92e700fae3266931f4d785f82c', TNGSnapshotID: int=99):
+    if not os.path.exists(path):
+        os.mkdir(path)
+    main_path = os.path.join(path, 'TNG100-1')
+    if not os.path.exists(main_path):
+        os.mkdir(main_path)
+    subfolders = [os.path.join(main_path, 'output'), 
+                          os.path.join(main_path, 'postprocessing')]
+    return
 
 def get_subhalorange(basePath, snapNum, subhaloIDs):
     partType = 'gas'
