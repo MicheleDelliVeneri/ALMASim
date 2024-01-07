@@ -3488,11 +3488,13 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('True Brightness', true_brightness, ' Jy/px')
     print('Minimum Brightness', min_brightness, ' Jy/px')
     if inbright != true_brightness:
+        print('Adjusting Brightness')
         flattened_skymodel = np.ravel(skymodel)
         t_min = 0
         t_max = inbright
         skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
         skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
+        print('New Brightness', np.max(skymodel), ' Jy/px')
         write_numpy_to_fits(skymodel, sky_header, filename)
     sim_time = time.time()
     simobserve(
