@@ -65,6 +65,8 @@ parser.add_argument('--plot', type=str2bool, default=False, const=True, nargs='?
 parser.add_argument('--save_ms', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the measurement sets are preserved and stored as numpy arrays. Default False.')
 parser.add_argument('--save_psf', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the PSF is stored as a numpy array. Default False.')
 parser.add_argument('--save_pb', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the primary beam is stored as a numpy array. Default False.')
+parser.add_argument('--run_tclean', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the tclean algorithm is run on the measurement set. Default False.')
+parser.add_argument('--tclean_iters', type=int, default=1000, help='R|Number of iterations for the tclean algorithm. Default 1000.')
 parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?',  help='R|If True, the simulation results are cropped to the size of the beam times 1.5. Default False.')
 parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels in the simulation. Default None, if set simulations are spatially cropped to the given number of pixels.')
 parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation. Default None, if set simulations are spectrally cropped to the given number of channels.')
@@ -212,6 +214,8 @@ if __name__ == '__main__':
     save_ms = [args.save_ms for i in idxs]
     save_psf = [args.save_psf for i in idxs]
     save_pb = [args.save_pb for i in idxs]
+    run_tclean = [args.run_tclean for i in idxs]
+    tclean_iters = [args.tclean_iters for i in idxs]
     crop = [args.crop for i in idxs]
     ncpu = [args.ncpu for i in idxs]
     print('Data directory: {}'.format(data_dir[0]))
@@ -248,6 +252,8 @@ if __name__ == '__main__':
                                     save_pb,
                                     crop,
                                     insert_serendipitous,
+                                    run_tclean,
+                                    tclean_iters,
                                     n_pxs, 
                                     n_channels,
                                     ncpu
@@ -258,7 +264,8 @@ if __name__ == '__main__':
                                             'inwidth', 'integration', 'totaltime', 'ra', 'dec',
                                             'pwv', 'rest_frequency', 'snr', 'get_skymodel', 
                                             'source_type', 'tng_basepath', 'tng_snapid', 'tng_subhaloid',
-                                            'plot', 'save_ms', 'save_psf', 'save_pb', 'crop', 'serendipitous',
+                                            'plot', 'save_ms', 'save_psf', 'save_pb', 'crop', 
+                                            'serendipitous', 'run_tclean', 'tclean_iters',
                                             'n_px', 'n_channels', 'ncpu'])
     #if args.source_type == 'extended':
     dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))

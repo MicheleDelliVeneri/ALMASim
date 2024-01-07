@@ -855,6 +855,7 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     fwhm_x = int(fwhm_x.value / pixel_size.value)
     fwhm_y = int(fwhm_y.value / pixel_size.value)
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
+    print(fwhm_x, fwhm_y, fwhm_z)
     if rest_frequency == 1420.4:
         hI_rest_frequency = rest_frequency * U.MHz
     else:
@@ -878,21 +879,29 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
     pos_z = n_channels // 2
     print('Generating central source at position ({}, {}, {})'.format(int(pos_x), int(pos_y), int(pos_z)))
     datacube = insert_gaussian(datacube, 1, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, pa, n_px, n_channels)
-    xy_radius = fov / pixel_size * 0.3
-    z_radius = 0.3 * bandwidth * U.MHz / frequency_resolution
+    #xy_radius = fov / pixel_size * 0.3
+    #z_radius = 0.3 * bandwidth * U.MHz / frequency_resolution
+    xy_radius = n_px / 4
+    z_radius = n_channels / 2
     if serendipitous is True:
         print('Generating central source and {} serendipitous companions in a radius of {} pixels in the x and y directions and {} pixels in the z direction\n'.format(n_sources, int(xy_radius), int(z_radius)))
     min_sep_xy = min_sep_spatial / pixel_size
     min_sep_z = min_sep_frequency / frequency_resolution
     if serendipitous is True:
-        fwhm_xs = np.random.randint(2, 10, n_sources)
-        fwhm_ys = np.random.randint(2, 10, n_sources)
-        fwhm_zs = np.random.randint(2, 30, n_sources)
+        if fwhm_x == 1:
+            fwhm_x += 1
+        if fwhm_y == 1:
+            fwhm_y += 1
+        if fwhm_z <= 2:
+            fwhm_z = 3
+        fwhm_xs = np.random.randint(1, fwhm_x, n_sources)
+        fwhm_ys = np.random.randint(1, fwhm_y, n_sources)
+        fwhm_zs = np.random.randint(2, fwhm_z, n_sources)
         amplitudes = np.random.rand(n_sources)
         sample_coords = sample_positions(pos_x, pos_y, pos_z, 
                                      fwhm_x, fwhm_y, fwhm_z,
                                      n_sources, fwhm_xs, fwhm_ys, fwhm_zs,
-                                     xy_radius.value, z_radius.value, min_sep_xy.value, min_sep_z.value)
+                                     xy_radius, z_radius, min_sep_xy.value, min_sep_z.value)
     
         pas = np.random.randint(0, 360, n_sources)
         for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords),):
@@ -3307,9 +3316,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, ra: float, dec: float,
               pwv: float, rest_frequency: float, snr: float, get_skymodel: bool, 
-              source_type: str, TNGBasePath: str, TNGSnapshotID: int, 
-              TNGSubhaloID: int,
-              plot: bool, save_ms: bool, save_psf: bool, save_pb: bool, crop: bool, serendipitous: bool, 
+              source_type: str, TNGBasePath: str, TNGSnapshotID: int, TNGSubhaloID: int,
+              plot: bool, save_ms: bool, save_psf: bool, save_pb: bool, crop: bool, 
+              serendipitous: bool, run_tclean: bool, niter: int,
               n_pxs: Optional[int] = None, 
               n_channels: Optional[int] = None,
               n_workers: Optional[int] = 1,
@@ -3340,6 +3349,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     plot (bool): if True, simulations plots are stored
     save_ms (bool): if True, measurement sets are stored
     crop (bool): if True, cubes are cropped to the size of the beam times 1.5 or to n_pxs
+    serendipitous (bool): if True, serendipitous sources are added to the cube
+    run_tclean (bool): if True, tclean is run on the measurement set
+    niter (int): number of iterations for tclean
     n_pxs (int): Optional number of pixels in the x and y direction, if present crop is set to True
     n_channels (int): Optional number of channels in the z direction
     ncpu (int): number of cpu to use in parallel
@@ -3573,16 +3585,16 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     # Cutting out the central region of the dirty and clean cubes
     clean, clean_header = load_fits(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"))
     dirty, dirty_header = load_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
-    sky_total_flux = np.sum(skymodel)
-    dirty_total_flux = np.sum(dirty)
+    sky_total_flux = np.nansum(skymodel)
+    dirty_total_flux = np.nansum(dirty)
     if sky_total_flux != dirty_total_flux:
         print('Dirty Cube total flux is different from the Sky Model total flux')
         print('Dirty Cube total flux: ', dirty_total_flux, ' Jy/px')
         print('Sky Model total flux: ', sky_total_flux, ' Jy/px')
-        print('Normalizing Dirty Cube to the Sky Model total flux')
-        dirty = dirty * sky_total_flux / dirty_total_flux
-        print('Dirty Cube total flux after normalization: ', np.sum(dirty), ' Jy/px')
-        write_numpy_to_fits(dirty, dirty_header, os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
+        print('Normalizing Sky Model Cube to the Observed total flux')
+        clean = clean * dirty_total_flux / sky_total_flux 
+        print('Sky Model total flux after normalization: ', np.sum(clean), ' Jy/px')
+        write_numpy_to_fits(clean, clean_header, os.path.join(output_dir, "clean_cube_" + str(i) +".fits"))
     if crop == True:
         left = int((clean.shape[-1] - n_pxs) / 2)
         clean_cube = clean[:, :,  left:left+int(n_pxs), left:left+int(n_pxs)]
@@ -3593,14 +3605,36 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         
         write_numpy_to_fits(clean_cube, clean_header, os.path.join(output_dir, "clean_cube_" + str(i) +".fits"))
         write_numpy_to_fits(dirty_cube, dirty_header, os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
-
+    if run_tclean is True:
+        print('Running tClean')
+        tclean_time = time.time()
+        tclean(
+        vis=os.path.join(project, "{}.{}.noisy.ms".format(project, antenna_name)),
+        imagename=os.path.join(project, '{}.{}'.format(project, antenna_name)),
+        imsize=[int(n_px), int(n_px)],
+        cell="{}arcsec".format(cell_size),
+        specmode="cube",
+        niter=niter,
+        fastnoise=False,
+        calcpsf=True,
+        pbcor=True,
+        pblimit=0.2,
+        )
+        final_tclean_time = time.time()
+        exportfits(imagename=os.path.join(project, '{}.{}.image'.format(project, antenna_name)), 
+           fitsimage=os.path.join(output_dir, "tclean_cube_" + str(i) +".fits"), overwrite=True)
+        print('tClean performed {} iterations in {} seconds'.format(niter, strftime("%H:%M:%S", gmtime(final_tclean_time - tclean_time))))
+    
     print('Deleting junk files')
     #shutil.rmtree(project)
     os.remove(os.path.join(output_dir, "skymodel_" + str(i) +".fits"))
     if plot is True:
         print('Saving Plots')
-        plotter(i, output_dir, plot_dir)
+        plotter(i, output_dir, plot_dir, run_tclean)
     stop = time.time()
+
+    
+
     print('Skymodel Generated in {} seconds'.format(strftime("%H:%M:%S", gmtime(final_skymodel_time - skymodel_time))))
     print('Simulation Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_sim_time - sim_time))))
     if save_ms is True:
@@ -3608,40 +3642,75 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
     return
 
-def plotter(i, output_dir, plot_dir):
+def plotter(i, output_dir, plot_dir, run_tclean):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))
     dirty, _ = load_fits(os.path.join(output_dir, 'dirty_cube_{}.fits'.format(i)))
+    if run_tclean is True:
+        tclean, _ = load_fits(os.path.join(output_dir, 'tclean_cube_{}.fits'.format(i)))
     if len(clean.shape) > 3:
         clean = clean[0]
         dirty = dirty[0]
+        if run_tclean is True:
+            tclean = tclean[0]
     if clean.shape[0] > 1:
         clean_spectrum = np.sum(clean[:, :, :], axis=(1, 2))
         dirty_spectrum = np.where(dirty < 0, 0, dirty)
         dirty_spectrum = np.nansum(dirty_spectrum[:, :, :], axis=(1, 2))
+        if run_tclean is True:
+            tclean_spectrum = np.where(tclean < 0, 0, tclean)
+            tclean_spectrum = np.nansum(tclean_spectrum[:, :, :], axis=(1, 2))
         clean_image = np.sum(clean[:, :, :], axis=0)[np.newaxis, :, :]
         dirty_image = np.nansum(dirty[:, :, :], axis=0)[np.newaxis, :, :]
+        if run_tclean is True:
+            tclean_image = np.nansum(tclean[:, :, :], axis=0)[np.newaxis, :, :]
     else:
         clean_image = clean.copy()
         dirty_image = dirty.copy()
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+        if run_tclean is True:
+            tclean_image = tclean.copy()
+    if run_tclean is True:
+        fig, ax = plt.subplots(1, 3, figsize=(18, 5))
+    else:
+        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     ax[0].imshow(clean_image[0], origin='lower')
     ax[1].imshow(dirty_image[0], origin='lower')
+    if run_tclean is True:
+        ax[2].imshow(tclean_image[0], origin='lower')
     plt.colorbar(ax[0].imshow(clean_image[0], origin='lower'), ax=ax[0], label='Jy/px')
     plt.colorbar(ax[1].imshow(dirty_image[0], origin='lower'), ax=ax[1], label='Jy/px')
+    if run_tclean is True:
+        plt.colorbar(ax[2].imshow(tclean_image[0], origin='lower'), ax=ax[2], label='Jy/px')
     ax[0].set_title('Sky Model Image')
     ax[1].set_title('ALMA Observed Image')
     ax[0].set_xlabel('x [pixels]')
     ax[0].set_ylabel('y [pixels]')
     ax[1].set_xlabel('x [pixels]')
     ax[1].set_ylabel('y [pixels]')
+    if run_tclean is True:
+        ax[2].set_xlabel('x [pixels]')
+        ax[2].set_ylabel('y [pixels]')
+        ax[2].set_title('tClean Image')
     plt.savefig(os.path.join(plot_dir, 'sim_{}.png'.format(i)))
     plt.close()
     if clean.shape[0] > 1:
-        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+        if run_tclean is True:
+            fig, ax = plt.subplots(1, 3, figsize=(18, 5))
+        else:
+            fig, ax = plt.subplots(1, 2, figsize=(12, 5))
         ax[0].plot(clean_spectrum)
         ax[1].plot(dirty_spectrum)
+        if run_tclean is True:
+            ax[2].plot(tclean_spectrum)
         ax[0].set_title('Clean Sky Model Spectrum')
         ax[1].set_title('ALMA Simulated Spectrum')
+        ax[0].set_xlabel('Channel')
+        ax[0].set_ylabel('Jy/px')
+        ax[1].set_xlabel('Channel')
+        ax[1].set_ylabel('Jy/px')
+        if run_tclean is True:
+            ax[2].set_title('tClean Spectrum')
+            ax[2].set_xlabel('Channel')
+            ax[2].set_ylabel('Jy/px')
         plt.savefig(os.path.join(plot_dir, 'sim_spectrum_{}.png'.format(i)))
         plt.close()
 
