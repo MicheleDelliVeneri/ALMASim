@@ -3571,8 +3571,16 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     # Cutting out the central region of the dirty and clean cubes
     clean, clean_header = load_fits(os.path.join(output_dir, "clean_cube_" + str(i) +".fits"))
     dirty, dirty_header = load_fits(os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
-    print('Sky Model total flux: ', np.sum(skymodel), ' Jy')
-    print('Dirty Cube total flux: ', np.sum(dirty), ' Jy')
+    sky_total_flux = np.sum(skymodel)
+    dirty_total_flux = np.sum(dirty)
+    if sky_total_flux != dirty_total_flux:
+        print('Dirty Cube total flux is different from the Sky Model total flux')
+        print('Dirty Cube total flux: ', dirty_total_flux, ' Jy/px')
+        print('Sky Model total flux: ', sky_total_flux, ' Jy/px')
+        print('Normalizing Dirty Cube to the Sky Model total flux')
+        dirty = dirty * sky_total_flux / dirty_total_flux
+        print('Dirty Cube total flux after normalization: ', np.sum(dirty), ' Jy/px')
+        write_numpy_to_fits(dirty, dirty_header, os.path.join(output_dir, "dirty_cube_" + str(i) +".fits"))
     if crop == True:
         left = int((clean.shape[-1] - n_pxs) / 2)
         clean_cube = clean[:, :,  left:left+int(n_pxs), left:left+int(n_pxs)]
@@ -3616,10 +3624,14 @@ def plotter(i, output_dir, plot_dir):
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     ax[0].imshow(clean_image[0], origin='lower')
     ax[1].imshow(dirty_image[0], origin='lower')
-    plt.colorbar(ax[0].imshow(clean_image[0], origin='lower'), ax=ax[0])
-    plt.colorbar(ax[1].imshow(dirty_image[0], origin='lower'), ax=ax[1])
-    ax[0].set_title('Clean Sky Model Image')
-    ax[1].set_title('ALMA Simulated Image')
+    plt.colorbar(ax[0].imshow(clean_image[0], origin='lower'), ax=ax[0], label='Jy/px')
+    plt.colorbar(ax[1].imshow(dirty_image[0], origin='lower'), ax=ax[1], label='Jy/px')
+    ax[0].set_title('Sky Model Image')
+    ax[1].set_title('ALMA Observed Image')
+    ax[0].set_xlabel('x [pixels]')
+    ax[0].set_ylabel('y [pixels]')
+    ax[1].set_xlabel('x [pixels]')
+    ax[1].set_ylabel('y [pixels]')
     plt.savefig(os.path.join(plot_dir, 'sim_{}.png'.format(i)))
     plt.close()
     if clean.shape[0] > 1:

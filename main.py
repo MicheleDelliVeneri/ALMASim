@@ -69,7 +69,7 @@ parser.add_argument('--crop', type=str2bool, default=False, const=True, nargs='?
 parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels in the simulation. Default None, if set simulations are spatially cropped to the given number of pixels.')
 parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation. Default None, if set simulations are spectrally cropped to the given number of channels.')
 parser.add_argument('--ncpu', type=int, default=10, help='R|Number of cpus to use. Default 10.')
-parser.add_argument('--ip', type=str, default=None, help='R|IP address of the cluster. Default None.')
+parser.add_argument('--ip', type=str, default='127.0.0.1', help='R|IP address of the cluster. Default None.')
 
 
 if __name__ == '__main__':
@@ -260,10 +260,11 @@ if __name__ == '__main__':
                                             'source_type', 'tng_basepath', 'tng_snapid', 'tng_subhaloid',
                                             'plot', 'save_ms', 'save_psf', 'save_pb', 'crop', 'serendipitous',
                                             'n_px', 'n_channels', 'ncpu'])
-    if args.source_type == 'extended':
-        dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))
-    else:
-        dbs = input_params
+    #if args.source_type == 'extended':
+    dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))
+    #else:
+    #    dbs = input_params
+    #print(type(dbs))
     for db in dbs:
         if (len(db) > 1) and (args.ncpu > 1) and  (args.source_type != 'extended'):
             print('Running multiple simulations in parallel...')
@@ -281,6 +282,7 @@ if __name__ == '__main__':
             futures = client.map(sm.simulator, *db.values.T)
             client.gather(futures)
             client.close()
+            cluster.close()
         else:
             print('Running simulations sequentially each with multiple workers...')
             for i in range(len(db)):
