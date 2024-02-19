@@ -1037,7 +1037,7 @@ def generate_gaussian_skymodel(id, data_dir, n_sources, n_px, n_channels, bandwi
 def generate_pointlike_skymodel(id, data_dir, rest_frequency, 
                                 frequency_resolution, fwhm_z, central_frequency, 
                                 n_px, n_channels, ra, dec, 
-                                spatial_resolution, plot_dir):
+                                spatial_resolution, serendipitous, plot_dir):
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
     if rest_frequency == 1420.4:
         hI_rest_frequency = rest_frequency * U.MHz
@@ -1061,6 +1061,23 @@ def generate_pointlike_skymodel(id, data_dir, rest_frequency,
     pos_z = n_channels // 2
     print('Generating point-like source at position ({}, {}, {})'.format(int(pos_x), int(pos_y), int(pos_z)))
     datacube = insert_pointlike(datacube, 1, pos_x, pos_y, pos_z, fwhm_z, n_px, n_channels)
+    if serendipitous is True:
+        print('Generating central serendipitous companions')
+        xy_radius = n_px / 4
+        z_radius = n_channels / 2
+        min_sep_xy = 3
+        min_sep_z = 10
+        amplitudes = np.random.rand(n_sources)
+        n_sources = random.randint(1, 5)
+        for i in range(n_sources):
+            while True:
+                x = np.random.randint(int(0.25 * n_px), int(0.75 * n_px))
+                y = np.random.randint(int(0.25 * n_px), int(0.75 * n_px))
+                z = np.random.randint(int(0.25 * n_channels), int(0.75 * n_channels))
+                if abs(x - pos_x) >= min_sep_xy and abs(y - pos_y) >= min_sep_xy and abs(z - pos_z) >= min_sep_z:
+                    break
+            s_fwhm_z = np.random.randint(1, fwhm_z)
+            datacube = insert_pointlike(datacube, amplitudes[i], x, y, z, s_fwhm_z, n_px, n_channels)
     filename = os.path.join(data_dir, 'skymodel_{}.fits'.format(id))
     write_datacube_to_fits(datacube, filename)
     plot_skymodel(filename, id, plot_dir)
