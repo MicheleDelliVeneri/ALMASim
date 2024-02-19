@@ -1,6 +1,7 @@
 from datetime import date 
 import tempfile
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 import numpy as np
 import pandas as pd
 from astropy.io import fits
@@ -1078,7 +1079,7 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     print('Mass ratio: {}%'.format(initial_mass_ratio))
     mass_ratio = initial_mass_ratio
     orevious_mass_ratio = initial_mass_ratio
-    improvement, increment, i = 1, 5, 0
+    improvement, increment, i = 1, 30, 0
     if mass_ratio < 50:
         print('Injected mass ratio is less than 50%, increasing distance')
     elif mass_ratio >= 50 and mass_ratio < 80:
@@ -3399,7 +3400,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     else:
         n_px = int(fov / cell_size)
     # number of pixels must be even
-    print('Simulation Parameters given Band and Spatial Resolution')
+    print('Simulation Parameters given Band and Spatial Resolution for simulation {}'.format(i))
     print('Band ', band)
     print('Bandwidth ', bandwidth, ' MHz')
     print('Central Frequency ', central_freq, ' GHz')
@@ -3408,6 +3409,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Spatial_resolution ', spatial_resolution, ' arcsec')
     print('Cycle ', cycle)
     print('Antenna Configuration ', antenna_name)
+    print('Inbright ', inbright, ' Jy/px')
     print('Beam Size: ', beam_size, ' arcsec')
     print('TNG Base Path ', TNGBasePath)
     print('TNG Snapshot ID ', TNGSnapshotID)
@@ -3630,7 +3632,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     os.remove(os.path.join(output_dir, "skymodel_" + str(i) +".fits"))
     if plot is True:
         print('Saving Plots')
-        plotter(i, output_dir, plot_dir, run_tclean)
+        plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_size, cell_size, antenna_name)
     stop = time.time()
 
     
@@ -3642,9 +3644,13 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
     return
 
-def plotter(i, output_dir, plot_dir, run_tclean):
+def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_size, pixel_size, antenna_config):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))
     dirty, _ = load_fits(os.path.join(output_dir, 'dirty_cube_{}.fits'.format(i)))
+    beam_solid_angle = np.pi * (beam_size / 2) ** 2
+    pixel_solid_angle = pixel_size ** 2
+    pix_to_beam = beam_solid_angle / pixel_solid_angle
+
     if run_tclean is True:
         tclean, _ = load_fits(os.path.join(output_dir, 'tclean_cube_{}.fits'.format(i)))
     if len(clean.shape) > 3:
@@ -3672,24 +3678,46 @@ def plotter(i, output_dir, plot_dir, run_tclean):
         fig, ax = plt.subplots(1, 3, figsize=(18, 5))
     else:
         fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    ax[0].imshow(clean_image[0], origin='lower')
-    ax[1].imshow(dirty_image[0], origin='lower')
+    ax[0].imshow(clean_image[0] * pix_to_beam, origin='lower')
+    ax[1].imshow(dirty_image[0] * pix_to_beam, origin='lower')
     if run_tclean is True:
-        ax[2].imshow(tclean_image[0], origin='lower')
-    plt.colorbar(ax[0].imshow(clean_image[0], origin='lower'), ax=ax[0], label='Jy/px')
-    plt.colorbar(ax[1].imshow(dirty_image[0], origin='lower'), ax=ax[1], label='Jy/px')
+        ax[2].imshow(tclean_image[0] * pix_to_beam, origin='lower')
+    plt.colorbar(ax[0].imshow(clean_image[0] * pix_to_beam, origin='lower'), ax=ax[0], label='Jy/beam')
+    plt.colorbar(ax[1].imshow(dirty_image[0] * pix_to_beam, origin='lower'), ax=ax[1], label='Jy/beam')
     if run_tclean is True:
-        plt.colorbar(ax[2].imshow(tclean_image[0], origin='lower'), ax=ax[2], label='Jy/px')
+        plt.colorbar(ax[2].imshow(tclean_image[0] * pix_to_beam, origin='lower'), ax=ax[2], label='Jy/beam')
+    x_size, y_size = clean_image[0].shape
+    xticks = np.arange(0, x_size, step=10)
+    yticks = np.arange(0, y_size, step=10)
     ax[0].set_title('Sky Model Image')
     ax[1].set_title('ALMA Observed Image')
-    ax[0].set_xlabel('x [pixels]')
-    ax[0].set_ylabel('y [pixels]')
-    ax[1].set_xlabel('x [pixels]')
-    ax[1].set_ylabel('y [pixels]')
+    ax[0].set_xlabel('RA (arcsec)')
+    ax[0].set_ylabel('DEC (arcsec)')
+    ax[0].set_xticks(xticks)
+    ax[0].set_xticklabels(np.round(xticks * pixel_size, 2))
+    ax[0].set_yticks(yticks)
+    ax[0].set_yticklabels(np.round(yticks * pixel_size, 2))
+    ax[1].set_xlabel('RA (arcsec)')
+    ax[1].set_ylabel('DEC (arcsec)')
+    ax[1].set_xticks(xticks)
+    ax[1].set_xticklabels(np.round(xticks * pixel_size, 2))
+    ax[1].set_yticks(yticks)
+    ax[1].set_yticklabels(np.round(yticks * pixel_size, 2))
+    ax[0].add_patch(Ellipse((10, 10), beam_size/ pixel_size, beam_size / pixel_size,
+                            color='white', fill=False, linewidth=2))
+    ax[0].text(10 + beam_size / pixel_size + 2, 10, f'Clean Beam with size: {round(beam_size, 2)} arcsec',
+            verticalalignment='center', horizontalalignment='left', color='white', fontsize=8)
     if run_tclean is True:
         ax[2].set_xlabel('x [pixels]')
         ax[2].set_ylabel('y [pixels]')
         ax[2].set_title('tClean Image')
+        ax[2].text(0.95, 0.95, 'Band: {}\n\nCycle: {}\n\n Antenna Config: {}\n\nBright: {} Jy/beam\n\nPixel Size {} arcsec'.format(band, cycle[-1], antenna_config[-1],
+                   round(inbright * pix_to_beam, 2), round(pixel_size, 2)), verticalalignment='top', horizontalalignment='right',
+                   transform=ax[2].transAxes, color='white', fontsize=8)
+    else:
+        ax[1].text(0.95, 0.95, 'Band: {}\n\nCycle: {}\n\n Antenna Config: {}\n\nBright: {} Jy/beam\n\nPixel Size {} arcsec'.format(band, cycle[-1], antenna_config[-1],
+                   round(inbright * pix_to_beam, 2), round(pixel_size, 2)), verticalalignment='top', horizontalalignment='right',
+                   transform=ax[1].transAxes, color='white', fontsize=8)
     plt.savefig(os.path.join(plot_dir, 'sim_{}.png'.format(i)))
     plt.close()
     if clean.shape[0] > 1:
@@ -3697,20 +3725,20 @@ def plotter(i, output_dir, plot_dir, run_tclean):
             fig, ax = plt.subplots(1, 3, figsize=(18, 5))
         else:
             fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-        ax[0].plot(clean_spectrum)
-        ax[1].plot(dirty_spectrum)
+        ax[0].plot(clean_spectrum * pix_to_beam)
+        ax[1].plot(dirty_spectrum * pix_to_beam)
         if run_tclean is True:
-            ax[2].plot(tclean_spectrum)
+            ax[2].plot(tclean_spectrum * pix_to_beam)
         ax[0].set_title('Clean Sky Model Spectrum')
         ax[1].set_title('ALMA Simulated Spectrum')
         ax[0].set_xlabel('Channel')
-        ax[0].set_ylabel('Jy/px')
+        ax[0].set_ylabel('Jy/beam')
         ax[1].set_xlabel('Channel')
-        ax[1].set_ylabel('Jy/px')
+        ax[1].set_ylabel('Jy/beam')
         if run_tclean is True:
             ax[2].set_title('tClean Spectrum')
             ax[2].set_xlabel('Channel')
-            ax[2].set_ylabel('Jy/px')
+            ax[2].set_ylabel('Jy/beam')
         plt.savefig(os.path.join(plot_dir, 'sim_spectrum_{}.png'.format(i)))
         plt.close()
 

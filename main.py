@@ -8,6 +8,7 @@ import argparse
 from random import choices
 from natsort import natsorted
 import math
+from itertools import product
 import random
 
 MALLOC_TRIM_THRESHOLD_ = 0
@@ -72,6 +73,7 @@ parser.add_argument('--n_px', type=int, default=None, help='R|Number of pixels i
 parser.add_argument('--n_channels', type=int, default=None, help='R|Number of channels in the simulation. Default None, if set simulations are spectrally cropped to the given number of channels.')
 parser.add_argument('--ncpu', type=int, default=10, help='R|Number of cpus to use. Default 10.')
 parser.add_argument('--ip', type=str, default='127.0.0.1', help='R|IP address of the cluster. Default None.')
+parser.add_argument('--testing-mode', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation is run in testing mode. Default False.')
 
 
 if __name__ == '__main__':
@@ -89,6 +91,8 @@ if __name__ == '__main__':
         idxs = np.arange(0, args.n_sims * len(os.listdir(args.reference_dir)))
     else:
         idxs = np.arange(0, args.n_sims)
+    if args.testing_mode == True:
+        idxs = np.arange(0, len(list(product(args.bands, args.antenna_config, args.inbright))))
     data_dir = [args.data_dir for i in idxs]
     main_path = [args.main_path for i in idxs]
     output_dir = [output_dir for i in idxs]
@@ -130,6 +134,20 @@ if __name__ == '__main__':
         rest_frequencies = [1420.4 for i in idxs]
         cycles = choices(args.cycle, k=len(idxs))
         antenna_ids = choices(args.antenna_config, k=len(idxs))
+        
+    if args.testing_mode == True:
+        all_combinations = list(product(args.bands, args.antenna_config, args.inbright))
+        bands = [comb[0] for comb in all_combinations]
+        antenna_ids = [comb[1] for comb in all_combinations]
+        inbrights = [comb[2] for comb in all_combinations]
+        idxs = np.arange(0, len(all_combinations))
+        ras = [0.0 for i in idxs]
+        decs = [0.0 for i in idxs]
+        n_pxs = [args.n_px for i in idxs]
+        n_channels = [args.n_channels for i in idxs]
+        rest_frequencies = [1420.4 for i in idxs]
+        cycles = choices(args.cycle, k=len(idxs))
+
     
 
     antenna_names = [os.path.join('cycle{}'.format(int(j)), 'alma.cycle{}.0.{}'.format(int(j), int(k))) for j, k in zip(cycles, antenna_ids)]
@@ -218,6 +236,7 @@ if __name__ == '__main__':
     tclean_iters = [args.tclean_iters for i in idxs]
     crop = [args.crop for i in idxs]
     ncpu = [args.ncpu for i in idxs]
+    print('Simulating {} ALMA observations...'.format(len(idxs)))
     print('Data directory: {}'.format(data_dir[0]))
     print('Main path: {}'.format(main_path[0]))
     print('Output directory: {}'.format(output_dir[0]))
