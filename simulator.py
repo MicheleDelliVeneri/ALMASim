@@ -3626,7 +3626,8 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                    inwidth * U.MHz, fwhm_z * U.MHz,
                                                    central_freq * U.GHz, n_px, 
                                                    n_channels, ra * U.deg, dec * U.deg,
-                                                   spatial_resolution * U.arcsec, plot_dir)
+                                                   spatial_resolution * U.arcsec, 
+                                                   serendipitous, plot_dir)
         elif source_type == "lens":
             print('Generating Lensing Skymodel')
             filename = generate_lensing_skymodel()
