@@ -199,39 +199,41 @@ def ms_to_npz(ms, dirty_cube, datacolumn='CORRECTED_DATA', output_file='test.npz
                     antpos2=tb.getcol('ANTENNA2'),
                     antpos3=tb.getcol('TIME'))
 
-def get_fov(bands):
+def get_fov_from_band(band):
     light_speed = c.to(U.m / U.s).value
+    if band == 1:
+        central_freq = 43 * U.GHz  
+    elif band == 2:
+        central_freq = 67 * U.GHz
+    elif band == 3:
+        central_freq = 100 * U.GHz
+    elif band == 4:
+        central_freq = 150 * U.GHz
+    elif band == 5:
+        central_freq = 217 * U.GHz
+    elif band == 6:
+        central_freq = 250 * U.GHz
+    elif band == 7:
+        central_freq = 353 * U.GHz
+    elif band == 8:
+        central_freq = 545 * U.GHz
+    elif band == 9:
+        central_freq = 650 * U.GHz    
+    elif band == 10:
+        central_freq = 868.5 * U.GHz
+    central_freq = central_freq.to(U.Hz).value
+    central_freq_s = 1 / central_freq
+    wavelength = light_speed * central_freq_s
+    # this is the field of view in Radians
+    fov = 1.22 * wavelength / 12
+    # fov in arcsec
+    fov = fov * 206264.806
+    return fov
+
+def get_fov(bands):
     fovs = []
     for band in bands:
-        if band == 1:
-            central_freq = 43 * U.GHz  
-        elif band == 2:
-            central_freq = 67 * U.GHz
-        elif band == 3:
-            central_freq = 100 * U.GHz
-        elif band == 4:
-            central_freq = 150 * U.GHz
-        elif band == 5:
-            central_freq = 217 * U.GHz
-        elif band == 6:
-            central_freq = 250 * U.GHz
-        elif band == 7:
-            central_freq = 353 * U.GHz
-        elif band == 8:
-            central_freq = 545 * U.GHz
-        elif band == 9:
-            central_freq = 650 * U.GHz    
-        elif band == 10:
-            central_freq = 868.5 * U.GHz
-           
-        central_freq = central_freq.to(U.Hz).value
-        central_freq_s = 1 / central_freq
-        wavelength = light_speed * central_freq_s
-        # this is the field of view in Radians
-        fov = 1.22 * wavelength / 12
-        # fov in arcsec
-        fov = fov * 206264.806
-        fovs.append(fov)
+        fovs.append(get_fov_from_band(band))
     return np.array(fovs)
 
 def get_spatial_resolution(band, config_number):
@@ -252,6 +254,125 @@ def get_spatial_resolution(band, config_number):
     elif config_number == 10:
         assert band <= 8, 'band should be less than 8 for antenna configuration 10'
     return spatial_resolution_dict[config_number][band - 3]
+
+def get_antenna_config_from_date(obs_date):
+    date_to_cycle = [
+        (date(2023, 10, 1), date(2024, 9, 30), 10),
+        (date(2022, 9, 30), date(2023, 10, 1), 9),
+        (date(2021, 10, 1), date(2022, 10, 1), 8),
+        (date(2019, 9, 30), date(2021, 10, 1), 7),
+        (date(2018, 10, 1), date(2019, 9, 30), 6),
+        (date(2017, 10, 1), date(2018, 10, 1), 5),
+        (date(2016, 9, 30), date(2017, 10, 1), 4),
+        (date(2015, 10, 1), date(2016, 10, 1), 3),
+     ]
+    date_to_conf = [
+        (date(2015, 10, 13), date(2015, 12, 7), 8),
+        (date(2015, 12, 7), date(2016, 3, 7), 1),
+        (date(2016, 3, 7), date(2016, 5, 2), 2),
+        (date(2016, 5, 2), date(2016, 5, 30), 3),
+        (date(2016, 5, 30), date(2016, 7, 18), 4),
+        (date(2016, 7, 18), date(2016, 8, 22), 5),
+        (date(2016, 8, 22), date(2016, 9, 30), 6),
+        (date(2016, 9, 30), date(2016, 11, 14), 4),
+        (date(2016, 11, 14), date(2016, 12, 5), 3),
+        (date(2016, 12, 5), date(2017, 3, 5), 2),
+        (date(2017, 3, 5), date(2017, 4, 9), 1),
+        (date(2017, 4, 9), date(2017, 4, 30), 3),
+        (date(2017, 4, 30), date(2017, 7, 31), 5),
+        (date(2017, 7, 31), date(2017, 9, 4), 7),
+        (date(2017, 9, 4), date(2017, 9, 11), 8),
+        (date(2017, 9, 11), date(2017, 10, 1), 9),
+        (date(2017, 10, 1), date(2017, 10, 23), 10),
+        (date(2017, 10, 23), date(2017, 11, 6), 9),
+        (date(2017, 11, 6), date(2017, 11, 27), 8),
+        (date(2017, 11, 27), date(2017, 12, 11), 7),
+        (date(2017, 12, 11), date(2018, 1, 8), 6),
+        (date(2018, 1, 8), date(2018, 2, 1), 5),
+        (date(2018, 2, 1), date(2018, 4, 2), 4),
+        (date(2018, 4, 2), date(2018, 5, 7), 3),
+        (date(2018, 5, 7), date(2018, 6, 4), 2),
+        (date(2018, 6, 4), date(2018, 7, 23), 1),
+        (date(2018, 7, 23), date(2018, 8, 20), 2),
+        (date(2018, 8, 20), date(2018, 9, 3), 3),
+        (date(2018, 9, 3), date(2018, 9, 17), 4),
+        (date(2018, 9, 17), date(2018, 10, 1), 5),
+        (date(2018, 10, 1), date(2018, 10, 15), 6),
+        (date(2018, 10, 15), date(2018, 11, 26), 5),
+        (date(2018, 11, 26), date(2018, 12, 17), 4),
+        (date(2018, 12, 17), date(2019, 1, 7), 3),
+        (date(2019, 1, 7), date(2019, 1, 21), 2),
+        (date(2019, 1, 21), date(2019, 3, 18), 1),
+        (date(2019, 3, 18), date(2019, 4, 1), 2),
+        (date(2019, 4, 1), date(2019, 4, 15), 3),
+        (date(2019, 4, 15), date(2019, 5, 6), 4),
+        (date(2019, 6, 3), date(2019, 7, 8), 9),
+        (date(2019, 7, 8), date(2019, 7, 29), 8),
+        (date(2019, 7, 29), date(2019, 9, 16), 7),
+        (date(2019, 9, 16), date(2019, 9, 30), 6),
+        (date(2019, 9, 30), date(2019, 10, 21), 4),
+        (date(2019, 10, 21), date(2019, 11, 18), 3),
+        (date(2019, 11, 18), date(2019, 12, 2), 2),
+        (date(2019, 12, 2), date(2019, 12, 23), 1),
+        (date(2019, 12, 23), date(2020, 1, 13), 2),
+        (date(2020, 1, 13), date(2020, 3, 3), 3),
+        (date(2020, 3, 3), date(2020, 3, 19), 4),
+        (date(2020, 3, 19), date(2021, 5, 10), 5),
+        (date(2021, 5, 10), date(2021, 7, 21), 6),
+        (date(2021, 7, 21), date(2021, 8, 2), 7),
+        (date(2021, 8, 2), date(2021, 8, 23), 8),
+        (date(2021, 8, 23), date(2021, 10, 1), 9),
+        (date(2021, 10, 1), date(2021, 11, 1), 8),
+        (date(2021, 11, 1), date(2021, 11, 29), 7),
+        (date(2021, 11, 29), date(2021, 12, 13), 6),
+        (date(2021, 12, 13), date(2021, 12, 20), 5),
+        (date(2021, 12, 20), date(2022, 1, 17), 4),
+        (date(2022, 1, 17), date(2022, 2, 1), 3),
+        (date(2022, 3, 1), date(2022, 3, 21), 1),
+        (date(2022, 3, 21), date(2022, 4, 18), 2),
+        (date(2022, 4, 18), date(2022, 5, 23), 3),
+        (date(2022, 5, 23), date(2022, 6, 20), 4),
+        (date(2022, 6, 20), date(2022, 7, 11), 5),
+        (date(2022, 7, 11), date(2022, 8, 1), 6),
+        (date(2022, 8, 1), date(2022, 8, 22), 5),
+        (date(2022, 8, 22), date(2022, 9, 12), 4),
+        (date(2022, 9,  30), date(2023, 1, 9), 3),
+        (date(2023, 1, 9), date(2023, 3, 20), 4),
+        (date(2023, 3, 20), date(2023, 4, 17), 5),
+        (date(2023, 4, 17), date(2023, 5, 22), 6),
+        (date(2023, 5, 22), date(2023, 6, 19), 7),
+        (date(2023, 6, 19), date(2023, 7, 10), 8),
+        (date(2023, 7, 10), date(2023, 7, 31), 9),
+        (date(2023, 7, 31), date(2023, 9, 30), 10),
+        (date(2023, 8, 21), date(2023, 9, 11), 8),
+        (date(2023, 9, 11), date(2023, 10, 1), 9),
+        (date(2023, 10, 1), date(2023, 10, 20), 8),
+        (date(2023, 10, 20), date(2023, 11, 10), 7),
+        (date(2023, 11, 10), date(2023, 12, 1), 6),
+        (date(2023, 12, 1), date(2023, 12, 20), 5),
+        (date(2023, 12, 20), date(2024, 1, 10), 4),
+        (date(2024, 1, 10), date(2024, 2, 1), 3),
+        (date(2024, 3, 1), date(2024, 3, 26), 1),
+        (date(2024, 3, 26), date(2024, 4, 20), 2),
+        (date(2024, 4, 20), date(2024, 5, 10), 3),
+        (date(2024, 5, 10), date(2024, 5, 31), 4),
+        (date(2024, 5, 31), date(2024, 6, 23), 5),
+        (date(2024, 6, 23), date(2024, 7, 28), 6),
+        (date(2024, 7, 28), date(2024, 8, 18), 5),
+        (date(2024, 8, 18), date(2024, 9, 10), 4),
+        (date(2024, 9, 10), date(2024, 9, 30), 3),
+    ]
+    obs_date = obs_date.split('-')
+    obs_date = date(int(obs_date[0]), int(obs_date[1]), int(obs_date[2][:2]))
+    print('Observation Date:', obs_date)
+    for start, end, cycle in date_to_cycle:
+        if start <= obs_date < end:
+            break
+    for start, end, antenna_config in date_to_conf:
+        if start <= obs_date < end:
+            break
+    print('Computed Cycle {} Antenna Config {}'.format(cycle, antenna_config))
+    return antenna_config, cycle
 
 def get_info_from_reference(reference_path, plot_dir, i):
     date_to_cycle = [
@@ -344,8 +465,6 @@ def get_info_from_reference(reference_path, plot_dir, i):
         (date(2023, 8, 21), date(2023, 9, 11), 8),
         (date(2023, 9, 11), date(2023, 10, 1), 9),
     ]
-
-
     img, header = load_fits(reference_path)
 
     shape = [s for s in img.shape if s != 1]
@@ -3378,11 +3497,13 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     if not os.path.exists(project):
         os.mkdir(project)
     cycle = os.path.split(antenna_name)[0]
+    print(antenna_name)
     antenna_name = os.path.split(antenna_name)[1]
     config_number = int(antenna_name.split('.')[-1])
     spatial_resolution = get_spatial_resolution(band, config_number)
     central_freq= get_band_central_freq(band)
     antennalist = os.path.join(main_path, "antenna_config", cycle, antenna_name + '.cfg')
+    print(antennalist)
     max_baseline = get_max_baseline_from_antenna_config(antennalist)
     beam_size = compute_beam_size_from_max_baseline(max_baseline, central_freq)
     cell_size = beam_size / 5

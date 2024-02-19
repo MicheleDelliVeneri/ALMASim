@@ -74,7 +74,7 @@ parser.add_argument('--n_channels', type=int, default=None, help='R|Number of ch
 parser.add_argument('--ncpu', type=int, default=10, help='R|Number of cpus to use. Default 10.')
 parser.add_argument('--ip', type=str, default='127.0.0.1', help='R|IP address of the cluster. Default None.')
 parser.add_argument('--testing-mode', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation is run in testing mode. Default False.')
-
+parser.add_argument('--sample_metadata', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the metadata is sampled from the metadata of real observations in the ALMA archive. Default False.')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -124,6 +124,23 @@ if __name__ == '__main__':
         rest_frequencies = reference_params[:, 5]
         cycles = reference_params[:, 6]
         antenna_ids = reference_params[:, 7]
+    if args.sample_metadata == True:
+        if (args.source_type == 'point') or (args.source_type == 'gaussian'):
+            db = pd.read_csv(os.path.join(args.main_path, 'AGN_metadata.csv'))
+        elif (args.source_type == 'diffuse') or (args.source_type == 'extended'):
+            db = pd.read_csv(os.path.join(args.main_path, 'LU_metadata.csv'))
+        metadata = db[['RA', 'Dec', 'Band', 'Ang.res.', 'FOV', 'Int.Time', 'Obs.date', 'PWV']]
+        metadata = metadata.sample(n=len(idxs), replace=False)
+        ras = metadata['RA'].values
+        decs = metadata['Dec'].values
+        n_pxs = [args.n_px for i in idxs]
+        n_channels = [args.n_channels for i in idxs]
+        min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
+        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
+        rest_frequencies = [1420.4 for i in idxs]
+        antenna_configs = [sm.get_antenna_config_from_date(obs_date) for obs_date in metadata['Obs.date'].values]
+        antenna_ids, cycles = zip(*antenna_configs)
+
     else:
         ras = [0.0 for i in idxs]
         decs = [0.0 for i in idxs]
@@ -134,7 +151,8 @@ if __name__ == '__main__':
         rest_frequencies = [1420.4 for i in idxs]
         cycles = choices(args.cycle, k=len(idxs))
         antenna_ids = choices(args.antenna_config, k=len(idxs))
-        
+
+
     if args.testing_mode == True:
         all_combinations = list(product(args.bands, args.antenna_config, args.inbright))
         bands = [comb[0] for comb in all_combinations]
@@ -147,8 +165,6 @@ if __name__ == '__main__':
         n_channels = [args.n_channels for i in idxs]
         rest_frequencies = [1420.4 for i in idxs]
         cycles = choices(args.cycle, k=len(idxs))
-
-    
 
     antenna_names = [os.path.join('cycle{}'.format(int(j)), 'alma.cycle{}.0.{}'.format(int(j), int(k))) for j, k in zip(cycles, antenna_ids)]
 
@@ -169,6 +185,8 @@ if __name__ == '__main__':
             inwidths = choices(args.inwidth, k=len(idxs))
     if len(args.integration) == len(idxs):
         integrations = args.integration
+    elif args.sample_metadata == True:
+        integrations = metadata['Int.Time'].values
     else:
         integrations = choices(args.integration, k=len(idxs))
     if len(args.totaltime) == len(idxs):
@@ -178,7 +196,10 @@ if __name__ == '__main__':
     else:
         totaltimes = choices(args.totaltime, k=len(idxs))
     min_pwv, max_pwv = np.min(args.pwv), np.max(args.pwv)
-    pwvs = np.random.uniform(min_pwv, max_pwv, size=len(idxs))
+    if args.sample_metadata == True:
+        pwvs = metadata['PWV'].values
+    else:
+        pwvs = np.random.uniform(min_pwv, max_pwv, size=len(idxs))
     min_snr, max_snr = np.min(args.snr), np.max(args.snr)
     snrs = np.random.uniform(min_snr, max_snr, size=len(idxs))
     get_skymodel = [args.get_skymodel for i in idxs]
