@@ -110,7 +110,7 @@ def get_subhaloids_from_db(n,
     #                       limit0, 
     #                       limit1
                            ):
-    file = 'morphologies_deeplearn.hdf5'
+    file = os.path.join('metadata', 'morphologies_deeplearn.hdf5')
     db = get_data_from_hdf(file)
     catalogue = db[['SubhaloID', 'P_Late', 'P_S0', 'P_Sab']]
     catalogue.sort_values(by=['P_Late'], inplace=True, ascending=False)
