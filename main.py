@@ -126,9 +126,10 @@ if __name__ == '__main__':
         antenna_ids = reference_params[:, 7]
     if args.sample_metadata == True:
         if (args.source_type == 'point') or (args.source_type == 'gaussian'):
-            db = pd.read_csv(os.path.join(args.main_path, 'AGN_metadata.csv'))
+            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'AGN_metadata.csv'))
         elif (args.source_type == 'diffuse') or (args.source_type == 'extended'):
-            db = pd.read_csv(os.path.join(args.main_path, 'LU_metadata.csv'))
+            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'LU_metadata.csv'))
+            db = db[db['Mosaic'] != 'mosaic']
         metadata = db[['RA', 'Dec', 'Band', 'Ang.res.', 'FOV', 'Int.Time', 'Obs.date', 'PWV']]
         metadata = metadata.sample(n=len(idxs), replace=False)
         ras = metadata['RA'].values
