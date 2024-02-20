@@ -1039,6 +1039,7 @@ def generate_pointlike_skymodel(id, data_dir, rest_frequency,
                                 n_px, n_channels, ra, dec, 
                                 spatial_resolution, serendipitous, plot_dir):
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
+    print('Line FWHM in channels:', fwhm_z)
     if rest_frequency == 1420.4:
         hI_rest_frequency = rest_frequency * U.MHz
     else:
