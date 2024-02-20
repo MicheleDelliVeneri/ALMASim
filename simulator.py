@@ -1144,8 +1144,8 @@ def generate_diffuse_skymodel(id, data_dir, n_px, n_channels,
 def generate_lensing_skymodel(id, data_dir):
     return
 
-def insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
-                            frequency_resolution, 
+def find_distance(TNGSnap, subhaloID, n_px, n_channels, 
+                            frequency_resolution, spatial_resolution,
                             ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu):
     source = myTNGSource(TNGSnap, subhaloID,
                        distance= distance * U.Mpc,
@@ -1176,12 +1176,87 @@ def insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels,
         datacube=datacube,
         sph_kernel=sph_kernel,
         spectral_model=spectral_model,
-        quiet=False)
+        quiet=False,
+        find_distance=True)
+    particle_percentage = M._compute_particles_num()
+    print('Initial particle percentage: {}%'.format(particle_percentage))
+    while particle_percentage < 80:
+        print('Particle percentage is too low, increasing')
+        distance += 10
+        source = myTNGSource(TNGSnap, subhaloID,
+                       distance= distance * U.Mpc,
+                       rotation = {'L_coords': (x_rot, y_rot)},
+                       basePath = TNGBasePath,
+                       ra = 0. * U.deg,
+                       dec = 0. * U.deg,)
+        if ra == 0.0 * U.deg and dec == 0.0 * U.deg:
+            ra = source.ra
+            dec = source.dec
+    
+        datacube = DataCube(
+            n_px_x = n_px,
+            n_px_y = n_px,
+            n_channels = n_channels, 
+            px_size = spatial_resolution * U.arcsec,
+            channel_width=frequency_resolution,
+            velocity_centre=source.vsys, 
+            ra = ra,
+            dec = dec,
+        )
+        spectral_model = GaussianSpectrum(
+            sigma="thermal"
+        )
+        sph_kernel =  WendlandC2Kernel()
+        M = Martini(
+            source=source,
+            datacube=datacube,
+            sph_kernel=sph_kernel,
+            spectral_model=spectral_model,
+            quiet=False)
+        particle_percentage = M._compute_particles_num()
+        print('Particle percentage: {}%'.format(particle_percentage))
+    return distance
+
+
+def insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
+                            frequency_resolution, spatial_resolution,
+                            ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu):
+    source = myTNGSource(TNGSnap, subhaloID,
+                       distance= distance * U.Mpc,
+                       rotation = {'L_coords': (x_rot, y_rot)},
+                       basePath = TNGBasePath,
+                       ra = 0. * U.deg,
+                       dec = 0. * U.deg,)
+    if ra == 0.0 * U.deg and dec == 0.0 * U.deg:
+        ra = source.ra
+        dec = source.dec
+    
+    datacube = DataCube(
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_channels, 
+        px_size = 10 * U.arcsec,
+        channel_width=frequency_resolution,
+        velocity_centre=source.vsys, 
+        ra = ra,
+        dec = dec,
+    )
+    spectral_model = GaussianSpectrum(
+        sigma="thermal"
+    )
+    sph_kernel =  WendlandC2Kernel()
+    M = Martini(
+        source=source,
+        datacube=datacube,
+        sph_kernel=sph_kernel,
+        spectral_model=spectral_model,
+        quiet=False, 
+        find_distance=False)
     M.insert_source_in_cube(skip_validation=True, progressbar=True, ncpu=ncpu)
     return M, source, datacube
 
 def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
-                               central_frequency, frequency_resolution, 
+                               central_frequency, frequency_resolution, spatial_resolution,
                                TNGBasePath, TNGSnap, subhaloID, ra, dec, 
                                rest_frequency, plot_dir, ncpu):
     #distance = np.random.randint(1, 5) * U.Mpc
@@ -1196,10 +1271,12 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     z = data_header["Redshift"] * cu.redshift
     
     distance = z.to(U.Mpc, cu.redshift_distance(Planck13, kind="comoving"))
-
+    distance= 10
+    distance = find_distance(TNGSnap, subhaloID, n_px, n_channels, 
+                            frequency_resolution, spatial_resolution,
+                            ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
+    print('Found optimal distance: {} Mpc'.format(distance))
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
-    
-    
     print('Source generated, injecting into datacube')
     if rest_frequency == 1420.4:
         hI_rest_frequency = rest_frequency * U.MHz
@@ -1208,44 +1285,46 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
-    distance = 30
+    #distance = 10
+
     M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
-                                frequency_resolution, 
+                                frequency_resolution, spatial_resolution,
                                 ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
-    initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
-    print('Mass ratio: {}%'.format(initial_mass_ratio))
-    mass_ratio = initial_mass_ratio
-    orevious_mass_ratio = initial_mass_ratio
-    improvement, increment, i = 1, 30, 0
-    if mass_ratio < 50:
-        print('Injected mass ratio is less than 50%, increasing distance')
-    elif mass_ratio >= 50 and mass_ratio < 80:
-        print('Injected mass ratio is sufficient, saving skymodel')
-    elif mass_ratio >= 80:
-        print('Injected mass ratio is optimal')
-    while mass_ratio < 50:
-        if i > 0:
-            if improvement <= 5:
-                print('No significant improvement in mass ratio, increasing distance')
-                increment = 30
-            elif improvement > 5 and improvement <= 10: 
-                print('Small improvement in mass ratio, increasing distance')
-                increment = 10
-            elif improvement > 10:
-                print('Significant improvement in mass ratio, increasing distance')
-                incremet = 5
-        if i >= 3 and (improvement < 10 or mass_ratio < 20):
-            increment += 100
-        distance += increment
-        M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
-                                frequency_resolution, 
-                                ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
-        previous_mass_ratio = mass_ratio
-        mass_ratio = M.inserted_mass / M.source.input_mass * 100
-        print('Mass ratio: {}%'.format(mass_ratio))
-        improvement = mass_ratio - previous_mass_ratio
-        print('Mass Ratio after shifting: {}%\n'.format(mass_ratio + improvement))
-        i += 1
+    #initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
+    #print('Mass ratio: {}%'.format(initial_mass_ratio))
+    #mass_ratio = initial_mass_ratio
+    #orevious_mass_ratio = initial_mass_ratio
+    #improvement, increment, i = 1, 30, 0
+    #if mass_ratio < 50:
+    #    print('Injected mass ratio is less than 50%, increasing distance')
+    #elif mass_ratio >= 50 and mass_ratio < 80:
+    #    print('Injected mass ratio is sufficient, saving skymodel')
+    #elif mass_ratio >= 80:
+    #    print('Injected mass ratio is optimal')
+    #while mass_ratio < 50:
+    #    if i > 0:
+    #        if improvement <= 5:
+    #            print('No significant improvement in mass ratio, increasing distance')
+    #            increment = 30
+    #        elif improvement > 5 and improvement <= 10: 
+    #            print('Small improvement in mass ratio, increasing distance')
+    #            increment = 10
+    #        elif improvement > 10:
+    #            print('Significant improvement in mass ratio, increasing distance')
+    #            incremet = 5
+    #    if i >= 3 and (improvement < 10 or mass_ratio < 20):
+    #        increment += 100
+    #   distance += increment
+    #    print('Injecting source at distance {}'.format(distance))
+    #    M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
+    #                            frequency_resolution, spatial_resolution,
+    #                            ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
+    #    previous_mass_ratio = mass_ratio
+    #    mass_ratio = M.inserted_mass / M.source.input_mass * 100
+    #    print('Mass ratio: {}%'.format(mass_ratio))
+    #    improvement = mass_ratio - previous_mass_ratio
+    #    print('Mass Ratio after shifting: {}%\n'.format(mass_ratio + improvement))
+    #    i += 1
 
     print('Datacube generated, inserting source')
     
@@ -2449,8 +2528,10 @@ class Martini:
         sph_kernel=None,
         spectral_model=None,
         quiet=False,
+        find_distance=False,
     ):
         self.quiet = quiet
+        self.find_distance = find_distance
         if source is not None:
             self.source = source
         else:
@@ -2479,10 +2560,10 @@ class Martini:
 
         self.sph_kernel._init_sm_lengths(source=self.source, datacube=self.datacube)
         self.sph_kernel._init_sm_ranges()
-        self._prune_particles()  # prunes both source, and kernel if applicable
-
-        self.spectral_model.init_spectra(self.source, self.datacube)
-        self.inserted_mass = 0
+        if self.find_distance == False:
+            self._prune_particles()  # prunes both source, and kernel if applicable
+            self.spectral_model.init_spectra(self.source, self.datacube)
+            self.inserted_mass = 0
 
         return
 
@@ -2589,6 +2670,37 @@ class Martini:
                 f"{self.source.mHI_g.sum():.2e}."
             )
         return
+    
+    def _compute_particles_num(self):
+        new_source = self.source
+        new_sph_kernel = self.sph_kernel
+        initial_npart = self.source.npart
+        spectrum_half_width = (
+            self.spectral_model.half_width(new_source) / self.datacube.channel_width
+        )
+        reject_conditions = (
+            (
+                new_source.pixcoords[:2] + new_sph_kernel.sm_ranges[np.newaxis]
+                < 0 * U.pix
+            ).any(axis=0),
+            new_source.pixcoords[0] - new_sph_kernel.sm_ranges
+            > (self.datacube.n_px_x + self.datacube.padx * 2) * U.pix,
+            new_source.pixcoords[1] - new_sph_kernel.sm_ranges
+            > (self.datacube.n_px_y + self.datacube.pady * 2) * U.pix,
+            new_source.pixcoords[2] + 4 * spectrum_half_width * U.pix < 0 * U.pix,
+            new_source.pixcoords[2] - 4 * spectrum_half_width * U.pix
+            > self.datacube.n_channels * U.pix,
+        )
+        reject_mask = np.zeros(new_source.pixcoords[0].shape)
+        for condition in reject_conditions:
+            reject_mask = np.logical_or(reject_mask, condition)
+        new_source.apply_mask(np.logical_not(reject_mask))
+        # most kernels ignore this line, but required by AdaptiveKernel
+        new_sph_kernel._apply_mask(np.logical_not(reject_mask))
+        final_npart = new_source.npart
+        del new_source
+        del new_sph_kernel
+        return final_npart / initial_npart * 100
 
     def _evaluate_pixel_spectrum(self, ranks_and_ij_pxs, progressbar=True):
         """
@@ -3572,7 +3684,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
             filename = generate_extended_skymodel(i, output_dir, n_px, n_channels, 
                                                   spatial_resolution * U.arcsec,
                                                   central_freq * U.GHz,
-                                                  inwidth * U.MHz, TNGBasePath, 
+                                                  inwidth * U.MHz, 
+                                                  spatial_resolution,
+                                                  TNGBasePath, 
                                                   TNGSnapshotID, TNGSubhaloID, 
                                                   ra * U.deg, dec * U.deg, 
                                                   rest_frequency, plot_dir, ncpu)
