@@ -672,9 +672,10 @@ def diffuse_signal(n_px):
     cf = ift.SimpleCorrelatedField(space, **args)
     exp_cf = ift.exp(cf)
     random_pos = ift.from_random(exp_cf.domain)
-    sample = exp_cf(random_pos)
+    sample = np.log(exp_cf(random_pos))
     data = sample.val[0:n_px, 0:n_px]
-    return data
+    normalized_data = (data - np.min(data)) / (np.max(data) - np.min(data))
+    return normalized_data
 
 def insert_pointlike(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_z, n_px, n_chan):
     z_idxs = np.arange(0, n_chan)
@@ -1087,8 +1088,7 @@ def generate_pointlike_skymodel(id, data_dir, rest_frequency,
     return filename
      
 def generate_diffuse_skymodel(id, data_dir, n_px, n_channels,
-                              fwhm_z, fov,
-                              spatial_resolution, central_frequency, 
+                              fwhm_z, fov, spatial_resolution, central_frequency, 
                               frequency_resolution, ra, dec, rest_frequency, plot_dir):
     """
     Generates a gaussian skymodel with n_sources sources
@@ -3614,9 +3614,9 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
             print('Generating Diffuse Emission Skymodel')
             fwhm_z = (0.1 * bandwidth - 0.01 * bandwidth)*np.random.rand() + 0.01 * bandwidth
             print('FWHM_z ', fwhm_z, ' MHz')
-            filename = generate_diffuse_skymodel(i, output_dir, n_px, n_channels, bandwidth, 
-                                                 fwhm_z * U.MHz, cell_size * U.arcsec, 
-                                                 fov * U.arcsec, spatial_resolution * U.arcsec, 
+            filename = generate_diffuse_skymodel(i, output_dir, n_px, n_channels,
+                                                 fwhm_z * U.MHz, fov * U.arcsec, 
+                                                 spatial_resolution * U.arcsec, 
                                                  central_freq * U.GHz, inwidth * U.GHz, ra * U.deg, 
                                                  dec * U.deg, rest_frequency, plot_dir)
         elif source_type == "point":
