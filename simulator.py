@@ -1068,8 +1068,7 @@ def generate_pointlike_skymodel(id, data_dir, rest_frequency,
         min_sep_xy = 3
         min_sep_z = 10
         n_sources = random.randint(1, 5)
-        #amplitudes = np.random.rand(0, 1)
-        amplitudes = np.random.rand()
+        amplitudes = np.random.rand(n_sources)
         for i in range(n_sources):
             while True:
                 x = np.random.randint(int(0.25 * n_px), int(0.75 * n_px))
