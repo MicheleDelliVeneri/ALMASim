@@ -1,5 +1,5 @@
 import dask
-from distributed import Client, LocalCluster
+from distributed import Client, LocalCluster, WorkerPlugin
 import simulator as sm
 import numpy as np
 import pandas as pd
@@ -10,8 +10,26 @@ from natsort import natsorted
 import math
 from itertools import product
 import random
+import psutil
 
 MALLOC_TRIM_THRESHOLD_ = 0
+class MemoryMonitor(WorkerPlugin):
+    def __init__(self, memory_limit):
+        self.memory_limit = memory_limit
+
+    def setup(self, worker):
+        self.worker = worker
+        self.process = psutil.Process()
+        self.process_memory_limit = self.memory_limit * 1024 * 1024 * 1024  # Convert GB to bytes
+
+    async def monitor_memory(self):
+        while True:
+            memory_usage = self.process.memory_info().rss
+            if memory_usage > self.process_memory_limit:
+                print("Memory limit exceeded. Closing worker.")
+                await self.worker.close(close_workers=True)
+                break
+            await asyncio.sleep(1)
 
 class SmartFormatter(argparse.HelpFormatter):
 
@@ -128,7 +146,7 @@ if __name__ == '__main__':
         if (args.source_type == 'point') or (args.source_type == 'gaussian'):
             db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'AGN_metadata.csv'))
         elif (args.source_type == 'diffuse') or (args.source_type == 'extended'):
-            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'LU_metadata.csv'))
+            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'Elias27_metadata.csv'))
             db = db[db['Mosaic'] != 'mosaic']
         metadata = db[['RA', 'Dec', 'Band', 'Ang.res.', 'FOV', 'Int.Time', 'Obs.date', 'PWV']]
         metadata = metadata.sample(n=len(idxs), replace=False)
@@ -314,7 +332,7 @@ if __name__ == '__main__':
     #    dbs = input_params
     #print(type(dbs))
     for db in dbs:
-        if (len(db) > 1) and (args.ncpu > 1) and  (args.source_type != 'extended'):
+        if (len(db) > 1) and (args.ncpu > 1): #and  (args.source_type != 'extended'):
             print('Running multiple simulations in parallel...')
             cluster = LocalCluster(
                 n_workers=args.ncpu, 
@@ -322,11 +340,12 @@ if __name__ == '__main__':
                 scheduler_port=8786,
                 host=args.ip,
                 memory_limit='{}GB'.format(sm.get_mem_gb()),
-                dashboard_address='{}:8787'.format(args.ip)
+                dashboard_address='{}:8787'.format(args.ip),
                 )
             client = Client(
                 cluster
                )
+            client.register_worker_plugin(MemoryMonitor(memory_limit=sm.get_mem_gb()))
             futures = client.map(sm.simulator, *db.values.T)
             client.gather(futures)
             client.close()

@@ -1238,8 +1238,8 @@ def insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels,
         px_size = 10 * U.arcsec,
         channel_width=frequency_resolution,
         velocity_centre=source.vsys, 
-        ra = ra,
-        dec = dec,
+        ra = source.ra,
+        dec = source.dec,
     )
     spectral_model = GaussianSpectrum(
         sigma="thermal"
@@ -1270,12 +1270,13 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     data_header = loadHeader(TNGBasePath, TNGSnap)
     z = data_header["Redshift"] * cu.redshift
     
-    distance = z.to(U.Mpc, cu.redshift_distance(Planck13, kind="comoving"))
-    distance= 10
-    distance = find_distance(TNGSnap, subhaloID, n_px, n_channels, 
-                            frequency_resolution, spatial_resolution,
-                            ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
-    print('Found optimal distance: {} Mpc'.format(distance))
+    #distance = z.to(U.Mpc, cu.redshift_distance(Planck13, kind="comoving"))
+    #distance= 10
+    #distance = find_distance(TNGSnap, subhaloID, n_px, n_channels, 
+    #                        frequency_resolution, spatial_resolution,
+    #                        ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
+    #print('Found optimal distance: {} Mpc'.format(distance))
+    distance = 50
     print('Generating extended source from subhalo {} - {} at {} with rotation angles {} and {} in the X and Y planes'.format(simulation_str, subhaloID, distance, x_rot, y_rot))
     print('Source generated, injecting into datacube')
     if rest_frequency == 1420.4:
@@ -1285,47 +1286,27 @@ def generate_extended_skymodel(id, data_dir, n_px, n_channels, pixel_size,
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
-    #distance = 10
-
     M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                                 frequency_resolution, spatial_resolution,
                                 ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
-    #initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
-    #print('Mass ratio: {}%'.format(initial_mass_ratio))
-    #mass_ratio = initial_mass_ratio
-    #orevious_mass_ratio = initial_mass_ratio
-    #improvement, increment, i = 1, 30, 0
-    #if mass_ratio < 50:
-    #    print('Injected mass ratio is less than 50%, increasing distance')
-    #elif mass_ratio >= 50 and mass_ratio < 80:
-    #    print('Injected mass ratio is sufficient, saving skymodel')
-    #elif mass_ratio >= 80:
-    #    print('Injected mass ratio is optimal')
-    #while mass_ratio < 50:
-    #    if i > 0:
-    #        if improvement <= 5:
-    #            print('No significant improvement in mass ratio, increasing distance')
-    #            increment = 30
-    #        elif improvement > 5 and improvement <= 10: 
-    #            print('Small improvement in mass ratio, increasing distance')
-    #            increment = 10
-    #        elif improvement > 10:
-    #            print('Significant improvement in mass ratio, increasing distance')
-    #            incremet = 5
-    #    if i >= 3 and (improvement < 10 or mass_ratio < 20):
-    #        increment += 100
-    #   distance += increment
-    #    print('Injecting source at distance {}'.format(distance))
-    #    M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
-    #                            frequency_resolution, spatial_resolution,
-    #                            ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
-    #    previous_mass_ratio = mass_ratio
-    #    mass_ratio = M.inserted_mass / M.source.input_mass * 100
-    #    print('Mass ratio: {}%'.format(mass_ratio))
-    #    improvement = mass_ratio - previous_mass_ratio
-    #    print('Mass Ratio after shifting: {}%\n'.format(mass_ratio + improvement))
-    #    i += 1
-
+    initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
+    print('Mass ratio: {}%'.format(initial_mass_ratio))
+    mass_ratio = initial_mass_ratio
+    while mass_ratio < 80:
+        if mass_ratio < 10:
+            distance = distance * 8
+        elif mass_ratio < 20:
+            distance = distance * 5
+        elif mass_ratio < 30:
+            distance = distance * 2
+        else:       
+            distance = distance * 1.5
+        print('Injecting source at distance {}'.format(distance))
+        M, source, datacube = insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
+                                frequency_resolution, spatial_resolution,
+                                ra, dec, x_rot, y_rot, TNGBasePath, distance, ncpu)
+        mass_ratio = M.inserted_mass / M.source.input_mass * 100
+        print('Mass ratio: {}%'.format(mass_ratio))
     print('Datacube generated, inserting source')
     
     print('Source inserted, saving skymodel')
