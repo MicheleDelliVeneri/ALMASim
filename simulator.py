@@ -50,6 +50,20 @@ from scipy.signal import fftconvolve
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
 
+def sample_from_brightneses(input_csv, n):
+  """
+  This function reads an input csv containing values of measured brightnesses for a given target type, 
+  fits this distribution and then samples n brightness values from saild distribution.
+  INPUT: 
+  - input_csv = path to the csv file containing the brightnesses
+  - n = number of brightness values to sample from the distribution
+  OUTPUT: 
+  - brightneses - list of sampled brightnesses from the distribution 
+  """
+  return brightnesses 
+  
+
+
 def closest_power_of_2(x):
     op = math.floor if bin(x)[3] != "1" else math.ceil
     return 2 ** op(math.log(x, 2))
