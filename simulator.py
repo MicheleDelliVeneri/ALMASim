@@ -3891,7 +3891,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     if save_ms is True:
         print('Saving Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_Save_time - save_time))))
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
-    return
+    return None
 
 def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_size, pixel_size, antenna_config):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))

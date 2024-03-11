@@ -1,5 +1,7 @@
 import dask
 from distributed import Client, LocalCluster, WorkerPlugin
+import multiprocessing
+import dask.dataframe as dd
 import simulator as sm
 import numpy as np
 import pandas as pd
@@ -48,6 +50,21 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+class MemoryLimitPlugin(WorkerPlugin):
+    def __init__(self, memory_limit):
+        self.memory_limit = memory_limit
+
+    def setup(self, worker):
+        pass
+
+    def teardown(self, worker):
+        pass
+
+    def transition(self, key, start, finish, *args, **kwargs):
+        if finish == 'memory' and psutil.virtual_memory().percent > self.memory_limit:
+            # If memory usage exceeds the limit, skip the task
+            return 'erred'
 
 parser = argparse.ArgumentParser(description='Welcome to ALMASim, the ALMA simulation package.\
                                  This is the main script to run the simulations. To use it you need to provide the following required arguments:\
@@ -327,33 +344,47 @@ if __name__ == '__main__':
                                             'serendipitous', 'run_tclean', 'tclean_iters',
                                             'n_px', 'n_channels', 'ncpu'])
     #if args.source_type == 'extended':
-    dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))
+    #dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))
     #else:
     #    dbs = input_params
     #print(type(dbs))
-    for db in dbs:
-        if (len(db) > 1) and (args.ncpu > 1): #and  (args.source_type != 'extended'):
-            print('Running multiple simulations in parallel...')
-            cluster = LocalCluster(
-                n_workers=args.ncpu, 
-                processes=True,
-                scheduler_port=8786,
-                host=args.ip,
-                memory_limit='{}GB'.format(sm.get_mem_gb()),
-                dashboard_address='{}:8787'.format(args.ip),
-                )
-            client = Client(
-                cluster
-               )
-            client.register_worker_plugin(MemoryMonitor(memory_limit=sm.get_mem_gb()))
-            futures = client.map(sm.simulator, *db.values.T)
-            client.gather(futures)
-            client.close()
-            cluster.close()
-        else:
-            print('Running simulations sequentially each with multiple workers...')
-            for i in range(len(db)):
-                sm.simulator(*db.values[i].T) 
+    #for db in dbs:
+        #if (len(db) > 1) and (args.ncpu > 1): #and  (args.source_type != 'extended'):
+            #print('Running multiple simulations in parallel...')
+            #cluster = LocalCluster(
+            #    n_workers=args.ncpu, 
+            #    processes=True,
+            #    scheduler_port=8786,
+            #    host=args.ip,
+            #    memory_limit='{}GB'.format(sm.get_mem_gb()),
+            #    dashboard_address='{}:8787'.format(args.ip),
+            #    )
+            #client = Client(
+            #    cluster
+            #   )
+            #client.register_worker_plugin(MemoryMonitor(memory_limit=sm.get_mem_gb()))
+            #futures = client.map(sm.simulator, *db.values.T)
+            #client.gather(futures)
+            #client.close()
+            #cluster.close()
+            #db.head()
+            #dask.compute(*[dask.delayed(sm.simulator)(*db.values.T)])
+        #else:
+            #print('Running simulations sequentially each with multiple workers...')
+            #for i in range(len(db)):
+            #    sm.simulator(*db.values[i].T) 
+    ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+    total_memory = psutil.virtual_memory().total
+    num_processes = multiprocessing.cpu_count() // 4
+    memory_limit = int(0.9 * total_memory / num_processes)
+    cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+    output_type = "object"
+    client = Client(cluster)
+    # Register the MemoryLimitPlugin with the Dask client
+    client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+    results =  ddf.map_partitions(lambda df: df.apply(lambda row: sm.simulator(*row), axis=1), meta=output_type).compute()
+    client.close()
+    cluster.close()
     files = os.listdir(args.main_path)
     for item in files:
         if item.endswith(".log"):
