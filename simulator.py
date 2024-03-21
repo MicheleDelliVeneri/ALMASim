@@ -46,6 +46,7 @@ from os.path import isfile, expanduser
 import six
 from itertools import product
 from scipy.signal import fftconvolve
+import pyvo
 
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
@@ -1228,7 +1229,6 @@ def find_distance(TNGSnap, subhaloID, n_px, n_channels,
         particle_percentage = M._compute_particles_num()
         print('Particle percentage: {}%'.format(particle_percentage))
     return distance
-
 
 def insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                             frequency_resolution, spatial_resolution,
@@ -4189,3 +4189,86 @@ def get_subhalorange(basePath, snapNum, subhaloIDs):
     filenums = np.array(filenums).flatten().tolist()
     return filenums, limits
 
+def query_observations(service, member_ous_uid, target_name):
+    """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
+
+    Parameters:
+    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+    member_ous_uid (str): The unique identifier for the member OUS to filter observations by.
+    target_name (str): The target name to filter observations by.
+
+    Returns:
+    pandas.DataFrame: A table of query results.
+    """
+
+    query = f"""
+            SELECT *
+            FROM ivoa.obscore
+            WHERE member_ous_uid = '{member_ous_uid}'
+            AND target_name = '{target_name}'
+            AND is_mosaic = 'F'
+            """
+
+    result = service.search(query).to_table().to_pandas()
+
+    return result
+
+def query_all_targets(service, targets):
+    """Query observations for all predefined targets and compile the results into a single DataFrame.
+
+    Parameters:
+    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+    targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+
+    Returns:
+    pandas.DataFrame: A DataFrame containing the results for all queried targets.
+    """
+    results = []
+
+    for target_name, member_ous_uid in targets:
+        result = query_observations(service, member_ous_uid, target_name)
+        results.append(result)
+
+    # Concatenate all DataFrames into a single DataFrame
+    df = pd.concat(results, ignore_index=True)
+
+    return df
+
+def query_for_metadata(targets, path, service_url: str = "https://almascience.eso.org/tap"):
+    """Query for metadata for all predefined targets and compile the results into a single DataFrame.
+
+    Parameters:
+    service_url (str): A TAPService http address for querying the database.
+    targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+    path (str): The path to save the results to.
+
+    Returns:
+    pandas.DataFrame: A DataFrame containing the results for all queried targets.
+    """
+    # Create a TAPService instance (replace 'your_service_url' with the actual URL)
+    service = pyvo.dal.TAPService(service_url)
+    # Query all targets and compile the results
+    df = query_all_targets(service, targets)
+    df = df.drop_duplicates(subset='member_ous_uid')
+    # Define a dictionary to map existing column names to new names with unit initials
+    rename_columns = {
+    'target_name': 'ALMA_source_name',
+    'pwv': 'PWV',
+    'schedblock_name': 'SB_name',
+    'velocity_resolution': 'Vel.res',
+    'spatial_resolution': 'Ang.res',
+    's_ra': 'RA',
+    's_dec': 'Dec',
+    's_fov': 'FOV',
+    't_resolution': 'Int.Time',
+    't_max': 'Total.Time',
+    'cont_sensitivity_bandwidth': 'Cont_sens_mJybeam',
+    'sensitivity_10kms': 'Line_sens_10kms_mJybeam',
+    'obs_release_date': 'Obs.date'
+    }
+    # Rename the columns in the DataFrame
+    df.rename(columns=rename_columns, inplace=True)
+    database = df[['ALMA_source_name', 'PWV', 'SB_name', 'Vel.res', 'Ang.res', 'RA', 'Dec', 'FOV', 'Int.Time', 'Total.Time', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date']]
+    database['Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
+    database.to_csv(path, index=False)
+    return database

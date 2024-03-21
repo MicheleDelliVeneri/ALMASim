@@ -110,7 +110,7 @@ parser.add_argument('--ncpu', type=int, default=10, help='R|Number of cpus to us
 parser.add_argument('--ip', type=str, default='127.0.0.1', help='R|IP address of the cluster. Default None.')
 parser.add_argument('--testing-mode', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation is run in testing mode. Default False.')
 parser.add_argument('--sample_metadata', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the metadata is sampled from the metadata of real observations in the ALMA archive. Default False.')
-
+parser.add_argument('--target_list', type=str, default=None, help='R|Path to the target list. Default None. The target list is a .csv containing two columns, one with the Target Name and the other with the Member OID')
 if __name__ == '__main__':
     args = parser.parse_args()
     dask.config.set({'temporary_directory': args.data_dir})
@@ -160,11 +160,18 @@ if __name__ == '__main__':
         cycles = reference_params[:, 6]
         antenna_ids = reference_params[:, 7]
     if args.sample_metadata == True:
-        if (args.source_type == 'point') or (args.source_type == 'gaussian'):
-            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'AGN_metadata.csv'))
-        elif (args.source_type == 'diffuse') or (args.source_type == 'extended'):
-            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'Elias27_metadata.csv'))
-            db = db[db['Mosaic'] != 'mosaic']
+        if args.target_list != None:
+            target_list = pd.read_csv(args.target_list)
+            targets = [tuple(record)[1:] for record in df.to_records(index=False)]
+            db = sm.query_for_metadata(targets, os.path.join(args.main_pat, 'metadata'))
+        else:
+            if (args.source_type == 'point') or (args.source_type == 'gaussian'):
+                db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'AGN_metadata.csv'))
+            elif (args.source_type == 'diffuse') or (args.source_type == 'extended'):
+                db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'Elias27_metadata.csv'))
+                db = db[db['Mosaic'] != 'mosaic']
+            elif args.source_type == 'QSO':
+                db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'QSO_metadata.csv'))
         metadata = db[['RA', 'Dec', 'Band', 'Ang.res.', 'FOV', 'Int.Time', 'Obs.date', 'PWV']]
         metadata = metadata.sample(n=len(idxs), replace=False)
         ras = metadata['RA'].values
