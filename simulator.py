@@ -62,8 +62,6 @@ def sample_from_brightneses(input_csv, n):
   """
   return brightnesses 
   
-
-
 def closest_power_of_2(x):
     op = math.floor if bin(x)[3] != "1" else math.ceil
     return 2 ** op(math.log(x, 2))
