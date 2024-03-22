@@ -201,10 +201,11 @@ if __name__ == '__main__':
         if not os.path.exists(args.brightness_path):
             raise FileNotFoundError('The brightness path does not exist.')
         else:
-            rest_frequency = input('Plese provide the line central frequency in GHz:')
-            velocity = input('Please provide the line width in km/s:')
+            rest_frequency = float(input('Plese provide the line central frequency in GHz:'))
+            velocity = float(input('Please provide the line width in km/s:'))
             brightness_db = sm.sample_from_brightness(len(idxs), velocity, rest_frequency, args.brightness_path)
-            inbrights = brightness_db['Brightness'].values
+            inbrights = brightness_db['Brightness(Jy)'].values
+            rest_frequencies = [rest_frequency / 1000 for i in idxs]
     else:
         inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
     if args.testing_mode == True:
@@ -261,33 +262,6 @@ if __name__ == '__main__':
     tng_basepaths = [args.TNGBasePath for i in idxs]
     tng_snapids = [args.TNGSnapID for i in idxs]
     if args.source_type == 'extended':
-        #tng_subhaloids = []
-        #n_snap = len(idxs) // len(args.TNGSnapID)
-        #for snapID in args.TNGSnapID:
-        #    filenums, limits = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
-        #    limit = limits[np.random.randint(0, len(limits) - 1)]
-        #    print(len(idxs), n_snap)
-        #    for i in range(n_snap):
-        #        tng_subhaloids.append(random.randint(limit[0], limit[1]))
-        #    #filenums = np.arange(np.min(filenums), np.max(filenums))
-        #    print('Checking TNG data for the following subhalos: {}...'.format(filenums))
-        #    if len(np.array(filenums).shape) > 1:
-        #        filenums = np.concatenate(filenums, axis=0)
-            
-        #    if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
-        #                        TNGSnapshotID=snapID, 
-        #                        TNGSubhaloID=filenums) == False:
-        #        print('TNG Data not found, downloading the following subhalos: {}...'.format(filenums))
-        #        sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
-        #                            TNGSubhaloID=filenums, 
-        #                            api_key=args.TNGAPIKey)
-        #    elif sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
-        #                          TNGSnapshotID=snapID, 
-        #                          TNGSubhaloID=filenums) == None:
-        #        print('Warning: if source_type is extended, TNGBasePath must be provided.')
-        #        exit()
-        # setting the working directory to the ALMASim directory, 
-        # needed if the TNG data is downloaded
         print("\n")
         print('Beginning simulation of Extended Sources...')
         print('Before injecting sources into the datacubes, I need to check if the TNG data is available on disk, if not, I will download it.')
@@ -316,7 +290,8 @@ if __name__ == '__main__':
     print('Main path: {}'.format(main_path[0]))
     print('Output directory: {}'.format(output_dir[0]))
     print('Plot directory: {}'.format(plot_dir[0]))
-    print('Project name: {}'.format(project_name[0])) 
+    print('Project name: {}'.format(project_name[0]))
+    print('The sampled brightness values are: {}'.format(inbrights))
     input_params = pd.DataFrame(zip(idxs, 
                                     data_dir, 
                                     main_path,
