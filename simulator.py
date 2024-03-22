@@ -4272,3 +4272,56 @@ def query_for_metadata(targets, path, service_url: str = "https://almascience.es
     database['Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
     database.to_csv(path, index=False)
     return database
+
+def luminosity_to_jy(velocity, data, rest_frequency: float = 115.27):
+        """
+        This function takes as input a pandas db containing luminosities in K km s-1 pc2, redshifts, and luminosity distances in Mpc, 
+        and returns the brightness values in Jy.
+        
+        Parameters:
+        velocity (float): The velocity dispersion assumed for the line (Km s-1).
+        data (pandas.DataFrame): A pandas DataFrame containing the data.
+        rest_frequency (float): The rest frequency of the line in GHz. Defaults to 115.27 GHz for CO(1-0).
+
+        Output:
+        sigma: numpy.ndarray: An array of brightness values in Jy.
+
+        """
+        alpha = 3.255 * 10**7
+        sigma = (data['Luminosity(K km s-1 pc2)'] * ( (1 + data['#redshift']) * rest **2)) / (alpha * velocity * (data['luminosity distance(Mpc)']**2))
+        redshift = data['#redshift'].values
+        return sigma
+
+def exponential_func(x, a, b):
+        """
+        Exponential function used to fit the data.
+        """
+        return a * np.exp(-b * x)
+
+def sample_from_brightness(n, velocity, rest_frequency, data_path):
+    """
+    Generates n samples of brightness values based on an exponential fit to the data.
+    
+    Parameters:
+    n (int): Number of samples to generate.
+    velocity (float): The velocity dispersion assumed for the line.
+    data_path (str): Path to the CSV file containing the data.
+    
+    Returns:
+    pd.DataFrame: A DataFrame containing the sampled brightness values and corresponding redshifts.
+    """
+    # Read the data from the CSV file
+    data = pd.read_csv(data_path)
+    # Calculate the brightness values (sigma) using the provided velocity
+    sigma = luminosity_to_jy(velocity, data)
+    # Extract the redshift values from the data
+    redshift = data['#redshift'].values
+    # Generate evenly spaced redshifts for sampling
+    sampled_redshifts = np.linspace(min(redshift), max(redshift), n)
+    # Fit an exponential curve to the data
+    popt, pcov = curve_fit(exponential_func, redshift, sigma)
+    # Use the fitted parameters to calculate the sampled brightness values
+    sampled_sigma = exponential_func(sampled_redshifts, *popt)
+    # Return the sampled brightness values and the corresponding redshifts
+    return pd.DataFrame(zip(sampled_redshifts, sampled_sigma), columns=['Redshift', 'Brightness(Jy)'])
+    

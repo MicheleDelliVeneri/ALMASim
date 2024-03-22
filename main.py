@@ -110,6 +110,8 @@ parser.add_argument('--ncpu', type=int, default=10, help='R|Number of cpus to us
 parser.add_argument('--ip', type=str, default='127.0.0.1', help='R|IP address of the cluster. Default None.')
 parser.add_argument('--testing-mode', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation is run in testing mode. Default False.')
 parser.add_argument('--sample_metadata', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the metadata is sampled from the metadata of real observations in the ALMA archive. Default False.')
+parser.add_argument('--sample_brightness', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the input brightness is sampled from the measured brightness of real observations in the ALMA archive. Default False.')
+parser.add_argument('--brightness_path', type=str, default=None, help='R|Path to the brightness data. Default None.')
 parser.add_argument('--target_list', type=str, default=None, help='R|Path to the target list. Default None. The target list is a .csv containing two columns, one with the Target Name and the other with the Member OID')
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -179,7 +181,7 @@ if __name__ == '__main__':
         n_pxs = [args.n_px for i in idxs]
         n_channels = [args.n_channels for i in idxs]
         min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
-        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
+        #inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
         rest_frequencies = [1420.4 for i in idxs]
         antenna_configs = [sm.get_antenna_config_from_date(obs_date) for obs_date in metadata['Obs.date'].values]
         antenna_ids, cycles = zip(*antenna_configs)
@@ -190,12 +192,21 @@ if __name__ == '__main__':
         n_pxs = [args.n_px for i in idxs]
         n_channels = [args.n_channels for i in idxs]
         min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
-        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
+        #inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
         rest_frequencies = [1420.4 for i in idxs]
         cycles = choices(args.cycle, k=len(idxs))
         antenna_ids = choices(args.antenna_config, k=len(idxs))
 
-
+    if args.sample_brightness == True:
+        if not os.path.exists(args.brightness_path):
+            raise FileNotFoundError('The brightness path does not exist.')
+        else:
+            rest_frequency = input('Plese provide the line central frequency in GHz:')
+            velocity = input('Please provide the line width in km/s:')
+            brightness_db = sm.sample_from_brightness(len(idxs), velocity, rest_frequency, args.brightness_path)
+            inbrights = brightness_db['Brightness'].values
+    else:
+        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
     if args.testing_mode == True:
         all_combinations = list(product(args.bands, args.antenna_config, args.inbright))
         bands = [comb[0] for comb in all_combinations]
