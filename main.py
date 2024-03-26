@@ -178,6 +178,8 @@ if __name__ == '__main__':
         metadata = metadata.sample(n=len(idxs), replace=False)
         ras = metadata['RA'].values
         decs = metadata['Dec'].values
+        bands = metadata['Band'].values
+        bands = [int(band) for band in bands]
         n_pxs = [args.n_px for i in idxs]
         n_channels = [args.n_channels for i in idxs]
         min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
