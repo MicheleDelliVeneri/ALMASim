@@ -4471,13 +4471,14 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
     'band_list': 'Band',
     'bandwidth': 'Bandwidth',
     'frequency': 'Freq',
+    'frequency_support': 'Freq.sup.'
 
     }
     # Rename the columns in the DataFrame
     df.rename(columns=rename_columns, inplace=True)
     database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time', 
                     'Total.Time', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq', 
-                    'Freq.support', 'Spatial.resolution']]
+                    'Freq.sup.', 'antenna_arrays']]
     database['Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
     database.to_csv(path, index=False)
     return database
@@ -4599,3 +4600,27 @@ def sample_from_brightness(n, velocity, rest_frequency, data_path, plot_distribu
         plt.show()
     # Return the sampled brightness values and the corresponding redshifts
     return pd.DataFrame(zip(sampled_redshifts, sampled_sigma), columns=['Redshift', 'Brightness(Jy)'])
+
+def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, output_dir):
+    antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
+    obs_antennas = antenna_array.split(' ')
+    obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
+    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
+    intro_string = "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
+    with open(os.path.join(output_dir, 'antenna.cfg'), 'w') as f:
+        f.write(intro_string)
+        for i in range(len(obs_antennas)):
+            f.write(f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n")
+    f.close()
+
+def remove_non_numeric(text):
+  """Removes non-numeric characters from a string.
+
+  Args:
+      text: The string to process.
+
+  Returns:
+      A new string containing only numeric characters and the decimal point (.).
+  """
+  numbers = "0123456789."
+  return "".join(char for char in text if char in numbers)
