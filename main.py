@@ -1,5 +1,7 @@
 import dask
 from distributed import Client, LocalCluster, WorkerPlugin
+import multiprocessing
+import dask.dataframe as dd
 import simulator as sm
 import numpy as np
 import pandas as pd
@@ -49,6 +51,21 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+class MemoryLimitPlugin(WorkerPlugin):
+    def __init__(self, memory_limit):
+        self.memory_limit = memory_limit
+
+    def setup(self, worker):
+        pass
+
+    def teardown(self, worker):
+        pass
+
+    def transition(self, key, start, finish, *args, **kwargs):
+        if finish == 'memory' and psutil.virtual_memory().percent > self.memory_limit:
+            # If memory usage exceeds the limit, skip the task
+            return 'erred'
+
 parser = argparse.ArgumentParser(description='Welcome to ALMASim, the ALMA simulation package.\
                                  This is the main script to run the simulations. To use it you need to provide the following required arguments:\
                                 --data_dir /full/path/to/where/you/want/to/store/the/simulations/outputs/ \
@@ -93,7 +110,9 @@ parser.add_argument('--ncpu', type=int, default=10, help='R|Number of cpus to us
 parser.add_argument('--ip', type=str, default='127.0.0.1', help='R|IP address of the cluster. Default None.')
 parser.add_argument('--testing-mode', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the simulation is run in testing mode. Default False.')
 parser.add_argument('--sample_metadata', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the metadata is sampled from the metadata of real observations in the ALMA archive. Default False.')
-
+parser.add_argument('--sample_brightness', type=str2bool, default=False, const=True, nargs='?', help='R|If True, the input brightness is sampled from the measured brightness of real observations in the ALMA archive. Default False.')
+parser.add_argument('--brightness_path', type=str, default=None, help='R|Path to the brightness data. Default None.')
+parser.add_argument('--target_list', type=str, default=None, help='R|Path to the target list. Default None. The target list is a .csv containing two columns, one with the Target Name and the other with the Member OID')
 if __name__ == '__main__':
     args = parser.parse_args()
     dask.config.set({'temporary_directory': args.data_dir})
@@ -143,19 +162,28 @@ if __name__ == '__main__':
         cycles = reference_params[:, 6]
         antenna_ids = reference_params[:, 7]
     if args.sample_metadata == True:
-        if (args.source_type == 'point') or (args.source_type == 'gaussian'):
-            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'AGN_metadata.csv'))
-        elif (args.source_type == 'diffuse') or (args.source_type == 'extended'):
-            db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'Elias27_metadata.csv'))
-            db = db[db['Mosaic'] != 'mosaic']
+        if args.target_list != None:
+            target_list = pd.read_csv(args.target_list)
+            targets = [tuple(record)[1:] for record in df.to_records(index=False)]
+            db = sm.query_for_metadata(targets, os.path.join(args.main_pat, 'metadata'))
+        else:
+            if (args.source_type == 'point') or (args.source_type == 'gaussian'):
+                db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'AGN_metadata.csv'))
+            elif (args.source_type == 'diffuse') or (args.source_type == 'extended'):
+                db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'Elias27_metadata.csv'))
+                db = db[db['Mosaic'] != 'mosaic']
+            elif args.source_type == 'QSO':
+                db = pd.read_csv(os.path.join(args.main_path, 'metadata', 'QSO_metadata.csv'))
         metadata = db[['RA', 'Dec', 'Band', 'Ang.res.', 'FOV', 'Int.Time', 'Obs.date', 'PWV']]
         metadata = metadata.sample(n=len(idxs), replace=False)
         ras = metadata['RA'].values
         decs = metadata['Dec'].values
+        bands = metadata['Band'].values
+        bands = [int(band) for band in bands]
         n_pxs = [args.n_px for i in idxs]
         n_channels = [args.n_channels for i in idxs]
         min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
-        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
+        #inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
         rest_frequencies = [1420.4 for i in idxs]
         antenna_configs = [sm.get_antenna_config_from_date(obs_date) for obs_date in metadata['Obs.date'].values]
         antenna_ids, cycles = zip(*antenna_configs)
@@ -166,12 +194,22 @@ if __name__ == '__main__':
         n_pxs = [args.n_px for i in idxs]
         n_channels = [args.n_channels for i in idxs]
         min_inbright, max_inbright = np.min(args.inbright), np.max(args.inbright)
-        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
+        #inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
         rest_frequencies = [1420.4 for i in idxs]
         cycles = choices(args.cycle, k=len(idxs))
         antenna_ids = choices(args.antenna_config, k=len(idxs))
 
-
+    if args.sample_brightness == True:
+        if not os.path.exists(args.brightness_path):
+            raise FileNotFoundError('The brightness path does not exist.')
+        else:
+            rest_frequency = float(input('Plese provide the line central frequency in GHz:'))
+            velocity = float(input('Please provide the line width in km/s:'))
+            brightness_db = sm.sample_from_brightness(len(idxs), velocity, rest_frequency, args.brightness_path)
+            inbrights = brightness_db['Brightness(Jy)'].values
+            rest_frequencies = [rest_frequency / 1000 for i in idxs]
+    else:
+        inbrights = np.random.uniform(min_inbright, max_inbright, size=len(idxs))
     if args.testing_mode == True:
         all_combinations = list(product(args.bands, args.antenna_config, args.inbright))
         bands = [comb[0] for comb in all_combinations]
@@ -226,33 +264,6 @@ if __name__ == '__main__':
     tng_basepaths = [args.TNGBasePath for i in idxs]
     tng_snapids = [args.TNGSnapID for i in idxs]
     if args.source_type == 'extended':
-        #tng_subhaloids = []
-        #n_snap = len(idxs) // len(args.TNGSnapID)
-        #for snapID in args.TNGSnapID:
-        #    filenums, limits = sm.get_subhalorange(args.TNGBasePath, snapID, args.TNGSubhaloID)
-        #    limit = limits[np.random.randint(0, len(limits) - 1)]
-        #    print(len(idxs), n_snap)
-        #    for i in range(n_snap):
-        #        tng_subhaloids.append(random.randint(limit[0], limit[1]))
-        #    #filenums = np.arange(np.min(filenums), np.max(filenums))
-        #    print('Checking TNG data for the following subhalos: {}...'.format(filenums))
-        #    if len(np.array(filenums).shape) > 1:
-        #        filenums = np.concatenate(filenums, axis=0)
-            
-        #    if sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
-        #                        TNGSnapshotID=snapID, 
-        #                        TNGSubhaloID=filenums) == False:
-        #        print('TNG Data not found, downloading the following subhalos: {}...'.format(filenums))
-        #        sm.download_TNG_data(path=args.TNGBasePath, TNGSnapshotID=snapID, 
-        #                            TNGSubhaloID=filenums, 
-        #                            api_key=args.TNGAPIKey)
-        #    elif sm.check_TNGBasePath(TNGBasePath=args.TNGBasePath, 
-        #                          TNGSnapshotID=snapID, 
-        #                          TNGSubhaloID=filenums) == None:
-        #        print('Warning: if source_type is extended, TNGBasePath must be provided.')
-        #        exit()
-        # setting the working directory to the ALMASim directory, 
-        # needed if the TNG data is downloaded
         print("\n")
         print('Beginning simulation of Extended Sources...')
         print('Before injecting sources into the datacubes, I need to check if the TNG data is available on disk, if not, I will download it.')
@@ -281,7 +292,8 @@ if __name__ == '__main__':
     print('Main path: {}'.format(main_path[0]))
     print('Output directory: {}'.format(output_dir[0]))
     print('Plot directory: {}'.format(plot_dir[0]))
-    print('Project name: {}'.format(project_name[0])) 
+    print('Project name: {}'.format(project_name[0]))
+    print('The sampled brightness values are: {}'.format(inbrights))
     input_params = pd.DataFrame(zip(idxs, 
                                     data_dir, 
                                     main_path,
@@ -327,33 +339,47 @@ if __name__ == '__main__':
                                             'serendipitous', 'run_tclean', 'tclean_iters',
                                             'n_px', 'n_channels', 'ncpu'])
     #if args.source_type == 'extended':
-    dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))
+    #dbs = np.array_split(input_params, math.ceil(len(input_params) / args.ncpu))
     #else:
     #    dbs = input_params
     #print(type(dbs))
-    for db in dbs:
-        if (len(db) > 1) and (args.ncpu > 1): #and  (args.source_type != 'extended'):
-            print('Running multiple simulations in parallel...')
-            cluster = LocalCluster(
-                n_workers=args.ncpu, 
-                processes=True,
-                scheduler_port=8786,
-                host=args.ip,
-                memory_limit='{}GB'.format(sm.get_mem_gb()),
-                dashboard_address='{}:8787'.format(args.ip),
-                )
-            client = Client(
-                cluster
-               )
-            client.register_worker_plugin(MemoryMonitor(memory_limit=sm.get_mem_gb()))
-            futures = client.map(sm.simulator, *db.values.T)
-            client.gather(futures)
-            client.close()
-            cluster.close()
-        else:
-            print('Running simulations sequentially each with multiple workers...')
-            for i in range(len(db)):
-                sm.simulator(*db.values[i].T) 
+    #for db in dbs:
+        #if (len(db) > 1) and (args.ncpu > 1): #and  (args.source_type != 'extended'):
+            #print('Running multiple simulations in parallel...')
+            #cluster = LocalCluster(
+            #    n_workers=args.ncpu, 
+            #    processes=True,
+            #    scheduler_port=8786,
+            #    host=args.ip,
+            #    memory_limit='{}GB'.format(sm.get_mem_gb()),
+            #    dashboard_address='{}:8787'.format(args.ip),
+            #    )
+            #client = Client(
+            #    cluster
+            #   )
+            #client.register_worker_plugin(MemoryMonitor(memory_limit=sm.get_mem_gb()))
+            #futures = client.map(sm.simulator, *db.values.T)
+            #client.gather(futures)
+            #client.close()
+            #cluster.close()
+            #db.head()
+            #dask.compute(*[dask.delayed(sm.simulator)(*db.values.T)])
+        #else:
+            #print('Running simulations sequentially each with multiple workers...')
+            #for i in range(len(db)):
+            #    sm.simulator(*db.values[i].T) 
+    ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+    total_memory = psutil.virtual_memory().total
+    num_processes = multiprocessing.cpu_count() // 4
+    memory_limit = int(0.9 * total_memory / num_processes)
+    cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+    output_type = "object"
+    client = Client(cluster)
+    # Register the MemoryLimitPlugin with the Dask client
+    client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+    results =  ddf.map_partitions(lambda df: df.apply(lambda row: sm.simulator(*row), axis=1), meta=output_type).compute()
+    client.close()
+    cluster.close()
     files = os.listdir(args.main_path)
     for item in files:
         if item.endswith(".log"):

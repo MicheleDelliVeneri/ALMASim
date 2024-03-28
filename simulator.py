@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import numpy as np
 import pandas as pd
+import math
 from astropy.io import fits
 from astropy.time import Time
 from astropy import wcs
@@ -46,6 +47,8 @@ from os.path import isfile, expanduser
 import six
 from itertools import product
 from scipy.signal import fftconvolve
+import pyvo
+from scipy.optimize import curve_fit
 
 os.environ['MPLCONFIGDIR'] = temp_dir.name
 pd.options.mode.chained_assignment = None  
@@ -62,8 +65,6 @@ def sample_from_brightneses(input_csv, n):
   """
   return brightnesses 
   
-
-
 def closest_power_of_2(x):
     op = math.floor if bin(x)[3] != "1" else math.ceil
     return 2 ** op(math.log(x, 2))
@@ -155,7 +156,14 @@ def get_subhaloids_from_db(n,
     return ids
 
 def get_band_central_freq(band):
-    if band == 3:
+    """
+    Takes as input the band number and returns its central frequency in GHz
+    """
+    if band == 1:
+        return 38
+    elif band == 2:
+        return 78.5
+    elif band == 3:
         return 100
     elif band == 4:
         return  143
@@ -171,6 +179,76 @@ def get_band_central_freq(band):
         return 650
     elif band == 10:
         return 850
+
+def get_band_range(band):
+    if band == 1:
+        return (31, 45)
+    elif band == 2:
+        return (67, 90)
+    elif band == 3:
+        return (84, 116)
+    elif band == 4:
+        return (125, 163)
+    elif band == 5:
+        return (163, 211)
+    elif band == 6:
+        return (211, 275)
+    elif band == 7:
+        return (275, 373)
+    elif band == 8:
+        return (385, 500)
+    elif band == 9:
+        return (602, 720)
+    elif band == 10:
+        return (787, 950)
+
+def convert_range_from_GHz_to_km_s(central_freq, central_velocity, freq_range):
+    freq_band = freq_range[1] - freq_range[0]
+    freq_band = freq_band * U.GHz
+    dv = (c * freq_band  / central_freq).to(U.km / U.s)
+    v_range = central_velocity + np.array([-1, 1]) * dv / 2
+    return v_range
+
+def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
+  """
+  Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA) in arcseconds.
+
+  This function provides an approximation based on the theoretical relationship between
+  observing frequency and maximum baseline. The formula used is:
+  beam_size = (speed_of_light / central_frequency) / max_baseline * (180 / pi) * 3600 arcseconds
+  [km]/[s] * [s] / [km] = [radians] * [arcsec /radian] * [arcseconds/degree]
+
+  Args:
+      central_frequency_ghz: Central frequency of the observing band in GHz (float).
+      max_baseline_km: Maximum baseline of the antenna array in kilometers (float).
+
+  Returns:
+      Estimated beam size in arcseconds (float).
+
+  Raises:
+      ValueError: If either input argument is non-positive.
+  """
+
+  # Input validation
+  if central_frequency_ghz <= 0 or max_baseline_km <= 0:
+    raise ValueError("Central frequency and maximum baseline must be positive values.")
+
+  # Speed of light in meters per second
+  speed_of_light = 299792458
+
+  # Convert frequency to Hz
+  central_frequency_hz = central_frequency_ghz.to(U.Hz).value
+
+  # Convert baseline to meters
+  max_baseline_meters = max_baseline_km.to(U.m).value
+
+  # Theoretical estimate of beam size (radians)
+  theta_radians = (speed_of_light / central_frequency_hz) / max_baseline_meters
+
+  # Convert theta from radians to arcseconds
+  beam_size_arcsec = theta_radians * (180 / math.pi) * 3600 * U.arcsec
+
+  return beam_size_arcsec
 
 def my_asserteq(*args):
     for aa in args[1:]:
@@ -241,7 +319,7 @@ def get_fov_from_band(band):
     # this is the field of view in Radians
     fov = 1.22 * wavelength / 12
     # fov in arcsec
-    fov = fov * 206264.806
+    fov = fov * (180 / math.pi) * 3600 * U.arcsec
     return fov
 
 def get_fov(bands):
@@ -667,7 +745,6 @@ def gaussian(x, amp, cen, fwhm):
     x: position
     amp: amplitude
     fwhm: fwhm
-    level: level
     """
     return amp*np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
 
@@ -1055,10 +1132,13 @@ def generate_pointlike_skymodel(id, data_dir, rest_frequency,
                                 spatial_resolution, serendipitous, plot_dir):
     fwhm_z = int(fwhm_z.value / frequency_resolution.value)
     print('Line FWHM in channels:', fwhm_z)
-    if rest_frequency == 1420.4:
-        hI_rest_frequency = rest_frequency * U.MHz
-    else:
-        hI_rest_frequency = rest_frequency * 10 ** -6 * U.MHz
+    if fwhm_z < 3:
+        fwhm_z = 3
+    #if rest_frequency == 1420.4:
+    #    hI_rest_frequency = rest_frequency * U.MHz
+    #else:
+    #    hI_rest_frequency = rest_frequency * 10 ** -6 * U.MHz
+    hI_rest_frequency = rest_frequency * U.MHz
     radio_hI_equivalence = U.doppler_radio(hI_rest_frequency)
     central_velocity = central_frequency.to(U.km / U.s, equivalencies=radio_hI_equivalence)
     velocity_resolution = frequency_resolution.to(U.km / U.s, equivalencies=radio_hI_equivalence)
@@ -1230,7 +1310,6 @@ def find_distance(TNGSnap, subhaloID, n_px, n_channels,
         particle_percentage = M._compute_particles_num()
         print('Particle percentage: {}%'.format(particle_percentage))
     return distance
-
 
 def insert_extended_skymodel(TNGSnap, subhaloID, n_px, n_channels, 
                             frequency_resolution, spatial_resolution,
@@ -3557,6 +3636,54 @@ def check_parameters(i, data_dir, main_path, project_name, output_dir, plot_dir,
         serendipitous = serendipitous[0]
     return i, data_dir, main_path, project_name, output_dir, plot_dir, band, antenna_name, inbright, bandwidth, inwidth, integration, totaltime, ra, dec, pwv, rest_frequency, snr, get_skymodel, source_type, TNGBasePath, TNGSnapshotID, TNGSubhaloID, plot, save_ms, save_psf, save_pb, crop, serendipitous, n_pxs, n_channels
 
+def write_simulation_parameters(path, band, bandwidth, central_freq, cell_size, fov, 
+                                spatial_resolution, cycle, antenna_name, inbright, beam_size, 
+                                integration, totaltime, TNGBasePath, TNGSnapshotID, TNGSubhaloID, 
+                                n_px, n_channels):
+  """
+  Writes simulation parameters to a text file at the specified path.
+
+  Args:
+    path: The path to save the text file.
+    band: The band name (e.g., 'L' band).
+    bandwidth: Bandwidth in MHz.
+    central_freq: Central frequency in GHz.
+    cell_size: Pixel size in arcseconds.
+    fov: Field of view in arcseconds.
+    spatial_resolution: Spatial resolution in arcseconds.
+    cycle: Cycle number.
+    antenna_name: Antenna configuration name.
+    inbright: Brightness in Jy/px.
+    beam_size: Beam size in arcseconds.
+    integration: Integration time in seconds.
+    totaltime: Total time in seconds.
+    TNGBasePath: Path to TNG base directory.
+    TNGSnapshotID: TNG snapshot ID.
+    TNGSubhaloID: TNG subhalo ID.
+    n_px: Number of pixels in each dimension of the cube.
+    n_channels: Number of channels.
+  """
+
+  with open(path, 'w') as f:
+    f.write('Simulation Parameters:\n')
+    f.write('Band: {}\n'.format(band))
+    f.write('Bandwidth: {} MHz\n'.format(bandwidth))
+    f.write('Central Frequency: {} GHz\n'.format(central_freq))
+    f.write('Pixel size: {} arcsec\n'.format(cell_size))
+    f.write('Fov: {} arcsec\n'.format(fov))
+    f.write('Spatial_resolution: {} arcsec\n'.format(spatial_resolution))
+    f.write('Cycle: {}\n'.format(cycle))
+    f.write('Antenna Configuration: {}\n'.format(antenna_name))
+    f.write('Inbright: {} Jy/px\n'.format(inbright))
+    f.write('Beam Size: {} arcsec\n'.format(beam_size))
+    f.write('Integration Time: {} s\n'.format(integration))
+    f.write('Total Time: {} s\n'.format(totaltime))
+    f.write('TNG Base Path: {}\n'.format(TNGBasePath))
+    f.write('TNG Snapshot ID: {}\n'.format(TNGSnapshotID))
+    f.write('TNG Subhalo ID: {}\n'.format(TNGSubhaloID))
+    f.write('Cube Size: {} x {} x {} pixels\n'.format(n_px, n_px, n_channels))
+    f.close()
+
 def simulator(i: int, data_dir: str, main_path: str, project_name: str, 
               output_dir: str, plot_dir: str, band: int, antenna_name: str, inbright: float, 
               bandwidth: int, inwidth: float, integration: int, totaltime: int, ra: float, dec: float,
@@ -3617,18 +3744,15 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                             save_psf, save_pb, crop, serendipitous, n_pxs, 
                                                             n_channels)
     os.chdir(output_dir)
-    
     project = project_name + '_{}'.format(i)
     if not os.path.exists(project):
         os.mkdir(project)
     cycle = os.path.split(antenna_name)[0]
-    print(antenna_name)
     antenna_name = os.path.split(antenna_name)[1]
     config_number = int(antenna_name.split('.')[-1])
     spatial_resolution = get_spatial_resolution(band, config_number)
     central_freq= get_band_central_freq(band)
     antennalist = os.path.join(main_path, "antenna_config", cycle, antenna_name + '.cfg')
-    print(antennalist)
     max_baseline = get_max_baseline_from_antenna_config(antennalist)
     beam_size = compute_beam_size_from_max_baseline(max_baseline, central_freq)
     cell_size = beam_size / 5
@@ -3638,7 +3762,7 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     if n_channels is None or n_channels == 1:
         flatten = True
         n_channels = int(bandwidth / inwidth)
-        inbright = inbright / n_channels
+        #inbright = inbright / n_channels
     if n_pxs is None:
         n_px = int(fov / cell_size)
     elif n_pxs is not None and crop is False:
@@ -3657,10 +3781,13 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     print('Antenna Configuration ', antenna_name)
     print('Inbright ', inbright, ' Jy/px')
     print('Beam Size: ', beam_size, ' arcsec')
+    print('Integration Time ', integration, ' s')
+    print('Total Time ', totaltime, ' s')
     print('TNG Base Path ', TNGBasePath)
     print('TNG Snapshot ID ', TNGSnapshotID)
     print('TNG Subhalo ID ', TNGSubhaloID)
     print('Cube Size: {} x {} x {} pixels'.format(n_px, n_px, n_channels))
+    write_simulation_parameters(os.path.join(output_dir, 'simulation_parameters_{}.txt'.format(i)), band, bandwidth, central_freq, cell_size, fov, spatial_resolution, cycle, antenna_name, inbright, beam_size, integration, totaltime, TNGBasePath, TNGSnapshotID, TNGSubhaloID, n_px, n_channels)
     if n_pxs is not None:
         print('Cube will be cropped to {} x {} x {} pixels'.format(n_pxs, n_pxs, n_channels))
     print('\n# ------------------------ #\n')
@@ -3728,10 +3855,12 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
                                                  spatial_resolution * U.arcsec, 
                                                  central_freq * U.GHz, inwidth * U.GHz, ra * U.deg, 
                                                  dec * U.deg, rest_frequency, plot_dir)
-        elif source_type == "point":
+        elif source_type == "point" or source_type == 'QSO':
             print('Generating Point Source Skymodel')
             fwhm_z = 0.1 * bandwidth * np.random.rand() + inwidth
             print('FWHM_z ', fwhm_z, ' MHz')
+            # there is no inbright in here, that is why all inbrights are set to 2, fix this by adding the 
+            # inbright and setting the maximum flux to inbright
             filename = generate_pointlike_skymodel(i, output_dir, rest_frequency, 
                                                    inwidth * U.MHz, fwhm_z * U.MHz,
                                                    central_freq * U.GHz, n_px, 
@@ -3881,19 +4010,16 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
     os.remove(os.path.join(output_dir, "skymodel_" + str(i) +".fits"))
     if plot is True:
         print('Saving Plots')
-        plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_size, cell_size, antenna_name)
+        plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_size, cell_size, antenna_name, fwhm_z)
     stop = time.time()
-
-    
-
     print('Skymodel Generated in {} seconds'.format(strftime("%H:%M:%S", gmtime(final_skymodel_time - skymodel_time))))
     print('Simulation Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_sim_time - sim_time))))
     if save_ms is True:
         print('Saving Took {} seconds'.format(strftime("%H:%M:%S", gmtime(final_Save_time - save_time))))
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
-    return
+    return None
 
-def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_size, pixel_size, antenna_config):
+def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_size, pixel_size, antenna_config, fwhm_z, show=False):
     clean, _ = load_fits(os.path.join(output_dir, 'clean_cube_{}.fits'.format(i)))
     dirty, _ = load_fits(os.path.join(output_dir, 'dirty_cube_{}.fits'.format(i)))
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
@@ -3916,6 +4042,7 @@ def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_siz
             tclean_spectrum = np.nansum(tclean_spectrum[:, :, :], axis=(1, 2))
         clean_image = np.sum(clean[:, :, :], axis=0)[np.newaxis, :, :]
         dirty_image = np.nansum(dirty[:, :, :], axis=0)[np.newaxis, :, :]
+        focused_image = np.nansum(dirty[int(dirty.shape[0] - fwhm_z):int(dirty.shape[0] + fwhm_z), :, :], axis=0)[np.newaxis, :, :]
         if run_tclean is True:
             tclean_image = np.nansum(tclean[:, :, :], axis=0)[np.newaxis, :, :]
     else:
@@ -3924,20 +4051,22 @@ def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_siz
         if run_tclean is True:
             tclean_image = tclean.copy()
     if run_tclean is True:
-        fig, ax = plt.subplots(1, 3, figsize=(18, 5))
+        fig, ax = plt.subplots(1, 4, figsize=(24, 5))
     else:
-        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+        fig, ax = plt.subplots(1, 3, figsize=(18, 5))
     ax[0].imshow(clean_image[0] * pix_to_beam, origin='lower')
     ax[1].imshow(dirty_image[0] * pix_to_beam, origin='lower')
     if run_tclean is True:
-        ax[2].imshow(tclean_image[0] * pix_to_beam, origin='lower')
+        ax[3].imshow(tclean_image[0] * pix_to_beam, origin='lower')
     plt.colorbar(ax[0].imshow(clean_image[0] * pix_to_beam, origin='lower'), ax=ax[0], label='Jy/beam')
     plt.colorbar(ax[1].imshow(dirty_image[0] * pix_to_beam, origin='lower'), ax=ax[1], label='Jy/beam')
     if run_tclean is True:
-        plt.colorbar(ax[2].imshow(tclean_image[0] * pix_to_beam, origin='lower'), ax=ax[2], label='Jy/beam')
+        plt.colorbar(ax[3].imshow(tclean_image[0] * pix_to_beam, origin='lower'), ax=ax[2], label='Jy/beam')
     x_size, y_size = clean_image[0].shape
-    xticks = np.arange(0, x_size, step=10)
-    yticks = np.arange(0, y_size, step=10)
+    ax[2].imshow(focused_image[0] * pix_to_beam, origin='lower')
+    plt.colorbar(ax[2].imshow(focused_image[0] * pix_to_beam, origin='lower'), ax=ax[2], label='Jy/beam')
+    xticks = np.arange(0, x_size, step=x_size // 5)
+    yticks = np.arange(0, y_size, step=x_size // 5)
     ax[0].set_title('Sky Model Image')
     ax[1].set_title('ALMA Observed Image')
     ax[0].set_xlabel('RA (arcsec)')
@@ -3956,11 +4085,19 @@ def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_siz
                             color='white', fill=False, linewidth=2))
     ax[0].text(10 + beam_size / pixel_size + 2, 10, f'Clean Beam with size: {round(beam_size, 2)} arcsec',
             verticalalignment='center', horizontalalignment='left', color='white', fontsize=8)
+    ax[2].set_xlabel('RA (arcsec)')
+    ax[2].set_ylabel('DEC (arcsec)')
+    ax[2].set_xticks(xticks)
+    ax[2].set_xticklabels(np.round(xticks * pixel_size, 2))
+    ax[2].set_yticks(yticks)
+    ax[2].set_yticklabels(np.round(yticks * pixel_size, 2))
+    ax[2].add_patch(Ellipse((10, 10), beam_size/ pixel_size, beam_size / pixel_size,  color='white', fill=False, linewidth=2))
+    ax[2].set_title('Focused Primary Source')
     if run_tclean is True:
-        ax[2].set_xlabel('x [pixels]')
-        ax[2].set_ylabel('y [pixels]')
-        ax[2].set_title('tClean Image')
-        ax[2].text(0.95, 0.95, 'Band: {}\n\nCycle: {}\n\n Antenna Config: {}\n\nBright: {} Jy/beam\n\nPixel Size {} arcsec'.format(band, cycle[-1], antenna_config[-1],
+        ax[3].set_xlabel('x [pixels]')
+        ax[3].set_ylabel('y [pixels]')
+        ax[3].set_title('tClean Image')
+        ax[3].text(0.95, 0.95, 'Band: {}\n\nCycle: {}\n\n Antenna Config: {}\n\nBright: {} Jy/beam\n\nPixel Size {} arcsec'.format(band, cycle[-1], antenna_config[-1],
                    round(inbright * pix_to_beam, 2), round(pixel_size, 2)), verticalalignment='top', horizontalalignment='right',
                    transform=ax[2].transAxes, color='white', fontsize=8)
     else:
@@ -3968,6 +4105,8 @@ def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_siz
                    round(inbright * pix_to_beam, 2), round(pixel_size, 2)), verticalalignment='top', horizontalalignment='right',
                    transform=ax[1].transAxes, color='white', fontsize=8)
     plt.savefig(os.path.join(plot_dir, 'sim_{}.png'.format(i)))
+    if show:
+        plt.show()
     plt.close()
     if clean.shape[0] > 1:
         if run_tclean is True:
@@ -3989,6 +4128,8 @@ def plotter(i, output_dir, plot_dir, run_tclean, band, cycle, inbright, beam_siz
             ax[2].set_xlabel('Channel')
             ax[2].set_ylabel('Jy/beam')
         plt.savefig(os.path.join(plot_dir, 'sim_spectrum_{}.png'.format(i)))
+        if show:
+            plt.show()
         plt.close()
 
 def plot_reference(reference, i, plot_dir):
@@ -4012,7 +4153,7 @@ def plot_reference(reference, i, plot_dir):
         plt.savefig(os.path.join(plot_dir, 'reference_spectrum_{}.png'.format(i)))
         plt.close()
 
-def plot_skymodel(path, i, plot_dir):
+def plot_skymodel(path, i, plot_dir, show=False):
     skymodel, _ = load_fits(path)
     if len(skymodel.shape) > 3:
         skymodel = skymodel[0]
@@ -4023,12 +4164,16 @@ def plot_skymodel(path, i, plot_dir):
     plt.colorbar()
     plt.title('skymodel Image')
     plt.savefig(os.path.join(plot_dir, 'skymodel_{}.png'.format(i)))
+    if show:
+        plt.show()
     plt.close()
     if skymodel.shape[0] > 1:
         plt.figure(figsize=(5, 5))
         plt.plot(skymodel_spectrum)
         plt.title('skymodel Spectrum')
         plt.savefig(os.path.join(plot_dir, 'skymodel_spectrum_{}.png'.format(i)))
+        if show:
+            plt.show()
         plt.close()
 
 def download_TNG_data(path, api_key: str='8f578b92e700fae3266931f4d785f82c', TNGSnapshotID: int=99, TNGSubhaloID: list=[0]):
@@ -4191,3 +4336,291 @@ def get_subhalorange(basePath, snapNum, subhaloIDs):
     filenums = np.array(filenums).flatten().tolist()
     return filenums, limits
 
+def query_observations(service, member_ous_uid, target_name):
+    """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
+
+    Parameters:
+    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+    member_ous_uid (str): The unique identifier for the member OUS to filter observations by.
+    target_name (str): The target name to filter observations by.
+
+    Returns:
+    pandas.DataFrame: A table of query results.
+    """
+
+    query = f"""
+            SELECT *
+            FROM ivoa.obscore
+            WHERE member_ous_uid = '{member_ous_uid}'
+            AND target_name = '{target_name}'
+            AND is_mosaic = 'F'
+            """
+
+    result = service.search(query).to_table().to_pandas()
+
+    return result
+
+def query_all_targets(service, targets):
+    """Query observations for all predefined targets and compile the results into a single DataFrame.
+
+    Parameters:
+    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+    targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+
+    Returns:
+    pandas.DataFrame: A DataFrame containing the results for all queried targets.
+    """
+    results = []
+
+    for target_name, member_ous_uid in targets:
+        result = query_observations(service, member_ous_uid, target_name)
+        results.append(result)
+
+    # Concatenate all DataFrames into a single DataFrame
+    df = pd.concat(results, ignore_index=True)
+
+    return df
+
+def query_for_metadata_by_targets(targets, path, service_url: str = "https://almascience.eso.org/tap"):
+    """Query for metadata for all predefined targets and compile the results into a single DataFrame.
+
+    Parameters:
+    service_url (str): A TAPService http address for querying the database.
+    targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+    path (str): The path to save the results to.
+
+    Returns:
+    pandas.DataFrame: A DataFrame containing the results for all queried targets.
+    """
+    # Create a TAPService instance (replace 'your_service_url' with the actual URL)
+    service = pyvo.dal.TAPService(service_url)
+    # Query all targets and compile the results
+    df = query_all_targets(service, targets)
+    df = df.drop_duplicates(subset='member_ous_uid')
+    # Define a dictionary to map existing column names to new names with unit initials
+    rename_columns = {
+    'target_name': 'ALMA_source_name',
+    'pwv': 'PWV',
+    'schedblock_name': 'SB_name',
+    'velocity_resolution': 'Vel.res.',
+    'spatial_resolution': 'Ang.res.',
+    's_ra': 'RA',
+    's_dec': 'Dec',
+    's_resolution': 'Spatial.resolution',
+    's_fov': 'FOV',
+    't_resolution': 'Int.Time',
+    't_max': 'Total.Time',
+    'cont_sensitivity_bandwidth': 'Cont_sens_mJybeam',
+    'sensitivity_10kms': 'Line_sens_10kms_mJybeam',
+    'obs_release_date': 'Obs.date',
+    'band_list': 'Band',
+    'bandwidth': 'Bandwidth',
+    'frequency': 'Freq',
+    'frequency_support': 'Freq.support',
+
+    }
+    # Rename the columns in the DataFrame
+    df.rename(columns=rename_columns, inplace=True)
+    database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res', 'Ang.res', 'RA', 'Dec', 'FOV', 'Int.Time', 
+                    'Total.Time', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq', 
+                    'Freq.support', 'Spatial.resolution']]
+    database = database[database['Obs.date'] <= '2024-9-30']
+    database['Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
+    database.to_csv(path, index=False)
+    return database
+
+def query_for_metadata_by_science_type(path, service_url: str = "https://almascience.eso.org/tap"):
+    service = pyvo.dal.TAPService(service_url)
+    science_keywords, scientific_categories = get_science_types(service)
+    print('Available science keywords:')
+    for i in range(len(science_keywords)):
+        print(f'{i}: {science_keywords[i]}')
+    print('Available scientific categories:')
+    for i in range(len(scientific_categories)):
+        print(f'{i}: {scientific_categories[i]}')
+    science_keyword_number = input('Plese select the Science Keyword by number, if you want to select multiple numbers separate them by a space, leave empty for all:' )
+    scientific_category_number = input('Plese select the Scientific Category by number, if you want to select multiple numbers separate them by a space, leave empty for all:' )
+    if science_keyword_number == "":
+        science_keyword = None
+    else:
+        science_keyword_number = [int(x) for x in science_keyword_number.split(' ')]
+        science_keyword = [science_keywords[i] for i in science_keyword_number]
+    if scientific_category_number == "":
+        scientific_category = None
+    else:
+        scientific_category_number = [int(x) for x in scientific_category_number.split(' ')]
+        scientific_category = [scientific_categories[i] for i in scientific_category_number]
+    df = query_by_science_type(service, science_keyword, scientific_category)
+    df = df.drop_duplicates(subset='member_ous_uid')
+    
+    # Define a dictionary to map existing column names to new names with unit initials
+    rename_columns = {
+    'target_name': 'ALMA_source_name',
+    'pwv': 'PWV',
+    'schedblock_name': 'SB_name',
+    'velocity_resolution': 'Vel.res.',
+    'spatial_resolution': 'Ang.res.',
+    's_ra': 'RA',
+    's_dec': 'Dec',
+    's_fov': 'FOV',
+    't_resolution': 'Int.Time',
+    't_max': 'Total.Time',
+    'cont_sensitivity_bandwidth': 'Cont_sens_mJybeam',
+    'sensitivity_10kms': 'Line_sens_10kms_mJybeam',
+    'obs_release_date': 'Obs.date',
+    'band_list': 'Band',
+    'bandwidth': 'Bandwidth',
+    'frequency': 'Freq',
+    'frequency_support': 'Freq.sup.'
+
+    }
+    # Rename the columns in the DataFrame
+    df.rename(columns=rename_columns, inplace=True)
+    database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time', 
+                    'Total.Time', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq', 
+                    'Freq.sup.', 'antenna_arrays']]
+    database['Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
+    database.to_csv(path, index=False)
+    return database
+
+def get_science_types(service):
+    query = f"""  
+            SELECT science_keyword, scientific_category  
+            FROM ivoa.obscore  
+            WHERE science_observation = 'T'    
+            """
+    db = service.search(query).to_table().to_pandas()
+    science_keywords = db['science_keyword'].unique()
+    scientific_category = db['scientific_category'].unique()
+    science_keywords = list(filter(lambda x: x != "", science_keywords))
+    scientific_category = list(filter(lambda x: x != "", scientific_category))
+    return  science_keywords, scientific_category
+
+def query_by_science_type(service, science_keyword=None, scientific_category=None):
+    """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
+
+    Parameters:
+    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+
+    Returns:
+    pandas.DataFrame: A table of query results.
+    """
+    if science_keyword == None:
+        science_keyword = ""
+    if scientific_category == None:
+        scientific_category = ""
+    print('Querying for science keyword/s: ', science_keyword)
+    print('And scientific category/ies: ', scientific_category)
+    if type(science_keyword) == list and len(science_keyword) == 1:
+        science_keyword = science_keyword[0]
+        science_keyword_query = f"science_keyword like '%{science_keyword}%'"
+    elif type(science_keyword) == list and len(science_keyword) > 1:
+        science_keyword = "', '".join(science_keyword)
+        science_keyword_query = f"science_keyword in ('{science_keyword}')"
+    else:
+        science_keyword_query = f"science_keyword like '%{science_keyword}%'"
+    if type(scientific_category) == list and len(scientific_category) == 1:
+        scientific_category = scientific_category[0]
+        scientific_category_query = f"scientific_category like '%{scientific_category}%'"
+    elif type(scientific_category) == list and len(scientific_category) > 1:
+        scientific_category = "', '".join(scientific_category)
+        scientific_category_query = f"scientific_category in ('{scientific_category}')"
+    else:
+        scientific_category_query = f"scientific_category like '%{scientific_category}%'"
+
+
+    query = f"""
+            SELECT *
+            FROM ivoa.obscore
+            WHERE {science_keyword_query}
+            AND {scientific_category_query}
+            AND is_mosaic = 'F'
+            """
+
+    result = service.search(query).to_table().to_pandas()
+
+    return result
+
+def luminosity_to_jy(velocity, data, rest_frequency: float = 115.27):
+        """
+        This function takes as input a pandas db containing luminosities in K km s-1 pc2, redshifts, and luminosity distances in Mpc, 
+        and returns the brightness values in Jy.
+        
+        Parameters:
+        velocity (float): The velocity dispersion assumed for the line (Km s-1).
+        data (pandas.DataFrame): A pandas DataFrame containing the data.
+        rest_frequency (float): The rest frequency of the line in GHz. Defaults to 115.27 GHz for CO(1-0).
+
+        Output:
+        sigma: numpy.ndarray: An array of brightness values in Jy.
+
+        """
+        alpha = 3.255 * 10**7
+        sigma = (data['Luminosity(K km s-1 pc2)'] * ( (1 + data['#redshift']) * rest_frequency **2)) / (alpha * velocity * (data['luminosity distance(Mpc)']**2))
+        redshift = data['#redshift'].values
+        return sigma
+
+def exponential_func(x, a, b):
+        """
+        Exponential function used to fit the data.
+        """
+        return a * np.exp(-b * x)
+
+def sample_from_brightness(n, velocity, rest_frequency, data_path, plot_distribution=False):
+    """
+    Generates n samples of brightness values based on an exponential fit to the data.
+    
+    Parameters:
+    n (int): Number of samples to generate.
+    velocity (float): The velocity dispersion assumed for the line.
+    data_path (str): Path to the CSV file containing the data.
+    
+    Returns:
+    pd.DataFrame: A DataFrame containing the sampled brightness values and corresponding redshifts.
+    """
+    # Read the data from the CSV file
+    data = pd.read_csv(data_path, sep='\t')
+    # Calculate the brightness values (sigma) using the provided velocity
+    sigma = luminosity_to_jy(velocity, data, rest_frequency)
+    # Extract the redshift values from the data
+    redshift = data['#redshift'].values
+    # Generate evenly spaced redshifts for sampling
+    np.random.seed(42)
+    sampled_redshifts = np.linspace(min(redshift), max(redshift), n)
+    # Fit an exponential curve to the data
+    popt, pcov = curve_fit(exponential_func, redshift, sigma, )
+    # Use the fitted parameters to calculate the sampled brightness values
+    sampled_sigma = exponential_func(sampled_redshifts, *popt) + np.min(sigma)
+    if plot_distribution:
+        plt.scatter(redshift, sigma, label='Data')
+        plt.scatter(sampled_redshifts, sampled_sigma, label='Polinomial Fit')
+        plt.xlabel('Redshift')
+        plt.ylabel('Brightness (Jy)')
+        plt.legend()
+        plt.show()
+    # Return the sampled brightness values and the corresponding redshifts
+    return pd.DataFrame(zip(sampled_redshifts, sampled_sigma), columns=['Redshift', 'Brightness(Jy)'])
+
+def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, output_dir):
+    antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
+    obs_antennas = antenna_array.split(' ')
+    obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
+    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
+    intro_string = "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
+    with open(os.path.join(output_dir, 'antenna.cfg'), 'w') as f:
+        f.write(intro_string)
+        for i in range(len(obs_antennas)):
+            f.write(f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n")
+    f.close()
+
+def remove_non_numeric(text):
+  """Removes non-numeric characters from a string.
+
+  Args:
+      text: The string to process.
+
+  Returns:
+      A new string containing only numeric characters and the decimal point (.).
+  """
+  numbers = "0123456789."
+  return "".join(char for char in text if char in numbers)
