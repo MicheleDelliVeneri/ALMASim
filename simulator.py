@@ -4624,3 +4624,51 @@ def remove_non_numeric(text):
   """
   numbers = "0123456789."
   return "".join(char for char in text if char in numbers)
+
+def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
+  """
+  Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA) in arcseconds.
+
+  This function provides an approximation based on the theoretical relationship between
+  observing frequency and maximum baseline. The formula used is:
+  beam_size = (speed_of_light / central_frequency) / max_baseline * (180 / pi) * 3600 arcseconds
+  [km]/[s] * [s] / [km] = [radians] * [arcsec /radian] * [arcseconds/degree]
+
+  Args:
+      central_frequency_ghz: Central frequency of the observing band in GHz (float).
+      max_baseline_km: Maximum baseline of the antenna array in kilometers (float).
+
+  Returns:
+      Estimated beam size in arcseconds (float).
+
+  Raises:
+      ValueError: If either input argument is non-positive.
+  """
+
+  # Input validation
+  if central_frequency_ghz <= 0 or max_baseline_km <= 0:
+    raise ValueError("Central frequency and maximum baseline must be positive values.")
+
+  # Speed of light in meters per second
+  light_speed = c.to(U.m / U.s).value
+
+  # Convert frequency to Hz
+  central_frequency_hz = central_frequency_ghz.to(U.Hz).value
+
+  # Convert baseline to meters
+  max_baseline_meters = max_baseline_km.to(U.m).value
+
+
+  # Theoretical estimate of beam size (radians)
+  theta_radians = (light_speed / central_frequency_hz) / max_baseline_meters
+
+  # Convert theta from radians to arcseconds
+  beam_size_arcsec = theta_radians * (180 / math.pi) * 3600 * U.arcsec
+
+  return beam_size_arcsec
+
+def convert_range_from_GHz_to_km_s(central_freq, central_velocity, freq_range):
+    freq_band = freq_range[1] - freq_range[0]
+    freq_band = freq_band * U.GHz
+    dv = (c * freq_band  / central_freq).to(U.km / U.s)
+    return dv
