@@ -2,6 +2,16 @@ import astropy.units as U
 from collections import OrderedDict
 import h5py
 import illustris_python as il
+from random import choices
+import sys
+import os
+import numpy as np
+import pandas as pd 
+from astropy.coordinates import SkyCoord
+from scipy.optimize import curve_fit
+import random
+import shutil
+from astropy.constants import c
 
 def convert_to_j2000_string(ra_deg, dec_deg):
   """Converts RA and Dec in degrees to J2000 notation string format (e.g., "J2000 19h30m00 -40d00m00").
@@ -207,3 +217,63 @@ def redshift_to_snapshot(redshift):
     for i in range(len(redshifts) - 1):
         if redshift >= redshifts[i] and redshift < redshifts[i + 1]:
             return snaps[i]
+
+def get_data_from_hdf(file):
+    data = list()
+    column_names = list()
+    r = h5py.File(file, 'r')
+    for key in r.keys():
+        if key == 'Snapshot_99':
+            group = r[key]
+            for key2 in group.keys():
+                column_names.append(key2)
+                data.append(group[key2])
+    values = np.array(data)
+    r.close()
+    db = pd.DataFrame(values.T, columns=column_names)     
+    return db   
+
+def get_subhaloids_from_db(n, main_path):
+    file = os.path.join(main_path, 'metadata', 'morphologies_deeplearn.hdf5')
+    db = get_data_from_hdf(file)
+    catalogue = db[['SubhaloID', 'P_Late', 'P_S0', 'P_Sab']]
+    catalogue.sort_values(by=['P_Late'], inplace=True, ascending=False)
+    catalogue.head(10)
+    ellipticals = catalogue[(catalogue['P_Late'] > 0.6) & (catalogue['P_S0'] < 0.5) & (catalogue['P_Sab'] < 0.5)]
+    lenticulars = catalogue[(catalogue['P_S0'] > 0.6) & (catalogue['P_Late'] < 0.5) & (catalogue['P_Sab'] < 0.5)]
+    spirals = catalogue[(catalogue['P_Sab'] > 0.6) & (catalogue['P_Late'] < 0.5) & (catalogue['P_S0'] < 0.5)]
+
+    ellipticals['sum'] = ellipticals['P_S0'].values + ellipticals['P_Sab'].values
+    lenticulars['sum'] = lenticulars['P_Late'].values + lenticulars['P_Sab'].values
+
+    spirals['sum'] = spirals['P_Late'].values + spirals['P_S0'].values
+    ellipticals.sort_values(by=['sum'], inplace=True, ascending=True)
+    lenticulars.sort_values(by=['sum'], inplace=True, ascending=True)
+    spirals.sort_values(by=['sum'], inplace=True, ascending=True)
+    ellipticals_ids = ellipticals['SubhaloID'].values
+    lenticulars_ids = lenticulars['SubhaloID'].values
+    spirals_ids = spirals['SubhaloID'].values
+    sample_n = n // 3
+    
+    #n_0 = choices(ellipticals_ids[(elliptical_ids > limit0) & ( ellipticals_ids < limit1)], k=sample_n)
+    #n_1 = choices(spirals_ids[(spirals_ids > limit0) & (spirals_ids < limit1)], k=sample_n)
+    #n_2 = choices(lenticulars_ids[(lenticulars_ids > limit0) & (lenticular_ids < limit1)], k=n - 2 * sample_n)
+    n_0 = choices(ellipticals_ids, k=sample_n)
+    n_1 = choices(spirals_ids, k=sample_n)
+    n_2 = choices(lenticulars_ids, k=n - 2 * sample_n)
+    ids = np.concatenate((n_0, n_1, n_2)).astype(int)
+    return ids
+
+def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, redshift):
+    data = pd.read_csv(data_path, sep='\t')
+    # Calculate the brightness values (sigma) using the provided velocity
+    sigma = luminosity_to_jy(velocity, data, rest_frequency)
+    # Extract the redshift values from the data
+    redshifts = data['#redshift'].values
+    # Generate evenly spaced redshifts for sampling
+    np.random.seed(42)
+    # Fit an exponential curve to the data
+    popt, pcov = curve_fit(exponential_func, redshifts, sigma, )
+    # Sample the brightness values using the exponential curve
+    sampled_brightness = exponential_func(redshift, *popt) + np.min(sigma)
+    return sampled_brightness
