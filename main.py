@@ -59,7 +59,7 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = "/mnt/storage/astro/almasim"
+    output_dir = "/mnt/storage/astro/almasim-test"
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
     tng_dir = "/mnt/storage/astro/TNGData"
     #project_name = input("Insert the name of the project: ")
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     
     # Getting Sims Configuration
     #n_sims = int(input("Insert number of simulations to run: "))
-    n_sims = 10
+    n_sims = 1
     sim_idxs = np.arange(n_sims)
     #ncpu = input("Insert total number of CPUs to use: ")
     ncpu = 10
@@ -94,10 +94,26 @@ if __name__ == '__main__':
         #metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
         metadata_name = "test.csv"
         metadata = ual.query_for_metadata_by_science_type(os.path.join(main_path, "metadata", metadata_name))
+    #line_mode = input("Do you want to simulate a specific line? (y/n) ")
+    line_mode = "y"
+    if line_mode == "y":
+        #line_name = input("Insert the name of the line you want to simulate: ")
+        line_name = "CO(1-0)"
+        rest_freq = uas.get_line_rest_frequency(line_name)
+        rest_freqs = np.array([rest_freq]*n_sims)
+        redshifts = np.array([None]*n_sims)
+    else:
+        #redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
+        redshifts = '1 2'
+        z0, z1 = redshifts.split()
+        z0, z1 = float(z0), float(z1)
+        redshifts = np.random.uniform(z0, z1, n_sims)
+        rest_freqs = np.array([None]*n_sims)
+
     #fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     fix_spatial = 'y'
     if fix_spatial == 'y':
-       #n_pix = input('Insert the desired cube dimension in pixels: ')
+        #n_pix = input('Insert the desired cube dimension in pixels: ')
         n_pix = 256
         n_pix = int(n_pix)
     else:
@@ -140,14 +156,16 @@ if __name__ == '__main__':
     tng_paths = np.array([tng_dir]*n_sims)
     main_paths = np.array([main_path]*n_sims)
     ncpus = np.array([ncpu]*n_sims)
+    project_names = np.array([project_name]*n_sims)
     input_params = pd.DataFrame(zip(
-        sim_idxs, main_paths, output_paths, tng_paths, ras, decs, bands, ang_ress, vel_ress, fovs, 
+        sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
         antenna_arrays, n_pixs, n_channels, source_types, 
-        tng_subhaloids, ncpus), 
-        columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'ra', 'dec', 'band', 
+        tng_subhaloids, ncpus, rest_freqs, redshifts), 
+        columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
-        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type', 'tng_subhaloid', 'ncpu'])
+        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type', 'tng_subhaloid', 'ncpu', 
+        'rest_freq', 'redshift'])
     
     
         # Dask utils

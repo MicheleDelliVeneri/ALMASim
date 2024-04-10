@@ -237,8 +237,7 @@ def get_subhaloids_from_db(n, main_path):
     file = os.path.join(main_path, 'metadata', 'morphologies_deeplearn.hdf5')
     db = get_data_from_hdf(file)
     catalogue = db[['SubhaloID', 'P_Late', 'P_S0', 'P_Sab']]
-    catalogue.sort_values(by=['P_Late'], inplace=True, ascending=False)
-    catalogue.head(10)
+    catalogue = catalogue.sort_values(by=['P_Late'], ascending=False)
     ellipticals = catalogue[(catalogue['P_Late'] > 0.6) & (catalogue['P_S0'] < 0.5) & (catalogue['P_Sab'] < 0.5)]
     lenticulars = catalogue[(catalogue['P_S0'] > 0.6) & (catalogue['P_Late'] < 0.5) & (catalogue['P_Sab'] < 0.5)]
     spirals = catalogue[(catalogue['P_Sab'] > 0.6) & (catalogue['P_Late'] < 0.5) & (catalogue['P_S0'] < 0.5)]
@@ -277,3 +276,28 @@ def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, r
     # Sample the brightness values using the exponential curve
     sampled_brightness = exponential_func(redshift, *popt) + np.min(sigma)
     return sampled_brightness
+
+def compute_rest_frequency_from_redshift(source_freq, redshift):
+    line_db = {
+        'CO(1-0)': 115.271,
+        'CO(2-1)': 230.538,
+        'H(1-0)': 1420.405,
+        'H(2-1)': 2820.536
+    }
+    source_freqs  = line_db.values() * (1 + redshift)
+    freq_names = line_db.keys()
+    closest_freq = min(source_freqs, key=lambda x:abs(x-source_freq))
+    line_name = freq_names[np.where(source_freqs == closest_freq)]
+    rest_frequency = get_line_rest_frequency(line_name) 
+    return rest_frequency
+
+def get_line_rest_frequency(line_name):
+    if line_name == 'CO(1-0)':
+        rest_frequency = 115.271
+    elif line_name == 'CO(2-1)':
+        rest_frequency = 230.538
+    elif line_name == "H(1-0)":
+        rest_frequency = 1420.405
+    elif line_name == "H(2-1)":
+        rest_frequency = 2820.536
+    return rest_frequency

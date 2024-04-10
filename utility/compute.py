@@ -8,9 +8,9 @@ import os
 import pandas as pd
 import utility.alma as ual
 import utility.astro as uas
-def simulator(inx, main_dir, output_dir, tng_dir, ra, dec, band, ang_res, vel_res, fov, obs_date, 
+def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_subhaloid, ncpu):
+              n_channels, source_type, tng_subhaloid, ncpu, rest_frequency, redshift):
     """
     Runs a simulation for a given set of input parameters.
 
@@ -49,15 +49,24 @@ def simulator(inx, main_dir, output_dir, tng_dir, ra, dec, band, ang_res, vel_re
     band_range = band_range * U.GHz
     source_freq = freq * U.GHz
     central_freq = ual.get_band_central_freq(int(band)) * U.GHz
-    ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, output_dir)
-    antennalist = os.path.join(output_dir, "antenna.cfg")
+    sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
+    if not os.path.exists(sim_output_dir):
+        os.makedirs(sim_output_dir)
+    ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
+    antennalist = os.path.join(sim_output_dir, "antenna.cfg")
     antenna_name = 'antenna'
     max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
     pos_string = uas.convert_to_j2000_string(ra.value, dec.value)
-    rest_frequency = 115.271 * U.GHz
-    redshift = uas.compute_redshift(rest_frequency, source_freq)
+    if redshift is None:
+        rest_frequency = rest_frequency * U.GHz
+        redshift = uas.compute_redshift(rest_frequency, source_freq)
+    #rest_frequency = 115.271 * U.GHz
+    else:
+        rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift)
+    
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
-    if source_type == 'exntended':
+    if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
         part_num = uas.get_particles_num(tng_dir, outPath, snapshot, int(tng_subhalo_id))
+
