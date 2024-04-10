@@ -277,6 +277,9 @@ def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, r
     sampled_brightness = exponential_func(redshift, *popt) + np.min(sigma)
     return sampled_brightness
 
+def read_line_db(path):
+    return pd.read_csv(path, sep='\t')
+
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {
         'H(1-0)': 14.405,

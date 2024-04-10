@@ -62,7 +62,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     #rest_frequency = 115.271 * U.GHz
     else:
-        rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift)
+        rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
+
     
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     if source_type == 'extended':
