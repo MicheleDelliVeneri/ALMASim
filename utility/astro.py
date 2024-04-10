@@ -279,10 +279,11 @@ def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, r
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {
+        'H(1-0)': 14.405,
+        'H(2-1)': 28.20536,
         'CO(1-0)': 115.271,
         'CO(2-1)': 230.538,
-        'H(1-0)': 1420.405,
-        'H(2-1)': 2820.536
+        
     }
     source_freqs  = line_db.values() * (1 + redshift)
     freq_names = line_db.keys()
