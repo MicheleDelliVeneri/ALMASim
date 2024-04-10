@@ -342,17 +342,17 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
     if science_keyword_number == "":
         science_keyword = None
     else:
-        science_keyword_number = [int(x) for x in science_keyword_number.split(' ')]
+        science_keyword_number = [int(x) for x in science_keyword_number.split(' ') if x != '']
         science_keyword = [science_keywords[i] for i in science_keyword_number]
     if scientific_category_number == "":
         scientific_category = None
     else:
-        scientific_category_number = [int(x) for x in scientific_category_number.split(' ')]
+        scientific_category_number = [int(x) for x in scientific_category_number.split(' ') if x != '']
         scientific_category = [scientific_categories[i] for i in scientific_category_number]
     if band == "":
         bands = None
     else:
-        bands = [int(x) for x in band.split(' ')]
+        bands = [int(x) for x in band.split(' ') if x != '']
     df = query_by_science_type(service, science_keyword, scientific_category, bands)
     df = df.drop_duplicates(subset='member_ous_uid')
     

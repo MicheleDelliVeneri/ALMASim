@@ -19,6 +19,8 @@ import utility.alma as ual
 import utility.astro as uas
 import utility.compute as uc
 import warnings
+from os.path import isfile, expanduser
+import subprocess
 
 warnings.simplefilter(action="ignore", category=UserWarning)
 MALLOC_TRIM_THRESHOLD_ = 0
@@ -82,10 +84,14 @@ if __name__ == '__main__':
     sim_idxs = np.arange(n_sims)
     #ncpu = input("Insert total number of CPUs to use: ")
     ncpu = 10
+    
     #query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science):")
     query_mode = "science"
     if query_mode == "target":
         target_list = input("Insert the absolute path of the target list .csv file. This file should contain two columns with the target name and the target uid: ")
+        if not isfile(target_list):
+            print("File not found.")
+            target_list = input("File not found. Please provide the correct path: ")
         target_list = pd.read_csv(target_list).values
         target_list = target_list.tolist()
         metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
@@ -96,6 +102,9 @@ if __name__ == '__main__':
         metadata = ual.query_for_metadata_by_science_type(os.path.join(main_path, "metadata", metadata_name))
     #line_mode = input("Do you want to simulate a specific line? (y/n) ")
     line_mode = "y"
+    if line_mode != "y" and line_mode != "n":
+        print("Invalid input. Please insert y or n.")
+        line_mode = input("Do you want to simulate a specific line? (y/n) ")
     if line_mode == "y":
         #line_name = input("Insert the name of the line you want to simulate: ")
         line_name = "CO(1-0)"
@@ -129,10 +138,29 @@ if __name__ == '__main__':
     #source_type = input('Insert source type you want to simulate (point, gaussian, extended, diffuse): ')
     source_type = 'extended'
     if source_type == 'extended':
+        print('Checking TNG Folders')
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'output')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'output'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets'))
+        print('Checking simulation file')
+        #tng_api_key = input('Insert the TNG API key: ')
+        tng_api_key = '8f578b92e700fae3266931f4d785f82c'
+        if not isfile(os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5')):
+            print('Downloading simulation file')
+            url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+            cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(tng_api_key, os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
+            subprocess.check_call(cmd, shell=True)
+            print('Done.')
         tng_subhaloids = uas.get_subhaloids_from_db(n_sims, main_path)
-    
+        tng_apis = [str(tng_api_key)*n_sims]
     else:
-        tng_subhaloids = np.array([None]*n_sims)    
+        tng_subhaloids = np.array([None]*n_sims)
+        tng_apis = np.array([None]*n_sims)    
     
     metadata = metadata.sample(n = n_sims)
     ras = metadata['RA'].values
@@ -161,11 +189,11 @@ if __name__ == '__main__':
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
         antenna_arrays, n_pixs, n_channels, source_types, 
-        tng_subhaloids, ncpus, rest_freqs, redshifts), 
+        tng_subhaloids, tng_apis, ncpus, rest_freqs, redshifts), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
-        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type', 'tng_subhaloid', 'ncpu', 
-        'rest_freq', 'redshift'])
+        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type', 'tng_subhaloid',
+        'tng_api_key', 'ncpu', 'rest_freq', 'redshift'])
     
     
         # Dask utils

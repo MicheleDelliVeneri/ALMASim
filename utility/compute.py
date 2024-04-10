@@ -10,7 +10,7 @@ import utility.alma as ual
 import utility.astro as uas
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_subhaloid, ncpu, rest_frequency, redshift):
+              n_channels, source_type, tng_subhaloid, tng_api_key, ncpu, rest_frequency, redshift):
     """
     Runs a simulation for a given set of input parameters.
 
@@ -64,10 +64,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
 
-    
+    print('Redshift: {}'.format(redshift))
+    print('Rest frequency: {}'.format(rest_frequency))
+    print('Source frequency: {}'.format(source_freq))
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
+        print('Snapshot: {}'.format(snapshot))
         outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
-        part_num = uas.get_particles_num(tng_dir, outPath, snapshot, int(tng_subhalo_id))
+        part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
+        print('Number of particles: {}'.format(part_num))
 
