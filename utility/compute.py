@@ -91,7 +91,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))
-        tng_subhaloid = uas.get_subhalid_from_db(1, main_dir, snapshot)
+        tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
         outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
         part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
         print('Number of particles: {}'.format(part_num))

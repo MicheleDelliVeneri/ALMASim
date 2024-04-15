@@ -16,6 +16,7 @@ from os.path import isfile, expanduser
 import subprocess
 import six
 from astropy.io import fits
+import astropy.units as U
 
 def write_numpy_to_fits(array, header, path):
     hdu = fits.PrimaryHDU(
@@ -99,22 +100,44 @@ def compute_redshift(rest_frequency, observed_frequency):
     redshift = (observed_frequency.value - rest_frequency.value) / rest_frequency.value
     return redshift
 
-def luminosity_to_jy(velocity, data, rest_frequency: float = 115.27):
+def luminosity_to_jy(velocity, data, line_name):
         """
         This function takes as input a pandas db containing luminosities in K km s-1 pc2, redshifts, and luminosity distances in Mpc, 
-        and returns the brightness values in Jy.
+        and returns the brightness values in Jy, for the chosen line emission name.
         
         Parameters:
         velocity (float): The velocity dispersion assumed for the line (Km s-1).
-        data (pandas.DataFrame): A pandas DataFrame containing the data.
-        rest_frequency (float): The rest frequency of the line in GHz. Defaults to 115.27 GHz for CO(1-0).
+        data (pandas.DataFrame): A pandas DataFrame containing the data: Luminosity(K km s-1 pc2),#redshift,luminosity distance(Mpc).
+        line_name (str): The choosen line emission name.
 
         Output:
         sigma: numpy.ndarray: An array of brightness values in Jy.
-
         """
-        alpha = 3.255 * 10**7
-        sigma = (data['Luminosity(K km s-1 pc2)'] * ( (1 + data['#redshift']) * rest_frequency **2)) / (alpha * velocity * (data['luminosity distance(Mpc)']**2))
+        def sigma_CO10(df, velocity, rest_frequency):
+                alpha = 3.255e7
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+        def sigma_CO21(df, velocity, rest_frequency):
+                alpha = 3.255e7
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+        def sigma_H10(df, velocity, rest_frequency):
+                alpha = 3.255e7
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+        def sigma_H21(df, velocity, rest_frequency):
+                alpha = 3.255e7
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+        def sigma_O32(df, velocity, rest_frequency):
+                alpha = 3.255e7
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+        rest_frequency = get_line_rest_frequency(line_name)
+        function = {
+                "CO(1-0)": (data, sigma_CO10),
+                "CO(2-1)": (data, sigma_CO21),
+                "H(1-0)": (data, sigma_H10),
+                "H(2-1)": (data, sigma_H21),
+                "O(3-2)": (data, sigma_O32),
+                }
+        sigma = data.apply(lambda row: function.get(line_name)[1](row, velocity, rest_frequency), axis=1)
+        sigma = np.concatenate(sigma.to_numpy())                                                                                                
         return sigma
         
 def exponential_func(x, a, b):
@@ -122,6 +145,21 @@ def exponential_func(x, a, b):
         Exponential function used to fit the data.
         """
         return a * np.exp(-b * x)
+
+def fit_distr(redshifts, sigma):
+    """ 
+    This function takes as input the path to file csv of the distribution of the chosen line emission.
+    It's require to specify the redshift coloumn name and luminosity values (sigma).
+
+    Parameters: 
+
+    Return: 
+    popt, pcov (float) : The parameters of the distribution.
+
+    """
+    popt, pcov = curve_fit(exponential_func, redshifts, sigma)
+
+    return popt, pcov 
 
 def redshift_to_snapshot(redshift):
     snap_db = {
@@ -246,10 +284,10 @@ def get_data_from_hdf(file, snapshot):
     db = pd.DataFrame(values.T, columns=column_names)     
     return db   
 
-def get_subhaloids_from_db(n, main_path):
+def get_subhaloids_from_db(n, main_path, snapshot):
     pd.options.mode.chained_assignment = None 
     file = os.path.join(main_path, 'metadata', 'morphologies_deeplearn.hdf5')
-    db = get_data_from_hdf(file)
+    db = get_data_from_hdf(file, snapshot)
     catalogue = db[['SubhaloID', 'P_Late', 'P_S0', 'P_Sab']]
     catalogue = catalogue.sort_values(by=['P_Late'], ascending=False)
     ellipticals = catalogue[(catalogue['P_Late'] > 0.6) & (catalogue['P_S0'] < 0.5) & (catalogue['P_Sab'] < 0.5)]
@@ -720,15 +758,17 @@ def loadHalo(basePath, snapNum, id, partType, fields=None, api_key=None):
     return loadSubset(basePath, snapNum, partType, fields, subset=subset, api_key=api_key)
 
 def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, redshift):
+    line_name = get_line_name(rest_frequency)
     data = pd.read_csv(data_path, sep='\t')
     # Calculate the brightness values (sigma) using the provided velocity
-    sigma = luminosity_to_jy(velocity, data, rest_frequency)
+    sigma = luminosity_to_jy(velocity, data, line_name)
+    #sigma = luminosity_to_jy()
     # Extract the redshift values from the data
     redshifts = data['#redshift'].values
     # Generate evenly spaced redshifts for sampling
     np.random.seed(42)
     # Fit an exponential curve to the data
-    popt, pcov = curve_fit(exponential_func, redshifts, sigma, )
+    popt, pcov = fit_distr(redshifts,sigma)
     # Sample the brightness values using the exponential curve
     sampled_brightness = exponential_func(redshift, *popt) + np.min(sigma)
     return sampled_brightness
@@ -761,7 +801,35 @@ def get_line_rest_frequency(line_name):
     elif line_name == "H(2-1)":
         rest_frequency = 2820.536
     return rest_frequency
-
-def sample_low_redshift(metadata, n):
+  
+def get_line_name(frequency):
+    line_db = {
+        'H(1-0)': 14.405,
+        'H(2-1)': 28.20536,
+        'CO(1-0)': 115.271,
+        'CO(2-1)': 230.538,
+        
+    }
+    min_diff = float('inf')
+    closest_line = None
+    
+    for line_name, line_freq in line_db.items():
+        diff = abs(line_freq - frequency)
+        if diff < min_diff:
+            min_diff = diff
+            closest_line = line_name
+    return closest_line
+    
+def sample_given_redshift(metadata, n, rest_frequency, extended):
+    metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
+    metadata.loc[:, 'redshift'] = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
+    metadata = metadata[metadata['redshift'] >= 0]
+    metadata.loc[:, 'snapshot'] = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
+    if extended == True:
+        #metatada = metadata[metadata['redshift'] < 0.05]
+        metadata = metadata[(metadata['snapshot'] == 99) | (metadata['snapshot'] == 95)]
+    sample = metadata.sample(n)
+    return sample
+
      

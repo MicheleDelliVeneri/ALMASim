@@ -1583,6 +1583,7 @@ def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, 
     data_header = uas.loadHeader(tngpath, snapshot)
     redshift = redshift * cu.redshift
     distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind='comoving'))
+    print('Computed a distance of {} for redshift {}'.format(distance, redshift))
     source = myTNGSource(
         snapNum= snapshot,
         subID = subhalo_id,

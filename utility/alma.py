@@ -148,6 +148,7 @@ def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, 
     with open(os.path.join(output_dir, 'antenna.cfg'), 'w') as f:
         f.write(intro_string)
         for i in range(len(obs_antennas)):
+            print(obs_coordinates.values[i])
             f.write(f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n")
     f.close()
 

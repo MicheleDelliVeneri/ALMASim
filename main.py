@@ -163,10 +163,11 @@ if __name__ == '__main__':
         #tng_subhaloids = np.array([None]*n_sims)
         tng_apis = np.array([None]*n_sims)    
     
-    if source_type == 'extended':
-        metadata = aus.sample_low_redshift(metada, n = n_sims)
+    if source_type == 'extended': 
+        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True)
     else:
-        metadata = metadata.sample(n = n_sims)
+        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False)
+    print('Metadata queried, {} examples found.'.format(len(metadata)))
     ras = metadata['RA'].values
     decs = metadata['Dec'].values
     bands = metadata['Band'].values
@@ -200,7 +201,7 @@ if __name__ == '__main__':
         'tng_api_key', 'ncpu', 'rest_freq', 'redshift'])
     
     
-        # Dask utils
+    # Dask utils
     dask.config.set({'temporary_directory': output_path})
     total_memory = psutil.virtual_memory().total
     num_processes = multiprocessing.cpu_count() // 4
