@@ -763,7 +763,6 @@ def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, r
     data = pd.read_csv(data_path, sep='\t')
     # Calculate the brightness values (sigma) using the provided velocity
     #sigma = luminosity_to_jy(velocity, data, line_name)
-    #sigma = luminosity_to_jy()
     sigma = data['Sigma(Jy)'].values
     # Extract the redshift values from the data
     redshifts = data['#redshift'].values
@@ -809,8 +808,7 @@ def get_line_name(frequency):
         'H(1-0)': 14.405,
         'H(2-1)': 28.20536,
         'CO(1-0)': 115.271,
-        'CO(2-1)': 230.538,
-        
+        'CO(2-1)': 230.538, 
     }
     min_diff = float('inf')
     closest_line = None

@@ -87,6 +87,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
     print('Band: ', band)
+    print('Velocity resolution: {} km/s'.format(vel_res))
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))
