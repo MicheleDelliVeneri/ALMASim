@@ -129,6 +129,7 @@ def luminosity_to_jy(velocity, data, line_name):
                 alpha = 3.255e7
                 return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
         rest_frequency = get_line_rest_frequency(line_name)
+        print(rest_frequency)
         function = {
                 "CO(1-0)": (data, sigma_CO10),
                 "CO(2-1)": (data, sigma_CO21),
@@ -761,8 +762,9 @@ def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, r
     line_name = get_line_name(rest_frequency)
     data = pd.read_csv(data_path, sep='\t')
     # Calculate the brightness values (sigma) using the provided velocity
-    sigma = luminosity_to_jy(velocity, data, line_name)
+    #sigma = luminosity_to_jy(velocity, data, line_name)
     #sigma = luminosity_to_jy()
+    sigma = data['Sigma(Jy)'].values
     # Extract the redshift values from the data
     redshifts = data['#redshift'].values
     # Generate evenly spaced redshifts for sampling

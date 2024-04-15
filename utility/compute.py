@@ -80,7 +80,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     if redshift is None:
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)
-    #rest_frequency = 115.271 * U.GHz
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
 
@@ -92,13 +91,18 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))
         tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+        print('Subhaloid ID: {}'.format(tng_subhaloid))
         outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
         part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
         print('Number of particles: {}'.format(part_num))
-        if part_num == 0:
-            print('No particles found. Skipping simulation.')
-            return
+        while part_num == 0:
+            print('No particles found. Checking another subhalo.')
+            tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+            outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
+            part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
+            print('Number of particles: {}'.format(part_num))
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
+    print('{} Brightness: {}'.format(line_name, brightness))
     fov =  ual.get_fov_from_band(int(band))
     if n_pix is None:
         beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline)
