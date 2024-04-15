@@ -5,12 +5,29 @@ from casatools import table
 from casatools import simulator as casa_simulator
 import sys
 import os
+import random
 import pandas as pd
 import utility.alma as ual
 import utility.astro as uas
+import utility.skymodels as usm
+
+
+def remove_non_numeric(text):
+  """Removes non-numeric characters from a string.
+
+  Args:
+      text: The string to process.
+
+  Returns:
+      A new string containing only numeric characters and the decimal point (.).
+  """
+  numbers = "0123456789."
+  return "".join(char for char in text if char in numbers)
+
+
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_subhaloid, tng_api_key, ncpu, rest_frequency, redshift):
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift):
     """
     Runs a simulation for a given set of input parameters.
 
@@ -44,6 +61,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     vel_res = vel_res * U.km / U.s
     int_time = int_time * U.s
     total_time = total_time * U.s
+    freq_support = freq_support.split(' U ')[0].split(',')[1]
+    freq_sup = float(remove_non_numeric(freq_support)) * U.kHz
+    freq_sup = freq_sup.to(U.MHz)   
     band_range = ual.get_band_range(int(band))
     band_range = band_range[1] - band_range[0]
     band_range = band_range * U.GHz
@@ -65,13 +85,103 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
 
     print('Redshift: {}'.format(redshift))
-    print('Rest frequency: {}'.format(rest_frequency))
-    print('Source frequency: {}'.format(source_freq))
-    brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
+    print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
+    print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
+    print('Band: ', band)
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))
+        tng_subhaloid = uas.get_subhalid_from_db(1, main_dir, snapshot)
         outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
         part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
         print('Number of particles: {}'.format(part_num))
-
+        if part_num == 0:
+            print('No particles found. Skipping simulation.')
+            return
+    brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
+    fov =  ual.get_fov_from_band(int(band))
+    if n_pix is None:
+        beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline)
+        cell_size = beam_size / 5
+        n_pix = int(1.5 * fov.to(U.arcsec) / cell_size)
+    else:
+        cell_size = fov.to(U.arcsec) / n_pix
+    if n_channels is None:
+        n_channels = int(band_range / freq_sup)
+   
+    central_channel_index = n_channels // 2
+    source_channel_index = int(central_channel_index * source_freq / central_freq)
+    datacube = usm.DataCube(
+        n_px_x=n_pix, 
+        n_px_y=n_pix,
+        n_channels=n_channels, 
+        px_size=cell_size, 
+        channel_width=freq_sup, 
+        velocity_centre=central_freq, 
+        ra=ra, 
+        dec=dec)
+    wcs = datacube.wcs
+    if source_type == 'point':
+        pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+        pos_z = int(source_channel_index)
+        fwhm_z = np.random.randint(3, 10)   
+        datacube = usm.insert_pointlike(datacube, brightness, pos_x, pos_y, pos_z, fwhm_z, n_px, n_channels)
+    elif source_type == 'gaussian':
+        pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+        pos_z = int(source_channel_index)
+        fwhm_x = np.random.randint(3, 10)
+        fwhm_y = np.random.randint(3, 10)
+        fwhm_z = np.random.randint(3, 10)
+        angle = np.random.randint(0, 180)
+        datacube = usm.insert_gaussian(datacube, brightness, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_channels)
+    elif source_type == 'extended':
+        datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, api_key=tng_api_key)
+    filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
+    usm.write_datacube_to_fits(datacube, filename)
+    del datacube
+    skymodel, sky_header = load_fits(filename)
+    sim_brightness = np.max(skymodel)
+    if sim_brightness != brightness:
+        flattened_skymodel = np.ravel(skymodel)
+        skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
+        skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
+        uas.write_numpy_to_fits(skymodel, sky_header, filename)
+    simobserve(
+        project=project, 
+        skymodel=filename,
+        obsmode="int",
+        setpointings=True,
+        thermalnoise="tsys-atm",
+        antennalist=antennalist,
+        indirection=pos_string,
+        incell="{}arcsec".format(cell_size.value),
+        incenter='{}GHz'.format(central_freq.value),
+        inwidth="{}MHz".format(freq_sup.value),
+        integration="{}s".format(int_time.value),
+        totaltime="{}s".format(total_time.value),
+        user_pwv=pwv,
+        )
+    
+    scale = random.uniform(0, 1)
+    ms_path = os.path.join(sim_output_dir, "{}.{}.noisy.ms".format(project, antenna_name))
+    ual.simulate_atmospheric_noise(sim_output_dir, scale, ms_path)
+    gain_error_amp = random.gauss(0, 0.1)
+    ual.simulate_gain_errors(ms_path, gain_error_amp)
+    tclean(
+        vis=ms_path,
+        imagename=os.path.join(project, '{}.{}'.format(project, antenna_name)),
+        imsize=[int(n_pixels), int(n_pixels)],
+        cell="{}".format(beam_size),
+        phasecenter=pos_string,
+        specmode="cube",
+        niter=0,
+        fastnoise=False,
+        calcpsf=True,
+        pbcor=True,
+        pblimit=0.2, 
+        )
+    exportfits(imagename=os.path.join(project, '{}.{}.image'.format(project, antenna_name)), 
+       fitsimage=os.path.join(output_dir, "dirty_cube_" + str(idx) +".fits"), overwrite=True)
+    exportfits(imagename=os.path.join(project, '{}.{}.skymodel'.format(project, antenna_name)), 
+        fitsimage=os.path.join(output_dir, "clean_cube_" + str(idx) +".fits"), overwrite=True)
+    

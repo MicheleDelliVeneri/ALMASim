@@ -147,6 +147,7 @@ if __name__ == '__main__':
             os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing'))
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets')):
             os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets'))
+
         print('Checking simulation file')
         #tng_api_key = input('Insert the TNG API key: ')
         tng_api_key = '8f578b92e700fae3266931f4d785f82c'
@@ -156,13 +157,16 @@ if __name__ == '__main__':
             cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(tng_api_key, os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
             subprocess.check_call(cmd, shell=True)
             print('Done.')
-        tng_subhaloids = uas.get_subhaloids_from_db(n_sims, main_path)
+
         tng_apis = [str(tng_api_key)*n_sims]
     else:
-        tng_subhaloids = np.array([None]*n_sims)
+        #tng_subhaloids = np.array([None]*n_sims)
         tng_apis = np.array([None]*n_sims)    
     
-    metadata = metadata.sample(n = n_sims)
+    if source_type == 'extended':
+        metadata = aus.sample_low_redshift(metada, n = n_sims)
+    else:
+        metadata = metadata.sample(n = n_sims)
     ras = metadata['RA'].values
     decs = metadata['Dec'].values
     bands = metadata['Band'].values
@@ -189,10 +193,10 @@ if __name__ == '__main__':
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
         antenna_arrays, n_pixs, n_channels, source_types, 
-        tng_subhaloids, tng_apis, ncpus, rest_freqs, redshifts), 
+        tng_apis, ncpus, rest_freqs, redshifts), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
-        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type', 'tng_subhaloid',
+        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
         'tng_api_key', 'ncpu', 'rest_freq', 'redshift'])
     
     

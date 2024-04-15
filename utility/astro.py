@@ -15,6 +15,13 @@ from astropy.constants import c
 from os.path import isfile, expanduser
 import subprocess
 import six
+from astropy.io import fits
+
+def write_numpy_to_fits(array, header, path):
+    hdu = fits.PrimaryHDU(
+            header=header, data=array
+        )
+    hdu.writeto(path, overwrite=True)
 
 def convert_to_j2000_string(ra_deg, dec_deg):
   """Converts RA and Dec in degrees to J2000 notation string format (e.g., "J2000 19h30m00 -40d00m00").
@@ -224,12 +231,12 @@ def redshift_to_snapshot(redshift):
         if redshift >= redshifts[i] and redshift < redshifts[i + 1]:
             return snaps[i]
 
-def get_data_from_hdf(file):
+def get_data_from_hdf(file, snapshot):
     data = list()
     column_names = list()
     r = h5py.File(file, 'r')
     for key in r.keys():
-        if key == 'Snapshot_99':
+        if key == f'Snapshot_{snapshot}':
             group = r[key]
             for key2 in group.keys():
                 column_names.append(key2)
@@ -268,6 +275,8 @@ def get_subhaloids_from_db(n, main_path):
     n_1 = choices(spirals_ids, k=sample_n)
     n_2 = choices(lenticulars_ids, k=n - 2 * sample_n)
     ids = np.concatenate((n_0, n_1, n_2)).astype(int)
+    if len(ids) == 1:
+        return ids[0]
     return ids
 
 def partTypeNum(partType):
@@ -446,6 +455,11 @@ def snapPath(basePath, snapNum, chunkNum=0):
         return filePath1
     return filePath2
 
+def snapPath2(basePath, snapNum, chunkNum=0):
+    snapPath = basePath + '/snapdir_' + str(snapNum).zfill(3) + '/'
+    filePath1 = snapPath + 'snap_' + str(snapNum).zfill(3) + '.' + str(chunkNum) + '.hdf5'
+    return filePath1
+
 def getNumPart(header):
     """ Calculate number of particles of all types given a snapshot header. """
     if 'NumPart_Total_HighWord' not in header:
@@ -478,6 +492,13 @@ def loadSubset(basePath, snapNum, partType, fields=None, subset=None, mdi=None, 
         fields = [fields]
 
     # load header from first chunk
+    if not os.path.exists(os.path.join(basePath, 'snapdir_0{}'.format(str(snapNum)))):
+        os.makedirs(os.path.join(basePath, 'snapdir_0{}'.format(str(snapNum))))
+    if not isfile(snapPath(basePath, snapNum)):
+        print('Downloading Snapshot {}...'.format(snapNum))
+        url = f'http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}'
+        cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{0}.hdf5 -O {snapPath2(basePath, snapNum)}'
+        subprocess.check_call(cmd, shell=True)
     with h5py.File(snapPath(basePath, snapNum), 'r') as f:
 
         header = dict(f['Header'].attrs.items())
@@ -606,10 +627,17 @@ def loadSubset(basePath, snapNum, partType, fields=None, subset=None, mdi=None, 
 
     return result
 
+def download_groupcat(basePath, snapNum, fileNum, api_key):
+    print('Group Catalogue not found, downloading it')
+    url = "http://www.tng-project.org/api/TNG100-1/files/groupcat-{}.{}.hdf5".format(snapNum, fileNum)
+    cmd = f'wget -nd -nc -nv -e robots=off -l 1 -A hdf5 --content-disposition --header="API-Key:{api_key}" {url} -O {gcPath(basePath, snapNum, fileNum)}'
+    subprocess.check_call(cmd, shell=True)
+    print('Done.')
+
 def getSnapOffsets(basePath, snapNum, id, type, api_key):
     """ Compute offsets within snapshot for a particular group/subgroup. """
     r = {}
-    print(f'Checking offset in Snapshot {snapNum} for grouphalo {id}')
+    print(f'Checking offset')
     # old or new format
     if 'fof_subhalo' in gcPath(basePath, snapNum):
         # use separate 'offsets_nnn.hdf5' files
@@ -619,6 +647,8 @@ def getSnapOffsets(basePath, snapNum, id, type, api_key):
             cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url} -O {offsetPath(basePath, snapNum)}'
             subprocess.check_call(cmd, shell=True)
             print('Done.')
+        if not isfile(gcPath(basePath, snapNum, 0)):
+            download_groupcat(basePath, snapNum, 0, api_key)
         with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
             groupFileOffsets = f['FileOffsets/'+type][()]
             r['snapOffsets'] = np.transpose(f['FileOffsets/SnapByType'][()])  # consistency
@@ -637,16 +667,15 @@ def getSnapOffsets(basePath, snapNum, id, type, api_key):
     group_path = basePath + '/groups_%03d/' % snapNum
     if not os.path.exists(group_path):
         os.makedirs(group_path)
+    if not isfile(gcPath(basePath, snapNum, 0)):
+        download_groupcat(basePath, snapNum, 0, api_key)
     if isfile(gcPath(basePath, snapNum, fileNum)):
         with h5py.File(gcPath(basePath, snapNum, fileNum), 'r') as f:
             r['lenType'] = f[type][type+'LenType'][groupOffset, :]
     else:
-        print('File Offset not found, downloading it')
-        url = "http://www.tng-project.org/api/TNG100-1/files/groupcat-{}/?format=api".format(snapNum)
-        cmd = f'wget -nd -nc -nv -e robots=off -l 1 -r -A hdf5 --content-disposition --header="API-Key:{api_key}" {url} -P {group_path}'
-        subprocess.check_call(cmd, shell=True)
-        print('Done.')
-
+        download_groupcat(basePath, snapNum, fileNum, api_key)
+        with h5py.File(gcPath(basePath, snapNum, fileNum), 'r') as f:
+            r['lenType'] = f[type][type+'LenType'][groupOffset, :]
     # old or new format: load the offset (by type) of  this group/subgroup within the snapshot
     if 'fof_subhalo' in gcPath(basePath, snapNum):
         with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
@@ -732,3 +761,7 @@ def get_line_rest_frequency(line_name):
     elif line_name == "H(2-1)":
         rest_frequency = 2820.536
     return rest_frequency
+
+def sample_low_redshift(metadata, n):
+    freqs = metadata['Freq'].values
+     

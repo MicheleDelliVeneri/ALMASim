@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import os 
 import sys
+from casatasks import exportfits, simobserve, tclean, gaincal, applycal
+from casatools import table
 # Metadata related functions
 
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
@@ -385,3 +387,96 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
     database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
     database.to_csv(path, index=False)
     return database
+
+def get_antennas_distances_from_reference(antenna_config):
+    f = open(antenna_config)
+    lines = f.readlines()
+    nlines = len(lines)
+    frefant = int((nlines - 1) // 2)
+    f.close()
+    zx, zy, zz, zztot = [], [], [], []
+    for i in range(3,nlines):
+        stuff = lines[i].split()
+        zx.append(float(stuff[0]))
+        zy.append(float(stuff[1]))
+        zz.append(float(stuff[2]))
+    nant = len(zx)
+    nref = int(frefant)
+    for i in range(0,nant):
+        zxref = zx[i]-zx[nref]
+        zyref = zy[i]-zy[nref]
+        zzref = zz[i]-zz[nref]
+        zztot.append(np.sqrt(zxref**2+zyref**2+zzref**2))
+    return zztot, frefant
+
+def generate_prms(antbl,scaleF):
+    """
+    This function generates the phase rms for the atmosphere
+    as a function of antenna baseline length.
+    It is based on the structure function of the atmosphere and 
+    it gives 30 deg phase rms at 10000m = 10km.
+
+    Input: 
+    antbl = antenna baseline length in meters
+    scaleF = scale factor for the phase rms
+    Output:
+    prms = phase rms
+    """
+    Lrms = 1.0/52.83 * antbl**0.8     # phase rms ~0.8 power to 10 km
+    Hrms = 3.0 * antbl**0.25          # phase rms `0.25 power beyond 10 km
+    if antbl < 10000.0:
+        prms = scaleF*Lrms
+    if antbl >= 10000.0:
+        prms = scaleF*Hrms
+    return prms
+
+def simulate_atmospheric_noise(project, scale, ms, antennalist):
+    zztot, frefant = get_antennas_distances_from_reference(antennalist)
+    gaincal(
+        vis=ms,
+        caltable=project + "_atmosphere.gcal",
+        refant=str(frefant), #name of the reference antenna
+        minsnr=0.01, #ignore solution with SNR below this
+        calmode="p", #phase
+        solint='inf', #solution interval
+    )
+    tb = table()
+    tb.open(project + "_atmosphere.gcal", nomodify=False)
+    yant = tb.getcol('ANTENNA1')
+    ytime = tb.getcol('TIME')
+    ycparam = tb.getcol('CPARAM')
+    nycparam = ycparam.copy()
+    nant = len(yant)
+    for i in range(nant):
+        antbl = zztot[yant[i]]
+        # get rms phase for each antenna
+        prms = generate_prms(antbl,scale)
+        # determine random GAUSSIAN phase error from rms phase
+        perror = random.gauss(0,prms)
+        # adding a random phase error to the solution, it will be 
+        # substituted by a frequency that depends from frequency
+        # of observation and baseline length
+        perror = perror + random.gauss(0, 0.05 * perror)
+        # convert phase error to complex number
+        rperror = np.cos(perror*pi/180.0)
+        iperror = np.sin(perror*pi/180.0)
+        nycparam[0][0][i] = 1.0*np.complex(rperror,iperror)  #X POL
+        nycparam[1][0][i] = 1.0*np.complex(rperror,iperror)  #Y POL  ASSUMED SAME
+    tb.putcol('CPARAM', nycparam)
+    tb.flush()
+    tb.close()
+    applycal(
+        vis = ms,
+        gaintable = project + "_atmosphere.gcal"
+    )
+    os.system("rm -rf " + project + "_atmosphere.gcal")
+    return 
+
+def simulate_gain_errors(ms, amplitude: float = 0.01):
+    sm = casa_simulator()
+    sm.openfromms(ms)
+    sm.setseed(42)
+    sm.setgain(mode='fbm', amplitude=[amplitude])
+    sm.corrupt()
+    sm.close()
+    return
