@@ -102,6 +102,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
             part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
             print('Number of particles: {}'.format(part_num))
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
+    line_name = uas.get_line_name(rest_frequency.value)
     print('{} Brightness: {}'.format(line_name, brightness))
     fov =  ual.get_fov_from_band(int(band))
     if n_pix is None:
