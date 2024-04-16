@@ -24,6 +24,18 @@ def write_numpy_to_fits(array, header, path):
         )
     hdu.writeto(path, overwrite=True)
 
+def load_fits(inFile):
+    hdu_list = fits.open(inFile)
+    data = hdu_list[0].data
+    header = hdu_list[0].header
+    hdu_list.close()
+    return data, header
+
+def save_fits(outfile, data, header):
+    hdu = fits.PrimaryHDU(data, header=header)
+    hdul = fits.HDUList([hdu])
+    hdul.writeto(outfile, overwrite=True)
+
 def convert_to_j2000_string(ra_deg, dec_deg):
   """Converts RA and Dec in degrees to J2000 notation string format (e.g., "J2000 19h30m00 -40d00m00").
 
@@ -823,9 +835,11 @@ def get_line_name(frequency):
 def sample_given_redshift(metadata, n, rest_frequency, extended):
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
-    metadata.loc[:, 'redshift'] = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
+    redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
+    metadata.loc[:, 'redshift'] = redshifts
     metadata = metadata[metadata['redshift'] >= 0]
-    metadata.loc[:, 'snapshot'] = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
+    snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
+    metadata['snapshot'] = snapshots
     if extended == True:
         #metatada = metadata[metadata['redshift'] < 0.05]
         metadata = metadata[(metadata['snapshot'] == 99) | (metadata['snapshot'] == 95)]

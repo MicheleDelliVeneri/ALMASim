@@ -65,7 +65,7 @@ if __name__ == '__main__':
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
     tng_dir = "/mnt/storage/astro/TNGData"
     #project_name = input("Insert the name of the project: ")
-    project_name = 'test'
+    project_name = 'test-extended'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     if not os.path.exists(tng_dir):
@@ -84,22 +84,28 @@ if __name__ == '__main__':
     sim_idxs = np.arange(n_sims)
     #ncpu = input("Insert total number of CPUs to use: ")
     ncpu = 10
-    
+    #query = input('Do you want to query for metadata? (y/n) ')
+    query = 'n'
+    if query == 'y':
     #query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science):")
-    query_mode = "science"
-    if query_mode == "target":
-        target_list = input("Insert the absolute path of the target list .csv file. This file should contain two columns with the target name and the target uid: ")
-        if not isfile(target_list):
-            print("File not found.")
-            target_list = input("File not found. Please provide the correct path: ")
-        target_list = pd.read_csv(target_list).values
-        target_list = target_list.tolist()
-        metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
-        metadata = ual.query_for_metadata_by_targets(target_list, os.path.join(main_path, "metadata", metadata_name))
+        query_mode = "science"
+        if query_mode == "target":
+            target_list = input("Insert the absolute path of the target list .csv file. This file should contain two columns with the target name and the target uid: ")
+            if not isfile(target_list):
+                print("File not found.")
+                target_list = input("File not found. Please provide the correct path: ")
+            target_list = pd.read_csv(target_list).values
+            target_list = target_list.tolist()
+            metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
+            metadata = ual.query_for_metadata_by_targets(target_list, os.path.join(main_path, "metadata", metadata_name))
+        else:
+            #metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
+            metadata_name = "test.csv"
+            metadata = ual.query_for_metadata_by_science_type(os.path.join(main_path, "metadata", metadata_name))
     else:
-        #metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
-        metadata_name = "test.csv"
-        metadata = ual.query_for_metadata_by_science_type(os.path.join(main_path, "metadata", metadata_name))
+        metadata_name = 'test.csv'
+        #metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
+        metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
     #line_mode = input("Do you want to simulate a specific line? (y/n) ")
     line_mode = "y"
     if line_mode != "y" and line_mode != "n":
@@ -190,15 +196,24 @@ if __name__ == '__main__':
     main_paths = np.array([main_path]*n_sims)
     ncpus = np.array([ncpu]*n_sims)
     project_names = np.array([project_name]*n_sims)
+    
+    #save_seconday = input('Store the Primary Beam, PSF and MS? (y/n) ')
+    save_secondary = 'y'
+    if save_secondary == 'y':
+        save_secondary = True
+    else:
+        save_secondary = False
+    save_secondary = np.array([save_secondary]*n_sims)
+
     input_params = pd.DataFrame(zip(
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
         antenna_arrays, n_pixs, n_channels, source_types, 
-        tng_apis, ncpus, rest_freqs, redshifts), 
+        tng_apis, ncpus, rest_freqs, redshifts, save_secondary), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
         'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
-        'tng_api_key', 'ncpu', 'rest_freq', 'redshift'])
+        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'save_secondary'])
     
     
     # Dask utils
@@ -213,4 +228,5 @@ if __name__ == '__main__':
     client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
     results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
     client.close()
-    cluster.close()    
+    cluster.close()
+    uc.remove_logs(main_path)

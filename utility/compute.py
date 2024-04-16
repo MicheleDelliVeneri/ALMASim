@@ -10,7 +10,9 @@ import pandas as pd
 import utility.alma as ual
 import utility.astro as uas
 import utility.skymodels as usm
-
+import utility.plotting as upl
+import shutil
+from os.path import isfile
 
 def remove_non_numeric(text):
   """Removes non-numeric characters from a string.
@@ -24,10 +26,18 @@ def remove_non_numeric(text):
   numbers = "0123456789."
   return "".join(char for char in text if char in numbers)
 
+def remove_logs(folder_path):
+    for filename in os.listdir(folder_path):
+        # Check if the file ends with '.log'
+        if filename.endswith('.log'):
+            # Construct the full path to the file
+            file_path = os.path.join(folder_path, filename)
+            # Remove the file
+            os.remove(file_path)
 
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift):
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, save_secondary=False):
     """
     Runs a simulation for a given set of input parameters.
 
@@ -70,8 +80,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     source_freq = freq * U.GHz
     central_freq = ual.get_band_central_freq(int(band)) * U.GHz
     sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
+    
     if not os.path.exists(sim_output_dir):
         os.makedirs(sim_output_dir)
+    os.chdir(output_dir)
     ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
     antennalist = os.path.join(sim_output_dir, "antenna.cfg")
     antenna_name = 'antenna'
@@ -87,7 +99,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
     print('Band: ', band)
-    print('Velocity resolution: {} km/s'.format(vel_res))
+    print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))
@@ -106,12 +118,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     line_name = uas.get_line_name(rest_frequency.value)
     print('{} Brightness: {}'.format(line_name, brightness))
     fov =  ual.get_fov_from_band(int(band))
-    if n_pix is None:
-        beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline)
+    beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline)
+    if n_pix is None: 
         cell_size = beam_size / 5
         n_pix = int(1.5 * fov.to(U.arcsec) / cell_size)
     else:
         cell_size = fov.to(U.arcsec) / n_pix
+        # just added
+        #beam_size = cell_size * 5
     if n_channels is None:
         n_channels = int(band_range / freq_sup)
    
@@ -131,7 +145,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = int(source_channel_index)
         fwhm_z = np.random.randint(3, 10)   
-        datacube = usm.insert_pointlike(datacube, brightness, pos_x, pos_y, pos_z, fwhm_z, n_px, n_channels)
+        datacube = usm.insert_pointlike(datacube, brightness, pos_x, pos_y, pos_z, fwhm_z, n_pix, n_channels)
     elif source_type == 'gaussian':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = int(source_channel_index)
@@ -141,19 +155,25 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         angle = np.random.randint(0, 180)
         datacube = usm.insert_gaussian(datacube, brightness, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_channels)
     elif source_type == 'extended':
-        datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, api_key=tng_api_key)
+        datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     usm.write_datacube_to_fits(datacube, filename)
     del datacube
-    skymodel, sky_header = load_fits(filename)
+    skymodel, sky_header = uas.load_fits(filename)
     sim_brightness = np.max(skymodel)
+    os.chdir(output_dir)
+    
     if sim_brightness != brightness:
+        print('Detected peak is: {} re-normalizing'.format(sim_brightness) )
         flattened_skymodel = np.ravel(skymodel)
+        t_min = 0
+        t_max = brightness
         skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
         skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
         uas.write_numpy_to_fits(skymodel, sky_header, filename)
+    project_name = project_name + '_{}'.format(inx)
     simobserve(
-        project=project, 
+        project=project_name, 
         skymodel=filename,
         obsmode="int",
         setpointings=True,
@@ -169,14 +189,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         )
     
     scale = random.uniform(0, 1)
-    ms_path = os.path.join(sim_output_dir, "{}.{}.noisy.ms".format(project, antenna_name))
-    ual.simulate_atmospheric_noise(sim_output_dir, scale, ms_path)
+    ms_path = os.path.join(sim_output_dir, "{}.{}.noisy.ms".format(project_name, antenna_name))
+    ual.simulate_atmospheric_noise(sim_output_dir, scale, ms_path, antennalist)
     gain_error_amp = random.gauss(0, 0.1)
     ual.simulate_gain_errors(ms_path, gain_error_amp)
     tclean(
         vis=ms_path,
-        imagename=os.path.join(project, '{}.{}'.format(project, antenna_name)),
-        imsize=[int(n_pixels), int(n_pixels)],
+        imagename=os.path.join(sim_output_dir, '{}.{}'.format(project_name, antenna_name)),
+        imsize=[int(n_pix), int(n_pix)],
         cell="{}".format(beam_size),
         phasecenter=pos_string,
         specmode="cube",
@@ -186,8 +206,19 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         pbcor=True,
         pblimit=0.2, 
         )
-    exportfits(imagename=os.path.join(project, '{}.{}.image'.format(project, antenna_name)), 
-       fitsimage=os.path.join(output_dir, "dirty_cube_" + str(idx) +".fits"), overwrite=True)
-    exportfits(imagename=os.path.join(project, '{}.{}.skymodel'.format(project, antenna_name)), 
-        fitsimage=os.path.join(output_dir, "clean_cube_" + str(idx) +".fits"), overwrite=True)
+    exportfits(imagename=os.path.join(project_name, '{}.{}.image'.format(project_name, antenna_name)), 
+       fitsimage=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"), overwrite=True)
+    exportfits(imagename=os.path.join(project_name, '{}.{}.skymodel'.format(project_name, antenna_name)), 
+        fitsimage=os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"), overwrite=True)
+    upl.plotter(inx, output_dir, beam_size)
+    if save_secondary == True:
+        exportfits(imagename=os.path.join(project_name, '{}.{}.psf'.format(project_name, antenna_name)),
+              fitsimage=os.path.join(output_dir, "psf_" + str(inx) +".fits"), overwrite=True)
+        exportfits(imagename=os.path.join(project_name, '{}.{}.pb'.format(project_name, antenna_name)),
+                fitsimage=os.path.join(output_dir, "pb_" + str(inx) +".fits"), overwrite=True)
+        ual.ms_to_npz(os.path.join(project_name, "{}.{}.noisy.ms".format(project_name, antenna_name)),
+              dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"),
+              datacolumn='CORRECTED_DATA',
+              output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
+    shutil.rmtree(sim_output_dir)
     

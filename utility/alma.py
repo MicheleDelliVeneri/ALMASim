@@ -1,5 +1,6 @@
 from astropy.constants import c
 import astropy.units as U
+from astropy.io import fits
 import math
 import pyvo
 import numpy as np 
@@ -8,6 +9,9 @@ import os
 import sys
 from casatasks import exportfits, simobserve, tclean, gaincal, applycal
 from casatools import table
+from casatools import simulator as casa_simulator
+import random
+from math import pi
 # Metadata related functions
 
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
@@ -436,7 +440,7 @@ def simulate_atmospheric_noise(project, scale, ms, antennalist):
         vis=ms,
         caltable=project + "_atmosphere.gcal",
         refant=str(frefant), #name of the reference antenna
-        minsnr=0.01, #ignore solution with SNR below this
+        minsnr=0.00, #ignore solution with SNR below this
         calmode="p", #phase
         solint='inf', #solution interval
     )
@@ -480,3 +484,43 @@ def simulate_gain_errors(ms, amplitude: float = 0.01):
     sm.corrupt()
     sm.close()
     return
+
+def _ms2resolve_transpose(arr):
+    my_asserteq(arr.ndim, 3)
+    return np.ascontiguousarray(np.transpose(arr, (0, 2,1)))
+def my_asserteq(*args):
+    for aa in args[1:]:
+        if args[0] != aa:
+            raise RuntimeError(f"{args[0]} != {aa}")
+
+def ms_to_npz(ms, dirty_cube, datacolumn='CORRECTED_DATA', output_file='test.npz'):
+    tb = table()
+    tb.open(ms)
+    
+    #get frequency info from dirty cube
+    with fits.open(dirty_cube, memmap=False) as hdulist: 
+            npol, nz, nx, ny = np.shape(hdulist[0].data)
+            header=hdulist[0].header
+    crdelt3 = header['CDELT3']
+    crval3 = header['CRVAL3']
+    wave = ((crdelt3 * (np.arange(0, nz, 1))) + crval3) #there will be problems, channels       are not of the same width in real data
+
+    vis = tb.getcol(datacolumn)
+    vis = np.ascontiguousarray(_ms2resolve_transpose(vis))
+
+    wgt = tb.getcol('WEIGHT')
+    wgt = np.repeat(wgt[:,None],128,axis=1)
+    #this is to get vis and wgt on the same shape if ms has column weighted_spectrum this       should be different
+    wgt = np.ascontiguousarray(_ms2resolve_transpose(wgt))
+
+    uvw = np.transpose(tb.getcol('UVW'))
+
+    np.savez_compressed(output_file,
+                    freq = wave,
+                    vis= vis, 
+                    weight= wgt,
+                    polarization=[9,12], 
+                    antpos0=uvw,
+                    antpos1=tb.getcol('ANTENNA1'),
+                    antpos2=tb.getcol('ANTENNA2'),
+                    antpos3=tb.getcol('TIME'))

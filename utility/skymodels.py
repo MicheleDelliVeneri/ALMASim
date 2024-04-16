@@ -16,8 +16,9 @@ from astropy.io import fits
 import utility.astro as uas
 import astropy.constants as C
 import numpy as np
-# -------------------------- Modified functions from illustris-tng -------------------------- #
-
+from itertools import product
+from tqdm import tqdm
+from astropy.time import Time
 
 class myTNGSource(SPHSource):
     def __init__(
@@ -1576,23 +1577,27 @@ def insert_gaussian(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fw
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
     return datacube
 
-def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, api_key):
-    x_rot = np.random.randint(0, 360) * U.deg
-    y_rot = np.random.randint(0, 360) * U.deg
-    tngpath = os.path.join(tngpath, 'TNG100-1', 'output') 
-    data_header = uas.loadHeader(tngpath, snapshot)
-    redshift = redshift * cu.redshift
-    distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind='comoving'))
-    print('Computed a distance of {} for redshift {}'.format(distance, redshift))
+def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
     source = myTNGSource(
         snapNum= snapshot,
         subID = subhalo_id,
-        distance = distance,
+        distance = distance * U.Mpc,
         rotation = {'L_coords': (x_rot, y_rot)},
         basePath = tngpath,
         ra=ra,
         dec=dec,
         api_key=api_key
+    )
+
+    datacube = DataCube(
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_channels, 
+        px_size = 10 * U.arcsec,
+        channel_width=freq_sup,
+        velocity_centre=source.vsys, 
+        ra = source.ra,
+        dec = source.dec,
     )
     spectral_model = GaussianSpectrum(
         sigma="thermal"
@@ -1606,4 +1611,157 @@ def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, 
         quiet=False, 
         find_distance=False)
     M.insert_source_in_cube(skip_validation=True, progressbar=True, ncpu=ncpu)
+    return M
+
+def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, api_key, ncpu):
+    x_rot = np.random.randint(0, 360) * U.deg
+    y_rot = np.random.randint(0, 360) * U.deg
+    tngpath = os.path.join(tngpath, 'TNG100-1', 'output') 
+    data_header = uas.loadHeader(tngpath, snapshot)
+    redshift = redshift * cu.redshift
+    distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind='comoving'))
+    print('Computed a distance of {} for redshift {}'.format(distance, redshift))
+    distance = 50
+    M = insert_tng(datacube.n_px_x, datacube.n_channels, datacube.channel_width, 
+                    snapshot, subhalo_id, distance, x_rot, y_rot, tngpath,
+                    ra, dec, api_key, ncpu)
+    initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
+    print('Mass ratio: {}%'.format(initial_mass_ratio))
+    mass_ratio = initial_mass_ratio
+    while mass_ratio < 80:
+        if mass_ratio < 10:
+            distance = distance * 8
+        elif mass_ratio < 20:
+            distance = distance * 5
+        elif mass_ratio < 30:
+            distance = distance * 2
+        else:       
+            distance = distance * 1.5
+        print('Injecting source at distance {}'.format(distance))
+        M = insert_tng(datacube.n_px_x, datacube.n_channels, datacube.channel_width,
+                        snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, 
+                        ra, dec, api_key, ncpu)
+        mass_ratio = M.inserted_mass / M.source.input_mass * 100
+        print('Mass ratio: {}%'.format(mass_ratio))
+    print('Datacube generated, inserting source')    
     return M.datacube
+
+def write_datacube_to_fits(
+    datacube,
+    filename,
+    channels="frequency",
+    overwrite=True,
+    ):
+        """
+        Output the DataCube to a FITS-format file.
+
+        Parameters
+        ----------
+        filename : string
+            Name of the file to write. '.fits' will be appended if not already
+            present.
+
+        channels : {'frequency', 'velocity'}, optional
+            Type of units used along the spectral axis in output file.
+            (Default: 'frequency'.)
+
+        overwrite: bool, optional
+            Whether to allow overwriting existing files. (Default: True.)
+        """
+
+        datacube.drop_pad()
+        if channels == "frequency":
+            datacube.freq_channels()
+        elif channels == "velocity":
+            datacube.velocity_channels()
+        else:
+            raise ValueError(
+                "Unknown 'channels' value "
+                "(use 'frequency' or 'velocity'."
+            )
+
+        filename = filename if filename[-5:] == ".fits" else filename + ".fits"
+
+        wcs_header = datacube.wcs.to_header()
+        wcs_header.rename_keyword("WCSAXES", "NAXIS")
+        header = fits.Header()
+        if len(datacube._array.shape) == 3: 
+            header.append(("SIMPLE", "T"))
+            header.append(("BITPIX", 16))
+            header.append(("NAXIS", wcs_header["NAXIS"]))
+            header.append(("NAXIS1", datacube.n_px_x))
+            header.append(("NAXIS2", datacube.n_px_y))
+            header.append(("NAXIS3", datacube.n_channels))
+            header.append(("EXTEND", "T"))
+            header.append(("CDELT1", wcs_header["CDELT1"]))
+            header.append(("CRPIX1", wcs_header["CRPIX1"]))
+            header.append(("CRVAL1", wcs_header["CRVAL1"]))
+            header.append(("CTYPE1", wcs_header["CTYPE1"]))
+            header.append(("CUNIT1", wcs_header["CUNIT1"]))
+            header.append(("CDELT2", wcs_header["CDELT2"]))
+            header.append(("CRPIX2", wcs_header["CRPIX2"]))
+            header.append(("CRVAL2", wcs_header["CRVAL2"]))
+            header.append(("CTYPE2", wcs_header["CTYPE2"]))
+            header.append(("CUNIT2", wcs_header["CUNIT2"]))
+            header.append(("CDELT3", wcs_header["CDELT3"]))
+            header.append(("CRPIX3", wcs_header["CRPIX3"]))
+            header.append(("CRVAL3", wcs_header["CRVAL3"]))
+            header.append(("CTYPE3", wcs_header["CTYPE3"]))
+            header.append(("CUNIT3", wcs_header["CUNIT3"]))
+        else:
+            header.append(("SIMPLE", "T"))
+            header.append(("BITPIX", 16))
+            header.append(("NAXIS", wcs_header["NAXIS"]))
+            header.append(("NAXIS1", datacube.n_px_x))
+            header.append(("NAXIS2", datacube.n_px_y))
+            header.append(("NAXIS3", datacube.n_channels))
+            header.append(("NAXIS4", 1))
+            header.append(("EXTEND", "T"))
+            header.append(("CDELT1", wcs_header["CDELT1"]))
+            header.append(("CRPIX1", wcs_header["CRPIX1"]))
+            header.append(("CRVAL1", wcs_header["CRVAL1"]))
+            header.append(("CTYPE1", wcs_header["CTYPE1"]))
+            header.append(("CUNIT1", wcs_header["CUNIT1"]))
+            header.append(("CDELT2", wcs_header["CDELT2"]))
+            header.append(("CRPIX2", wcs_header["CRPIX2"]))
+            header.append(("CRVAL2", wcs_header["CRVAL2"]))
+            header.append(("CTYPE2", wcs_header["CTYPE2"]))
+            header.append(("CUNIT2", wcs_header["CUNIT2"]))
+            header.append(("CDELT3", wcs_header["CDELT3"]))
+            header.append(("CRPIX3", wcs_header["CRPIX3"]))
+            header.append(("CRVAL3", wcs_header["CRVAL3"]))
+            header.append(("CTYPE3", wcs_header["CTYPE3"]))
+            header.append(("CUNIT3", wcs_header["CUNIT3"]))
+            header.append(("CDELT4", wcs_header["CDELT4"]))
+            header.append(("CRPIX4", wcs_header["CRPIX4"]))
+            header.append(("CRVAL4", wcs_header["CRVAL4"]))
+            header.append(("CTYPE4", wcs_header["CTYPE4"]))
+            header.append(("CUNIT4", "PAR"))
+        header.append(("EPOCH", 2000))
+        # header.append(('BLANK', -32768)) #only for integer data
+        header.append(("BSCALE", 1.0))
+        header.append(("BZERO", 0.0))
+        datacube_array_units = datacube._array.unit
+        header.append(
+            ("DATAMAX", np.max(datacube._array.to_value(datacube_array_units)))
+        )
+        header.append(
+            ("DATAMIN", np.min(datacube._array.to_value(datacube_array_units)))
+        )
+        
+        # long names break fits format, don't let the user set this
+        header.append(("OBJECT", "MOCK"))
+        header.append(("BUNIT", datacube_array_units.to_string("fits")))
+        header.append(("MJD-OBS", Time.now().to_value("mjd")))
+        header.append(("BTYPE", "Intensity"))
+        header.append(("SPECSYS", wcs_header["SPECSYS"]))
+
+        # flip axes to write
+        hdu = fits.PrimaryHDU(
+            header=header, data=datacube._array.to_value(datacube_array_units).T
+        )
+        hdu.writeto(filename, overwrite=overwrite)
+
+        if channels == "frequency":
+            datacube.velocity_channels()
+        return
