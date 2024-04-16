@@ -65,6 +65,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         tng_subhaloid (int): Subhaloid ID for the TNG simulation.
         ncpu (int): Number of CPU cores to use for the simulation.
     """
+    print('Running simulation {}'.format(inx))
     ra = ra * U.deg
     dec = dec * U.deg
     ang_res = ang_res * U.arcsec
@@ -100,6 +101,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
     print('Band: ', band)
     print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
+    print('Angular resolution: {} arcsec'.format(round(ang_res.value, 3)))
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))
@@ -116,19 +118,23 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
             print('Number of particles: {}'.format(part_num))
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     line_name = uas.get_line_name(rest_frequency.value)
-    print('{} Brightness: {}'.format(line_name, brightness))
+    print('{} Brightness: {}'.format(line_name, round(brightness, 2)))
     fov =  ual.get_fov_from_band(int(band))
     beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline)
+    cell_size = beam_size / 5
     if n_pix is None: 
-        cell_size = beam_size / 5
-        n_pix = int(1.5 * fov.to(U.arcsec) / cell_size)
+        #cell_size = beam_size / 5
+        n_pix = int(1.5 * fov / cell_size)
     else:
-        cell_size = fov.to(U.arcsec) / n_pix
+        cell_size = fov / n_pix
         # just added
         #beam_size = cell_size * 5
     if n_channels is None:
         n_channels = int(band_range / freq_sup)
-   
+    
+    print('Field of view: {}'.format(fov))
+    print('Beam size: {} '.format(beam_size))
+    print('Cell size: {} '.format(cell_size))
     central_channel_index = n_channels // 2
     source_channel_index = int(central_channel_index * source_freq / central_freq)
     datacube = usm.DataCube(
@@ -153,25 +159,26 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         fwhm_y = np.random.randint(3, 10)
         fwhm_z = np.random.randint(3, 10)
         angle = np.random.randint(0, 180)
-        datacube = usm.insert_gaussian(datacube, brightness, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_channels)
+        datacube = usm.insert_gaussian(datacube, brightness, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':
         datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     usm.write_datacube_to_fits(datacube, filename)
     del datacube
-    skymodel, sky_header = uas.load_fits(filename)
-    sim_brightness = np.max(skymodel)
-    os.chdir(output_dir)
+    upl.plot_skymodel(filename, inx, output_dir, show=False)
+    #skymodel, sky_header = uas.load_fits(filename)
+    #sim_brightness = np.max(skymodel)
     
-    if sim_brightness != brightness:
-        print('Detected peak is: {} re-normalizing'.format(sim_brightness) )
-        flattened_skymodel = np.ravel(skymodel)
-        t_min = 0
-        t_max = brightness
-        skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
-        skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
-        uas.write_numpy_to_fits(skymodel, sky_header, filename)
+    #if sim_brightness != brightness:
+    #    print('Detected peak is: {} re-normalizing'.format(sim_brightness) )
+    #    flattened_skymodel = np.ravel(skymodel)
+    #    t_min = 0
+    #    t_max = brightness
+    #    skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
+    ##    skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
+     #   uas.write_numpy_to_fits(skymodel, sky_header, filename)
     project_name = project_name + '_{}'.format(inx)
+    os.chdir(output_dir)
     simobserve(
         project=project_name, 
         skymodel=filename,
@@ -186,11 +193,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         integration="{}s".format(int_time.value),
         totaltime="{}s".format(total_time.value),
         user_pwv=pwv,
+        #verbose=False,
+        overwrite=True,
+        #graphics="none",
         )
     
     scale = random.uniform(0, 1)
     ms_path = os.path.join(sim_output_dir, "{}.{}.noisy.ms".format(project_name, antenna_name))
-    ual.simulate_atmospheric_noise(sim_output_dir, scale, ms_path, antennalist)
+    ual.simulate_atmospheric_noise(sim_output_dir, project_name, scale, ms_path, antennalist)
     gain_error_amp = random.gauss(0, 0.1)
     ual.simulate_gain_errors(ms_path, gain_error_amp)
     tclean(

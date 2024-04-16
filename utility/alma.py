@@ -434,18 +434,18 @@ def generate_prms(antbl,scaleF):
         prms = scaleF*Hrms
     return prms
 
-def simulate_atmospheric_noise(project, scale, ms, antennalist):
+def simulate_atmospheric_noise(sim_output_dir, project, scale, ms, antennalist):
     zztot, frefant = get_antennas_distances_from_reference(antennalist)
     gaincal(
         vis=ms,
-        caltable=project + "_atmosphere.gcal",
+        caltable=os.path.join(sim_output_dir, project + "_atmosphere.gcal"),
         refant=str(frefant), #name of the reference antenna
         minsnr=0.00, #ignore solution with SNR below this
         calmode="p", #phase
         solint='inf', #solution interval
     )
     tb = table()
-    tb.open(project + "_atmosphere.gcal", nomodify=False)
+    tb.open(os.path.join(sim_output_dir, project + "_atmosphere.gcal"), nomodify=False)
     yant = tb.getcol('ANTENNA1')
     ytime = tb.getcol('TIME')
     ycparam = tb.getcol('CPARAM')
@@ -464,16 +464,16 @@ def simulate_atmospheric_noise(project, scale, ms, antennalist):
         # convert phase error to complex number
         rperror = np.cos(perror*pi/180.0)
         iperror = np.sin(perror*pi/180.0)
-        nycparam[0][0][i] = 1.0*np.complex(rperror,iperror)  #X POL
-        nycparam[1][0][i] = 1.0*np.complex(rperror,iperror)  #Y POL  ASSUMED SAME
+        nycparam[0][0][i] = 1.0*complex(rperror,iperror)  #X POL
+        nycparam[1][0][i] = 1.0*complex(rperror,iperror)  #Y POL  ASSUMED SAME
     tb.putcol('CPARAM', nycparam)
     tb.flush()
     tb.close()
     applycal(
         vis = ms,
-        gaintable = project + "_atmosphere.gcal"
+        gaintable = os.path.join(sim_output_dir, project + "_atmosphere.gcal")
     )
-    os.system("rm -rf " + project + "_atmosphere.gcal")
+    #os.system("rm -rf " + os.path.join(sim_output_dir, project + "_atmosphere.gcal"))
     return 
 
 def simulate_gain_errors(ms, amplitude: float = 0.01):

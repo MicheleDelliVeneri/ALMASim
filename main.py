@@ -64,8 +64,8 @@ if __name__ == '__main__':
     output_dir = "/mnt/storage/astro/almasim-test"
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
     tng_dir = "/mnt/storage/astro/TNGData"
-    #project_name = input("Insert the name of the project: ")
-    project_name = 'test-extended'
+    project_name = input("Insert the name of the project: ")
+    #project_name = 'test-extended'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     if not os.path.exists(tng_dir):
@@ -79,16 +79,22 @@ if __name__ == '__main__':
     
     
     # Getting Sims Configuration
-    #n_sims = int(input("Insert number of simulations to run: "))
-    n_sims = 1
+    n_sims = int(input("Insert number of simulations to run: "))
+    #n_sims = 1
     sim_idxs = np.arange(n_sims)
-    #ncpu = input("Insert total number of CPUs to use: ")
-    ncpu = 10
-    #query = input('Do you want to query for metadata? (y/n) ')
-    query = 'n'
-    if query == 'y':
-    #query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science):")
-        query_mode = "science"
+    ncpu = input("Insert total number of CPUs to use: ")
+    #ncpu = 10
+    query = input('Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) ')
+    #query = 'n'
+    if query != 'query' and query != 'get':
+        print("Invalid input. Please insert query or get.")
+        query = input('Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) ')
+    if query == 'retrieve':
+        query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): ")
+        #query_mode = "science"
+        if query_mode != "target" and query_mode != "science":
+            print("Invalid input. Please insert target or science.")
+            query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): ")
         if query_mode == "target":
             target_list = input("Insert the absolute path of the target list .csv file. This file should contain two columns with the target name and the target uid: ")
             if not isfile(target_list):
@@ -99,12 +105,16 @@ if __name__ == '__main__':
             metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
             metadata = ual.query_for_metadata_by_targets(target_list, os.path.join(main_path, "metadata", metadata_name))
         else:
-            #metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
-            metadata_name = "test.csv"
+            metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
+            if '.csv' not in metadata_name:
+                metadata_name = metadata_name + '.csv'
+            #metadata_name = "test.csv"
             metadata = ual.query_for_metadata_by_science_type(os.path.join(main_path, "metadata", metadata_name))
     else:
-        metadata_name = 'test.csv'
-        #metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
+        #metadata_name = 'test.csv'
+        metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
+        if '.csv' not in metadata_name:
+            metadata_name = metadata_name + '.csv'
         metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
     #line_mode = input("Do you want to simulate a specific line? (y/n) ")
     line_mode = "y"
@@ -127,6 +137,10 @@ if __name__ == '__main__':
 
     #fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     fix_spatial = 'y'
+    if fix_spatial != 'y' and fix_spatial != 'n':
+        print("Invalid input. Please insert y or n.")
+        fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
+
     if fix_spatial == 'y':
         #n_pix = input('Insert the desired cube dimension in pixels: ')
         n_pix = 256
@@ -135,14 +149,20 @@ if __name__ == '__main__':
         n_pix = None
     #fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
     fix_spectral = 'y'
+    if fix_spectral != 'y' and fix_spectral != 'n':
+        print("Invalid input. Please insert y or n.")
+        fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
     if fix_spectral == 'y':
         #n_channels = input('Insert the desired number of channels: ')
         n_channels = 256
         n_channels = int(n_channels)
     else:
         n_channels = None
-    #source_type = input('Insert source type you want to simulate (point, gaussian, extended, diffuse): ')
-    source_type = 'extended'
+    source_type = input('Insert source type you want to simulate (point, gaussian, extended, diffuse): ')
+    if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse':
+        print("Invalid input. Please insert point, gaussian, extended or diffuse.")
+        source_type = input('Insert source type you want to simulate (point, gaussian, extended, diffuse): ')
+    #source_type = 'extended'
     if source_type == 'extended':
         print('Checking TNG Folders')
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
@@ -166,14 +186,13 @@ if __name__ == '__main__':
 
         tng_apis = [str(tng_api_key)*n_sims]
     else:
-        #tng_subhaloids = np.array([None]*n_sims)
         tng_apis = np.array([None]*n_sims)    
     
     if source_type == 'extended': 
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True)
     else:
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False)
-    print('Metadata queried, {} examples found.'.format(len(metadata)))
+    print('Metadata retrieved')
     ras = metadata['RA'].values
     decs = metadata['Dec'].values
     bands = metadata['Band'].values
@@ -230,3 +249,4 @@ if __name__ == '__main__':
     client.close()
     cluster.close()
     uc.remove_logs(main_path)
+    
