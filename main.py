@@ -193,6 +193,14 @@ if __name__ == '__main__':
     else:
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False)
     print('Metadata retrieved')
+    inject_ser = input('Do you want to inject serendipitous sources? (y/n) ')
+    if inject_ser != 'y' and inject_ser != 'n':
+        print("Invalid input. Please insert y or n.")
+        inject_ser = input('Do you want to inject serendipitous sources? (y/n) ')
+    if inject_ser == 'y':
+        inject_serendipitous = np.array([True] * n_sims)
+    else:
+        inject_serendipitous = np.array([False] * n_sims)
     ras = metadata['RA'].values
     decs = metadata['Dec'].values
     bands = metadata['Band'].values
@@ -228,11 +236,11 @@ if __name__ == '__main__':
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
         antenna_arrays, n_pixs, n_channels, source_types, 
-        tng_apis, ncpus, rest_freqs, redshifts, save_secondary), 
+        tng_apis, ncpus, rest_freqs, redshifts, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
         'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
-        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'save_secondary'])
+        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'save_secondary', 'inject_serendipitous'])
     
     
     # Dask utils

@@ -1628,7 +1628,7 @@ def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, 
     initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
     print('Mass ratio: {}%'.format(initial_mass_ratio))
     mass_ratio = initial_mass_ratio
-    while mass_ratio < 80:
+    while mass_ratio < 50:
         if mass_ratio < 10:
             distance = distance * 8
         elif mass_ratio < 20:
@@ -1645,6 +1645,174 @@ def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, 
         print('Mass ratio: {}%'.format(mass_ratio))
     print('Datacube generated, inserting source')    
     return M.datacube
+
+def distance_1d(p1, p2):
+    return math.sqrt((p1-p2)**2)
+
+def distance_2d(p1, p2):
+    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+
+def distance_3d(p1, p2):
+    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2)
+
+def get_iou(bb1, bb2):
+    """
+    Calculate the Intersection over Union (IoU) of two bounding boxes.
+
+    Parameters
+    ----------
+    bb1 : dict
+        Keys: {'x1', 'x2', 'y1', 'y2'}
+        The (x1, y1) position is at the top left corner,
+        the (x2, y2) position is at the bottom right corner
+    bb2 : dict
+        Keys: {'x1', 'x2', 'y1', 'y2'}
+        The (x, y) position is at the top left corner,
+        the (x2, y2) position is at the bottom right corner
+
+    Returns
+    -------
+    float
+        in [0, 1]
+    """
+    assert bb1['x1'] < bb1['x2']
+    assert bb1['y1'] < bb1['y2']
+    assert bb2['x1'] < bb2['x2']
+    assert bb2['y1'] < bb2['y2']
+
+    # determine the coordinates of the intersection rectangle
+    x_left = max(bb1['x1'], bb2['x1'])
+    y_top = max(bb1['y1'], bb2['y1'])
+    x_right = min(bb1['x2'], bb2['x2'])
+    y_bottom = min(bb1['y2'], bb2['y2'])
+
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    # The intersection of two axis-aligned bounding boxes is always an
+    # axis-aligned bounding box
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+
+    # compute the area of both AABBs
+    bb1_area = (bb1['x2'] - bb1['x1']) * (bb1['y2'] - bb1['y1'])
+    bb2_area = (bb2['x2'] - bb2['x1']) * (bb2['y2'] - bb2['y1'])
+
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the interesection area
+    iou = intersection_area / float(bb1_area + bb2_area - intersection_area)
+    assert iou >= 0.0
+    assert iou <= 1.0
+    return iou
+
+def get_iou_1d(bb1, bb2):
+    assert(bb1['z1'] < bb1['z2'])
+    assert(bb2['z1'] < bb2['z2'])
+    z_left = max(bb1['z1'], bb2['z1'])
+    z_right = min(bb1['z2'], bb2['z2'])
+    if z_right < z_left:
+        return 0.0
+    intersection = z_right - z_left
+    bb1_area = bb1['z2'] - bb1['z1']
+    bb2_area = bb2['z2'] - bb2['z1']
+    union = bb1_area + bb2_area - intersection
+    return intersection / union
+
+def get_pos(x_radius, y_radius, z_radius):
+    x = np.random.randint(-x_radius , x_radius)
+    y = np.random.randint(-y_radius, y_radius)
+    z = np.random.randint(-z_radius, z_radius)
+    return (x, y, z)
+
+def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,  
+                     n_components, fwhm_xs, fwhm_ys, fwhm_zs,
+                     xy_radius, z_radius, sep_xy, sep_z):
+    sample = []
+    i = 0
+    n = 0
+    while (len(sample) < n_components) and (n < 1000):
+        new_p = get_pos(xy_radius, xy_radius, z_radius)
+        new_p = int(new_p[0] + pos_x), int(new_p[1] + pos_y), int(new_p[2] + pos_z)
+        if len(sample) == 0:
+            spatial_dist = distance_2d((new_p[0],new_p[1]), (pos_x, pos_y))
+            freq_dist = distance_1d(new_p[2], pos_z)
+            if  spatial_dist < sep_xy or freq_dist < sep_z:
+                n += 1
+                continue
+            else:
+                spatial_iou = get_iou(
+                        {'x1': new_p[0] - fwhm_xs[i], 
+                         'x2': new_p[0] + fwhm_xs[i], 
+                         'y1': new_p[1] - fwhm_ys[i], 
+                         'y2': new_p[1] + fwhm_ys[i]},
+                        {'x1': pos_x - fwhm_x, 
+                         'x2': pos_x + fwhm_x, 
+                         'y1': pos_y - fwhm_y, 
+                         'y2': pos_y + fwhm_y})
+                freq_iou = get_iou_1d(
+                        {'z1': new_p[2] - fwhm_zs[i], 'z2': new_p[2] + fwhm_zs[i]}, 
+                        {'z1': pos_z - fwhm_z, 'z2': pos_z + fwhm_z})
+                if spatial_iou > 0.1 or freq_iou > 0.1:
+                    n += 1
+                    continue
+                else:
+                    sample.append(new_p)
+                    i += 1
+                    n = 0
+                    print('Found {}st component'.format(len(sample)))
+        else:
+            spatial_distances = [distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample]
+            freq_distances = [distance_1d(new_p[2], p[2]) for p in sample]
+            checks = [spatial_dist < sep_xy or freq_dist < sep_z for spatial_dist, freq_dist in zip(spatial_distances, freq_distances)]
+            if any(checks) is True:
+                n += 1
+                continue
+            else:
+                spatial_iou = [get_iou(
+                        {'x1': new_p[0] - fwhm_xs[i], 
+                         'x2': new_p[0] + fwhm_xs[i], 
+                         'y1': new_p[1] - fwhm_ys[i], 
+                         'y2': new_p[1] + fwhm_ys[i]},
+                        {'x1': p[0] - fwhm_xs[j], 
+                         'x2': p[0] + fwhm_xs[j], 
+                         'y1': p[1] - fwhm_ys[j], 
+                         'y2': p[1] + fwhm_ys[j]}) for j, p in enumerate(sample)]
+                freq_iou = [get_iou_1d(
+                        {'z1': new_p[2] - fwhm_zs[i], 'z2': new_p[2] + fwhm_zs[i]}, 
+                        {'z1': p[2] - fwhm_zs[j], 'z2': p[2] + fwhm_zs[j]}) for j, p in enumerate(sample)]
+                checks = [spatial_iou > 0.1 or freq_iou > 0.1 for spatial_iou, freq_iou in zip(spatial_iou, freq_iou)]
+                if any(checks) is True:
+                    n += 1
+                    continue
+                else:
+                    i += 1
+                    n = 0
+                    sample.append(new_p)
+                    print('Found {}st component'.format(len(sample)))
+          
+    return sample
+
+def insert_serendipitous(datacube, brightness, fwhm_x, fwhm_y, fwhm_z, n_px, n_chan):
+    xy_radius = n_px / 4
+    z_radius = n_chan / 2
+    n_sources = np.random.randint(1, 5)
+    fwhm_xs = np.random.randint(1, fwhm_x, n_sources)
+    fwhm_ys = np.random.randint(1, fwhm_y, n_sources)
+    fwhm_zs = np.random.randint(2, fwhm_z, n_sources)
+    amplitudes = np.random.uniform(0, brightness, n_sources)
+    pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(datacube.ra, datacube.dec, datacube.velocity_centre, 0)
+    pos_z = n_chan // 2
+    sep_x, sep_z = np.random.randint(0, xy_radius), np.random.randint(0, z_radius)
+    sample_coords = sample_positions(pos_x, pos_y, pos_z, 
+                                     fwhm_x, fwhm_y, fwhm_z,
+                                     n_sources, fwhm_xs, fwhm_ys, fwhm_zs,
+                                     xy_radius, z_radius, sep_x, sep_z)
+    pas = np.random.randint(0, 360, n_sources)
+    for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords)):
+        print('{}:\nLocation: {}\nSize X: {} Y: {} Z: {}'.format(c_id, choords, fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id]))
+        datacube = insert_gaussian(datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], 
+                                    fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_chan)
+    return datacube
 
 def write_datacube_to_fits(
     datacube,

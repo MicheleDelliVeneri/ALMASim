@@ -284,10 +284,14 @@ def get_science_types(service):
     # Aggiungi le parole alla lista dei valori univoci
         unique_keywords.extend(keywords_list)
     # Utilizza il set per ottenere i valori univoci
-    unique_keywords = list(set(unique_keywords))
+    unique_keywords = sorted(set(unique_keywords))
+    unique_keywords = [keyword for keyword in unique_keywords if (
+                        keyword != 'Evolved stars: Shaping/physical structure' and
+                        keyword != 'Exo-planets' and 
+                        keyword != 'Galaxy structure &evolution')]
+    
     return  unique_keywords, scientific_category
     
-
 def query_by_science_type(service, science_keyword=None, scientific_category=None, band=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
@@ -361,6 +365,12 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
     else:
         science_keyword_number = [int(x) for x in science_keyword_number.split(' ') if x != '']
         science_keyword = [science_keywords[i] for i in science_keyword_number]
+
+    duplicates = ['Evolved stars - Shaping/physical structure', 'Exo-planets', 'Galaxy structure &evolution']
+    original = ['Evolved stars: Shaping/physical structure', 'Exoplanets', 'Galaxy structure & evolution']
+    for i in range(len(original)):
+        if original[i] in science_keyword:
+            science_keywords.append(duplicates[i])
     if scientific_category_number == "":
         scientific_category = None
     else:

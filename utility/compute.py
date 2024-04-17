@@ -37,7 +37,8 @@ def remove_logs(folder_path):
 
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, save_secondary=False):
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, save_secondary=False, 
+              inject_serendipitous=False):
     """
     Runs a simulation for a given set of input parameters.
 
@@ -162,6 +163,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         datacube = usm.insert_gaussian(datacube, brightness, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':
         datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
+
+    if inject_serendipitous == True:
+        if source_type != 'gaussian':
+            fwhm_x = np.random.randint(3, 10)
+            fwhm_y = np.random.randint(3, 10)
+            fwhm_z = np.random.randint(3, 10)
+        datacube = usm.insert_serendipitous(datacube, brightness, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels)
+    
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     usm.write_datacube_to_fits(datacube, filename)
     del datacube
