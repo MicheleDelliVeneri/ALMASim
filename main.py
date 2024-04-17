@@ -89,7 +89,7 @@ if __name__ == '__main__':
     if query != 'query' and query != 'get':
         print("Invalid input. Please insert query or get.")
         query = input('Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) ')
-    if query == 'retrieve':
+    if query == 'query':
         query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): ")
         #query_mode = "science"
         if query_mode != "target" and query_mode != "science":

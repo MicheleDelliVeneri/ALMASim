@@ -275,7 +275,18 @@ def get_science_types(service):
     scientific_category = db['scientific_category'].unique()
     science_keywords = list(filter(lambda x: x != "", science_keywords))
     scientific_category = list(filter(lambda x: x != "", scientific_category))
-    return  science_keywords, scientific_category
+
+    unique_keywords = []
+    # Iterazione attraverso ogni stringa nella lista
+    for keywords_string in science_keywords:
+    # Dividi la stringa in base alla virgola e rimuovi gli spazi bianchi
+        keywords_list = [keyword.strip() for keyword in keywords_string.split(',')]
+    # Aggiungi le parole alla lista dei valori univoci
+        unique_keywords.extend(keywords_list)
+    # Utilizza il set per ottenere i valori univoci
+    unique_keywords = list(set(unique_keywords))
+    return  unique_keywords, scientific_category
+    
 
 def query_by_science_type(service, science_keyword=None, scientific_category=None, band=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
@@ -488,6 +499,7 @@ def simulate_gain_errors(ms, amplitude: float = 0.01):
 def _ms2resolve_transpose(arr):
     my_asserteq(arr.ndim, 3)
     return np.ascontiguousarray(np.transpose(arr, (0, 2,1)))
+
 def my_asserteq(*args):
     for aa in args[1:]:
         if args[0] != aa:
