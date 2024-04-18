@@ -3951,7 +3951,6 @@ def simulator(i: int, data_dir: str, main_path: str, project_name: str,
         exportfits(imagename=os.path.join(project, '{}.{}.pb'.format(project, antenna_name)),
                 fitsimage=os.path.join(output_dir, "pb_" + str(i) +".fits"), overwrite=True)
     final_sim_time = time.time()
-    
     if save_ms is True:
         print('# ------------------------ #')
         print('Saving Measurement Set')

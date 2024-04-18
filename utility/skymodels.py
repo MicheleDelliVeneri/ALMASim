@@ -7,449 +7,18 @@ from martini.sources.sph_source import SPHSource
 from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import (AdaptiveKernel, CubicSplineKernel,
                                  GaussianKernel, find_fwhm,  WendlandC2Kernel)
-
-# -------------------------- Modified functions from illustris-tng -------------------------- #
-
-def partTypeNum(partType):
-    """ Mapping between common names and numeric particle types. """
-    if str(partType).isdigit():
-        return int(partType)
-        
-    if str(partType).lower() in ['gas','cells']:
-        return 0
-    if str(partType).lower() in ['dm','darkmatter']:
-        return 1
-    if str(partType).lower() in ['dmlowres']:
-        return 2 # only zoom simulations, not present in full periodic boxes
-    if str(partType).lower() in ['tracer','tracers','tracermc','trmc']:
-        return 3
-    if str(partType).lower() in ['star','stars','stellar']:
-        return 4 # only those with GFM_StellarFormationTime>0
-    if str(partType).lower() in ['wind']:
-        return 4 # only those with GFM_StellarFormationTime<0
-    if str(partType).lower() in ['bh','bhs','blackhole','blackholes']:
-        return 5
-    
-    raise Exception("Unknown particle type name.")
-
-def gcPath(basePath, snapNum, chunkNum=0):
-    """ Return absolute path to a group catalog HDF5 file (modify as needed). """
-    gcPath = basePath + '/groups_%03d/' % snapNum
-    filePath1 = gcPath + 'groups_%03d.%d.hdf5' % (snapNum, chunkNum)
-    filePath2 = gcPath + 'fof_subhalo_tab_%03d.%d.hdf5' % (snapNum, chunkNum)
-
-    if isfile(expanduser(filePath1)):
-        return filePath1
-    return filePath2
-
-def offsetPath(basePath, snapNum):
-    """ Return absolute path to a separate offset file (modify as needed). """
-    offsetPath = basePath + '/../postprocessing/offsets/offsets_%03d.hdf5' % snapNum
-
-    return offsetPath
-
-def loadObjects(basePath, snapNum, gName, nName, fields):
-    """ Load either halo or subhalo information from the group catalog. """
-    result = {}
-
-    # make sure fields is not a single element
-    if isinstance(fields, six.string_types):
-        fields = [fields]
-
-    # load header from first chunk
-    with h5py.File(gcPath(basePath, snapNum), 'r') as f:
-
-        header = dict(f['Header'].attrs.items())
-
-        if 'N'+nName+'_Total' not in header and nName == 'subgroups':
-            nName = 'subhalos' # alternate convention
-
-        result['count'] = f['Header'].attrs['N' + nName + '_Total']
-
-        if not result['count']:
-            print('warning: zero groups, empty return (snap=' + str(snapNum) + ').')
-            return result
-
-        # if fields not specified, load everything
-        if not fields:
-            fields = list(f[gName].keys())
-
-        for field in fields:
-            # verify existence
-            if field not in f[gName].keys():
-                raise Exception("Group catalog does not have requested field [" + field + "]!")
-
-            # replace local length with global
-            shape = list(f[gName][field].shape)
-            shape[0] = result['count']
-
-            # allocate within return dict
-            result[field] = np.zeros(shape, dtype=f[gName][field].dtype)
-
-    # loop over chunks
-    wOffset = 0
-
-    for i in range(header['NumFiles']):
-        f = h5py.File(gcPath(basePath, snapNum, i), 'r')
-
-        if not f['Header'].attrs['N'+nName+'_ThisFile']:
-            continue  # empty file chunk
-
-        # loop over each requested field
-        for field in fields:
-            if field not in f[gName].keys():
-                raise Exception("Group catalog does not have requested field [" + field + "]!")
-
-            # shape and type
-            shape = f[gName][field].shape
-
-            # read data local to the current file
-            if len(shape) == 1:
-                result[field][wOffset:wOffset+shape[0]] = f[gName][field][0:shape[0]]
-            else:
-                result[field][wOffset:wOffset+shape[0], :] = f[gName][field][0:shape[0], :]
-
-        wOffset += shape[0]
-        f.close()
-
-    # only a single field? then return the array instead of a single item dict
-    if len(fields) == 1:
-        return result[fields[0]]
-
-    return result
-
-def loadSubhalos(basePath, snapNum, fields=None):
-    """ Load all subhalo information from the entire group catalog for one snapshot
-       (optionally restrict to a subset given by fields). """
-
-    return loadObjects(basePath, snapNum, "Subhalo", "subgroups", fields)
-
-def loadHalos(basePath, snapNum, fields=None):
-    """ Load all halo information from the entire group catalog for one snapshot
-       (optionally restrict to a subset given by fields). """
-
-    return loadObjects(basePath, snapNum, "Group", "groups", fields)
-
-def loadHeader(basePath, snapNum):
-    """ Load the group catalog header. """
-    with h5py.File(gcPath(basePath, snapNum), 'r') as f:
-        header = dict(f['Header'].attrs.items())
-
-    return header
-
-def load(basePath, snapNum):
-    """ Load complete group catalog all at once. """
-    r = {}
-    r['subhalos'] = loadSubhalos(basePath, snapNum)
-    r['halos']    = loadHalos(basePath, snapNum)
-    r['header']   = loadHeader(basePath, snapNum)
-    return r
-
-def loadSingle(basePath, snapNum, haloID=-1, subhaloID=-1):
-    """ Return complete group catalog information for one halo or subhalo. """
-    if (haloID < 0 and subhaloID < 0) or (haloID >= 0 and subhaloID >= 0):
-        raise Exception("Must specify either haloID or subhaloID (and not both).")
-
-    gName = "Subhalo" if subhaloID >= 0 else "Group"
-    searchID = subhaloID if subhaloID >= 0 else haloID
-
-    # old or new format
-    if 'fof_subhalo' in gcPath(basePath, snapNum):
-        # use separate 'offsets_nnn.hdf5' files
-        with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
-            offsets = f['FileOffsets/'+gName][()]
-    else:
-        # use header of group catalog
-        with h5py.File(gcPath(basePath, snapNum), 'r') as f:
-            offsets = f['Header'].attrs['FileOffsets_'+gName]
-
-    offsets = searchID - offsets
-    fileNum = np.max(np.where(offsets >= 0))
-    groupOffset = offsets[fileNum]
-
-    # load halo/subhalo fields into a dict
-    result = {}
-
-    with h5py.File(gcPath(basePath, snapNum, fileNum), 'r') as f:
-        for haloProp in f[gName].keys():
-            result[haloProp] = f[gName][haloProp][groupOffset]
-
-    return result
-
-def snapPath(basePath, snapNum, chunkNum=0):
-    """ Return absolute path to a snapshot HDF5 file (modify as needed). """
-    snapPath = basePath + '/snapdir_' + str(snapNum).zfill(3) + '/'
-    filePath1 = snapPath + 'snap_' + str(snapNum).zfill(3) + '.' + str(chunkNum) + '.hdf5'
-    filePath2 = filePath1.replace('/snap_', '/snapshot_')
-
-    if isfile(filePath1):
-        return filePath1
-    return filePath2
-
-def getNumPart(header):
-    """ Calculate number of particles of all types given a snapshot header. """
-    if 'NumPart_Total_HighWord' not in header:
-        return header['NumPart_Total'] # new uint64 convention
-
-    nTypes = 6
-
-    nPart = np.zeros(nTypes, dtype=np.int64)
-    for j in range(nTypes):
-        nPart[j] = header['NumPart_Total'][j] | (header['NumPart_Total_HighWord'][j] << 32)
-
-    return nPart
-
-def loadSubset(basePath, snapNum, partType, fields=None, subset=None, mdi=None, sq=True, float32=False, outPath=None):
-    """ Load a subset of fields for all particles/cells of a given partType.
-        If offset and length specified, load only that subset of the partType.
-        If mdi is specified, must be a list of integers of the same length as fields,
-        giving for each field the multi-dimensional index (on the second dimension) to load.
-          For example, fields=['Coordinates', 'Masses'] and mdi=[1, None] returns a 1D array
-          of y-Coordinates only, together with Masses.
-        If sq is True, return a numpy array instead of a dict if len(fields)==1.
-        If float32 is True, load any float64 datatype arrays directly as float32 (save memory). """
-    result = {}
-
-    ptNum = partTypeNum(partType)
-    gName = "PartType" + str(ptNum)
-
-    # make sure fields is not a single element
-    if isinstance(fields, six.string_types):
-        fields = [fields]
-
-    # load header from first chunk
-    with h5py.File(snapPath(basePath, snapNum), 'r') as f:
-
-        header = dict(f['Header'].attrs.items())
-        nPart = getNumPart(header)
-
-        # decide global read size, starting file chunk, and starting file chunk offset
-        if subset:
-            offsetsThisType = subset['offsetType'][ptNum] - subset['snapOffsets'][ptNum, :]
-
-            fileNum = np.max(np.where(offsetsThisType >= 0))
-            fileOff = offsetsThisType[fileNum]
-            numToRead = subset['lenType'][ptNum]
-        else:
-            fileNum = 0
-            fileOff = 0
-            numToRead = nPart[ptNum]
-
-        result['count'] = numToRead
-
-        if not numToRead:
-            # print('warning: no particles of requested type, empty return.')
-            return result
-
-        # find a chunk with this particle type
-        i = 1
-        while gName not in f:
-            if os.path.isfile(snapPath(basePath, snapNum, i)):
-                print('Found')
-                f = h5py.File(snapPath(basePath, snapNum, i), 'r')
-            else:
-                print('Not Found')
-                api_key = '8f578b92e700fae3266931f4d785f82c'
-                url = f'http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}'
-                subdir = os.path.join('output', 'snapdir_0{}'.format(str(i)))
-                cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{i}.hdf5'
-                print(f'Downloading {message} {i} ...')
-                if outPath is not None:
-                    os.chdir(outPath)
-                subprocess.check_call(cmd, shell=True)
-                print('Done.')
-                f = h5py.File(snapPath(basePath, snapNum, i), 'r')
-            i += 1
-
-        # if fields not specified, load everything
-        if not fields:
-            fields = list(f[gName].keys())
-
-        for i, field in enumerate(fields):
-            # verify existence
-            if field not in f[gName].keys():
-                raise Exception("Particle type ["+str(ptNum)+"] does not have field ["+field+"]")
-
-            # replace local length with global
-            shape = list(f[gName][field].shape)
-            shape[0] = numToRead
-
-            # multi-dimensional index slice load
-            if mdi is not None and mdi[i] is not None:
-                if len(shape) != 2:
-                    raise Exception("Read error: mdi requested on non-2D field ["+field+"]")
-                shape = [shape[0]]
-
-            # allocate within return dict
-            dtype = f[gName][field].dtype
-            if dtype == np.float64 and float32: dtype = np.float32
-            result[field] = np.zeros(shape, dtype=dtype)
-
-    # loop over chunks
-    wOffset = 0
-    origNumToRead = numToRead
-
-    while numToRead:
-        if not os.path.isfile(snapPath(basePath, snapNum, fileNum)):
-            print(f'Particles are found in Snapshot {fileNum} which is not present on disk')
-            # move directory to the correct directory data !!!
-            api_key = '8f578b92e700fae3266931f4d785f82c'
-            url = f'http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}'
-            subdir = os.path.join('output', 'snapdir_0{}'.format(str(fileNum)))
-            savePath = os.path.join(basePath, 'snapdir_0{}'.format(str(snapNum)))
-            cmd = f'wget -P {savePath} -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{fileNum}.hdf5'
-            if outPath is not None:
-                os.chdir(outPath)
-            print(f'Downloading Snapshot {fileNum} in {savePath}...')
-            subprocess.check_call(cmd, shell=True)
-            print('Done.')
-        print('Checking File {}...'.format(fileNum))
-        f = h5py.File(snapPath(basePath, snapNum, fileNum), 'r')
-
-        # no particles of requested type in this file chunk?
-        if gName not in f:
-            f.close()
-            fileNum += 1
-            fileOff  = 0
-            continue
-
-        # set local read length for this file chunk, truncate to be within the local size
-        numTypeLocal = f['Header'].attrs['NumPart_ThisFile'][ptNum]
-
-        numToReadLocal = numToRead
-
-        if fileOff + numToReadLocal > numTypeLocal:
-            numToReadLocal = numTypeLocal - fileOff
-
-        #print('['+str(fileNum).rjust(3)+'] off='+str(fileOff)+' read ['+str(numToReadLocal)+\
-        #      '] of ['+str(numTypdeLocal)+'] remaining = '+str(numToRead-numToReadLocal))
-
-        # loop over each requested field for this particle type
-        for i, field in enumerate(fields):
-            # read data local to the current file
-            if mdi is None or mdi[i] is None:
-                result[field][wOffset:wOffset+numToReadLocal] = f[gName][field][fileOff:fileOff+numToReadLocal]
-            else:
-                result[field][wOffset:wOffset+numToReadLocal] = f[gName][field][fileOff:fileOff+numToReadLocal, mdi[i]]
-
-        wOffset   += numToReadLocal
-        numToRead -= numToReadLocal
-        fileNum   += 1
-        fileOff    = 0  # start at beginning of all file chunks other than the first
-        print('Loading File {}...'.format(fileNum))
-        f.close()
-
-    # verify we read the correct number
-    if origNumToRead != wOffset:
-        raise Exception("Read ["+str(wOffset)+"] particles, but was expecting ["+str(origNumToRead)+"]")
-
-    # only a single field? then return the array instead of a single item dict
-    if sq and len(fields) == 1:
-        return result[fields[0]]
-
-    return result
-
-def getSnapOffsets(basePath, snapNum, id, type):
-    """ Compute offsets within snapshot for a particular group/subgroup. """
-    r = {}
-    print(f'Checking offset in Snapshot {snapNum} for grouphalo {id}')
-    # old or new format
-    if 'fof_subhalo' in gcPath(basePath, snapNum):
-        # use separate 'offsets_nnn.hdf5' files
-        with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
-            groupFileOffsets = f['FileOffsets/'+type][()]
-            r['snapOffsets'] = np.transpose(f['FileOffsets/SnapByType'][()])  # consistency
-    else:
-        # load groupcat chunk offsets from header of first file
-        with h5py.File(gcPath(basePath, snapNum), 'r') as f:
-            groupFileOffsets = f['Header'].attrs['FileOffsets_'+type]
-            r['snapOffsets'] = f['Header'].attrs['FileOffsets_Snap']
-
-    # calculate target groups file chunk which contains this id
-    groupFileOffsets = int(id) - groupFileOffsets
-    fileNum = np.max(np.where(groupFileOffsets >= 0))
-    groupOffset = groupFileOffsets[fileNum]
-
-    # load the length (by type) of this group/subgroup from the group catalog
-    with h5py.File(gcPath(basePath, snapNum, fileNum), 'r') as f:
-        r['lenType'] = f[type][type+'LenType'][groupOffset, :]
-
-    # old or new format: load the offset (by type) of  this group/subgroup within the snapshot
-    if 'fof_subhalo' in gcPath(basePath, snapNum):
-        with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
-            r['offsetType'] = f[type+'/SnapByType'][id, :]
-
-            # add TNG-Cluster specific offsets if present
-            if 'OriginalZooms' in f:
-                for key in f['OriginalZooms']:
-                    r[key] = f['OriginalZooms'][key][()] 
-    else:
-        with h5py.File(gcPath(basePath, snapNum, fileNum), 'r') as f:
-            r['offsetType'] = f['Offsets'][type+'_SnapByType'][groupOffset, :]
-
-    return r
-
-def loadSubhalo(basePath, snapNum, id, partType, fields=None):
-    """ Load all particles/cells of one type for a specific subhalo
-        (optionally restricted to a subset fields). """
-    # load subhalo length, compute offset, call loadSubset
-    subset = getSnapOffsets(basePath, snapNum, id, "Subhalo")
-    return loadSubset(basePath, snapNum, partType, fields, subset=subset)
-
-def loadHalo(basePath, snapNum, id, partType, fields=None):
-    """ Load all particles/cells of one type for a specific halo
-        (optionally restricted to a subset fields). """
-    # load halo length, compute offset, call loadSubset
-    subset = getSnapOffsets(basePath, snapNum, id, "Group")
-    return loadSubset(basePath, snapNum, partType, fields, subset=subset)
-
-def loadOriginalZoom(basePath, snapNum, id, partType, fields=None):
-    """ Load all particles/cells of one type corresponding to an
-        original (entire) zoom simulation. TNG-Cluster specific.
-        (optionally restricted to a subset fields). """
-    # load fuzz length, compute offset, call loadSubset                                                                     
-    subset = getSnapOffsets(basePath, snapNum, id, "Group")
-
-    # identify original halo ID and corresponding index
-    halo = loadSingle(basePath, snapNum, haloID=id)
-    assert 'GroupOrigHaloID' in halo, 'Error: loadOriginalZoom() only for the TNG-Cluster simulation.'
-    orig_index = np.where(subset['HaloIDs'] == halo['GroupOrigHaloID'])[0][0]
-
-    # (1) load all FoF particles/cells
-    subset['lenType'] = subset['GroupsTotalLengthByType'][orig_index, :]
-    subset['offsetType'] = subset['GroupsSnapOffsetByType'][orig_index, :]
-
-    data1 = loadSubset(basePath, snapNum, partType, fields, subset=subset)
-
-    # (2) load all non-FoF particles/cells
-    subset['lenType'] = subset['OuterFuzzTotalLengthByType'][orig_index, :]
-    subset['offsetType'] = subset['OuterFuzzSnapOffsetByType'][orig_index, :]
-
-    data2 = loadSubset(basePath, snapNum, partType, fields, subset=subset)
-
-    # combine and return
-    if isinstance(data1, np.ndarray):
-        return np.concatenate((data1,data2), axis=0)
-    
-    data = {'count':data1['count']+data2['count']}
-    for key in data1.keys():
-        if key == 'count': continue
-        data[key] = np.concatenate((data1[key],data2[key]), axis=0)
-    return data
-
-def get_particles_num(basePath, outputPath, snapNum, subhaloID):
-    basePath = os.path.join(basePath, "TNG100-1", "output", )
-    print('Looking for Subhalo %d in snapshot %d' % (subhaloID, snapNum))
-    partType = 'gas'
-    subset = getSnapOffsets(basePath, snapNum, subhaloID, "Subhalo")
-    subhalo = loadSubset(basePath, snapNum, partType, subset=subset)
-    os.chdir(basePath)
-    gas = il.snapshot.loadSubhalo(basePath, snapNum, subhaloID, partType)
-    if 'Coordinates' in gas.keys():
-        gas_num = len(gas['Coordinates'])
-    else:
-        gas_num = 0
-    return gas_num
+import astropy.cosmology.units as cu
+from astropy.cosmology import WMAP9
+from astropy import wcs
+import os 
+import h5py
+from astropy.io import fits
+import utility.astro as uas
+import astropy.constants as C
+import numpy as np
+from itertools import product
+from tqdm import tqdm
+from astropy.time import Time
 
 class myTNGSource(SPHSource):
     def __init__(
@@ -462,6 +31,7 @@ class myTNGSource(SPHSource):
         rotation={"rotmat": np.eye(3)},
         ra=0.0 * U.deg,
         dec=0.0 * U.deg,
+        api_key=None,
     ):
         X_H = 0.76
         full_fields_g = (
@@ -482,18 +52,19 @@ class myTNGSource(SPHSource):
             "Density",
             "Coordinates",
         )
-        data_header = loadHeader(basePath, snapNum)
-        data_sub = loadSingle(basePath, snapNum, subhaloID=subID)
+        data_header = uas.loadHeader(basePath, snapNum)
+        data_sub = uas.loadSingle(basePath, snapNum, subhaloID=subID)
         haloID = data_sub["SubhaloGrNr"]
-        subset_g = getSnapOffsets(basePath, snapNum, haloID, "Group")
+        subset_g = uas.getSnapOffsets(basePath, snapNum, haloID, "Group", api_key)
         try:
-            data_g = loadSubset(
+            data_g = uas.loadSubset(
                     basePath,
                     snapNum,
                     "gas",
                     fields=full_fields_g,
                     subset=subset_g,
                     mdi=mdi_full,
+                    api_key=api_key,
                 )
 
             minisnap = False
@@ -508,6 +79,7 @@ class myTNGSource(SPHSource):
                             fields=("CenterOfMass",),
                             subset=subset_g,
                             sq=False,
+                            api_key=api_key,
                         )
                     )
                 minisnap = True
@@ -2005,8 +1577,359 @@ def insert_gaussian(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fw
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
     return datacube
 
-def insert_extended(snap_number, subhalo_id, n_px, n_channels, spatial_resolution, 
-                    frequency_resolution, ra, dec, x_rot, y_rot, tngpath, distance, ncpu):
-     
+def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
+    source = myTNGSource(
+        snapNum= snapshot,
+        subID = subhalo_id,
+        distance = distance * U.Mpc,
+        rotation = {'L_coords': (x_rot, y_rot)},
+        basePath = tngpath,
+        ra=ra,
+        dec=dec,
+        api_key=api_key
+    )
 
-    return 
+    datacube = DataCube(
+        n_px_x = n_px,
+        n_px_y = n_px,
+        n_channels = n_channels, 
+        px_size = 10 * U.arcsec,
+        channel_width=freq_sup,
+        velocity_centre=source.vsys, 
+        ra = source.ra,
+        dec = source.dec,
+    )
+    spectral_model = GaussianSpectrum(
+        sigma="thermal"
+    )
+    sph_kernel =  WendlandC2Kernel()
+    M = Martini(
+        source=source,
+        datacube=datacube,
+        sph_kernel=sph_kernel,
+        spectral_model=spectral_model,
+        quiet=False, 
+        find_distance=False)
+    M.insert_source_in_cube(skip_validation=True, progressbar=True, ncpu=ncpu)
+    return M
+
+def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, api_key, ncpu):
+    x_rot = np.random.randint(0, 360) * U.deg
+    y_rot = np.random.randint(0, 360) * U.deg
+    tngpath = os.path.join(tngpath, 'TNG100-1', 'output') 
+    data_header = uas.loadHeader(tngpath, snapshot)
+    redshift = redshift * cu.redshift
+    distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind='comoving'))
+    print('Computed a distance of {} for redshift {}'.format(distance, redshift))
+    distance = 50
+    M = insert_tng(datacube.n_px_x, datacube.n_channels, datacube.channel_width, 
+                    snapshot, subhalo_id, distance, x_rot, y_rot, tngpath,
+                    ra, dec, api_key, ncpu)
+    initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
+    print('Mass ratio: {}%'.format(initial_mass_ratio))
+    mass_ratio = initial_mass_ratio
+    while mass_ratio < 50:
+        if mass_ratio < 10:
+            distance = distance * 8
+        elif mass_ratio < 20:
+            distance = distance * 5
+        elif mass_ratio < 30:
+            distance = distance * 2
+        else:       
+            distance = distance * 1.5
+        print('Injecting source at distance {}'.format(distance))
+        M = insert_tng(datacube.n_px_x, datacube.n_channels, datacube.channel_width,
+                        snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, 
+                        ra, dec, api_key, ncpu)
+        mass_ratio = M.inserted_mass / M.source.input_mass * 100
+        print('Mass ratio: {}%'.format(mass_ratio))
+    print('Datacube generated, inserting source')    
+    return M.datacube
+
+def distance_1d(p1, p2):
+    return math.sqrt((p1-p2)**2)
+
+def distance_2d(p1, p2):
+    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+
+def distance_3d(p1, p2):
+    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2)
+
+def get_iou(bb1, bb2):
+    """
+    Calculate the Intersection over Union (IoU) of two bounding boxes.
+
+    Parameters
+    ----------
+    bb1 : dict
+        Keys: {'x1', 'x2', 'y1', 'y2'}
+        The (x1, y1) position is at the top left corner,
+        the (x2, y2) position is at the bottom right corner
+    bb2 : dict
+        Keys: {'x1', 'x2', 'y1', 'y2'}
+        The (x, y) position is at the top left corner,
+        the (x2, y2) position is at the bottom right corner
+
+    Returns
+    -------
+    float
+        in [0, 1]
+    """
+    assert bb1['x1'] < bb1['x2']
+    assert bb1['y1'] < bb1['y2']
+    assert bb2['x1'] < bb2['x2']
+    assert bb2['y1'] < bb2['y2']
+
+    # determine the coordinates of the intersection rectangle
+    x_left = max(bb1['x1'], bb2['x1'])
+    y_top = max(bb1['y1'], bb2['y1'])
+    x_right = min(bb1['x2'], bb2['x2'])
+    y_bottom = min(bb1['y2'], bb2['y2'])
+
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    # The intersection of two axis-aligned bounding boxes is always an
+    # axis-aligned bounding box
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+
+    # compute the area of both AABBs
+    bb1_area = (bb1['x2'] - bb1['x1']) * (bb1['y2'] - bb1['y1'])
+    bb2_area = (bb2['x2'] - bb2['x1']) * (bb2['y2'] - bb2['y1'])
+
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the interesection area
+    iou = intersection_area / float(bb1_area + bb2_area - intersection_area)
+    assert iou >= 0.0
+    assert iou <= 1.0
+    return iou
+
+def get_iou_1d(bb1, bb2):
+    assert(bb1['z1'] < bb1['z2'])
+    assert(bb2['z1'] < bb2['z2'])
+    z_left = max(bb1['z1'], bb2['z1'])
+    z_right = min(bb1['z2'], bb2['z2'])
+    if z_right < z_left:
+        return 0.0
+    intersection = z_right - z_left
+    bb1_area = bb1['z2'] - bb1['z1']
+    bb2_area = bb2['z2'] - bb2['z1']
+    union = bb1_area + bb2_area - intersection
+    return intersection / union
+
+def get_pos(x_radius, y_radius, z_radius):
+    x = np.random.randint(-x_radius , x_radius)
+    y = np.random.randint(-y_radius, y_radius)
+    z = np.random.randint(-z_radius, z_radius)
+    return (x, y, z)
+
+def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,  
+                     n_components, fwhm_xs, fwhm_ys, fwhm_zs,
+                     xy_radius, z_radius, sep_xy, sep_z):
+    sample = []
+    i = 0
+    n = 0
+    while (len(sample) < n_components) and (n < 1000):
+        new_p = get_pos(xy_radius, xy_radius, z_radius)
+        new_p = int(new_p[0] + pos_x), int(new_p[1] + pos_y), int(new_p[2] + pos_z)
+        if len(sample) == 0:
+            spatial_dist = distance_2d((new_p[0],new_p[1]), (pos_x, pos_y))
+            freq_dist = distance_1d(new_p[2], pos_z)
+            if  spatial_dist < sep_xy or freq_dist < sep_z:
+                n += 1
+                continue
+            else:
+                spatial_iou = get_iou(
+                        {'x1': new_p[0] - fwhm_xs[i], 
+                         'x2': new_p[0] + fwhm_xs[i], 
+                         'y1': new_p[1] - fwhm_ys[i], 
+                         'y2': new_p[1] + fwhm_ys[i]},
+                        {'x1': pos_x - fwhm_x, 
+                         'x2': pos_x + fwhm_x, 
+                         'y1': pos_y - fwhm_y, 
+                         'y2': pos_y + fwhm_y})
+                freq_iou = get_iou_1d(
+                        {'z1': new_p[2] - fwhm_zs[i], 'z2': new_p[2] + fwhm_zs[i]}, 
+                        {'z1': pos_z - fwhm_z, 'z2': pos_z + fwhm_z})
+                if spatial_iou > 0.1 or freq_iou > 0.1:
+                    n += 1
+                    continue
+                else:
+                    sample.append(new_p)
+                    i += 1
+                    n = 0
+                    print('Found {}st component'.format(len(sample)))
+        else:
+            spatial_distances = [distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample]
+            freq_distances = [distance_1d(new_p[2], p[2]) for p in sample]
+            checks = [spatial_dist < sep_xy or freq_dist < sep_z for spatial_dist, freq_dist in zip(spatial_distances, freq_distances)]
+            if any(checks) is True:
+                n += 1
+                continue
+            else:
+                spatial_iou = [get_iou(
+                        {'x1': new_p[0] - fwhm_xs[i], 
+                         'x2': new_p[0] + fwhm_xs[i], 
+                         'y1': new_p[1] - fwhm_ys[i], 
+                         'y2': new_p[1] + fwhm_ys[i]},
+                        {'x1': p[0] - fwhm_xs[j], 
+                         'x2': p[0] + fwhm_xs[j], 
+                         'y1': p[1] - fwhm_ys[j], 
+                         'y2': p[1] + fwhm_ys[j]}) for j, p in enumerate(sample)]
+                freq_iou = [get_iou_1d(
+                        {'z1': new_p[2] - fwhm_zs[i], 'z2': new_p[2] + fwhm_zs[i]}, 
+                        {'z1': p[2] - fwhm_zs[j], 'z2': p[2] + fwhm_zs[j]}) for j, p in enumerate(sample)]
+                checks = [spatial_iou > 0.1 or freq_iou > 0.1 for spatial_iou, freq_iou in zip(spatial_iou, freq_iou)]
+                if any(checks) is True:
+                    n += 1
+                    continue
+                else:
+                    i += 1
+                    n = 0
+                    sample.append(new_p)
+                    print('Found {}st component'.format(len(sample)))
+          
+    return sample
+
+def insert_serendipitous(datacube, brightness, fwhm_x, fwhm_y, fwhm_z, n_px, n_chan):
+    xy_radius = n_px / 4
+    z_radius = n_chan / 2
+    n_sources = np.random.randint(1, 5)
+    fwhm_xs = np.random.randint(1, fwhm_x, n_sources)
+    fwhm_ys = np.random.randint(1, fwhm_y, n_sources)
+    fwhm_zs = np.random.randint(2, fwhm_z, n_sources)
+    amplitudes = np.random.uniform(0, brightness, n_sources)
+    pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(datacube.ra, datacube.dec, datacube.velocity_centre, 0)
+    pos_z = n_chan // 2
+    sep_x, sep_z = np.random.randint(0, xy_radius), np.random.randint(0, z_radius)
+    sample_coords = sample_positions(pos_x, pos_y, pos_z, 
+                                     fwhm_x, fwhm_y, fwhm_z,
+                                     n_sources, fwhm_xs, fwhm_ys, fwhm_zs,
+                                     xy_radius, z_radius, sep_x, sep_z)
+    pas = np.random.randint(0, 360, n_sources)
+    for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords)):
+        print('{}:\nLocation: {}\nSize X: {} Y: {} Z: {}'.format(c_id, choords, fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id]))
+        datacube = insert_gaussian(datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], 
+                                    fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_chan)
+    return datacube
+
+def write_datacube_to_fits(
+    datacube,
+    filename,
+    channels="frequency",
+    overwrite=True,
+    ):
+        """
+        Output the DataCube to a FITS-format file.
+
+        Parameters
+        ----------
+        filename : string
+            Name of the file to write. '.fits' will be appended if not already
+            present.
+
+        channels : {'frequency', 'velocity'}, optional
+            Type of units used along the spectral axis in output file.
+            (Default: 'frequency'.)
+
+        overwrite: bool, optional
+            Whether to allow overwriting existing files. (Default: True.)
+        """
+
+        datacube.drop_pad()
+        if channels == "frequency":
+            datacube.freq_channels()
+        elif channels == "velocity":
+            datacube.velocity_channels()
+        else:
+            raise ValueError(
+                "Unknown 'channels' value "
+                "(use 'frequency' or 'velocity'."
+            )
+
+        filename = filename if filename[-5:] == ".fits" else filename + ".fits"
+
+        wcs_header = datacube.wcs.to_header()
+        wcs_header.rename_keyword("WCSAXES", "NAXIS")
+        header = fits.Header()
+        if len(datacube._array.shape) == 3: 
+            header.append(("SIMPLE", "T"))
+            header.append(("BITPIX", 16))
+            header.append(("NAXIS", wcs_header["NAXIS"]))
+            header.append(("NAXIS1", datacube.n_px_x))
+            header.append(("NAXIS2", datacube.n_px_y))
+            header.append(("NAXIS3", datacube.n_channels))
+            header.append(("EXTEND", "T"))
+            header.append(("CDELT1", wcs_header["CDELT1"]))
+            header.append(("CRPIX1", wcs_header["CRPIX1"]))
+            header.append(("CRVAL1", wcs_header["CRVAL1"]))
+            header.append(("CTYPE1", wcs_header["CTYPE1"]))
+            header.append(("CUNIT1", wcs_header["CUNIT1"]))
+            header.append(("CDELT2", wcs_header["CDELT2"]))
+            header.append(("CRPIX2", wcs_header["CRPIX2"]))
+            header.append(("CRVAL2", wcs_header["CRVAL2"]))
+            header.append(("CTYPE2", wcs_header["CTYPE2"]))
+            header.append(("CUNIT2", wcs_header["CUNIT2"]))
+            header.append(("CDELT3", wcs_header["CDELT3"]))
+            header.append(("CRPIX3", wcs_header["CRPIX3"]))
+            header.append(("CRVAL3", wcs_header["CRVAL3"]))
+            header.append(("CTYPE3", wcs_header["CTYPE3"]))
+            header.append(("CUNIT3", wcs_header["CUNIT3"]))
+        else:
+            header.append(("SIMPLE", "T"))
+            header.append(("BITPIX", 16))
+            header.append(("NAXIS", wcs_header["NAXIS"]))
+            header.append(("NAXIS1", datacube.n_px_x))
+            header.append(("NAXIS2", datacube.n_px_y))
+            header.append(("NAXIS3", datacube.n_channels))
+            header.append(("NAXIS4", 1))
+            header.append(("EXTEND", "T"))
+            header.append(("CDELT1", wcs_header["CDELT1"]))
+            header.append(("CRPIX1", wcs_header["CRPIX1"]))
+            header.append(("CRVAL1", wcs_header["CRVAL1"]))
+            header.append(("CTYPE1", wcs_header["CTYPE1"]))
+            header.append(("CUNIT1", wcs_header["CUNIT1"]))
+            header.append(("CDELT2", wcs_header["CDELT2"]))
+            header.append(("CRPIX2", wcs_header["CRPIX2"]))
+            header.append(("CRVAL2", wcs_header["CRVAL2"]))
+            header.append(("CTYPE2", wcs_header["CTYPE2"]))
+            header.append(("CUNIT2", wcs_header["CUNIT2"]))
+            header.append(("CDELT3", wcs_header["CDELT3"]))
+            header.append(("CRPIX3", wcs_header["CRPIX3"]))
+            header.append(("CRVAL3", wcs_header["CRVAL3"]))
+            header.append(("CTYPE3", wcs_header["CTYPE3"]))
+            header.append(("CUNIT3", wcs_header["CUNIT3"]))
+            header.append(("CDELT4", wcs_header["CDELT4"]))
+            header.append(("CRPIX4", wcs_header["CRPIX4"]))
+            header.append(("CRVAL4", wcs_header["CRVAL4"]))
+            header.append(("CTYPE4", wcs_header["CTYPE4"]))
+            header.append(("CUNIT4", "PAR"))
+        header.append(("EPOCH", 2000))
+        # header.append(('BLANK', -32768)) #only for integer data
+        header.append(("BSCALE", 1.0))
+        header.append(("BZERO", 0.0))
+        datacube_array_units = datacube._array.unit
+        header.append(
+            ("DATAMAX", np.max(datacube._array.to_value(datacube_array_units)))
+        )
+        header.append(
+            ("DATAMIN", np.min(datacube._array.to_value(datacube_array_units)))
+        )
+        
+        # long names break fits format, don't let the user set this
+        header.append(("OBJECT", "MOCK"))
+        header.append(("BUNIT", datacube_array_units.to_string("fits")))
+        header.append(("MJD-OBS", Time.now().to_value("mjd")))
+        header.append(("BTYPE", "Intensity"))
+        header.append(("SPECSYS", wcs_header["SPECSYS"]))
+
+        # flip axes to write
+        hdu = fits.PrimaryHDU(
+            header=header, data=datacube._array.to_value(datacube_array_units).T
+        )
+        hdu.writeto(filename, overwrite=overwrite)
+
+        if channels == "frequency":
+            datacube.velocity_channels()
+        return
