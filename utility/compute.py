@@ -117,6 +117,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
             outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
             part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
             print('Number of particles: {}'.format(part_num))
+    else:
+        snapshot = None
+        tng_subhaloid = None
+
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     line_name = uas.get_line_name(rest_frequency.value)
     print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
@@ -191,7 +195,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
                             ra, dec, ang_res, vel_res, int_time, total_time, band, central_freq,
                             source_freq, redshift, brightness, fov, beam_size, cell_size, n_pix, 
-                            n_channels, snapshot, subhalo)
+                            n_channels, snapshot, tng_subhaloid)
     simobserve(
         project=project_name, 
         skymodel=filename,
