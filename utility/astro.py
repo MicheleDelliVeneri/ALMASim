@@ -866,7 +866,7 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         f.write('Redshift: {}\n'.format(redshift))
         f.write('Integration Time: {} s\n'.format(int_time))
         f.write('Total Time: {} s\n'.format(total_time))
-        f.write('Cube Size: {} x {} x {} pixels\n'.format(n_px, n_px, n_channels))
+        f.write('Cube Size: {} x {} x {} pixels\n'.format(n_pix, n_pix, n_channels))
         if snapshot != None:
             f.write('TNG Snapshot ID: {}\n'.format(snapshot))
             f.write('TNG Subhalo ID: {}\n'.format(subhalo))     
