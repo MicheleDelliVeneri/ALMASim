@@ -847,4 +847,27 @@ def sample_given_redshift(metadata, n, rest_frequency, extended):
     sample = metadata.sample(n)
     return sample
 
-     
+def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time, 
+                        total_time, band, central_freq, source_freq, redshift, brightness,
+                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo):
+    with open(path, 'w') as f:
+        f.write('Simulation Parameters:\n')
+        f.write('RA: {}\n'.format(ra))
+        f.write('DEC: {}\n'.format(dec))
+        f.write('Band: {}\n'.format(band))
+        f.write('Central Frequency: {} GHz\n'.format(central_freq))
+        f.write('Source Frequency: {} GHz\n'.format(source_freq))
+        f.write('Pixel size: {} arcsec\n'.format(cell_size))
+        f.write('Beam Size: {} arcsec\n'.format(beam_size))
+        f.write('Fov: {} arcsec\n'.format(fov))
+        f.write('Angular Resolution: {}\n'.format(ang_res))
+        f.write('Velocity Resolution: {}\n'.format(vel_res))
+        f.write('Brightness: {} Jy/px\n'.format(brightness))
+        f.write('Redshift: {}\n'.format(redshift))
+        f.write('Integration Time: {} s\n'.format(int_time))
+        f.write('Total Time: {} s\n'.format(total_time))
+        f.write('Cube Size: {} x {} x {} pixels\n'.format(n_px, n_px, n_channels))
+        if snapshot != None:
+            f.write('TNG Snapshot ID: {}\n'.format(snapshot))
+            f.write('TNG Subhalo ID: {}\n'.format(subhalo))     
+        f.close()     

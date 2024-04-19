@@ -188,6 +188,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
      #   uas.write_numpy_to_fits(skymodel, sky_header, filename)
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
+    uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
+                            ra, dec, ang_res, vel_res, int_time, total_time, band, central_freq,
+                            source_freq, redshift, brightness, fov, beam_size, cell_size, n_pix, 
+                            n_channels, snapshot, subhalo)
     simobserve(
         project=project_name, 
         skymodel=filename,
