@@ -833,6 +833,7 @@ def get_line_name(frequency):
     return closest_line
     
 def sample_given_redshift(metadata, n, rest_frequency, extended):
+    pd.options.mode.chained_assignment = None
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
