@@ -1,11 +1,17 @@
 from astropy.constants import c
 import astropy.units as U
+from astropy.io import fits
 import math
 import pyvo
 import numpy as np 
 import pandas as pd
 import os 
 import sys
+from casatasks import exportfits, simobserve, tclean, gaincal, applycal
+from casatools import table
+from casatools import simulator as casa_simulator
+import random
+from math import pi
 # Metadata related functions
 
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
@@ -145,7 +151,7 @@ def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, 
     intro_string = "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
     with open(os.path.join(output_dir, 'antenna.cfg'), 'w') as f:
         f.write(intro_string)
-        for i in range(len(obs_antennas)):
+        for i in range(len(obs_coordinates)):
             f.write(f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n")
     f.close()
 
@@ -269,8 +275,23 @@ def get_science_types(service):
     scientific_category = db['scientific_category'].unique()
     science_keywords = list(filter(lambda x: x != "", science_keywords))
     scientific_category = list(filter(lambda x: x != "", scientific_category))
-    return  science_keywords, scientific_category
 
+    unique_keywords = []
+    # Iterazione attraverso ogni stringa nella lista
+    for keywords_string in science_keywords:
+    # Dividi la stringa in base alla virgola e rimuovi gli spazi bianchi
+        keywords_list = [keyword.strip() for keyword in keywords_string.split(',')]
+    # Aggiungi le parole alla lista dei valori univoci
+        unique_keywords.extend(keywords_list)
+    # Utilizza il set per ottenere i valori univoci
+    unique_keywords = sorted(set(unique_keywords))
+    unique_keywords = [keyword for keyword in unique_keywords if (
+                        keyword != 'Evolved stars: Shaping/physical structure' and
+                        keyword != 'Exo-planets' and 
+                        keyword != 'Galaxy structure &evolution')]
+    
+    return  unique_keywords, scientific_category
+    
 def query_by_science_type(service, science_keyword=None, scientific_category=None, band=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
@@ -342,17 +363,23 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
     if science_keyword_number == "":
         science_keyword = None
     else:
-        science_keyword_number = [int(x) for x in science_keyword_number.split(' ')]
+        science_keyword_number = [int(x) for x in science_keyword_number.split(' ') if x != '']
         science_keyword = [science_keywords[i] for i in science_keyword_number]
+
+    duplicates = ['Evolved stars: Shaping/physical structure', 'Exo-planets', 'Galaxy structure &evolution']
+    original = ['Evolved stars - Shaping/physical structure', 'Exoplanets', 'Galaxy structure & evolution']
+    for i in range(len(original)):
+        if original[i] in [science_keyword]:
+            science_keywords.append(duplicates[i])
     if scientific_category_number == "":
         scientific_category = None
     else:
-        scientific_category_number = [int(x) for x in scientific_category_number.split(' ')]
+        scientific_category_number = [int(x) for x in scientific_category_number.split(' ') if x != '']
         scientific_category = [scientific_categories[i] for i in scientific_category_number]
     if band == "":
         bands = None
     else:
-        bands = [int(x) for x in band.split(' ')]
+        bands = [int(x) for x in band.split(' ') if x != '']
     df = query_by_science_type(service, science_keyword, scientific_category, bands)
     df = df.drop_duplicates(subset='member_ous_uid')
     
@@ -385,3 +412,137 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
     database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
     database.to_csv(path, index=False)
     return database
+
+def get_antennas_distances_from_reference(antenna_config):
+    f = open(antenna_config)
+    lines = f.readlines()
+    nlines = len(lines)
+    frefant = int((nlines - 1) // 2)
+    f.close()
+    zx, zy, zz, zztot = [], [], [], []
+    for i in range(3,nlines):
+        stuff = lines[i].split()
+        zx.append(float(stuff[0]))
+        zy.append(float(stuff[1]))
+        zz.append(float(stuff[2]))
+    nant = len(zx)
+    nref = int(frefant)
+    for i in range(0,nant):
+        zxref = zx[i]-zx[nref]
+        zyref = zy[i]-zy[nref]
+        zzref = zz[i]-zz[nref]
+        zztot.append(np.sqrt(zxref**2+zyref**2+zzref**2))
+    return zztot, frefant
+
+def generate_prms(antbl,scaleF):
+    """
+    This function generates the phase rms for the atmosphere
+    as a function of antenna baseline length.
+    It is based on the structure function of the atmosphere and 
+    it gives 30 deg phase rms at 10000m = 10km.
+
+    Input: 
+    antbl = antenna baseline length in meters
+    scaleF = scale factor for the phase rms
+    Output:
+    prms = phase rms
+    """
+    Lrms = 1.0/52.83 * antbl**0.8     # phase rms ~0.8 power to 10 km
+    Hrms = 3.0 * antbl**0.25          # phase rms `0.25 power beyond 10 km
+    if antbl < 10000.0:
+        prms = scaleF*Lrms
+    if antbl >= 10000.0:
+        prms = scaleF*Hrms
+    return prms
+
+def simulate_atmospheric_noise(sim_output_dir, project, scale, ms, antennalist):
+    zztot, frefant = get_antennas_distances_from_reference(antennalist)
+    gaincal(
+        vis=ms,
+        caltable=os.path.join(sim_output_dir, project + "_atmosphere.gcal"),
+        refant=str(frefant), #name of the reference antenna
+        minsnr=0.00, #ignore solution with SNR below this
+        calmode="p", #phase
+        solint='inf', #solution interval
+    )
+    tb = table()
+    tb.open(os.path.join(sim_output_dir, project + "_atmosphere.gcal"), nomodify=False)
+    yant = tb.getcol('ANTENNA1')
+    ytime = tb.getcol('TIME')
+    ycparam = tb.getcol('CPARAM')
+    nycparam = ycparam.copy()
+    nant = len(yant)
+    for i in range(nant):
+        antbl = zztot[yant[i]]
+        # get rms phase for each antenna
+        prms = generate_prms(antbl,scale)
+        # determine random GAUSSIAN phase error from rms phase
+        perror = random.gauss(0,prms)
+        # adding a random phase error to the solution, it will be 
+        # substituted by a frequency that depends from frequency
+        # of observation and baseline length
+        perror = perror + random.gauss(0, 0.05 * perror)
+        # convert phase error to complex number
+        rperror = np.cos(perror*pi/180.0)
+        iperror = np.sin(perror*pi/180.0)
+        nycparam[0][0][i] = 1.0*complex(rperror,iperror)  #X POL
+        nycparam[1][0][i] = 1.0*complex(rperror,iperror)  #Y POL  ASSUMED SAME
+    tb.putcol('CPARAM', nycparam)
+    tb.flush()
+    tb.close()
+    applycal(
+        vis = ms,
+        gaintable = os.path.join(sim_output_dir, project + "_atmosphere.gcal")
+    )
+    #os.system("rm -rf " + os.path.join(sim_output_dir, project + "_atmosphere.gcal"))
+    return 
+
+def simulate_gain_errors(ms, amplitude: float = 0.01):
+    sm = casa_simulator()
+    sm.openfromms(ms)
+    sm.setseed(42)
+    sm.setgain(mode='fbm', amplitude=[amplitude])
+    sm.corrupt()
+    sm.close()
+    return
+
+def _ms2resolve_transpose(arr):
+    my_asserteq(arr.ndim, 3)
+    return np.ascontiguousarray(np.transpose(arr, (0, 2,1)))
+
+def my_asserteq(*args):
+    for aa in args[1:]:
+        if args[0] != aa:
+            raise RuntimeError(f"{args[0]} != {aa}")
+
+def ms_to_npz(ms, dirty_cube, datacolumn='CORRECTED_DATA', output_file='test.npz'):
+    tb = table()
+    tb.open(ms)
+    
+    #get frequency info from dirty cube
+    with fits.open(dirty_cube, memmap=False) as hdulist: 
+            npol, nz, nx, ny = np.shape(hdulist[0].data)
+            header=hdulist[0].header
+    crdelt3 = header['CDELT3']
+    crval3 = header['CRVAL3']
+    wave = ((crdelt3 * (np.arange(0, nz, 1))) + crval3) #there will be problems, channels       are not of the same width in real data
+
+    vis = tb.getcol(datacolumn)
+    vis = np.ascontiguousarray(_ms2resolve_transpose(vis))
+
+    wgt = tb.getcol('WEIGHT')
+    wgt = np.repeat(wgt[:,None],128,axis=1)
+    #this is to get vis and wgt on the same shape if ms has column weighted_spectrum this       should be different
+    wgt = np.ascontiguousarray(_ms2resolve_transpose(wgt))
+
+    uvw = np.transpose(tb.getcol('UVW'))
+
+    np.savez_compressed(output_file,
+                    freq = wave,
+                    vis= vis, 
+                    weight= wgt,
+                    polarization=[9,12], 
+                    antpos0=uvw,
+                    antpos1=tb.getcol('ANTENNA1'),
+                    antpos2=tb.getcol('ANTENNA2'),
+                    antpos3=tb.getcol('TIME'))
