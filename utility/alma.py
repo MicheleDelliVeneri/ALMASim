@@ -12,6 +12,8 @@ from casatools import table
 from casatools import simulator as casa_simulator
 import random
 from math import pi
+import matplotlib.pyplot as plt
+
 # Metadata related functions
 
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
@@ -348,9 +350,45 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
 
     return result
 
+def count_science_keywords_with_bands(service):
+    query = """  
+            SELECT science_keyword, band_list, member_ous_uid
+            FROM ivoa.obscore  
+            WHERE science_observation = 'T'    
+            """
+    db = service.search(query).to_table().to_pandas()
+    db = db.drop_duplicates(subset='member_ous_uid')
+    db = db.drop(db[db['science_keyword'] == ''].index)
+    # Splitting the science keywords at commas
+    db['science_keyword'] = db['science_keyword'].str.split(',')
+    # Exploding to have one row for each combination of science keyword and band
+    db = db.explode('science_keyword')
+    
+    # Cleaning up science keywords and band names
+    db['science_keyword'] = db['science_keyword'].str.strip()
+    db['band_list'] = db['band_list'].str.split(' ')
+    
+    # Exploding to have one row for each combination of science keyword and band
+    db = db.explode('band_list')
+    
+    # Cleaning up band names
+    db['band_list'] = db['band_list'].str.strip()
+    
+    # Counting occurrences of each combination of science keyword and band
+    counts = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
+    return counts
+
 def query_for_metadata_by_science_type(path, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)
+    counts = count_science_keywords_with_bands(service)
+    plt.rcParams["figure.figsize"] = (14,18)
+    counts.plot(kind='barh', stacked=True)
+    plt.title('Science Keywords vs. ALMA Bands')
+    plt.xlabel('Counts')
+    plt.ylabel('Science Keywords')
+    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
+    plt.show()
     print('Available science keywords:')
     for i in range(len(science_keywords)):
         print(f'{i}: {science_keywords[i]}')
@@ -382,6 +420,7 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
         bands = [int(x) for x in band.split(' ') if x != '']
     df = query_by_science_type(service, science_keyword, scientific_category, bands)
     df = df.drop_duplicates(subset='member_ous_uid')
+    db = db.drop(db[db['science_keyword'] == ''].index)
     
     # Define a dictionary to map existing column names to new names with unit initials
     rename_columns = {
