@@ -379,7 +379,7 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db['band_list'] = db['band_list'].str.split(' ')
     db['band_list'] = db['band_list'].str.strip()
     db['max_baseline'] = db['antenna_arrays'].apply(lambda x: get_max_baseline_from_antenna_array(x, master_path))
-    db['central_freq'] = db['band_list'].apply(lambda: get_band_central_freq(int(x)))
+    db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
     db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
     db['beam_size'] = db.apply(lambda x: estimate_alma_beam_size(x['central_freq'], x['max_baseline']), axis=1)
     
