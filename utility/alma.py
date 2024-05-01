@@ -1,4 +1,5 @@
 from astropy.constants import c
+from astropy.units import Quantity
 import astropy.units as U
 from astropy.cosmology import FlatLambdaCDM
 from astropy.io import fits
@@ -18,7 +19,7 @@ import seaborn as sns
 
 # Metadata related functions
 
-def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
+def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
   """
   Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA) in arcseconds.
 
@@ -42,9 +43,9 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
   if central_frequency_ghz <= 0 or max_baseline_km <= 0:
     raise ValueError("Central frequency and maximum baseline must be positive values.")
     
-  if type(central_frequency_ghz) != astropy.units.quantity.Quantity:
+  if type(central_frequency_ghz) != Quantity:
     central_frequency_ghz = central_frequency_ghz * U.GHz
-  if type(max_baseline_km) != astropy.units.quantity.Quantity:
+  if type(max_baseline_km) != Quantity:
     max_baseline_km = max_baseline_km * U.km
 
   # Speed of light in meters per second
@@ -62,11 +63,13 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
 
   # Convert theta from radians to arcseconds
   beam_size_arcsec = theta_radians * (180 / math.pi) * 3600 * U.arcsec
+  if return_value == True:
+    return beam_size_arcsec.value
+  else:
+    return beam_size_arcsec
 
-  return beam_size_arcsec
 
-
-def get_fov_from_band(band, antenna_diameter: int = 12):
+def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     """
     This function returns the field of view of an ALMA band in arcseconds
     input: 
@@ -104,7 +107,10 @@ def get_fov_from_band(band, antenna_diameter: int = 12):
     fov = 1.22 * wavelength / antenna_diameter
     # fov in arcsec
     fov = fov * (180 / math.pi) * 3600 * U.arcsec
-    return fov
+    if return_value == True:
+        return fov.value
+    else:
+        return fov
 
 def get_band_range(band):
     if band == 1:
@@ -305,7 +311,7 @@ def get_science_types(service):
     unique_keywords = sorted(set(unique_keywords))
     unique_keywords = [keyword for keyword in unique_keywords if (
                         keyword != 'Evolved stars: Shaping/physical structure' and
-                        keyword != 'Exo-planets' and 
+                        keyword != 'Exoplanets' and 
                         keyword != 'Galaxy structure &evolution')]
     
     return  unique_keywords, scientific_category
@@ -359,6 +365,7 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
             WHERE {science_keyword_query}
             AND {scientific_category_query}
             AND is_mosaic = 'F'
+            AND science_observation = 'T'    
             AND {band_query}
             """
 
@@ -370,7 +377,8 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     query = """  
             SELECT science_keyword, band_list, member_ous_uid, frequency, t_resolution, t_max, antenna_arrays
             FROM ivoa.obscore  
-            WHERE science_observation = 'T'    
+            WHERE science_observation = 'T'
+            AND is_mosaic = 'F'
             """
 
     plot_dir = os.path.join(output_dir, 'plots')
@@ -379,16 +387,21 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db = service.search(query).to_table().to_pandas()
     db = db.drop_duplicates(subset='member_ous_uid')
     db = db.drop(db[db['science_keyword'] == ''].index)
+    db = db.drop(db[db['science_keyword'] == 'Exoplanets'].index)
+    db = db.drop(db[db['science_keyword'] == 'Galaxy structure &evolution'].index)
+    db = db.drop(db[db['science_keyword'] == 'Evolved stars: Shaping/physical structure'].index)
     # Splitting the science keywords at commas
     db['science_keyword'] = db['science_keyword'].str.split(',')
-    db['science_keyword'] = db['science_keyword'].str.strip()
+    db['science_keyword'] = db['science_keyword'].apply(lambda x: [y.strip() for y in x])
+    db = db.explode('science_keyword')
     db['band_list'] = db['band_list'].str.split(' ')
-    db['band_list'] = db['band_list'].str.strip()
-    db = db.dropna()
+    db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
+    db = db.explode('band_list')
     db['max_baseline'] = db['antenna_arrays'].apply(lambda x: get_max_baseline_from_antenna_array(x, master_path))
     db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
     db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
-    db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size_from_db(x.central_freq, x.max_baseline), axis=1)
+    db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size(*x), axis=1)
+    # 
     # TESTING 
     #Checking Freq. distribution
     plt.hist(db['fov'], bins=50, alpha=0.75)
@@ -396,7 +409,6 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.xlabel('FOV arcsec')
     plt.ylabel('Count')
     plt.savefig(os.path.join(plot_dir, 'fov_dir.png'))
-
     #Checking time integration distribution < 30000 s 
     plt.hist(db['t_max'], bins=100, alpha=0.75, log=True)
     plt.title('Total Time Distribution')
@@ -412,7 +424,7 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.savefig(os.path.join(plot_dir, 'bs_dir.png'))
 
     # Exploding to have one row for each combination of science keyword and band
-    db = db.explode(['science_keyword', 'band_list', 'frequency', 't_resolution', 't_max', 'max_baseline', 'central_freq', 'fov', 'beam_size'])
+    #db = db.explode(['science_keyword', 'band_list', 'frequency', 't_resolution', 't_max', 'max_baseline', 'central_freq', 'fov', 'beam_size'])
 
     db = db[db['t_resolution'] <= 3e4]
     frequency_bins = np.arange(db['frequency'].min(), db['frequency'].max(), 50)  # 50 GHz bins
@@ -480,11 +492,6 @@ def query_for_metadata_by_science_type(metadata_name, main_path, output_dir, ser
         science_keyword_number = [int(x) for x in science_keyword_number.split(' ') if x != '']
         science_keyword = [science_keywords[i] for i in science_keyword_number]
 
-    duplicates = ['Evolved stars: Shaping/physical structure', 'Exo-planets', 'Galaxy structure &evolution']
-    original = ['Evolved stars - Shaping/physical structure', 'Exoplanets', 'Galaxy structure & evolution']
-    for i in range(len(original)):
-        if original[i] in [science_keyword]:
-            science_keywords.append(duplicates[i])
     if scientific_category_number == "":
         scientific_category = None
     else:
