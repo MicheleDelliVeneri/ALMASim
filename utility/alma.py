@@ -404,10 +404,10 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
         science_keyword_number = [int(x) for x in science_keyword_number.split(' ') if x != '']
         science_keyword = [science_keywords[i] for i in science_keyword_number]
 
-    duplicates = ['Evolved stars - Shaping/physical structure', 'Exo-planets', 'Galaxy structure &evolution']
-    original = ['Evolved stars: Shaping/physical structure', 'Exoplanets', 'Galaxy structure & evolution']
+    duplicates = ['Evolved stars: Shaping/physical structure', 'Exo-planets', 'Galaxy structure &evolution']
+    original = ['Evolved stars - Shaping/physical structure', 'Exoplanets', 'Galaxy structure & evolution']
     for i in range(len(original)):
-        if original[i] in science_keyword:
+        if original[i] in [science_keyword]:
             science_keywords.append(duplicates[i])
     if scientific_category_number == "":
         scientific_category = None
