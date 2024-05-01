@@ -185,8 +185,6 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
     max_baseline = 2 * np.max(np.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2])) / 1000
     return max_baseline
 
-
-
 def query_observations(service, member_ous_uid, target_name):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
@@ -448,11 +446,11 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
     plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
 
-def query_for_metadata_by_science_type(medata_name, master_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
+def query_for_metadata_by_science_type(medata_name, main_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
-    plot_science_keywords_distributions(service, master_path, output_dir)
+    plot_science_keywords_distributions(service, main_path, output_dir)
     print('Please take a look at distributions in plots folder: {output_dir}/plots')
     #plt.rcParams["figure.figsize"] = (14,18)
     #counts.plot(kind='barh', stacked=True)
