@@ -14,6 +14,7 @@ from casatools import simulator as casa_simulator
 import random
 from math import pi
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Metadata related functions
 
@@ -175,6 +176,16 @@ def get_max_baseline_from_antenna_config(antenna_config):
     positions = np.array(positions)
     max_baseline = 2 * np.max(np.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2])) / 1000
     return max_baseline
+
+def get_max_baseline_from_antenna_array(antenna_array, master_path):
+    antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
+    obs_antennas = antenna_array.split(' ')
+    obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
+    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
+    max_baseline = 2 * np.max(np.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2])) / 1000
+    return max_baseline
+
+
 
 def query_observations(service, member_ous_uid, target_name):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
@@ -351,38 +362,98 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
 
     return result
 
-def count_science_keywords_with_bands(service):
+def plot_science_keywords_distributions(service, master_path, output_dir):
     query = """  
-            SELECT science_keyword, band_list, member_ous_uid
+            SELECT science_keyword, band_list, member_ous_uid, frequency, t_resolution, t_max, antenna_arrays
             FROM ivoa.obscore  
             WHERE science_observation = 'T'    
             """
+
+    plot_dir = os.path.join(output_dir, 'plots')
+    custom_palette = sns.color_palette("tab20")
+    sns.set_palette(custom_palette)
     db = service.search(query).to_table().to_pandas()
     db = db.drop_duplicates(subset='member_ous_uid')
     db = db.drop(db[db['science_keyword'] == ''].index)
     # Splitting the science keywords at commas
     db['science_keyword'] = db['science_keyword'].str.split(',')
-    # Exploding to have one row for each combination of science keyword and band
-    db = db.explode('science_keyword')
-    
-    # Cleaning up science keywords and band names
     db['science_keyword'] = db['science_keyword'].str.strip()
     db['band_list'] = db['band_list'].str.split(' ')
-    
-    # Exploding to have one row for each combination of science keyword and band
-    db = db.explode('band_list')
-    
-    # Cleaning up band names
     db['band_list'] = db['band_list'].str.strip()
+    db['max_baseline'] = db['antenna_arrays'].apply(lambda x: get_max_baseline_from_antenna_array(x, master_path))
+    db['central_freq'] = db['band_list'].apply(lambda: get_band_central_freq(int(x)))
+    db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
+    db['beam_size'] = db.apply(lambda x: estimate_alma_beam_size(x['central_freq'], x['max_baseline']), axis=1)
     
-    # Counting occurrences of each combination of science keyword and band
-    counts = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
-    return counts
+    # TESTING 
+    #Checking Freq. distribution
+    plt.hist(db['fov'], bins=50, alpha=0.75)
+    plt.title('FOV Distribution')
+    plt.xlabel('FOV arcsec')
+    plt.ylabel('Count')
+    plt.savefig(os.path.join(plot_dir, 'fov_dir.png'))
 
-def query_for_metadata_by_science_type(path, service_url: str = "https://almascience.eso.org/tap"):
+    #Checking time integration distribution < 30000 s 
+    plt.hist(db['t_max'], bins=100, alpha=0.75, log=True)
+    plt.title('Total Time Distribution')
+    plt.xlabel('Total Time (s)')
+    plt.ylabel('Count')
+    plt.xscale('log')
+    plt.savefig(os.path.join(plot_dir, 'tottime_dir.png'))
+
+    plt.hist(db['beam_size'], bins=50, alpha=0.75)
+    plt.title('Beam Distribution')
+    plt.xlabel('Beam arcsec')
+    plt.ylabel('Count')
+    plt.savefig(os.path.join(plot_dir, 'bs_dir.png'))
+
+    # Exploding to have one row for each combination of science keyword and band
+    db = db.explode(['science_keyword', 'band_list', 'frequency', 't_resolution', 't_max', 'max_baseline', 'central_freq', 'fov', 'beam_size'])
+
+    db = db[db['t_resolution'] <= 3e4]
+    frequency_bins = np.arange(db['frequency'].min(), db['frequency'].max(), 50)  # 50 GHz bins
+    db['frequency_bin'] = pd.cut(db['frequency'], bins=frequency_bins)
+    time_bins = np.arange(db['t_resolution'].min(), db['t_resolution'].max(), 1000)  # 1000 second bins
+    db['time_bin'] = pd.cut(db['t_resolution'], bins=time_bins)
+
+    db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
+    db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
+    db_sk_t = db.groupby(['science_keyword', 'time_bin']).size().unstack(fill_value=0)
+    db_sk_fov = db.groupby(['science_keyword', 'fov']).size().unstack(fill_value=0)
+    db_sk_bs = db.groupby(['science_keyword', 'beam_size']).size().unstack(fill_value=0)
+    
+    
+
+    plt.rcParams["figure.figsize"] = (14,18)
+    db_sk_b.plot(kind='barh', stacked=True, color=custom_palette)
+    plt.title('Science Keywords vs. ALMA Bands')
+    plt.xlabel('Counts')
+    plt.ylabel('Science Keywords')
+    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
+    plt.savefig(os.path.join(plot_dir, 'science_vs_bands.png'))
+
+    plt.rcParams["figure.figsize"] = (14,18)
+    db_sk_t.plot(kind='barh', stacked=True)
+    plt.title('Science Keywords vs. Integration Time')
+    plt.xlabel('Counts')
+    plt.ylabel('Science Keywords')
+    plt.legend(title='Integration Time', loc='upper left', bbox_to_anchor=(1.01, 1))
+    plt.savefig(os.path.join(plot_dir, 'science_vs_int_time.png'))
+
+    plt.rcParams["figure.figsize"] = (14,18)
+    db_sk_f.plot(kind='barh', stacked=True, color=custom_palette)
+    plt.title('Science Keywords vs. Source Frequency')
+    plt.xlabel('Counts')
+    plt.ylabel('Science Keywords')
+    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
+    plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
+
+def query_for_metadata_by_science_type(medata_name, master_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)
-    counts = count_science_keywords_with_bands(service)
+    path = os.path.join(main_path, "metadata", metadata_name)
+    plot_science_keywords_distributions(service, master_path, output_dir)
+    print('Please take a look at distributions in plots folder: {output_dir}/plots')
     #plt.rcParams["figure.figsize"] = (14,18)
     #counts.plot(kind='barh', stacked=True)
     #plt.title('Science Keywords vs. ALMA Bands')
@@ -587,3 +658,103 @@ def ms_to_npz(ms, dirty_cube, datacolumn='CORRECTED_DATA', output_file='test.npz
                     antpos1=tb.getcol('ANTENNA1'),
                     antpos2=tb.getcol('ANTENNA2'),
                     antpos3=tb.getcol('TIME'))
+
+def sed_reading(type_, path):
+    cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
+    if type_ == "extended":
+        file_path = path + "/sed_low_z_warm_star_forming_galaxy.dat"
+        redshift = 10**(-4)
+    elif type_ == "point":
+        file_path = path + "/sed_low_z_type2_AGN.dat"
+        redshift = 0.05
+    else:
+        return "Not valid type"
+    
+    try: 
+        SED= pd.read_csv(file_path, sep="\s+")
+        rename_columns = {
+            'um' : 'GHz',
+            'erg/s/Hz': 'Jy',
+        }
+        SED.rename(columns=rename_columns, inplace=True)
+        SED['GHz']=SED['GHz'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
+        if type_ == 'point': 
+            SED['Jy']=SED['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
+        else:
+            SED['Jy']=SED['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
+        return SED
+    except FileNotFoundError:
+         return "File not Found"
+
+def process_spectral_data(type,redshift, central_frequency, delta_freq, source_frequency, n_lines=None):
+    """
+    Process spectral data based on the type of source, wavelength conversion,
+    line ratios, and given frequency bands.
+    
+    Prameters:
+    
+    redshift: Redshift value to adjust the spectral lines and continuum.
+    central_frequency: Central frequency of the observation band (GHz).
+    delta_freq: Bandwidth around the central frequency (GHz).
+    source_frequency: Frequency of the source obtained from metadata (GHz).
+    lines: Optional list of line names provided by the user.
+    n_lines: Number of additional lines to consider if lines is None.
+
+    Output:
+
+
+    """
+    # Define the frequency range based on central frequency and bandwidth
+    freq_min = central_frequency - delta_freq / 2
+    freq_max = central_frequency + delta_freq / 2
+    # Example data: Placeholder for continuum and lines from SED processing
+    SED=sed_reading(type,os.path.join(parent_dir,'brightnes'))
+
+    # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
+    db_line = read_line_emission_csv(os.path.join(parent_dir,'brightnes','Calibrations_FIR(GHz).csv'))
+    rest_frequencies = []
+    for line_name in line_names:
+        if line_name not in db_line["Line"].to_list():
+            raise ValueError(f"The line name, '{line_name}', cannot be found in the dataframe.")
+        rest_frequency = {}
+        rest_frequency['line']=line_name
+        rest_frequency['frequency(GHz)'] = db_line[db_line["Line"]==line_name]["freq(GHz)"].to_list()
+        # rest_frequency = db_line[db_line["Line"]==line_name]["freq(GHz)"]
+        rest_frequencies.append(rest_frequency)
+    rest_frequencies = pd.DataFrame(rest_frequencies)
+    rest_frequencies = rest_frequencies.explode('frequency(GHz)')
+    line_names = rest_frequencies['line'].unique().tolist()
+    for line in line_names:
+        rest_frequency = rest_frequencies[rest_frequencies['line']==line]['frequency(GHz)'].tolist()
+        print(f"Rest frequency/ies of {line}: {rest_frequency}\n")
+    # Shift the continuum and line frequencies by (1 + redshift)
+    SED['GHz'] *= (1 + redshift)
+    db_line['freq(GHz)'] = db_line['freq(GHz)'] * (1 + redshift)
+
+    # Filter the continuum and lines to only include those within the frequency range
+    continuum_mask = (SED['GHz'] >= freq_min) & (SED['GHz'] <= freq_max)
+    filtered_continuum_frequencies = SED[continuum_mask]
+
+    line_mask = (db_line['freq(GHz)'].astype(float) >= freq_min) & (db_line['freq(GHz)'].astype(float) <= freq_max)
+    filtered_lines = db_line[line_mask]
+    if len(filtered_lines) == 0:
+        print("Warning: No valid frequencies provided by the user. Returning possible lines.")
+    print(filtered_lines)
+    #Determine which lines to output based on user input or nearest lines to source frequency
+    if line_names is not None:
+        # Filter out the lines that are not possible
+        possible_lines = filtered_lines[np.isin(filtered_lines[:, 0], lines)]
+        if len(possible_lines) == 0:
+            print("Warning: No valid lines provided by the user. Returning possible lines.")
+            possible_lines = filtered_lines
+    else:
+        # If no lines are provided, select the nearest line to the source frequency and additional lines if specified
+        distances = np.abs(filtered_lines[:, 1].astype(float) - source_frequency)
+        nearest_index = np.argmin(distances)
+        if n_lines is None or n_lines > len(filtered_lines):
+            n_lines = len(filtered_lines)
+        nearest_lines = filtered_lines[np.argsort(distances)[:n_lines]]
+        possible_lines = nearest_lines
+
+    #Output the processed arrays and line information
+    return filtered_continuum_frequencies, possible_lines[:, 0], possible_lines
