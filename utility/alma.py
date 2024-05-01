@@ -41,6 +41,11 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
   # Input validation
   if central_frequency_ghz <= 0 or max_baseline_km <= 0:
     raise ValueError("Central frequency and maximum baseline must be positive values.")
+    
+  if type(central_frequency_ghz) != astropy.units.quantity.Quantity:
+    central_frequency_ghz = central_frequency_ghz * U.GHz
+  if type(max_baseline_km) != astropy.units.quantity.Quantity:
+    max_baseline_km = max_baseline_km * U.km
 
   # Speed of light in meters per second
   light_speed = c.to(U.m / U.s).value
@@ -60,48 +65,6 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km):
 
   return beam_size_arcsec
 
-def estimate_alma_beam_size_from_db(row):
-  """
-  Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA) in arcseconds.
-
-  This function provides an approximation based on the theoretical relationship between
-  observing frequency and maximum baseline. The formula used is:
-  beam_size = (speed_of_light / central_frequency) / max_baseline * (180 / pi) * 3600 arcseconds
-  [km]/[s] * [s] / [km] = [radians] * [arcsec /radian] * [arcseconds/degree]
-
-  Args:
-      central_frequency_ghz: Central frequency of the observing band in GHz (float).
-      max_baseline_km: Maximum baseline of the antenna array in kilometers (float).
-
-  Returns:
-      Estimated beam size in arcseconds (float).
-
-  Raises:
-      ValueError: If either input argument is non-positive.
-  """
-  central_frequency_ghz = row['central_freq'].values * U.GHz
-  max_baseline_km = row['max_baseline'].values * U.Km
-   # Input validation
-  if central_frequency_ghz <= 0 or max_baseline_km <= 0:
-    raise ValueError("Central frequency and maximum baseline must be positive values.")
-
-  # Speed of light in meters per second
-  light_speed = c.to(U.m / U.s).value
-
-  # Convert frequency to Hz
-  central_frequency_hz = central_frequency_ghz.to(U.Hz).value
-
-  # Convert baseline to meters
-  max_baseline_meters = max_baseline_km.to(U.m).value
-
-
-  # Theoretical estimate of beam size (radians)
-  theta_radians = (light_speed / central_frequency_hz) / max_baseline_meters
-
-  # Convert theta from radians to arcseconds
-  beam_size_arcsec = theta_radians * (180 / math.pi) * 3600 * U.arcsec
-
-  return beam_size_arcsec
 
 def get_fov_from_band(band, antenna_diameter: int = 12):
     """
@@ -425,8 +388,7 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db['max_baseline'] = db['antenna_arrays'].apply(lambda x: get_max_baseline_from_antenna_array(x, master_path))
     db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
     db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
-    beam_sizes = db.apply(estimate_alma_beam_size_from_db, axis=1)
-    
+    db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size_from_db(x.central_freq, x.max_baseline), axis=1)
     # TESTING 
     #Checking Freq. distribution
     plt.hist(db['fov'], bins=50, alpha=0.75)

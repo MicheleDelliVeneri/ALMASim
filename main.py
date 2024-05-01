@@ -109,7 +109,7 @@ if __name__ == '__main__':
             if '.csv' not in metadata_name:
                 metadata_name = metadata_name + '.csv'
             #metadata_name = "test.csv"
-            metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path, output_dir)
+            metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path, output_path)
     else:
         #metadata_name = 'test.csv'
         metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
