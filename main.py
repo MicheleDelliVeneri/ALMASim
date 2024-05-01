@@ -124,6 +124,7 @@ if __name__ == '__main__':
     if line_mode == "y":
         uas.line_display(main_path)
         line_idxs = input("Select the line/s you want to simulate, separated by a space: ")
+        line_idxs = [int(ix) for ix in line_idxs.split(' ')]
         #rest_freq = uas.get_line_rest_frequency(line_name)
         rest_freq, line_names = uas.get_line_info(main_path, line_idxs)
         if len(rest_fre) == 1:
