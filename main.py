@@ -123,19 +123,25 @@ if __name__ == '__main__':
         line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     if line_mode == "y":
         uas.line_display(main_path)
-        #line_name = input("Insert the name of the line/s you want to simulate, separated by a comma: ")
-        
-        line_name = "CO(1-0)"
-        rest_freq = uas.get_line_rest_frequency(line_name)
+        line_idxs = input("Select the line/s you want to simulate, separated by a space: ")
+        #rest_freq = uas.get_line_rest_frequency(line_name)
+        rest_freq, line_names = get_line_info(main_path, line_idxs)
+        if len(rest_fre) == 1:
+            rest_freq = rest_freq[0]
         rest_freqs = np.array([rest_freq]*n_sims)
         redshifts = np.array([None]*n_sims)
+        n_lines = np.array([None]*n_sims)
+        line_names = np.array([line_names]*n_sims)
     else:
-        #redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
+        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
         redshifts = '1 2'
         z0, z1 = redshifts.split()
         z0, z1 = float(z0), float(z1)
         redshifts = np.random.uniform(z0, z1, n_sims)
         rest_freqs = np.array([None]*n_sims)
+        n_lines = input('Please provide the number of lines you want to simulate as an integer: ')
+        n_lines = np.array([int(n_lines)]*n_sims)
+        line_names = np.array([None]*n_sims)
 
     #fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     fix_spatial = 'y'
@@ -238,11 +244,11 @@ if __name__ == '__main__':
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
         antenna_arrays, n_pixs, n_channels, source_types, 
-        tng_apis, ncpus, rest_freqs, redshifts, save_secondary, inject_serendipitous), 
+        tng_apis, ncpus, rest_freqs, redshifts, n_lines, line_names, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
         'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
-        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'save_secondary', 'inject_serendipitous'])
+        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
     
     
     # Dask utils

@@ -37,7 +37,8 @@ def remove_logs(folder_path):
 
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, save_secondary=False, 
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, 
+              n_lines, line_names, redshift, save_secondary=False, 
               inject_serendipitous=False):
     """
     Runs a simulation for a given set of input parameters.
@@ -91,11 +92,44 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     antenna_name = 'antenna'
     max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
     pos_string = uas.convert_to_j2000_string(ra.value, dec.value)
+
+    fov =  ual.get_fov_from_band(int(band), return_value=False)
+    beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
+    cell_size = beam_size / 5
+    if n_pix is None: 
+        #cell_size = beam_size / 5
+        n_pix = int(1.5 * fov / cell_size)
+    else:
+        cell_size = fov / n_pix
+        # just added
+        #beam_size = cell_size * 5
+    if n_channels is None:
+        n_channels = int(band_range / freq_sup)
+    else:
+        band_range = n_channels * freq_sup
+    print('Field of view: {}'.format(fov))
+    print('Beam size: {} '.format(beam_size))
+    print('Cell size: {} '.format(cell_size))
+    central_channel_index = n_channels // 2
+    source_channel_index = int(central_channel_index * source_freq / central_freq)
+    
+
+
     if redshift is None:
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
+
+    continum, line_fluxes, line_names, redshift, rest_frequency = uas.process_spectral_data(
+                                                                        source_type,
+                                                                        redshift, 
+                                                                        central_frequency.value,
+                                                                        band_range.value,
+                                                                        source_freq.value,
+                                                                        line_names,
+                                                                        n_lines
+                                                                        )
 
     print('Redshift: {}'.format(redshift))
     print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
@@ -121,27 +155,11 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         snapshot = None
         tng_subhaloid = None
 
-    brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
-    line_name = uas.get_line_name(rest_frequency.value)
-    print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
-    fov =  ual.get_fov_from_band(int(band), return_value=False)
-    beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
-    cell_size = beam_size / 5
-    if n_pix is None: 
-        #cell_size = beam_size / 5
-        n_pix = int(1.5 * fov / cell_size)
-    else:
-        cell_size = fov / n_pix
-        # just added
-        #beam_size = cell_size * 5
-    if n_channels is None:
-        n_channels = int(band_range / freq_sup)
+    #brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     
-    print('Field of view: {}'.format(fov))
-    print('Beam size: {} '.format(beam_size))
-    print('Cell size: {} '.format(cell_size))
-    central_channel_index = n_channels // 2
-    source_channel_index = int(central_channel_index * source_freq / central_freq)
+    #line_name = uas.get_line_name(rest_frequency.value)
+    print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
+    
     # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 
