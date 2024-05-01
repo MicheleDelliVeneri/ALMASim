@@ -125,7 +125,7 @@ if __name__ == '__main__':
         uas.line_display(main_path)
         line_idxs = input("Select the line/s you want to simulate, separated by a space: ")
         #rest_freq = uas.get_line_rest_frequency(line_name)
-        rest_freq, line_names = get_line_info(main_path, line_idxs)
+        rest_freq, line_names = uas.get_line_info(main_path, line_idxs)
         if len(rest_fre) == 1:
             rest_freq = rest_freq[0]
         rest_freqs = np.array([rest_freq]*n_sims)

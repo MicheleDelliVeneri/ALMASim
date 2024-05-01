@@ -895,17 +895,24 @@ def process_spectral_data(type_, redshift, central_frequency, delta_freq, source
     db_line = read_line_emission_csv(os.path.join(parent_dir,'brightnes','Calibrations_FIR(GHz).csv'))
     # Shift the continuum and line frequencies by (1 + redshift)
     SED['GHz'] *= (1 + redshift)
-    db_line['freq(GHz)'] = db_line['freq(GHz)'] * (1 + redshift)
-
-    # Filter the continuum and lines to only include those within the frequency range
+    
     continuum_mask = (SED['GHz'] >= freq_min) & (SED['GHz'] <= freq_max)
     continum_brightness = SED[continuum_mask]['Jy'].values
-
-    line_mask = (db_line['freq(GHz)'].astype(float) >= freq_min) & (db_line['freq(GHz)'].astype(float) <= freq_max)
-    filtered_lines = db_line[line_mask]
-    if len(filtered_lines) == 0:
-        print('Warning: No lines fall in the selected band.')
-    
+    filtered_lines = db_line.copy()
+    filtered_lines.drop(filtered_lines.index, inplace=True)
+    while len(filtered_lines) == 0:
+        db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] * (1 + redshift)
+        line_mask = (db_line['shifted_freq(GHz)'].astype(float) >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) <= freq_max)
+        filtered_lines = db_line[line_mask]
+        if len(filtered_lines) == 0:
+            print('Warning: No lines fall in the selected band.')
+            n_low = ~(db_line['shifted_freq(GHz)'].astype(float) >= freq_min).sum()
+            n_high = ~(db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum()
+            if redshift > 0.01 and n_low > 0:
+                redshift -= 0.01
+            elif n_high > 0:
+                redshift += 0.01
+ 
     if line_names != None:
         user_lines = filtered_lines[np.isin(filtered_lines[:, 0], line_names)]
         if len(user_lines) == 0:
@@ -917,16 +924,14 @@ def process_spectral_data(type_, redshift, central_frequency, delta_freq, source
     filtered_lines.sort_values(by='distance', inplace=True)
     if n_lines != None:
         if n_lines > len(filtered_lines):
-            print(f'Warning: Can not insert {n_lines}, injecting {len(filtered_lines)}.')
+            print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
         else:
             filtered_lines = filtered_lines.head(n_lines)
     
-    filtered_lines['log_brightnes'] = filtered_lines['GHz'].apply(lambda x: continuum_finder(SED,x))
+    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: continuum_finder(SED,x))
     brightnesses = filtered_lines.apply(cont_to_line, axis=1) 
-
-
     #Output the processed arrays and line information
-    return continum_brightness, brightnesses, filtered_lines['Line'], redsfhit, filtered_lines['GHz']
+    return continum_brightness, brightnesses, filtered_lines['Line'], redsfhit, filtered_lines['shifted_freq(GHz)']
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {
