@@ -446,7 +446,7 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
     plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
 
-def query_for_metadata_by_science_type(medata_name, main_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
+def query_for_metadata_by_science_type(metadata_name, main_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
