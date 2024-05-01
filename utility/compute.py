@@ -117,9 +117,13 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
             outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
             part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
             print('Number of particles: {}'.format(part_num))
+    else:
+        snapshot = None
+        tng_subhaloid = None
+
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     line_name = uas.get_line_name(rest_frequency.value)
-    print('{} Brightness: {}'.format(line_name, round(brightness, 2)))
+    print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
     fov =  ual.get_fov_from_band(int(band))
     beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline)
     cell_size = beam_size / 5
@@ -138,6 +142,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Cell size: {} '.format(cell_size))
     central_channel_index = n_channels // 2
     source_channel_index = int(central_channel_index * source_freq / central_freq)
+    # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 
         n_px_y=n_pix,
@@ -188,6 +193,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
      #   uas.write_numpy_to_fits(skymodel, sky_header, filename)
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
+    uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
+                            ra, dec, ang_res, vel_res, int_time, total_time, band, central_freq,
+                            source_freq, redshift, brightness, fov, beam_size, cell_size, n_pix, 
+                            n_channels, snapshot, tng_subhaloid)
     simobserve(
         project=project_name, 
         skymodel=filename,
@@ -202,9 +211,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         integration="{}s".format(int_time.value),
         totaltime="{}s".format(total_time.value),
         user_pwv=pwv,
-        #verbose=False,
+        verbose=True,
         overwrite=True,
-        #graphics="none",
+        graphics="none",
         )
     
     scale = random.uniform(0, 1)
