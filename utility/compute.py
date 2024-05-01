@@ -142,6 +142,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Cell size: {} '.format(cell_size))
     central_channel_index = n_channels // 2
     source_channel_index = int(central_channel_index * source_freq / central_freq)
+    # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 
         n_px_y=n_pix,

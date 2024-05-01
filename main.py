@@ -116,13 +116,14 @@ if __name__ == '__main__':
         if '.csv' not in metadata_name:
             metadata_name = metadata_name + '.csv'
         metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
-    #line_mode = input("Do you want to simulate a specific line? (y/n) ")
+    #line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     line_mode = "y"
     if line_mode != "y" and line_mode != "n":
         print("Invalid input. Please insert y or n.")
-        line_mode = input("Do you want to simulate a specific line? (y/n) ")
+        line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     if line_mode == "y":
-        #line_name = input("Insert the name of the line you want to simulate: ")
+        #line_name = input("Insert the name of the line/s you want to simulate, separated by a comma: ")
+        ual.line_display(main_path)
         line_name = "CO(1-0)"
         rest_freq = uas.get_line_rest_frequency(line_name)
         rest_freqs = np.array([rest_freq]*n_sims)
