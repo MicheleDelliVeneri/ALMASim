@@ -855,7 +855,7 @@ def continuum_finder(SED,line_frequency):
     return np.log(SED['Jy'].values[idx_])
 
 def cont_to_line(row):
-    return np.exp(row['log_brightnes']+row['c'])
+    return np.exp(row['log_brightnes'] + np.random.normal(row['c'], row['err_c']))
 
 def process_spectral_data(type_, redshift, central_frequency, delta_freq, source_frequency, line_names=None ,n_lines=None):
     """

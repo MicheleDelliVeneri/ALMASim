@@ -124,8 +124,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     line_name = uas.get_line_name(rest_frequency.value)
     print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
-    fov =  ual.get_fov_from_band(int(band))
-    beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline)
+    fov =  ual.get_fov_from_band(int(band), return_value=False)
+    beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     cell_size = beam_size / 5
     if n_pix is None: 
         #cell_size = beam_size / 5
