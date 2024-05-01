@@ -1,5 +1,6 @@
 from astropy.constants import c
 import astropy.units as U
+from astropy.cosmology import FlatLambdaCDM
 from astropy.io import fits
 import math
 import pyvo

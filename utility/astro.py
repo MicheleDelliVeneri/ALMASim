@@ -789,6 +789,64 @@ def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, r
 def read_line_db(path):
     return pd.read_csv(path, sep='\t')
 
+def read_line_emission_csv(path_line_emission_csv):
+    """
+    Read the csv file in which are stored the line emission's rest frequency.
+    
+    Parameter: 
+    path_line_emission_csv (str): Path to file.csv within there are the line emission's rest frequency.
+    
+    Return:
+    pd.DataFrame : Dataframe with line names and rest frequencies.
+    """
+    db_line = pd.read_csv(path_line_emission_csv, sep = ";")
+    return db_line
+
+def line_display(main_path):
+    """
+    Display the line emission's rest frequency.
+    
+    Parameter:
+    main_path (str): Path to the directory where the file.csv is stored.
+    
+    Return:
+    pd.DataFrame : Dataframe with line names and rest frequencies.
+    """
+    path_line_emission_csv = os.path.join(main_path, 'brightness', 'Calibrations_FIR(GHz).csv')
+    db_line = read_line_emission_csv(path_line_emission_csv).sort_values(by='Line')
+    line_names = db_line['Line'].values
+    rest_frequencies = db_line['freq(GHz)'].values
+    for i in range(len(line_names)):
+        print(f'{line_names[i]}: {rest_frequencies[i]} GHz')
+
+def sed_reading(type_, path):
+    cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
+    if type_ == "extended":
+        file_path = path + "/sed_low_z_warm_star_forming_galaxy.dat"
+        redshift = 10**(-4)
+    elif type_ == "point":
+        file_path = path + "/sed_low_z_type2_AGN.dat"
+        redshift = 0.05
+    else:
+        return "Not valid type"
+    
+    try: 
+        SED= pd.read_csv(file_path, sep="\s+")
+        rename_columns = {
+            'um' : 'GHz',
+            'erg/s/Hz': 'Jy',
+        }
+        SED.rename(columns=rename_columns, inplace=True)
+        SED['GHz']=SED['GHz'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
+        if type_ == 'point': 
+            SED['Jy']=SED['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
+        else:
+            SED['Jy']=SED['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
+        return SED
+    except FileNotFoundError:
+         return "File not Found"
+
+
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {
         'H(1-0)': 14.405,
