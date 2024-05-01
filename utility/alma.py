@@ -383,17 +383,17 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)
     counts = count_science_keywords_with_bands(service)
-    plt.rcParams["figure.figsize"] = (14,18)
-    counts.plot(kind='barh', stacked=True)
-    plt.title('Science Keywords vs. ALMA Bands')
-    plt.xlabel('Counts')
-    plt.ylabel('Science Keywords')
-    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
-    plt.show()
+    #plt.rcParams["figure.figsize"] = (14,18)
+    #counts.plot(kind='barh', stacked=True)
+    #plt.title('Science Keywords vs. ALMA Bands')
+    #plt.xlabel('Counts')
+    #plt.ylabel('Science Keywords')
+    #plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
+    #plt.show()
     print('Available science keywords:')
     for i in range(len(science_keywords)):
-        print(f'{i}: {science_keywords[i]}')
-    print('Available scientific categories:')
+        print(f'{i}: {science_keywords[i]}')   
+    print('\nAvailable scientific categories:')
     for i in range(len(scientific_categories)):
         print(f'{i}: {scientific_categories[i]}')
     science_keyword_number = input('Select the Science Keyword by number, if you want to select multiple numbers separate them by a space, leave empty for all: ' )
@@ -421,7 +421,7 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
         bands = [int(x) for x in band.split(' ') if x != '']
     df = query_by_science_type(service, science_keyword, scientific_category, bands)
     df = df.drop_duplicates(subset='member_ous_uid')
-    db = db.drop(db[db['science_keyword'] == ''].index)
+    df = df.drop(df[df['science_keyword'] == ''].index)
     
     # Define a dictionary to map existing column names to new names with unit initials
     rename_columns = {
@@ -451,6 +451,7 @@ def query_for_metadata_by_science_type(path, service_url: str = "https://almasci
                     'Freq.sup.', 'antenna_arrays']]
     database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
     database.to_csv(path, index=False)
+    print(f'Metadata saved to {path}\n')
     return database
 
 def get_antennas_distances_from_reference(antenna_config):

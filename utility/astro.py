@@ -812,12 +812,14 @@ def line_display(main_path):
     Return:
     pd.DataFrame : Dataframe with line names and rest frequencies.
     """
-    path_line_emission_csv = os.path.join(main_path, 'brightness', 'Calibrations_FIR(GHz).csv')
+    
+    path_line_emission_csv = os.path.join(main_path, 'brightnes', 'calibrations_FIR(GHz).csv')
     db_line = read_line_emission_csv(path_line_emission_csv).sort_values(by='Line')
     line_names = db_line['Line'].values
     rest_frequencies = db_line['freq(GHz)'].values
+    print('Please choose the lines from the following list')
     for i in range(len(line_names)):
-        print(f'{line_names[i]}: {rest_frequencies[i]} GHz')
+        print(f'{line_names[i]}: {rest_frequencies[i]:.2e} GHz')
 
 def sed_reading(type_, path):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
@@ -845,7 +847,6 @@ def sed_reading(type_, path):
         return SED
     except FileNotFoundError:
          return "File not Found"
-
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {

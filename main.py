@@ -102,10 +102,10 @@ if __name__ == '__main__':
                 target_list = input("File not found. Please provide the correct path: ")
             target_list = pd.read_csv(target_list).values
             target_list = target_list.tolist()
-            metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
+            metadata_name = input("Queried metadata will be saved as a .csv file in the metadata folder: ")
             metadata = ual.query_for_metadata_by_targets(target_list, os.path.join(main_path, "metadata", metadata_name))
         else:
-            metadata_name = input("Queried metadata will be saved as a .csv file. Insert the name of the file, make sure to add .csv: ")
+            metadata_name = input("Queried metadata will be saved as a .csv file in the metadata folder: ")
             if '.csv' not in metadata_name:
                 metadata_name = metadata_name + '.csv'
             #metadata_name = "test.csv"
@@ -122,8 +122,9 @@ if __name__ == '__main__':
         print("Invalid input. Please insert y or n.")
         line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     if line_mode == "y":
+        uas.line_display(main_path)
         #line_name = input("Insert the name of the line/s you want to simulate, separated by a comma: ")
-        ual.line_display(main_path)
+        
         line_name = "CO(1-0)"
         rest_freq = uas.get_line_rest_frequency(line_name)
         rest_freqs = np.array([rest_freq]*n_sims)
