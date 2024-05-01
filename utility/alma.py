@@ -409,19 +409,24 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.xlabel('FOV arcsec')
     plt.ylabel('Count')
     plt.savefig(os.path.join(plot_dir, 'fov_dir.png'))
+    plt.close()
     #Checking time integration distribution < 30000 s 
+
     plt.hist(db['t_max'], bins=100, alpha=0.75, log=True)
     plt.title('Total Time Distribution')
     plt.xlabel('Total Time (s)')
     plt.ylabel('Count')
     plt.xscale('log')
     plt.savefig(os.path.join(plot_dir, 'tottime_dir.png'))
+    plt.close()
 
     plt.hist(db['beam_size'], bins=50, alpha=0.75)
     plt.title('Beam Distribution')
     plt.xlabel('Beam arcsec')
     plt.ylabel('Count')
+    plt.legend()
     plt.savefig(os.path.join(plot_dir, 'bs_dir.png'))
+    plt.close()
 
     # Exploding to have one row for each combination of science keyword and band
     #db = db.explode(['science_keyword', 'band_list', 'frequency', 't_resolution', 't_max', 'max_baseline', 'central_freq', 'fov', 'beam_size'])
@@ -447,6 +452,7 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.ylabel('Science Keywords')
     plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
     plt.savefig(os.path.join(plot_dir, 'science_vs_bands.png'))
+    plt.close()
 
     plt.rcParams["figure.figsize"] = (14,18)
     db_sk_t.plot(kind='barh', stacked=True)
@@ -455,6 +461,7 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.ylabel('Science Keywords')
     plt.legend(title='Integration Time', loc='upper left', bbox_to_anchor=(1.01, 1))
     plt.savefig(os.path.join(plot_dir, 'science_vs_int_time.png'))
+    plt.close()
 
     plt.rcParams["figure.figsize"] = (14,18)
     db_sk_f.plot(kind='barh', stacked=True, color=custom_palette)
@@ -463,6 +470,7 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.ylabel('Science Keywords')
     plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
     plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
+    plt.close()
 
 def query_for_metadata_by_science_type(metadata_name, main_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
