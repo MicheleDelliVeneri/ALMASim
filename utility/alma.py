@@ -182,7 +182,7 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
     obs_antennas = antenna_array.split(' ')
     obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
     obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
-    max_baseline = 2 * np.max(np.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2])) / 1000
+    max_baseline = 2 * np.max(np.sqrt(obs_coordinates[:, 0]**2 + obs_coordinates[:, 1]**2 + obs_coordinates[:, 2])) / 1000
     return max_baseline
 
 def query_observations(service, member_ous_uid, target_name):
