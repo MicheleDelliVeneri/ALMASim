@@ -110,6 +110,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Field of view: {}'.format(fov))
     print('Beam size: {} '.format(beam_size))
     print('Cell size: {} '.format(cell_size))
+    print('Central Frequency: {}'.format(central_freq))
+    print('Spectral Window: {}'.format(band_range))
+    print('Freq Support: {}'.format(freq_sup))
+    print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
     central_channel_index = n_channels // 2
     source_channel_index = int(central_channel_index * source_freq / central_freq)
     if redshift is None:
@@ -128,7 +132,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         line_names,
                                                                         n_lines
                                                                         )
-
+    print(continum.shape, line_fluxes, line_names)
     print('Redshift: {}'.format(redshift))
     print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))

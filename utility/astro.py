@@ -855,13 +855,14 @@ def sed_reading(type_, path):
         sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
     else:
         sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
-        
+
+    sed = sed.sort_values(by='GHz', ascending=True)    
     return sed
+
 def continuum_finder(sed,line_frequency):
     continuum_frequencies=sed['GHz'].values
-    distances = np.abs(continuum_frequencies - np.ones(len(continuum_frequencies)*line_frequency))
-    idx_=np.where(distances=np.min(distances))
-    return np.log(sed['Jy'].values[idx_])
+    distances = np.abs(continuum_frequencies - np.ones(len(continuum_frequencies))*line_frequency)
+    return np.log(sed['Jy'].values[np.argmin(distances)])
 
 def cont_to_line(row):
     return np.exp(row['log_brightnes'] + np.random.normal(row['c'], row['err_c']))
@@ -909,15 +910,13 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
                 redshift -= 0.01
             elif n_high > 0:
                 redshift += 0.01
- 
     if line_names != None:
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) == 0:
             print('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
         else:
             filtered_lines = user_lines
-    
-    filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(Ghz)'].astype(float) - source_frequency)
+    filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
     filtered_lines.sort_values(by='distance', inplace=True)
  
     if n_lines != None:
@@ -925,11 +924,10 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
         else:
             filtered_lines = filtered_lines.head(n_lines)
-    
-    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: continuum_finder(sed,x))
+    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: continuum_finder(sed, float(x)))
     brightnesses = filtered_lines.apply(cont_to_line, axis=1) 
     #Output the processed arrays and line information
-    return continum_brightness, brightnesses, filtered_lines['Line'], redsfhit, filtered_lines['shifted_freq(GHz)']
+    return continum_brightness, brightnesses.values, filtered_lines['Line'].values, redshift, filtered_lines['shifted_freq(GHz)'].astype(float).values
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {
