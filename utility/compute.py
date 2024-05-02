@@ -147,6 +147,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         central_freq.value,
                                                                         band_range.value,
                                                                         source_freq.value,
+                                                                        n_channels, 
                                                                         line_names,
                                                                         n_lines
                                                                         )

@@ -862,17 +862,13 @@ def sed_reading(type_, path):
 def cont_finder(sed,line_frequency):
     cont_frequencies=sed['GHz'].values
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
-    print(cont_frequencies[np.argmin(distances)])
-    print(sed['Jy'].values[np.argmin(distances)])
-    print(np.log(sed['Jy'].values[np.argmin(distances)]))
     return np.log(sed['Jy'].values[np.argmin(distances)])
 
 def cont_to_line(row):
     line_delta = np.random.normal(row['c'], row['err_c'])
-    print(line_delta)
     return np.exp(row['log_brightnes'] - line_delta)
 
-def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, line_names=None ,n_lines=None):
+def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, n_channels, line_names=None ,n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -907,9 +903,9 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         line_mask = (db_line['shifted_freq(GHz)'].astype(float) >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) <= freq_max)
         filtered_lines = db_line[line_mask]
         if len(filtered_lines) == 0:
-            print('Warning: No lines fall in the selected band.')
             n_low = ~(db_line['shifted_freq(GHz)'].astype(float) >= freq_min).sum()
             n_high = ~(db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum()
+            print(n_low, n_high)
             if redshift > 0.01 and n_low > 0:
                 redshift -= 0.01
             elif n_high > 0:
@@ -935,17 +931,14 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
     line_fluxes = filtered_lines.apply(cont_to_line, axis=1).values
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
-    print(line_frequencies)
-    print(line_fluxes)
-    print(line_names)
-    print(cont_frequencies)
-    print(cont_fluxes)
-    print(filtered_lines)
-    print(len(cont_frequencies), len(cont_fluxes))
-    print(freq_min, freq_max)
-    import ipdb; ipdb.set_trace()
+    new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
+    if len(cont_fluxes) > 1: 
+        int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies,cont_fluxes)
+    else:
+        int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
+    #import ipdb; ipdb.set_trace()
     #Output the processed arrays and line information
-    return cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, cont_frequencies
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {
