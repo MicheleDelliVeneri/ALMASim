@@ -403,31 +403,6 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
     db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
     db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size(*x), axis=1)
-    # 
-    # TESTING 
-    #Checking Freq. distribution
-    plt.hist(db['fov'], bins=50, alpha=0.75)
-    plt.title('FOV Distribution')
-    plt.xlabel('FOV arcsec')
-    plt.ylabel('Count')
-    plt.savefig(os.path.join(plot_dir, 'fov_dir.png'))
-    plt.close() 
-
-    plt.hist(db['t_max'], bins=100, alpha=0.75, log=True)
-    plt.title('Total Time Distribution')
-    plt.xlabel('Total Time (s)')
-    plt.ylabel('Count')
-    plt.xscale('log')
-    plt.savefig(os.path.join(plot_dir, 'tottime_dir.png'))
-    plt.close()
-
-    plt.hist(db['beam_size'], bins=50, alpha=0.75)
-    plt.title('Beam Distribution')
-    plt.xlabel('Beam arcsec')
-    plt.ylabel('Count')
-    plt.legend()
-    plt.savefig(os.path.join(plot_dir, 'bs_dir.png'))
-    plt.close()
 
     # Exploding to have one row for each combination of science keyword and band
     #db = db.explode(['science_keyword', 'band_list', 'frequency', 't_resolution', 't_max', 'max_baseline', 'central_freq', 'fov', 'beam_size'])
