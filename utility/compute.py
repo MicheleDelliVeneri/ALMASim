@@ -122,8 +122,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         n_channels = int(band_range / freq_sup)
     else:
         band_range = n_channels * freq_sup 
+        band_range = band_range.to(U.GHz)
     
-    band_range.to(U.GHz)
+    
     print('Field of view: {}'.format(fov))
     print('Beam size: {} '.format(beam_size))
     print('Cell size: {} '.format(cell_size))
