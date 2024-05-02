@@ -35,6 +35,21 @@ def remove_logs(folder_path):
             # Remove the file
             os.remove(file_path)
 
+def load_metadata(main_path, metadata_name):
+    if '.csv' not in metadata_name:
+            metadata_name = metadata_name.split('.')[0]
+            metadata_name = metadata_name + '.csv'
+    try:
+        metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
+        return metadata
+    except FileNotFoundError:
+        print("File not found. Please enter the metadata name again.")
+        new_metadata_name = input("Enter metadata name: ")
+        if '.csv' not in metadata_name:
+            new_metadata_name = new_metadata_name.split('.')[0]
+            new_metadata_name = new_metadata_name + '.csv'
+        return load_metadata(main_path, new_metadata_name)
+
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
               n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift,
@@ -107,7 +122,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         n_channels = int(band_range / freq_sup)
     else:
         band_range = n_channels * freq_sup 
-        band_range.to(U.GHz)
+    
+    band_range.to(U.GHz)
     print('Field of view: {}'.format(fov))
     print('Beam size: {} '.format(beam_size))
     print('Cell size: {} '.format(cell_size))

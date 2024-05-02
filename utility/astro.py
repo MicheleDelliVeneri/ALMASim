@@ -859,13 +859,18 @@ def sed_reading(type_, path):
     sed = sed.sort_values(by='GHz', ascending=True)    
     return sed
 
-def continuum_finder(sed,line_frequency):
-    continuum_frequencies=sed['GHz'].values
-    distances = np.abs(continuum_frequencies - np.ones(len(continuum_frequencies))*line_frequency)
+def cont_finder(sed,line_frequency):
+    cont_frequencies=sed['GHz'].values
+    distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
+    print(cont_frequencies[np.argmin(distances)])
+    print(sed['Jy'].values[np.argmin(distances)])
+    print(np.log(sed['Jy'].values[np.argmin(distances)]))
     return np.log(sed['Jy'].values[np.argmin(distances)])
 
 def cont_to_line(row):
-    return np.exp(row['log_brightnes'] + np.random.normal(row['c'], row['err_c']))
+    line_delta = np.random.normal(row['c'], row['err_c'])
+    print(line_delta)
+    return np.exp(row['log_brightnes'] - line_delta)
 
 def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, line_names=None ,n_lines=None):
     """
@@ -874,7 +879,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     
     Prameters:
     
-    redshift: Redshift value to adjust the spectral lines and continuum.
+    redshift: Redshift value to adjust the spectral lines and cont.
     central_frequency: Central frequency of the observation band (GHz).
     delta_freq: Bandwidth around the central frequency (GHz).
     source_frequency: Frequency of the source obtained from metadata (GHz).
@@ -888,11 +893,11 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     # Define the frequency range based on central frequency and bandwidth
     freq_min = central_frequency - delta_freq / 2
     freq_max = central_frequency + delta_freq / 2
-    # Example data: Placeholder for continuum and lines from SED processing
+    # Example data: Placeholder for cont and lines from SED processing
     sed = sed_reading(type_,os.path.join(master_path,'brightnes'))
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
-    # Shift the continuum and line frequencies by (1 + redshift)
+    # Shift the cont and line frequencies by (1 + redshift)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
     
     filtered_lines = db_line.copy()
@@ -917,17 +922,30 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             filtered_lines = user_lines
     filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
     filtered_lines.sort_values(by='distance', inplace=True)
-    continuum_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
-    continum_brightness = sed[continuum_mask]['Jy'].values
+    cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
+    cont_fluxes = sed[cont_mask]['Jy'].values
+    cont_frequencies = sed[cont_mask]['GHz'].values
+
     if n_lines != None:
         if n_lines > len(filtered_lines):
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
         else:
             filtered_lines = filtered_lines.head(n_lines)
-    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: continuum_finder(sed, float(x)))
-    brightnesses = filtered_lines.apply(cont_to_line, axis=1) 
+    line_names = filtered_lines['Line'].values
+    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
+    line_fluxes = filtered_lines.apply(cont_to_line, axis=1).values
+    line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
+    print(line_frequencies)
+    print(line_fluxes)
+    print(line_names)
+    print(cont_frequencies)
+    print(cont_fluxes)
+    print(filtered_lines)
+    print(len(cont_frequencies), len(cont_fluxes))
+    print(freq_min, freq_max)
+    import ipdb; ipdb.set_trace()
     #Output the processed arrays and line information
-    return continum_brightness, brightnesses.values, filtered_lines['Line'].values, redshift, filtered_lines['shifted_freq(GHz)'].astype(float).values
+    return cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, cont_frequencies
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {

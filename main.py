@@ -103,6 +103,7 @@ if __name__ == '__main__':
         else:
             metadata_name = input("Queried metadata will be saved as a .csv file in the metadata folder: ")
             if '.csv' not in metadata_name:
+                metadata_name = metadata_name.split('.')[0]
                 metadata_name = metadata_name + '.csv'
             #metadata_name = "test.csv"
             metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path, output_path)
@@ -110,8 +111,10 @@ if __name__ == '__main__':
         #metadata_name = 'test.csv'
         metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
         if '.csv' not in metadata_name:
+            metadata_name = metadata_name.split('.')[0]
             metadata_name = metadata_name + '.csv'
-        metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
+        #metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
+        metadata = uc.load_metadata(main_path, metadata_name)
     line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     if line_mode != "y" and line_mode != "n":
         print("Invalid input. Please insert y or n.")
@@ -190,7 +193,7 @@ if __name__ == '__main__':
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True)
     else:
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False)
-    print('Metadata retrieved')
+    print('\nMetadata retrieved\n')
     inject_ser = input('Do you want to inject serendipitous sources? (y/n) ')
     if inject_ser != 'y' and inject_ser != 'n':
         print("Invalid input. Please insert y or n.")
@@ -242,17 +245,18 @@ if __name__ == '__main__':
     
     
     # Dask utils
-    dask.config.set({'temporary_directory': output_path})
+    #dask.config.set({'temporary_directory': output_path})
     total_memory = psutil.virtual_memory().total
     num_processes = multiprocessing.cpu_count() // 4
     memory_limit = int(0.9 * total_memory / num_processes)
-    ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-    cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
-    output_type = "object"
-    client = Client(cluster)
-    client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-    results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
-    client.close()
-    cluster.close()
+    #ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+    #cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+    #output_type = "object"
+    #client = Client(cluster)
+    #client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+    #results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
+    #client.close()
+    #cluster.close()
+    uc.simulator(*input_params.iloc[0])
     uc.remove_logs(main_path)
     
