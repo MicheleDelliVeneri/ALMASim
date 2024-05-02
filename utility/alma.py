@@ -386,14 +386,16 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     sns.set_palette(custom_palette)
     db = service.search(query).to_table().to_pandas()
     db = db.drop_duplicates(subset='member_ous_uid')
-    db = db.drop(db[db['science_keyword'] == ''].index)
-    db = db.drop(db[db['science_keyword'] == 'Exoplanets'].index)
-    db = db.drop(db[db['science_keyword'] == 'Galaxy structure &evolution'].index)
-    db = db.drop(db[db['science_keyword'] == 'Evolved stars: Shaping/physical structure'].index)
+
     # Splitting the science keywords at commas
     db['science_keyword'] = db['science_keyword'].str.split(',')
     db['science_keyword'] = db['science_keyword'].apply(lambda x: [y.strip() for y in x])
     db = db.explode('science_keyword')
+    db = db.drop(db[db['science_keyword'] == ''].index)
+    db = db.drop(db[db['science_keyword'] == 'Exoplanets'].index)
+    db = db.drop(db[db['science_keyword'] == 'Galaxy structure &evolution'].index)
+    db = db.drop(db[db['science_keyword'] == 'Evolved stars: Shaping/physical structure'].index)
+
     db['band_list'] = db['band_list'].str.split(' ')
     db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
     db = db.explode('band_list')
@@ -401,32 +403,6 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
     db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
     db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size(*x), axis=1)
-    # 
-    # TESTING 
-    #Checking Freq. distribution
-    plt.hist(db['fov'], bins=50, alpha=0.75)
-    plt.title('FOV Distribution')
-    plt.xlabel('FOV arcsec')
-    plt.ylabel('Count')
-    plt.savefig(os.path.join(plot_dir, 'fov_dir.png'))
-    plt.close()
-    #Checking time integration distribution < 30000 s 
-
-    plt.hist(db['t_max'], bins=100, alpha=0.75, log=True)
-    plt.title('Total Time Distribution')
-    plt.xlabel('Total Time (s)')
-    plt.ylabel('Count')
-    plt.xscale('log')
-    plt.savefig(os.path.join(plot_dir, 'tottime_dir.png'))
-    plt.close()
-
-    plt.hist(db['beam_size'], bins=50, alpha=0.75)
-    plt.title('Beam Distribution')
-    plt.xlabel('Beam arcsec')
-    plt.ylabel('Count')
-    plt.legend()
-    plt.savefig(os.path.join(plot_dir, 'bs_dir.png'))
-    plt.close()
 
     # Exploding to have one row for each combination of science keyword and band
     #db = db.explode(['science_keyword', 'band_list', 'frequency', 't_resolution', 't_max', 'max_baseline', 'central_freq', 'fov', 'beam_size'])
@@ -436,13 +412,19 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db['frequency_bin'] = pd.cut(db['frequency'], bins=frequency_bins)
     time_bins = np.arange(db['t_resolution'].min(), db['t_resolution'].max(), 1000)  # 1000 second bins
     db['time_bin'] = pd.cut(db['t_resolution'], bins=time_bins)
+    fov_bins = np.arange(db['fov'].min(), db['fov'].max(), 10)  #  10 arcsec bins
+    db['fov_bins'] = pd.cut(db['fov'], bins=fov_bins)
+    beam_size_bins = np.arange(db['beam_size'].min(), db['beam_size'].max(), 0.1)  # 0.1 arcsec bins
+    db['beam_bins'] = pd.cut(db['beam_size'], bins=beam_size_bins)
+    Ttime_bins = np.arange(db['t_max'].min(), db['t_max'].max(), 500)  # 500 seconds bins
+    db['Ttime_bins'] = pd.cut(db['t_max'], bins=Ttime_bins)
 
     db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
     db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
     db_sk_t = db.groupby(['science_keyword', 'time_bin']).size().unstack(fill_value=0)
     db_sk_fov = db.groupby(['science_keyword', 'fov']).size().unstack(fill_value=0)
     db_sk_bs = db.groupby(['science_keyword', 'beam_size']).size().unstack(fill_value=0)
-    
+    db_sk_Tt = db.groupby(['science_keyword', 'Ttime_bins']).size().unstack(fill_value=0)
     
 
     plt.rcParams["figure.figsize"] = (14,18)
@@ -470,6 +452,33 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     plt.ylabel('Science Keywords')
     plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
     plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
+    plt.close()
+
+    plt.rcParams["figure.figsize"] = (14,18)
+    db_sk_fov.plot(kind='barh', stacked=True, color=custom_palette)
+    plt.title('Science Keywords vs. FoV')
+    plt.xlabel('Counts')
+    plt.ylabel('Science Keywords')
+    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='FoV')
+    plt.savefig(os.path.join(plot_dir, 'science_vs_FoV.png'))
+    plt.close()
+
+    plt.rcParams["figure.figsize"] = (14,18)
+    db_sk_bs.plot(kind='barh', stacked=True, color=custom_palette)
+    plt.title('Science Keywords vs. beams_size')
+    plt.xlabel('Counts')
+    plt.ylabel('Science Keywords')
+    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Beams Size')
+    plt.savefig(os.path.join(plot_dir, 'science_vs_beam_size.png'))
+    plt.close()
+
+    plt.rcParams["figure.figsize"] = (14,18)
+    db_sk_Tt.plot(kind='barh', stacked=True, color=custom_palette)
+    plt.title('Science Keywords vs. Total Time')
+    plt.xlabel('Counts')
+    plt.ylabel('Science Keywords')
+    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Total Time')
+    plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
     plt.close()
 
 def query_for_metadata_by_science_type(metadata_name, main_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
