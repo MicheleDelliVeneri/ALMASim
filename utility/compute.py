@@ -106,7 +106,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     if n_channels is None:
         n_channels = int(band_range / freq_sup)
     else:
-        band_range = n_channels * freq_sup
+        band_range = n_channels * freq_sup 
+        band_range.to(U.GHz)
     print('Field of view: {}'.format(fov))
     print('Beam size: {} '.format(beam_size))
     print('Cell size: {} '.format(cell_size))
@@ -134,7 +135,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         )
     print(continum.shape, line_fluxes, line_names)
     print('Redshift: {}'.format(redshift))
-    print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
+    #print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
     print('Band: ', band)
     print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
