@@ -80,18 +80,14 @@ if __name__ == '__main__':
     
     # Getting Sims Configuration
     n_sims = int(input("Insert number of simulations to run: "))
-    #n_sims = 1
     sim_idxs = np.arange(n_sims)
     ncpu = input("Insert total number of CPUs to use: ")
-    #ncpu = 10
     query = input('Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) ')
-    #query = 'n'
     if query != 'query' and query != 'get':
         print("Invalid input. Please insert query or get.")
         query = input('Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) ')
     if query == 'query':
         query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): ")
-        #query_mode = "science"
         if query_mode != "target" and query_mode != "science":
             print("Invalid input. Please insert target or science.")
             query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): ")
@@ -116,8 +112,7 @@ if __name__ == '__main__':
         if '.csv' not in metadata_name:
             metadata_name = metadata_name + '.csv'
         metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
-    #line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
-    line_mode = "y"
+    line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     if line_mode != "y" and line_mode != "n":
         print("Invalid input. Please insert y or n.")
         line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
@@ -125,9 +120,8 @@ if __name__ == '__main__':
         uas.line_display(main_path)
         line_idxs = input("Select the line/s you want to simulate, separated by a space: ")
         line_idxs = [int(ix) for ix in line_idxs.split(' ')]
-        #rest_freq = uas.get_line_rest_frequency(line_name)
         rest_freq, line_names = uas.get_line_info(main_path, line_idxs)
-        if len(rest_fre) == 1:
+        if len(rest_freq) == 1:
             rest_freq = rest_freq[0]
         rest_freqs = np.array([rest_freq]*n_sims)
         redshifts = np.array([None]*n_sims)
@@ -144,26 +138,22 @@ if __name__ == '__main__':
         n_lines = np.array([int(n_lines)]*n_sims)
         line_names = np.array([None]*n_sims)
 
-    #fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
-    fix_spatial = 'y'
+    fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     if fix_spatial != 'y' and fix_spatial != 'n':
         print("Invalid input. Please insert y or n.")
         fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
 
     if fix_spatial == 'y':
-        #n_pix = input('Insert the desired cube dimension in pixels: ')
-        n_pix = 256
+        n_pix = input('Insert the desired cube dimension in pixels: ')
         n_pix = int(n_pix)
     else:
         n_pix = None
-    #fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
-    fix_spectral = 'y'
+    fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
     if fix_spectral != 'y' and fix_spectral != 'n':
         print("Invalid input. Please insert y or n.")
         fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
     if fix_spectral == 'y':
-        #n_channels = input('Insert the desired number of channels: ')
-        n_channels = 256
+        n_channels = input('Insert the desired number of channels: ')
         n_channels = int(n_channels)
     else:
         n_channels = None
@@ -171,7 +161,6 @@ if __name__ == '__main__':
     if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse':
         print("Invalid input. Please insert point, gaussian, extended or diffuse.")
         source_type = input('Insert source type you want to simulate (point, gaussian, extended, diffuse): ')
-    #source_type = 'extended'
     if source_type == 'extended':
         print('Checking TNG Folders')
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):

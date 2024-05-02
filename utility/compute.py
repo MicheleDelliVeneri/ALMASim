@@ -37,8 +37,8 @@ def remove_logs(folder_path):
 
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_api_key, ncpu, rest_frequency, 
-              n_lines, line_names, redshift, save_secondary=False, 
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift,
+              n_lines, line_names, save_secondary=False, 
               inject_serendipitous=False):
     """
     Runs a simulation for a given set of input parameters.
@@ -112,9 +112,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Cell size: {} '.format(cell_size))
     central_channel_index = n_channels // 2
     source_channel_index = int(central_channel_index * source_freq / central_freq)
-    
-
-
     if redshift is None:
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)
@@ -123,8 +120,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
 
     continum, line_fluxes, line_names, redshift, rest_frequency = uas.process_spectral_data(
                                                                         source_type,
+                                                                        main_dir,
                                                                         redshift, 
-                                                                        central_frequency.value,
+                                                                        central_freq.value,
                                                                         band_range.value,
                                                                         source_freq.value,
                                                                         line_names,

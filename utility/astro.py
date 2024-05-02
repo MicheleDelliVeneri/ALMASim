@@ -1,4 +1,8 @@
 import astropy.units as U
+from astropy.cosmology import FlatLambdaCDM
+from astropy.io import fits
+from astropy.coordinates import SkyCoord
+from astropy.constants import c
 from collections import OrderedDict
 import h5py
 import illustris_python as il
@@ -7,16 +11,13 @@ import sys
 import os
 import numpy as np
 import pandas as pd 
-from astropy.coordinates import SkyCoord
 from scipy.optimize import curve_fit
 import random
 import shutil
-from astropy.constants import c
 from os.path import isfile, expanduser
 import subprocess
 import six
-from astropy.io import fits
-import astropy.units as U
+
 
 def write_numpy_to_fits(array, header, path):
     hdu = fits.PrimaryHDU(
@@ -832,7 +833,7 @@ def get_line_info(main_path, idxs=None):
         return rest_frequencies, line_names
 
 def sed_reading(type_, path):
-    cosmo = FlatLambdaCDM(H0=70 * u.km / u.s / u.Mpc, Tcmb0=2.725 * u.K, Om0=0.3)
+    cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
     if type_ == "extended":
         file_path = path + "/sed_low_z_warm_star_forming_galaxy.dat"
         redshift = 10**(-4)
@@ -843,31 +844,32 @@ def sed_reading(type_, path):
         return "Not valid type"
     
     try: 
-        SED= pd.read_csv(file_path, sep="\s+")
+        sed = pd.read_csv(file_path, sep="\s+")
         rename_columns = {
             'um' : 'GHz',
             'erg/s/Hz': 'Jy',
         }
-        SED.rename(columns=rename_columns, inplace=True)
-        SED['GHz']=SED['GHz'].apply(lambda x: (x* u.um).to(u.GHz, equivalencies=u.spectral()).value)
+        sed.rename(columns=rename_columns, inplace=True)
+        sed['GHz']=sed['GHz'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
         if type_ == 'point': 
-            SED['Jy']=SED['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
+            sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
         else:
-            SED['Jy']=SED['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
-        return SED
+            sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
+        
+        return sed
     except FileNotFoundError:
          return "File not Found"
 
-def continuum_finder(SED,line_frequency):
-    continuum_frequencies=SED['GHz'].values
+def continuum_finder(sed,line_frequency):
+    continuum_frequencies=sed['GHz'].values
     distances = np.abs(continuum_frequencies - np.ones(len(continuum_frequencies)*line_frequency))
     idx_=np.where(distances=np.min(distances))
-    return np.log(SED['Jy'].values[idx_])
+    return np.log(sed['Jy'].values[idx_])
 
 def cont_to_line(row):
     return np.exp(row['log_brightnes'] + np.random.normal(row['c'], row['err_c']))
 
-def process_spectral_data(type_, redshift, central_frequency, delta_freq, source_frequency, line_names=None ,n_lines=None):
+def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, line_names=None ,n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -889,15 +891,18 @@ def process_spectral_data(type_, redshift, central_frequency, delta_freq, source
     freq_min = central_frequency - delta_freq / 2
     freq_max = central_frequency + delta_freq / 2
     # Example data: Placeholder for continuum and lines from SED processing
-    SED=sed_reading(type_,os.path.join(parent_dir,'brightnes'))
+    sed = sed_reading(type_,os.path.join(master_path,'brightnes'))
 
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
-    db_line = read_line_emission_csv(os.path.join(parent_dir,'brightnes','Calibrations_FIR(GHz).csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the continuum and line frequencies by (1 + redshift)
-    SED['GHz'] *= (1 + redshift)
+    print(redshift)
+    print(type(sed))
+    print(sed.info)
+    sed['GHz'] = sed['GHz'] * (1 + redshift)
     
-    continuum_mask = (SED['GHz'] >= freq_min) & (SED['GHz'] <= freq_max)
-    continum_brightness = SED[continuum_mask]['Jy'].values
+    continuum_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
+    continum_brightness = sed[continuum_mask]['Jy'].values
     filtered_lines = db_line.copy()
     filtered_lines.drop(filtered_lines.index, inplace=True)
     while len(filtered_lines) == 0:
@@ -928,7 +933,7 @@ def process_spectral_data(type_, redshift, central_frequency, delta_freq, source
         else:
             filtered_lines = filtered_lines.head(n_lines)
     
-    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: continuum_finder(SED,x))
+    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: continuum_finder(sed,x))
     brightnesses = filtered_lines.apply(cont_to_line, axis=1) 
     #Output the processed arrays and line information
     return continum_brightness, brightnesses, filtered_lines['Line'], redsfhit, filtered_lines['shifted_freq(GHz)']
