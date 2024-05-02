@@ -835,31 +835,28 @@ def get_line_info(main_path, idxs=None):
 def sed_reading(type_, path):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
     if type_ == "extended":
-        file_path = path + "/sed_low_z_warm_star_forming_galaxy.dat"
+        file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
         redshift = 10**(-4)
     elif type_ == "point":
-        file_path = path + "/sed_low_z_type2_AGN.dat"
+        file_path = os.path.join(path, 'SED_low_z_type2_AGN.dat')
         redshift = 0.05
     else:
         return "Not valid type"
     
-    try: 
-        sed = pd.read_csv(file_path, sep="\s+")
-        rename_columns = {
+
+    sed = pd.read_csv(file_path, sep="\s+")
+    rename_columns = {
             'um' : 'GHz',
             'erg/s/Hz': 'Jy',
-        }
-        sed.rename(columns=rename_columns, inplace=True)
-        sed['GHz']=sed['GHz'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
-        if type_ == 'point': 
-            sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
-        else:
-            sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
+    }
+    sed.rename(columns=rename_columns, inplace=True)
+    sed['GHz']=sed['GHz'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
+    if type_ == 'point': 
+        sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
+    else:
+        sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
         
-        return sed
-    except FileNotFoundError:
-         return "File not Found"
-
+    return sed
 def continuum_finder(sed,line_frequency):
     continuum_frequencies=sed['GHz'].values
     distances = np.abs(continuum_frequencies - np.ones(len(continuum_frequencies)*line_frequency))
@@ -892,15 +889,10 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_max = central_frequency + delta_freq / 2
     # Example data: Placeholder for continuum and lines from SED processing
     sed = sed_reading(type_,os.path.join(master_path,'brightnes'))
-
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the continuum and line frequencies by (1 + redshift)
-    print(redshift)
-    print(type(sed))
-    print(sed.info)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
-    
     continuum_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
     continum_brightness = sed[continuum_mask]['Jy'].values
     filtered_lines = db_line.copy()
@@ -919,14 +911,15 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
                 redshift += 0.01
  
     if line_names != None:
-        user_lines = filtered_lines[np.isin(filtered_lines[:, 0], line_names)]
+        user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) == 0:
             print('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
         else:
             filtered_lines = user_lines
     
-    filtered_lines['distance'] = np.abs(filtered_lines[:, 1].astype(float) - source_frequency)
+    filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(Ghz)'].astype(float) - source_frequency)
     filtered_lines.sort_values(by='distance', inplace=True)
+ 
     if n_lines != None:
         if n_lines > len(filtered_lines):
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
