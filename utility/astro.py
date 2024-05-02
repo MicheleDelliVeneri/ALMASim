@@ -894,8 +894,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the continuum and line frequencies by (1 + redshift)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
-    continuum_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
-    continum_brightness = sed[continuum_mask]['Jy'].values
+    
     filtered_lines = db_line.copy()
     filtered_lines.drop(filtered_lines.index, inplace=True)
     while len(filtered_lines) == 0:
@@ -918,7 +917,8 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             filtered_lines = user_lines
     filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
     filtered_lines.sort_values(by='distance', inplace=True)
- 
+    continuum_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
+    continum_brightness = sed[continuum_mask]['Jy'].values
     if n_lines != None:
         if n_lines > len(filtered_lines):
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
