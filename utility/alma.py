@@ -416,8 +416,8 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db['fov_bins'] = pd.cut(db['fov'], bins=fov_bins)
     beam_size_bins = np.arange(db['beam_size'].min(), db['beam_size'].max(), 0.1)  # 0.1 arcsec bins
     db['beam_bins'] = pd.cut(db['beam_size'], bins=beam_size_bins)
-    Ttime_bins = np.arange(db['t_max'].min(), db['t_max'].max(), 500)  # 500 seconds bins
-    db['Ttime_bins'] = pd.cut(db['t_max'], bins=Ttime_bins)
+    total_time_bins = np.arange(db['t_max'].min(), db['t_max'].max(), 500)  # 500 seconds bins
+    db['Ttime_bins'] = pd.cut(db['t_max'], bins=total_time_bins)
 
     db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
     db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
