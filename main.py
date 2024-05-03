@@ -80,18 +80,14 @@ if __name__ == '__main__':
     
     # Getting Sims Configuration
     n_sims = int(input("Insert number of simulations to run: "))
-    #n_sims = 1
     sim_idxs = np.arange(n_sims)
     ncpu = input("Insert total number of CPUs to use: ")
-    #ncpu = 10
     query = input('Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) ')
-    #query = 'n'
     if query != 'query' and query != 'get':
         print("Invalid input. Please insert query or get.")
         query = input('Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) ')
     if query == 'query':
         query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): ")
-        #query_mode = "science"
         if query_mode != "target" and query_mode != "science":
             print("Invalid input. Please insert target or science.")
             query_mode = input("Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): ")
@@ -107,6 +103,7 @@ if __name__ == '__main__':
         else:
             metadata_name = input("Queried metadata will be saved as a .csv file in the metadata folder: ")
             if '.csv' not in metadata_name:
+                metadata_name = metadata_name.split('.')[0]
                 metadata_name = metadata_name + '.csv'
             #metadata_name = "test.csv"
             metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path, output_path)
@@ -114,49 +111,52 @@ if __name__ == '__main__':
         #metadata_name = 'test.csv'
         metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
         if '.csv' not in metadata_name:
+            metadata_name = metadata_name.split('.')[0]
             metadata_name = metadata_name + '.csv'
-        metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
-    #line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
-    line_mode = "y"
+        #metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
+        metadata = uc.load_metadata(main_path, metadata_name)
+    line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     if line_mode != "y" and line_mode != "n":
         print("Invalid input. Please insert y or n.")
         line_mode = input("Do you want to simulate a specific line/s? (y/n) ")
     if line_mode == "y":
         uas.line_display(main_path)
-        #line_name = input("Insert the name of the line/s you want to simulate, separated by a comma: ")
-        
-        line_name = "CO(1-0)"
-        rest_freq = uas.get_line_rest_frequency(line_name)
+        line_idxs = input("Select the line/s you want to simulate, separated by a space: ")
+        line_idxs = [int(ix) for ix in line_idxs.split(' ')]
+        rest_freq, line_names = uas.get_line_info(main_path, line_idxs)
+        if len(rest_freq) == 1:
+            rest_freq = rest_freq[0]
         rest_freqs = np.array([rest_freq]*n_sims)
         redshifts = np.array([None]*n_sims)
+        n_lines = np.array([None]*n_sims)
+        line_names = np.array([line_names]*n_sims)
     else:
-        #redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
+        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
         redshifts = '1 2'
         z0, z1 = redshifts.split()
         z0, z1 = float(z0), float(z1)
         redshifts = np.random.uniform(z0, z1, n_sims)
         rest_freqs = np.array([None]*n_sims)
+        n_lines = input('Please provide the number of lines you want to simulate as an integer: ')
+        n_lines = np.array([int(n_lines)]*n_sims)
+        line_names = np.array([None]*n_sims)
 
-    #fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
-    fix_spatial = 'y'
+    fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     if fix_spatial != 'y' and fix_spatial != 'n':
         print("Invalid input. Please insert y or n.")
         fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
 
     if fix_spatial == 'y':
-        #n_pix = input('Insert the desired cube dimension in pixels: ')
-        n_pix = 256
+        n_pix = input('Insert the desired cube dimension in pixels: ')
         n_pix = int(n_pix)
     else:
         n_pix = None
-    #fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
-    fix_spectral = 'y'
+    fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
     if fix_spectral != 'y' and fix_spectral != 'n':
         print("Invalid input. Please insert y or n.")
         fix_spectral = input('Do you want to fix cube spectral dimensions? (y/n) ')
     if fix_spectral == 'y':
-        #n_channels = input('Insert the desired number of channels: ')
-        n_channels = 256
+        n_channels = input('Insert the desired number of channels: ')
         n_channels = int(n_channels)
     else:
         n_channels = None
@@ -164,7 +164,6 @@ if __name__ == '__main__':
     if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse':
         print("Invalid input. Please insert point, gaussian, extended or diffuse.")
         source_type = input('Insert source type you want to simulate (point, gaussian, extended, diffuse): ')
-    #source_type = 'extended'
     if source_type == 'extended':
         print('Checking TNG Folders')
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
@@ -194,7 +193,7 @@ if __name__ == '__main__':
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True)
     else:
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False)
-    print('Metadata retrieved')
+    print('\nMetadata retrieved\n')
     inject_ser = input('Do you want to inject serendipitous sources? (y/n) ')
     if inject_ser != 'y' and inject_ser != 'n':
         print("Invalid input. Please insert y or n.")
@@ -238,25 +237,26 @@ if __name__ == '__main__':
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
         antenna_arrays, n_pixs, n_channels, source_types, 
-        tng_apis, ncpus, rest_freqs, redshifts, save_secondary, inject_serendipitous), 
+        tng_apis, ncpus, rest_freqs, redshifts, n_lines, line_names, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
         'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
-        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'save_secondary', 'inject_serendipitous'])
+        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
     
     
     # Dask utils
-    dask.config.set({'temporary_directory': output_path})
+    #dask.config.set({'temporary_directory': output_path})
     total_memory = psutil.virtual_memory().total
     num_processes = multiprocessing.cpu_count() // 4
     memory_limit = int(0.9 * total_memory / num_processes)
-    ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-    cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
-    output_type = "object"
-    client = Client(cluster)
-    client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-    results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
-    client.close()
-    cluster.close()
+    #ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+    #cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+    #output_type = "object"
+    #client = Client(cluster)
+    #client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+    #results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
+    #client.close()
+    #cluster.close()
+    uc.simulator(*input_params.iloc[0])
     uc.remove_logs(main_path)
     

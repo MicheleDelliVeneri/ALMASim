@@ -35,9 +35,25 @@ def remove_logs(folder_path):
             # Remove the file
             os.remove(file_path)
 
+def load_metadata(main_path, metadata_name):
+    if '.csv' not in metadata_name:
+            metadata_name = metadata_name.split('.')[0]
+            metadata_name = metadata_name + '.csv'
+    try:
+        metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
+        return metadata
+    except FileNotFoundError:
+        print("File not found. Please enter the metadata name again.")
+        new_metadata_name = input("Enter metadata name: ")
+        if '.csv' not in metadata_name:
+            new_metadata_name = new_metadata_name.split('.')[0]
+            new_metadata_name = new_metadata_name + '.csv'
+        return load_metadata(main_path, new_metadata_name)
+
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, save_secondary=False, 
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift,
+              n_lines, line_names, save_secondary=False, 
               inject_serendipitous=False):
     """
     Runs a simulation for a given set of input parameters.
@@ -91,14 +107,53 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     antenna_name = 'antenna'
     max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
     pos_string = uas.convert_to_j2000_string(ra.value, dec.value)
+
+    fov =  ual.get_fov_from_band(int(band), return_value=False)
+    beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
+    cell_size = beam_size / 5
+    if n_pix is None: 
+        #cell_size = beam_size / 5
+        n_pix = int(1.5 * fov / cell_size)
+    else:
+        cell_size = fov / n_pix
+        # just added
+        #beam_size = cell_size * 5
+    if n_channels is None:
+        n_channels = int(band_range / freq_sup)
+    else:
+        band_range = n_channels * freq_sup 
+        band_range = band_range.to(U.GHz)
+    
+    
+    print('Field of view: {}'.format(fov))
+    print('Beam size: {} '.format(beam_size))
+    print('Cell size: {} '.format(cell_size))
+    print('Central Frequency: {}'.format(central_freq))
+    print('Spectral Window: {}'.format(band_range))
+    print('Freq Support: {}'.format(freq_sup))
+    print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
+    central_channel_index = n_channels // 2
+    source_channel_index = int(central_channel_index * source_freq / central_freq)
     if redshift is None:
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
 
+    continum, line_fluxes, line_names, redshift, rest_frequency = uas.process_spectral_data(
+                                                                        source_type,
+                                                                        main_dir,
+                                                                        redshift, 
+                                                                        central_freq.value,
+                                                                        band_range.value,
+                                                                        source_freq.value,
+                                                                        n_channels, 
+                                                                        line_names,
+                                                                        n_lines
+                                                                        )
+    print(continum.shape, line_fluxes, line_names)
     print('Redshift: {}'.format(redshift))
-    print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
+    #print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
     print('Band: ', band)
     print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
@@ -121,27 +176,11 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         snapshot = None
         tng_subhaloid = None
 
-    brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
-    line_name = uas.get_line_name(rest_frequency.value)
-    print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
-    fov =  ual.get_fov_from_band(int(band), return_value=False)
-    beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
-    cell_size = beam_size / 5
-    if n_pix is None: 
-        #cell_size = beam_size / 5
-        n_pix = int(1.5 * fov / cell_size)
-    else:
-        cell_size = fov / n_pix
-        # just added
-        #beam_size = cell_size * 5
-    if n_channels is None:
-        n_channels = int(band_range / freq_sup)
+    #brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     
-    print('Field of view: {}'.format(fov))
-    print('Beam size: {} '.format(beam_size))
-    print('Cell size: {} '.format(cell_size))
-    central_channel_index = n_channels // 2
-    source_channel_index = int(central_channel_index * source_freq / central_freq)
+    #line_name = uas.get_line_name(rest_frequency.value)
+    print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
+    
     # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 
