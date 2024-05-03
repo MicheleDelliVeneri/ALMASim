@@ -1532,7 +1532,7 @@ def threedgaussian(amplitude, spind, chan, center_x, center_y, width_x, width_y,
         np.exp(-(((rcen_x-xp)/width_x)**2+((rcen_y-yp)/width_y)**2)/2.)
     return g
 
-def insert_pointlike(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_z, n_px, n_chan):
+def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_px, n_chan):
     """
     Inserts a point source into the datacube at the specified position and amplitude.
     datacube: datacube object
@@ -1545,11 +1545,13 @@ def insert_pointlike(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_z, n_px, n_c
     n_chan: number of channels in the cube
     """
     z_idxs = np.arange(0, n_chan)
-    g = gaussian(z_idxs, 1, pos_z, fwhm_z)
+    gs = [gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z) for i in range(len(line_fluxes))]
     ts = np.zeros((n_px, n_px, n_chan))
-    ts[int(pos_x), int(pos_y), :] = amplitude
-    for z in range(datacube._array.shape[2]):
-        slice_ = g[z] * ts[:, :, z]
+    ts[int(pos_x), int(pos_y), :] = continum
+    for z in tqdm(range(datacube._array.shape[2]), total=datacube._array.shape[2]):
+        slice_ = ts[:, :, z]
+        for g in gs:
+            slice_ += g[z] 
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
     return datacube
 

@@ -1019,6 +1019,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended):
     metadata.loc[:, 'redshift'] = redshifts
     metadata = metadata[metadata['redshift'] >= 0]
     snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
+    print(snapshots)
     metadata['snapshot'] = snapshots
     if extended == True:
         #metatada = metadata[metadata['redshift'] < 0.05]
