@@ -17,6 +17,7 @@ import shutil
 from os.path import isfile, expanduser
 import subprocess
 import six
+from math import pi
 
 
 def write_numpy_to_fits(array, header, path):
@@ -832,32 +833,40 @@ def get_line_info(main_path, idxs=None):
     else:
         return rest_frequencies, line_names
 
-def sed_reading(type_, path):
+def sed_reading(type_, path, lum_infrared=None):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
+    erg_s_hz_to_jy = 
     if type_ == "extended":
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
         redshift = 10**(-4)
+        if lum_infrared is None: 
+            lum_infrared = 1e+10
     elif type_ == "point":
         file_path = os.path.join(path, 'SED_low_z_type2_AGN.dat')
         redshift = 0.05
+        if lum_infrared is None:
+            lum_infrared = 1e+9
     else:
         return "Not valid type"
     
+    distance_Mpc = cosmo.luminosity_distance(redshift).value
+    Mpc_to_m = 3.086e+22
+    distance_m = distance_Mpc * Mpc_to_m
 
     sed = pd.read_csv(file_path, sep="\s+")
-    rename_columns = {
-            'um' : 'GHz',
-            'erg/s/Hz': 'Jy',
-    }
+    #rename_columns = {
+    #        'um' : 'GHz',
+    #        'erg/s/Hz': 'Jy',
+    #}
     sed.rename(columns=rename_columns, inplace=True)
-    sed['GHz']=sed['GHz'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
+    sed['GHz']=sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
     if type_ == 'point': 
-        sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+10)
+        sed['Jy']=sed['erg/s/Hz']/((10.**(-26.))*(10.**7.)*4*pi*distance_m**2*(3.846e+33 * lum_infrared))
     else:
-        sed['Jy']=sed['Jy']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)*(3.846e+33*1e+9)
-
+        sed['Jy']=sed['etg/s/Hz']/((10.**(-26.))*(10.**7.)*4*pi*distance_m**2*(3.846e+33 * lum_infared))
+    sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True)    
-    return sed
+    return sed, 
 
 def cont_finder(sed,line_frequency):
     cont_frequencies=sed['GHz'].values
