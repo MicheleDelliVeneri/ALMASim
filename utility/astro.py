@@ -855,7 +855,8 @@ def sed_reading(type_, path, lum_infrared=None):
     so_to_erg_s_hz = 3.846e+33 # Solar luminosity to erg/s/Hz
     lum_infrared_erg_s_hz = lum_infrared * so_to_erg_s_hz # luminosity in erg/s/Hz
     erg_cm2_s_hz_to_to_jy = 10**(-23) # erg/cm2/s/Hz to Jy
-    lum_infrared_jy = lum_infrared_erg_s_hz / (erg_cm2_s_hz_to_to_jy *  solid_angle) # luminosity in Jy
+    erg_s_hz_to_jy = 10**(-23) * solid_angle # erg/s/Hz to Jy
+    lum_infrared_jy = lum_infrared_erg_s_hz * eng_s_hz_to_jy # luminosity in Jy
     sed = pd.read_csv(file_path, sep="\s+")
     #rename_columns = {
     #        'um' : 'GHz',
@@ -863,7 +864,7 @@ def sed_reading(type_, path, lum_infrared=None):
     #}
     #sed.rename(columns=rename_columns, inplace=True)
     sed['GHz']=sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
-    sed['Jy']= lum_infrared_jy * (sed['erg/s/Hz'] / (erg_cm2_s_hz_to_to_jy *  solid_angle))
+    sed['Jy']= lum_infrared_jy * (sed['erg/s/Hz'] * erg_s_hz_to_jy)
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True)    
     return sed, lum_infrared_jy
