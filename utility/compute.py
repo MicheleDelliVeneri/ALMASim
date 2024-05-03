@@ -141,6 +141,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
     lum_infared = None
+    print(line_names)
     continum, line_fluxes, line_names, redshift, rest_frequency, n_channels  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
@@ -188,6 +189,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
             print('{} Flux: {} at z {}'.format(line_name, line_flux, redshift))
     else:
         print('{} Flux: {} at z {}'.format(line_names, line_fluxes, redshift))
+
+    """
     # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 
@@ -294,5 +297,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"),
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
+    """
     shutil.rmtree(sim_output_dir)
     

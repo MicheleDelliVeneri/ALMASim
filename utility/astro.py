@@ -18,7 +18,7 @@ from os.path import isfile, expanduser
 import subprocess
 import six
 from math import pi
-
+import matplotlib.pyplot as plt
 
 def write_numpy_to_fits(array, header, path):
     hdu = fits.PrimaryHDU(
@@ -839,40 +839,48 @@ def sed_reading(type_, path, lum_infrared=None):
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
         redshift = 10**(-4)
         if lum_infrared is None: 
-            lum_infrared = 1e+10 # luminosity in solar masses
+            lum_infrared = 1e+10 # luminosity in solar luminosities
     elif type_ == "point":
         file_path = os.path.join(path, 'SED_low_z_type2_AGN.dat')
         redshift = 0.05
         if lum_infrared is None:
-            lum_infrared = 1e+9 # luminosity in solar masses
+            lum_infrared = 1e+9 # luminosity in solar luminosities
     else:
         return "Not valid type"
-    
+    # L (erg/s/Hz) = 4 pi d^2(cm) * 10^-23 Flux (Jy)
+    #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
+    # To normalize we multiply by lum_infrared_jy
     distance_Mpc = cosmo.luminosity_distance(redshift).value # distance in Mpc
     Mpc_to_cm = 3.086e+24 # Mpc to cm
-    distance_cm = distance_Mpc * Mpc_to_cm # distance in cm
-    solid_angle = 4 * pi  * distance_cm**2 # solid angle in cm^2
-    so_to_erg_s_hz = 3.846e+33 # Solar luminosity to erg/s/Hz
-    lum_infrared_erg_s_hz = lum_infrared * so_to_erg_s_hz # luminosity in erg/s/Hz
-    erg_cm2_s_hz_to_to_jy = 10**(-23) # erg/cm2/s/Hz to Jy
-    erg_s_hz_to_jy = 10**(-23) * solid_angle # erg/s/Hz to Jy
-    lum_infrared_jy = lum_infrared_erg_s_hz / erg_s_hz_to_jy # luminosity in Jy
+    distance_cm = distance_Mpc * Mpc_to_cm # distance in cm  -XX
+    solid_angle = 4 * pi  * distance_cm**2 # solid angle in cm^2 -XX
+    so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
+    lum_infrared_erg_s = lum_infrared * so_to_erg_s # luminosity in erg/s -XX
+  
     sed = pd.read_csv(file_path, sep="\s+")
-    #rename_columns = {
-    #        'um' : 'GHz',
-    #        'erg/s/Hz': 'Jy',
-    #}
-    #sed.rename(columns=rename_columns, inplace=True)
-    sed['GHz']=sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
-    sed['Jy']= lum_infrared_jy * (sed['erg/s/Hz'] / erg_s_hz_to_jy)
+    sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
+    sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
+    flux_infrared = lum_infrared_erg_s * 1e+23 / solid_angle # Jy / Hz
+    #flux_infrared_jy = flux_infrared  * (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
+
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
-    sed = sed.sort_values(by='GHz', ascending=True)    
-    return sed, lum_infrared_jy
+    sed = sed.sort_values(by='GHz', ascending=True) 
+    plt.figure(figsize=(10,10))
+    plt.plot(sed['GHz'], sed['Jy'])
+    #plt.plot(sed['GHz'], flux_infrared_jy, 'ro')
+    plt.xlabel('GHz')
+    plt.ylabel('Jy')
+    plt.title('SED')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.savefig(path + '/SED.png')
+    plt.show()
+    return sed, flux_infrared
 
 def cont_finder(sed,line_frequency):
     cont_frequencies=sed['GHz'].values
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
-    return np.log(sed['Jy'].values[np.argmin(distances)])
+    return np.argmin(distances)
 
 def cont_to_line(row):
     line_delta = np.random.normal(row['c'], row['err_c'])
@@ -908,7 +916,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the cont and line frequencies by (1 + redshift)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
-    
+    print(flux_infrared)
     filtered_lines = db_line.copy()
     filtered_lines.drop(filtered_lines.index, inplace=True)
     while len(filtered_lines) == 0:
@@ -925,7 +933,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
                 freq_min += freq_min / 10
                 freq_max += freq_max / 10
 
-    if type(line_names) == list:
+    if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) == 0:
             print('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
@@ -943,9 +951,10 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         else:
             filtered_lines = filtered_lines.head(n_lines)
     line_names = filtered_lines['Line'].values
-    #filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x))
-    line_fluxes = np.exp(np.log10(flux_infrared) * filtered_lines.apply(cont_to_line, axis=1).values)
+    line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
+    line_fluxes = 10**(np.log10(flux_infrared * (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value) + filtered_lines.apply(cont_to_line, axis=1).values)
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
+    #line_fluxes = line_fluxes[line_indexes]
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
         int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
@@ -955,7 +964,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     #Output the processed arrays and line information
     if freq_min != save_freq_min:
         n_channels = int(n_channels * (freq_max / save_freq_max))
-        
+    print(cont_fluxes)
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
