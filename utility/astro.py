@@ -835,7 +835,6 @@ def get_line_info(main_path, idxs=None):
 
 def sed_reading(type_, path, lum_infrared=None):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
-    erg_s_hz_to_jy = 
     if type_ == "extended":
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
         redshift = 10**(-4)
@@ -850,9 +849,12 @@ def sed_reading(type_, path, lum_infrared=None):
         return "Not valid type"
     
     distance_Mpc = cosmo.luminosity_distance(redshift).value
-    Mpc_to_m = 3.086e+22
-    distance_m = distance_Mpc * Mpc_to_m
-
+    Mpc_to_cm = 3.086e+24
+    distance_cm = distance_Mpc * Mpc_to_cm
+    so_to_erg_s_hz = 3.846e+33
+    lum_infrared_erg_s_hz = lum_infrared * so_to_erg_s_hz
+    erg_cm2_s_hz_to_to_jy = 10**(-23)
+    lum_infreared_jy = lum_infrared_erg_s_hz / (erg_cm2_s_hz_to_to_jy *  4 * pi  * distance_cm**2)
     sed = pd.read_csv(file_path, sep="\s+")
     #rename_columns = {
     #        'um' : 'GHz',
@@ -860,24 +862,24 @@ def sed_reading(type_, path, lum_infrared=None):
     #}
     sed.rename(columns=rename_columns, inplace=True)
     sed['GHz']=sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
-    if type_ == 'point': 
-        sed['Jy']=sed['erg/s/Hz']/((10.**(-26.))*(10.**7.)*4*pi*distance_m**2*(3.846e+33 * lum_infrared))
-    else:
-        sed['Jy']=sed['etg/s/Hz']/((10.**(-26.))*(10.**7.)*4*pi*distance_m**2*(3.846e+33 * lum_infared))
+
+    sed['Jy']=sed['erg/s/Hz']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)
+
+    sed['Jy']= lum_infrared_jy * sed['erg/s/Hz']
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True)    
-    return sed, 
+    return sed, lum_infrared_jy
 
 def cont_finder(sed,line_frequency):
     cont_frequencies=sed['GHz'].values
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
     return np.log(sed['Jy'].values[np.argmin(distances)])
 
-def cont_to_line(row):
+def cont_to_line(row, flux_infrared):
     line_delta = np.random.normal(row['c'], row['err_c'])
-    return np.exp(row['log_brightnes'] - line_delta)
+    return np.exp(np.log(flux_infrared) + line_delta)
 
-def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, n_channels, line_names=None ,n_lines=None):
+def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -901,7 +903,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     save_freq_min = freq_min
     save_freq_max = freq_max
     # Example data: Placeholder for cont and lines from SED processing
-    sed = sed_reading(type_,os.path.join(master_path,'brightnes'))
+    sed, flux_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the cont and line frequencies by (1 + redshift)
@@ -941,12 +943,12 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         else:
             filtered_lines = filtered_lines.head(n_lines)
     line_names = filtered_lines['Line'].values
-    filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
-    line_fluxes = filtered_lines.apply(cont_to_line, axis=1).values
+    #filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
+    line_fluxes = filtered_lines['c', 'c_err'].apply(lambda x: cont_to_line(x)).values
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
-        int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies,cont_fluxes)
+        int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
     else:
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
     #import ipdb; ipdb.set_trace()

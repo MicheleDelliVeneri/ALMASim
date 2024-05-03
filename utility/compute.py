@@ -140,7 +140,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
-
+    lum_infared = None
     continum, line_fluxes, line_names, redshift, rest_frequency, n_channels  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
@@ -148,7 +148,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         central_freq.value,
                                                                         band_range.value,
                                                                         source_freq.value,
-                                                                        n_channels, 
+                                                                        n_channels,
+                                                                        lum_infared,
                                                                         line_names,
                                                                         n_lines
                                                                         )
