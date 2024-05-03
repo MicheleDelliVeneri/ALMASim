@@ -134,7 +134,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
     
     if redshift is None:
-        if type(rest_frequency) == list:
+        if isinstance(rest_frequency, np.ndarray):
             rest_frequency = np.sort(np.array(rest_frequency))[0]
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)

@@ -1004,7 +1004,7 @@ def get_line_name(frequency):
     
 def sample_given_redshift(metadata, n, rest_frequency, extended):
     pd.options.mode.chained_assignment = None
-    if type(rest_frequency) == list:
+    if isinstance(rest_frequency, np.ndarray):
         rest_frequency = np.sort(np.array(rest_frequency))[0]
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
