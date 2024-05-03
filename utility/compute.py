@@ -183,8 +183,11 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     #brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     
     #line_name = uas.get_line_name(rest_frequency.value)
-    for line_name, line_flux, redshift in zip(line_names, line_fluxes, redshift): 
-        print('{} Flux: {} at z {}'.format(line_name, line_flux, redshift))
+    if type(line_names) == list:
+        for line_name, line_flux in zip(line_names, line_fluxes): 
+            print('{} Flux: {} at z {}'.format(line_name, line_flux, redshift))
+    else:
+        print('{} Flux: {} at z {}'.format(line_names, line_fluxes, redshift))
     # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 

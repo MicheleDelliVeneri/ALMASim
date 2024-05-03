@@ -875,10 +875,9 @@ def cont_finder(sed,line_frequency):
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
     return np.log(sed['Jy'].values[np.argmin(distances)])
 
-def cont_to_line(row, flux_infrared):
-    print(row)
+def cont_to_line(row):
     line_delta = np.random.normal(row['c'], row['err_c'])
-    return np.exp(np.log(flux_infrared) + line_delta)
+    return line_delta
 
 def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
     source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
@@ -945,8 +944,8 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         else:
             filtered_lines = filtered_lines.head(n_lines)
     line_names = filtered_lines['Line'].values
-    #filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
-    line_fluxes = filtered_lines['c', 'c_err'].apply(lambda x: cont_to_line(x, flux_infrared)).values
+    #filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x))
+    line_fluxes = np.exp(np.log10(flux_infrared) * filtered_lines.apply(cont_to_line, axis=1).values)
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
