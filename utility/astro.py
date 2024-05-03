@@ -854,13 +854,13 @@ def sed_reading(type_, path, lum_infrared=None):
     so_to_erg_s_hz = 3.846e+33
     lum_infrared_erg_s_hz = lum_infrared * so_to_erg_s_hz
     erg_cm2_s_hz_to_to_jy = 10**(-23)
-    lum_infreared_jy = lum_infrared_erg_s_hz / (erg_cm2_s_hz_to_to_jy *  4 * pi  * distance_cm**2)
+    lum_infrared_jy = lum_infrared_erg_s_hz / (erg_cm2_s_hz_to_to_jy *  4 * pi  * distance_cm**2)
     sed = pd.read_csv(file_path, sep="\s+")
     #rename_columns = {
     #        'um' : 'GHz',
     #        'erg/s/Hz': 'Jy',
     #}
-    sed.rename(columns=rename_columns, inplace=True)
+    #sed.rename(columns=rename_columns, inplace=True)
     sed['GHz']=sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
 
     sed['Jy']=sed['erg/s/Hz']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)
@@ -876,10 +876,12 @@ def cont_finder(sed,line_frequency):
     return np.log(sed['Jy'].values[np.argmin(distances)])
 
 def cont_to_line(row, flux_infrared):
+    print(row)
     line_delta = np.random.normal(row['c'], row['err_c'])
     return np.exp(np.log(flux_infrared) + line_delta)
 
-def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
+def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
+    source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -925,7 +927,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
                 freq_min += freq_min / 10
                 freq_max += freq_max / 10
 
-    if line_names != None:
+    if type(line_names) == list:
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) == 0:
             print('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
@@ -944,7 +946,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             filtered_lines = filtered_lines.head(n_lines)
     line_names = filtered_lines['Line'].values
     #filtered_lines['log_brightnes'] = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
-    line_fluxes = filtered_lines['c', 'c_err'].apply(lambda x: cont_to_line(x)).values
+    line_fluxes = filtered_lines['c', 'c_err'].apply(lambda x: cont_to_line(x, flux_infrared)).values
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
@@ -1003,7 +1005,7 @@ def get_line_name(frequency):
     
 def sample_given_redshift(metadata, n, rest_frequency, extended):
     pd.options.mode.chained_assignment = None
-    if len(rest_frequency) > 1:
+    if type(rest_frequency) == list:
         rest_frequency = np.sort(np.array(rest_frequency))[0]
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
