@@ -861,8 +861,7 @@ def sed_reading(type_, path, lum_infrared=None):
     sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
     sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
     flux_infrared = lum_infrared_erg_s * 1e+23 / solid_angle # Jy / Hz
-    #flux_infrared_jy = flux_infrared  * (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
-
+    #flux_infrared_jy = flux_infrared  / (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True) 
     plt.figure(figsize=(10,10))
@@ -952,7 +951,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             filtered_lines = filtered_lines.head(n_lines)
     line_names = filtered_lines['Line'].values
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
-    line_fluxes = 10**(np.log10(flux_infrared * (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value) + filtered_lines.apply(cont_to_line, axis=1).values)
+    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared / (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value) + filtered_lines.apply(cont_to_line, axis=1).values)
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
     #line_fluxes = line_fluxes[line_indexes]
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
