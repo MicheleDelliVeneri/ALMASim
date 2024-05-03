@@ -839,22 +839,23 @@ def sed_reading(type_, path, lum_infrared=None):
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
         redshift = 10**(-4)
         if lum_infrared is None: 
-            lum_infrared = 1e+10
+            lum_infrared = 1e+10 # luminosity in solar masses
     elif type_ == "point":
         file_path = os.path.join(path, 'SED_low_z_type2_AGN.dat')
         redshift = 0.05
         if lum_infrared is None:
-            lum_infrared = 1e+9
+            lum_infrared = 1e+9 # luminosity in solar masses
     else:
         return "Not valid type"
     
-    distance_Mpc = cosmo.luminosity_distance(redshift).value
-    Mpc_to_cm = 3.086e+24
-    distance_cm = distance_Mpc * Mpc_to_cm
-    so_to_erg_s_hz = 3.846e+33
-    lum_infrared_erg_s_hz = lum_infrared * so_to_erg_s_hz
-    erg_cm2_s_hz_to_to_jy = 10**(-23)
-    lum_infrared_jy = lum_infrared_erg_s_hz / (erg_cm2_s_hz_to_to_jy *  4 * pi  * distance_cm**2)
+    distance_Mpc = cosmo.luminosity_distance(redshift).value # distance in Mpc
+    Mpc_to_cm = 3.086e+24 # Mpc to cm
+    distance_cm = distance_Mpc * Mpc_to_cm # distance in cm
+    solid_angle = 4 * pi  * distance_cm**2 # solid angle in cm^2
+    so_to_erg_s_hz = 3.846e+33 # Solar luminosity to erg/s/Hz
+    lum_infrared_erg_s_hz = lum_infrared * so_to_erg_s_hz # luminosity in erg/s/Hz
+    erg_cm2_s_hz_to_to_jy = 10**(-23) # erg/cm2/s/Hz to Jy
+    lum_infrared_jy = lum_infrared_erg_s_hz / (erg_cm2_s_hz_to_to_jy *  solid_angle) # luminosity in Jy
     sed = pd.read_csv(file_path, sep="\s+")
     #rename_columns = {
     #        'um' : 'GHz',
@@ -862,10 +863,7 @@ def sed_reading(type_, path, lum_infrared=None):
     #}
     #sed.rename(columns=rename_columns, inplace=True)
     sed['GHz']=sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
-
-    sed['Jy']=sed['erg/s/Hz']/((10.**(-26.))*(10.**7.)*4.*np.pi*(cosmo.luminosity_distance(redshift).value*(3.086e+22))**2.)
-
-    sed['Jy']= lum_infrared_jy * sed['erg/s/Hz']
+    sed['Jy']= lum_infrared_jy * (sed['erg/s/Hz'] / (erg_cm2_s_hz_to_to_jy *  solid_angle))
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True)    
     return sed, lum_infrared_jy
