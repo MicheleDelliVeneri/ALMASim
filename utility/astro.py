@@ -943,7 +943,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     #import ipdb; ipdb.set_trace()
     #Output the processed arrays and line information
     if freq_min != save_freq_min:
-        n_channels = int(n_channels * (freq_max / save_freq_max)
+        n_channels = int(n_channels * (freq_max / save_freq_max))
         
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels
 
