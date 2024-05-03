@@ -889,6 +889,8 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     # Define the frequency range based on central frequency and bandwidth
     freq_min = central_frequency - delta_freq / 2
     freq_max = central_frequency + delta_freq / 2
+    save_freq_min = freq_min
+    save_freq_max = freq_max
     # Example data: Placeholder for cont and lines from SED processing
     sed = sed_reading(type_,os.path.join(master_path,'brightnes'))
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
@@ -903,13 +905,15 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         line_mask = (db_line['shifted_freq(GHz)'].astype(float) >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) <= freq_max)
         filtered_lines = db_line[line_mask]
         if len(filtered_lines) == 0:
-            n_low = ~(db_line['shifted_freq(GHz)'].astype(float) >= freq_min).sum()
-            n_high = ~(db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum()
-            print(n_low, n_high)
-            if redshift > 0.01 and n_low > 0:
-                redshift -= 0.01
-            elif n_high > 0:
+            n_possible = (db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum()
+            print(f'Warning: No lines found in the provided bandwidth. {n_possible} possible lines could fall at a higher redshift, increasing.')
+            if n_possible != 0:
                 redshift += 0.01
+            else:
+                print(f'Warning: No lines found in the provided bandwisth, cannot increse redshift, increasing bandwidth')
+                freq_min += freq_min / 10
+                freq_max += freq_max / 10
+
     if line_names != None:
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) == 0:
@@ -938,7 +942,10 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
     #import ipdb; ipdb.set_trace()
     #Output the processed arrays and line information
-    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies
+    if freq_min != save_freq_min:
+        n_channels = int(n_channels * (freq_max / save_freq_max)
+        
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {
@@ -985,6 +992,8 @@ def get_line_name(frequency):
     
 def sample_given_redshift(metadata, n, rest_frequency, extended):
     pd.options.mode.chained_assignment = None
+    if len(rest_frequency) > 1:
+        rest_frequency = np.sort(np.array(rest_frequency))[0]
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]

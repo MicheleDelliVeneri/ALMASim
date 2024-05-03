@@ -132,15 +132,16 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Spectral Window: {}'.format(band_range))
     print('Freq Support: {}'.format(freq_sup))
     print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
-    central_channel_index = n_channels // 2
-    source_channel_index = int(central_channel_index * source_freq / central_freq)
+    
     if redshift is None:
+        if len(rest_frequency) > 1:
+            rest_frequency = np.sort(np.array(rest_frequency))[0]
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
 
-    continum, line_fluxes, line_names, redshift, rest_frequency = uas.process_spectral_data(
+    continum, line_fluxes, line_names, redshift, rest_frequency, n_channels  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
                                                                         redshift, 
@@ -151,7 +152,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         line_names,
                                                                         n_lines
                                                                         )
-    print(continum.shape, line_fluxes, line_names)
+    #print(continum.shape, line_fluxes, line_names)
+    central_channel_index = n_channels // 2
+    source_channel_index = int(central_channel_index * source_freq / central_freq)
     print('Redshift: {}'.format(redshift))
     #print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
@@ -179,8 +182,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     #brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
     
     #line_name = uas.get_line_name(rest_frequency.value)
-    print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
-    
+    for line_name, line_flux, redshift in zip(line_names, line_fluxes, redshift): 
+        print('{} Flux: {} at z {}'.format(line_name, line_flux, redshift))
     # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 
