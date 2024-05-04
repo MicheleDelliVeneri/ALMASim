@@ -1573,7 +1573,7 @@ def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x
     gs = np.zeros(n_channels)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
-    for z in tqdm(range(0, n_channels)):
+    for z in tqdm(range(0, n_chan)):
         datacube._array[:, :, z] = gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle) + gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)  
     return datacube * U.Jy * U.pix**-2
 
