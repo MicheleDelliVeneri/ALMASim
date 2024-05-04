@@ -125,9 +125,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         band_range = band_range.to(U.GHz)
     
     
-    print('Field of view: {}'.format(fov))
-    print('Beam size: {} '.format(beam_size))
-    print('Cell size: {} '.format(cell_size))
+    print('Field of view: {}'.format(round(fov, 3)))
+    print('Beam size: {} '.format(round(beam_size, 4)))
+    print('Cell size: {} '.format(round(cell_size, 4)))
     print('Central Frequency: {}'.format(central_freq))
     print('Spectral Window: {}'.format(band_range))
     print('Freq Support: {}'.format(freq_sup))
@@ -225,6 +225,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     print('Writing datacube to {}'.format(filename))
     usm.write_datacube_to_fits(datacube, filename)
+    print('Done')
     del datacube
     upl.plot_skymodel(filename, inx, output_dir, show=False)
     #skymodel, sky_header = uas.load_fits(filename)
@@ -242,8 +243,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
-                            ra, dec, ang_res, vel_res, int_time, total_time, band, central_freq,
-                            source_freq, redshift, line_fluxes, fov, beam_size, cell_size, n_pix, 
+                            ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
+                            redshift, line_fluxes, line_names, line_frequency, 
+                            fov, beam_size, cell_size, n_pix, 
                             n_channels, snapshot, tng_subhaloid)
     simobserve(
         project=project_name, 

@@ -1020,15 +1020,15 @@ def sample_given_redshift(metadata, n, rest_frequency, extended):
     return sample
 
 def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time, 
-                        total_time, band, central_freq, source_freq, redshift, brightness,
+                        total_time, band, band_range, central_freq, redshift, line_fluxes, line_names, line_frequencies,
                         fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo):
     with open(path, 'w') as f:
         f.write('Simulation Parameters:\n')
         f.write('RA: {}\n'.format(ra))
         f.write('DEC: {}\n'.format(dec))
         f.write('Band: {}\n'.format(band))
-        f.write('Central Frequency: {}\n'.format(central_freq))
-        f.write('Source Frequency: {}\n'.format(source_freq))
+        f.write('Bandwidth {}\n'.format(band_range))
+        f.write('Band Central Frequency: {}\n'.format(central_freq))
         f.write('Pixel size: {}\n'.format(cell_size))
         f.write('Beam Size: {}\n'.format(beam_size))
         f.write('Fov: {} arcsec\n'.format(fov))
@@ -1039,6 +1039,8 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         f.write('Integration Time: {}\n'.format(int_time))
         f.write('Total Time: {}\n'.format(total_time))
         f.write('Cube Size: {} x {} x {} pixels\n'.format(n_pix, n_pix, n_channels))
+        for i in rage(len(line_fluxes)):
+            f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy\n'.format(line_names[i], line_frequencies[i], line_fluxes[i]))
         if snapshot != None:
             f.write('TNG Snapshot ID: {}\n'.format(snapshot))
             f.write('TNG Subhalo ID: {}\n'.format(subhalo))     
