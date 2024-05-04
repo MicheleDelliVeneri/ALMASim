@@ -125,9 +125,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         band_range = band_range.to(U.GHz)
     
     
-    print('Field of view: {}'.format(round(fov, 3)))
-    print('Beam size: {} '.format(round(beam_size, 4)))
-    print('Cell size: {} '.format(round(cell_size, 4)))
+    print('Field of view: {} arcsec'.format(round(fov.value, 3)))
+    print('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
+    print('Cell size: {} arcsec'.format(round(cell_size.value, 4)))
     print('Central Frequency: {}'.format(central_freq))
     print('Spectral Window: {}'.format(band_range))
     print('Freq Support: {}'.format(freq_sup))
