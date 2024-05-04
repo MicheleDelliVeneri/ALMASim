@@ -915,7 +915,6 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the cont and line frequencies by (1 + redshift)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
-    print(flux_infrared)
     filtered_lines = db_line.copy()
     filtered_lines.drop(filtered_lines.index, inplace=True)
     while len(filtered_lines) == 0:
@@ -953,17 +952,13 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
     line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared / (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value) + filtered_lines.apply(cont_to_line, axis=1).values)
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
-    #line_fluxes = line_fluxes[line_indexes]
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
         int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
     else:
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
-    #import ipdb; ipdb.set_trace()
-    #Output the processed arrays and line information
     if freq_min != save_freq_min:
         n_channels = int(n_channels * (freq_max / save_freq_max))
-    print(cont_fluxes)
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
