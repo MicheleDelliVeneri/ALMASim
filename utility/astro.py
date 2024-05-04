@@ -1042,7 +1042,6 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         f.write('Fov: {} arcsec\n'.format(fov))
         f.write('Angular Resolution: {}\n'.format(ang_res))
         f.write('Velocity Resolution: {}\n'.format(vel_res))
-        f.write('Brightness: {} Jy/px\n'.format(brightness))
         f.write('Redshift: {}\n'.format(redshift))
         f.write('Integration Time: {}\n'.format(int_time))
         f.write('Total Time: {}\n'.format(total_time))
