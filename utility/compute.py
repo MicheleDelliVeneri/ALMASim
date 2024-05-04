@@ -243,7 +243,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     os.chdir(output_dir)
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
                             ra, dec, ang_res, vel_res, int_time, total_time, band, central_freq,
-                            source_freq, redshift, brightness, fov, beam_size, cell_size, n_pix, 
+                            source_freq, redshift, line_fluxes, fov, beam_size, cell_size, n_pix, 
                             n_channels, snapshot, tng_subhaloid)
     simobserve(
         project=project_name, 
