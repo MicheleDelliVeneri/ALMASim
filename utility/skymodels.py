@@ -1512,34 +1512,27 @@ def gaussian(x, amp, cen, fwhm):
     norm = 1 / integral
     return norm * amp * np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
 
-def threedgaussian(amplitude, spind, chan, center_x, center_y, width_x, width_y, angle, idxs):
+def gaussian2d(x, y, amp, cen_x, cen_y, fwhm_x, fwhm_y, angle):
     """
-    Generates a 3D Gaussian given the following input parameters:
-    amplitude: amplitude
-    spind: spectral index
-    chan: channel
-    center_x: x position
-    center_y: y position
-    width_x: width in x
-    width_y: width in y
-    angle: angle of rotation
-    idxs: indices of the datacube
-
+    Generates a 2D Gaussian given the following input parameters:
+    x, y: positions
+    amp: amplitude
+    cen_x, cen_y: centers
+    fwhm_x, fwhm_y: FWHMs (full width at half maximum) along x and y axes
+    angle: angle of rotation (in degrees)
     """
-    angle = math.pi/180. * angle
-    rcen_x = center_x * np.cos(angle) - center_y * np.sin(angle)
-    rcen_y = center_x * np.sin(angle) + center_y * np.cos(angle)
-    xp = idxs[0] * np.cos(angle) - idxs[1] * np.sin(angle)
-    yp = idxs[0] * np.sin(angle) + idxs[1] * np.cos(angle)
-    v1 = 230e9 - (64 * 10e6)
-    v2 = v1+10e6*chan
-    def integrand(amplitude, spind, v1, v2, rcen_x, rcen_y, xp, yp, width_x, width_y):
-        return (10**(np.log10(amplitude) + (spind) * np.log10(v1/v2))) * \
-                        np.exp(-(((rcen_x-xp)/width_x)**2+((rcen_y-yp)/width_y)**2)/2.)
-    integral, _ = quad(integrand, -np.inf, np.inf, args=(amplitude, spind, v1, v2, rcen_x, rcen_y, xp, yp, width_x, width_y))
-    norm = 1 / integral
-    return norm * (10**(np.log10(amplitude) + (spind) * np.log10(v1/v2))) * \
-        np.exp(-(((rcen_x-xp)/width_x)**2+((rcen_y-yp)/width_y)**2)/2.)
+    angle_rad = math.radians(angle)
+    
+    # Rotate coordinates
+    xp = (x - cen_x) * np.cos(angle_rad) - (y - cen_y) * np.sin(angle_rad) + cen_x
+    yp = (x - cen_x) * np.sin(angle_rad) + (y - cen_y) * np.cos(angle_rad) + cen_y
+    
+    gaussian = np.exp(-((xp-cen_x)**2/(2*(fwhm_x/2.35482)**2) + (yp-cen_y)**2/(2*(fwhm_y/2.35482)**2)))
+    norm = amp /  np.sum(gaussian)
+    
+    result = norm * gaussian
+    
+    return result
 
 def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_chan):
     """
@@ -1557,10 +1550,10 @@ def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_
     gs = np.zeros(n_channels)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])  
-    datacube._array[pos_x, pos_y, ] = continum * gs * U.Jy * U.pix**-2
-    return datacube
+    datacube._array[pos_x, pos_y, ] = continum + gs 
+    return datacube * U.Jy * U.pix**-2
 
-def insert_gaussian(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_chan):
+def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_chan):
     """
     Inserts a 3D Gaussian into the datacube at the specified position and amplitude.
     datacube: datacube object
@@ -1575,14 +1568,14 @@ def insert_gaussian(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fw
     n_px: number of pixels in the cube
     n_chan: number of channels in the cube
     """
-    idxs = np.indices((n_px, n_px))
+    X, Y = np.meshgrid(np.arange(n_px), np.arange(n_px))
     z_idxs = np.arange(0, n_chan)
-    g = gaussian(z_idxs, 1, pos_z, fwhm_z)
-    ts = np.zeros((n_px, n_px, n_chan))
-    for z in range(datacube._array.shape[2]):
-        slice_ = g[z] * threedgaussian(amplitude, 0, z, pos_x, pos_y, fwhm_x, fwhm_y, angle, idxs)
-        datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
-    return datacube
+    gs = np.zeros(n_channels)
+    for i in range(len(line_fluxes)):
+        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
+    for z in tqdm(range(0, n_channels)):
+        datacube._array[:, :, z] = gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle) + gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)  
+    return datacube * U.Jy * U.pix**-2
 
 def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
     source = myTNGSource(
