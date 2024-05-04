@@ -909,6 +909,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_max = central_frequency + delta_freq / 2
     save_freq_min = freq_min
     save_freq_max = freq_max
+    saved_redshift = redshift
     # Example data: Placeholder for cont and lines from SED processing
     sed, flux_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
@@ -928,7 +929,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             else:
                 freq_min += freq_min / 10
                 freq_max += freq_max / 10
-
+        
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) == 0:
@@ -957,7 +958,14 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
     if freq_min != save_freq_min:
         n_channels = int(n_channels * (freq_max / save_freq_max))
-    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels
+        print('Bandwidth has been adjusted to fit the lines')
+        print('New number of channels:', n_channels)
+    if redshift != saved_redshift:
+        print('Redshift has been adjusted to fit the lines')
+        print('New redshift:', redshift)
+    bandwidth = freq_max - freq_min
+    freq_support = bandwidth / n_channels
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels, bandwidth, freq_support
 
 def compute_rest_frequency_from_redshift(source_freq, redshift):
     line_db = {

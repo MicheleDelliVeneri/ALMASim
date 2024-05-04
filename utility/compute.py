@@ -125,13 +125,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         band_range = band_range.to(U.GHz)
     
     
-    print('Field of view: {} arcsec'.format(round(fov.value, 3)))
-    print('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
-    print('Cell size: {} arcsec'.format(round(cell_size.value, 4)))
-    print('Central Frequency: {}'.format(central_freq))
-    print('Spectral Window: {}'.format(band_range))
-    print('Freq Support: {}'.format(freq_sup))
-    print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
+    
     
     if redshift is None:
         if isinstance(rest_frequency, np.ndarray):
@@ -141,7 +135,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
     lum_infared = None
-    continum, line_fluxes, line_names, redshift, line_frequency, n_channels  = uas.process_spectral_data(
+    continum, line_fluxes, line_names, redshift, line_frequency, n_channels_nw, bandwidth, freq_sup_nw  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
                                                                         redshift, 
@@ -154,11 +148,21 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         n_lines
                                                                         )
     #print(continum.shape, line_fluxes, line_names)
+    if n_channels_nw != n_channels:
+        freq_sup = freq_sup_nw * U.MHz
+        n_channels = n_channels_nw
+        band_range  = n_channels * freq_sup
+    
     central_channel_index = n_channels // 2
     source_channel_index = np.array([int(central_channel_index * source_freq * U.GHz / central_freq) for source_freq in line_frequency])
-
+    print('Field of view: {} arcsec'.format(round(fov.value, 3)))
+    print('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
+    print('Cell size: {} arcsec'.format(round(cell_size.value, 4)))
+    print('Central Frequency: {}'.format(central_freq))
+    print('Spectral Window: {}'.format(band_range))
+    print('Freq Support: {}'.format(freq_sup))
+    print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
     print('Redshift: {}'.format(redshift))
-    #print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
     print('Band: ', band)
     print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
@@ -181,7 +185,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         snapshot = None
         tng_subhaloid = None
 
-    if type(line_names) == list:
+    if type(line_names) == list or isinstance(line_names, np.ndarray):
         for line_name, line_flux in zip(line_names, line_fluxes): 
             print('Simulating Line {} Flux: {} at z {}'.format(line_name, line_flux, redshift))
     else:
