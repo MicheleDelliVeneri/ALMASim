@@ -141,7 +141,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
     lum_infared = None
-    print(line_names)
     continum, line_fluxes, line_names, redshift, line_frequency, n_channels  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
@@ -184,10 +183,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
 
     if type(line_names) == list:
         for line_name, line_flux in zip(line_names, line_fluxes): 
-            print('{} Flux: {} at z {}'.format(line_name, line_flux, redshift))
+            print('Simulating Line {} Flux: {} at z {}'.format(line_name, line_flux, redshift))
     else:
-        print('{} Flux: {} at z {}'.format(line_names, line_fluxes, redshift))
-
+        print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
+    print('Simulating Continum Flux: {}'.format(np.mean(continum)))
     
     # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
@@ -204,7 +203,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
         fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
-        datacube = usm.insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_channels)
+        datacube = usm.insert_pointlike(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_z, n_channels)
     elif source_type == 'gaussian':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
@@ -212,7 +211,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         fwhm_y =[np.random.randint(3, 10) for i in range(len(pos_z))]   
         fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
         angle = np.random.randint(0, 180)
-        datacube = usm.insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
+        datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':
         datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
 

@@ -1506,12 +1506,14 @@ def gaussian(x, amp, cen, fwhm):
     amp: amplitude
     fwhm: fwhm
     """
-    def integrand(x, amp, cen, fwhm):
-        return np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
-
-    integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
-    norm = 1 / integral
-    return norm * amp * np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    #def integrand(x, amp, cen, fwhm):
+    #    return np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    #integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
+    gaussian = np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    norm = amp /  np.sum(gaussian)
+    result = norm * gaussian
+    #norm = 1 / integral
+    return result
 
 def gaussian2d(x, y, amp, cen_x, cen_y, fwhm_x, fwhm_y, angle):
     """

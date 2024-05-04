@@ -923,11 +923,9 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         filtered_lines = db_line[line_mask]
         if len(filtered_lines) == 0:
             n_possible = (db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum()
-            print(f'Warning: No lines found in the provided bandwidth. {n_possible} possible lines could fall at a higher redshift, increasing.')
             if n_possible != 0:
                 redshift += 0.01
             else:
-                print(f'Warning: No lines found in the provided bandwisth, cannot increse redshift, increasing bandwidth')
                 freq_min += freq_min / 10
                 freq_max += freq_max / 10
 
@@ -1014,7 +1012,6 @@ def sample_given_redshift(metadata, n, rest_frequency, extended):
     metadata.loc[:, 'redshift'] = redshifts
     metadata = metadata[metadata['redshift'] >= 0]
     snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
-    print(snapshots)
     metadata['snapshot'] = snapshots
     if extended == True:
         #metatada = metadata[metadata['redshift'] < 0.05]
