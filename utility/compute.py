@@ -182,9 +182,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         snapshot = None
         tng_subhaloid = None
 
-    #brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
-    
-    #line_name = uas.get_line_name(rest_frequency.value)
     if type(line_names) == list:
         for line_name, line_flux in zip(line_names, line_fluxes): 
             print('{} Flux: {} at z {}'.format(line_name, line_flux, redshift))
@@ -206,16 +203,16 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     if source_type == 'point':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
-        fwhm_z = np.random.randint(3, 10)   
-        datacube = usm.insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_pix, n_channels)
+        fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
+        datacube = usm.insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_channels)
     elif source_type == 'gaussian':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-        pos_z = int(source_channel_index)
-        fwhm_x = np.random.randint(3, 10)
-        fwhm_y = np.random.randint(3, 10)
-        fwhm_z = np.random.randint(3, 10)
+        pos_z = [int(index) for index in source_channel_index]
+        fwhm_x = [np.random.randint(3, 10) for i in range(len(pos_z))]   
+        fwhm_y =[np.random.randint(3, 10) for i in range(len(pos_z))]   
+        fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
         angle = np.random.randint(0, 180)
-        datacube = usm.insert_gaussian(datacube, continum, line_fluxes, line_names, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
+        datacube = usm.insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':
         datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
 
@@ -242,7 +239,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     #    skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
     ##    skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
      #   uas.write_numpy_to_fits(skymodel, sky_header, filename)
-    """
+    
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
@@ -300,6 +297,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"),
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
-    """
+    
     shutil.rmtree(sim_output_dir)
     
