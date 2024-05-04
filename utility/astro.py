@@ -944,6 +944,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             filtered_lines = user_lines
         else:
             filtered_lines = user_lines
+    print('Injecting {} lines'.format(len(filtered_lines)))
     filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
     filtered_lines.sort_values(by='distance', inplace=True)
     cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
