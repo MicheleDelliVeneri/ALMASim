@@ -932,8 +932,16 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
-        if len(user_lines) == 0:
+        if len(user_lines) != len(line_names):
             print('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
+            # Find rows in filtered_lines that are not already in user_lines
+            additional_lines = filtered_lines[~filtered_lines.index.isin(user_lines.index)]
+            # Add rows from filtered_lines to user_lines until the length matches len(line_names)
+            num_additional_rows = len(line_names) - len(user_lines)
+            additional_lines = additional_lines.iloc[:num_additional_rows]  # Ensure we only select the required number of rows
+            # Add additional_lines to user_lines
+            user_lines = pd.concat([user_lines, additional_lines])
+            filtered_lines = user_lines
         else:
             filtered_lines = user_lines
     filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
