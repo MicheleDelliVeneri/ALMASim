@@ -1505,7 +1505,12 @@ def gaussian(x, amp, cen, fwhm):
     amp: amplitude
     fwhm: fwhm
     """
-    return amp*np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    def integrand(x, amp, cen, fwhm):
+        return np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+
+    integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
+    norm = 1 / integral
+    return norm * amp * np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
 
 def threedgaussian(amplitude, spind, chan, center_x, center_y, width_x, width_y, angle, idxs):
     """
@@ -1528,11 +1533,15 @@ def threedgaussian(amplitude, spind, chan, center_x, center_y, width_x, width_y,
     yp = idxs[0] * np.sin(angle) + idxs[1] * np.cos(angle)
     v1 = 230e9 - (64 * 10e6)
     v2 = v1+10e6*chan
-    g = (10**(np.log10(amplitude) + (spind) * np.log10(v1/v2))) * \
+    def integrand(amplitude, spind, v1, v2, rcen_x, rcen_y, xp, yp, width_x, width_y):
+        return (10**(np.log10(amplitude) + (spind) * np.log10(v1/v2))) * \
+                        np.exp(-(((rcen_x-xp)/width_x)**2+((rcen_y-yp)/width_y)**2)/2.)
+    integral, _ = quad(integrand, -np.inf, np.inf, args=(amplitude, spind, v1, v2, rcen_x, rcen_y, xp, yp, width_x, width_y))
+    norm = 1 / integral
+    return norm * (10**(np.log10(amplitude) + (spind) * np.log10(v1/v2))) * \
         np.exp(-(((rcen_x-xp)/width_x)**2+((rcen_y-yp)/width_y)**2)/2.)
-    return g
 
-def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_px, n_chan):
+def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_chan):
     """
     Inserts a point source into the datacube at the specified position and amplitude.
     datacube: datacube object
@@ -1545,14 +1554,10 @@ def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_
     n_chan: number of channels in the cube
     """
     z_idxs = np.arange(0, n_chan)
-    gs = [gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z) for i in range(len(line_fluxes))]
-    ts = np.zeros((n_px, n_px, n_chan))
-    ts[int(pos_x), int(pos_y), :] = continum
-    for z in tqdm(range(datacube._array.shape[2]), total=datacube._array.shape[2]):
-        slice_ = ts[:, :, z]
-        for g in gs:
-            slice_ += g[z] 
-        datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
+    gs = np.zeros(n_channels)
+    for i in range(len(line_fluxes)):
+        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])  
+    datacube._array[pos_x, pos_y, ] = continum * gs * U.Jy * U.pix**-2
     return datacube
 
 def insert_gaussian(datacube, amplitude, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_chan):
