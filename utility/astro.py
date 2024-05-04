@@ -918,7 +918,15 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     sed['GHz'] = sed['GHz'] * (1 + redshift)
     filtered_lines = db_line.copy()
     filtered_lines.drop(filtered_lines.index, inplace=True)
-    while len(filtered_lines) == 0:
+    if line_names is None:
+        if n_lines != None:
+            n = n_lines
+        else:
+            n = 1
+    else:
+        n = len(line_names)
+        
+    while len(filtered_lines) < n:
         db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] * (1 + redshift)
         line_mask = (db_line['shifted_freq(GHz)'].astype(float) >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) <= freq_max)
         filtered_lines = db_line[line_mask]
@@ -1055,7 +1063,7 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         f.write('Integration Time: {}\n'.format(int_time))
         f.write('Total Time: {}\n'.format(total_time))
         f.write('Cube Size: {} x {} x {} pixels\n'.format(n_pix, n_pix, n_channels))
-        for i in rage(len(line_fluxes)):
+        for i in range(len(line_fluxes)):
             f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy\n'.format(line_names[i], line_frequencies[i], line_fluxes[i]))
         if snapshot != None:
             f.write('TNG Snapshot ID: {}\n'.format(snapshot))
