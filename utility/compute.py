@@ -269,6 +269,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         overwrite=True,
         graphics="none",
         )
+    print('Simulated observation for {}'.format(project_name))    
     
     scale = random.uniform(0, 1)
     ms_path = os.path.join(sim_output_dir, "{}.{}.noisy.ms".format(project_name, antenna_name))
@@ -288,6 +289,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         pbcor=True,
         pblimit=0.2, 
         )
+    print('Created dirty cube for {}'.format(project_name))
+    print('Exporting...')
     exportfits(imagename=os.path.join(project_name, '{}.{}.image'.format(project_name, antenna_name)), 
        fitsimage=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"), overwrite=True)
     exportfits(imagename=os.path.join(project_name, '{}.{}.skymodel'.format(project_name, antenna_name)), 
@@ -302,6 +305,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"),
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
-    
+    print('Finished')
     shutil.rmtree(sim_output_dir)
     
