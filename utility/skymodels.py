@@ -19,6 +19,7 @@ import numpy as np
 from itertools import product
 from tqdm import tqdm
 from astropy.time import Time
+from scipy.integrate import quad, nquad
 
 class myTNGSource(SPHSource):
     def __init__(
@@ -1547,11 +1548,11 @@ def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_
     n_chan: number of channels in the cube
     """
     z_idxs = np.arange(0, n_chan)
-    gs = np.zeros(n_channels)
+    gs = np.zeros(n_chan)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])  
-    datacube._array[pos_x, pos_y, ] = continum + gs 
-    return datacube * U.Jy * U.pix**-2
+    datacube._array[pos_x, pos_y, ] = (continum + gs) * U.Jy * U.pix**-2
+    return datacube 
 
 def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_chan):
     """
@@ -1570,12 +1571,12 @@ def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x
     """
     X, Y = np.meshgrid(np.arange(n_px), np.arange(n_px))
     z_idxs = np.arange(0, n_chan)
-    gs = np.zeros(n_channels)
+    gs = np.zeros(n_chan)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in tqdm(range(0, n_chan)):
-        datacube._array[:, :, z] = gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle) + gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)  
-    return datacube * U.Jy * U.pix**-2
+        datacube._array[:, :, z] = (gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle) + gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)) * U.Jy * U.pix**-2 
+    return datacube 
 
 def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
     source = myTNGSource(
