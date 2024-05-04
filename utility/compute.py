@@ -132,26 +132,31 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Spectral Window: {}'.format(band_range))
     print('Freq Support: {}'.format(freq_sup))
     print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
-    central_channel_index = n_channels // 2
-    source_channel_index = int(central_channel_index * source_freq / central_freq)
+    
     if redshift is None:
+        if isinstance(rest_frequency, np.ndarray):
+            rest_frequency = np.sort(np.array(rest_frequency))[0]
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
-
-    continum, line_fluxes, line_names, redshift, rest_frequency = uas.process_spectral_data(
+    lum_infared = None
+    continum, line_fluxes, line_names, redshift, line_frequency, n_channels  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
                                                                         redshift, 
                                                                         central_freq.value,
                                                                         band_range.value,
                                                                         source_freq.value,
-                                                                        n_channels, 
+                                                                        n_channels,
+                                                                        lum_infared,
                                                                         line_names,
                                                                         n_lines
                                                                         )
-    print(continum.shape, line_fluxes, line_names)
+    #print(continum.shape, line_fluxes, line_names)
+    central_channel_index = n_channels // 2
+    source_channel_index = np.array([int(central_channel_index * source_freq * U.GHz / central_freq) for source_freq in line_frequency])
+
     print('Redshift: {}'.format(redshift))
     #print('Rest frequency: {} GHz'.format(round(rest_frequency.value, 2)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
@@ -176,10 +181,12 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         snapshot = None
         tng_subhaloid = None
 
-    #brightness = uas.sample_from_brightness_given_redshift(vel_res, rest_frequency.value, os.path.join(main_dir, 'brightnes', 'CO10.dat'), redshift)
-    
-    #line_name = uas.get_line_name(rest_frequency.value)
-    print('{} Brightness: {}'.format(line_name, round(brightness, 4)))
+    if type(line_names) == list:
+        for line_name, line_flux in zip(line_names, line_fluxes): 
+            print('Simulating Line {} Flux: {} at z {}'.format(line_name, line_flux, redshift))
+    else:
+        print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
+    print('Simulating Continum Flux: {}'.format(np.mean(continum)))
     
     # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
@@ -194,17 +201,17 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     wcs = datacube.wcs
     if source_type == 'point':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-        pos_z = int(source_channel_index)
-        fwhm_z = np.random.randint(3, 10)   
-        datacube = usm.insert_pointlike(datacube, brightness, pos_x, pos_y, pos_z, fwhm_z, n_pix, n_channels)
+        pos_z = [int(index) for index in source_channel_index]
+        fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
+        datacube = usm.insert_pointlike(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_z, n_channels)
     elif source_type == 'gaussian':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-        pos_z = int(source_channel_index)
-        fwhm_x = np.random.randint(3, 10)
-        fwhm_y = np.random.randint(3, 10)
-        fwhm_z = np.random.randint(3, 10)
+        pos_z = [int(index) for index in source_channel_index]
+        fwhm_x = [np.random.randint(3, 10) for i in range(len(pos_z))]   
+        fwhm_y =[np.random.randint(3, 10) for i in range(len(pos_z))]   
+        fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
         angle = np.random.randint(0, 180)
-        datacube = usm.insert_gaussian(datacube, brightness, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
+        datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':
         datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
 
@@ -216,6 +223,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         datacube = usm.insert_serendipitous(datacube, brightness, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels)
     
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
+    print('Writing datacube to {}'.format(filename))
     usm.write_datacube_to_fits(datacube, filename)
     del datacube
     upl.plot_skymodel(filename, inx, output_dir, show=False)
@@ -230,11 +238,12 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     #    skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
     ##    skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
      #   uas.write_numpy_to_fits(skymodel, sky_header, filename)
+    
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
                             ra, dec, ang_res, vel_res, int_time, total_time, band, central_freq,
-                            source_freq, redshift, brightness, fov, beam_size, cell_size, n_pix, 
+                            source_freq, redshift, line_fluxes, fov, beam_size, cell_size, n_pix, 
                             n_channels, snapshot, tng_subhaloid)
     simobserve(
         project=project_name, 
@@ -287,5 +296,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"),
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
+    
     shutil.rmtree(sim_output_dir)
     

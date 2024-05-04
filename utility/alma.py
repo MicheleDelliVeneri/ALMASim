@@ -214,6 +214,7 @@ def query_observations(service, member_ous_uid, target_name):
             WHERE member_ous_uid = '{member_ous_uid}'
             AND target_name = '{target_name}'
             AND is_mosaic = 'F'
+            AND science_observation = 'T'    
             """
 
     result = service.search(query).to_table().to_pandas()
