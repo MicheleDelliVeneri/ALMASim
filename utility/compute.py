@@ -258,7 +258,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         user_pwv=pwv,
         verbose=True,
         overwrite=True,
-        graphics="none",
+        #graphics="none",
         )
     print('Simulated observation for {}'.format(project_name))    
     

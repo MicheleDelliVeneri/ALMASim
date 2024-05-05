@@ -944,7 +944,8 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         if len(filtered_lines) > r_len:
             pbar.update(1)   
         recorded_length = len(filtered_lines)
-    pbar.update(1)        
+    pbar.update(1) 
+    freq_max += freq_max / 10      
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) != len(line_names):
