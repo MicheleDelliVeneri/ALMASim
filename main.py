@@ -130,16 +130,19 @@ if __name__ == '__main__':
         redshifts = np.array([None]*n_sims)
         n_lines = np.array([None]*n_sims)
         line_names = np.array([line_names]*n_sims)
+        z1 = None
     else:
         redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
         redshifts = '1 2'
         z0, z1 = redshifts.split()
         z0, z1 = float(z0), float(z1)
         redshifts = np.random.uniform(z0, z1, n_sims)
-        rest_freqs = np.array([None]*n_sims)
         n_lines = input('Please provide the number of lines you want to simulate as an integer: ')
         n_lines = np.array([int(n_lines)]*n_sims)
+        rest_freq, _ = uas.get_line_info(main_path)
         line_names = np.array([None]*n_sims)
+        rest_freqs = np.array([None]*n_sims)
+
 
     fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     if fix_spatial != 'y' and fix_spatial != 'n':

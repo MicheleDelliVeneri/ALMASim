@@ -41,6 +41,7 @@ def load_metadata(main_path, metadata_name):
             metadata_name = metadata_name + '.csv'
     try:
         metadata = pd.read_csv(os.path.join(main_path, "metadata", metadata_name))
+        print('Metadata contains {} samples'.format(len(metadata)))
         return metadata
     except FileNotFoundError:
         print("File not found. Please enter the metadata name again.")
@@ -133,7 +134,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         rest_frequency = rest_frequency * U.GHz
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
-        rest_frequency = uas.compute_rest_frequency_from_redshift(source_freq, redshift) * U.GHz
+        rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
     lum_infared = None
     continum, line_fluxes, line_names, redshift, line_frequency, n_channels_nw, bandwidth, freq_sup_nw  = uas.process_spectral_data(
                                                                         source_type,
@@ -251,7 +252,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
                             ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
                             redshift, line_fluxes, line_names, line_frequency, 
-                            fov, beam_size, cell_size, n_pix, 
+                            continum, fov, beam_size, cell_size, n_pix, 
                             n_channels, snapshot, tng_subhaloid)
     simobserve(
         project=project_name, 

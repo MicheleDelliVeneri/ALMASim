@@ -942,10 +942,9 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             freq_max += freq_max / 10
         pbar.set_description("Increasing Bandwidth {}".format(round(freq_max - freq_min), 3))
         if len(filtered_lines) > r_len:
-            pbar.update(1)
-        
+            pbar.update(1)   
         recorded_length = len(filtered_lines)
-        
+    pbar.update(1)        
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) != len(line_names):
@@ -990,50 +989,32 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_support = bandwidth / n_channels
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels, bandwidth, freq_support
 
-def compute_rest_frequency_from_redshift(source_freq, redshift):
-    line_db = {
-        'H(1-0)': 14.405,
-        'H(2-1)': 28.20536,
-        'CO(1-0)': 115.271,
-        'CO(2-1)': 230.538,
-        
-    }
-    source_freqs  = line_db.values() * (1 + redshift)
-    freq_names = line_db.keys()
+def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
+    source_freqs  = db_line['freq(GHz)'].values * (1 + redshift)
+    freq_names =  db_line['Line'].values
     closest_freq = min(source_freqs, key=lambda x:abs(x-source_freq))
-    line_name = freq_names[np.where(source_freqs == closest_freq)]
-    rest_frequency = get_line_rest_frequency(line_name) 
+    line_name = freq_names[np.where(source_freqs == closest_freq)][0]
+    rest_frequency = db_line[db_line['Line'] == line_name]['freq(GHz)'].values[0]
     return rest_frequency
 
-def get_line_rest_frequency(line_name):
-    if line_name == 'CO(1-0)':
-        rest_frequency = 115.271
-    elif line_name == 'CO(2-1)':
-        rest_frequency = 230.538
-    elif line_name == "H(1-0)":
-        rest_frequency = 1420.405
-    elif line_name == "H(2-1)":
-        rest_frequency = 2820.536
-    return rest_frequency
-  
-def get_line_name(frequency):
-    line_db = {
-        'H(1-0)': 14.405,
-        'H(2-1)': 28.20536,
-        'CO(1-0)': 115.271,
-        'CO(2-1)': 230.538, 
-    }
-    min_diff = float('inf')
-    closest_line = None
+def get_line_rest_frequency(master_path, line_names=None):
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    if line_names is not None:
+        db_line = db_line[np.isin(db_line['Line'], line_names)]
+    return db_line['freq(GHz)'].values
+
+def get_line_name_from_rest_frequency(master_path, rest_frequencies):
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
+    if isinstance(rest_frequencies, np.ndarray):
+        line_names = db_line[db_line['freq(GHz)'].isin(rest_frequencies)]['Line'].values
+    else:
+        line_names = db_line[db_line['freq(GHz)'] == rest_frequencies]['Line'].values
+    return line_names
     
-    for line_name, line_freq in line_db.items():
-        diff = abs(line_freq - frequency)
-        if diff < min_diff:
-            min_diff = diff
-            closest_line = line_name
-    return closest_line
-    
-def sample_given_redshift(metadata, n, rest_frequency, extended):
+def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     pd.options.mode.chained_assignment = None
     if isinstance(rest_frequency, np.ndarray):
         rest_frequency = np.sort(np.array(rest_frequency))[0]
@@ -1041,7 +1022,10 @@ def sample_given_redshift(metadata, n, rest_frequency, extended):
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
     metadata.loc[:, 'redshift'] = redshifts
-    metadata = metadata[metadata['redshift'] >= 0]
+    if zmax != None:
+        metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
+    else:
+        metadata = metadata[metadata['redshift'] >= 0]
     snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
     metadata['snapshot'] = snapshots
     if extended == True:
@@ -1050,8 +1034,9 @@ def sample_given_redshift(metadata, n, rest_frequency, extended):
     sample = metadata.sample(n)
     return sample
 
-def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time, 
-                        total_time, band, band_range, central_freq, redshift, line_fluxes, line_names, line_frequencies,
+def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
+                        total_time, band, band_range, central_freq, redshift,
+                        line_fluxes, line_names, line_frequencies, continum,
                         fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo):
     with open(path, 'w') as f:
         f.write('Simulation Parameters:\n')
@@ -1062,13 +1047,14 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         f.write('Band Central Frequency: {}\n'.format(central_freq))
         f.write('Pixel size: {}\n'.format(cell_size))
         f.write('Beam Size: {}\n'.format(beam_size))
-        f.write('Fov: {} arcsec\n'.format(fov))
+        f.write('Fov: {}\n'.format(fov))
         f.write('Angular Resolution: {}\n'.format(ang_res))
         f.write('Velocity Resolution: {}\n'.format(vel_res))
         f.write('Redshift: {}\n'.format(redshift))
         f.write('Integration Time: {}\n'.format(int_time))
         f.write('Total Time: {}\n'.format(total_time))
         f.write('Cube Size: {} x {} x {} pixels\n'.format(n_pix, n_pix, n_channels))
+        f.write('Mean Continum Flux: {}\n'.format(np.mean(continum)))
         for i in range(len(line_fluxes)):
             f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy\n'.format(line_names[i], line_frequencies[i], line_fluxes[i]))
         if snapshot != None:
