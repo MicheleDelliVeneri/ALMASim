@@ -19,6 +19,7 @@ import subprocess
 import six
 from math import pi
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 def write_numpy_to_fits(array, header, path):
     hdu = fits.PrimaryHDU(
@@ -925,18 +926,25 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             n = 1
     else:
         n = len(line_names)
-        
+    pbar = tqdm(desc='Searching lines....', total=n)
     while len(filtered_lines) < n:
+        r_len = len(filtered_lines)
+        filtered_lines = db_line.copy()
+        filtered_lines.drop(filtered_lines.index, inplace=True)
         db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] * (1 + redshift)
         line_mask = (db_line['shifted_freq(GHz)'].astype(float) >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) <= freq_max)
         filtered_lines = db_line[line_mask]
-        if len(filtered_lines) == 0:
-            n_possible = (db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum()
-            if n_possible != 0:
-                redshift += 0.01
-            else:
-                freq_min += freq_min / 10
-                freq_max += freq_max / 10
+        if len(filtered_lines) < n:
+            n_possible = (db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) >= freq_min).sum()
+            ##if n_possible != 0:
+            #    redshift += 0.01
+            freq_min -= freq_min / 10
+            freq_max += freq_max / 10
+        pbar.set_description("Increasing Bandwidth {}".format(round(freq_max - freq_min), 3))
+        if len(filtered_lines) > r_len:
+            pbar.update(1)
+        
+        recorded_length = len(filtered_lines)
         
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
@@ -974,9 +982,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     else:
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
     if freq_min != save_freq_min:
-        n_channels = int(n_channels * (freq_max / save_freq_max))
         print('Bandwidth has been adjusted to fit the lines')
-        print('New number of channels:', n_channels)
     if redshift != saved_redshift:
         print('Redshift has been adjusted to fit the lines')
         print('New redshift:', redshift)

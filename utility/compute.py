@@ -148,6 +148,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         n_lines
                                                                         )
     #print(continum.shape, line_fluxes, line_names)
+    print('Continum shape: {}'.format(continum.shape))
+    print('N Channels: {}'.format(n_channels_nw))
     if n_channels_nw != n_channels:
         freq_sup = freq_sup_nw * U.MHz
         n_channels = n_channels_nw
