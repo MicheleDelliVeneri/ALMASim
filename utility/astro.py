@@ -1018,6 +1018,8 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     pd.options.mode.chained_assignment = None
     if isinstance(rest_frequency, np.ndarray):
         rest_frequency = np.sort(np.array(rest_frequency))[0]
+    print(f'Filtering metadata based on rest frequency of selected lines: {rest_frequency}')
+    print(f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}")
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
@@ -1031,6 +1033,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     if extended == True:
         #metatada = metadata[metadata['redshift'] < 0.05]
         metadata = metadata[(metadata['snapshot'] == 99) | (metadata['snapshot'] == 95)]
+
     sample = metadata.sample(n)
     return sample
 

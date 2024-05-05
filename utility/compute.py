@@ -194,8 +194,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     else:
         print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
     print('Simulating Continum Flux: {}'.format(np.mean(continum)))
-    
-    # LUCA BRIGHTNESS FUNCTION n_canali, band_range, freq_sup, band, central_freq)
     datacube = usm.DataCube(
         n_px_x=n_pix, 
         n_px_y=n_pix,
@@ -214,8 +212,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     elif source_type == 'gaussian':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
-        fwhm_x = [np.random.randint(3, 10) for i in range(len(pos_z))]   
-        fwhm_y =[np.random.randint(3, 10) for i in range(len(pos_z))]   
+        fwhm_x = np.random.randint(3, 10) 
+        fwhm_y = np.random.randint(3, 10)   
         fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
         angle = np.random.randint(0, 180)
         datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
@@ -235,17 +233,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Done')
     del datacube
     upl.plot_skymodel(filename, inx, output_dir, show=False)
-    #skymodel, sky_header = uas.load_fits(filename)
-    #sim_brightness = np.max(skymodel)
-    
-    #if sim_brightness != brightness:
-    #    print('Detected peak is: {} re-normalizing'.format(sim_brightness) )
-    #    flattened_skymodel = np.ravel(skymodel)
-    #    t_min = 0
-    #    t_max = brightness
-    #    skymodel_norm = (flattened_skymodel - np.min(flattened_skymodel)) / (np.max(flattened_skymodel) - np.min(flattened_skymodel)) * (t_max - t_min) + t_min
-    ##    skymodel = np.reshape(skymodel_norm, np.shape(skymodel))
-     #   uas.write_numpy_to_fits(skymodel, sky_header, filename)
     
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
@@ -258,7 +245,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         project=project_name, 
         skymodel=filename,
         obsmode="int",
-        setpointings=True,
+        #setpointings=True,
         thermalnoise="tsys-atm",
         antennalist=antennalist,
         indirection=pos_string,

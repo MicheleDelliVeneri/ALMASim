@@ -193,9 +193,9 @@ if __name__ == '__main__':
         tng_apis = np.array([None]*n_sims)    
     
     if source_type == 'extended': 
-        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True)
+        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True, z1)
     else:
-        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False)
+        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False, z1)
     print('\nMetadata retrieved\n')
     inject_ser = input('Do you want to inject serendipitous sources? (y/n) ')
     if inject_ser != 'y' and inject_ser != 'n':
