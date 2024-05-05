@@ -887,7 +887,7 @@ def cont_to_line(row):
     return line_delta
 
 def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
-    source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
+    source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None, snr=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -973,7 +973,9 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             filtered_lines = filtered_lines.head(n_lines)
     line_names = filtered_lines['Line'].values
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
-    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared / (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value) + filtered_lines.apply(cont_to_line, axis=1).values)
+    if snr is None:
+        snr = 1
+    line_fluxes = snr * cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared / (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value) + filtered_lines.apply(cont_to_line, axis=1).values)
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
@@ -987,6 +989,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         print('New redshift:', redshift)
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
+
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels, bandwidth, freq_support
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):

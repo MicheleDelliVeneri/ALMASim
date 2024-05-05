@@ -143,6 +143,15 @@ if __name__ == '__main__':
         line_names = np.array([None]*n_sims)
         rest_freqs = np.array([None]*n_sims)
 
+    fix_snr = input('Do you want to fix the SNR? (y/n) ')
+    if fix_snr != 'y' and fix_snr != 'n':
+        print("Invalid input. Please insert y or n.")
+        fix_snr = input('Do you want to fix the SNR? (y/n) ')
+    if fix_snr == 'y':
+        snr = input('Insert the desired SNR: ')
+        snr = float(snr)
+    else:
+        snr = None
 
     fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     if fix_spatial != 'y' and fix_spatial != 'n':
@@ -227,7 +236,7 @@ if __name__ == '__main__':
     main_paths = np.array([main_path]*n_sims)
     ncpus = np.array([ncpu]*n_sims)
     project_names = np.array([project_name]*n_sims)
-    
+    snrs = np.array([snr]*n_sims)
     #save_seconday = input('Store the Primary Beam, PSF and MS? (y/n) ')
     save_secondary = 'y'
     if save_secondary == 'y':
@@ -239,11 +248,11 @@ if __name__ == '__main__':
     input_params = pd.DataFrame(zip(
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
-        antenna_arrays, n_pixs, n_channels, source_types, 
+        antenna_arrays, n_pixs, n_channels, source_types, snrs,
         tng_apis, ncpus, rest_freqs, redshifts, n_lines, line_names, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
-        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
+        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type', 'snr',
         'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
     
     
