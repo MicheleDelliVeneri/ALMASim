@@ -836,12 +836,12 @@ def get_line_info(main_path, idxs=None):
 
 def sed_reading(type_, path, lum_infrared=None):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
-    if type_ == "extended":
+    if type_ == "extended" or type_ == 'diffuse':
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
         redshift = 10**(-4)
         if lum_infrared is None: 
             lum_infrared = 1e+10 # luminosity in solar luminosities
-    elif type_ == "point":
+    elif type_ == "point" or type_ == "gaussian":
         file_path = os.path.join(path, 'SED_low_z_type2_AGN.dat')
         redshift = 0.05
         if lum_infrared is None:
