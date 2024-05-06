@@ -879,7 +879,7 @@ def cont_to_line(row):
     return line_delta
 
 def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
-    source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
+    source_frequency, n_channels, lum_infrared, line_names=None, n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
