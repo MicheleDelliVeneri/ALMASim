@@ -879,7 +879,7 @@ def cont_to_line(row):
     return line_delta
 
 def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
-    source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None, snr=None):
+    source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -958,7 +958,6 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
     cont_fluxes = sed[cont_mask]['Jy'].values
     cont_frequencies = sed[cont_mask]['GHz'].values
-
     if n_lines != None:
         if n_lines > len(filtered_lines):
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
@@ -966,9 +965,9 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             filtered_lines = filtered_lines.head(n_lines)
     line_names = filtered_lines['Line'].values
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
-    if snr is None:
-        snr = 1
-    line_fluxes = snr * cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared / (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value) + filtered_lines.apply(cont_to_line, axis=1).values)
+    freq_steps = np.array([cont_frequencies[line_index + 1] - cont_frequencies[line_index] for line_index in line_indexes]) * U.GHz
+    freq_steps = freq_steps.to(U.Hz).value
+    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared_point / freq_steps) + cs)
     line_frequencies = filtered_lines['shifted_freq(GHz)'].astype(float).values
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
