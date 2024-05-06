@@ -834,16 +834,18 @@ def get_line_info(main_path, idxs=None):
     else:
         return rest_frequencies, line_names
 
-def sed_reading(type_, path, lum_infrared=None):
+def sed_reading(type_, path, lum_infrared=None, redshift=None):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
     if type_ == "extended" or type_ == 'diffuse':
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
-        redshift = 10**(-4)
+        if redshift is None:
+            redshift = 10**(-4)
         if lum_infrared is None: 
             lum_infrared = 1e+10 # luminosity in solar luminosities
     elif type_ == "point" or type_ == "gaussian":
         file_path = os.path.join(path, 'SED_low_z_type2_AGN.dat')
-        redshift = 0.05
+        if redshift is None:
+            redshift = 0.05
         if lum_infrared is None:
             lum_infrared = 1e+9 # luminosity in solar luminosities
     else:
@@ -865,16 +867,6 @@ def sed_reading(type_, path, lum_infrared=None):
     #flux_infrared_jy = flux_infrared  / (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True) 
-    plt.figure(figsize=(10,10))
-    plt.plot(sed['GHz'], sed['Jy'])
-    #plt.plot(sed['GHz'], flux_infrared_jy, 'ro')
-    plt.xlabel('GHz')
-    plt.ylabel('Jy')
-    plt.title('SED')
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.savefig(path + '/SED.png')
-    plt.show()
     return sed, flux_infrared
 
 def cont_finder(sed,line_frequency):
