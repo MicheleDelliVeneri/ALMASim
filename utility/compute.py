@@ -53,7 +53,7 @@ def load_metadata(main_path, metadata_name):
 
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
-              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift,
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, 
               n_lines, line_names, save_secondary=False, 
               inject_serendipitous=False):
     """
@@ -240,7 +240,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                             ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
                             redshift, line_fluxes, line_names, line_frequency, 
                             continum, fov, beam_size, cell_size, n_pix, 
-                            n_channels, snapshot, tng_subhaloid)
+                            n_channels, snapshot, tng_subhaloid, lum_infrared)
     simobserve(
         project=project_name, 
         skymodel=filename,
