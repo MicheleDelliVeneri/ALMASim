@@ -537,12 +537,12 @@ def plot_science_keywords_distributions(service, master_path):
             plt.close()
     
 
-def query_for_metadata_by_science_type(metadata_name, main_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
+def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
-    plot_science_keywords_distributions(service, main_path, output_dir)
-    print('Please take a look at distributions in plots folder: {output_dir}/plots')
+    plot_science_keywords_distributions(service, main_path)
+    print('Please take a look at distributions in plots folder: {main_path}/plots')
     #plt.rcParams["figure.figsize"] = (14,18)
     #counts.plot(kind='barh', stacked=True)
     #plt.title('Science Keywords vs. ALMA Bands')
