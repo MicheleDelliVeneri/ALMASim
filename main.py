@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = "/mnt/storage/astro/almasim-test-24-5-1"
+    output_dir = "/mnt/storage/astro/almasim-test-24-5-4"
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
     tng_dir = "/mnt/storage/astro/TNGData"
     project_name = input("Insert the name of the project: ")
@@ -130,16 +130,19 @@ if __name__ == '__main__':
         redshifts = np.array([None]*n_sims)
         n_lines = np.array([None]*n_sims)
         line_names = np.array([line_names]*n_sims)
+        z1 = None
     else:
         redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
         redshifts = '1 2'
         z0, z1 = redshifts.split()
         z0, z1 = float(z0), float(z1)
         redshifts = np.random.uniform(z0, z1, n_sims)
-        rest_freqs = np.array([None]*n_sims)
         n_lines = input('Please provide the number of lines you want to simulate as an integer: ')
         n_lines = np.array([int(n_lines)]*n_sims)
+        rest_freq, _ = uas.get_line_info(main_path)
         line_names = np.array([None]*n_sims)
+        rest_freqs = np.array([None]*n_sims)
+
 
     fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     if fix_spatial != 'y' and fix_spatial != 'n':
@@ -190,9 +193,9 @@ if __name__ == '__main__':
         tng_apis = np.array([None]*n_sims)    
     
     if source_type == 'extended': 
-        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True)
+        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True, z1)
     else:
-        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False)
+        metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False, z1)
     print('\nMetadata retrieved\n')
     inject_ser = input('Do you want to inject serendipitous sources? (y/n) ')
     if inject_ser != 'y' and inject_ser != 'n':
@@ -224,7 +227,6 @@ if __name__ == '__main__':
     main_paths = np.array([main_path]*n_sims)
     ncpus = np.array([ncpu]*n_sims)
     project_names = np.array([project_name]*n_sims)
-    
     #save_seconday = input('Store the Primary Beam, PSF and MS? (y/n) ')
     save_secondary = 'y'
     if save_secondary == 'y':
@@ -236,7 +238,7 @@ if __name__ == '__main__':
     input_params = pd.DataFrame(zip(
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
-        antenna_arrays, n_pixs, n_channels, source_types, 
+        antenna_arrays, n_pixs, n_channels, source_types,
         tng_apis, ncpus, rest_freqs, redshifts, n_lines, line_names, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
