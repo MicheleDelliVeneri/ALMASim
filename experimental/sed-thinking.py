@@ -166,7 +166,7 @@ line_ratio = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
 # Get the index of the continuum where the line fall
 line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(cont_frequencies, float(x)))
 # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
-line_frequencies =  (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value
+line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
 line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz
 fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
 freq_steps = np.array([cont_frequencies[line_index + fwhm] - cont_frequencies[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
@@ -209,5 +209,8 @@ for flux, name in zip(line_fluxes, line_names):
 spectrum = cont_fluxes + gs
 plt.figure(figsize=(10, 10))
 plt.plot(new_cont_freq, spectrum)
-#plt.scatter(filtered_lines['shifted_freq(GHz)'].values , line_fluxes, label='Line Peak')
+for freq, name, index in zip(line_frequencies, line_names, line_indexes):
+    plt.text(new_cont_freq[index + 1], spectrum[index] + 0.001 * spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
+plt.xlabel('Frequency (GHz)')
+plt.ylabel('Flux (Jy)')
 plt.savefig('sed_plot.png')
