@@ -214,3 +214,31 @@ for freq, name, index in zip(line_frequencies, line_names, line_indexes):
 plt.xlabel('Frequency (GHz)')
 plt.ylabel('Flux (Jy)')
 plt.savefig('sed_plot.png')
+
+def luminosity_to_jy(velocity, data,  redshift=3):
+        """
+        This function takes as input a pandas db containing luminosities in K km s-1 pc2, redshifts, and luminosity distances in Mpc, 
+        and returns the brightness values in Jy.
+        
+        Parameters:
+        velocity (float): The velocity dispersion assumed for the line (Km s-1).
+        data (pandas.DataFrame): A pandas DataFrame containing the data.
+        rest_frequency (float): The rest frequency of the line in GHz. Defaults to 115.27 GHz for CO(1-0).
+
+        Output:
+        sigma: numpy.ndarray: An array of brightness values in Jy.
+
+        """
+        alpha = 3.255 * 10**7
+        # Intensity: 10^9 K km s−1 pc2
+        sigma = (data['Intensity'] * ( (1 + redshift) * data['Frequency'] **2)) / (alpha * velocity * (data['luminosity distance(Mpc)']**2))
+        return sigma
+
+new_lines = pd.read_csv(os.path.join(parent_dir,'brightnes','temporary.csv'))
+sigmas = luminosity_to_jy(400, new_lines, redshift=3)
+line_names = new_lines['Line'].values
+L_s = 5e13
+cs = sigmas / L_s
+for name, c in zip(line_name, cs):
+    print(name, c)
+
