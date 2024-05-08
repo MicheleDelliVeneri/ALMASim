@@ -881,8 +881,8 @@ def sed_reading(type_, path, lum_infrared=None, redshift=None):
     sed = sed.sort_values(by='GHz', ascending=True) 
     return sed, flux_infrared
 
-def cont_finder(sed,line_frequency):
-    cont_frequencies=sed['GHz'].values
+def cont_finder(cont_frequencies,line_frequency):
+    #cont_frequencies=sed['GHz'].values
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
     return np.argmin(distances)
 
@@ -978,15 +978,12 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     line_names = filtered_lines['Line'].values
     cs = filtered_lines['c'].values
     cdeltas = filtered_lines['err_c'].values
-    line_ratio = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
+    line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
     # Get the index of the continuum where the line fall
-    line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed[cont_mask], float(x)))
+    
     # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
     line_frequencies =  (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value
-    line_velocity = 400 
-    line_widths = 2 * np.sqrt(2 * np.log(2)) * line_frequencies * line_velocity / c.value
-    freq_steps = freq_steps.to(U.Hz).value
-    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared ) + cs) / line_widths
+    
 
 
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
@@ -994,6 +991,11 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
     else:
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
+    line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x)))
+    freq_steps = np.array([cont_frequencies[line_index + 1] - cont_frequencies[line_index] for line_index in line_indexes]) * U.GHz
+    freq_steps = freq_steps.to(U.Hz).value
+    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared ) + line_ratios) /freq_steps
+
     if freq_min != save_freq_min:
         print('Bandwidth has been adjusted to fit the lines')
     if redshift != saved_redshift:

@@ -8,7 +8,10 @@ from scipy.constants import c
 import sys
 from math import pi
 
-current_dir = os.getcwd()
+current_path = os.getcwd()
+parent_dir = os.path.join(current_path, "..")
+print("Current working directory:", current_path)
+print("Path to the parent directory:",parent_dir)
 
 def get_band_range(band):
     if band == 1:
@@ -107,11 +110,11 @@ def sed_reading(type_, path, lum_infrared=None, redshift=None):
     sed = sed.sort_values(by='GHz', ascending=True) 
     return sed, flux_infrared
 
-sed_point, flux_infrared_point = sed_reading("point", os.path.join(current_dir, 'brightnes'), lum_infrared=1e+12, redshift=0.05)
-sed_extended, flux_infrared_ext = sed_reading("extended", os.path.join(current_dir, 'brightnes'), lum_infrared=1e+12, redshift=0.05)
+sed_point, flux_infrared_point = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=0.05)
+sed_extended, flux_infrared_ext = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=0.05)
 
-def cont_finder(sed,line_frequency):
-    cont_frequencies=sed['GHz'].values
+def cont_finder(cont_frequencies,line_frequency):
+    #cont_frequencies=sed['GHz'].values
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
     return np.argmin(distances)
 
@@ -140,7 +143,7 @@ band = 6
 # Get band Central Frequency
 central_frequency = get_band_central_freq(band)
 # Load Line Database
-db_line = read_line_emission_csv(os.path.join(current_dir,'brightnes','calibrations_FIR(GHz).csv'))
+db_line = read_line_emission_csv(os.path.join(parent_dir,'brightnes','calibrations_FIR(GHz).csv'))
 # Shift the SED to the given redshift
 sed_point['GHz'] = sed_point['GHz'] * (1 + redshift)
 # Get limits of the ALMA Band
@@ -158,17 +161,53 @@ cont_frequencies = sed_point[cont_mask]['GHz'].values
 
 line_names = filtered_lines['Line'].values
 cs = filtered_lines['c'].values
+cdeltas = filtered_lines['err_c'].values
+line_ratio = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
 # Get the index of the continuum where the line fall
-line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(sed_point[cont_mask], float(x)))
+line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(cont_frequencies, float(x)))
 # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
 line_frequencies =  (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value
-freq_steps = np.array([cont_frequencies[line_index + 1] - cont_frequencies[line_index] for line_index in line_indexes]) * U.GHz
+line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz
+fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
+freq_steps = np.array([cont_frequencies[line_index + fwhm] - cont_frequencies[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
 freq_steps = freq_steps.to(U.Hz).value
-line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared_point / freq_steps) + cs)
+line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared_point ) + cs) / freq_steps
+n_channels = 1024
+new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
+if len(cont_fluxes) > 1: 
+    cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
+else:
+    cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
+line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x))).values
+print(line_indexes)
+def gaussian(x, amp, cen, fwhm):
+    """
+    Generates a 1D Gaussian given the following input parameters:
+    x: position
+    amp: amplitude
+    fwhm: fwhm
+    """
+    #def integrand(x, amp, cen, fwhm):
+    #    return np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    #integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
+    gaussian = np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    if np.sum(gaussian) != 0:
+        norm = amp /  np.sum(gaussian)
+    else:
+        norm = amp
+    result = norm * gaussian
+    #norm = 1 / integral
+    return result
+z_idxs = np.arange(0, n_channels)
+gs = np.zeros(n_channels)
+for i in range(len(line_fluxes)):
+    gs += gaussian(z_idxs, line_fluxes[i],  line_indexes[i], fwhms[i])
+
 print('Mean Continum: {}'.format(np.mean(cont_fluxes)))
 for flux, name in zip(line_fluxes, line_names):
     print('Line {} has a flux of {}'.format(name, flux))
+spectrum = cont_fluxes + gs
 plt.figure(figsize=(10, 10))
-plt.plot(cont_frequencies, cont_fluxes)
-plt.scatter(filtered_lines['shifted_freq(GHz)'].values , line_fluxes, label='Line Peak')
-plt.show()
+plt.plot(new_cont_freq, spectrum)
+#plt.scatter(filtered_lines['shifted_freq(GHz)'].values , line_fluxes, label='Line Peak')
+plt.savefig('sed_plot.png')
