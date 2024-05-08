@@ -7,7 +7,7 @@ from astropy import units as U
 from scipy.constants import c
 import sys
 from math import pi
-
+from astropy.cosmology import FlatLambdaCDM 
 current_path = os.getcwd()
 parent_dir = os.path.join(current_path, "..")
 print("Current working directory:", current_path)
@@ -216,6 +216,7 @@ plt.ylabel('Flux (Jy)')
 plt.savefig('sed_plot.png')
 
 def luminosity_to_jy(velocity, data,  redshift=3):
+    
         """
         This function takes as input a pandas db containing luminosities in K km s-1 pc2, redshifts, and luminosity distances in Mpc, 
         and returns the brightness values in Jy.
@@ -229,16 +230,17 @@ def luminosity_to_jy(velocity, data,  redshift=3):
         sigma: numpy.ndarray: An array of brightness values in Jy.
 
         """
-        alpha = 3.255 * 10**7
+        alpha = 3.255 * 10**7 / 10**9
+        cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
         # Intensity: 10^9 K km s−1 pc2
-        sigma = (data['Intensity'] * ( (1 + redshift) * data['Frequency'] **2)) / (alpha * velocity * (data['luminosity distance(Mpc)']**2))
+        sigma = (data['Intensity'] * ( (1 + redshift) * data['Frequency'] **2)) / (alpha * velocity * cosmo.luminosity_distance(redshift).value**2)
         return sigma
 
 new_lines = pd.read_csv(os.path.join(parent_dir,'brightnes','temporary.csv'))
-sigmas = luminosity_to_jy(400, new_lines, redshift=3)
+sigmas = luminosity_to_jy(400, new_lines, redshift=0.05)
 line_names = new_lines['Line'].values
 L_s = 5e13
 cs = sigmas / L_s
-for name, c in zip(line_name, cs):
+for name, c in zip(line_names, cs):
     print(name, c)
 

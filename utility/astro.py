@@ -886,24 +886,6 @@ def cont_finder(cont_frequencies,line_frequency):
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
     return np.argmin(distances)
 
-
-alma_bands = [get_band_range(i) for i in range(1, 11)]
-color_map = plt.colormaps.get_cmap('tab10')
-
-plt.figure(figsize=(10,10))
-plt.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
-plt.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
-plt.xlabel('GHz')
-plt.ylabel('Jy')
-plt.title('SED')
-plt.xscale('log')
-plt.yscale('log')
-for i in range(len(alma_bands)):
-    color = color_map(i)
-    plt.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
-plt.legend()
-plt.show()
-
 def cont_to_line(row):
     line_delta = np.random.normal(row['c'], row['err_c'])
     return line_delta
