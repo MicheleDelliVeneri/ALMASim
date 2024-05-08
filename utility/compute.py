@@ -52,7 +52,7 @@ def load_metadata(main_path, metadata_name):
         return load_metadata(main_path, new_metadata_name)
 
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
-              pwv, int_time, total_time, bandwidth, freq, freq_support, antenna_array, n_pix, 
+              pwv, int_time, total_time, bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
               n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, 
               n_lines, line_names, save_secondary=False, 
               inject_serendipitous=False):
@@ -111,6 +111,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
 
     fov =  ual.get_fov_from_band(int(band), return_value=False)
     beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
+    cont_sens  = (cont_sens * U.mJy).to(U.Jy)  * beam_size
     cell_size = beam_size / 5
     if n_pix is None: 
         #cell_size = beam_size / 5
@@ -136,7 +137,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
     lum_infared = None
-    continum, line_fluxes, line_names, redshift, line_frequency, n_channels_nw, bandwidth, freq_sup_nw  = uas.process_spectral_data(
+    continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, fwhms_z  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
                                                                         redshift, 
@@ -145,6 +146,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         source_freq.value,
                                                                         n_channels,
                                                                         lum_infared,
+                                                                        cont_sens,
                                                                         line_names,
                                                                         n_lines,
                                                                         )
@@ -157,7 +159,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         band_range  = n_channels * freq_sup
     
     central_channel_index = n_channels // 2
-    source_channel_index = np.array([int(central_channel_index * source_freq * U.GHz / central_freq) for source_freq in line_frequency])
+    #source_channel_index = np.array([int(central_channel_index * source_freq * U.GHz / central_freq) for source_freq in line_frequency])
     print('Field of view: {} arcsec'.format(round(fov.value, 3)))
     print('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
     print('Cell size: {} arcsec'.format(round(cell_size.value, 4)))
@@ -194,6 +196,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     else:
         print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
     print('Simulating Continum Flux: {}'.format(np.mean(continum)))
+    print('Continuum Sensitity: {}'.format(cont_sens))
     datacube = usm.DataCube(
         n_px_x=n_pix, 
         n_px_y=n_pix,
@@ -207,14 +210,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     if source_type == 'point':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
-        fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
+        #fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
         datacube = usm.insert_pointlike(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_z, n_channels)
     elif source_type == 'gaussian':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
         fwhm_x = np.random.randint(3, 10) 
         fwhm_y = np.random.randint(3, 10)   
-        fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
+        #fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
         angle = np.random.randint(0, 180)
         datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':

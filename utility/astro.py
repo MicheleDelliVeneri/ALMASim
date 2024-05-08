@@ -886,12 +886,30 @@ def cont_finder(cont_frequencies,line_frequency):
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
     return np.argmin(distances)
 
+
+alma_bands = [get_band_range(i) for i in range(1, 11)]
+color_map = plt.colormaps.get_cmap('tab10')
+
+plt.figure(figsize=(10,10))
+plt.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
+plt.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
+plt.xlabel('GHz')
+plt.ylabel('Jy')
+plt.title('SED')
+plt.xscale('log')
+plt.yscale('log')
+for i in range(len(alma_bands)):
+    color = color_map(i)
+    plt.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
+plt.legend()
+plt.show()
+
 def cont_to_line(row):
     line_delta = np.random.normal(row['c'], row['err_c'])
     return line_delta
 
 def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
-    source_frequency, n_channels, lum_infrared, line_names=None, n_lines=None):
+    source_frequency, n_channels, lum_infrared, cont_sens, line_names=None, n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -980,12 +998,14 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     cdeltas = filtered_lines['err_c'].values
     line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
     # Get the index of the continuum where the line fall
-    
+    line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(cont_frequencies, float(x)))
     # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
-    line_frequencies =  (filtered_lines['shifted_freq(GHz)'].values * U.GHz).to(U.Hz).value
-    
-
-
+    line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
+    line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz
+    fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
+    freq_steps = np.array([cont_frequencies[line_index + fwhm] - cont_frequencies[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
+    freq_steps = freq_steps.to(U.Hz).value
+    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared_point ) + cs) / freq_steps
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
         int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
@@ -995,7 +1015,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_steps = np.array([cont_frequencies[line_index + 1] - cont_frequencies[line_index] for line_index in line_indexes]) * U.GHz
     freq_steps = freq_steps.to(U.Hz).value
     line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared ) + line_ratios) /freq_steps
-
+    line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x))).values
     if freq_min != save_freq_min:
         print('Bandwidth has been adjusted to fit the lines')
     if redshift != saved_redshift:
@@ -1004,7 +1024,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
 
-    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels, bandwidth, freq_support
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, fwhms
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
