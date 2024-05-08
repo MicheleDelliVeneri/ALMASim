@@ -18,7 +18,8 @@ from os.path import isfile, expanduser
 import subprocess
 import six
 from math import pi
-
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 def write_numpy_to_fits(array, header, path):
     hdu = fits.PrimaryHDU(
@@ -849,6 +850,16 @@ def sed_reading(type_, path, lum_infrared=None, redshift=None):
             lum_infrared = 1e+9 # luminosity in solar luminosities
     else:
         return "Not valid type"
+    # L (erg/s/Hz) = 4 pi d^2(cm) * 10^-23 Flux (Jy)
+    #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
+    # To normalize we multiply by lum_infrared_jy
+    distance_Mpc = cosmo.luminosity_distance(redshift).value # distance in Mpc
+    Mpc_to_cm = 3.086e+24 # Mpc to cm
+    distance_cm = distance_Mpc * Mpc_to_cm # distance in cm  -XX
+    solid_angle = 4 * pi  * distance_cm**2 # solid angle in cm^2 -XX
+    so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
+    lum_infrared_erg_s = lum_infrared * so_to_erg_s # luminosity in erg/s -XX
+  
     # Compute luminosity distance in Mpc
     distance_Mpc = cosmo.luminosity_distance(redshift).value # distance in Mpc
     Mpc_to_cm = 3.086e+24 # Mpc to cm
@@ -873,13 +884,14 @@ def sed_reading(type_, path, lum_infrared=None, redshift=None):
 def cont_finder(sed,line_frequency):
     cont_frequencies=sed['GHz'].values
     distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
-    return np.log(sed['Jy'].values[np.argmin(distances)])
+    return np.argmin(distances)
 
-def cont_to_line(row, flux_infrared):
+def cont_to_line(row):
     line_delta = np.random.normal(row['c'], row['err_c'])
-    return np.exp(np.log(flux_infrared) + line_delta)
+    return line_delta
 
-def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, source_frequency, n_channels, lum_infrared, line_names=None ,n_lines=None):
+def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
+    source_frequency, n_channels, lum_infrared, line_names=None, n_lines=None):
     """
     Process spectral data based on the type of source, wavelength conversion,
     line ratios, and given frequency bands.
@@ -902,41 +914,62 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_max = central_frequency + delta_freq / 2
     save_freq_min = freq_min
     save_freq_max = freq_max
+    saved_redshift = redshift
     # Example data: Placeholder for cont and lines from SED processing
     sed, flux_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the cont and line frequencies by (1 + redshift)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
-    
     filtered_lines = db_line.copy()
     filtered_lines.drop(filtered_lines.index, inplace=True)
-    while len(filtered_lines) == 0:
+    if line_names is None:
+        if n_lines != None:
+            n = n_lines
+        else:
+            n = 1
+    else:
+        n = len(line_names)
+    pbar = tqdm(desc='Searching lines....', total=n)
+    while len(filtered_lines) < n:
+        r_len = len(filtered_lines)
+        filtered_lines = db_line.copy()
+        filtered_lines.drop(filtered_lines.index, inplace=True)
         db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] * (1 + redshift)
         line_mask = (db_line['shifted_freq(GHz)'].astype(float) >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) <= freq_max)
         filtered_lines = db_line[line_mask]
-        if len(filtered_lines) == 0:
-            n_possible = (db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum()
-            print(f'Warning: No lines found in the provided bandwidth. {n_possible} possible lines could fall at a higher redshift, increasing.')
-            if n_possible != 0:
-                redshift += 0.01
-            else:
-                print(f'Warning: No lines found in the provided bandwisth, cannot increse redshift, increasing bandwidth')
-                freq_min += freq_min / 10
-                freq_max += freq_max / 10
-
-    if line_names != None:
+        if len(filtered_lines) < n:
+            n_possible = (db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) >= freq_min).sum()
+            ##if n_possible != 0:
+            #    redshift += 0.01
+            freq_min -= freq_min / 10
+            freq_max += freq_max / 10
+        pbar.set_description("Increasing Bandwidth {}".format(round(freq_max - freq_min), 3))
+        if len(filtered_lines) > r_len:
+            pbar.update(1)   
+        recorded_length = len(filtered_lines)
+    pbar.update(1) 
+    freq_max += freq_max / 10      
+    if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
-        if len(user_lines) == 0:
+        if len(user_lines) != len(line_names):
             print('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
+            # Find rows in filtered_lines that are not already in user_lines
+            additional_lines = filtered_lines[~filtered_lines.index.isin(user_lines.index)]
+            # Add rows from filtered_lines to user_lines until the length matches len(line_names)
+            num_additional_rows = len(line_names) - len(user_lines)
+            additional_lines = additional_lines.iloc[:num_additional_rows]  # Ensure we only select the required number of rows
+            # Add additional_lines to user_lines
+            user_lines = pd.concat([user_lines, additional_lines])
+            filtered_lines = user_lines
         else:
             filtered_lines = user_lines
+    print('Injecting {} lines'.format(len(filtered_lines)))
     filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
     filtered_lines.sort_values(by='distance', inplace=True)
     cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
     cont_fluxes = sed[cont_mask]['Jy'].values
     cont_frequencies = sed[cont_mask]['GHz'].values
-
     if n_lines != None:
         if n_lines > len(filtered_lines):
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
@@ -961,93 +994,88 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
     else:
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
-    #import ipdb; ipdb.set_trace()
-    #Output the processed arrays and line information
     if freq_min != save_freq_min:
-        n_channels = int(n_channels * (freq_max / save_freq_max))
-        
-    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels
+        print('Bandwidth has been adjusted to fit the lines')
+    if redshift != saved_redshift:
+        print('Redshift has been adjusted to fit the lines')
+        print('New redshift:', redshift)
+    bandwidth = freq_max - freq_min
+    freq_support = bandwidth / n_channels
 
-def compute_rest_frequency_from_redshift(source_freq, redshift):
-    line_db = {
-        'H(1-0)': 14.405,
-        'H(2-1)': 28.20536,
-        'CO(1-0)': 115.271,
-        'CO(2-1)': 230.538,
-        
-    }
-    source_freqs  = line_db.values() * (1 + redshift)
-    freq_names = line_db.keys()
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, n_channels, bandwidth, freq_support
+
+def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
+    source_freqs  = db_line['freq(GHz)'].values * (1 + redshift)
+    freq_names =  db_line['Line'].values
     closest_freq = min(source_freqs, key=lambda x:abs(x-source_freq))
-    line_name = freq_names[np.where(source_freqs == closest_freq)]
-    rest_frequency = get_line_rest_frequency(line_name) 
+    line_name = freq_names[np.where(source_freqs == closest_freq)][0]
+    rest_frequency = db_line[db_line['Line'] == line_name]['freq(GHz)'].values[0]
     return rest_frequency
 
-def get_line_rest_frequency(line_name):
-    if line_name == 'CO(1-0)':
-        rest_frequency = 115.271
-    elif line_name == 'CO(2-1)':
-        rest_frequency = 230.538
-    elif line_name == "H(1-0)":
-        rest_frequency = 1420.405
-    elif line_name == "H(2-1)":
-        rest_frequency = 2820.536
-    return rest_frequency
-  
-def get_line_name(frequency):
-    line_db = {
-        'H(1-0)': 14.405,
-        'H(2-1)': 28.20536,
-        'CO(1-0)': 115.271,
-        'CO(2-1)': 230.538, 
-    }
-    min_diff = float('inf')
-    closest_line = None
+def get_line_rest_frequency(master_path, line_names=None):
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    if line_names is not None:
+        db_line = db_line[np.isin(db_line['Line'], line_names)]
+    return db_line['freq(GHz)'].values
+
+def get_line_name_from_rest_frequency(master_path, rest_frequencies):
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
+    if isinstance(rest_frequencies, np.ndarray):
+        line_names = db_line[db_line['freq(GHz)'].isin(rest_frequencies)]['Line'].values
+    else:
+        line_names = db_line[db_line['freq(GHz)'] == rest_frequencies]['Line'].values
+    return line_names
     
-    for line_name, line_freq in line_db.items():
-        diff = abs(line_freq - frequency)
-        if diff < min_diff:
-            min_diff = diff
-            closest_line = line_name
-    return closest_line
-    
-def sample_given_redshift(metadata, n, rest_frequency, extended):
+def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     pd.options.mode.chained_assignment = None
-    if len(rest_frequency) > 1:
+    if isinstance(rest_frequency, np.ndarray):
         rest_frequency = np.sort(np.array(rest_frequency))[0]
+    print(f'Filtering metadata based on rest frequency of selected lines: {rest_frequency}')
+    print(f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}")
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
     metadata.loc[:, 'redshift'] = redshifts
-    metadata = metadata[metadata['redshift'] >= 0]
+    if zmax != None:
+        metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
+    else:
+        metadata = metadata[metadata['redshift'] >= 0]
     snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
     metadata['snapshot'] = snapshots
     if extended == True:
         #metatada = metadata[metadata['redshift'] < 0.05]
         metadata = metadata[(metadata['snapshot'] == 99) | (metadata['snapshot'] == 95)]
+
     sample = metadata.sample(n)
     return sample
 
-def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time, 
-                        total_time, band, central_freq, source_freq, redshift, brightness,
-                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo):
+def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
+                        total_time, band, band_range, central_freq, redshift,
+                        line_fluxes, line_names, line_frequencies, continum,
+                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo, lum_infared):
     with open(path, 'w') as f:
         f.write('Simulation Parameters:\n')
         f.write('RA: {}\n'.format(ra))
         f.write('DEC: {}\n'.format(dec))
         f.write('Band: {}\n'.format(band))
-        f.write('Central Frequency: {}\n'.format(central_freq))
-        f.write('Source Frequency: {}\n'.format(source_freq))
+        f.write('Bandwidth {}\n'.format(band_range))
+        f.write('Band Central Frequency: {}\n'.format(central_freq))
         f.write('Pixel size: {}\n'.format(cell_size))
         f.write('Beam Size: {}\n'.format(beam_size))
-        f.write('Fov: {} arcsec\n'.format(fov))
+        f.write('Fov: {}\n'.format(fov))
         f.write('Angular Resolution: {}\n'.format(ang_res))
         f.write('Velocity Resolution: {}\n'.format(vel_res))
-        f.write('Brightness: {} Jy/px\n'.format(brightness))
         f.write('Redshift: {}\n'.format(redshift))
         f.write('Integration Time: {}\n'.format(int_time))
         f.write('Total Time: {}\n'.format(total_time))
         f.write('Cube Size: {} x {} x {} pixels\n'.format(n_pix, n_pix, n_channels))
+        f.write('Mean Continum Flux: {}\n'.format(np.mean(continum)))
+        f.write('Infrared Luminosity: {}\n'.format(lum_infrared))
+        for i in range(len(line_fluxes)):
+            f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy\n'.format(line_names[i], line_frequencies[i], line_fluxes[i]))
         if snapshot != None:
             f.write('TNG Snapshot ID: {}\n'.format(snapshot))
             f.write('TNG Subhalo ID: {}\n'.format(subhalo))     

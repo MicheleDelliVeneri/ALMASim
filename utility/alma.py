@@ -67,7 +67,6 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
   else:
     return beam_size_arcsec
 
-
 def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     """
     This function returns the field of view of an ALMA band in arcseconds
@@ -373,15 +372,52 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
 
     return result
 
-def plot_science_keywords_distributions(service, master_path, output_dir):
-    query = """  
-            SELECT science_keyword, band_list, member_ous_uid, frequency, t_resolution, t_max, antenna_arrays
+def plot_science_keywords_distributions(service, master_path):
+    
+    plot_dir = os.path.join(master_path, "plots")
+
+        # Check if plot directory exists
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+        existing_plots = []  # Initialize as empty list if plot directory doesn't exist
+    else:
+        # Check if plot files already exist
+        existing_plots = [f for f in os.listdir(plot_dir) if f.endswith('.png')]
+
+    expected_plots = ['science_vs_bands.png', 'science_vs_int_time.png', 'science_vs_source_freq.png',
+                      'science_vs_FoV.png', 'science_vs_beam_size.png', 'science_vs_total_time.png']
+
+    if all(plot_file in existing_plots for plot_file in expected_plots):
+        print("Plots already exist. Exiting.")
+        return
+    else:
+        print("Some plots are missing. Generating missing plots.")
+        # Identify missing plots
+    missing_plots = [plot for plot in expected_plots if plot not in existing_plots]
+
+    # Query only for variables associated with missing plots
+    query_variables = set()
+    for missing_plot in missing_plots:
+        if missing_plot == 'science_vs_bands.png':
+            query_variables.update(['science_keyword', 'band_list'])
+        elif missing_plot == 'science_vs_int_time.png':
+            query_variables.update(['science_keyword', 't_resolution'])
+        elif missing_plot == 'science_vs_source_freq.png':
+            query_variables.update(['science_keyword', 'frequency'])
+        elif missing_plot == 'science_vs_FoV.png':
+            query_variables.update(['science_keyword', 'band_list'])
+        elif missing_plot == 'science_vs_beam_size.png':
+            query_variables.update(['science_keyword', 'band_list', 'antenna_arrays'])
+        elif missing_plot == 'science_vs_total_time.png':
+            query_variables.update(['science_keyword', 't_max'])
+
+    query = f"""  
+            SELECT {', '.join(query_variables)}, member_ous_uid
             FROM ivoa.obscore  
             WHERE science_observation = 'T'
             AND is_mosaic = 'F'
             """
-
-    plot_dir = os.path.join(output_dir, 'plots')
+    
     custom_palette = sns.color_palette("tab20")
     sns.set_palette(custom_palette)
     db = service.search(query).to_table().to_pandas()
@@ -396,97 +432,116 @@ def plot_science_keywords_distributions(service, master_path, output_dir):
     db = db.drop(db[db['science_keyword'] == 'Galaxy structure &evolution'].index)
     db = db.drop(db[db['science_keyword'] == 'Evolved stars: Shaping/physical structure'].index)
 
-    db['band_list'] = db['band_list'].str.split(' ')
-    db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
-    db = db.explode('band_list')
-    db['max_baseline'] = db['antenna_arrays'].apply(lambda x: get_max_baseline_from_antenna_array(x, master_path))
-    db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
-    db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
-    db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size(*x), axis=1)
+    for missing_plot in missing_plots:
+        if missing_plot == 'science_vs_bands.png':
+            db['band_list'] = db['band_list'].str.split(' ')
+            db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
+            db = db.explode('band_list')
 
-    # Exploding to have one row for each combination of science keyword and band
-    #db = db.explode(['science_keyword', 'band_list', 'frequency', 't_resolution', 't_max', 'max_baseline', 'central_freq', 'fov', 'beam_size'])
+            db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
 
-    db = db[db['t_resolution'] <= 3e4]
-    frequency_bins = np.arange(db['frequency'].min(), db['frequency'].max(), 50)  # 50 GHz bins
-    db['frequency_bin'] = pd.cut(db['frequency'], bins=frequency_bins)
-    time_bins = np.arange(db['t_resolution'].min(), db['t_resolution'].max(), 1000)  # 1000 second bins
-    db['time_bin'] = pd.cut(db['t_resolution'], bins=time_bins)
-    fov_bins = np.arange(db['fov'].min(), db['fov'].max(), 10)  #  10 arcsec bins
-    db['fov_bins'] = pd.cut(db['fov'], bins=fov_bins)
-    beam_size_bins = np.arange(db['beam_size'].min(), db['beam_size'].max(), 0.1)  # 0.1 arcsec bins
-    db['beam_bins'] = pd.cut(db['beam_size'], bins=beam_size_bins)
-    total_time_bins = np.arange(db['t_max'].min(), db['t_max'].max(), 500)  # 500 seconds bins
-    db['Ttime_bins'] = pd.cut(db['t_max'], bins=total_time_bins)
+            plt.rcParams["figure.figsize"] = (18,20)
+            db_sk_b.plot(kind='barh', stacked=True, color=custom_palette)
+            plt.title('Science Keywords vs. ALMA Bands')
+            plt.xlabel('Counts')
+            plt.ylabel('Science Keywords')
+            plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
+            plt.savefig(os.path.join(plot_dir, 'science_vs_bands.png'))
+            plt.close()
 
-    db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
-    db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
-    db_sk_t = db.groupby(['science_keyword', 'time_bin']).size().unstack(fill_value=0)
-    db_sk_fov = db.groupby(['science_keyword', 'fov']).size().unstack(fill_value=0)
-    db_sk_bs = db.groupby(['science_keyword', 'beam_size']).size().unstack(fill_value=0)
-    db_sk_Tt = db.groupby(['science_keyword', 'Ttime_bins']).size().unstack(fill_value=0)
+        elif missing_plot == 'science_vs_int_time.png':
+            db = db[db['t_resolution'] <= 3e4]
+            time_bins = np.arange(db['t_resolution'].min(), db['t_resolution'].max(), 1000)  # 1000 second bins
+            db['time_bin'] = pd.cut(db['t_resolution'], bins=time_bins)
+
+            db_sk_t = db.groupby(['science_keyword', 'time_bin']).size().unstack(fill_value=0)
+
+            plt.rcParams["figure.figsize"] = (18,20)
+            db_sk_t.plot(kind='barh', stacked=True)
+            plt.title('Science Keywords vs. Integration Time')
+            plt.xlabel('Counts')
+            plt.ylabel('Science Keywords')
+            plt.legend(title='Integration Time', loc='upper left', bbox_to_anchor=(1.01, 1))
+            plt.savefig(os.path.join(plot_dir, 'science_vs_int_time.png'))
+            plt.close()
+
+        elif missing_plot == 'science_vs_source_freq.png':
+            frequency_bins = np.arange(db['frequency'].min(), db['frequency'].max(), 50)  # 50 GHz bins
+            db['frequency_bin'] = pd.cut(db['frequency'], bins=frequency_bins)
+
+            db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
+
+            plt.rcParams["figure.figsize"] = (18,20)
+            db_sk_f.plot(kind='barh', stacked=True, color=custom_palette)
+            plt.title('Science Keywords vs. Source Frequency')
+            plt.xlabel('Counts')
+            plt.ylabel('Science Keywords')
+            plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
+            plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
+            plt.close()
+
+        elif missing_plot == 'science_vs_FoV.png':
+            db['band_list'] = db['band_list'].str.split(' ')
+            db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
+            db = db.explode('band_list')
+            db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
+            fov_bins = np.arange(db['fov'].min(), db['fov'].max(), 10)  #  10 arcsec bins
+            db['fov_bins'] = pd.cut(db['fov'], bins=fov_bins)
+
+            db_sk_fov = db.groupby(['science_keyword', 'fov_bins']).size().unstack(fill_value=0)
+
+            plt.rcParams["figure.figsize"] = (18,20)
+            db_sk_fov.plot(kind='barh', stacked=True, color=custom_palette)
+            plt.title('Science Keywords vs. FoV')
+            plt.xlabel('Counts')
+            plt.ylabel('Science Keywords')
+            plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='FoV')
+            plt.savefig(os.path.join(plot_dir, 'science_vs_FoV.png'))
+            plt.close()
+
+        elif missing_plot == 'science_vs_beam_size.png':
+            db['band_list'] = db['band_list'].str.split(' ')
+            db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
+            db = db.explode('band_list')
+            db['max_baseline'] = db['antenna_arrays'].apply(lambda x: get_max_baseline_from_antenna_array(x, master_path))
+            db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
+            db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size(*x), axis=1)
+            beam_size_bins = np.arange(db['beam_size'].min(), db['beam_size'].max(), 0.1)  # 0.1 arcsec bins
+            db['beam_bins'] = pd.cut(db['beam_size'], bins=beam_size_bins)
+
+            db_sk_bs = db.groupby(['science_keyword', 'beam_bins']).size().unstack(fill_value=0)
+
+            plt.rcParams["figure.figsize"] = (18,20)
+            db_sk_bs.plot(kind='barh', stacked=True, color=custom_palette)
+            plt.title('Science Keywords vs. beams_size')
+            plt.xlabel('Counts')
+            plt.ylabel('Science Keywords')
+            plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Beams Size')
+            plt.savefig(os.path.join(plot_dir, 'science_vs_beam_size.png'))
+            plt.close()
+
+        elif missing_plot == 'science_vs_total_time.png':
+            total_time_bins = np.arange(db['t_max'].min(), db['t_max'].max(), 500)  # 500 seconds bins
+            db['Ttime_bins'] = pd.cut(db['t_max'], bins=total_time_bins)
+            
+            db_sk_Tt = db.groupby(['science_keyword', 'Ttime_bins']).size().unstack(fill_value=0)
+
+            plt.rcParams["figure.figsize"] = (18,20)
+            db_sk_Tt.plot(kind='barh', stacked=True, color=custom_palette)
+            plt.title('Science Keywords vs. Total Time')
+            plt.xlabel('Counts')
+            plt.ylabel('Science Keywords')
+            plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Total Time')
+            plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
+            plt.close()
     
 
-    plt.rcParams["figure.figsize"] = (14,18)
-    db_sk_b.plot(kind='barh', stacked=True, color=custom_palette)
-    plt.title('Science Keywords vs. ALMA Bands')
-    plt.xlabel('Counts')
-    plt.ylabel('Science Keywords')
-    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
-    plt.savefig(os.path.join(plot_dir, 'science_vs_bands.png'))
-    plt.close()
-
-    plt.rcParams["figure.figsize"] = (14,18)
-    db_sk_t.plot(kind='barh', stacked=True)
-    plt.title('Science Keywords vs. Integration Time')
-    plt.xlabel('Counts')
-    plt.ylabel('Science Keywords')
-    plt.legend(title='Integration Time', loc='upper left', bbox_to_anchor=(1.01, 1))
-    plt.savefig(os.path.join(plot_dir, 'science_vs_int_time.png'))
-    plt.close()
-
-    plt.rcParams["figure.figsize"] = (14,18)
-    db_sk_f.plot(kind='barh', stacked=True, color=custom_palette)
-    plt.title('Science Keywords vs. Source Frequency')
-    plt.xlabel('Counts')
-    plt.ylabel('Science Keywords')
-    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
-    plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
-    plt.close()
-
-    plt.rcParams["figure.figsize"] = (14,18)
-    db_sk_fov.plot(kind='barh', stacked=True, color=custom_palette)
-    plt.title('Science Keywords vs. FoV')
-    plt.xlabel('Counts')
-    plt.ylabel('Science Keywords')
-    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='FoV')
-    plt.savefig(os.path.join(plot_dir, 'science_vs_FoV.png'))
-    plt.close()
-
-    plt.rcParams["figure.figsize"] = (14,18)
-    db_sk_bs.plot(kind='barh', stacked=True, color=custom_palette)
-    plt.title('Science Keywords vs. beams_size')
-    plt.xlabel('Counts')
-    plt.ylabel('Science Keywords')
-    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Beams Size')
-    plt.savefig(os.path.join(plot_dir, 'science_vs_beam_size.png'))
-    plt.close()
-
-    plt.rcParams["figure.figsize"] = (14,18)
-    db_sk_Tt.plot(kind='barh', stacked=True, color=custom_palette)
-    plt.title('Science Keywords vs. Total Time')
-    plt.xlabel('Counts')
-    plt.ylabel('Science Keywords')
-    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Total Time')
-    plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
-    plt.close()
-
-def query_for_metadata_by_science_type(metadata_name, main_path, output_dir, service_url: str = "https://almascience.eso.org/tap"):
+def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
-    plot_science_keywords_distributions(service, main_path, output_dir)
-    print('Please take a look at distributions in plots folder: {output_dir}/plots')
+    plot_science_keywords_distributions(service, main_path)
+    print('Please take a look at distributions in plots folder: {main_path}/plots')
     #plt.rcParams["figure.figsize"] = (14,18)
     #counts.plot(kind='barh', stacked=True)
     #plt.title('Science Keywords vs. ALMA Bands')
