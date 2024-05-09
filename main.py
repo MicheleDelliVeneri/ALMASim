@@ -132,17 +132,46 @@ if __name__ == '__main__':
         line_names = np.array([line_names]*n_sims)
         z1 = None
     else:
-        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space: ')
-        redshifts = '1 2'
-        z0, z1 = redshifts.split()
-        z0, z1 = float(z0), float(z1)
-        redshifts = np.random.uniform(z0, z1, n_sims)
+        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space\nif a single value is given, all simualtions will be performed at the same redshift: ')
+        redshifts = redshifts.split()
+        if len(redshifts) == 1:
+            redshifts = np.array([float(redshifts[0])] * n_sims)
+            z0, z1 = float(redshifts[0]), float(redshifts[0])
+        else:
+            z0, z1 = float(redshifts[0]), float(redshifts[1])
+            redshifts = np.random.uniform(z0, z1, n_sims)
         n_lines = input('Please provide the number of lines you want to simulate as an integer: ')
         n_lines = np.array([int(n_lines)]*n_sims)
         rest_freq, _ = uas.get_line_info(main_path)
         line_names = np.array([None]*n_sims)
         rest_freqs = np.array([None]*n_sims)
 
+    set_infrared = input('Do you want to provide infrared luminosities for SED normalization? (y/n), \nif you choose not to provide them, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: ')
+    if set_infrared != "y" and set_infrared != "n":
+        print("Invalid input. Please insert y or n.")
+        set_infrared = input('Do you want to provide infrared luminosities for SED normalization? (y/n), \nif you choose not to provide them, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: ')
+    if set_infrared == "y":
+        lum_infrared = input('Please provide the infrared luminosity (in solar masses) to normalize the SED,\nyou can input a single value or an interval as two floats (es. 1e10) separated by a space: ')
+        lum_infrared = [float(lum) for lum in lum_infrared.split()]
+        if len(lum_infrared) == 1:
+            lum_ir = np.array([lum_infrared[0]]*n_sims)
+        else:
+            lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
+    else:
+        lum_ir = np.array([None]*n_sims)
+    set_snr = input('Do you want to provide a desired SNR for the simulated observations? (y/n) ')
+    if set_snr != "y" and set_snr != "n":
+        print("Invalid input. Please insert y or n.")
+        set_snr = input('Do you want to provide a desired SNR for the simulated observations? (y/n) ')
+    if set_snr == "y":
+        snr = input('Please provide the desired SNR as a float or an interval as two floats separated by a space: ')
+        snr = [float(snr) for snr in snr.split()]
+        if len(snr) == 1:
+            snr = np.array([snr[0]]*n_sims)
+        else:
+            snr = np.random.uniform(snr[0], snr[1], n_sims)
+    else:
+        snr = np.ones(n_sims)
 
     fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     if fix_spatial != 'y' and fix_spatial != 'n':
@@ -219,6 +248,7 @@ if __name__ == '__main__':
     freqs = metadata['Freq'].values
     freq_supports = metadata['Freq.sup.'].values
     antenna_arrays = metadata['antenna_arrays'].values
+    cont_sens = metadata['Cont_sens_mJybeam'].values
     n_pixs = np.array([n_pix]*n_sims)
     n_channels = np.array([n_channels]*n_sims)
     source_types = np.array([source_type]*n_sims)
@@ -237,13 +267,15 @@ if __name__ == '__main__':
 
     input_params = pd.DataFrame(zip(
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
-        obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, 
+        obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
-        tng_apis, ncpus, rest_freqs, redshifts, n_lines, line_names, save_secondary, inject_serendipitous), 
+        tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
+        n_lines, line_names, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
-        'freq', 'freq_support', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
-        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
+        'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
+        'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
+        'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
     
     
     # Dask utils
