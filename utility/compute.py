@@ -142,7 +142,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
-    continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, fwhm_z  = uas.process_spectral_data(
+    continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, fwhm_z, lum_infrared  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
                                                                         redshift, 
@@ -249,7 +249,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         project=project_name, 
         skymodel=filename,
         obsmode="int",
-        #setpointings=True,
+        setpointings=True,
         thermalnoise="tsys-atm",
         antennalist=antennalist,
         indirection=pos_string,
@@ -300,5 +300,5 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
     print('Finished')
-    shutil.rmtree(sim_output_dir)
+    #shutil.rmtree(sim_output_dir)
     

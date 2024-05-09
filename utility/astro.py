@@ -887,7 +887,7 @@ def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
         min_ = np.min(cont_fluxes)
     if lum_save != lum_infrared:
         print('To match the desired SNR, luminosity has been increased to {}'.format(lum_infrared))
-    return sed, lum_infrared_erg_s
+    return sed, lum_infrared_erg_s, lum_infrared
 
 def cont_finder(cont_frequencies,line_frequency):
     #cont_frequencies=sed['GHz'].values
@@ -923,7 +923,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     save_freq_min = freq_min
     save_freq_max = freq_max
     # Example data: Placeholder for cont and lines from SED processing
-    sed, flux_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared)
+    sed, flux_infrared, lum_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the cont and line frequencies by (1 + redshift)
@@ -1005,7 +1005,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         print('Bandwidth has been adjusted to fit the lines')
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
-    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, fwhms
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, fwhms, lum_infrared
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
