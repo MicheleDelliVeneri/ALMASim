@@ -36,8 +36,6 @@ def plotter(inx, output_dir, beam_size, line_names, line_frequencies, line_index
     for freq, name, index in zip(line_frequencies, line_names, line_indexes):
         ax[0].text(cont_frequencies[index + 1], clean_spectrum[index] + 0.001 * clean_spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
         ax[1].text(cont_frequencies[index + 1], dirty_spectrum[index] + 0.001 * dirty_spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
-    plt.xlabel()
-    
     ax[0].set_title('Clean Sky Model Spectrum')
     ax[1].set_title('ALMA Simulated Spectrum')
     ax[0].set_xlabel('Frequency (GHz)')
