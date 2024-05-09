@@ -353,6 +353,7 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
         band = band[0]
         band_query = f"band_list like '%{band}%'"
     elif type(band) == list and len(band) > 1:
+        band = [str(x) for x in band]
         band = "', '".join(band)
         band_query = f"band_list in ('{band}')"
     else:
@@ -388,10 +389,9 @@ def plot_science_keywords_distributions(service, master_path):
                       'science_vs_FoV.png', 'science_vs_beam_size.png', 'science_vs_total_time.png']
 
     if all(plot_file in existing_plots for plot_file in expected_plots):
-        print("Plots already exist. Exiting.")
         return
     else:
-        print("Some plots are missing. Generating missing plots.")
+        print(f"Generating helping plots to guide you in the scientific query, check them in {plot_dir}.")
         # Identify missing plots
     missing_plots = [plot for plot in expected_plots if plot not in existing_plots]
 
