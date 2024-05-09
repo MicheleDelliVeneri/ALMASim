@@ -1801,7 +1801,8 @@ def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
           
     return sample
 
-def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names, line_frequencies, freq_sup, pos_zs, fwhm_x, fwhm_y, fwhm_zs, n_px, n_chan, sim_params_path):
+def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names, 
+    line_frequencies, freq_sup, pos_zs, fwhm_x, fwhm_y, fwhm_zs, n_px, n_chan, sim_params_path):
     wcs = datacube.wcs
     xy_radius = n_px / 4
     z_radius = n_chan / 2
