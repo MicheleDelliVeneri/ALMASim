@@ -432,6 +432,15 @@ def plot_science_keywords_distributions(service, master_path):
     db = db.drop(db[db['science_keyword'] == 'Exoplanets'].index)
     db = db.drop(db[db['science_keyword'] == 'Galaxy structure &evolution'].index)
     db = db.drop(db[db['science_keyword'] == 'Evolved stars: Shaping/physical structure'].index)
+    short_keyword = {
+        'Solar system - Trans-Neptunian Objects (TNOs)' : 'Solar System - TNOs',
+        'Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)': 'Photon/X-Ray Domanited Regions',
+        'Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)': 'LIRG & ULIRG',
+        'Cosmic Microwave Background (CMB)/Sunyaev-Zel\'dovich Effect (SZE)': 'CMB/Sunyaev-Zel\'dovich Effect',
+        'Active Galactic Nuclei (AGN)/Quasars (QSO)': 'AGN/QSO',
+        'Inter-Stellar Medium (ISM)/Molecular clouds': 'ISM & Molecular Clouds',
+    }
+    db['science_keyword'] = db['science_keyword'].replace(short_keyword)
 
     for missing_plot in missing_plots:
         if missing_plot == 'science_vs_bands.png':
