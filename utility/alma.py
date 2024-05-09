@@ -439,6 +439,7 @@ def plot_science_keywords_distributions(service, master_path):
         'Active Galactic Nuclei (AGN)/Quasars (QSO)': 'AGN/QSO',
         'Inter-Stellar Medium (ISM)/Molecular clouds': 'ISM & Molecular Clouds',
     }
+    
     db['science_keyword'] = db['science_keyword'].replace(short_keyword)
 
     for missing_plot in missing_plots:
