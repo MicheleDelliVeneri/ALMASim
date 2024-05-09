@@ -741,3 +741,70 @@ def ms_to_npz(ms, dirty_cube, datacolumn='CORRECTED_DATA', output_file='test.npz
                     antpos1=tb.getcol('ANTENNA1'),
                     antpos2=tb.getcol('ANTENNA2'),
                     antpos3=tb.getcol('TIME'))
+
+
+def query_by_keyword_and_ranges(service_url, keyword, fov_range, t_resolution_range, t_max_range, freq_range, path):
+    """
+    Queries a database for specific science observations based on user-provided keyword and ranges, then processes and saves the data.
+
+    Parameters:
+    service_url (str): URL to the TAP service.
+    keyword (str): Science keyword to filter observations.
+    fov_range (tuple): Range (min, max) for the field of view (FOV).
+    t_resolution_range (tuple): Range (min, max) for the time resolution (Int.Time).
+    t_max_range (tuple): Range (min, max) for the total time (Total.Time).
+    freq_range (tuple): Range (min, max) for the frequency (Freq).
+    path (str): File path to save the results to.
+
+    Returns:
+    pandas.DataFrame: The processed data frame with the results.
+    """
+    service = pyvo.dal.TAPService(service_url)
+    
+    # Constructing the query with the provided ranges and keyword
+    query = f"""
+    SELECT target_name, pwv, schedblock_name, velocity_resolution, spatial_resolution, s_ra, s_dec, s_fov, t_resolution, 
+           t_max, cont_sensitivity_bandwidth, sensitivity_10kms, obs_release_date, band_list, bandwidth, frequency, 
+           frequency_support, antenna_arrays
+    FROM ivoa.obscore
+    WHERE science_keyword LIKE '%{keyword}%'
+      AND s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}
+      AND t_resolution BETWEEN {t_resolution_range[0]} AND {t_resolution_range[1]}
+      AND t_max BETWEEN {t_max_range[0]} AND {t_max_range[1]}
+      AND frequency BETWEEN {freq_range[0]} AND {freq_range[1]}
+      AND science_observation = 'T'
+    """
+    df = service.search(query).to_table().to_pandas()
+    
+    # Renaming columns as specified
+    rename_columns = {
+        'target_name': 'ALMA_source_name',
+        'pwv': 'PWV',
+        'schedblock_name': 'SB_name',
+        'velocity_resolution': 'Vel.res.',
+        'spatial_resolution': 'Ang.res.',
+        's_ra': 'RA',
+        's_dec': 'Dec',
+        's_fov': 'FOV',
+        't_resolution': 'Int.Time',
+        't_max': 'Total.Time',
+        'cont_sensitivity_bandwidth': 'Cont_sens_mJybeam',
+        'sensitivity_10kms': 'Line_sens_10kms_mJybeam',
+        'obs_release_date': 'Obs.date',
+        'band_list': 'Band',
+        'bandwidth': 'Bandwidth',
+        'frequency': 'Freq',
+        'frequency_support': 'Freq.sup.'
+    }
+    df.rename(columns=rename_columns, inplace=True)
+    
+    # Selecting only the required columns
+    database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time',
+                   'Total.Time', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq', 'Freq.sup.', 'antenna_arrays']]
+    # Formatting the observation date to only show the date part
+    database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
+    
+    # Saving to CSV
+    database.to_csv(path, index=False)
+    
+    return database
