@@ -353,6 +353,7 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
         band = band[0]
         band_query = f"band_list like '%{band}%'"
     elif type(band) == list and len(band) > 1:
+        band = [str(x) for x in band]
         band = "', '".join(band)
         band_query = f"band_list in ('{band}')"
     else:
@@ -388,10 +389,9 @@ def plot_science_keywords_distributions(service, master_path):
                       'science_vs_FoV.png', 'science_vs_beam_size.png', 'science_vs_total_time.png']
 
     if all(plot_file in existing_plots for plot_file in expected_plots):
-        print("Plots already exist. Exiting.")
         return
     else:
-        print("Some plots are missing. Generating missing plots.")
+        print(f"Generating helping plots to guide you in the scientific query, check them in {plot_dir}.")
         # Identify missing plots
     missing_plots = [plot for plot in expected_plots if plot not in existing_plots]
 
@@ -431,6 +431,16 @@ def plot_science_keywords_distributions(service, master_path):
     db = db.drop(db[db['science_keyword'] == 'Exoplanets'].index)
     db = db.drop(db[db['science_keyword'] == 'Galaxy structure &evolution'].index)
     db = db.drop(db[db['science_keyword'] == 'Evolved stars: Shaping/physical structure'].index)
+    short_keyword = {
+        'Solar system - Trans-Neptunian Objects (TNOs)' : 'Solar System - TNOs',
+        'Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)': 'Photon/X-Ray Domanited Regions',
+        'Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)': 'LIRG & ULIRG',
+        'Cosmic Microwave Background (CMB)/Sunyaev-Zel\'dovich Effect (SZE)': 'CMB/Sunyaev-Zel\'dovich Effect',
+        'Active Galactic Nuclei (AGN)/Quasars (QSO)': 'AGN/QSO',
+        'Inter-Stellar Medium (ISM)/Molecular clouds': 'ISM & Molecular Clouds',
+    }
+    
+    db['science_keyword'] = db['science_keyword'].replace(short_keyword)
 
     for missing_plot in missing_plots:
         if missing_plot == 'science_vs_bands.png':
@@ -440,7 +450,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_b.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. ALMA Bands')
             plt.xlabel('Counts')
@@ -456,7 +466,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_t = db.groupby(['science_keyword', 'time_bin']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_t.plot(kind='barh', stacked=True)
             plt.title('Science Keywords vs. Integration Time')
             plt.xlabel('Counts')
@@ -471,7 +481,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_f.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. Source Frequency')
             plt.xlabel('Counts')
@@ -490,7 +500,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_fov = db.groupby(['science_keyword', 'fov_bins']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_fov.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. FoV')
             plt.xlabel('Counts')
@@ -511,7 +521,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_bs = db.groupby(['science_keyword', 'beam_bins']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_bs.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. beams_size')
             plt.xlabel('Counts')
@@ -526,7 +536,7 @@ def plot_science_keywords_distributions(service, master_path):
             
             db_sk_Tt = db.groupby(['science_keyword', 'Ttime_bins']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_Tt.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. Total Time')
             plt.xlabel('Counts')
@@ -535,7 +545,6 @@ def plot_science_keywords_distributions(service, master_path):
             plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
             plt.close()
     
-
 def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)

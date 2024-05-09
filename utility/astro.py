@@ -834,7 +834,7 @@ def get_line_info(main_path, idxs=None):
     else:
         return rest_frequencies, line_names
 
-def sed_reading(type_, path, lum_infrared=None, redshift=None):
+def sed_reading(type_, path, cont_sens, freq_min, freq_max, lum_infrared=None, redshift=None):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
     if type_ == "extended" or type_ == 'diffuse':
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
@@ -857,29 +857,37 @@ def sed_reading(type_, path, lum_infrared=None, redshift=None):
     Mpc_to_cm = 3.086e+24 # Mpc to cm
     distance_cm = distance_Mpc * Mpc_to_cm # distance in cm  -XX
     solid_angle = 4 * pi  * distance_cm**2 # solid angle in cm^2 -XX
-    so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
-    lum_infrared_erg_s = lum_infrared * so_to_erg_s # luminosity in erg/s -XX
-  
-    # Compute luminosity distance in Mpc
-    distance_Mpc = cosmo.luminosity_distance(redshift).value # distance in Mpc
-    Mpc_to_cm = 3.086e+24 # Mpc to cm
-    distance_cm = distance_Mpc * Mpc_to_cm # distance in cm  -XX
-    solid_angle = 4 * pi  * distance_cm**2 # solid angle in cm^2 -XX
-    so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
-    lum_infrared_erg_s = lum_infrared * so_to_erg_s # luminosity in erg/s -XX
-    
     # Load the SED
     sed = pd.read_csv(file_path, sep="\s+")
     # Convert to GHz
     sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
     # Re normalize the SED and convert to Jy from erg/s/Hz
-    sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
+    sed, lum_infrared_erg_s, lum_infrared = normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
     #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
     flux_infrared = lum_infrared_erg_s * 1e+23 / solid_angle # Jy * Hz 
     #flux_infrared_jy = flux_infrared  / (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True) 
-    return sed, flux_infrared
+    return sed, flux_infrared, lum_infrared
+
+def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max):
+    so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
+    lum_infrared_erg_s = lum_infrared * so_to_erg_s  # luminosity in erg/s -XX
+    sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
+    cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
+    cont_fluxes = sed[cont_mask]['Jy'].values
+    min_ = np.min(cont_fluxes)
+    lum_save = lum_infrared
+    while min_ < cont_sens:
+        lum_infrared += 0.1 * lum_infrared
+        lum_infrared_erg_s = so_to_erg_s * lum_infrared
+        sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
+        cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
+        cont_fluxes = sed[cont_mask]['Jy'].values
+        min_ = np.min(cont_fluxes)
+    if lum_save != lum_infrared:
+        print('To match the desired SNR, luminosity has been set to {:.2e}'.format(lum_infrared))
+    return sed, lum_infrared_erg_s, lum_infrared
 
 def cont_finder(cont_frequencies,line_frequency):
     #cont_frequencies=sed['GHz'].values
@@ -914,9 +922,8 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_max = central_frequency + delta_freq / 2
     save_freq_min = freq_min
     save_freq_max = freq_max
-    saved_redshift = redshift
     # Example data: Placeholder for cont and lines from SED processing
-    sed, flux_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), lum_infrared)
+    sed, flux_infrared, lum_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
     # Shift the cont and line frequencies by (1 + redshift)
@@ -980,33 +987,25 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     cdeltas = filtered_lines['err_c'].values
     line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
     # Get the index of the continuum where the line fall
-    line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(cont_frequencies, float(x)))
+    #line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(cont_frequencies, float(x)))
     # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
     line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
     line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz
     fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
-    freq_steps = np.array([cont_frequencies[line_index + fwhm] - cont_frequencies[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
-    freq_steps = freq_steps.to(U.Hz).value
-    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared_point ) + cs) / freq_steps
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
         int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
     else:
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x)))
-    freq_steps = np.array([cont_frequencies[line_index + 1] - cont_frequencies[line_index] for line_index in line_indexes]) * U.GHz
+    freq_steps = np.array([new_cont_freq[line_index + fwhm] - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
     freq_steps = freq_steps.to(U.Hz).value
-    line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared ) + line_ratios) /freq_steps
-    line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x))).values
+    line_fluxes = int_cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared) + line_ratios) / freq_steps
     if freq_min != save_freq_min:
         print('Bandwidth has been adjusted to fit the lines')
-    if redshift != saved_redshift:
-        print('Redshift has been adjusted to fit the lines')
-        print('New redshift:', redshift)
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
-
-    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, fwhms
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
@@ -1059,7 +1058,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
 def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
                         total_time, band, band_range, central_freq, redshift,
                         line_fluxes, line_names, line_frequencies, continum,
-                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo, lum_infared):
+                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo, lum_infrared):
     with open(path, 'w') as f:
         f.write('Simulation Parameters:\n')
         f.write('RA: {}\n'.format(ra))

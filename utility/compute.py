@@ -1,5 +1,6 @@
 import numpy as np
 import astropy.units as U
+from astropy.time import Time
 from casatasks import exportfits, simobserve, tclean, gaincal, applycal
 from casatools import table
 from casatools import simulator as casa_simulator
@@ -53,9 +54,8 @@ def load_metadata(main_path, metadata_name):
 
 def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
-              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, 
-              n_lines, line_names, save_secondary=False, 
-              inject_serendipitous=False):
+              n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
+              n_lines, line_names, save_secondary=False, inject_serendipitous=False):
     """
     Runs a simulation for a given set of input parameters.
 
@@ -99,10 +99,13 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     source_freq = freq * U.GHz
     central_freq = ual.get_band_central_freq(int(band)) * U.GHz
     sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
-    
+    obs_date = Time(obs_date + 'T00:00:00', format='isot', scale='utc').to_value("mjd")
     if not os.path.exists(sim_output_dir):
         os.makedirs(sim_output_dir)
     os.chdir(output_dir)
+    print('Angular resolution: {}'.format(ang_res))
+    print('Integration Time: {}'.format(int_time))
+    print('Total Observatio Time: {}'.format(total_time))
     ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
     antennalist = os.path.join(sim_output_dir, "antenna.cfg")
     antenna_name = 'antenna'
@@ -111,7 +114,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
 
     fov =  ual.get_fov_from_band(int(band), return_value=False)
     beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
-    cont_sens  = (cont_sens * U.mJy).to(U.Jy)  * beam_size
+    beam_solid_angle = np.pi * (beam_size / 2) ** 2
+    cont_sens = cont_sens * U.mJy / (U.arcsec ** 2)
+    cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
+    cont_sens  = cont_sens_jy  * snr
+    print("Beam Size: ", beam_size)
+    print("Minimum detectable continum: ", cont_sens_jy)
+    print(f"To reach SNR of {snr}: {cont_sens}")
+
     cell_size = beam_size / 5
     if n_pix is None: 
         #cell_size = beam_size / 5
@@ -136,8 +146,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
-    lum_infared = None
-    continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, fwhms_z  = uas.process_spectral_data(
+    continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, cont_frequencies, fwhm_z, lum_infrared  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
                                                                         redshift, 
@@ -145,21 +154,18 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
                                                                         band_range.value,
                                                                         source_freq.value,
                                                                         n_channels,
-                                                                        lum_infared,
-                                                                        cont_sens,
+                                                                        lum_infrared,
+                                                                        cont_sens.value,
                                                                         line_names,
                                                                         n_lines,
                                                                         )
     #print(continum.shape, line_fluxes, line_names)
-    print('Continum shape: {}'.format(continum.shape))
-    print('N Channels: {}'.format(n_channels_nw))
     if n_channels_nw != n_channels:
         freq_sup = freq_sup_nw * U.MHz
         n_channels = n_channels_nw
         band_range  = n_channels * freq_sup
     
     central_channel_index = n_channels // 2
-    #source_channel_index = np.array([int(central_channel_index * source_freq * U.GHz / central_freq) for source_freq in line_frequency])
     print('Field of view: {} arcsec'.format(round(fov.value, 3)))
     print('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
     print('Cell size: {} arcsec'.format(round(cell_size.value, 4)))
@@ -172,6 +178,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Band: ', band)
     print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
     print('Angular resolution: {} arcsec'.format(round(ang_res.value, 3)))
+    print('Infrared Luminosity: {:.2e}'.format(lum_infrared))
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))
@@ -192,11 +199,11 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
 
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         for line_name, line_flux in zip(line_names, line_fluxes): 
-            print('Simulating Line {} Flux: {} at z {}'.format(line_name, line_flux, redshift))
+            print('Simulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
     else:
         print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
-    print('Simulating Continum Flux: {}'.format(np.mean(continum)))
-    print('Continuum Sensitity: {}'.format(cont_sens))
+    print('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
+    print('Continuum Sensitity: {:.2e}'.format(cont_sens))
     datacube = usm.DataCube(
         n_px_x=n_pix, 
         n_px_y=n_pix,
@@ -210,14 +217,12 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     if source_type == 'point':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
-        #fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
         datacube = usm.insert_pointlike(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_z, n_channels)
     elif source_type == 'gaussian':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
         fwhm_x = np.random.randint(3, 10) 
-        fwhm_y = np.random.randint(3, 10)   
-        #fwhm_z = [np.random.randint(3, 10) for i in range(len(pos_z))]   
+        fwhm_y = np.random.randint(3, 10)    
         angle = np.random.randint(0, 180)
         datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':
@@ -232,10 +237,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     print('Writing datacube to {}'.format(filename))
-    usm.write_datacube_to_fits(datacube, filename)
+    usm.write_datacube_to_fits(datacube, filename, obs_date)
     print('Done')
     del datacube
-    upl.plot_skymodel(filename, inx, output_dir, show=False)
+    upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
     
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
@@ -248,7 +253,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         project=project_name, 
         skymodel=filename,
         obsmode="int",
-        #setpointings=True,
+        setpointings=True,
         thermalnoise="tsys-atm",
         antennalist=antennalist,
         indirection=pos_string,
@@ -266,9 +271,13 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     
     scale = random.uniform(0, 1)
     ms_path = os.path.join(sim_output_dir, "{}.{}.noisy.ms".format(project_name, antenna_name))
+    print('Simulating atmospheric noise ....')
     ual.simulate_atmospheric_noise(sim_output_dir, project_name, scale, ms_path, antennalist)
+    print('Simulating gain errors ....')
     gain_error_amp = random.gauss(0, 0.1)
     ual.simulate_gain_errors(ms_path, gain_error_amp)
+    print('Done')
+    print('Fourier inverting ....')
     tclean(
         vis=ms_path,
         imagename=os.path.join(sim_output_dir, '{}.{}'.format(project_name, antenna_name)),
@@ -288,7 +297,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
        fitsimage=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"), overwrite=True)
     exportfits(imagename=os.path.join(project_name, '{}.{}.skymodel'.format(project_name, antenna_name)), 
         fitsimage=os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"), overwrite=True)
-    upl.plotter(inx, output_dir, beam_size)
+    upl.plotter(inx, output_dir, beam_size, line_names, line_frequency, source_channel_index, cont_frequencies)
     if save_secondary == True:
         exportfits(imagename=os.path.join(project_name, '{}.{}.psf'.format(project_name, antenna_name)),
               fitsimage=os.path.join(output_dir, "psf_" + str(inx) +".fits"), overwrite=True)
@@ -299,5 +308,5 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
     print('Finished')
-    shutil.rmtree(sim_output_dir)
+    #shutil.rmtree(sim_output_dir)
     

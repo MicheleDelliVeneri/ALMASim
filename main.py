@@ -61,9 +61,9 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = "/mnt/storage/astro/almasim-test-24-5-4"
+    output_dir = "/srv/Fast01/delliven/almasim-test-24-5-4"
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
-    tng_dir = "/mnt/storage/astro/TNGData"
+    tng_dir = "/srv/Fast01/delliven/TNGData"
     project_name = input("Insert the name of the project: ")
     #project_name = 'test-extended'
     if not os.path.exists(output_dir):
@@ -106,7 +106,7 @@ if __name__ == '__main__':
                 metadata_name = metadata_name.split('.')[0]
                 metadata_name = metadata_name + '.csv'
             #metadata_name = "test.csv"
-            metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path, output_path)
+            metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path)
     else:
         #metadata_name = 'test.csv'
         metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
@@ -132,12 +132,13 @@ if __name__ == '__main__':
         line_names = np.array([line_names]*n_sims)
         z1 = None
     else:
-        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space\n if a single value is given, all simualtions will be performed at the same redshift: ')
+        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space\nif a single value is given, all simualtions will be performed at the same redshift: ')
         redshifts = redshifts.split()
         if len(redshifts) == 1:
             redshifts = np.array([float(redshifts[0])] * n_sims)
+            z0, z1 = float(redshifts[0]), float(redshifts[0])
         else:
-            z0, z1 = float(z0), float(z1)
+            z0, z1 = float(redshifts[0]), float(redshifts[1])
             redshifts = np.random.uniform(z0, z1, n_sims)
         n_lines = input('Please provide the number of lines you want to simulate as an integer: ')
         n_lines = np.array([int(n_lines)]*n_sims)
@@ -145,13 +146,32 @@ if __name__ == '__main__':
         line_names = np.array([None]*n_sims)
         rest_freqs = np.array([None]*n_sims)
 
-    lum_infrared = input('Please provide the infrared luminosity (in solar masses) to normalize the SED,\n you can input a single value or an interval as two floats (es. 1e10) separated by a space: ')
-    lum_infrared = [float(lum) for lum in lum_infrared.split()]
-    if len(lum_infrared) == 1:
-        lum_ir = np.array([lum_infrared[0]]*n_sims)
+    set_infrared = input('Do you want to provide infrared luminosities for SED normalization? (y/n), \nif you choose not to provide them, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: ')
+    if set_infrared != "y" and set_infrared != "n":
+        print("Invalid input. Please insert y or n.")
+        set_infrared = input('Do you want to provide infrared luminosities for SED normalization? (y/n), \nif you choose not to provide them, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: ')
+    if set_infrared == "y":
+        lum_infrared = input('Please provide the infrared luminosity (in solar masses) to normalize the SED,\nyou can input a single value or an interval as two floats (es. 1e10) separated by a space: ')
+        lum_infrared = [float(lum) for lum in lum_infrared.split()]
+        if len(lum_infrared) == 1:
+            lum_ir = np.array([lum_infrared[0]]*n_sims)
+        else:
+            lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
     else:
-        lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
-
+        lum_ir = np.array([None]*n_sims)
+    set_snr = input('Do you want to provide a desired SNR for the simulated observations? (y/n) ')
+    if set_snr != "y" and set_snr != "n":
+        print("Invalid input. Please insert y or n.")
+        set_snr = input('Do you want to provide a desired SNR for the simulated observations? (y/n) ')
+    if set_snr == "y":
+        snr = input('Please provide the desired SNR as a float or an interval as two floats separated by a space: ')
+        snr = [float(snr) for snr in snr.split()]
+        if len(snr) == 1:
+            snr = np.array([snr[0]]*n_sims)
+        else:
+            snr = np.random.uniform(snr[0], snr[1], n_sims)
+    else:
+        snr = np.ones(n_sims)
 
     fix_spatial = input('Do you want to fix cube spatial dimensions? (y/n) ')
     if fix_spatial != 'y' and fix_spatial != 'n':
@@ -249,12 +269,12 @@ if __name__ == '__main__':
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
-        tng_apis, ncpus, rest_freqs, redshifts, lum_ir,
+        tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
         n_lines, line_names, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
-        'freq', 'freq_support', 'continum_sensitivity', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
-        'tng_api_key', 'ncpu', 'rest_freq', 'redshift', 'lum_infrared',
+        'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
+        'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
         'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
     
     

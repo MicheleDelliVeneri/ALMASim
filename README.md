@@ -36,30 +36,21 @@ ALMASim entry: https://doi.org/10.1093/mnras/stac3314
 ## Installation Notes
 
 
-ALMASim works with ``python3`` (version ``3.8``), and does not support ``python2``.
+ALMASim works with ``python3`` (version ``3.10``), and does not support ``python2``.
 First create a virtual environment with ``python3`` and activate it. Then install the required packages with ``pip``:
 
-- python3.8 -m venv astro-env
-- source astro-env/bin/activate
-- pip install --upgrade --extra-index-url https://go.nrao.edu/pypi casadata
-- pip install casatools==6.5.6.22
-- pip install casatasks==6.5.6.22
-- pip install numpy h5py astropy scipy matplotlib pandas tqdm hdecompose spectral-cube astromartini dask distributed dask[distributed]  natsort nose coverage nifty8 notebook
-- git clone https://github.com/illustristng/illustris_python.git
-- cd illustris_python
-- pip install .
-- cd ..
-- git clone https://github.com/MicheleDelliVeneri/ALMASim.git
-- cd ALMASim
+- ```python3.10 -m venv astro-env```
+- ```source astro-env/bin/activate```
+- ```git clone https://github.com/MicheleDelliVeneri/ALMASim.git```
+- ```pip install -r ALMASim/requirements.txt```
+- ```git clone https://github.com/illustristng/illustris_python.git```
+- ```cd illustris_python```
+- ```pip install .```
+- ```cd ..```
 
 
 ## Getting started
 
-
 To run the simulation, just navigate to the ALMASim folder and execute 
-``python main.py --option value --option1 value1 value2``
-to check the available option run 
-``python main.py -h``
-
-
+```python main.py ```
 ## Notes
