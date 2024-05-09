@@ -545,7 +545,6 @@ def plot_science_keywords_distributions(service, master_path):
             plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
             plt.close()
     
-
 def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
     science_keywords, scientific_categories = get_science_types(service)

@@ -61,9 +61,9 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = "/mnt/storage/astro/almasim-test-24-5-4"
+    output_dir = "/srv/Fast01/delliven/almasim-test-24-5-4"
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
-    tng_dir = "/mnt/storage/astro/TNGData"
+    tng_dir = "/srv/Fast01/delliven/TNGData"
     project_name = input("Insert the name of the project: ")
     #project_name = 'test-extended'
     if not os.path.exists(output_dir):
@@ -106,7 +106,7 @@ if __name__ == '__main__':
                 metadata_name = metadata_name.split('.')[0]
                 metadata_name = metadata_name + '.csv'
             #metadata_name = "test.csv"
-            metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path, output_path)
+            metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path)
     else:
         #metadata_name = 'test.csv'
         metadata_name = input("Insert the name of the metadata file you want to use. Make sure to add .csv: ")
