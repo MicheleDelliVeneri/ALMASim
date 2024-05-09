@@ -242,7 +242,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
             fwhm_x = np.random.randint(3, 10)
             fwhm_y = np.random.randint(3, 10)
         datacube = usm.insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names, line_frequency, 
-                                            freq_sup, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_chan, 
+                                            freq_sup, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
                                             os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)))
     
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))

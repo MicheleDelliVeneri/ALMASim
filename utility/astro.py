@@ -1081,7 +1081,7 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         if source_type == 'gaussian':
             f.write('FWHM_x (pixels): {}\n'.format(fwhm_x))
             f.write('FWHM_y (pixels): {}\n'.format(fwhm_y))
-        if (source_ype == 'gaussian') or (source_type == 'extended'):
+        if (source_type == 'gaussian') or (source_type == 'extended'):
             f.write('Projection Angle: {}\n'.format(angle))
         for i in range(len(line_fluxes)):
             f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy  - Width (Channels): {}\n'.format(line_names[i], line_frequencies[i], line_fluxes[i], fwhm_z[i]))
