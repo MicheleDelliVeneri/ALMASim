@@ -39,7 +39,7 @@ def plotter(inx, output_dir, beam_size):
     plt.savefig(os.path.join(plot_dir, 'sim-spectra_{}.png'.format(inx)))
     plt.close()   
 
-def plot_skymodel(path, i, output_dir, beam_size, line_names, line_frequencies, line_indexes, cont_frequencies, show=False):
+def plot_skymodel(path, i, output_dir, line_names, line_frequencies, line_indexes, cont_frequencies, show=False):
     plot_dir = os.path.join(output_dir, 'plots')
     skymodel, _ = uas.load_fits(path)
     if len(skymodel.shape) > 3:

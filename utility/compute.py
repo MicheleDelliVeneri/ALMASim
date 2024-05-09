@@ -236,7 +236,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     usm.write_datacube_to_fits(datacube, filename)
     print('Done')
     del datacube
-    upl.plot_skymodel(filename, inx, output_dir, line_names, source_channel_index, cont_frequencies, show=False)
+    upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
     
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
