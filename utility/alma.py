@@ -450,7 +450,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_b.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. ALMA Bands')
             plt.xlabel('Counts')
@@ -466,7 +466,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_t = db.groupby(['science_keyword', 'time_bin']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_t.plot(kind='barh', stacked=True)
             plt.title('Science Keywords vs. Integration Time')
             plt.xlabel('Counts')
@@ -481,7 +481,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_f.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. Source Frequency')
             plt.xlabel('Counts')
@@ -500,7 +500,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_fov = db.groupby(['science_keyword', 'fov_bins']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_fov.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. FoV')
             plt.xlabel('Counts')
@@ -521,7 +521,7 @@ def plot_science_keywords_distributions(service, master_path):
 
             db_sk_bs = db.groupby(['science_keyword', 'beam_bins']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_bs.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. beams_size')
             plt.xlabel('Counts')
@@ -536,7 +536,7 @@ def plot_science_keywords_distributions(service, master_path):
             
             db_sk_Tt = db.groupby(['science_keyword', 'Ttime_bins']).size().unstack(fill_value=0)
 
-            plt.rcParams["figure.figsize"] = (18,20)
+            plt.rcParams["figure.figsize"] = (28,20)
             db_sk_Tt.plot(kind='barh', stacked=True, color=custom_palette)
             plt.title('Science Keywords vs. Total Time')
             plt.xlabel('Counts')
