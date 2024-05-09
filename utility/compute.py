@@ -308,5 +308,5 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
     print('Finished')
-    #shutil.rmtree(sim_output_dir)
+    shutil.rmtree(sim_output_dir)
     

@@ -841,13 +841,13 @@ def sed_reading(type_, path, cont_sens, freq_min, freq_max, lum_infrared=None, r
         if redshift is None:
             redshift = 10**(-4)
         if lum_infrared is None: 
-            lum_infrared = 1e+10 # luminosity in solar luminosities
+            lum_infrared = 1e+12 # luminosity in solar luminosities
     elif type_ == "point" or type_ == "gaussian":
         file_path = os.path.join(path, 'SED_low_z_type2_AGN.dat')
         if redshift is None:
             redshift = 0.05
         if lum_infrared is None:
-            lum_infrared = 1e+9 # luminosity in solar luminosities
+            lum_infrared = 1e+12 # luminosity in solar luminosities
     else:
         return "Not valid type"
     # L (erg/s/Hz) = 4 pi d^2(cm) * 10^-23 Flux (Jy)
