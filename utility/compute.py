@@ -175,6 +175,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Band: ', band)
     print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
     print('Angular resolution: {} arcsec'.format(round(ang_res.value, 3)))
+    print('Infrared Luminosity: {:.2e}'.format(lum_infrared))
     if source_type == 'extended':
         snapshot = uas.redshift_to_snapshot(redshift)
         print('Snapshot: {}'.format(snapshot))

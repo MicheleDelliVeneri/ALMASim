@@ -862,13 +862,13 @@ def sed_reading(type_, path, cont_sens, freq_min, freq_max, lum_infrared=None, r
     # Convert to GHz
     sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
     # Re normalize the SED and convert to Jy from erg/s/Hz
-    sed, lum_infrared_erg_s = normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
+    sed, lum_infrared_erg_s, lum_infrared = normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
     #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
     flux_infrared = lum_infrared_erg_s * 1e+23 / solid_angle # Jy * Hz 
     #flux_infrared_jy = flux_infrared  / (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
     sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
     sed = sed.sort_values(by='GHz', ascending=True) 
-    return sed, flux_infrared
+    return sed, flux_infrared, lum_infrared
 
 def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max):
     so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
@@ -886,7 +886,7 @@ def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
         cont_fluxes = sed[cont_mask]['Jy'].values
         min_ = np.min(cont_fluxes)
     if lum_save != lum_infrared:
-        print('To match the desired SNR, luminosity has been increased to {}'.format(lum_infrared))
+        print('To match the desired SNR, luminosity has been set to {:.2e}'.format(lum_infrared))
     return sed, lum_infrared_erg_s, lum_infrared
 
 def cont_finder(cont_frequencies,line_frequency):
@@ -1058,7 +1058,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
 def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
                         total_time, band, band_range, central_freq, redshift,
                         line_fluxes, line_names, line_frequencies, continum,
-                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo, lum_infared):
+                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo, lum_infrared):
     with open(path, 'w') as f:
         f.write('Simulation Parameters:\n')
         f.write('RA: {}\n'.format(ra))
