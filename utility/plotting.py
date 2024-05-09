@@ -34,8 +34,8 @@ def plotter(inx, output_dir, beam_size, line_names, line_frequencies, line_index
     ax[0].plot(cont_frequencies, clean_spectrum * pix_to_beam)
     ax[1].plot(cont_frequencies, dirty_spectrum * pix_to_beam)
     for freq, name, index in zip(line_frequencies, line_names, line_indexes):
-        ax[0].text(cont_frequencies[index + 1], spectrum[index] + 0.001 * spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
-        ax[1].text(cont_frequencies[index + 1], spectrum[index] + 0.001 * spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
+        ax[0].text(cont_frequencies[index + 1], clean_spectrum[index] + 0.001 * clean_spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
+        ax[1].text(cont_frequencies[index + 1], dirty_spectrum[index] + 0.001 * dirty_spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
     plt.xlabel()
     
     ax[0].set_title('Clean Sky Model Spectrum')
