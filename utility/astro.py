@@ -1005,7 +1005,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         print('Bandwidth has been adjusted to fit the lines')
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
-    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, fwhms, lum_infrared
+    return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))

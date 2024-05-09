@@ -39,26 +39,29 @@ def plotter(inx, output_dir, beam_size):
     plt.savefig(os.path.join(plot_dir, 'sim-spectra_{}.png'.format(inx)))
     plt.close()   
 
-def plot_skymodel(path, i, output_dir, show=False):
+def plot_skymodel(path, i, output_dir, beam_size, line_names, line_frequencies, line_indexes, cont_frequencies, show=False):
     plot_dir = os.path.join(output_dir, 'plots')
     skymodel, _ = uas.load_fits(path)
     if len(skymodel.shape) > 3:
         skymodel = skymodel[0]
-    skymodel_spectrum = np.sum(skymodel[:, :, :], axis=(1, 2))
-    skymodel_image = np.sum(skymodel[:, :, :], axis=0)[np.newaxis, :, :]
+    spectrum = np.sum(skymodel[:, :, :], axis=(1, 2))
+    image = np.sum(skymodel[:, :, :], axis=0)[np.newaxis, :, :]
     plt.figure(figsize=(5, 5))
-    plt.imshow(skymodel_image[0], origin='lower')
+    plt.imshow(image[0], origin='lower')
     plt.colorbar()
     plt.title('skymodel Image')
     plt.savefig(os.path.join(plot_dir, 'skymodel_{}.png'.format(i)))
     if show:
         plt.show()
     plt.close()
-    if skymodel.shape[0] > 1:
-        plt.figure(figsize=(5, 5))
-        plt.plot(skymodel_spectrum)
-        plt.title('skymodel Spectrum')
-        plt.savefig(os.path.join(plot_dir, 'skymodel_spectrum_{}.png'.format(i)))
-        if show:
-            plt.show()
-        plt.close()
+    plt.figure(figsize=(5, 5))
+    plt.plot(cont_frequencies, spectrum)
+    for freq, name, index in zip(line_frequencies, line_names, line_indexes):
+        plt.text(cont_frequencies[index + 1], spectrum[index] + 0.001 * spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
+    plt.xlabel('Frequency (GHz)')
+    plt.ylabel('Flux (Jy)')
+    plt.title('skymodel Spectrum')
+    plt.savefig(os.path.join(plot_dir, 'skymodel_spectrum_{}.png'.format(i)))
+    if show:
+        plt.show()
+    plt.close()

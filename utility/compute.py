@@ -142,7 +142,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         redshift = uas.compute_redshift(rest_frequency, source_freq)
     else:
         rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
-    continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, fwhm_z, lum_infrared  = uas.process_spectral_data(
+    continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, cont_frequencies, fwhm_z, lum_infrared  = uas.process_spectral_data(
                                                                         source_type,
                                                                         main_dir,
                                                                         redshift, 
@@ -162,7 +162,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         band_range  = n_channels * freq_sup
     
     central_channel_index = n_channels // 2
-    #source_channel_index = np.array([int(central_channel_index * source_freq * U.GHz / central_freq) for source_freq in line_frequency])
     print('Field of view: {} arcsec'.format(round(fov.value, 3)))
     print('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
     print('Cell size: {} arcsec'.format(round(cell_size.value, 4)))
@@ -196,11 +195,11 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
 
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         for line_name, line_flux in zip(line_names, line_fluxes): 
-            print('Simulating Line {} Flux: {} at z {}'.format(line_name, line_flux, redshift))
+            print('Simulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
     else:
         print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
-    print('Simulating Continum Flux: {}'.format(np.mean(continum)))
-    print('Continuum Sensitity: {}'.format(cont_sens))
+    print('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
+    print('Continuum Sensitity: {:.2e}'.format(cont_sens))
     datacube = usm.DataCube(
         n_px_x=n_pix, 
         n_px_y=n_pix,
@@ -237,7 +236,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     usm.write_datacube_to_fits(datacube, filename)
     print('Done')
     del datacube
-    upl.plot_skymodel(filename, inx, output_dir, show=False)
+    upl.plot_skymodel(filename, inx, output_dir, line_names, source_channel_index, cont_frequencies, show=False)
     
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
