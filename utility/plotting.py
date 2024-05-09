@@ -5,7 +5,7 @@ import utility.alma as ual
 import utility.astro as uas
 import utility.skymodels as usm
 
-def plotter(inx, output_dir, beam_size):
+def plotter(inx, output_dir, beam_size, line_names, line_frequencies, line_indexes, cont_frequencies):
     plot_dir = os.path.join(output_dir, 'plots')
     clean, clean_header = uas.load_fits(os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"))
     dirty, dirty_header = uas.load_fits(os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
@@ -31,11 +31,17 @@ def plotter(inx, output_dir, beam_size):
     plt.close()
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    ax[0].plot(clean_spectrum * pix_to_beam)
-    ax[1].plot(dirty_spectrum * pix_to_beam)
+    ax[0].plot(cont_frequencies, clean_spectrum * pix_to_beam)
+    ax[1].plot(cont_frequencies, dirty_spectrum * pix_to_beam)
+    for freq, name, index in zip(line_frequencies, line_names, line_indexes):
+        ax[0].text(cont_frequencies[index + 1], spectrum[index] + 0.001 * spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
+        ax[1].text(cont_frequencies[index + 1], spectrum[index] + 0.001 * spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
+    plt.xlabel()
+    
     ax[0].set_title('Clean Sky Model Spectrum')
     ax[1].set_title('ALMA Simulated Spectrum')
-    ax[0].set_xlabel('Frequency Channel')
+    ax[0].set_xlabel('Frequency (GHz)')
+    plt.ylabel('Flux (Jy/beam)')
     plt.savefig(os.path.join(plot_dir, 'sim-spectra_{}.png'.format(inx)))
     plt.close()   
 

@@ -1,5 +1,6 @@
 import numpy as np
 import astropy.units as U
+from astropy.time import Time
 from casatasks import exportfits, simobserve, tclean, gaincal, applycal
 from casatools import table
 from casatools import simulator as casa_simulator
@@ -98,10 +99,13 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     source_freq = freq * U.GHz
     central_freq = ual.get_band_central_freq(int(band)) * U.GHz
     sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
-    
+    obs_date = Time(obs_date + 'T00:00:00', format='isot', scale='utc').to_value("mjd")
     if not os.path.exists(sim_output_dir):
         os.makedirs(sim_output_dir)
     os.chdir(output_dir)
+    print('Angular resolution: {}'.format(ang_res))
+    print('Integration Time: {}'.format(int_time))
+    print('Total Observatio Time: {}'.format(total_time))
     ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
     antennalist = os.path.join(sim_output_dir, "antenna.cfg")
     antenna_name = 'antenna'
@@ -233,7 +237,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     print('Writing datacube to {}'.format(filename))
-    usm.write_datacube_to_fits(datacube, filename)
+    usm.write_datacube_to_fits(datacube, filename, obs_date)
     print('Done')
     del datacube
     upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
@@ -267,9 +271,13 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     
     scale = random.uniform(0, 1)
     ms_path = os.path.join(sim_output_dir, "{}.{}.noisy.ms".format(project_name, antenna_name))
+    print('Simulating atmospheric noise ....')
     ual.simulate_atmospheric_noise(sim_output_dir, project_name, scale, ms_path, antennalist)
+    print('Simulating gain errors ....')
     gain_error_amp = random.gauss(0, 0.1)
     ual.simulate_gain_errors(ms_path, gain_error_amp)
+    print('Done')
+    print('Fourier inverting ....')
     tclean(
         vis=ms_path,
         imagename=os.path.join(sim_output_dir, '{}.{}'.format(project_name, antenna_name)),
@@ -289,7 +297,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
        fitsimage=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"), overwrite=True)
     exportfits(imagename=os.path.join(project_name, '{}.{}.skymodel'.format(project_name, antenna_name)), 
         fitsimage=os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"), overwrite=True)
-    upl.plotter(inx, output_dir, beam_size)
+    upl.plotter(inx, output_dir, beam_size, line_names, line_frequency, source_channel_index, cont_frequencies)
     if save_secondary == True:
         exportfits(imagename=os.path.join(project_name, '{}.{}.psf'.format(project_name, antenna_name)),
               fitsimage=os.path.join(output_dir, "psf_" + str(inx) +".fits"), overwrite=True)

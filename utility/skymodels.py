@@ -1826,6 +1826,7 @@ def insert_serendipitous(datacube, brightness, fwhm_x, fwhm_y, fwhm_z, n_px, n_c
 def write_datacube_to_fits(
     datacube,
     filename,
+    obs_date,
     channels="frequency",
     overwrite=True,
     ):
@@ -1914,7 +1915,7 @@ def write_datacube_to_fits(
             header.append(("CRVAL4", wcs_header["CRVAL4"]))
             header.append(("CTYPE4", wcs_header["CTYPE4"]))
             header.append(("CUNIT4", "PAR"))
-        header.append(("EPOCH", 2000))
+        header.append(("EPOCH", 2000.))
         # header.append(('BLANK', -32768)) #only for integer data
         header.append(("BSCALE", 1.0))
         header.append(("BZERO", 0.0))
@@ -1929,7 +1930,7 @@ def write_datacube_to_fits(
         # long names break fits format, don't let the user set this
         header.append(("OBJECT", "MOCK"))
         header.append(("BUNIT", datacube_array_units.to_string("fits")))
-        header.append(("MJD-OBS", Time.now().to_value("mjd")))
+        header.append(("MJD-OBS", obs_date))
         header.append(("BTYPE", "Intensity"))
         header.append(("SPECSYS", wcs_header["SPECSYS"]))
 
