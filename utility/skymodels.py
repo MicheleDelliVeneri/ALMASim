@@ -1510,7 +1510,10 @@ def gaussian(x, amp, cen, fwhm):
     #    return np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
     #integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
     gaussian = np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
-    norm = amp /  np.sum(gaussian)
+    if np.sum(gaussian) != 0:
+        norm = amp /  np.sum(gaussian)
+    else:
+        norm = amp
     result = norm * gaussian
     #norm = 1 / integral
     return result
@@ -1577,7 +1580,10 @@ def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in tqdm(range(0, n_chan)):
-        datacube._array[:, :, z] = (gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle) + gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)) * U.Jy * U.pix**-2 
+        cont = gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
+        line =  gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
+        slice_ = cont + line
+        datacube._array[:, :, z] = slice_ * U.Jy * U.pix**-2 
     return datacube 
 
 def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
