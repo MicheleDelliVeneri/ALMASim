@@ -1825,7 +1825,7 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
     # get maximum continum value
     cont_peak = np.max(continum)
     # get serendipitous continum maximum
-    serendipitous_norms = np.random.rand(cont_sens, cont_peaks, n_sources)
+    serendipitous_norms = np.random.uniform(cont_sens, cont_peak, n_sources)
     # normalize continum to each serendipitous continum maximum
     serendipitous_conts = np.array([continum * serendipitous_norm / cont_peak for serendipitous_norm in serendipitous_norms])
     # sample coordinates of the first line
