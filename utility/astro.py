@@ -1058,7 +1058,8 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
 def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
                         total_time, band, band_range, central_freq, redshift,
                         line_fluxes, line_names, line_frequencies, continum,
-                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, subhalo, lum_infrared):
+                        fov, beam_size, cell_size, n_pix, n_channels, snapshot, 
+                        subhalo, lum_infrared, fwhm_z, source_type, fwhm_x=None, fwhm_y=None, angle=None):
     with open(path, 'w') as f:
         f.write('Simulation Parameters:\n')
         f.write('RA: {}\n'.format(ra))
@@ -1077,8 +1078,13 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         f.write('Cube Size: {} x {} x {} pixels\n'.format(n_pix, n_pix, n_channels))
         f.write('Mean Continum Flux: {}\n'.format(np.mean(continum)))
         f.write('Infrared Luminosity: {}\n'.format(lum_infrared))
+        if source_type is 'gaussian':
+            f.write('FWHM_x (pixels): {}\n'.format(fwhm_x))
+            f.write('FWHM_y (pixels): {}\n'.format(fwhm_y))
+        if (source_ype is 'gaussian') or (source_type is 'extended'):
+            f.write('Projection Angle: {}\n'.format(angle))
         for i in range(len(line_fluxes)):
-            f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy\n'.format(line_names[i], line_frequencies[i], line_fluxes[i]))
+            f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy  - Width (Channels): {}\n'.format(line_names[i], line_frequencies[i], line_fluxes[i], fwhm_z[i]))
         if snapshot != None:
             f.write('TNG Snapshot ID: {}\n'.format(snapshot))
             f.write('TNG Subhalo ID: {}\n'.format(subhalo))     

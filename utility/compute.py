@@ -214,6 +214,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         ra=ra, 
         dec=dec)
     wcs = datacube.wcs
+    fwhm_x, fwhm_y, angle = None, None, None
     if source_type == 'point':
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         pos_z = [int(index) for index in source_channel_index]
@@ -226,13 +227,19 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         angle = np.random.randint(0, 180)
         datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_pix, n_channels)
     elif source_type == 'extended':
+        
         datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
+
+    uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
+                            ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
+                            redshift, line_fluxes, line_names, line_frequency, 
+                            continum, fov, beam_size, cell_size, n_pix, 
+                            n_channels, snapshot, tng_subhaloid, lum_infrared, fwhm_z, source_type, fwhm_x, fwhm_y, angle)
 
     if inject_serendipitous == True:
         if source_type != 'gaussian':
             fwhm_x = np.random.randint(3, 10)
             fwhm_y = np.random.randint(3, 10)
-            fwhm_z = np.random.randint(3, 10)
         datacube = usm.insert_serendipitous(datacube, brightness, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels)
     
     filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
@@ -244,11 +251,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     
     project_name = project_name + '_{}'.format(inx)
     os.chdir(output_dir)
-    uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
-                            ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
-                            redshift, line_fluxes, line_names, line_frequency, 
-                            continum, fov, beam_size, cell_size, n_pix, 
-                            n_channels, snapshot, tng_subhaloid, lum_infrared)
+    
     simobserve(
         project=project_name, 
         skymodel=filename,
