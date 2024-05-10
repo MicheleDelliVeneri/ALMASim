@@ -600,25 +600,32 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
             fov_range = tuple(fovs[0], fovs[0])
         else: 
             fov_range = tuple(0., fovs[0])
+    else:
+        fov_range = None
     time_resolutions = [float(time_res) for time_res in time_resolution_input.split()] if time_resolution_input else None
     if isinstance(time_resolutions, list):
         if len(time_resolutions) > 1:
             time_resolution_range = tuple(time_resolutions[0], time_resolutions[1])
         else:
             time_resolution_range = tuple(0., time_resolutions[0])
+    else:
+        time_resolution_range = None
     total_times = [float(total_time) for total_time in total_time_input.split()] if time_resolution_input else None
     if isinstance(total_times, list):
         if len(total_times) > 1:
             total_time_range = tuple(total_times[0], total_times[1])
         else:
             total_time_range = tuple(0., total_times[0])
+    else:
+        total_time_range = None
     frequencies = [float(frequency) for frequency in frequency_input.split()] if frequency_input else None
     if isinstance(frequencies, list):
         if len(frequencies) > 1:
             frequency_range = tuple(frequencies[0], frequencies[1])
         else:
             frequency_range = tuple(0., frequencies[0])
-
+    else:
+        frequency_range = None
 
     # Query the database with all filters
     df = query_by_science_type(service, science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)

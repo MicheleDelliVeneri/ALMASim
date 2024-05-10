@@ -9,7 +9,7 @@ import sys
 from math import pi
 from astropy.cosmology import FlatLambdaCDM 
 current_path = os.getcwd()
-parent_dir = os.path.join(current_path)
+parent_dir = os.path.join(current_path, "..")
 print("Current working directory:", current_path)
 print("Path to the parent directory:",parent_dir)
 
@@ -110,8 +110,8 @@ def sed_reading(type_, path, lum_infrared=None, redshift=None):
     sed = sed.sort_values(by='GHz', ascending=True) 
     return sed, flux_infrared
 
-sed_point, flux_infrared_point = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+10, redshift=0.05)
-sed_extended, flux_infrared_ext = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e9, redshift=1e-4)
+sed_point, flux_infrared_point = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=0.05)
+sed_extended, flux_infrared_ext = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=1e-4)
 
 def cont_finder(cont_frequencies,line_frequency):
     #cont_frequencies=sed['GHz'].values
@@ -249,10 +249,13 @@ new_lines = pd.read_csv(os.path.join(parent_dir,'brightnes','temporary.csv'))
 sigmas = luminosity_to_jy(400, new_lines, redshift=0.05)
 line_names = new_lines['Line'].values
 sol_lum = temperature_lum_to_solar_lum(os.path.join(parent_dir,'brightnes','temporary.csv'),'Frequency','Intensity')
+sol_err = temperature_lum_to_solar_lum(os.path.join(parent_dir,'brightnes','temporary.csv'),'Frequency','Error')
 L_s = 5.9e13 # Continuum luminosity infrared in unity of solar luminosity
 cs = np.log10(sol_lum / L_s) # c obtained from :  LogL_line=LogL_IR + c 
-for name, c in zip(line_names, cs):
-    print(name, c)
+c_err = np.log10(sol_err / L_s)
+for name, c, c_er in zip(line_names, cs, c_err):
+    print(name, c, c_er)
 new_lines['cs'] = cs
+new_lines['err_c'] = c_err
 update_temporary = os.path.join(parent_dir, 'brightnes', 'temporary_update.csv')
 new_lines.to_csv(update_temporary, index=False)
