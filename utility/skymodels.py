@@ -1801,26 +1801,66 @@ def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
           
     return sample
 
-def insert_serendipitous(datacube, brightness, fwhm_x, fwhm_y, fwhm_z, n_px, n_chan):
+def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names, 
+    line_frequencies, freq_sup, pos_zs, fwhm_x, fwhm_y, fwhm_zs, n_px, n_chan, sim_params_path):
+    wcs = datacube.wcs
     xy_radius = n_px / 4
     z_radius = n_chan / 2
     n_sources = np.random.randint(1, 5)
+    # Generate fwhm for x and y
     fwhm_xs = np.random.randint(1, fwhm_x, n_sources)
     fwhm_ys = np.random.randint(1, fwhm_y, n_sources)
-    fwhm_zs = np.random.randint(2, fwhm_z, n_sources)
-    amplitudes = np.random.uniform(0, brightness, n_sources)
+    # generate a random number of lines for each serendipitous source
+    n_lines = np.random.randint(1, len(line_fluxes), n_sources)
+    # generate the width of the first line based on the first line of the central source
+    s_fwhm_zs = np.random.randint(2, fwhm_zs[0], n_sources)
+    # get posx and poy of the centtral source
     pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(datacube.ra, datacube.dec, datacube.velocity_centre, 0)
-    pos_z = n_chan // 2
+    # get a mininum separation based on spatial dimensions
     sep_x, sep_z = np.random.randint(0, xy_radius), np.random.randint(0, z_radius)
+    # get the position of the first line of the central source
+    pos_z = pos_zs[0]
+    # get line fluxes
+    serendipitous_line_fluxes = ([np.random.uniform(cont_sens, line_flux, n_sources) for line_flux in line_fluxes])
+    # get maximum continum value
+    cont_peak = np.max(continum)
+    # get serendipitous continum maximum
+    serendipitous_norms = np.random.uniform(cont_sens, cont_peak, n_sources)
+    # normalize continum to each serendipitous continum maximum
+    serendipitous_conts = np.array([continum * serendipitous_norm / cont_peak for serendipitous_norm in serendipitous_norms])
+    # sample coordinates of the first line
     sample_coords = sample_positions(pos_x, pos_y, pos_z, 
-                                     fwhm_x, fwhm_y, fwhm_z,
-                                     n_sources, fwhm_xs, fwhm_ys, fwhm_zs,
+                                     fwhm_x, fwhm_y, fwhm_zs[0],
+                                     n_sources, fwhm_xs, fwhm_ys, s_fwhm_zs,
                                      xy_radius, z_radius, sep_x, sep_z)
+    # get the rotation angles
     pas = np.random.randint(0, 360, n_sources)
+    with open(path, 'w') as f:
+        f.write('\n Injected {} serendipitous sources\n'.format(n_sources))
     for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords)):
-        print('{}:\nLocation: {}\nSize X: {} Y: {} Z: {}'.format(c_id, choords, fwhm_xs[c_id], fwhm_ys[c_id], fwhm_zs[c_id]))
-        datacube = insert_gaussian(datacube, amplitudes[c_id], choords[0], choords[1], choords[2], fwhm_xs[c_id], 
-                                    fwhm_ys[c_id], fwhm_zs[c_id], pas[c_id], n_px, n_chan)
+        n_line = n_lines[c_id]
+        pos_x, pos_y, pos_z = choords
+        delta = pos_z - pos_zs[0]
+        pos_z = np.array([pos + delta for pos in pos_zs])[:n_line]
+        s_ra, s_dec, _ = wcs.sub(3).wcs_pix2world(pos_x, pos_y, 0, 0)
+        s_freq = np.array([line_freq + delta * freq_sup for line_freq in line_frequencies])[:n_line]
+        fwhmsz = [s_fwhm_zs[0]]
+        for _ in range(n_line):
+            fwhmsz.append(np.random.randint(2, np.random.sample(fwhm_zs, 1)))
+            
+        s_line_names = line_names[:n_line]
+        s_line_fluxes = serendipitous_line_fluxes[c_id][:n_line]
+        s_continum = serendipitous_conts[c_id]
+        f.write('RA: {}\n'.format(s_ra))
+        f.write('DEC: {}\n'.format(s_dec))
+        f.write('FWHM_x (pixels): {}\n'.format(fwhm_xs[c_id]))
+        f.write('FWHM_y (pixels): {}\n'.format(fwhm_ys[c_id]))
+        f.write('Projection Angle: {}\n'.format(pas[c_id]))
+        for i in range(s_freq):
+            f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy - Width (Channels): {}\n'.format(s_line_names[i], s_freq[i], line_fluxes[i], fwhmsz[i]))
+        datacube = insert_gaussian(datacube, s_continum, s_line_fluxes, pos_x, pos_y, pos_z, fwhm_xs[c_id], fwhm_ys[c_id], fwhmsz, 
+                    pas[c_id], n_px, n_chan)
+    f.close()
     return datacube
 
 def write_datacube_to_fits(

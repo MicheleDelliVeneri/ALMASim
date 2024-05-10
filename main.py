@@ -132,7 +132,7 @@ if __name__ == '__main__':
         line_names = np.array([line_names]*n_sims)
         z1 = None
     else:
-        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space\nif a single value is given, all simualtions will be performed at the same redshift: ')
+        redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space. If a single value is given, all simualtions will be performed at the same redshift: ')
         redshifts = redshifts.split()
         if len(redshifts) == 1:
             redshifts = np.array([float(redshifts[0])] * n_sims)
