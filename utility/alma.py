@@ -359,20 +359,23 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
             band_query = f"band_list in ('{bands}')"
 
     # Additional filtering based on ranges
-    fov_query = ""
-    if fov_range:
+    if fov_range is None:
+        fov_query = ""
+    else:
         fov_query = f"s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}"
-
-    time_resolution_query = ""
-    if time_resolution_range:
+    if time_resolution_range is None:
+        time_resolution_query = ""
+    else:
         time_resolution_query = f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
 
-    total_time_query = ""
-    if total_time_range:
+    if total_time_range is None:
+        total_time_query = ""
+    else:    
         total_time_query = f"t_max BETWEEN {total_time_range[0]} AND {total_time_range[1]}"
 
-    frequency_query = ""
-    if frequency_range:
+    if frequency_range is None:
+        frequency_query = ""
+    else:
         frequency_query = f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
 
     # Combine all conditions into one WHERE clause
@@ -580,10 +583,10 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
     science_keyword_number = input('Select the Science Keyword by number, separate by space, leave empty for all: ')
     scientific_category_number = input('Select the Scientific Category by number, separate by space, leave empty for all: ')
     band = input('Select observing bands, separate by space, leave empty for all: ')
-    fov_input = input("Select FOV range as min max separated by space, or leave empty for no filters: ")
-    time_resolution_input = input("Select time resolution range as min max separated by space, or leave empty for no filters: ")
-    total_time_input = input("Select total time range as min max separated by space, or leave empty for no filters: ")
-    frequency_input = input("Select frequency range as min max separated by space, or leave empty for no filters: ")
+    fov_input = input("Select FOV range as min FOV and max FOV separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
+    time_resolution_input = input("Select time resolution range as min max separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
+    total_time_input = input("Select total time range as min max separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
+    frequency_input = input("Select the source frequency range as min max separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
 
     # Convert input selections to filters
     science_keyword = [science_keywords[int(i)] for i in science_keyword_number.split()] if science_keyword_number else None
@@ -591,10 +594,31 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
     bands = [int(x) for x in band.split()] if band else None
 
     # Convert input ranges to tuples or None
-    fov_range = tuple(map(float, fov_input.split())) if fov_input else None
-    time_resolution_range = tuple(map(float, time_resolution_input.split())) if time_resolution_input else None
-    total_time_range = tuple(map(float, total_time_input.split())) if total_time_input else None
-    frequency_range = tuple(map(float, frequency_input.split())) if frequency_input else None
+    fovs = [float(fov) for fov in fov_input.split()] if fov_input else None
+    if isinstance(fovs, list):
+        if len(fovs) > 1:
+            fov_range = tuple(fovs[0], fovs[0])
+        else: 
+            fov_range = tuple(0., fovs[0])
+    time_resolutions = [float(time_res) for time_res in time_resolution_input.split()] if time_resolution_input else None
+    if isinstance(time_resolutions, list):
+        if len(time_resolutions) > 1:
+            time_resolution_range = tuple(time_resolutions[0], time_resolutions[1])
+        else:
+            time_resolution_range = tuple(0., time_resolutions[0])
+    total_times = [float(total_time) for total_time in total_time_input.split()] if time_resolution_input else None
+    if isinstance(total_times, list):
+        if len(total_times) > 1:
+            total_time_range = tuple(total_times[0], total_times[1])
+        else:
+            total_time_range = tuple(0., total_times[0])
+    frequencies = [float(frequency) for frequency in frequency_input.split()] if frequency_input else None
+    if isinstance(frequencies, list):
+        if len(frequencies) > 1:
+            frequency_range = tuple(frequencies[0], frequencies[1])
+        else:
+            frequency_range = tuple(0., frequencies[0])
+
 
     # Query the database with all filters
     df = query_by_science_type(service, science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)
