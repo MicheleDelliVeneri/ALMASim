@@ -9,7 +9,7 @@ import sys
 from math import pi
 from astropy.cosmology import FlatLambdaCDM 
 current_path = os.getcwd()
-parent_dir = os.path.join(current_path, "..")
+parent_dir = os.path.join(current_path)
 print("Current working directory:", current_path)
 print("Path to the parent directory:",parent_dir)
 
@@ -110,8 +110,8 @@ def sed_reading(type_, path, lum_infrared=None, redshift=None):
     sed = sed.sort_values(by='GHz', ascending=True) 
     return sed, flux_infrared
 
-sed_point, flux_infrared_point = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=0.05)
-sed_extended, flux_infrared_ext = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=0.05)
+sed_point, flux_infrared_point = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+10, redshift=0.05)
+sed_extended, flux_infrared_ext = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e9, redshift=1e-4)
 
 def cont_finder(cont_frequencies,line_frequency):
     #cont_frequencies=sed['GHz'].values
@@ -213,7 +213,7 @@ for freq, name, index in zip(line_frequencies, line_names, line_indexes):
     plt.text(new_cont_freq[index + 1], spectrum[index] + 0.001 * spectrum[index], name, rotation=0, verticalalignment='bottom')  # Add text annotation
 plt.xlabel('Frequency (GHz)')
 plt.ylabel('Flux (Jy)')
-plt.savefig('sed_plot.png')
+plt.savefig(os.path.join(parent_dir, 'experimental/sed_plot.png'))
 
 def luminosity_to_jy(velocity, data,  redshift=3):
     
@@ -236,11 +236,23 @@ def luminosity_to_jy(velocity, data,  redshift=3):
         sigma = (data['Intensity'] * ( (1 + redshift) * data['Frequency'] **2)) / (alpha * velocity * cosmo.luminosity_distance(redshift).value**2)
         return sigma
 
+# Using the relation from Matteo's photo to convert K km s-1 pc2 in solar luminosity
+def temperature_lum_to_solar_lum(data_path, freq_col_name, lum_col_name):
+    db = pd.read_csv(data_path)
+    temp_lum = db[lum_col_name] #luminosity values in k km s-1 pc2
+    rest_freq = db[freq_col_name] #frequency at rest frame
+    sol_lum= 3.2e-11 * (rest_freq ** 3)* (temp_lum * 1e9) #The matematical eq is: 3.2e-11 * ((obs_freq[GHz])*(1+z))^3 * L[k km s-1 pc2]
+    #1e9 is presente because the data are presented in unit of 1e9 k km s-1 pc2, 
+    return sol_lum #Line Luminosity values in unit of solar luminosity cfr. Spilker et all. 2014
+
 new_lines = pd.read_csv(os.path.join(parent_dir,'brightnes','temporary.csv'))
 sigmas = luminosity_to_jy(400, new_lines, redshift=0.05)
 line_names = new_lines['Line'].values
-L_s = 5e13
-cs = sigmas / L_s
+sol_lum = temperature_lum_to_solar_lum(os.path.join(parent_dir,'brightnes','temporary.csv'),'Frequency','Intensity')
+L_s = 5.9e13 # Continuum luminosity infrared in unity of solar luminosity
+cs = np.log10(sol_lum / L_s) # c obtained from :  LogL_line=LogL_IR + c 
 for name, c in zip(line_names, cs):
     print(name, c)
-
+new_lines['cs'] = cs
+update_temporary = os.path.join(parent_dir, 'brightnes', 'temporary_update.csv')
+new_lines.to_csv(update_temporary, index=False)
