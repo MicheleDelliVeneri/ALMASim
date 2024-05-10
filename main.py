@@ -292,5 +292,5 @@ if __name__ == '__main__':
     #client.close()
     #cluster.close()
     uc.simulator(*input_params.iloc[0])
-    uc.remove_logs(main_path)
+    #uc.remove_logs(main_path)
     

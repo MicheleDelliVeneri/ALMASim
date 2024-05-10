@@ -169,6 +169,9 @@ def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, 
             f.write(f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n")
     f.close()
 
+def compute_distance(x1, y1, z1, x2, y2, z2):
+        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+
 def get_max_baseline_from_antenna_config(antenna_config):
     """
     takes an antenna configuration .cfg file as input and outputs
@@ -184,7 +187,16 @@ def get_max_baseline_from_antenna_config(antenna_config):
                     row = [x for x in line.split(" ")][:3]
                 positions.append([float(x) for x in row])  
     positions = np.array(positions)
-    max_baseline = 2 * np.max(np.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2]**2)) / 1000
+    max_baseline = 0
+    
+    for i in range(len(positions)):
+        x1, y1, z1 = positions[i]
+        for j in range(i + 1, len(positions)):
+            x2, y2, z2 = positions[j]
+            dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
+            if dist > max_baseline:
+                max_baseline = dist
+
     return max_baseline
 
 def get_max_baseline_from_antenna_array(antenna_array, master_path):
@@ -192,7 +204,14 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
     obs_antennas = antenna_array.split(' ')
     obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
     obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
-    max_baseline = 2 * np.max(np.sqrt(obs_coordinates['x'].values**2 + obs_coordinates['y'].values**2 + obs_coordinates['z'].values**2)) / 1000
+    max_baseline = 0
+    for i in range(len(obs_coordinates)):
+        x1, y1, z1 = obs_coordinates[i]
+        for j in range(i + 1, len(obs_coordinates)):
+            x2, y2, z2 = obs_coordinates[j]
+            dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
+            if dist > max_baseline:
+                max_baseline = dist
     return max_baseline
 
 def query_observations(service, member_ous_uid, target_name):

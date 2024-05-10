@@ -1,5 +1,6 @@
 import numpy as np
 import astropy.units as U
+from astropy.constants import c
 from astropy.time import Time
 from casatasks import exportfits, simobserve, tclean, gaincal, applycal
 from casatools import table
@@ -14,6 +15,7 @@ import utility.skymodels as usm
 import utility.plotting as upl
 import shutil
 from os.path import isfile
+import math
 
 def remove_non_numeric(text):
   """Removes non-numeric characters from a string.
@@ -110,8 +112,10 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     antennalist = os.path.join(sim_output_dir, "antenna.cfg")
     antenna_name = 'antenna'
     max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
+    t_ang_res = c.to(U.m/U.s) / central_freq.to(U.Hz) / (max_baseline.to(U.m))
+    t_ang_res = t_ang_res * (180 / math.pi) * 3600 * U.arcsec
+    print('Angular Resolution computed from max baseline: {}'.format(t_ang_res))
     pos_string = uas.convert_to_j2000_string(ra.value, dec.value)
-
     fov =  ual.get_fov_from_band(int(band), return_value=False)
     beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
@@ -314,5 +318,5 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
     print('Finished')
-    shutil.rmtree(sim_output_dir)
+    #shutil.rmtree(sim_output_dir)
     
