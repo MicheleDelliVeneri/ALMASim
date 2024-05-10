@@ -315,7 +315,7 @@ def get_science_types(service):
     
     return  unique_keywords, scientific_category
     
-def query_by_science_type(service, science_keyword=None, scientific_category=None, band=None, fov=None, time_resolution=None, total_time=None, frequency=None):
+def query_by_science_type(service, science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
     Parameters:
@@ -335,44 +335,45 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
     # Build query components based on the type and content of each parameter
     science_keyword_query = f"science_keyword like '%{science_keyword}%'"
     if isinstance(science_keyword, list):
-        science_keywords = "', '".join(science_keyword)
-        science_keyword_query = f"science_keyword in ('{science_keywords}')"
+        if len(science_keyword) == 1:
+            science_keyword_query = f"science_keyword like '%{science_keyword[0]}%'"
+        else:
+            science_keywords = "', '".join(science_keyword)
+            science_keyword_query = f"science_keyword in ('{science_keywords}')"
 
     scientific_category_query = f"scientific_category like '%{scientific_category}%'"
     if isinstance(scientific_category, list):
-        scientific_categories = "', '".join(scientific_category)
-        scientific_category_query = f"scientific_category in ('{scientific_categories}')"
+        if len(scientific_category) == 1:
+            scientific_category_query = f"scientific_category like '%{scientific_category[0]}%'"
+        else:
+            scientific_categories = "', '".join(scientific_category)
+            scientific_category_query = f"scientific_category in ('{scientific_categories}')"
 
     band_query = f"band_list like '%{band}%'"
     if isinstance(band, list):
-        bands = [str(x) for x in band]
-        bands = "', '".join(bands)
-        band_query = f"band_list in ('{bands}')"
+        if len(band) == 1:
+            band_query = f"band_list like '%{band[0]}%'"
+        else:
+            bands = [str(x) for x in band]
+            bands = "', '".join(bands)
+            band_query = f"band_list in ('{bands}')"
 
-    # Additional filtering based on multiple discrete values
+    # Additional filtering based on ranges
     fov_query = ""
-    if fov:
-        fovs = [str(f) for f in fov]
-        fovs = "', '".join(fovs)
-        fov_query = f"s_fov in ('{fovs}')"
+    if fov_range:
+        fov_query = f"s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}"
 
     time_resolution_query = ""
-    if time_resolution:
-        time_resolutions = [str(tr) for tr in time_resolution]
-        time_resolutions = "', '".join(time_resolutions)
-        time_resolution_query = f"t_resolution in ('{time_resolutions}')"
+    if time_resolution_range:
+        time_resolution_query = f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
 
     total_time_query = ""
-    if total_time:
-        total_times = [str(tt) for tt in total_time]
-        total_times = "', '".join(total_times)
-        total_time_query = f"t_max in ('{total_times}')"
+    if total_time_range:
+        total_time_query = f"t_max BETWEEN {total_time_range[0]} AND {total_time_range[1]}"
 
     frequency_query = ""
-    if frequency:
-        frequencies = [str(freq) for freq in frequency]
-        frequencies = "', '".join(frequencies)
-        frequency_query = f"frequency in ('{frequencies}')"
+    if frequency_range:
+        frequency_query = f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
 
     # Combine all conditions into one WHERE clause
     conditions = [science_keyword_query, scientific_category_query, band_query, fov_query, time_resolution_query, total_time_query, frequency_query]
@@ -575,26 +576,28 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
     for i, category in enumerate(scientific_categories):
         print(f'{i}: {category}')
 
-    # User input for selecting multiple numbers or leaving empty
-    science_keyword_number = input('Select the Science Keyword by number, if you want to select multiple numbers separate them by a space, leave empty for all: ')
-    scientific_category_number = input('Select the Scientific Category by number, if you want to select multiple numbers separate them by a space, leave empty for all: ')
-    band_number = input('Select observing bands by number, if you want to select multiple bands separate them by a space, leave empty for all: ')
-    fov_number = input('Select FOV values by number, if you want to select multiple values separate them by a space, leave empty for all: ')
-    time_resolution_number = input('Select time resolution values by number, if you want to select multiple values separate them by a space, leave empty for all: ')
-    total_time_number = input('Select total time values by number, if you want to select multiple values separate them by a space, leave empty for all: ')
-    frequency_number = input('Select frequency values by number, if you want to select multiple values separate them by a space, leave empty for all: ')
+    # Input for selection using space-separated values or empty for no filter
+    science_keyword_number = input('Select the Science Keyword by number, separate by space, leave empty for all: ')
+    scientific_category_number = input('Select the Scientific Category by number, separate by space, leave empty for all: ')
+    band = input('Select observing bands, separate by space, leave empty for all: ')
+    fov_input = input("Select FOV range as min max separated by space, or leave empty for no filters: ")
+    time_resolution_input = input("Select time resolution range as min max separated by space, or leave empty for no filters: ")
+    total_time_input = input("Select total time range as min max separated by space, or leave empty for no filters: ")
+    frequency_input = input("Select frequency range as min max separated by space, or leave empty for no filters: ")
 
-    # Convert input numbers to filters
+    # Convert input selections to filters
     science_keyword = [science_keywords[int(i)] for i in science_keyword_number.split()] if science_keyword_number else None
     scientific_category = [scientific_categories[int(i)] for i in scientific_category_number.split()] if scientific_category_number else None
-    bands = [int(x) for x in band_number.split()] if band_number else None
-    fov = [float(x) for x in fov_number.split()] if fov_number else None
-    time_resolution = [float(x) for x in time_resolution_number.split()] if time_resolution_number else None
-    total_time = [float(x) for x in total_time_number.split()] if total_time_number else None
-    frequency = [float(x) for x in frequency_number.split()] if frequency_number else None
+    bands = [int(x) for x in band.split()] if band else None
 
-    # Query the database
-    df = query_by_science_type(service, science_keyword, scientific_category, bands, fov, time_resolution, total_time, frequency)
+    # Convert input ranges to tuples or None
+    fov_range = tuple(map(float, fov_input.split())) if fov_input else None
+    time_resolution_range = tuple(map(float, time_resolution_input.split())) if time_resolution_input else None
+    total_time_range = tuple(map(float, total_time_input.split())) if total_time_input else None
+    frequency_range = tuple(map(float, frequency_input.split())) if frequency_input else None
+
+    # Query the database with all filters
+    df = query_by_science_type(service, science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)
     df = df.drop_duplicates(subset='member_ous_uid').drop(df[df['science_keyword'] == ''].index)
 
     # Rename columns and select relevant data
@@ -618,9 +621,9 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
         'frequency_support': 'Freq.sup.'
     }
     df.rename(columns=rename_columns, inplace=True)
-    database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time', 
-                    'Total.Time', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq', 
-                    'Freq.sup.', 'antenna_arrays']]
+    database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time',
+                   'Total.Time', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq',
+                   'Freq.sup.', 'antenna_arrays']]
     database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
     database.to_csv(path, index=False)
 
