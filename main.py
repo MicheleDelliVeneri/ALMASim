@@ -61,9 +61,9 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = "/mnt/storage/astro/almasim-test-24-5-9"
+    output_dir = "/srv/Fast01/delliven/almasim-test-24-5-12"
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
-    tng_dir = "/mnt/storage/astro/TNGData"
+    tng_dir = "/srv/Fast01/delliven/TNGData"
     project_name = input("Insert the name of the project: ")
     #project_name = 'test-extended'
     if not os.path.exists(output_dir):
@@ -134,6 +134,10 @@ if __name__ == '__main__':
     else:
         redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space. If a single value is given, all simualtions will be performed at the same redshift: ')
         redshifts = redshifts.split()
+        if not uc.is_float(redshifts[0]):
+            print("Invalid input. Please insert a float or integer.")
+            redshifts = input('Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space. If a single value is given, all simualtions will be performed at the same redshift: ')
+            redshifts = redshifts.split()
         if len(redshifts) == 1:
             redshifts = np.array([float(redshifts[0])] * n_sims)
             z0, z1 = float(redshifts[0]), float(redshifts[0])
@@ -279,18 +283,18 @@ if __name__ == '__main__':
     
     
     # Dask utils
-    #dask.config.set({'temporary_directory': output_path})
+    dask.config.set({'temporary_directory': output_path})
     total_memory = psutil.virtual_memory().total
     num_processes = multiprocessing.cpu_count() // 4
     memory_limit = int(0.9 * total_memory / num_processes)
-    #ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-    #cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
-    #output_type = "object"
-    #client = Client(cluster)
-    #client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-    #results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
-    #client.close()
-    #cluster.close()
-    uc.simulator(*input_params.iloc[0])
-    #uc.remove_logs(main_path)
+    ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+    cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+    output_type = "object"
+    client = Client(cluster)
+    client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+    results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
+    client.close()
+    cluster.close()
+    #uc.simulator(*input_params.iloc[0])
+    uc.remove_logs(main_path)
     
