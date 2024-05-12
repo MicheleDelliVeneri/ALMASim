@@ -9,7 +9,7 @@ import sys
 from math import pi
 from astropy.cosmology import FlatLambdaCDM 
 current_path = os.getcwd()
-parent_dir = os.path.join(current_path, "..")
+parent_dir = os.path.join(current_path)
 print("Current working directory:", current_path)
 print("Path to the parent directory:",parent_dir)
 
@@ -252,10 +252,10 @@ sol_lum = temperature_lum_to_solar_lum(os.path.join(parent_dir,'brightnes','temp
 sol_err = temperature_lum_to_solar_lum(os.path.join(parent_dir,'brightnes','temporary.csv'),'Frequency','Error')
 L_s = 5.9e13 # Continuum luminosity infrared in unity of solar luminosity
 cs = np.log10(sol_lum / L_s) # c obtained from :  LogL_line=LogL_IR + c 
-c_err = np.log10(sol_err / L_s)
-for name, c, c_er in zip(line_names, cs, c_err):
-    print(name, c, c_er)
+cs_error = np.abs(1 / (sol_lum * np.log(10)) * sol_err)
+for name, c in zip(line_names, cs):
+    print(name, c)
 new_lines['cs'] = cs
-new_lines['err_c'] = c_err
+new_lines['err_c'] = cs_error
 update_temporary = os.path.join(parent_dir, 'brightnes', 'temporary_update.csv')
-new_lines.to_csv(update_temporary, index=False)
+new_lines.to_csv(update_temporary,index=False)
