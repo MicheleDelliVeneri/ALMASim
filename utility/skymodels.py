@@ -1820,8 +1820,6 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
     sep_x, sep_z = np.random.randint(0, xy_radius), np.random.randint(0, z_radius)
     # get the position of the first line of the central source
     pos_z = pos_zs[0]
-    # get line fluxes
-    serendipitous_line_fluxes = np.array([np.random.uniform(cont_sens, line_flux, n_lines) for line_flux in line_fluxes])
     # get maximum continum value
     cont_peak = np.max(continum)
     # get serendipitous continum maximum
@@ -1842,7 +1840,7 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
         with open(sim_params_path, 'w') as f:
             n_line = n_lines[c_id]
             print('Simulating serendipitous source {} with {} lines'.format(c_id + 1, n_line))
-            s_line_fluxes = serendipitous_line_fluxes[c_id][:n_line]
+            s_line_fluxes = np.random.uniform(cont_sens, np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
             for s_name, s_flux in zip(s_line_names, s_line_fluxes):
                 print('Line {} Flux: {}'.format(s_name, s_flux))
@@ -1852,11 +1850,8 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
             s_ra, s_dec, _ = wcs.sub(3).wcs_pix2world(pos_x, pos_y, 0, 0)
             s_freq = np.array([line_freq + delta * freq_sup for line_freq in line_frequencies])[:n_line]
             fwhmsz = [s_fwhm_zs[0]]
-            for _ in range(n_line):
-                fwhmsz.append(np.random.randint(2, np.random.choice(fwhm_zs, 1)))
-            
-            
-            
+            for _ in range(n_line - 1):
+                fwhmsz.append(np.random.randint(2, np.random.choice(fwhm_zs, 1))[0]) 
             s_continum = serendipitous_conts[c_id]
             f.write('RA: {}\n'.format(s_ra))
             f.write('DEC: {}\n'.format(s_dec))

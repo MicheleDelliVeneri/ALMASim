@@ -283,18 +283,18 @@ if __name__ == '__main__':
     
     
     # Dask utils
-    dask.config.set({'temporary_directory': output_path})
+    #dask.config.set({'temporary_directory': output_path})
     total_memory = psutil.virtual_memory().total
     num_processes = multiprocessing.cpu_count() // 4
     memory_limit = int(0.9 * total_memory / num_processes)
-    ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-    cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
-    output_type = "object"
-    client = Client(cluster)
-    client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-    results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
-    client.close()
-    cluster.close()
-    #uc.simulator(*input_params.iloc[0])
-    uc.remove_logs(main_path)
+    #ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+    #cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+    #output_type = "object"
+    #client = Client(cluster)
+    #client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+    #results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
+    #client.close()
+    #cluster.close()
+    uc.simulator(*input_params.iloc[0])
+    #uc.remove_logs(main_path)
     

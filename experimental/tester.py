@@ -8,9 +8,6 @@ print("Path to the parent directory:",parent_dir)
 sys.path.append(parent_dir)
 import numpy as np
 import astropy.units as U
-from casatasks import exportfits, simobserve, tclean, gaincal, applycal
-from casatools import table
-from casatools import simulator as casa_simulator
 import random
 import shutil
 from astropy.constants import c
@@ -18,11 +15,6 @@ import math
 import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord
 from scipy.optimize import curve_fit
-import  utility.skymodels as sku
-import utility.alma as au
-import utility.astro as uas
-import utility.plotting as uplt
-import utility.skymodels as usk
 
 continum = [0.00032362, 0.00032942, 0.00033533, 0.00034136, 0.00034753, 0.00035381,
         0.00036021, 0.00036672, 0.00037327, 0.00037988, 0.00038661, 0.00039345,
@@ -41,19 +33,5 @@ fwhm_x, fwhm_y = 3, 3
 pos_x, pos_y = 64, 64
 n_px = 128
 
-datacube = usk.DataCube(
-        n_px_x=n_px, 
-        n_px_y=n_px,
-        n_channels=n_channels)
-
-datacube = usk.insert_pointlike(datacube, continum, source_flux, pos_x, pos_y, source_index, source_fwhm, n_channels)
-print(np.sum(datacube._array), np.sum(continum) + np.sum(source_flux))
-
-datacube = usk.DataCube(
-        n_px_x=n_px, 
-        n_px_y=n_px,
-        n_channels=n_channels)
-
-datacube = usk.insert_gaussian(datacube, continum, source_flux, pos_x, pos_y, source_index, fwhm_x, fwhm_y, 
-        source_fwhm, 0, n_px, n_channels)
-print(np.sum(datacube._array), np.sum(continum) + np.sum(source_flux))
+fwhm_zs = [10, 5, 8]
+print()
