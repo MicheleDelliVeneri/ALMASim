@@ -898,6 +898,7 @@ def cont_to_line(row):
     line_delta = np.random.normal(row['c'], row['err_c'])
     return line_delta
 
+
 def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
     source_frequency, n_channels, lum_infrared, cont_sens, line_names=None, n_lines=None):
     """
@@ -991,6 +992,10 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
     line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
     line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz
+    
+    # To get the real fwhms we must know the exact velocity dispersion for each object or emission line
+    # whitout that information we could only assume a typical velocity dispersion and generate fwhms
+    #fwhms = generate_fwhms(line_frequencies, source_type)
     fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 

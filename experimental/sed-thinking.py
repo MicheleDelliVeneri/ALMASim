@@ -169,6 +169,47 @@ line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(c
 line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
 line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz
 fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
+def generate_fwhms(line_frequencies, source : str):
+    fwhms = []
+
+    for i in range(len(line_frequencies)):
+        if source == "gaussian":
+            # Gaussian 
+            mean_sigma = 60  # km/s 
+            std_dev_sigma = 5  # km/s 
+            random_sigma = np.random.normal(loc=mean_sigma, scale=std_dev_sigma)
+            fwhm = 2 * np.sqrt(2 * np.log(2)) * random_sigma # km/s
+        
+
+        elif source == "pointed":
+            # Pointed 
+            mean_sigma = 70  # km/s 
+            std_dev_sigma = 5  # km/s 
+            random_sigma = np.random.normal(loc=mean_sigma, scale=std_dev_sigma)
+            fwhm = 2 * np.sqrt(2 * np.log(2)) * random_sigma # km/s
+          
+
+        elif source == "extended":
+            # Extended 
+            mean_sigma = 150  # km/s 
+            std_dev_sigma = 10  # km/s 
+            random_sigma = np.random.normal(loc=mean_sigma, scale=std_dev_sigma)
+            fwhm = 2 * np.sqrt(2 * np.log(2)) * random_sigma # km/s
+        
+
+        elif source == "disperse":
+            # Disperse 
+            mean_sigma = 300  # km/s 
+            std_dev_sigma = 20  # km/s 
+            random_sigma = np.random.normal(loc=mean_sigma, scale=std_dev_sigma)
+            fwhm = 2 * np.sqrt(2 * np.log(2)) * random_sigma # km/s
+            
+   
+        fwhms.append(int(np.isscalar(fwhm)))   # Append as float object
+
+    return fwhms
+
+#fwhms = generate_fwhms(line_frequencies, 'gaussian')
 freq_steps = np.array([cont_frequencies[line_index + fwhm] - cont_frequencies[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
 freq_steps = freq_steps.to(U.Hz).value
 line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared_point ) + cs) / freq_steps
@@ -180,6 +221,7 @@ else:
     cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
 line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x))).values
 print(line_indexes)
+
 def gaussian(x, amp, cen, fwhm):
     """
     Generates a 1D Gaussian given the following input parameters:
@@ -190,7 +232,7 @@ def gaussian(x, amp, cen, fwhm):
     #def integrand(x, amp, cen, fwhm):
     #    return np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
     #integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
-    gaussian = np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    gaussian = np.exp(-(x-cen)**2/(2*(fwhm)**2))
     if np.sum(gaussian) != 0:
         norm = amp /  np.sum(gaussian)
     else:
