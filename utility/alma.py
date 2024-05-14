@@ -15,6 +15,7 @@ import random
 from math import pi
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import tqdm
 
 # Metadata related functions
 
@@ -189,7 +190,7 @@ def get_max_baseline_from_antenna_config(antenna_config):
     positions = np.array(positions)
     max_baseline = 0
     
-    for i in range(len(positions)):
+    for i in tqdm(range(len(positions)), total=len(positions)):
         x1, y1, z1 = positions[i]
         for j in range(i + 1, len(positions)):
             x2, y2, z2 = positions[j]
@@ -203,12 +204,12 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
     antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
     obs_antennas = antenna_array.split(' ')
     obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
+    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)].values
     max_baseline = 0
-    for i in range(len(obs_coordinates)):
-        x1, y1, z1 = obs_coordinates[i]
+    for i in tqdm(range(len(obs_coordinates)), total=len(obs_coordinates)):
+        name, x1, y1, z1 = obs_coordinates[i]
         for j in range(i + 1, len(obs_coordinates)):
-            x2, y2, z2 = obs_coordinates[j]
+            name, x2, y2, z2 = obs_coordinates[j]
             dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
             if dist > max_baseline:
                 max_baseline = dist
@@ -587,6 +588,7 @@ def plot_science_keywords_distributions(service, master_path):
     
 def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
+    plot_science_keywords_distributions(service, main_path)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
 
