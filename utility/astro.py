@@ -816,7 +816,7 @@ def line_display(main_path):
     pd.DataFrame : Dataframe with line names and rest frequencies.
     """
     
-    path_line_emission_csv = os.path.join(main_path, 'brightnes', 'calibrations_FIR(GHz).csv')
+    path_line_emission_csv = os.path.join(main_path, 'brightnes', 'calibrated_lines.csv')
     db_line = read_line_emission_csv(path_line_emission_csv).sort_values(by='Line')
     line_names = db_line['Line'].values
     rest_frequencies = db_line['freq(GHz)'].values
@@ -825,7 +825,7 @@ def line_display(main_path):
         print(f'{i}: {line_names[i]} - {rest_frequencies[i]:.2e} GHz')
 
 def get_line_info(main_path, idxs=None):
-    path_line_emission_csv = os.path.join(main_path, 'brightnes', 'calibrations_FIR(GHz).csv')
+    path_line_emission_csv = os.path.join(main_path, 'brightnes', 'calibrated_lines.csv')
     db_line = read_line_emission_csv(path_line_emission_csv).sort_values(by='Line')
     rest_frequencies = db_line['freq(GHz)'].values
     line_names = db_line['Line'].values
@@ -925,7 +925,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     # Example data: Placeholder for cont and lines from SED processing
     sed, flux_infrared, lum_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
     # Shift the cont and line frequencies by (1 + redshift)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
     filtered_lines = db_line.copy()
@@ -1008,7 +1008,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
     db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
     source_freqs  = db_line['freq(GHz)'].values * (1 + redshift)
     freq_names =  db_line['Line'].values
@@ -1018,13 +1018,13 @@ def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     return rest_frequency
 
 def get_line_rest_frequency(master_path, line_names=None):
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
     if line_names is not None:
         db_line = db_line[np.isin(db_line['Line'], line_names)]
     return db_line['freq(GHz)'].values
 
 def get_line_name_from_rest_frequency(master_path, rest_frequencies):
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrations_FIR(GHz).csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
     db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
     if isinstance(rest_frequencies, np.ndarray):
         line_names = db_line[db_line['freq(GHz)'].isin(rest_frequencies)]['Line'].values
