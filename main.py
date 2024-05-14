@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = "/srv/Fast01/delliven/almasim-test-24-5-12"
+    output_dir = "/srv/Fast01/delliven/almasim-test-24-5-14"
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
     tng_dir = "/srv/Fast01/delliven/TNGData"
     project_name = input("Insert the name of the project: ")
@@ -296,5 +296,5 @@ if __name__ == '__main__':
     #client.close()
     #cluster.close()
     uc.simulator(*input_params.iloc[0])
-    #uc.remove_logs(main_path)
+    uc.remove_logs(main_path)
     
