@@ -17,56 +17,71 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 
+# Utility function to get a TAP service from a list of URLs, cycling through until one works
+def get_tap_service():
+    urls = [
+        "https://almascience.eso.org/tap",
+        "https://almascience.nao.ac.jp/tap",
+        "https://almascience.nrao.edu/tap"
+    ]
+    for url in urls:
+        try:
+            service = pyvo.dal.TAPService(url)
+            # Test the connection with a simple query
+            result = service.search("SELECT TOP 1 * FROM ivoa.obscore")
+            print(f"Connected successfully to {url}")
+            return service
+        except Exception as e:
+            print(f"Failed to connect to {url}: {e}")
+    raise Exception("All TAP service connections failed. Check network or service status.")
+
 # Metadata related functions
-
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
-  """
-  Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA) in arcseconds.
+    """
+    Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA) in arcseconds.
 
-  This function provides an approximation based on the theoretical relationship between
-  observing frequency and maximum baseline. The formula used is:
-  beam_size = (speed_of_light / central_frequency) / max_baseline * (180 / pi) * 3600 arcseconds
-  [km]/[s] * [s] / [km] = [radians] * [arcsec /radian] * [arcseconds/degree]
+    This function provides an approximation based on the theoretical relationship between
+    observing frequency and maximum baseline. The formula used is:
+    beam_size = (speed_of_light / central_frequency) / max_baseline * (180 / pi) * 3600 arcseconds
+    [km]/[s] * [s] / [km] = [radians] * [arcsec /radian] * [arcseconds/degree]
 
-  Args:
-      central_frequency_ghz: Central frequency of the observing band in GHz (float).
-      max_baseline_km: Maximum baseline of the antenna array in kilometers (float).
+    Args:
+        central_frequency_ghz: Central frequency of the observing band in GHz (float).
+        max_baseline_km: Maximum baseline of the antenna array in kilometers (float).
 
-  Returns:
-      Estimated beam size in arcseconds (float).
+    Returns:
+        Estimated beam size in arcseconds (float).
 
-  Raises:
-      ValueError: If either input argument is non-positive.
-  """
-
-  # Input validation
-  if central_frequency_ghz <= 0 or max_baseline_km <= 0:
-    raise ValueError("Central frequency and maximum baseline must be positive values.")
+    Raises:
+        ValueError: If either input argument is non-positive.
+    """
+    # Input validation
+    if central_frequency_ghz <= 0 or max_baseline_km <= 0:
+        raise ValueError("Central frequency and maximum baseline must be positive values.")
     
-  if type(central_frequency_ghz) != Quantity:
-    central_frequency_ghz = central_frequency_ghz * U.GHz
-  if type(max_baseline_km) != Quantity:
-    max_baseline_km = max_baseline_km * U.km
+    if type(central_frequency_ghz) != Quantity:
+        central_frequency_ghz = central_frequency_ghz * U.GHz
+    if type(max_baseline_km) != Quantity:
+        max_baseline_km = max_baseline_km * U.km
 
-  # Speed of light in meters per second
-  light_speed = c.to(U.m / U.s).value
+    # Speed of light in meters per second
+    light_speed = c.to(U.m / U.s).value
 
-  # Convert frequency to Hz
-  central_frequency_hz = central_frequency_ghz.to(U.Hz).value
+    # Convert frequency to Hz
+    central_frequency_hz = central_frequency_ghz.to(U.Hz).value
 
-  # Convert baseline to meters
-  max_baseline_meters = max_baseline_km.to(U.m).value
+    # Convert baseline to meters
+    max_baseline_meters = max_baseline_km.to(U.m).value
 
+    # Theoretical estimate of beam size (radians)
+    theta_radians = (light_speed / central_frequency_hz) / max_baseline_meters
 
-  # Theoretical estimate of beam size (radians)
-  theta_radians = (light_speed / central_frequency_hz) / max_baseline_meters
-
-  # Convert theta from radians to arcseconds
-  beam_size_arcsec = theta_radians * (180 / math.pi) * 3600 * U.arcsec
-  if return_value == True:
-    return beam_size_arcsec.value
-  else:
-    return beam_size_arcsec
+    # Convert theta from radians to arcseconds
+    beam_size_arcsec = theta_radians * (180 / math.pi) * 3600 * U.arcsec
+    if return_value == True:
+        return beam_size_arcsec.value
+    else:
+        return beam_size_arcsec
 
 def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     """
@@ -171,7 +186,7 @@ def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, 
     f.close()
 
 def compute_distance(x1, y1, z1, x2, y2, z2):
-        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
 def get_max_baseline_from_antenna_config(antenna_config):
     """
@@ -273,7 +288,7 @@ def query_for_metadata_by_targets(targets, path, service_url: str = "https://alm
     pandas.DataFrame: A DataFrame containing the results for all queried targets.
     """
     # Create a TAPService instance (replace 'your_service_url' with the actual URL)
-    service = pyvo.dal.TAPService(service_url)
+    service = get_tap_service()  # Use the new function to get the service
     # Query all targets and compile the results
     df = query_all_targets(service, targets)
     df = df.drop_duplicates(subset='member_ous_uid')
@@ -418,7 +433,7 @@ def plot_science_keywords_distributions(service, master_path):
     
     plot_dir = os.path.join(master_path, "plots")
 
-        # Check if plot directory exists
+    # Check if plot directory exists
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
         existing_plots = []  # Initialize as empty list if plot directory doesn't exist
@@ -587,7 +602,7 @@ def plot_science_keywords_distributions(service, master_path):
             plt.close()
     
 def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
-    service = pyvo.dal.TAPService(service_url)
+    service = get_tap_service()
     plot_science_keywords_distributions(service, main_path)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
@@ -732,7 +747,7 @@ def simulate_atmospheric_noise(sim_output_dir, project, scale, ms, antennalist):
         refant=str(frefant), #name of the reference antenna
         minsnr=0.00, #ignore solution with SNR below this
         calmode="p", #phase
-        solint='inf', #solution interval
+        solint='inf', #solution interval,
     )
     tb = table()
     tb.open(os.path.join(sim_output_dir, project + "_atmosphere.gcal"), nomodify=False)
@@ -815,4 +830,3 @@ def ms_to_npz(ms, dirty_cube, datacolumn='CORRECTED_DATA', output_file='test.npz
                     antpos1=tb.getcol('ANTENNA1'),
                     antpos2=tb.getcol('ANTENNA2'),
                     antpos3=tb.getcol('TIME'))
-
