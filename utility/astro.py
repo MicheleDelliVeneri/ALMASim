@@ -792,7 +792,7 @@ def sample_from_brightness_given_redshift(velocity, rest_frequency, data_path, r
 def read_line_db(path):
     return pd.read_csv(path, sep='\t')
 
-def read_line_emission_csv(path_line_emission_csv):
+def read_line_emission_csv(path_line_emission_csv, sep=";"):
     """
     Read the csv file in which are stored the line emission's rest frequency.
     
@@ -802,7 +802,7 @@ def read_line_emission_csv(path_line_emission_csv):
     Return:
     pd.DataFrame : Dataframe with line names and rest frequencies.
     """
-    db_line = pd.read_csv(path_line_emission_csv, sep = ";")
+    db_line = pd.read_csv(path_line_emission_csv, sep = sep)
     return db_line
 
 def line_display(main_path):
@@ -817,7 +817,7 @@ def line_display(main_path):
     """
     
     path_line_emission_csv = os.path.join(main_path, 'brightnes', 'calibrated_lines.csv')
-    db_line = read_line_emission_csv(path_line_emission_csv).sort_values(by='Line')
+    db_line = read_line_emission_csv(path_line_emission_csv, sep=',').sort_values(by='Line')
     line_names = db_line['Line'].values
     rest_frequencies = db_line['freq(GHz)'].values
     print('Please choose the lines from the following list')
@@ -826,7 +826,7 @@ def line_display(main_path):
 
 def get_line_info(main_path, idxs=None):
     path_line_emission_csv = os.path.join(main_path, 'brightnes', 'calibrated_lines.csv')
-    db_line = read_line_emission_csv(path_line_emission_csv).sort_values(by='Line')
+    db_line = read_line_emission_csv(path_line_emission_csv, sep=',').sort_values(by='Line')
     rest_frequencies = db_line['freq(GHz)'].values
     line_names = db_line['Line'].values
     if idxs is not None:
@@ -925,7 +925,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     # Example data: Placeholder for cont and lines from SED processing
     sed, flux_infrared, lum_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
     # Shift the cont and line frequencies by (1 + redshift)
     sed['GHz'] = sed['GHz'] * (1 + redshift)
     filtered_lines = db_line.copy()
@@ -1008,7 +1008,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
     db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
     source_freqs  = db_line['freq(GHz)'].values * (1 + redshift)
     freq_names =  db_line['Line'].values
@@ -1018,13 +1018,13 @@ def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     return rest_frequency
 
 def get_line_rest_frequency(master_path, line_names=None):
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
     if line_names is not None:
         db_line = db_line[np.isin(db_line['Line'], line_names)]
     return db_line['freq(GHz)'].values
 
 def get_line_name_from_rest_frequency(master_path, rest_frequencies):
-    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'))
+    db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
     db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
     if isinstance(rest_frequencies, np.ndarray):
         line_names = db_line[db_line['freq(GHz)'].isin(rest_frequencies)]['Line'].values

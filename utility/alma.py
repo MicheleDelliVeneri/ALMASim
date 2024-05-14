@@ -196,7 +196,7 @@ def get_max_baseline_from_antenna_config(antenna_config):
     with open(antenna_config, 'r') as f:
         lines = f.readlines()
         for line in lines:
-            if not line.strip().startsWith('#'):
+            if not line.strip().startswith('#'):
                 if '\t' in line:
                     row = [x for x in line.split("\t")][:3]
                 else:

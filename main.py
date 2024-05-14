@@ -61,9 +61,10 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = "/srv/Fast01/delliven/almasim-test-24-5-14"
+    #output_dir = "/srv/Fast01/delliven/almasim-test-24-5-14"
+    output_dir = '/mnt/storage/astro/almasim-test-24-5-14'
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
-    tng_dir = "/srv/Fast01/delliven/TNGData"
+    tng_dir = "/mnt/storage/astro/TNGData"
     project_name = input("Insert the name of the project: ")
     #project_name = 'test-extended'
     if not os.path.exists(output_dir):
@@ -262,7 +263,7 @@ if __name__ == '__main__':
     
     input_params = pd.DataFrame(zip(
         sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
-        obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_support, cont_sens,
+        obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
         tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
         n_lines, line_names, save_secondary, inject_serendipitous), 
