@@ -15,6 +15,7 @@ import random
 from math import pi
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import tqdm
 
 # Metadata related functions
 
@@ -169,6 +170,9 @@ def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, 
             f.write(f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n")
     f.close()
 
+def compute_distance(x1, y1, z1, x2, y2, z2):
+        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+
 def get_max_baseline_from_antenna_config(antenna_config):
     """
     takes an antenna configuration .cfg file as input and outputs
@@ -184,15 +188,31 @@ def get_max_baseline_from_antenna_config(antenna_config):
                     row = [x for x in line.split(" ")][:3]
                 positions.append([float(x) for x in row])  
     positions = np.array(positions)
-    max_baseline = 2 * np.max(np.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2]**2)) / 1000
+    max_baseline = 0
+    
+    for i in tqdm(range(len(positions)), total=len(positions)):
+        x1, y1, z1 = positions[i]
+        for j in range(i + 1, len(positions)):
+            x2, y2, z2 = positions[j]
+            dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
+            if dist > max_baseline:
+                max_baseline = dist
+
     return max_baseline
 
 def get_max_baseline_from_antenna_array(antenna_array, master_path):
     antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
     obs_antennas = antenna_array.split(' ')
     obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
-    max_baseline = 2 * np.max(np.sqrt(obs_coordinates['x'].values**2 + obs_coordinates['y'].values**2 + obs_coordinates['z'].values**2)) / 1000
+    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)].values
+    max_baseline = 0
+    for i in tqdm(range(len(obs_coordinates)), total=len(obs_coordinates)):
+        name, x1, y1, z1 = obs_coordinates[i]
+        for j in range(i + 1, len(obs_coordinates)):
+            name, x2, y2, z2 = obs_coordinates[j]
+            dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
+            if dist > max_baseline:
+                max_baseline = dist
     return max_baseline
 
 def query_observations(service, member_ous_uid, target_name):
@@ -359,20 +379,23 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
             band_query = f"band_list in ('{bands}')"
 
     # Additional filtering based on ranges
-    fov_query = ""
-    if fov_range:
+    if fov_range is None:
+        fov_query = ""
+    else:
         fov_query = f"s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}"
-
-    time_resolution_query = ""
-    if time_resolution_range:
+    if time_resolution_range is None:
+        time_resolution_query = ""
+    else:
         time_resolution_query = f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
 
-    total_time_query = ""
-    if total_time_range:
+    if total_time_range is None:
+        total_time_query = ""
+    else:    
         total_time_query = f"t_max BETWEEN {total_time_range[0]} AND {total_time_range[1]}"
 
-    frequency_query = ""
-    if frequency_range:
+    if frequency_range is None:
+        frequency_query = ""
+    else:
         frequency_query = f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
 
     # Combine all conditions into one WHERE clause
@@ -565,6 +588,7 @@ def plot_science_keywords_distributions(service, master_path):
     
 def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
     service = pyvo.dal.TAPService(service_url)
+    plot_science_keywords_distributions(service, main_path)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
 
@@ -580,10 +604,10 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
     science_keyword_number = input('Select the Science Keyword by number, separate by space, leave empty for all: ')
     scientific_category_number = input('Select the Scientific Category by number, separate by space, leave empty for all: ')
     band = input('Select observing bands, separate by space, leave empty for all: ')
-    fov_input = input("Select FOV range as min max separated by space, or leave empty for no filters: ")
-    time_resolution_input = input("Select time resolution range as min max separated by space, or leave empty for no filters: ")
-    total_time_input = input("Select total time range as min max separated by space, or leave empty for no filters: ")
-    frequency_input = input("Select frequency range as min max separated by space, or leave empty for no filters: ")
+    fov_input = input("Select FOV range as min FOV and max FOV separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
+    time_resolution_input = input("Select time resolution range as min max separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
+    total_time_input = input("Select total time range as min max separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
+    frequency_input = input("Select the source frequency range as min max separated by space, a single value is interpreted as the max, or leave empty for no filters: ")
 
     # Convert input selections to filters
     science_keyword = [science_keywords[int(i)] for i in science_keyword_number.split()] if science_keyword_number else None
@@ -591,10 +615,38 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
     bands = [int(x) for x in band.split()] if band else None
 
     # Convert input ranges to tuples or None
-    fov_range = tuple(map(float, fov_input.split())) if fov_input else None
-    time_resolution_range = tuple(map(float, time_resolution_input.split())) if time_resolution_input else None
-    total_time_range = tuple(map(float, total_time_input.split())) if total_time_input else None
-    frequency_range = tuple(map(float, frequency_input.split())) if frequency_input else None
+    fovs = [float(fov) for fov in fov_input.split()] if fov_input else None
+    if isinstance(fovs, list):
+        if len(fovs) > 1:
+            fov_range = tuple(fovs[0], fovs[0])
+        else: 
+            fov_range = tuple(0., fovs[0])
+    else:
+        fov_range = None
+    time_resolutions = [float(time_res) for time_res in time_resolution_input.split()] if time_resolution_input else None
+    if isinstance(time_resolutions, list):
+        if len(time_resolutions) > 1:
+            time_resolution_range = tuple(time_resolutions[0], time_resolutions[1])
+        else:
+            time_resolution_range = tuple(0., time_resolutions[0])
+    else:
+        time_resolution_range = None
+    total_times = [float(total_time) for total_time in total_time_input.split()] if time_resolution_input else None
+    if isinstance(total_times, list):
+        if len(total_times) > 1:
+            total_time_range = tuple(total_times[0], total_times[1])
+        else:
+            total_time_range = tuple(0., total_times[0])
+    else:
+        total_time_range = None
+    frequencies = [float(frequency) for frequency in frequency_input.split()] if frequency_input else None
+    if isinstance(frequencies, list):
+        if len(frequencies) > 1:
+            frequency_range = tuple(frequencies[0], frequencies[1])
+        else:
+            frequency_range = tuple(0., frequencies[0])
+    else:
+        frequency_range = None
 
     # Query the database with all filters
     df = query_by_science_type(service, science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)
