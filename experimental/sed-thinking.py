@@ -8,6 +8,8 @@ from scipy.constants import c
 import sys
 from math import pi
 from astropy.cosmology import FlatLambdaCDM 
+from matplotlib.animation import FuncAnimation
+
 current_path = os.getcwd()
 parent_dir = os.path.join(current_path)
 print("Current working directory:", current_path)
@@ -122,19 +124,78 @@ def cont_finder(cont_frequencies,line_frequency):
 alma_bands = [get_band_range(i) for i in range(1, 11)]
 color_map = plt.colormaps.get_cmap('tab10')
 
-plt.figure(figsize=(10,10))
-plt.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
-plt.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
-plt.xlabel('GHz')
-plt.ylabel('Jy')
-plt.title('SED')
-plt.xscale('log')
-plt.yscale('log')
-for i in range(len(alma_bands)):
-    color = color_map(i)
-    plt.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
-plt.legend()
+def update_plot_lum(frame, ax, lum_range):
+    lum_infrared = 10**(12 + frame * (np.log10(lum_range[1]) - np.log10(lum_range[0])) / 99)
+    sed_point, _ = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=lum_infrared, redshift=0.05)
+    sed_extended, _ = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=lum_infrared, redshift=1e-4)
+    
+    ax.clear()
+    ax.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
+    ax.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
+    ax.set_xlabel('GHz')
+    ax.set_ylabel('Jy')
+    ax.set_title(f'SED Luminosity: {lum_infrared:.2e}')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_ylim(1e-30, 1e10)
+    for i in range(len(alma_bands)):
+        color = color_map(i)
+        ax.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
+    ax.legend()
+
+def update_plot_red(frame, ax, redshift_range):
+    redshift = 0.05 + (frame * (redshift_range[1] - redshift_range[0]) / 99)
+    redshift2 = 1e-4 + (frame * (redshift_range[1] - redshift_range[0]) / 99)
+    sed_point, _ = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=redshift)
+    sed_extended, _ = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=redshift2)
+    
+    ax.clear()
+    
+    # Exclude non-positive values
+    sed_point_positive = sed_point[sed_point['Jy'] > 0]
+    sed_extended_positive = sed_extended[sed_extended['Jy'] > 0]
+    
+    ax.plot(sed_point_positive['GHz'], sed_point_positive['Jy'], label='Type2 AGN')
+    ax.plot(sed_extended_positive['GHz'], sed_extended_positive['Jy'], label='SF-Galaxy')
+    ax.set_xlabel('GHz')
+    ax.set_ylabel('Jy')
+    ax.set_title(f'SED: Point source Redshift = {redshift:.3f} and Extended source Redshift = {redshift2:.3f}')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_ylim(1e-30, 1e10)
+    for i in range(len(alma_bands)):
+        color = color_map(i)
+        ax.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
+    ax.legend()
+
+# Set up the figure
+fig, ax = plt.subplots(figsize=(10, 10))
+
+# Set up the luminosity animation
+lum_range = (1e12, 1e15)
+lum_animation = FuncAnimation(fig, update_plot_lum, frames=100, fargs=(ax, lum_range), interval=30)
+lum_animation.save(os.path.join(parent_dir, 'brightnes/luminosity_variation.gif'), writer='pillow')
+
+# Set up the redshift animation
+redshift_range = (0, 5)
+redshift_animation = FuncAnimation(fig, update_plot_red, frames=100, fargs=(ax, redshift_range), interval=80)
+redshift_animation.save(os.path.join(parent_dir, 'brightnes/redshift_variation.gif'), writer='pillow')
+
 plt.show()
+
+#plt.figure(figsize=(10,10))
+#plt.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
+#plt.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
+#plt.xlabel('GHz')
+#plt.ylabel('Jy')
+#plt.title('SED')
+#plt.xscale('log')
+#plt.yscale('log')
+#for i in range(len(alma_bands)):
+    #color = color_map(i)
+    #plt.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
+#plt.legend()
+#plt.show()
 
 # Let's procede with only the AGN SED
 
