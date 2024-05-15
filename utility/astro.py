@@ -1009,8 +1009,6 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_steps = np.array([new_cont_freq[line_index + fwhm] - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
     freq_steps = freq_steps.to(U.Hz).value
     line_fluxes = int_cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared) + line_ratios) / freq_steps
-    if freq_min != save_freq_min:
-        print('Bandwidth has been adjusted to fit the lines')
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared

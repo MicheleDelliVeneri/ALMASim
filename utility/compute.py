@@ -139,7 +139,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     cont_sens  = cont_sens_jy  * snr
     print("Beam Size: ", beam_size)
     print("Minimum detectable continum: ", cont_sens_jy)
-    print(f"To reach SNR of {snr}: {cont_sens}")
 
     cell_size = beam_size / 5
     if n_pix is None: 
