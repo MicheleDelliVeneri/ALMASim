@@ -631,6 +631,7 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
 
     # Convert input ranges to tuples or None
     fovs = [float(fov) for fov in fov_input.split()] if fov_input else None
+    print(fovs)
     if isinstance(fovs, list):
         if len(fovs) > 1:
             fov_range = tuple(fovs[0], fovs[0])
