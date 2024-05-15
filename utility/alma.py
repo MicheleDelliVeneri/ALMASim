@@ -276,19 +276,17 @@ def query_all_targets(service, targets):
 
     return df
 
-def query_for_metadata_by_targets(targets, path, service_url: str = "https://almascience.eso.org/tap"):
+def query_for_metadata_by_targets(targets, path, service):
     """Query for metadata for all predefined targets and compile the results into a single DataFrame.
 
     Parameters:
-    service_url (str): A TAPService http address for querying the database.
+    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
     targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
     path (str): The path to save the results to.
 
     Returns:
     pandas.DataFrame: A DataFrame containing the results for all queried targets.
     """
-    # Create a TAPService instance (replace 'your_service_url' with the actual URL)
-    service = get_tap_service()  # Use the new function to get the service
     # Query all targets and compile the results
     df = query_all_targets(service, targets)
     df = df.drop_duplicates(subset='member_ous_uid')
@@ -601,8 +599,7 @@ def plot_science_keywords_distributions(service, master_path):
             plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
             plt.close()
     
-def query_for_metadata_by_science_type(metadata_name, main_path, service_url: str = "https://almascience.eso.org/tap"):
-    service = get_tap_service()
+def query_for_metadata_by_science_type(metadata_name, main_path, service):
     plot_science_keywords_distributions(service, main_path)
     science_keywords, scientific_categories = get_science_types(service)
     path = os.path.join(main_path, "metadata", metadata_name)
@@ -646,7 +643,7 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
             time_resolution_range = tuple([0., time_resolutions[0]])
     else:
         time_resolution_range = None
-    total_times = [float(total_time) for total_time in total_time_input.split()] if time_resolution_input else None
+    total_times = [float(total_time) for total_time in total_time_input.split()] if total_time_input else None
     if isinstance(total_times, list):
         if len(total_times) > 1:
             total_time_range = tuple([total_times[0], total_times[1]])
