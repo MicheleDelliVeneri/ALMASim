@@ -232,7 +232,7 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
                 max_baseline = dist
     return max_baseline
 
-def query_observations(service = get_tap_service(), member_ous_uid, target_name):
+def query_observations(member_ous_uid, target_name):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
     Parameters:
@@ -252,12 +252,12 @@ def query_observations(service = get_tap_service(), member_ous_uid, target_name)
             AND is_mosaic = 'F'
             AND science_observation = 'T'    
             """
-
+    service = get_tap_service()
     result = service.search(query).to_table().to_pandas()
 
     return result
 
-def query_all_targets(service = get_tap_service(), targets):
+def query_all_targets(targets):
     """Query observations for all predefined targets and compile the results into a single DataFrame.
 
     Parameters:
@@ -270,7 +270,7 @@ def query_all_targets(service = get_tap_service(), targets):
     results = []
 
     for target_name, member_ous_uid in targets:
-        result = query_observations(service = get_tap_service(), member_ous_uid, target_name)
+        result = query_observations(member_ous_uid, target_name)
         results.append(result)
 
     # Concatenate all DataFrames into a single DataFrame
@@ -278,7 +278,7 @@ def query_all_targets(service = get_tap_service(), targets):
 
     return df
 
-def query_for_metadata_by_targets(targets, path, service = get_tap_service()):
+def query_for_metadata_by_targets(targets, path):
     """Query for metadata for all predefined targets and compile the results into a single DataFrame.
 
     Parameters:
@@ -290,7 +290,7 @@ def query_for_metadata_by_targets(targets, path, service = get_tap_service()):
     pandas.DataFrame: A DataFrame containing the results for all queried targets.
     """
     # Query all targets and compile the results
-    df = query_all_targets(service = get_tap_service(), targets)
+    df = query_all_targets(targets)
     df = df.drop_duplicates(subset='member_ous_uid')
     # Define a dictionary to map existing column names to new names with unit initials
     rename_columns = {
@@ -322,7 +322,8 @@ def query_for_metadata_by_targets(targets, path, service = get_tap_service()):
     database.to_csv(path, index=False)
     return database
 
-def get_science_types(service = get_tap_service()):
+def get_science_types():
+    service = get_tap_service()
     query = f"""  
             SELECT science_keyword, scientific_category  
             FROM ivoa.obscore  
@@ -350,7 +351,7 @@ def get_science_types(service = get_tap_service()):
     
     return  unique_keywords, scientific_category
     
-def query_by_science_type(service = get_tap_service(), science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
+def query_by_science_type(science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
     Parameters:
@@ -359,6 +360,7 @@ def query_by_science_type(service = get_tap_service(), science_keyword=None, sci
     Returns:
     pandas.DataFrame: A table of query results.
     """
+    service = get_tap_service()
     # Default values for parameters if they are None
     if science_keyword is None:
         science_keyword = ""
@@ -429,8 +431,8 @@ def query_by_science_type(service = get_tap_service(), science_keyword=None, sci
 
     return result
 
-def plot_science_keywords_distributions(service = get_tap_service(), master_path):
-    
+def plot_science_keywords_distributions(master_path):
+    service = get_tap_service()
     plot_dir = os.path.join(master_path, "plots")
 
     # Check if plot directory exists
@@ -601,9 +603,9 @@ def plot_science_keywords_distributions(service = get_tap_service(), master_path
             plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
             plt.close()
     
-def query_for_metadata_by_science_type(metadata_name, main_path, service = get_tap_service()):
-    plot_science_keywords_distributions(service = get_tap_service(), main_path)
-    science_keywords, scientific_categories = get_science_types(service = get_tap_service())
+def query_for_metadata_by_science_type(metadata_name, main_path):
+    plot_science_keywords_distributions(main_path)
+    science_keywords, scientific_categories = get_science_types()
     path = os.path.join(main_path, "metadata", metadata_name)
 
     print(f'Please take a look at distributions in plots folder: {main_path}/plots')
@@ -663,7 +665,7 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service = get_t
         frequency_range = None
 
     # Query the database with all filters
-    df = query_by_science_type(service = get_tap_service(), science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)
+    df = query_by_science_type(science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)
     df = df.drop_duplicates(subset='member_ous_uid').drop(df[df['science_keyword'] == ''].index)
 
     # Rename columns and select relevant data

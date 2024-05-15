@@ -18,6 +18,7 @@ from os.path import isfile
 import math
 from datetime import date
 import time
+from time import strftime
 
 def is_float(s):
     try:
@@ -334,7 +335,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         dirty = dirty + np.nanmin(dirty)
     dirty_total_flux = np.nansum(dirty)
     print(f'Total Flux detected in skymodel cube: {round(sky_total_flux, 2)}')
-    print(f'Total Flux detected in dirty cube: {round(dirty_total_flux, 2)}')
     if sky_total_flux != dirty_total_flux:
         print('Normalizing')
         dirty = dirty * (sky_total_flux / dirty_total_flux)
