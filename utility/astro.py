@@ -1049,6 +1049,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
         metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
     else:
         metadata = metadata[metadata['redshift'] >= 0]
+    print(f'Remaining metadata aftter redshift cut: {len(metadata)}')
     snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
     metadata['snapshot'] = snapshots
     if extended == True:
