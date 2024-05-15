@@ -275,7 +275,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         project=project_name, 
         skymodel=filename,
         obsmode="int",
-        setpointings=True,
+        #setpointings=True,
         thermalnoise="tsys-atm",
         antennalist=antennalist,
         indirection=pos_string,
