@@ -324,8 +324,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     dirty, dirty_header = uas.load_fits(os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
     sky_total_flux = np.nansum(clean)
     dirty_total_flux = np.nansum(dirty)
-    dirty = dirty * (sky_total_flux / dirty_total_flux)
-    uas.write_numpy_to_fits(dirty, dirty_header, os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
+    print(f'Total Flux detected in skymodel cube: {round(sky_total_flux, 2)}')
+    print(f'Total Flux detected in dirty cube: {round(dirty_total_flux, 2)}')
+    if sky_total_flux != dirty_total_flux:
+        print('Normalizing')
+        dirty = dirty * (sky_total_flux / dirty_total_flux)
+        dirty_total_flux = np.nansum(dirty)
+        print('Total Flux detected in dirty cube after normalization: {}'.format(round(dirty_total_flux, 2)))
+        uas.write_numpy_to_fits(dirty, dirty_header, os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
     del clean
     del dirty
     upl.plotter(inx, output_dir, beam_size, line_names, line_frequency, source_channel_index, cont_frequencies)

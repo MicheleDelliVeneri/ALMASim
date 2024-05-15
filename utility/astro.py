@@ -1040,9 +1040,11 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     print(f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}")
     print(f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}")
     metadata = metadata[metadata['Freq'] >= rest_frequency]
+    print(f'Remaining metadata: {len(metadata)}')
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
     metadata.loc[:, 'redshift'] = redshifts
+
     if zmax != None:
         metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
     else:
