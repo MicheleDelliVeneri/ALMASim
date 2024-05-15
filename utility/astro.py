@@ -938,6 +938,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     else:
         n = len(line_names)
     pbar = tqdm(desc='Searching lines....', total=n)
+    initial_len = len(filtered_lines)
     while len(filtered_lines) < n:
         r_len = len(filtered_lines)
         filtered_lines = db_line.copy()
@@ -956,6 +957,13 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             pbar.update(1)   
         recorded_length = len(filtered_lines)
     pbar.update(1) 
+    pbar.close()
+    if len(filtered_lines) > initial_len:
+        print('Warning: Bandwidth increased to match the desired number of lines.')
+        increment = freq_max - save_freq_max
+        freq_max += increment
+        freq_min -= increment
+        print('New Bandwidth: {} GHz'.format(round(freq_max - freq_min, 3)))
     freq_max += freq_max / 10      
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
