@@ -24,16 +24,18 @@ def get_tap_service():
         "https://almascience.nao.ac.jp/tap",
         "https://almascience.nrao.edu/tap"
     ]
-    for url in urls:
-        try:
-            service = pyvo.dal.TAPService(url)
-            # Test the connection with a simple query
-            result = service.search("SELECT TOP 1 * FROM ivoa.obscore")
-            print(f"Connected successfully to {url}")
-            return service
-        except Exception as e:
-            print(f"Failed to connect to {url}: {e}")
-    raise Exception("All TAP service connections failed. Check network or service status.")
+    while True:  # Infinite loop to keep trying until successful
+        for url in urls:
+            try:
+                service = pyvo.dal.TAPService(url)
+                # Test the connection with a simple query to ensure the service is working
+                result = service.search("SELECT TOP 1 * FROM ivoa.obscore")
+                print(f"Connected successfully to {url}")
+                return service
+            except Exception as e:
+                print(f"Failed to connect to {url}: {e}")
+                print("Retrying other servers...")
+        print("All URLs attempted and failed, retrying...")
 
 # Metadata related functions
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
@@ -230,7 +232,7 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
                 max_baseline = dist
     return max_baseline
 
-def query_observations(service, member_ous_uid, target_name):
+def query_observations(service = get_tap_service(), member_ous_uid, target_name):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
     Parameters:
@@ -255,7 +257,7 @@ def query_observations(service, member_ous_uid, target_name):
 
     return result
 
-def query_all_targets(service, targets):
+def query_all_targets(service = get_tap_service(), targets):
     """Query observations for all predefined targets and compile the results into a single DataFrame.
 
     Parameters:
@@ -268,7 +270,7 @@ def query_all_targets(service, targets):
     results = []
 
     for target_name, member_ous_uid in targets:
-        result = query_observations(service, member_ous_uid, target_name)
+        result = query_observations(service = get_tap_service(), member_ous_uid, target_name)
         results.append(result)
 
     # Concatenate all DataFrames into a single DataFrame
@@ -276,7 +278,7 @@ def query_all_targets(service, targets):
 
     return df
 
-def query_for_metadata_by_targets(targets, path, service):
+def query_for_metadata_by_targets(targets, path, service = get_tap_service()):
     """Query for metadata for all predefined targets and compile the results into a single DataFrame.
 
     Parameters:
@@ -288,7 +290,7 @@ def query_for_metadata_by_targets(targets, path, service):
     pandas.DataFrame: A DataFrame containing the results for all queried targets.
     """
     # Query all targets and compile the results
-    df = query_all_targets(service, targets)
+    df = query_all_targets(service = get_tap_service(), targets)
     df = df.drop_duplicates(subset='member_ous_uid')
     # Define a dictionary to map existing column names to new names with unit initials
     rename_columns = {
@@ -320,7 +322,7 @@ def query_for_metadata_by_targets(targets, path, service):
     database.to_csv(path, index=False)
     return database
 
-def get_science_types(service):
+def get_science_types(service = get_tap_service()):
     query = f"""  
             SELECT science_keyword, scientific_category  
             FROM ivoa.obscore  
@@ -348,7 +350,7 @@ def get_science_types(service):
     
     return  unique_keywords, scientific_category
     
-def query_by_science_type(service, science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
+def query_by_science_type(service = get_tap_service(), science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
     Parameters:
@@ -427,7 +429,7 @@ def query_by_science_type(service, science_keyword=None, scientific_category=Non
 
     return result
 
-def plot_science_keywords_distributions(service, master_path):
+def plot_science_keywords_distributions(service = get_tap_service(), master_path):
     
     plot_dir = os.path.join(master_path, "plots")
 
@@ -599,9 +601,9 @@ def plot_science_keywords_distributions(service, master_path):
             plt.savefig(os.path.join(plot_dir, 'science_vs_total_time.png'))
             plt.close()
     
-def query_for_metadata_by_science_type(metadata_name, main_path, service):
-    plot_science_keywords_distributions(service, main_path)
-    science_keywords, scientific_categories = get_science_types(service)
+def query_for_metadata_by_science_type(metadata_name, main_path, service = get_tap_service()):
+    plot_science_keywords_distributions(service = get_tap_service(), main_path)
+    science_keywords, scientific_categories = get_science_types(service = get_tap_service())
     path = os.path.join(main_path, "metadata", metadata_name)
 
     print(f'Please take a look at distributions in plots folder: {main_path}/plots')
@@ -661,7 +663,7 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service):
         frequency_range = None
 
     # Query the database with all filters
-    df = query_by_science_type(service, science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)
+    df = query_by_science_type(service = get_tap_service(), science_keyword, scientific_category, bands, fov_range, time_resolution_range, total_time_range, frequency_range)
     df = df.drop_duplicates(subset='member_ous_uid').drop(df[df['science_keyword'] == ''].index)
 
     # Rename columns and select relevant data
