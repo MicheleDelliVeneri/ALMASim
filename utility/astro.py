@@ -1038,19 +1038,18 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     
     if isinstance(rest_frequency, np.ndarray):
         rest_frequency = np.sort(np.array(rest_frequency))[0]
-    print(f'Filtering metadata based on rest frequency of selected lines: {rest_frequency}')
     print(f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}")
     print(f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}")
+    print('Filtering metadata based on line catalogue...')
     metadata = metadata[metadata['Freq'] >= rest_frequency]
     print(f'Remaining metadata: {len(metadata)}')
     freqs = metadata['Freq'].values
-    print(f'Source Frequency: {freqs}')
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
     metadata.loc[:, 'redshift'] = redshifts
 
     n_metadata = 0
     z_save = zmax
-    
+    print('Computing redshifts')
     while n_metadata < ceil(n / 10):
         s_metadata = n_metadata
         if zmax != None:
@@ -1060,9 +1059,13 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
         n_metadata = len(f_metadata)
         if n_metadata == s_metadata:
             zmax += 0.1
+    if zmax != None:
+            metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
+    else:
+        metadata = metadata[metadata['redshift'] >= 0]
     if z_save != zmax:
-        print(f'Max redshift has been adjusted to identify possible lines, max redshift: {zmax}')
-    print(f'Remaining metadata after redshift cut: {len(metadata)}')
+        print(f'Max redshift has been adjusted fit metadata, new max redshift: {round(zmax, 3)}')
+    print(f'Remaining metadata: {len(metadata)}')
     snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
     metadata['snapshot'] = snapshots
     if extended == True:
