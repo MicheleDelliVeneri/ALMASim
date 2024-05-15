@@ -646,7 +646,7 @@ def query_for_metadata_by_science_type(metadata_name, main_path, service_url: st
             time_resolution_range = tuple([0., time_resolutions[0]])
     else:
         time_resolution_range = None
-    total_times = [float(total_time) for total_time in total_time_input.split()] if time_resolution_input else None
+    total_times = [float(total_time) for total_time in total_time_input.split()] if total_time_input else None
     if isinstance(total_times, list):
         if len(total_times) > 1:
             total_time_range = tuple([total_times[0], total_times[1]])
