@@ -151,17 +151,14 @@ def update_plot_red(frame, ax, redshift_range):
     
     ax.clear()
     
-    # Exclude non-positive values
-    sed_point_positive = sed_point[sed_point['Jy'] > 0]
-    sed_extended_positive = sed_extended[sed_extended['Jy'] > 0]
-    
-    ax.plot(sed_point_positive['GHz'], sed_point_positive['Jy'], label='Type2 AGN')
-    ax.plot(sed_extended_positive['GHz'], sed_extended_positive['Jy'], label='SF-Galaxy')
+    ax.plot(sed_point['GHz']*(1+redshift), sed_point['Jy'], label='Type2 AGN')
+    ax.plot(sed_extended['GHz']*(1+redshift2), sed_extended['Jy'], label='SF-Galaxy')
     ax.set_xlabel('GHz')
     ax.set_ylabel('Jy')
     ax.set_title(f'SED: Point source Redshift = {redshift:.3f} and Extended source Redshift = {redshift2:.3f}')
     ax.set_xscale('log')
     ax.set_yscale('log')
+    ax.set_xlim(1e-3, 1e12)
     ax.set_ylim(1e-30, 1e10)
     for i in range(len(alma_bands)):
         color = color_map(i)
