@@ -1034,6 +1034,7 @@ def get_line_name_from_rest_frequency(master_path, rest_frequencies):
     
 def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     pd.options.mode.chained_assignment = None
+    print(rest_frequency)
     if isinstance(rest_frequency, np.ndarray):
         rest_frequency = np.sort(np.array(rest_frequency))[0]
     print(f'Filtering metadata based on rest frequency of selected lines: {rest_frequency}')
