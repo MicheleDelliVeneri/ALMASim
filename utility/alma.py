@@ -221,7 +221,7 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
     obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
     obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)].values
     max_baseline = 0
-    for i in tqdm(range(len(obs_coordinates)), total=len(obs_coordinates)):
+    for i in range(len(obs_coordinates)):
         name, x1, y1, z1 = obs_coordinates[i]
         for j in range(i + 1, len(obs_coordinates)):
             name, x2, y2, z2 = obs_coordinates[j]
@@ -572,7 +572,7 @@ def plot_science_keywords_distributions(service, master_path):
             db['max_baseline'] = db['antenna_arrays'].apply(lambda x: get_max_baseline_from_antenna_array(x, master_path))
             db['central_freq'] = db['band_list'].apply(lambda x: get_band_central_freq(int(x)))
             db['beam_size'] = db[['central_freq', 'max_baseline']].apply(lambda x: estimate_alma_beam_size(*x), axis=1)
-            beam_size_bins = np.arange(db['beam_size'].min(), db['beam_size'].max(), 0.1)  # 0.1 arcsec bins
+            beam_size_bins = np.arange(db['beam_size'].min(), db['beam_size'].max(), 0.3)  # 0.1 arcsec bins
             db['beam_bins'] = pd.cut(db['beam_size'], bins=beam_size_bins)
 
             db_sk_bs = db.groupby(['science_keyword', 'beam_bins']).size().unstack(fill_value=0)
