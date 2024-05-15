@@ -18,7 +18,7 @@ from os.path import isfile
 import math
 from datetime import date
 import time
-from time import strftime
+from time import strftime, gmtime
 
 def is_float(s):
     try:
