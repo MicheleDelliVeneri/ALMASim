@@ -9,6 +9,7 @@ import sys
 from math import pi
 from astropy.cosmology import FlatLambdaCDM 
 from matplotlib.animation import FuncAnimation
+import pyvo 
 
 current_path = os.getcwd()
 parent_dir = os.path.join(current_path)
@@ -123,76 +124,76 @@ def cont_finder(cont_frequencies,line_frequency):
 
 alma_bands = [get_band_range(i) for i in range(1, 11)]
 color_map = plt.colormaps.get_cmap('tab10')
-
-def update_plot_lum(frame, ax, lum_range):
-    lum_infrared = 10**(12 + frame * (np.log10(lum_range[1]) - np.log10(lum_range[0])) / 99)
-    sed_point, _ = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=lum_infrared, redshift=0.05)
-    sed_extended, _ = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=lum_infrared, redshift=1e-4)
-    
-    ax.clear()
-    ax.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
-    ax.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
-    ax.set_xlabel('GHz')
-    ax.set_ylabel('Jy')
-    ax.set_title(f'SED Luminosity: {lum_infrared:.2e}')
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_ylim(1e-30, 1e10)
-    for i in range(len(alma_bands)):
-        color = color_map(i)
-        ax.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
-    ax.legend()
-
-def update_plot_red(frame, ax, redshift_range):
-    redshift = 0.05 + (frame * (redshift_range[1] - redshift_range[0]) / 99)
-    redshift2 = 1e-4 + (frame * (redshift_range[1] - redshift_range[0]) / 99)
-    sed_point, _ = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=redshift)
-    sed_extended, _ = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=redshift2)
-    
-    ax.clear()
-    
-    ax.plot(sed_point['GHz']*(1+redshift), sed_point['Jy'], label='Type2 AGN')
-    ax.plot(sed_extended['GHz']*(1+redshift2), sed_extended['Jy'], label='SF-Galaxy')
-    ax.set_xlabel('GHz')
-    ax.set_ylabel('Jy')
-    ax.set_title(f'SED: Point source Redshift = {redshift:.3f} and Extended source Redshift = {redshift2:.3f}')
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlim(1e-3, 1e12)
-    ax.set_ylim(1e-30, 1e10)
-    for i in range(len(alma_bands)):
-        color = color_map(i)
-        ax.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
-    ax.legend()
-
-# Set up the figure
-fig, ax = plt.subplots(figsize=(10, 10))
-
-# Set up the luminosity animation
-lum_range = (1e12, 1e15)
-lum_animation = FuncAnimation(fig, update_plot_lum, frames=100, fargs=(ax, lum_range), interval=30)
-lum_animation.save(os.path.join(parent_dir, 'brightnes/luminosity_variation.gif'), writer='pillow')
-
-# Set up the redshift animation
-redshift_range = (0, 5)
-redshift_animation = FuncAnimation(fig, update_plot_red, frames=100, fargs=(ax, redshift_range), interval=80)
-redshift_animation.save(os.path.join(parent_dir, 'brightnes/redshift_variation.gif'), writer='pillow')
-
-plt.show()
-
-#plt.figure(figsize=(10,10))
-#plt.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
-#plt.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
-#plt.xlabel('GHz')
-#plt.ylabel('Jy')
-#plt.title('SED')
-#plt.xscale('log')
-#plt.yscale('log')
-#for i in range(len(alma_bands)):
-    #color = color_map(i)
-    #plt.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
-#plt.legend()
+#
+#def update_plot_lum(frame, ax, lum_range):
+#    lum_infrared = 10**(12 + frame * (np.log10(lum_range[1]) - np.log10(lum_range[0])) / 99)
+#    sed_point, _ = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=lum_infrared, redshift=0.05)
+#    sed_extended, _ = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=lum_infrared, redshift=1e-4)
+#    
+#    ax.clear()
+#    ax.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
+#    ax.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
+#    ax.set_xlabel('GHz')
+#    ax.set_ylabel('Jy')
+#    ax.set_title(f'SED Luminosity: {lum_infrared:.2e}')
+#    ax.set_xscale('log')
+#    ax.set_yscale('log')
+#    ax.set_ylim(1e-30, 1e10)
+#    for i in range(len(alma_bands)):
+#        color = color_map(i)
+#        ax.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
+#    ax.legend()
+#
+#def update_plot_red(frame, ax, redshift_range):
+#    redshift = 0.05 + (frame * (redshift_range[1] - redshift_range[0]) / 99)
+#    redshift2 = 1e-4 + (frame * (redshift_range[1] - redshift_range[0]) / 99)
+#    sed_point, _ = sed_reading("point", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=redshift)
+#    sed_extended, _ = sed_reading("extended", os.path.join(parent_dir, 'brightnes'), lum_infrared=1e+12, redshift=redshift2)
+#    
+#    ax.clear()
+#    
+#    ax.plot(sed_point['GHz']*(1+redshift), sed_point['Jy'], label='Type2 AGN')
+#    ax.plot(sed_extended['GHz']*(1+redshift2), sed_extended['Jy'], label='SF-Galaxy')
+#    ax.set_xlabel('GHz')
+#    ax.set_ylabel('Jy')
+#    ax.set_title(f'SED: Point source Redshift = {redshift:.3f} and Extended source Redshift = {redshift2:.3f}')
+#    ax.set_xscale('log')
+#    ax.set_yscale('log')
+#    ax.set_xlim(1e-3, 1e12)
+#    ax.set_ylim(1e-30, 1e10)
+#    for i in range(len(alma_bands)):
+#        color = color_map(i)
+#        ax.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
+#    ax.legend()
+#
+## Set up the figure
+#fig, ax = plt.subplots(figsize=(10, 10))
+#
+## Set up the luminosity animation
+#lum_range = (1e12, 1e15)
+#lum_animation = FuncAnimation(fig, update_plot_lum, frames=100, fargs=(ax, lum_range), interval=30)
+#lum_animation.save(os.path.join(parent_dir, 'brightnes/luminosity_variation.gif'), writer='pillow')
+#
+## Set up the redshift animation
+#redshift_range = (0, 5)
+#redshift_animation = FuncAnimation(fig, update_plot_red, frames=100, fargs=(ax, redshift_range), interval=80)
+#redshift_animation.save(os.path.join(parent_dir, 'brightnes/redshift_variation.gif'), writer='pillow')
+#
 #plt.show()
+
+plt.figure(figsize=(10,10))
+plt.plot(sed_point['GHz'], sed_point['Jy'], label='Type2 AGN')
+plt.plot(sed_extended['GHz'], sed_extended['Jy'], label='SF-Galaxy')
+plt.xlabel('GHz')
+plt.ylabel('Jy')
+plt.title('SED')
+plt.xscale('log')
+plt.yscale('log')
+for i in range(len(alma_bands)):
+   color = color_map(i)
+   plt.axvspan(alma_bands[i][0], alma_bands[i][1], color=color, alpha=0.3, label=f'Band {i + 1}')
+plt.legend()
+plt.show()
 
 # Let's procede with only the AGN SED
 
@@ -226,7 +227,7 @@ line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(c
 # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
 line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
 line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz
-fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
+#fwhms = [np.random.randint(3, 10) for i in range(len(line_frequencies))] 
 def generate_fwhms(line_frequencies, source : str):
     fwhms = []
 
@@ -267,9 +268,10 @@ def generate_fwhms(line_frequencies, source : str):
 
     return fwhms
 
-#fwhms = generate_fwhms(line_frequencies, 'gaussian')
+fwhms = generate_fwhms(line_frequencies, 'gaussian')
 freq_steps = np.array([cont_frequencies[line_index + fwhm] - cont_frequencies[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
 freq_steps = freq_steps.to(U.Hz).value
+print(f'FWHM = {freq_steps}')
 line_fluxes = cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared_point ) + cs) / freq_steps
 n_channels = 1024
 new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
@@ -278,7 +280,7 @@ if len(cont_fluxes) > 1:
 else:
     cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
 line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x))).values
-print(line_indexes)
+print(f'Line Indexes on continiuum: {line_indexes}')
 
 def gaussian(x, amp, cen, fwhm):
     """
@@ -359,3 +361,14 @@ new_lines['cs'] = cs
 new_lines['err_c'] = cs_error
 update_temporary = os.path.join(parent_dir, 'brightnes', 'temporary_update.csv')
 new_lines.to_csv(update_temporary,index=False)
+
+query = f"""  
+            SELECT , member_ous_uid
+            FROM ivoa.obscore  
+            WHERE science_observation = 'T'
+            AND is_mosaic = 'F'
+            """
+service_url = "https://almascience.eso.org/tap"
+service = pyvo.dal.TAPService(service_url)
+db = service.search(query).to_table().to_pandas()
+db = db.drop_duplicates(subset='member_ous_uid')
