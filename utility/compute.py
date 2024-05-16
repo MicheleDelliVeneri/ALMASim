@@ -330,8 +330,8 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     clean, clean_header = uas.load_fits(os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"))
     dirty, dirty_header = uas.load_fits(os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
     sky_total_flux = np.nansum(clean)
-    if np.nanmin(dirty) < 0:
-        dirty = dirty + np.nanmin(dirty)
+    #if np.nanmin(dirty) < 0:
+    #    dirty = dirty + np.nanmin(dirty)
     dirty_total_flux = np.nansum(dirty)
     print(f'Total Flux detected in skymodel cube: {round(sky_total_flux, 2)}')
     if sky_total_flux != dirty_total_flux:
