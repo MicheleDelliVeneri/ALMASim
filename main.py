@@ -70,7 +70,7 @@ if __name__ == '__main__':
     output_dir = '/mnt/storage/astro/almasim-test-24-5-16'
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
     tng_dir = "/mnt/storage/astro/TNGData"
-    project_name = input("Insert the name of the project: ")
+    project_name = input("{RED}Insert the name of the project: {RESET}")
     #project_name = 'test-extended'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
