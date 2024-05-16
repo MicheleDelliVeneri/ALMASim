@@ -154,7 +154,7 @@ if __name__ == '__main__':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         set_infrared = input(f'{RED}Do you want to provide infrared luminosities for SED normalization? (y/n), if not provided, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: {RESET}')
     if set_infrared == "y":
-        lum_infrared = input(f'{BLUE}Please provide the infrared luminosity (in solar masses) to normalize the SED,\nyou can input a single value or an interval as two floats (es. 1e10) separated by a space: {RESET}')
+        lum_infrared = input(f'{BLUE}Insert infrared luminosity (in solar masses), you can input a single value, or an interval as two floats (es. 1e10) separated by a space: {RESET}')
         lum_infrared = [float(lum) for lum in lum_infrared.split()]
         if len(lum_infrared) == 1:
             lum_ir = np.array([lum_infrared[0]]*n_sims)
