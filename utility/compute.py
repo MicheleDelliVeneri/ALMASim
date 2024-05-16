@@ -348,10 +348,14 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               fitsimage=os.path.join(output_dir, "psf_" + str(inx) +".fits"), overwrite=True)
         exportfits(imagename=os.path.join(project_name, '{}.{}.pb'.format(project_name, antenna_name)),
                 fitsimage=os.path.join(output_dir, "pb_" + str(inx) +".fits"), overwrite=True)
+        ual.ms_to_npz(os.path.join(project_name, "{}.{}.ms".format(project_name, antenna_name)),
+                dirty_cube=os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"),
+                datacolumn='DATA',
+                output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
         ual.ms_to_npz(os.path.join(project_name, "{}.{}.noisy.ms".format(project_name, antenna_name)),
               dirty_cube=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"),
               datacolumn='CORRECTED_DATA',
-              output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
+              output_file=os.path.join(output_dir, "ms_dirty_" + str(inx) +".npz"))
     print('Finished')
     stop = time.time()
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))

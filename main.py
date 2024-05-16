@@ -85,9 +85,22 @@ if __name__ == '__main__':
     
     
     # Getting Sims Configuration
-    n_sims = int(input(f"{BLUE}Insert number of simulations to run: {RESET}"))
+    n_sims = input(f"{BLUE}Insert number of simulations to run: {RESET}")
+    try:
+        n_sims = int(n_sims)
+    except ValueError:
+        print(f"{YELLOW}Invalid input. Please insert an integer.{RESET}")
+        n_sims = input(f"{RED}Insert number of simulations to run: {RESET}")
+        n_sims = int(n_sims)
+    
     sim_idxs = np.arange(n_sims)
     ncpu = input(f"{RED}Insert total number of CPUs to use: {RESET}")
+    try:
+        ncpu = int(ncpu)
+    except ValueError:
+        print(f"{YELLOW}Invalid input. Please insert an integer.{RESET}")
+        ncpu = input(f"{BLUE}Insert total number of CPUs to use: {RESET}")
+        ncpu = int(ncpu)
     query = input(f'{BLUE}Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) {RESET}')
     if query != 'query' and query != 'get':
         print(f"{YELLOW}Invalid input. Please insert query or get.{RESET}")
