@@ -17,7 +17,7 @@ import shutil
 from os.path import isfile, expanduser
 import subprocess
 import six
-from math import pi
+from math import pi, ceil
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
@@ -939,6 +939,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     else:
         n = len(line_names)
     pbar = tqdm(desc='Searching lines....', total=n)
+    initial_len = len(filtered_lines)
     while len(filtered_lines) < n:
         r_len = len(filtered_lines)
         filtered_lines = db_line.copy()
@@ -957,6 +958,13 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             pbar.update(1)   
         recorded_length = len(filtered_lines)
     pbar.update(1) 
+    pbar.close()
+    if len(filtered_lines) > initial_len:
+        print('Warning: Bandwidth increased to match the desired number of lines.')
+        increment = freq_max - save_freq_max
+        freq_max += increment
+        freq_min -= increment
+        print('New Bandwidth: {} GHz'.format(round(freq_max - freq_min, 3)))
     freq_max += freq_max / 10      
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
@@ -1006,8 +1014,6 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_steps = np.array([new_cont_freq[line_index + fwhm] - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
     freq_steps = freq_steps.to(U.Hz).value
     line_fluxes = int_cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared) + line_ratios) / freq_steps
-    if freq_min != save_freq_min:
-        print('Bandwidth has been adjusted to fit the lines')
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
@@ -1041,16 +1047,34 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     pd.options.mode.chained_assignment = None
     if isinstance(rest_frequency, np.ndarray):
         rest_frequency = np.sort(np.array(rest_frequency))[0]
-    print(f'Filtering metadata based on rest frequency of selected lines: {rest_frequency}')
     print(f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}")
+    print(f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}")
+    print('Filtering metadata based on line catalogue...')
     metadata = metadata[metadata['Freq'] >= rest_frequency]
+    print(f'Remaining metadata: {len(metadata)}')
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
     metadata.loc[:, 'redshift'] = redshifts
+
+    n_metadata = 0
+    z_save = zmax
+    print('Computing redshifts')
+    while n_metadata < ceil(n / 10):
+        s_metadata = n_metadata
+        if zmax != None:
+            f_metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
+        else:
+            f_metadata = metadata[metadata['redshift'] >= 0]
+        n_metadata = len(f_metadata)
+        if n_metadata == s_metadata:
+            zmax += 0.1
     if zmax != None:
-        metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
+            metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
     else:
         metadata = metadata[metadata['redshift'] >= 0]
+    if z_save != zmax:
+        print(f'Max redshift has been adjusted fit metadata, new max redshift: {round(zmax, 3)}')
+    print(f'Remaining metadata: {len(metadata)}')
     snapshots = [redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
     metadata['snapshot'] = snapshots
     if extended == True:

@@ -16,6 +16,9 @@ import utility.plotting as upl
 import shutil
 from os.path import isfile
 import math
+from datetime import date
+import time
+from time import strftime, gmtime
 
 def is_float(s):
     try:
@@ -97,6 +100,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         ncpu (int): Number of CPU cores to use for the simulation.
     """
     print('Running simulation {}'.format(inx))
+    start = time.time()
     ra = ra * U.deg
     dec = dec * U.deg
     ang_res = ang_res * U.arcsec
@@ -135,7 +139,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     cont_sens  = cont_sens_jy  * snr
     print("Beam Size: ", beam_size)
     print("Minimum detectable continum: ", cont_sens_jy)
-    print(f"To reach SNR of {snr}: {cont_sens}")
 
     cell_size = beam_size / 5
     if n_pix is None: 
@@ -304,7 +307,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         vis=ms_path,
         imagename=os.path.join(sim_output_dir, '{}.{}'.format(project_name, antenna_name)),
         imsize=[int(n_pix), int(n_pix)],
-        cell="{}".format(beam_size),
+        cell="{}".format(cell_size),
         phasecenter=pos_string,
         specmode="cube",
         niter=0,
@@ -319,13 +322,24 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
        fitsimage=os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"), overwrite=True)
     exportfits(imagename=os.path.join(project_name, '{}.{}.skymodel'.format(project_name, antenna_name)), 
         fitsimage=os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"), overwrite=True)
-    
+    shutil.copy(os.path.join(sim_output_dir, "{}.{}.observe.png".format(project_name, antenna_name)), 
+                os.path.join(output_dir, 'plots', 'observation_' + str(inx) + '.png'))
+    shutil.copy(os.path.join(sim_output_dir, "{}.{}.skymodel.png".format(project_name, antenna_name)), 
+                os.path.join(output_dir, 'plots', 'skymodel_observation_' + str(inx) + '.png'))
+
     clean, clean_header = uas.load_fits(os.path.join(output_dir, "clean_cube_" + str(inx) +".fits"))
     dirty, dirty_header = uas.load_fits(os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
     sky_total_flux = np.nansum(clean)
+    if np.nanmin(dirty) < 0:
+        dirty = dirty + np.nanmin(dirty)
     dirty_total_flux = np.nansum(dirty)
-    dirty = dirty * (sky_total_flux / dirty_total_flux)
-    uas.write_numpy_to_fits(dirty, dirty_header, os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
+    print(f'Total Flux detected in skymodel cube: {round(sky_total_flux, 2)}')
+    if sky_total_flux != dirty_total_flux:
+        print('Normalizing')
+        dirty = dirty * (sky_total_flux / dirty_total_flux)
+        dirty_total_flux = np.nansum(dirty)
+        print('Total Flux detected in dirty cube after normalization: {}'.format(round(dirty_total_flux, 2)))
+        uas.write_numpy_to_fits(dirty, dirty_header, os.path.join(output_dir, "dirty_cube_" + str(inx) +".fits"))
     del clean
     del dirty
     upl.plotter(inx, output_dir, beam_size, line_names, line_frequency, source_channel_index, cont_frequencies)
@@ -339,5 +353,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
               datacolumn='CORRECTED_DATA',
               output_file=os.path.join(output_dir, "ms_" + str(inx) +".npz"))
     print('Finished')
-    #shutil.rmtree(sim_output_dir)
+    stop = time.time()
+    print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
+    shutil.rmtree(sim_output_dir)
     
