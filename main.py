@@ -22,6 +22,11 @@ import warnings
 from os.path import isfile, expanduser
 import subprocess
 
+RED = '\033[31m'
+BLUE = '\033[34m'
+YELLOW = '\033[33m'
+RESET = '{RESET}'
+
 warnings.simplefilter(action="ignore", category=UserWarning)
 MALLOC_TRIM_THRESHOLD_ = 0
 class MemoryMonitor(WorkerPlugin):
@@ -80,46 +85,46 @@ if __name__ == '__main__':
     
     
     # Getting Sims Configuration
-    n_sims = int(input("\033[36mInsert number of simulations to run: \033[0m"))
+    n_sims = int(input("{BLUE}Insert number of simulations to run: {RESET}"))
     sim_idxs = np.arange(n_sims)
-    ncpu = input("\033[35mInsert total number of CPUs to use: \033[0m")
-    query = input('\033[36mDo you want to query for metadata or get an available file stored in the metadata directory? (query/get) \033[0m')
+    ncpu = input("{RED}Insert total number of CPUs to use: {RESET}")
+    query = input('{BLUE}Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) {RESET}')
     if query != 'query' and query != 'get':
-        print("Invalid input. Please insert query or get.")
-        query = input('\033[35mDo you want to query for metadata or get an available file stored in the metadata directory? (query/get) \033[0m')
+        print("{YELLOW}Invalid input. Please insert query or get.{RESET}")
+        query = input('{RED}Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) {RESET}')
     if query == 'query':
-        query_mode = input("\033[36mDo you have a target list for the ALMA Database or do you want to query by science case? (target/science): \033[0m")
+        query_mode = input("{BLUE}Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): {RESET}")
         if query_mode != "target" and query_mode != "science":
-            print("Invalid input. Please insert target or science.")
-            query_mode = input("\033[35mDo you have a target list for the ALMA Database or do you want to query by science case? (target/science): \033[0m")
+            print("{YELLOW}Invalid input. Please insert target or science.{RESET}")
+            query_mode = input("{RED}Do you have a target list for the ALMA Database or do you want to query by science case? (target/science): {RESET}")
         if query_mode == "target":
-            target_list = input("\033[36mInsert the absolute path of the target list .csv file. This file should contain two columns with the target name and the target uid: \033[0m")
+            target_list = input("{BLUE}Insert the absolute path of the target list .csv file. This file should contain two columns with the target name and the target uid: {RESET}")
             if not isfile(target_list):
-                print("File not found.")
-                target_list = input("\033[35mFile not found. Please provide the correct path: \033[0m")
+                print("{YELLOW}File not found.{RESET}")
+                target_list = input("{RED}File not found. Please provide the correct path: {RESET}")
             target_list = pd.read_csv(target_list).values
             target_list = target_list.tolist()
-            metadata_name = input("\033[36mQueried metadata will be saved as a .csv file in the metadata folder: \033[0m")
+            metadata_name = input("{BLUE}Queried metadata will be saved as a .csv file in the metadata folder: {RESET}")
             metadata = ual.query_for_metadata_by_targets(target_list, os.path.join(main_path, "metadata", metadata_name))
         else:
-            metadata_name = input("\033[35mQueried metadata will be saved as a .csv file in the metadata folder: \033[0m")
+            metadata_name = input("{RED}Queried metadata will be saved as a .csv file in the metadata folder: {RESET}")
             if '.csv' not in metadata_name:
                 metadata_name = metadata_name.split('.')[0]
                 metadata_name = metadata_name + '.csv'
             metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path)
     else:
-        metadata_name = input("\033[36mInsert the name of the metadata file you want to use. Make sure to add .csv: \033[0m")
+        metadata_name = input("{BLUE}Insert the name of the metadata file you want to use. Make sure to add .csv: {RESET}")
         if '.csv' not in metadata_name:
             metadata_name = metadata_name.split('.')[0]
             metadata_name = metadata_name + '.csv'
         metadata = uc.load_metadata(main_path, metadata_name)
-    line_mode = input("\033[35mDo you want to simulate a specific line/s? (y/n) \033[0m")
+    line_mode = input("{RED}Do you want to simulate a specific line/s? (y/n) {RESET}")
     if line_mode != "y" and line_mode != "n":
-        print("Invalid input. Please insert y or n.")
-        line_mode = input("\033[36mDo you want to simulate a specific line/s? (y/n) \033[0m")
+        print("{YELLOW}Invalid input. Please insert y or n.{RESET}")
+        line_mode = input("{BLUE}Do you want to simulate a specific line/s? (y/n) {RESET}")
     if line_mode == "y":
         uas.line_display(main_path)
-        line_idxs = input("\033[35mSelect the line/s you want to simulate, separated by a space: \033[0m")
+        line_idxs = input("{RED}Select the line/s you want to simulate, separated by a space: {RESET}")
         line_idxs = [int(ix) for ix in line_idxs.split(' ')]
         rest_freq, line_names = uas.get_line_info(main_path, line_idxs)
         if len(rest_freq) == 1:
@@ -130,7 +135,7 @@ if __name__ == '__main__':
         line_names = np.array([line_names]*n_sims)
         z1 = None
     else:
-        redshifts = input('\033[36mPlease provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space. If a single value is given, all simualtions will be performed at the same redshift: \033[0m')
+        redshifts = input('{BLUE}Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space. If a single value is given, all simualtions will be performed at the same redshift: {RESET}')
         redshifts = redshifts.split()
         if len(redshifts) == 1:
             redshifts = np.array([float(redshifts[0])] * n_sims)
@@ -138,18 +143,18 @@ if __name__ == '__main__':
         else:
             z0, z1 = float(redshifts[0]), float(redshifts[1])
             redshifts = np.random.uniform(z0, z1, n_sims)
-        n_lines = input('\033[35mPlease provide the number of lines you want to simulate as an integer: \033[0m')
+        n_lines = input('{RED}Please provide the number of lines you want to simulate as an integer: {RESET}')
         n_lines = np.array([int(n_lines)]*n_sims)
         rest_freq, _ = uas.get_line_info(main_path)
         line_names = np.array([None]*n_sims)
         rest_freqs = np.array([None]*n_sims)
     
-    set_infrared = input('\033[36mDo you want to provide infrared luminosities for SED normalization? (y/n), \nif you choose not to provide them, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: \033[0m')
+    set_infrared = input('{BLUE}Do you want to provide infrared luminosities for SED normalization? (y/n), if not provided, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: {RESET}')
     if set_infrared != "y" and set_infrared != "n":
-        print("Invalid input. Please insert y or n.")
-        set_infrared = input('\033[35mDo you want to provide infrared luminosities for SED normalization? (y/n), \nif you choose not to provide them, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: \033[0m')
+        print("{YELLOW}Invalid input. Please insert y or n.{RESET}")
+        set_infrared = input('{RED}Do you want to provide infrared luminosities for SED normalization? (y/n), if not provided, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: {RESET}')
     if set_infrared == "y":
-        lum_infrared = input('\033[36mPlease provide the infrared luminosity (in solar masses) to normalize the SED,\nyou can input a single value or an interval as two floats (es. 1e10) separated by a space: \033[0m')
+        lum_infrared = input('{BLUE}Please provide the infrared luminosity (in solar masses) to normalize the SED,\nyou can input a single value or an interval as two floats (es. 1e10) separated by a space: {RESET}')
         lum_infrared = [float(lum) for lum in lum_infrared.split()]
         if len(lum_infrared) == 1:
             lum_ir = np.array([lum_infrared[0]]*n_sims)
@@ -157,12 +162,12 @@ if __name__ == '__main__':
             lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
     else:
         lum_ir = np.array([None]*n_sims)
-    set_snr = input('\033[35mDo you want to provide a desired SNR for the simulated observations? (y/n) \033[0m')
+    set_snr = input('{RED}Do you want to provide a desired SNR for the simulated observations? (y/n) {RESET}')
     if set_snr != "y" and set_snr != "n":
-        print("Invalid input. Please insert y or n.")
-        set_snr = input('\033[36mDo you want to provide a desired SNR for the simulated observations? (y/n) \033[0m')
+        print("{YELLOW}Invalid input. Please insert y or n.{RESET}")
+        set_snr = input('{BLUE}Do you want to provide a desired SNR for the simulated observations? (y/n) {RESET}')
     if set_snr == "y":
-        snr = input('\033[35mPlease provide the desired SNR as a float or an interval as two floats separated by a space: \033[0m')
+        snr = input('{RED}Please provide the desired SNR as a float or an interval as two floats separated by a space: {RESET}')
         snr = [float(snr) for snr in snr.split()]
         if len(snr) == 1:
             snr = np.array([snr[0]]*n_sims)
@@ -171,29 +176,29 @@ if __name__ == '__main__':
     else:
         snr = np.ones(n_sims)
     
-    fix_spatial = input('\033[36mDo you want to fix cube spatial dimensions? (y/n) \033[0m')
+    fix_spatial = input('{BLUE}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
     if fix_spatial != 'y' and fix_spatial != 'n':
-        print("Invalid input. Please insert y or n.")
-        fix_spatial = input('\033[35mDo you want to fix cube spatial dimensions? (y/n) \033[0m')
+        print("{YELLOW}Invalid input. Please insert y or n.{RESET}")
+        fix_spatial = input('{RED}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
     
     if fix_spatial == 'y':
-        n_pix = input('\033[36mInsert the desired cube dimension in pixels: \033[0m')
+        n_pix = input('{BLUE}Insert the desired cube dimension in pixels: {RESET}')
         n_pix = int(n_pix)
     else:
         n_pix = None
-    fix_spectral = input('\033[35mDo you want to fix cube spectral dimensions? (y/n) \033[0m')
+    fix_spectral = input('{RED}Do you want to fix cube spectral dimensions? (y/n) {RESET}')
     if fix_spectral != 'y' and fix_spectral != 'n':
-        print("Invalid input. Please insert y or n.")
-        fix_spectral = input('\033[36mDo you want to fix cube spectral dimensions? (y/n) \033[0m')
+        print("{YELLOW}Invalid input. Please insert y or n.{RESET}")
+        fix_spectral = input('{BLUE}Do you want to fix cube spectral dimensions? (y/n) {RESET}')
     if fix_spectral == 'y':
-        n_channels = input('\033[35mInsert the desired number of channels: \033[0m')
+        n_channels = input('{RED}Insert the desired number of channels: {RESET}')
         n_channels = int(n_channels)
     else:
         n_channels = None
-    source_type = input('\033[36mInsert source type you want to simulate (point, gaussian, extended, diffuse): \033[0m')
+    source_type = input('{BLUE}Insert source type you want to simulate (point, gaussian, extended, diffuse): {RESET}')
     if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse':
-        print("Invalid input. Please insert point, gaussian, extended or diffuse.")
-        source_type = input('\033[35mInsert source type you want to simulate (point, gaussian, extended, diffuse): \033[0m')
+        print("{YELLOW}Invalid input. Please insert point, gaussian, extended or diffuse.{RESET}")
+        source_type = input('{RED}Insert source type you want to simulate (point, gaussian, extended, diffuse): {RESET}')
     if source_type == 'extended':
         print('Checking TNG Folders')
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
@@ -223,10 +228,10 @@ if __name__ == '__main__':
     else:
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False, z1)
     print('\nMetadata retrieved\n')
-    inject_ser = input('\033[35mDo you want to inject serendipitous sources? (y/n) \033[0m')
+    inject_ser = input('{RED}Do you want to inject serendipitous sources? (y/n) {RESET}')
     if inject_ser != 'y' and inject_ser != 'n':
-        print("Invalid input. Please insert y or n.")
-        inject_ser = input('\033[36mDo you want to inject serendipitous sources? (y/n) \033[0m')
+        print("{YELLOW}Invalid input. Please insert y or n.{RESET}")
+        inject_ser = input('{BLUE}Do you want to inject serendipitous sources? (y/n) {RESET}')
     if inject_ser == 'y':
         inject_serendipitous = np.array([True] * n_sims)
     else:
