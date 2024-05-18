@@ -10,7 +10,8 @@ from astropy.constants import c
 import astropy.units as U
 from tqdm import tqdm
 import astropy.time
-import astropy.coordinates as coord
+from astropy.coordinates import EarthLocation, SkyCoord, AltAz
+import pandas as pd
 
 def showError(message):
         raise Exception(message)
@@ -28,12 +29,14 @@ class Interferometer(object):
         self.integration_time = integration_time
         self.total_time = total_time
         self.nH = int(self.total_time / self.integration_time)
-        self.atenna_diameter = antenna_diameter
-        self.n_pix = n_pix
+        self.antenna_diameter = antenna_diameter
+        self.Npix = n_pix
         self.central_freq = central_freq
         self.bandwidth = bandwidth
         self.n_channels = n_channels
         # Constants and conversions
+        self.robust = 0.0
+        self.Hfac = np.pi / 180. * 15.
         self.c_ms = c.to(U.m / U.s).value
         self.deg2rad = np.pi / 180.
         self.rad2deg = 180. / np.pi
@@ -42,31 +45,34 @@ class Interferometer(object):
         self.lat = 23.017469 * self.deg2rad 
         self.date_str = obs_date
         self.ra = ra
-        self.dec = dec
-        self._alma_radec_to_dec()
-        print(self.Hcov)
-        self.trlat [np.sin(self.lat), np.cos(self.lat)]
-        self.trdec [np.sin(self.dec), np.cos(self.dec)]
+        self.dec = dec * self.deg2rad
+        alma_loc = EarthLocation.of_site('ALMA')
+        self.lat = alma_loc.lat * self.deg2rad
+        self.trlat = [np.sin(self.lat), np.cos(self.lat)]
+        self.trdec = [np.sin(self.dec), np.cos(self.dec)]
         self.delta_nu = self._hz_to_m(self.bandwidth  / self.n_channels) # channel width in meters
-        self.obs_wavelenghts = _get_observing_wavelengths() # observing wavelenghts in meters
+        self.obs_wavelenghts = self._get_observing_wavelength() # observing wavelenghts in meters
         self.gamma = 0.5  # gamma correction to plot model 
         self.lambdafac = 1.e6 # scale factor from km to mm
         self.W2W1 = 1.0 # relative weight of subarrays
         self.hpbw = self._get_half_power_beam_width() # half power beam width in radians
          # coverage in hours, CHECK THIS
-        self.antenna_array = antenna_arrays
+        self.antenna_array = antenna_array
         self._get_antenna_coords()
-        self.fov = self._get_fov()
+        self._get_fov()
         self._readAntennas()
         self.model = model
         self.imsize = 1.5 * self.fov
-        self.Xaxmax
+        self.pixsize = float(self.imsize) / self.Npix
+        self.Xaxmax = self.imsize / 2.
         self.Nphf = self.Npix // 2
         self.robfac = 0.0
         self.currcmap = cm.jet
         self._prepareCubes()
         for channel in tqdm(range(self.n_channels)):
-            self.wavelenghts = self.obs_wavelenghts[channel]
+            self.wavelength = list(self.obs_wavelenghts[channel])
+            self.wavelength.append(
+                                (self.wavelength[0] + self.wavelength[1]) / 2.)
             self._prepareBeam()
             self._prepareBaselines()
             self._setBaselines()
@@ -75,7 +81,7 @@ class Interferometer(object):
             xx = np.linspace(-self.imsize / 2., self.imsize / 2., self.Npix)
             yy = np.ones(self.Npix, dtype=np.float32)
             self.distmat = (-np.outer(xx**2., yy) -
-                        np.outer(yy, xx**2.)) * pixsize**2.
+                        np.outer(yy, xx**2.)) * self.pixsize**2.
             self._setPrimaryBeam()
             self._obs_model()
         
@@ -87,13 +93,19 @@ class Interferometer(object):
         self._plotAntennas()
         self._plotSim()
         self._savez_compressed_cubes()
+        self._free_space()
 
 
     def _readAntennas(self):
-        self.Xmax = 0.0
+        antPos = []
+        Xmax = 0.0
+        Hcov = [-12.0 * self.Hfac, 12.0 * self.Hfac]
         for line in self.antenna_coordinates:
+            antPos.append([line[0], line[1], line[2]])
             Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
         self.Xmax = Xmax
+        self.antPos = antPos
+        self.Hcov = Hcov
         cosW = -np.tan(self.lat) * np.tan(self.dec)
         if np.abs(cosW) < 1.0:
             Hhor = np.arccos(cosW)
@@ -101,7 +113,7 @@ class Interferometer(object):
             Hhor = 0
         else:
             Hhor = np.pi
-
+        Hhor = Hhor.value
         if Hhor > 0.0:
             if self.Hcov[0] < -Hhor:
                 self.Hcov[0] = -Hhor
@@ -109,21 +121,22 @@ class Interferometer(object):
                 self.Hcov[1] = Hhor
 
         self.Hmax = Hhor
+        
         H = np.linspace(self.Hcov[0], self.Hcov[1],
                         self.nH)[np.newaxis, :]
         self.Xmax = Xmax * 1.5
 
     def _get_antenna_coords(self):
-        antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
-        obs_antennas = antenna_array.split(' ')
+        antenna_coordinates = pd.read_csv(os.path.join(self.master_path, 'antenna_config', 'antenna_coordinates.csv'))
+        obs_antennas = self.antenna_array.split(' ')
         obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
         obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
-        antenna_coordinates = obs_coordinates.iloc[:, 'x', 'y', 'z'].values
+        antenna_coordinates = obs_coordinates[['x', 'y', 'z']].values
 
         self.antenna_coordinates = antenna_coordinates * 1.e-3 # convert to km
         self.Nant = len(antenna_coordinates)
     
-    def _get_observing_wavelengths(self):
+    def _get_observing_wavelength(self):
         # returns the observing wavelenghts in meters
         w_min, w_max = [self._hz_to_m(freq) for freq in [self.central_freq - self.bandwidth / 2,    self.central_freq + self.bandwidth / 2]]
         obs_wavelengths= np.array([[wave - self.delta_nu /2, wave + self.delta_nu / 2] for wave in np.linspace(w_min, w_max, self.n_channels)])
@@ -150,43 +163,45 @@ class Interferometer(object):
             tuple: (longitude, latitude, initial_hour_angle, final_hour_angle) in degrees.
         """
 
-         # Convert date string to Astropy Time object
-        obstime = astropy.time.Time(self.date_str)
-    
         # Define ALMA location (approximately)
-        alma_loc = coord.EarthLocation(lon=-69.482606 * U.deg, lat=-23.017469  * U.deg, height=5000 * U.m)  # ALMA location
+        
+         # Convert date string to Astropy Time object
+        obs_time = astropy.time.Time(self.date_str + 'T00:00:00', format='isot', scale='utc', location=alma_loc)
+        #self.dec = self.dec * self.deg2rad
+        #aa = AltAz(location=alma_loc, obstime=obs_time)
 
         # Create sky coordinate object
-        sky_coord = coord.ICRS(ra=self.ra * U.deg, dec=self.dec * U.deg)
+        #sky_coord = SkyCoord(ra=self.ra * U.deg, dec=self.dec * U.deg, frame='icrs')
 
         # Transform to topocentric coordinates (ALMA frame)
-        target_altaz = sky_coord.transform_to(alma_loc)
+        #target_altaz = sky_coord.transform_to(aa)
 
         # Extract Longitude and Latitude
-        longitude = target_altaz.lon.degree
-        latitude = target_altaz.lat.degree
+        #longitude = target_altaz.lon.degree
+        #latitude = target_altaz.lat.degree
 
         # Calculate sidereal rotation rate (Earth's rotation in radians per second)
-        sidereal_rate = 2 * np.pi / (23.9305882 * U.hour)  # sidereal day in hours
+        #sidereal_rate_hours = 23.9344696
 
         # Convert total observation time to hours
-        observation_time_hours = total_observation_time / 3600
+        #observation_time_hours = self.total_time / 3600
 
         # Calculate Local Sidereal Time (LST) at the start of observation (approximate)
         # Requires more precise calculations for real-world use
-        local_sidereal_time = obstime.sidereal_time('apparent')
+        #local_sidereal_time = obs_time.sidereal_time('apparent')
 
         # Calculate initial Hour Angle (assuming LST is constant during observation)
-        initial_hour_angle = (ra - local_sidereal_time.hour) * 15
+        #initial_hour_angle = self.ra * self.deg2rad * 15. - local_sidereal_time.hour
 
         # Calculate final Hour Angle (initial Hour Angle + observation time * sidereal rate)
-        final_hour_angle = (initial_hour_angle + observation_time_hours * sidereal_rate.to(U.deg/U.s)) * 180 / np.pi
-        self.Hcov = [initial_hour_angle.value, final_hour_angle.value]
-        self.dec = latitude.value * self.dec2rad
+        #final_hour_angle = initial_hour_angle + (observation_time_hours * sidereal_rate_hours)
+
+        #self.Hcov = [-12 * self.Hfac, 12 * self.Hfac]
+        #self.dec * self.deg2rad
 
     def _get_wavelength(self):
         # returns the wavelength in meters
-        return self.c_ms / self.central_freq.to(U.Hz).value
+        return self.c_ms / self.central_freq
 
     def _get_wavelenght_km(self):
         # return the wavelength in km
@@ -233,7 +248,7 @@ class Interferometer(object):
         self.H = [np.sin(H), np.cos(H)]
         bi = 0
         nii = [0 for n in range(self.Nant)]
-        for n1 in range(Nant - 1):
+        for n1 in range(self.Nant - 1):
             for n2 in range(n1 + 1, self.Nant):
                 self.basnum[n1, nii[n1]] = np.int8(bi)
                 self.basnum[n2, nii[n2]] = np.int8(bi)
@@ -242,11 +257,11 @@ class Interferometer(object):
                 nii[n1] += 1
                 nii[n2] += 1
                 bi += np.int8(1)
-        self.u = np.zeros((NBmax, nH))
-        self.v = np.zeros((NBmax, nH))
-        self.ravelDims = (NBmax, nH)
+        self.u = np.zeros((NBmax, self.nH))
+        self.v = np.zeros((NBmax, self.nH))
+        self.ravelDims = (NBmax, self.nH)
 
-    def _setBaselines(self, antidxs=-1): 
+    def _setBaselines(self, antidx=-1): 
         if antidx == -1:
             bas2change = range(self.Nbas)
         elif antidx < self.Nant:
@@ -318,12 +333,12 @@ class Interferometer(object):
                 mUi = mU[pi]
                 mVi = mV[pi]
                 pUi = pU[pi]
-                totsampling[pVi, mUi] += 1.0
-                totsampling[mVi, pUi] += 1.0
-                Gsampling[pVi, mUi] += self.Gains[nb, gp]
-                Gsampling[mVi, pUi] += np.conjugate(self.Gains[nb, gp])
-                noisemap[pVi, mUi] += self.Noise[nb, gp] * gabs
-                noisemap[mVi, pUi] += np.conjugate(
+                self.totsampling[pVi, mUi] += 1.0
+                self.totsampling[mVi, pUi] += 1.0
+                self.Gsampling[pVi, mUi] += self.Gains[nb, gp]
+                self.Gsampling[mVi, pUi] += np.conjugate(self.Gains[nb, gp])
+                self.noisemap[pVi, mUi] += self.Noise[nb, gp] * gabs
+                self.noisemap[mVi, pUi] += np.conjugate(
                     self.Noise[nb, gp]) * gabs
         self.robfac = (5. * 10.**(-self.robust))**2. * (
             2. * self.Nbas * self.nH) / np.sum(self.totsampling**2.)    
@@ -332,11 +347,11 @@ class Interferometer(object):
         PB = 2. * (1220. * self.rad2arcsec * self.wavelength[2] /
                            self.antenna_diameter / 2.3548)**2.
         beamImg = np.exp(self.distmat / PB)
-        self.modelim = self.modelimTrue * beamImg
+        self.modelim = self.modelim * beamImg
         self.modelfft = np.fft.fft2(np.fft.fftshift(self.modelim))
-        self.modelvis = np.fft.fftshift(modelfft)
+        self.modelvis = np.fft.fftshift(self.modelfft)
 
-    def _setBeam(self):
+    def _setBeam(self, antidx=-1):
 
         self._gridUV(antidx=antidx)
         denom = 1. + self.robfac * self.totsampling
@@ -351,10 +366,10 @@ class Interferometer(object):
         self.beam[:] /= self.beamScale
 
     def _obs_model(self):
-        self.dirtyvis[:] = np.fft.ifftshift(GrobustNoise) + modelfft * np.fft.ifftshift(Grobustsamp)
+        self.dirtyvis = np.fft.ifftshift(self.GrobustNoise) + self.modelfft * np.fft.ifftshift(self.Grobustsamp)
         self.dirtymap[:] = (np.fft.fftshift(
-            np.fft.ifft2(dirtyvis))).real / (1. + W2W1)
-        self.dirtymap /= beamScale 
+            np.fft.ifft2(self.dirtyvis))).real / (1. + self.W2W1)
+        self.dirtymap /= self.beamScale 
        
     def _plotAntennas(self):
         antPlot = plt.figure(figsize=(8, 8))
@@ -367,7 +382,7 @@ class Interferometer(object):
             self.lambdafac = 1.e6
             self.ulab = r'U (M$\lambda$)'
             vlab = r'V (M$\lambda$)'
-        toplot = np.array(self.antPos[:Nant])
+        toplot = np.array(self.antPos[:self.Nant])
         antPlotBas = plt.plot([0], [0], '-b')[0]
         antPlotPlot = plt.plot(toplot[:, 0], toplot[:, 1],
                                                     'o',
@@ -380,7 +395,7 @@ class Interferometer(object):
         plt.xlabel('East-West offset (Km)')
         plt.ylabel('North-South offset (Km)')
         plt.title('Antenna Configuration')
-        plt.savez_compressedfig(os.path.join(self.plot_path, 'antenna_config.png'))
+        plt.savefig(os.path.join(self.plot_path, 'antenna_config.png'))
 
         UVPlot = plt.figure(figsize=(8, 8))
         UVPlotPlot = []
@@ -404,19 +419,20 @@ class Interferometer(object):
                          -2. * self.Xmax / self.wavelength[2] / self.lambdafac))
         plt.ylim((2. * self.Xmax / self.wavelength[2] / self.lambdafac,
                          -2. * self.Xmax / self.wavelength[2] / self.lambdafac))
-        plt.xlabel(ulab)
-        plt.ylabel(vlab)
+        plt.xlabel(self.ulab)
+        plt.ylabel(self.vlab)
         plt.title('UV Coverage')
-        plt.save(os.path.join(self.plot_path, 'uv_coverage.png'))
+        plt.savefig(os.path.join(self.plot_path, 'uv_coverage.png'))
+        plt.close()
 
     def _plotBeam(self):
         self.Np4 = self.Npix // 4
         beamPlot = plt.figure(figsize=(8, 8))
         beam_img = plt.avg(self.beamCube, axis=0)
         beamPlotPlot = plt.imshow(
-            beam_img[Np4:Npix - Np4, Np4:Npix - Np4],
+            beam_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
             picker=True,
-            interpolation='near')
+            interpolation='nearest')
         plt.ylabel('Dec offset (as)')
         plt.xlabel('RA offset (as)')
         plt.setp(beamPlotPlot,
@@ -426,7 +442,8 @@ class Interferometer(object):
         nptot = np.sum(self.totsampling[:])
         beamPlotPlot.norm.vmin = np.min(beam_img)
         beamPlotPlot.norm.vmax = 1.0
-        plt.save(os.path.join(self.plot_path, 'beam.png'))
+        plt.savefig(os.path.join(self.plot_path, 'beam.png'))
+        plt.close()
 
     def _plotSim(self):
         self.Np4 = self.Npix // 4
@@ -440,28 +457,28 @@ class Interferometer(object):
             interpolation='nearest',
             vmin=0.0,
             vmax=np.max(sim_img)**self.gamma,
-            cmap=currcmap)
+            cmap=self.currcmap)
         plt.setp(simPlotPlot,
             extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
                     -self.Xaxmax / 2., self.Xaxmax / 2.)) 
         ax[0, 0].set_ylabel('Dec offset (as)')
         ax[0, 0].set_xlabel('RA offset (as)')
-        totflux = np.sum(modelimTrue[Np4:Npix -Np4, Np4:Npix - Np4])
+        totflux = np.sum(self.modelim[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4])
         ax[0, 0].set_title('MODEL IMAGE: %.2e Jy' % totflux)
         simPlotPlot.norm.vmin = np.min(sim_img)
         simPlotPlot.norm.vmax = np.max(sim_img)
 
         dirty_img = np.sum(self.dirtymapCube, axis=0)
         dirtyPlotPlot = ax[0, 1].imshow(
-            dirty_img[Np4:Npix - Np4, Np4:Npix - Np4],
+            dirty_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
             picker=True,
-            interpolation='near')
+            interpolation='nearest')
         plt.setp(dirtyPlotPlot,
             extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
                     -self.Xaxmax / 2., self.Xaxmax / 2.))
         ax[0, 1].set_ylabel('Dec offset (as)')
         ax[0, 1].set_xlabel('RA offset (as)')
-        totflux = np.sum(dirty_img[Np4:Npix - Np4, Np4:Npix - Np4])
+        totflux = np.sum(dirty_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4])
         ax[0, 1].set_title('DIRTY IMAGE: %.2e Jy' % totflux)
         dirtyPlotPlot.norm.vmin = np.min(dirty_img)
         dirtyPlotPlot.norm.vmax = np.max(dirty_img)
@@ -495,13 +512,14 @@ class Interferometer(object):
                                         vmin=0.0,
                                         vmax=Mval + dval,
                                         picker=5)
-        pl.setp(UVPlotDirtyFFTPlot,
+        plt.setp(UVPlotDirtyFFTPlot,
                     extent=(-self.UVmax + self.UVSh, self.UVmax + self.UVSh,
                             -self.UVmax - self.UVSh, self.UVmax - self.UVSh))
         ax[1, 1].set_ylabel('V (k$\\lambda$)')
         ax[1, 1].set_xlabel('U (k$\\lambda$)')
         ax[1, 1].set_title('DIRTY VISIBILITY')
-        plt.save(os.path.join(self.plot_path, 'sim.png'))
+        plt.savefig(os.path.join(self.plot_path, 'sim.png'))
+        plt.close()
 
     def _savez_compressed_cubes(self):
         np.savez_compressed(os.path.join(self.output_path, 'modelCube.npz'), self.modelCube)
@@ -509,6 +527,13 @@ class Interferometer(object):
         np.savez_compressed(os.path.join(self.output_path, 'dirtymapCube.npz'), self.dirtymapCube)
         np.savez_compressed(os.path.join(self.output_path, 'dirtyvisCube.npz'), self.dirtyvisCube)
         np.savez_compressed(os.path.join(self.output_path, 'modelvisCube.npz'), self.modelvisCube)
+
+    def _free_space(self):
+        del self.modelCube
+        del self.beamCube
+        del self.dirtymapCube
+        del self.dirtyvisCube
+        del self.modelvisCube
 
 
     

@@ -554,7 +554,6 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     usm.write_datacube_to_fits(datacube, filename, obs_date)
     print('Done')
     model = datacube._array.to_value(datacube._array.unit).T
-    print(model.shape)
     del datacube
     upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
     uin.Interferometer(inx, main_dir, output_dir, model, int_time.value,
