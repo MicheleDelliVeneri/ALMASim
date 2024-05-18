@@ -34,7 +34,7 @@ class Interferometer(object):
         self.bandwidth = bandwidth
         self.n_channels = n_channels
         # Constants and conversions
-        self.c_ms c.to(U.m / U.s).value
+        self.c_ms = c.to(U.m / U.s).value
         self.deg2rad = np.pi / 180.
         self.rad2deg = 180. / np.pi
         self.rad2arcsec = 3600. * self.rad2deg
@@ -220,30 +220,28 @@ class Interferometer(object):
                                      dtype=np.complex64)
 
     def _prepareBaselines(self):
-
-            self.Nbas = self.Nant * (self.Nant - 1) // 2
-            NBmax = self.Nbas
-            self.B = np.zeros((NBmax, self.nH), dtype=np.float32)
-            self.basnum = np.zeros((self.Nant, self.Nant - 1), dtype=np.int8)
-            self.basidx = np.zeros((self.Nant, self.Nant), dtype=np.int8)
-            self.antnum = np.zeros((NBmax, 2), dtype=np.int8)
-            self.Gains = np.ones((self.Nbas, self.nH), dtype=np.complex64)
-            self.Noise = np.zeros((self.Nbas, self.nH), dtype=np.complex64)
-            self.Horig = np.linspace(self.Hcov[0], self.Hcov[1], self.nH)
-            H = self.Horig[np.newaxis, :]
-            self.H = [np.sin(H), np.cos(H)]
-
-            bi = 0
-            nii = [0 for n in range(self.Nant)]
-            for n1 in range(Nant - 1):
-                for n2 in range(n1 + 1, self.Nant):
-                    self.basnum[n1, nii[n1]] = np.int8(bi)
-                    self.basnum[n2, nii[n2]] = np.int8(bi)
-                    self.basidx[n1, n2] = np.int8(bi)
-                    self.antnum[bi] = [n1, n2]
-                    nii[n1] += 1
-                    nii[n2] += 1
-                    bi += np.int8(1)
+        self.Nbas = self.Nant * (self.Nant - 1) // 2
+        NBmax = self.Nbas
+        self.B = np.zeros((NBmax, self.nH), dtype=np.float32)
+        self.basnum = np.zeros((self.Nant, self.Nant - 1), dtype=np.int8)
+        self.basidx = np.zeros((self.Nant, self.Nant), dtype=np.int8)
+        self.antnum = np.zeros((NBmax, 2), dtype=np.int8)
+        self.Gains = np.ones((self.Nbas, self.nH), dtype=np.complex64)
+        self.Noise = np.zeros((self.Nbas, self.nH), dtype=np.complex64)
+        self.Horig = np.linspace(self.Hcov[0], self.Hcov[1], self.nH)
+        H = self.Horig[np.newaxis, :]
+        self.H = [np.sin(H), np.cos(H)]
+        bi = 0
+        nii = [0 for n in range(self.Nant)]
+        for n1 in range(Nant - 1):
+            for n2 in range(n1 + 1, self.Nant):
+                self.basnum[n1, nii[n1]] = np.int8(bi)
+                self.basnum[n2, nii[n2]] = np.int8(bi)
+                self.basidx[n1, n2] = np.int8(bi)
+                self.antnum[bi] = [n1, n2]
+                nii[n1] += 1
+                nii[n2] += 1
+                bi += np.int8(1)
         self.u = np.zeros((NBmax, nH))
         self.v = np.zeros((NBmax, nH))
         self.ravelDims = (NBmax, nH)
@@ -483,8 +481,8 @@ class Interferometer(object):
                     extent=(-self.UVmax + self.UVSh, self.UVmax + self.UVSh,
                             -self.UVmax - self.UVSh, self.UVmax - self.UVSh))
 
-        ax[1, 0].set_ylabel('V (k$\lambda$)')
-        ax[1, 0].set_xlabel('U (k$\lambda$)')
+        ax[1, 0].set_ylabel('V (k$\\lambda$)')
+        ax[1, 0].set_xlabel('U (k$\\lambda$)')
         ax[1, 0].set_title('MODEL VISIBILITY')
 
 
@@ -500,8 +498,8 @@ class Interferometer(object):
         pl.setp(UVPlotDirtyFFTPlot,
                     extent=(-self.UVmax + self.UVSh, self.UVmax + self.UVSh,
                             -self.UVmax - self.UVSh, self.UVmax - self.UVSh))
-        ax[1, 1].set_ylabel('V (k$\lambda$)')
-        ax[1, 1].set_xlabel('U (k$\lambda$)')
+        ax[1, 1].set_ylabel('V (k$\\lambda$)')
+        ax[1, 1].set_xlabel('U (k$\\lambda$)')
         ax[1, 1].set_title('DIRTY VISIBILITY')
         plt.save(os.path.join(self.plot_path, 'sim.png'))
 

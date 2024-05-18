@@ -67,9 +67,9 @@ if __name__ == '__main__':
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
     #output_dir = "/srv/Fast01/delliven/almasim-test-24-5-14"
-    output_dir = '/mnt/storage/astro/almasim-test-24-5-16'
+    output_dir = '/Users/michele/Documents/almasim-test-24-5-18'
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
-    tng_dir = "/mnt/storage/astro/TNGData"
+    tng_dir = "/Users/michele/Documents/TNGData"
     project_name = input(f"{RED}Insert the name of the project: {RESET}")
     #project_name = 'test-extended'
     if not os.path.exists(output_dir):
