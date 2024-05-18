@@ -154,7 +154,7 @@ class Interferometer(object):
         obstime = astropy.time.Time(self.date_str)
     
         # Define ALMA location (approximately)
-        alma_loc = coord.EarthLocation(obstime=obstime, lon=-69.482606 * U.deg, lat=-23.017469  * U.deg, height=5000 * U.m)  # ALMA location
+        alma_loc = coord.EarthLocation(lon=-69.482606 * U.deg, lat=-23.017469  * U.deg, height=5000 * U.m)  # ALMA location
 
         # Create sky coordinate object
         sky_coord = coord.ICRS(ra=self.ra * U.deg, dec=self.dec * U.deg)
