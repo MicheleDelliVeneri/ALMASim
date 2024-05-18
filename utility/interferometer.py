@@ -9,6 +9,8 @@ import scipy.ndimage.interpolation as spndint
 from astropy.constants import c
 import astropy.units as U
 from tqdm import tqdm
+import astropy.time
+import astropy.coordinates as coord
 
 def showError(message):
         raise Exception(message)
@@ -19,7 +21,7 @@ class Interferometer(object):
     def __init__(self, idx, master_path, output_path, model, 
                        integration_time, total_time, n_pix, 
                        n_channels,  bandwidth, central_freq, 
-                       lat, dec, antenna_array, antenna_diameter=12):
+                       ra, dec, obs_date, antenna_array, antenna_diameter=12):
         self.master_path = master_path
         self.output_path = output_path
         self.plot_path = os.path.join(output_path, 'plots')
@@ -37,11 +39,14 @@ class Interferometer(object):
         self.rad2deg = 180. / np.pi
         self.rad2arcsec = 3600. * self.rad2deg
         self.deltaAng = 1. * self.deg2rad 
-        self.lat = self.deg2rad * lat
-        self.dec = self.deg2rad * dec
-        self.trlat [np.sin(lat), np.cos(lat)]
-        self.trdec [np.sin(dec), np.cos(dec)]
-
+        self.lat = 23.017469 * self.deg2rad 
+        self.date_str = obs_date
+        self.ra = ra
+        self.dec = dec
+        self._alma_radec_to_dec()
+        print(self.Hcov)
+        self.trlat [np.sin(self.lat), np.cos(self.lat)]
+        self.trdec [np.sin(self.dec), np.cos(self.dec)]
         self.delta_nu = self._hz_to_m(self.bandwidth  / self.n_channels) # channel width in meters
         self.obs_wavelenghts = _get_observing_wavelengths() # observing wavelenghts in meters
         self.gamma = 0.5  # gamma correction to plot model 
@@ -85,7 +90,6 @@ class Interferometer(object):
 
 
     def _readAntennas(self):
-        self.Hcov = [-12.0 * Hfac, 12.0 * Hfac]
         self.Xmax = 0.0
         for line in self.antenna_coordinates:
             Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
@@ -130,6 +134,55 @@ class Interferometer(object):
     
     def _hz_to_km (self, freq):
         return self._hz_to_m(freq) / 1000
+
+    def _alma_radec_to_dec(self):
+        """
+            Converts RA and Dec to Lon and Lat for the ALMA array on a given date, 
+            and calculates initial and final Hour Angles.
+
+        Args:
+            date_str (str): Date string in YYYY-MM-DD format.
+            ra (float): Right Ascension in degrees.
+            dec (float): Declination in degrees.
+            total_observation_time (float): Total observation time in seconds.
+
+        Returns:
+            tuple: (longitude, latitude, initial_hour_angle, final_hour_angle) in degrees.
+        """
+
+         # Convert date string to Astropy Time object
+        obstime = astropy.time.Time(self.date_str)
+    
+        # Define ALMA location (approximately)
+        alma_loc = coord.EarthLocation(obstime=obstime, lon=-69.482606 * U.deg, lat=-23.017469  * U.deg, height=5000 * U.m)  # ALMA location
+
+        # Create sky coordinate object
+        sky_coord = coord.ICRS(ra=self.ra * U.deg, dec=self.dec * U.deg)
+
+        # Transform to topocentric coordinates (ALMA frame)
+        target_altaz = sky_coord.transform_to(alma_loc)
+
+        # Extract Longitude and Latitude
+        longitude = target_altaz.lon.degree
+        latitude = target_altaz.lat.degree
+
+        # Calculate sidereal rotation rate (Earth's rotation in radians per second)
+        sidereal_rate = 2 * np.pi / (23.9305882 * U.hour)  # sidereal day in hours
+
+        # Convert total observation time to hours
+        observation_time_hours = total_observation_time / 3600
+
+        # Calculate Local Sidereal Time (LST) at the start of observation (approximate)
+        # Requires more precise calculations for real-world use
+        local_sidereal_time = obstime.sidereal_time('apparent')
+
+        # Calculate initial Hour Angle (assuming LST is constant during observation)
+        initial_hour_angle = (ra - local_sidereal_time.hour) * 15
+
+        # Calculate final Hour Angle (initial Hour Angle + observation time * sidereal rate)
+        final_hour_angle = (initial_hour_angle + observation_time_hours * sidereal_rate.to(U.deg/U.s)) * 180 / np.pi
+        self.Hcov = [initial_hour_angle.value, final_hour_angle.value]
+        self.dec = latitude.value * self.dec2rad
 
     def _get_wavelength(self):
         # returns the wavelength in meters
@@ -372,10 +425,10 @@ class Interferometer(object):
             extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
                     -self.Xaxmax / 2., self.Xaxmax / 2.)) 
         plt.title('DIRTY BEAM')
-    nptot = np.sum(self.totsampling[:])
-    beamPlotPlot.norm.vmin = np.min(beam_img)
-    beamPlotPlot.norm.vmax = 1.0
-    plt.save(os.path.join(self.plot_path, 'beam.png'))
+        nptot = np.sum(self.totsampling[:])
+        beamPlotPlot.norm.vmin = np.min(beam_img)
+        beamPlotPlot.norm.vmax = 1.0
+        plt.save(os.path.join(self.plot_path, 'beam.png'))
 
     def _plotSim(self):
         self.Np4 = self.Npix // 4
@@ -451,8 +504,6 @@ class Interferometer(object):
         ax[1, 1].set_xlabel('U (k$\lambda$)')
         ax[1, 1].set_title('DIRTY VISIBILITY')
         plt.save(os.path.join(self.plot_path, 'sim.png'))
-
-       
 
     def _savez_compressed_cubes(self):
         np.savez_compressed(os.path.join(self.output_path, 'modelCube.npz'), self.modelCube)

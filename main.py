@@ -304,6 +304,6 @@ if __name__ == '__main__':
     #results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
     #client.close()
     #cluster.close()
-    uc.simulator(*input_params.iloc[0])
+    uc.simulator2(*input_params.iloc[0])
     uc.remove_logs(main_path)
     
