@@ -72,7 +72,7 @@ class Interferometer():
             self._get_channel_range()
             self._prepare_2d_arrays()
             self._prepare_baselines()
-            if 
+            self.set_noise()
             self._set_baselines()
             self._grid_uv()
             self._set_beam()
@@ -192,6 +192,15 @@ class Interferometer():
         self.v = np.zeros((NBmax, self.nH))
         self.ravelDims = (NBmax, self.nH)
 
+    def set_noise(self):
+        if self.noise == 0.0:
+            self.Noise[:] = 0.0
+        else:
+            self.Noise[:] = np.random.normal(
+                loc=0.0, scale=self.noise, size=np.shape(
+                    self.Noise)) + 1.j * np.random.normal(
+                        loc=0.0, scale=self.noise, size=np.shape(self.Noise))
+
     def _set_baselines(self, antidx=-1):
         if antidx == -1:
                 bas2change = range(self.Nbas)
@@ -293,7 +302,7 @@ class Interferometer():
             interpolation='nearest',
             cmap=self.currcmap)
         beamText = plt.text(
-            0.05,
+            0.80,
             0.80,
             self.fmtB % (1.0, 0.0, 0.0),
             bbox=dict(facecolor='white', alpha=0.7))

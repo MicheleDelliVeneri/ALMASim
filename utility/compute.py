@@ -561,7 +561,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     model = datacube._array.to_value(datacube._array.unit).T
     del datacube
     #upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
-    uin.Interferometer(inx, model, main_dir, output_dir, dec, central_freq, band_range, fov, antenna_array)
+    uin.Interferometer(inx, model, main_dir, output_dir, dec, central_freq, band_range, fov, antenna_array, cont_sens_jy.value)
     print('Finished')
     stop = time.time()
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
