@@ -614,9 +614,9 @@ class Interferometer():
             self._set_primary_beam()
             self._observe()
             self._update_cubes()
-        self.plot_sim()
-        self.savez_compressed_cubes()
-        self.free_space()
+        self._plot_sim()
+        self._savez_compressed_cubes()
+        self._free_space()
 
     def _hz_to_m(self, freq):
         return self.c_ms / freq
@@ -946,7 +946,7 @@ class Interferometer():
     
     def _free_space(self):
         del self.modelCube
-        del self.dirtCube
+        del self.dirtyCube
         del self.dirtyvisCube
         del self.visCube
 
