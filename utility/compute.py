@@ -398,6 +398,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     start = time.time()
     ra = ra * U.deg
     dec = dec * U.deg
+    fov = fov * 3600 * U.arcsec
     ang_res = ang_res * U.arcsec
     vel_res = vel_res * U.km / U.s
     int_time = int_time * U.s
@@ -415,6 +416,8 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     if not os.path.exists(sim_output_dir):
         os.makedirs(sim_output_dir)
     os.chdir(output_dir)
+    print('RA: {}'.format(ra))
+    print('DEC: {}'.format(dec))
     print('Angular resolution: {}'.format(ang_res))
     print('Integration Time: {}'.format(int_time))
     print('Total Observatio Time: {}'.format(total_time))
@@ -422,11 +425,13 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     antennalist = os.path.join(sim_output_dir, "antenna.cfg")
     antenna_name = 'antenna'
     max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
-    t_ang_res = c.to(U.m/U.s) / central_freq.to(U.Hz) / (max_baseline.to(U.m))
-    t_ang_res = t_ang_res * (180 / math.pi) * 3600 * U.arcsec
-    print('Angular Resolution computed from max baseline: {}'.format(t_ang_res))
+    #t_ang_res = c.to(U.m/U.s) / central_freq.to(U.Hz) / (max_baseline.to(U.m))
+    #t_ang_res = t_ang_res * (180 / math.pi) * 3600 * U.arcsec
+    #print('Angular Resolution computed from max baseline: {}'.format(t_ang_res))
+    print('Angular Resolution: {}'.format(ang_res))
     #pos_string = uas.convert_to_j2000_string(ra.value, dec.value)
-    fov =  ual.get_fov_from_band(int(band), return_value=False)
+    #fov =  ual.get_fov_from_band(int(band), return_value=False)
+    print('Field of view: {} arcsec'.format(round(fov.value, 3)) )
     beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
     cont_sens = cont_sens * U.mJy / (U.arcsec ** 2)
@@ -549,13 +554,13 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
         datacube = usm.insert_serendipitous(datacube, continum, cont_sens.value, line_fluxes, line_names, line_frequency, 
                                             freq_sup.value, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
                                             os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)))
-    filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
-    print('Writing datacube to {}'.format(filename))
-    usm.write_datacube_to_fits(datacube, filename, obs_date)
+    #filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
+    #print('Writing datacube to {}'.format(filename))
+    #usm.write_datacube_to_fits(datacube, filename, obs_date)
     print('Done')
     model = datacube._array.to_value(datacube._array.unit).T
     del datacube
-    upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
+    #upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
     uin.Interferometer(inx, main_dir, output_dir, model, int_time.value,
                         total_time.value, n_pix, n_channels, band_range.to(U.Hz).value, 
                         central_freq.to(U.Hz).value, ra.value, dec.value, obs_date, antenna_array)

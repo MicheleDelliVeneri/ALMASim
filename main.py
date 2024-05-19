@@ -200,7 +200,7 @@ if __name__ == '__main__':
         snr = np.ones(n_sims)
     
     #fix_spatial = input(f'{BLUE}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
-    fix_spatial = 'y'
+    fix_spatial = 'n'
     if fix_spatial != 'y' and fix_spatial != 'n':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         fix_spatial = input(f'{RED}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
@@ -223,7 +223,7 @@ if __name__ == '__main__':
     else:
         n_channels = None
     #source_type = input(f'{BLUE}Insert source type you want to simulate (point, gaussian, extended, diffuse): {RESET}')
-    source_type = 'point'
+    source_type = 'gaussian'
     if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse':
         print(f"{YELLOW}Invalid input. Please insert point, gaussian, extended or diffuse.{RESET}")
         source_type = input(f'{RED}Insert source type you want to simulate (point, gaussian, extended, diffuse): {RESET}')

@@ -29,6 +29,7 @@ class Interferometer(object):
         self.integration_time = integration_time
         self.total_time = total_time
         self.nH = int(self.total_time / self.integration_time)
+        print(self.nH)
         self.antenna_diameter = antenna_diameter
         self.Npix = n_pix
         self.central_freq = central_freq
@@ -48,10 +49,14 @@ class Interferometer(object):
         self.dec = dec * self.deg2rad
         alma_loc = EarthLocation.of_site('ALMA')
         self.lat = alma_loc.lat * self.deg2rad
+        if np.abs(self.lat - self.dec >= np.pi / 2.):
+           print("\nSource is either not observable or just at the horizon!\n\n")
+
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
         self.trdec = [np.sin(self.dec), np.cos(self.dec)]
         self.delta_nu = self._hz_to_m(self.bandwidth  / self.n_channels) # channel width in meters
         self.obs_wavelenghts = self._get_observing_wavelength() # observing wavelenghts in meters
+        print("{:.2e}".format(self.obs_wavelenghts[0][0]), "{:.2e}".format(self.obs_wavelenghts[-1][1]))
         self.gamma = 0.5  # gamma correction to plot model 
         self.lambdafac = 1.e6 # scale factor from km to mm
         self.W2W1 = 1.0 # relative weight of subarrays
@@ -62,7 +67,7 @@ class Interferometer(object):
         self._get_fov()
         self._readAntennas()
         self.model = model
-        self.imsize = 1.5 * self.fov
+        self.imsize = 2 * self.fov
         self.pixsize = float(self.imsize) / self.Npix
         self.Xaxmax = self.imsize / 2.
         self.Nphf = self.Npix // 2
@@ -70,9 +75,11 @@ class Interferometer(object):
         self.currcmap = cm.jet
         self._prepareCubes()
         for channel in tqdm(range(self.n_channels)):
-            self.wavelength = list(self.obs_wavelenghts[channel])
+            self.wavelength = list(self.obs_wavelenghts[channel] * 1e-3)
             self.wavelength.append(
                                 (self.wavelength[0] + self.wavelength[1]) / 2.)
+            self.fmtB1 = r'$\lambda = $ %4.1fmm  ' % (self.wavelength[2] * 1.e6)
+            self.fmtB = self.fmtB1 + "\n" + r'% 4.2f Jy/beam' + "\n" + r'$\Delta\alpha = $ % 4.2f / $\Delta\delta = $ % 4.2f '
             self._prepareBeam()
             self._prepareBaselines()
             self._setBaselines()
@@ -92,6 +99,7 @@ class Interferometer(object):
             self.modelvisCube[channel] = np.fft.fftshift(self.modelfft)
         self._plotAntennas()
         self._plotSim()
+        self._plotBeam()
         self._savez_compressed_cubes()
         self._free_space()
 
@@ -99,9 +107,9 @@ class Interferometer(object):
     def _readAntennas(self):
         antPos = []
         Xmax = 0.0
-        Hcov = [-12.0 * self.Hfac, 12.0 * self.Hfac]
+        Hcov = [-1.0 * self.Hfac, 1.0 * self.Hfac]
         for line in self.antenna_coordinates:
-            antPos.append([line[0], line[1], line[2]])
+            antPos.append([line[0] * 1e-3, line[1] * 1e-3])
             Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
         self.Xmax = Xmax
         self.antPos = antPos
@@ -131,15 +139,18 @@ class Interferometer(object):
         obs_antennas = self.antenna_array.split(' ')
         obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
         obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
-        antenna_coordinates = obs_coordinates[['x', 'y', 'z']].values
+        antenna_coordinates = obs_coordinates[['x', 'y']].values
 
         self.antenna_coordinates = antenna_coordinates * 1.e-3 # convert to km
         self.Nant = len(antenna_coordinates)
     
     def _get_observing_wavelength(self):
+        
+    
         # returns the observing wavelenghts in meters
-        w_min, w_max = [self._hz_to_m(freq) for freq in [self.central_freq - self.bandwidth / 2,    self.central_freq + self.bandwidth / 2]]
-        obs_wavelengths= np.array([[wave - self.delta_nu /2, wave + self.delta_nu / 2] for wave in np.linspace(w_min, w_max, self.n_channels)])
+        w_max, w_min = [self._hz_to_m(freq) for freq in [self.central_freq - self.bandwidth / 2,    self.central_freq + self.bandwidth / 2]]
+        waves = np.linspace(w_min, w_max, self.n_channels + 1)
+        obs_wavelengths= np.array([[waves[i], waves[i + 1] ] for i in range(len(waves) - 1)])
         return obs_wavelengths
 
     def _hz_to_m(self, freq):
@@ -428,11 +439,17 @@ class Interferometer(object):
     def _plotBeam(self):
         self.Np4 = self.Npix // 4
         beamPlot = plt.figure(figsize=(8, 8))
-        beam_img = plt.avg(self.beamCube, axis=0)
+        beam_img = self.beamCube[self.n_channels // 2]
         beamPlotPlot = plt.imshow(
             beam_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
             picker=True,
-            interpolation='nearest')
+            interpolation='nearest', 
+            cmap=self.currcmap)
+        beamText = plt.text(
+                0.05,
+                 0.80,
+                self.fmtB % (1.0, 0.0, 0.0),
+                bbox=dict(facecolor='white', alpha=0.7))
         plt.ylabel('Dec offset (as)')
         plt.xlabel('RA offset (as)')
         plt.setp(beamPlotPlot,
@@ -442,6 +459,10 @@ class Interferometer(object):
         nptot = np.sum(self.totsampling[:])
         beamPlotPlot.norm.vmin = np.min(beam_img)
         beamPlotPlot.norm.vmax = 1.0
+        print(nptot)
+        print(np.sum(self.totsampling[self.Nphf - 4:self.Nphf + 4, self.Nphf -
+                           4:self.Nphf + 4]))
+        plt.colorbar()
         plt.savefig(os.path.join(self.plot_path, 'beam.png'))
         plt.close()
 
