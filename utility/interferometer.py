@@ -830,7 +830,7 @@ class Interferometer():
         plt.setp(beamPlotPlot,
                 extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
                         -self.Xaxmax / 2., self.Xaxmax / 2.))
-        curzoom[0] = (self.Xaxmax / 2., -self.Xaxmax / 2.,
+        self.curzoom[0] = (self.Xaxmax / 2., -self.Xaxmax / 2.,
                            -self.Xaxmax / 2., self.Xaxmax / 2.)
         plt.title('DIRTY BEAM')
         plt.colorbar()
@@ -871,6 +871,8 @@ class Interferometer():
             self.vlab = r'V (M$\lambda$)'
 
     def _plot_uv_coverage(self):
+        self.ulab = r'U (k$\lambda$)'
+        self.vlab = r'V (k$\lambda$)'
         UVPlot = plt.figure(figsize=(8, 8))
         UVPlotPlot = []
         toplotu = self.u.flatten() / self.lfac
