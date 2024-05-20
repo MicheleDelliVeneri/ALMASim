@@ -196,6 +196,10 @@ class Interferometer():
         if self.noise == 0.0:
             self.Noise[:] = 0.0
         else:
+            # Inject in the noise array a random distribution 
+            # with mean 0 and standard deviation equal to the noise
+            # The distribution in the complex domain is scaled to the 
+            # imaginary unit
             self.Noise[:] = np.random.normal(
                 loc=0.0, scale=self.noise, size=np.shape(
                     self.Noise)) + 1.j * np.random.normal(
@@ -222,6 +226,7 @@ class Interferometer():
                                  + self.trdec[1] * self.B[currBas, 2]
     
     def _grid_uv(self, antidx=-1):
+        
         if antidx == -1:
             bas2change = range(self.Nbas)
             self.pixpos = [[] for nb in bas2change]
@@ -232,21 +237,32 @@ class Interferometer():
             bas2change = list(map(int, list(self.basnum[antidx].flatten())))
         else:
             bas2change = []
+        # set the pixsize in the UV plane
         self.UVpixsize = 2. / (self.imsize * np.pi / 180. / 3600.)
-        for nb in bas2change:
+        self.baseline_phases = {}
+        self.bas2change = bas2change
+        for nb in self.bas2change:
+            # Computes pixel positions in the UV plane 
             pixU = np.rint(self.u[nb] / self.UVpixsize).flatten().astype(
                 np.int32)
             pixV = np.rint(self.v[nb] / self.UVpixsize).flatten().astype(
                 np.int32)
+            # select pixels within the half field 
             goodpix = np.where(
                 np.logical_and(
                     np.abs(pixU) < self.Nphf,
                     np.abs(pixV) < self.Nphf))[0]
+            # added to introduce Atmospheric Errors 
+            phase_nb = np.angle(self.Gains[nb, goodpix])
+            self.baseline_phases[nb] = phase_nb
+            # Isolates positives and negative pixels 
             pU = pixU[goodpix] + self.Nphf
             pV = pixV[goodpix] + self.Nphf
             mU = -pixU[goodpix] + self.Nphf
             mV = -pixV[goodpix] + self.Nphf
             if antidx != -1:
+                # subtracting previous gains and sampling contributions based on
+                # stored positions 
                 self.totsampling[self.pixpos[nb][1], self.pixpos[nb][2]] -= 1.0
                 self.totsampling[self.pixpos[nb][3], self.pixpos[nb][0]] -= 1.0
                 self.Gsampling[self.pixpos[nb][1], 
@@ -261,6 +277,7 @@ class Interferometer():
                               self.pixpos[nb][0]] -= np.conjugate(
                                   self.Noise[nb, goodpix]) * np.abs(
                                       self.Gains[nb, goodpix])
+            # updated pixel positions for current baseline 
             self.pixpos[nb] = [
                 np.copy(pU),
                 np.copy(pV),
@@ -268,6 +285,7 @@ class Interferometer():
                 np.copy(mV)
             ]
             for pi, gp in enumerate(goodpix):
+                # computes the absolute gains for the current baseline
                 gabs = np.abs(self.Gains[nb, gp])
                 pVi = pV[pi]
                 mUi = mU[pi]
@@ -282,7 +300,13 @@ class Interferometer():
                     self.Noise[nb, gp]) * gabs
         self.robfac = (5. * 10.**(-self.robust))**2. * (
             2. * self.Nbas * self.nH) / np.sum(self.totsampling**2.)
-    
+
+    def _add_atmospheric_noise(self):
+        for nb in self.bas2change:
+            phase_rms = np.std(self.baseline_phases[nb]) # Standard deviation is RMS for phases
+            random_phase_error = np.random.normal(scale=phase_rms)
+            self.Gains[nb] *= np.exp(1j * random_phase_error)
+       
     def _set_beam(self):
         denom = 1. + self.robfac * self.totsampling
         self.robustsamp[:] = self.totsampling / denom
@@ -324,6 +348,7 @@ class Interferometer():
             beamText.set_text(warn)
 
         plt.savefig(os.path.join(self.plot_dir, 'beam_{}.png'.format(str(self.idx))))
+        plt.close()
 
     def _plot_antennas(self):
         antPlot = plt.figure(figsize=(8, 8))
@@ -339,6 +364,7 @@ class Interferometer():
         plt.ylabel('North-South offset (Km)')
         plt.title('Antenna Configuration')
         plt.savefig(os.path.join(self.plot_dir, 'antenna_config_{}.png'.format(str(self.idx))))
+        plt.close()
 
     def _check_lfac(self):
         mw = 2. * self.Xmax / self.wavelength[2] / self.lfac
@@ -380,7 +406,8 @@ class Interferometer():
         plt.ylabel(self.vlab)
         plt.title('UV Coverage')
         plt.savefig(os.path.join(self.plot_dir, 'uv_coverage_{}.png'.format(str(self.idx))))
-
+        plt.close()
+   
     def _prepare_model(self):
         self.modelim = [np.zeros((self.Npix, self.Npix), dtype=np.float32) for i in [0, 1]]
         self.modelimTrue = np.zeros((self.Npix, self.Npix), dtype=np.float32)
@@ -417,7 +444,7 @@ class Interferometer():
             np.fft.ifftshift(self.GrobustNoise) + self.modelfft * np.fft.ifftshift(self.Grobustsamp)))).real / (1. + self.W2W1)
         self.dirtymap /= self.beamScale
         self.modelvis = np.fft.fftshift(self.modelfft)
-        self.dirtyvis = np.fft.ifftshift(self.GrobustNoise) + self.modelfft * np.fft.ifftshift(self.Grobustsamp)
+        self.dirtyvis = np.fft.fftshift(np.fft.ifftshift(self.GrobustNoise) + self.modelfft * np.fft.ifftshift(self.Grobustsamp))
 
     def _savez_compressed_cubes(self):
         np.savez_compressed(os.path.join(self.output_dir, 'clean-cube_{}.npz'.format(str(self.idx))), self.modelCube)
@@ -503,3 +530,6 @@ class Interferometer():
         ax[1, 1].set_title('DIRTY VISIBILITY')
         plt.savefig(os.path.join(self.plot_dir, 'sim_{}.png'.format(str(self.idx))))
         plt.close()
+
+        sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
+        dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))

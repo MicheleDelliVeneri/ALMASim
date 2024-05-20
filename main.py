@@ -70,8 +70,8 @@ if __name__ == '__main__':
     output_dir = '/Users/michele/Documents/almasim-test-24-5-18'
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
     tng_dir = "/Users/michele/Documents/TNGData"
-    #project_name = input(f"{RED}Insert the name of the project: {RESET}")
-    project_name = 'test-int'
+    project_name = input(f"{RED}Insert the name of the project: {RESET}")
+    #project_name = 'test-int'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     if not os.path.exists(tng_dir):
@@ -200,7 +200,7 @@ if __name__ == '__main__':
         snr = np.ones(n_sims)
     
     #fix_spatial = input(f'{BLUE}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
-    fix_spatial = 'n'
+    fix_spatial = 'y'
     if fix_spatial != 'y' and fix_spatial != 'n':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         fix_spatial = input(f'{RED}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
