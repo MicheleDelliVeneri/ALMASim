@@ -1,16 +1,12 @@
-![Alt text](ALMASim_banner.png)
+![Alt text](pictures/ALMASim_banner.png)
 
 ## Overview
 
-
-ALMASim is a package to generate mock observations of HI line galaxies as observed by the Atacama Large Millimetre/Submillimetre Array (ALMA). ALMASim primary goal is to allow users to generate simulated datasets on which to test deconvolution and source detection models. ALMASim is intended to leverage MPI parallel computing on modern HPC clusters to generate thousands of ALMA data cubes. Users are free to set both source and observational parameters such as antenna configuration, bandwidth, integration time and so on, or completely generate data using random configuration and sources.
-ALMASim is built upon the CASA PiP Wheels (https://casadocs.readthedocs.io/en/latest/index.html), the MARTINI Package (https://github.com/kyleaoman/martini), and the Illustris Python Package (https://github.com/illustristng/illustris_python) to be able to generate observations of both high redshift point-like sources and close extendend sources in all possible ALMA configurations. 
+ALMASim is a package to generate mock observations of HI line galaxies as observed by the Atacama Large Millimetre/Submillimetre Array (ALMA). ALMASim primary goal is to allow users to generate simulated datasets on which to test deconvolution and source detection models. ALMASim is intended to leverage MPI parallel computing on modern HPC clusters to generate thousands of ALMA data cubes, but can also work on laptopts. 
+ALMA database or a prepared catalogue is queried to sample observational 
+metadata such as band, bandwidth, integration time, antenna configurations and so on. 
+ALMASim employs the MARTINI Package (https://github.com/kyleaoman/martini), and the Illustris Python Package (https://github.com/illustristng/illustris_python) to be able to generate observations of extendend sources in all possible ALMA configurations.
 For every observed target ALMASim generates:
-
-- A Sky model .fits cube containing the source without any source of noise or instrumental effects;
-- A Dirty .fits cube, i.e. the Fourier inversion of the observed visibilities;
-
-Optionally ALMASim can also output the PSFs, Measurement Sets and plots of the 2D integrated cubes and 1D spectra for all simulated data. 
 
 ## Citing ALMASim
 

@@ -101,6 +101,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
         ncpu (int): Number of CPU cores to use for the simulation.
     """
     print('Running simulation {}'.format(inx))
+    
     start = time.time()
     ra = ra * U.deg
     dec = dec * U.deg
@@ -362,8 +363,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
     shutil.rmtree(sim_output_dir)
     
-
-
 def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
               n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
@@ -396,6 +395,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     """
     print('Running simulation {}'.format(inx))
     start = time.time()
+    second2hour = 1 / 3600
     ra = ra * U.deg
     dec = dec * U.deg
     fov = fov * 3600 * U.arcsec
@@ -516,6 +516,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
         print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
     print('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
     print('Continuum Sensitity: {:.2e}'.format(cont_sens))
+    print('Generating skymodel cube ...')
     datacube = usm.DataCube(
         n_px_x=n_pix, 
         n_px_y=n_pix,
@@ -557,11 +558,15 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     #filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     #print('Writing datacube to {}'.format(filename))
     #usm.write_datacube_to_fits(datacube, filename, obs_date)
-    print('Done')
     model = datacube._array.to_value(datacube._array.unit).T
+    totflux = np.sum(model) 
+    print(f'Total Flux injected in model cube: {round(totflux, 3)} Jy')
+    print('Done')
     del datacube
+    print('Observing with ALMA')
     #upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
-    uin.Interferometer(inx, model, main_dir, output_dir, dec, central_freq, band_range, fov, antenna_array, cont_sens_jy.value)
+    uin.Interferometer(inx, model, main_dir, output_dir, dec, central_freq, band_range, fov, antenna_array, cont_sens.value, 
+                        total_time.value * second2hour , int_time.value * second2hour)
     print('Finished')
     stop = time.time()
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))

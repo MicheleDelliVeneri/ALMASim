@@ -103,6 +103,12 @@ if __name__ == '__main__':
         print(f"{YELLOW}Invalid input. Please insert an integer.{RESET}")
         ncpu = input(f"{BLUE}Insert total number of CPUs to use: {RESET}")
         ncpu = int(ncpu)
+    
+    #comp_mode = input(f'{RED} Do you want to simulate sequentially or in parallel? (sequential/parallel) {RESET}')
+    comp_mode = 'sequential'
+    if comp_mode != 'sequential' and comp_mode != 'parallel':
+        print(f'{YELLOW}Invalid Input. Please insert sequential or parallel {RESET}')
+        comp_mode = input(f'{RED} sequential or parallel? {RESET}')
     #query = input(f'{BLUE}Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) {RESET}')
     query = 'get'
     if query != 'query' and query != 'get':
@@ -307,19 +313,20 @@ if __name__ == '__main__':
         'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
         'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
 
+    if comp_mode == 'parallel':
     # Dask utils
-    #dask.config.set({'temporary_directory': output_path})
-    total_memory = psutil.virtual_memory().total
-    num_processes = multiprocessing.cpu_count() // 4
-    memory_limit = int(0.9 * total_memory / num_processes)
-    #ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-    #cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
-    #output_type = "object"
-    #client = Client(cluster)
-    #client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-    #results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator(*row), axis=1), meta=output_type).compute()
-    #client.close()
-    #cluster.close()
-    uc.simulator2(*input_params.iloc[0])
+        dask.config.set({'temporary_directory': output_path})
+        total_memory = psutil.virtual_memory().total
+        num_processes = multiprocessing.cpu_count() // 4
+        memory_limit = int(0.9 * total_memory / num_processes)
+        ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+        cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+        output_type = "object"
+        client = Client(cluster)
+        client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+        results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator2(*row), axis=1), meta=output_type).compute()
+        client.close()
+        cluster.close()
+    else: 
+        uc.simulator2(*input_params.iloc[0])
     uc.remove_logs(main_path)
-    

@@ -18,11 +18,16 @@ def showError(message):
 
 class Interferometer():
 
-    def __init__(self, idx, skymodel, main_dir, output_dir, dec, central_freq, band_range, fov, antenna_array, noise):
+    def __init__(self, idx, skymodel, main_dir, 
+                output_dir, dec, central_freq, band_range, 
+                fov, antenna_array, noise, tot_time, int_time, 
+                robust=0.5):
         self.idx = idx
         self.skymodel = skymodel
         self.antenna_array = antenna_array
         self.noise = noise
+        self.tot_time = tot_time
+        self.int_time = int_time
         # Constants
         self.c_ms = c.to(U.m / U.s).value
         # Directories
@@ -33,12 +38,13 @@ class Interferometer():
         self.Hfac = np.pi / 180. * 15.
         self.deg2rad = np.pi / 180.
         self.curzoom = [0, 0, 0, 0]
-        self.robust = 0.0
+        self.robust = robust
         self.deltaAng = 1. * self.deg2rad
         self.gamma = 0.5
         self.lfac = 1.e6
         # PLACEHOLDER MUST BE SUBSTITUTED WITH REAL NUMBER OF SCANS 
-        self.nH = 200
+        self.nH = int(tot_time / int_time)
+        print(f'Number of scans: {self.nH}')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
@@ -86,8 +92,8 @@ class Interferometer():
             self._set_primary_beam()
             self._observe()
             self._update_cubes()
-        self._plot_sim()
         self._savez_compressed_cubes()
+        self._plot_sim()
         self._free_space()
 
     def _hz_to_m(self, freq):
@@ -131,8 +137,8 @@ class Interferometer():
         self.Nant = len(self.antPos)
     
     def _get_wavelengths(self):
-        w_max, w_min = [self._hz_to_m(freq) for freq in [self.central_freq - self.band_range / 2, self.central_freq + self.band_range / 2]]
-        waves = np.linspace(w_min, w_max, self.Nchan + 1)
+        self.w_max, self.w_min = [self._hz_to_m(freq) for freq in [self.central_freq - self.band_range / 2, self.central_freq + self.band_range / 2]]
+        waves = np.linspace(self.w_min, self.w_max, self.Nchan + 1)
         obs_wavelengths= np.array([[waves[i], waves[i + 1] ] for i in range(len(waves) - 1)])
         self.obs_wavelengths = obs_wavelengths
     
@@ -160,7 +166,7 @@ class Interferometer():
         self.dirtyvisCube = np.zeros((self.Nchan, self.Npix, self.Npix), dtype=np.complex64)
 
     def _update_cubes(self):
-        self.modelCube[self.channel] = self.img
+        self.modelCube[self.channel] = self.modelim[0]
         self.dirtyCube[self.channel] = self.dirtymap
         self.visCube[self.channel] = self.modelvis
         self.dirtyvisCube[self.channel] = self.dirtyvis
@@ -306,7 +312,11 @@ class Interferometer():
             phase_rms = np.std(self.baseline_phases[nb]) # Standard deviation is RMS for phases
             random_phase_error = np.random.normal(scale=phase_rms)
             self.Gains[nb] *= np.exp(1j * random_phase_error)
-       
+
+    def _add_thermal_noise(self):
+        mean_val = np.mean(self.img)
+        #self.img += np.random.normal(scale=mean_val / self.snr)
+
     def _set_beam(self):
         denom = 1. + self.robfac * self.totsampling
         self.robustsamp[:] = self.totsampling / denom
@@ -413,14 +423,13 @@ class Interferometer():
         self.modelimTrue = np.zeros((self.Npix, self.Npix), dtype=np.float32)
         dims = np.shape(self.img)
         d1 = self.img.shape[0]
-        avimg = self.img
         if d1 == self.Nphf:
             sh0 = (self.Nphf - dims[0]) // 2
             sh1 = (self.Nphf - dims[1]) // 2
             self.modelimTrue[sh0 + self.Np4:sh0 + self.Np4 + dims[0], sh1 + self.Np4:sh1 +
                                  self.Np4 + dims[1]] += self.zoomimg
         else:
-            zoomimg = spndint.zoom(avimg, float(self.Nphf) / d1)
+            zoomimg = spndint.zoom(self.img, float(self.Nphf) / d1)
             zdims = np.shape(zoomimg)
             zd0 = min(zdims[0], self.Nphf)
             zd1 = min(zdims[1], self.Nphf)
@@ -435,7 +444,7 @@ class Interferometer():
         PB = 2. * (1220. * 180. / np.pi * 3600. * self.wavelength[2] /
                self.Diameters[0] / 2.3548)**2.
         beamImg = np.exp(self.distmat / PB)
-        self.modelim[0][:] = self.modelimTrue * beamImg
+        self.modelim[0][:] = self.modelimTrue * beamImg 
         self.modelfft = np.fft.fft2(np.fft.fftshift(self.modelim[0]))
 
     def _observe(self):
@@ -443,14 +452,28 @@ class Interferometer():
         np.fft.ifft2(
             np.fft.ifftshift(self.GrobustNoise) + self.modelfft * np.fft.ifftshift(self.Grobustsamp)))).real / (1. + self.W2W1)
         self.dirtymap /= self.beamScale
+        min_dirty = np.min(self.dirtymap)
+        if min_dirty < 0.0:
+            self.dirtymap += np.abs(min_dirty)
+        else:
+            self.dirtymap -= min_dirty
         self.modelvis = np.fft.fftshift(self.modelfft)
         self.dirtyvis = np.fft.fftshift(np.fft.ifftshift(self.GrobustNoise) + self.modelfft * np.fft.ifftshift(self.Grobustsamp))
 
     def _savez_compressed_cubes(self):
+        min_dirty = np.min(self.dirtyCube)
+        if min_dirty < 0:
+            self.dirtyCube += min_dirty
+        max_dirty = np.sum(self.dirtyCube)
+        max_clean = np.sum(self.modelCube)
+        self.dirtyCube = self.dirtyCube / max_dirty 
+        self.dirtyCube =  self.dirtyCube * max_clean
         np.savez_compressed(os.path.join(self.output_dir, 'clean-cube_{}.npz'.format(str(self.idx))), self.modelCube)
         np.savez_compressed(os.path.join(self.output_dir, 'dirty-cube_{}.npz'.format(str(self.idx))), self.dirtyCube)
         np.savez_compressed(os.path.join(self.output_dir, 'dirty-vis-cube_{}.npz'.format(str(self.idx))), self.dirtyvisCube)
         np.savez_compressed(os.path.join(self.output_dir, 'clean-vis-cube_{}.npz'.format(str(self.idx))), self.visCube)
+        print(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
+        print(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
     
     def _free_space(self):
         del self.modelCube
@@ -478,7 +501,6 @@ class Interferometer():
         ax[0, 0].set_title('MODEL IMAGE: %.2e Jy' % totflux)
         simPlotPlot.norm.vmin = np.min(sim_img)
         simPlotPlot.norm.vmax = np.max(sim_img)
-
         dirty_img = np.sum(self.dirtyCube, axis=0)
         dirtyPlotPlot = ax[0, 1].imshow(
             dirty_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
@@ -493,7 +515,6 @@ class Interferometer():
         ax[0, 1].set_title('DIRTY IMAGE: %.2e Jy' % totflux)
         dirtyPlotPlot.norm.vmin = np.min(dirty_img)
         dirtyPlotPlot.norm.vmax = np.max(dirty_img)
-
         self.UVmax = self.Npix / 2. / self.lfac * self.UVpixsize
         self.UVSh = -self.UVmax / self.Npix
         toplot = np.sum(np.abs(self.visCube), axis=0)
@@ -533,3 +554,17 @@ class Interferometer():
 
         sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
         dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))
+        wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
+        x_ticks = np.round(wavelenghts, 2)
+        specPlot, ax = plt.subplots(1, 2, figsize=(12, 6))
+        ax[0].plot(wavelenghts, sim_spectrum)
+        ax[0].set_ylabel('Jy/$pix^{2}$')
+        ax[0].set_xlabel('$\\lambda$ [mm]')
+        ax[0].set_title('MODEL SPECTRUM')
+        ax[1].plot(wavelenghts, dirty_spectrum)
+        ax[1].set_ylabel('Jy/$pix^{2}$')
+        ax[1].set_xlabel('$\\lambda$ [mm]')
+        ax[1].set_title('DIRTY SPECTRUM')
+        plt.savefig(os.path.join(self.plot_dir, 'spectra_{}.png'.format(str(self.idx))))
+
+
