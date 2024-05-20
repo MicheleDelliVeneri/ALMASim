@@ -362,13 +362,3 @@ new_lines['err_c'] = cs_error
 update_temporary = os.path.join(parent_dir, 'brightnes', 'temporary_update.csv')
 new_lines.to_csv(update_temporary,index=False)
 
-query = f"""  
-            SELECT , member_ous_uid
-            FROM ivoa.obscore  
-            WHERE science_observation = 'T'
-            AND is_mosaic = 'F'
-            """
-service_url = "https://almascience.eso.org/tap"
-service = pyvo.dal.TAPService(service_url)
-db = service.search(query).to_table().to_pandas()
-db = db.drop_duplicates(subset='member_ous_uid')
