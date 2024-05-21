@@ -74,7 +74,7 @@ class Interferometer():
         self.currcmap = cm.jet
         self.zooming = 0
         
-        self._get_initial_and_final_H()
+        #self._get_initial_and_final_H()
         # Get the antenna coordinates, and the hour angle coverage
         self._read_antennas()
         # Get the observing wavelengths for each channel 
