@@ -14,6 +14,7 @@ from astropy.coordinates import EarthLocation, SkyCoord, AltAz
 from astropy.constants import M_earth, R_earth, G
 import pandas as pd
 from scipy.integrate import odeint
+from astropy.time import Time
 
 def showError(message):
         raise Exception(message)
@@ -73,6 +74,7 @@ class Interferometer():
         self.currcmap = cm.jet
         self.zooming = 0
         
+        self._get_initial_and_final_H()
         # Get the antenna coordinates, and the hour angle coverage
         self._read_antennas()
         # Get the observing wavelengths for each channel 
@@ -115,13 +117,13 @@ class Interferometer():
     def _get_az_el(self):
         self._get_observing_location()
         self._get_middle_time()
-        sky_coords = SkyCoord(ra=self.ra * rad2deg, dec=self.dec * rad2deg, unit='deg')
+        sky_coords = SkyCoord(ra=self.ra * self.rad2deg, dec=self.dec * self.rad2deg, unit='deg')
         aa = AltAz(location=self.observing_location, obstime=self.middle_time)
         sky_coords.transform_to(aa)
         self.az = sky_coords.az
         self.el = sky_coords.alt
     
-    def _get_initial_and_final_alt_az(self):
+    def _get_initial_and_final_H(self):
 
         def differential_equations(y, t,phi, A, E, forward=True):
             """
@@ -155,7 +157,7 @@ class Interferometer():
                 dE_dt = dtau_dt_reversed(t) * (np.cos(phi) * np.sin(A))
             return [dA_dt, dE_dt]
 
-        self.get_az_el()
+        self._get_az_el()
         y0 = [self.az, self.el]
         middle_H = self.el.to(U.hourangle).value
         t_final_solve = np.linspace(self.middle_time, self.end_time, self.nH)
@@ -170,6 +172,7 @@ class Interferometer():
         aa_final = AltAz(az=az_final, alt=el_final, location=self.observing_location, obstime=self.end_time)
         self.initial_H =  - aa_initial.alt.to(U.hourangle).value 
         self.final_H = - aa_final.alt.to(U.hourangle).value
+        print(self.initial_H, self.final_H)
   
     def _hz_to_m(self, freq):
         return self.c_ms / freq
