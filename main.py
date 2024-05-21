@@ -169,7 +169,7 @@ if __name__ == '__main__':
             z0, z1 = float(redshifts[0]), float(redshifts[1])
             redshifts = np.random.uniform(z0, z1, n_sims)
         #n_lines = input(f'{RED}Please provide the number of lines you want to simulate as an integer: {RESET}')
-        n_lines = '1'
+        n_lines = '3'
         n_lines = np.array([int(n_lines)]*n_sims)
         rest_freq, _ = uas.get_line_info(main_path)
         line_names = np.array([None]*n_sims)
@@ -263,7 +263,7 @@ if __name__ == '__main__':
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False, z1)
     print('\nMetadata retrieved\n')
     #inject_ser = input(f'{RED}Do you want to inject serendipitous sources? (y/n) {RESET}')
-    inject_ser = 'n'
+    inject_ser = 'y'
     if inject_ser != 'y' and inject_ser != 'n':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         inject_ser = input(f'{BLUE}Do you want to inject serendipitous sources? (y/n) {RESET}')

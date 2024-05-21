@@ -10,7 +10,8 @@ from astropy.constants import c
 import astropy.units as U
 from tqdm import tqdm
 import astropy.time
-from astropy.coordinates import EarthLocation, SkyCoord, AltAz
+from astropy.coordinates import EarthLocation, SkyCoord, AltAz, siderea
+from astropy.constants import M_earth, R_earth, G
 import pandas as pd
 
 def showError(message):
@@ -19,15 +20,15 @@ def showError(message):
 class Interferometer():
 
     def __init__(self, idx, skymodel, main_dir, 
-                output_dir, dec, central_freq, band_range, 
-                fov, antenna_array, noise, tot_time, int_time, 
+                output_dir, ra, dec, central_freq, band_range, 
+                fov, antenna_array, noise, int_time, obs_date, 
                 robust=0.5):
         self.idx = idx
         self.skymodel = skymodel
         self.antenna_array = antenna_array
         self.noise = noise
-        self.tot_time = tot_time
         self.int_time = int_time
+        self.obs_date = obs_date
         # Constants
         self.c_ms = c.to(U.m / U.s).value
         # Directories
@@ -37,18 +38,21 @@ class Interferometer():
         # Parameters
         self.Hfac = np.pi / 180. * 15.
         self.deg2rad = np.pi / 180.
+        self.rad2deg = 180. / np.pi
+        self.second2hour = 1. / 3600.
         self.curzoom = [0, 0, 0, 0]
         self.robust = robust
         self.deltaAng = 1. * self.deg2rad
         self.gamma = 0.5
         self.lfac = 1.e6
         # PLACEHOLDER MUST BE SUBSTITUTED WITH REAL NUMBER OF SCANS 
-        self.nH = int(tot_time / int_time)
+        self.nH = int(self.int_time / (6 * second2hour))
         print(f'Number of scans: {self.nH}')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
         self.Diameters = [12.0, 0]
+        self.ra = ra.value * self.deg2rad
         self.dec = dec.value * self.deg2rad
         self.trdec = [np.sin(self.dec), np.cos(self.dec)]
         self.central_freq = central_freq.to(U.Hz).value
@@ -95,6 +99,20 @@ class Interferometer():
         self._savez_compressed_cubes()
         self._plot_sim()
         self._free_space()
+
+    def _get_ellipticity_factor(self):
+        polar_radius = 6356752
+        e2 = 1 - (polar_radius**2 / R_earth.value**2)
+        self.f = e2 * np.sin(self.lat * self.rad2deg )**2 / (1 + e2 * np.cos(self.lat * self.rad2deg)**2)
+
+    def _get_observation_window(self):
+        start_time = Time(self.obs_date + 'T00:00:00', format='isot', scale='utc')
+        sidereal_time = start_time.sidereal_time('mean', longitude=self.lat)
+        source = coordinates.SkyCoord(ra=self.ra, dec=self.dec, unit='arcsec')
+        initial_angle = sidereal_time - source.ra.to('hour')
+        final_angle = 
+
+
 
     def _hz_to_m(self, freq):
         return self.c_ms / freq
