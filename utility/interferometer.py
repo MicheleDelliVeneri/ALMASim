@@ -10,9 +10,10 @@ from astropy.constants import c
 import astropy.units as U
 from tqdm import tqdm
 import astropy.time
-from astropy.coordinates import EarthLocation, SkyCoord, AltAz, siderea
+from astropy.coordinates import EarthLocation, SkyCoord, AltAz
 from astropy.constants import M_earth, R_earth, G
 import pandas as pd
+from scipy.integrate import odeint
 
 def showError(message):
         raise Exception(message)
@@ -46,7 +47,7 @@ class Interferometer():
         self.gamma = 0.5
         self.lfac = 1.e6
         # PLACEHOLDER MUST BE SUBSTITUTED WITH REAL NUMBER OF SCANS 
-        self.nH = int(self.int_time / (6 * second2hour))
+        self.nH = int(self.int_time / (6 * self.second2hour))
         print(f'Number of scans: {self.nH}')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
@@ -100,20 +101,76 @@ class Interferometer():
         self._plot_sim()
         self._free_space()
 
-    def _get_ellipticity_factor(self):
-        polar_radius = 6356752
-        e2 = 1 - (polar_radius**2 / R_earth.value**2)
-        self.f = e2 * np.sin(self.lat * self.rad2deg )**2 / (1 + e2 * np.cos(self.lat * self.rad2deg)**2)
+   
+    def _get_observing_location(self):
+        self.observing_location = EarthLocation.of_site('ALMA')
 
-    def _get_observation_window(self):
+    def _get_middle_time(self):
         start_time = Time(self.obs_date + 'T00:00:00', format='isot', scale='utc')
         sidereal_time = start_time.sidereal_time('mean', longitude=self.lat)
-        source = coordinates.SkyCoord(ra=self.ra, dec=self.dec, unit='arcsec')
-        initial_angle = sidereal_time - source.ra.to('hour')
-        final_angle = 
+        self.start_time = sidereal_time.value
+        self.middle_time = sidereal_time.value + self.int_time / 2
+        self.end_time = sidereal_time.value + self.int_time
+    
+    def _get_az_el(self):
+        self._get_observing_location()
+        self._get_middle_time()
+        sky_coords = SkyCoord(ra=self.ra * rad2deg, dec=self.dec * rad2deg, unit='deg')
+        aa = AltAz(location=self.observing_location, obstime=self.middle_time)
+        sky_coords.transform_to(aa)
+        self.az = sky_coords.az
+        self.el = sky_coords.alt
+    
+    def _get_initial_and_final_alt_az(self):
 
+        def differential_equations(y, t,phi, A, E, forward=True):
+            """
+            Defines the system of differential equations.
+            Args:
+                y: Current state vector (A, E).
+                t: Independent variable (time).
+                tau: Time constant.
+                phi: Angle (radians).
+                A0: Initial value of A.
+                E0: Initial value of E.
 
+            Returns:
+                The derivatives of A and E (dA/dt, dE/dt).
+            """
 
+            def dtau_dt(t):
+                """
+                PLACEHOLDER TO BE SUBSTITUTED WITH REAL 
+                """
+                return 1
+            def dtau_dt_reversed(t):
+                return - dtau_dt(t)
+
+            A, E = y
+            if forward == True: 
+                dA_dt = dtau_dt(t) * ((np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A)) / np.cos(E))
+                dE_dt = dtau_dt(t) * (np.cos(phi) * np.sin(A))
+            else: 
+                dA_dt = dtau_dt_reversed(t) * ((np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A)) / np.cos(E))
+                dE_dt = dtau_dt_reversed(t) * (np.cos(phi) * np.sin(A))
+            return [dA_dt, dE_dt]
+
+        self.get_az_el()
+        y0 = [self.az, self.el]
+        middle_H = self.el.to(U.hourangle).value
+        t_final_solve = np.linspace(self.middle_time, self.end_time, self.nH)
+        sol_final = odeint(differential_equations, y0, t_final_solve, args=(self.lat, self.az, self.el))
+        az_final = sol_final[-1, 0]
+        el_final = sol_final[-1, 1]
+        t_initial_solve = np.linspace(self.middle_time, self.start_time , self.nH)[::-1]
+        sol_initial = odeint(differential_equations, y0, t_initial_solve, args=(self.lat, self.az, self.el, False))
+        az_initial = sol_initial[-1, 0]
+        el_initial = sol_initial[-1, 1]
+        aa_initial = AltAz(az=az_initial, alt=el_initial, location=self.observing_location, obstime=self.start_time)
+        aa_final = AltAz(az=az_final, alt=el_final, location=self.observing_location, obstime=self.end_time)
+        self.initial_H =  - aa_initial.alt.to(U.hourangle).value 
+        self.final_H = - aa_final.alt.to(U.hourangle).value
+  
     def _hz_to_m(self, freq):
         return self.c_ms / freq
 
