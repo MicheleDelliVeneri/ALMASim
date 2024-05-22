@@ -49,6 +49,12 @@ class Interferometer():
         self.lfac = 1.e6
         # PLACEHOLDER MUST BE SUBSTITUTED WITH REAL NUMBER OF SCANS 
         self.nH = int(self.int_time / (6 * self.second2hour))
+        if self.nH > 200: 
+            self.nH = int(self.int_time / (8.064 * self.second2hour))
+        if self.nH > 200:
+            self.nH = int(self.int_time / 18.144 * self.second2hour)
+        if self.nH > 200:
+            self.nH = int(self.int_time / 30.24 * self.second2hour)
         print(f'Number of scans: {self.nH}')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
