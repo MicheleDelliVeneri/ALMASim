@@ -49,12 +49,12 @@ class Interferometer():
         self.lfac = 1.e6
         # PLACEHOLDER MUST BE SUBSTITUTED WITH REAL NUMBER OF SCANS 
         self.nH = int(self.int_time / (6 * self.second2hour))
-        if self.nH > 200: 
-            self.nH = int(self.int_time / (8.064 * self.second2hour))
-        if self.nH > 200:
-            self.nH = int(self.int_time / 18.144 * self.second2hour)
-        if self.nH > 200:
-            self.nH = int(self.int_time / 30.24 * self.second2hour)
+        #if self.nH > 200: 
+        #    self.nH = int(self.int_time / (8.064 * self.second2hour))
+        #if self.nH > 200:
+        #    self.nH = int(self.int_time / 18.144 * self.second2hour)
+        #if self.nH > 200:
+        #    self.nH = int(self.int_time / 30.24 * self.second2hour)
         print(f'Number of scans: {self.nH}')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
@@ -80,12 +80,15 @@ class Interferometer():
         self.currcmap = cm.jet
         self.zooming = 0
         
-        #self._get_initial_and_final_H()
         # Get the antenna coordinates, and the hour angle coverage
+        self._get_observing_location()
+        # This function must be checked
+        self._get_Hcov()
         self._read_antennas()
         # Get the observing wavelengths for each channel 
         self._get_wavelengths()
         self._prepare_cubes()
+        
         for channel in tqdm(range(self.Nchan)):
             self.channel = channel
             self._get_channel_range()
@@ -113,13 +116,21 @@ class Interferometer():
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site('ALMA')
 
-    def _get_middle_time(self):
+    def _get_Hcov(self):
+        self.int_time = self.int_time * U.s
         start_time = Time(self.obs_date + 'T00:00:00', format='isot', scale='utc')
-        sidereal_time = start_time.sidereal_time('mean', longitude=self.lat)
-        self.start_time = sidereal_time.value
-        self.middle_time = sidereal_time.value + self.int_time / 2
-        self.end_time = sidereal_time.value + self.int_time
-    
+        midle_time = start_time + self.int_time / 2
+        end_time = start_time + self.int_time
+        sidereal_start = start_time.sidereal_time('mean', longitude=self.lat)
+        sidereal_middle = midle_time.sidereal_time('mean', longitude=self.lat)
+        sidereal_end = end_time.sidereal_time('mean', longitude=self.lat)
+        #self.start_time = sidereal_time
+        #self.middle_time = sidereal_time + self.int_time.to(U.hourangle) / 2
+        #self.end_time = sidereal_time.value + self.int_time.to(U.hournangle)
+        start = (sidereal_middle - sidereal_start)
+        end = (sidereal_end - sidereal_middle)
+        self.Hcov = [-start.value, end.value]
+        
     def _get_az_el(self):
         self._get_observing_location()
         self._get_middle_time()
@@ -192,13 +203,13 @@ class Interferometer():
         antPos = []
         Xmax = 0.0
         # PLACEHOLDER MUSTE BE SUBSTITUTED WITH REAL TIME RANGE
-        Hcov = [-3.0 * self.Hfac, 3.0 * self.Hfac]
+        #Hcov = [-3.0 * self.Hfac, 3.0 * self.Hfac]
         for line in antenna_coordinates:
             antPos.append([line[0] * 1e-3, line[1] * 1e-3])
             Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
         self.Xmax = Xmax
         self.antPos = antPos
-        self.Hcov = Hcov
+        #self.Hcov = Hcov
         cosW = -np.tan(self.lat) * np.tan(self.dec)
         if np.abs(cosW) < 1.0:
             Hhor = np.arccos(cosW)
