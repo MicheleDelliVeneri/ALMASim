@@ -104,7 +104,7 @@ if __name__ == '__main__':
         ncpu = input(f"{BLUE}Insert total number of CPUs to use: {RESET}")
         ncpu = int(ncpu)
     
-    comp_mode = input(f'{RED} Do you want to simulate sequentially or in parallel? (sequential/parallel) {RESET}')
+    comp_mode = input(f'{RED}Do you want to simulate sequentially or in parallel? (sequential/parallel) {RESET}')
     #comp_mode = 'sequential'
     if comp_mode != 'sequential' and comp_mode != 'parallel':
         print(f'{YELLOW}Invalid Input. Please insert sequential or parallel {RESET}')

@@ -15,6 +15,7 @@ from astropy.constants import M_earth, R_earth, G
 import pandas as pd
 from scipy.integrate import odeint
 from astropy.time import Time
+import numba 
 
 def showError(message):
         raise Exception(message)
@@ -88,7 +89,7 @@ class Interferometer():
         # Get the observing wavelengths for each channel 
         self._get_wavelengths()
         self._prepare_cubes()
-        
+        print(f'Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}')
         for channel in tqdm(range(self.Nchan)):
             self.channel = channel
             self._get_channel_range()
@@ -121,15 +122,15 @@ class Interferometer():
         start_time = Time(self.obs_date + 'T00:00:00', format='isot', scale='utc')
         midle_time = start_time + self.int_time / 2
         end_time = start_time + self.int_time
-        sidereal_start = start_time.sidereal_time('mean', longitude=self.lat)
-        sidereal_middle = midle_time.sidereal_time('mean', longitude=self.lat)
-        sidereal_end = end_time.sidereal_time('mean', longitude=self.lat)
+        sidereal_start = start_time.sidereal_time('apparent', longitude=self.lat)
+        sidereal_middle = midle_time.sidereal_time('apparent', longitude=self.lat)
+        sidereal_end = end_time.sidereal_time('apparent', longitude=self.lat)
         #self.start_time = sidereal_time
         #self.middle_time = sidereal_time + self.int_time.to(U.hourangle) / 2
         #self.end_time = sidereal_time.value + self.int_time.to(U.hournangle)
-        start = (sidereal_middle - sidereal_start)
+        start = (sidereal_start - sidereal_middle)
         end = (sidereal_end - sidereal_middle)
-        self.Hcov = [-start.value, end.value]
+        self.Hcov = [start.value , end.value]
         
     def _get_az_el(self):
         self._get_observing_location()

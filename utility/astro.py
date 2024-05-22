@@ -1076,7 +1076,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
         #metatada = metadata[metadata['redshift'] < 0.05]
         metadata = metadata[(metadata['snapshot'] == 99) | (metadata['snapshot'] == 95)]
 
-    sample = metadata.sample(n)
+    sample = metadata.sample(n, replace=True)
     return sample
 
 def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,

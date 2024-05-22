@@ -418,9 +418,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     os.chdir(output_dir)
     print('RA: {}'.format(ra))
     print('DEC: {}'.format(dec))
-    print('Angular resolution: {}'.format(ang_res))
     print('Integration Time: {}'.format(int_time))
-    print('Total Observatio Time: {}'.format(total_time))
     ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
     antennalist = os.path.join(sim_output_dir, "antenna.cfg")
     antenna_name = 'antenna'
@@ -428,7 +426,6 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     #t_ang_res = c.to(U.m/U.s) / central_freq.to(U.Hz) / (max_baseline.to(U.m))
     #t_ang_res = t_ang_res * (180 / math.pi) * 3600 * U.arcsec
     #print('Angular Resolution computed from max baseline: {}'.format(t_ang_res))
-    print('Angular Resolution: {}'.format(ang_res))
     #pos_string = uas.convert_to_j2000_string(ra.value, dec.value)
     #fov =  ual.get_fov_from_band(int(band), return_value=False)
     print('Field of view: {} arcsec'.format(round(fov.value, 3)) )
@@ -437,7 +434,6 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
     cont_sens = cont_sens * U.mJy / (U.arcsec ** 2)
     cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
     cont_sens  = cont_sens_jy  * snr
-    print("Beam Size: ", beam_size)
     print("Minimum detectable continum: ", cont_sens_jy)
     cell_size = beam_size / 5
     if n_pix is None: 
@@ -479,9 +475,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
         n_channels = n_channels_nw
         band_range  = n_channels * freq_sup
     central_channel_index = n_channels // 2
-    print('Field of view: {} arcsec'.format(round(fov.value, 3)))
     print('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
-    print('Cell size: {} arcsec'.format(round(cell_size.value, 4)))
     print('Central Frequency: {}'.format(central_freq))
     print('Spectral Window: {}'.format(band_range))
     print('Freq Support: {}'.format(freq_sup))
