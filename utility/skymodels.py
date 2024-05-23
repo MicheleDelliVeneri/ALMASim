@@ -1613,7 +1613,7 @@ def insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_ch
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in tqdm(range(0, n_chan)):
-        datacube._array[:, :, z] += avimg * (cont[z] + gs[z]) * U.Jy * U.pix**-2 
+        datacube._array[:, :, z] += avimg * (continum[z] + gs[z]) * U.Jy * U.pix**-2 
     return datacube 
 
 def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
