@@ -1586,6 +1586,34 @@ def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2 
     return datacube 
 
+def download_gz_data(path):
+    return
+
+def interpolate_array(arr, n_px):
+    """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
+    zoom_factor = n_px / arr.shape[0]   
+    return zoom(arr, zoom_factor)
+
+def insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan, data_path):
+    files = np.array(os.listdir(data_path))
+    imfile = os.path.join(data_path, np.random.choice(files))
+    img = plimg.imread(imfile).astype(np.float32)
+    dims = np.shape(img)
+    d3 = min(2, dims[2])
+    d1 = float(max(dims))
+    avimg = np.average(img[:, :, :d3], axis=2)
+    avimg -= np.min(avimg)
+    avimg *= 1 / np.max(avimg)
+    avimg = interpolate_array(avimg, n_px)
+    X, Y = np.meshgrid(np.arange(n_px), np.arange(n_px))
+    z_idxs = np.arange(0, n_chan)
+    gs = np.zeros(n_chan)
+    for i in range(len(line_fluxes)):
+        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
+    for z in tqdm(range(0, n_chan)):
+        datacube[:, :, z] += avimg * (cont[z] + gs[z]) * U.Jy * U.pix**-2 
+    return datacube 
+
 def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
     source = myTNGSource(
         snapNum= snapshot,

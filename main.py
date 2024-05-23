@@ -69,6 +69,8 @@ if __name__ == '__main__':
     #output_dir = "/srv/Fast01/delliven/almasim-test-24-5-14"
     output_dir = '/Users/michele/Documents/almasim-test-24-5-22'
     #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
+    #galaxy_zoo_dir = input("Insert absolute path of the Galaxy Zoo directory, if this is the first time running ALMASim this directory will be created: ")
+    galaxy_zoo_dir = '/Users/michele/Downloads/GalaxyZooArchive'
     tng_dir = "/Users/michele/Documents/TNGData"
     project_name = input(f"{RED}Insert the name of the project: {RESET}")
     #project_name = 'test-int'
@@ -76,6 +78,9 @@ if __name__ == '__main__':
         os.makedirs(output_dir)
     if not os.path.exists(tng_dir):
         os.makedirs(tng_dir)
+    if not os.path.exists(galaxy_zoo_dir):
+        os.makedirs(galaxy_zoo_dir)
+        uc.download_galaxy_zoo(galaxy_zoo_dir)
     output_path = os.path.join(output_dir, project_name)
     if not os.path.exists(os.path.join(output_dir, project_name)):
         os.makedirs(output_path)
@@ -228,10 +233,10 @@ if __name__ == '__main__':
         n_channels = int(n_channels)
     else:
         n_channels = None
-    source_type = input(f'{BLUE}Insert source type you want to simulate (point, gaussian, extended, diffuse): {RESET}')
+    source_type = input(f'{BLUE}Insert source type you want to simulate (point, gaussian, extended, diffuse, galaxy-zoo): {RESET}')
     #source_type = 'gaussian'
-    if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse':
-        print(f"{YELLOW}Invalid input. Please insert point, gaussian, extended or diffuse.{RESET}")
+    if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse' and source_type != 'galaxy-zoo':
+        print(f"{YELLOW}Invalid input. Please insert point, gaussian, extended, diffuse or galaxy-zoo.{RESET}")
         source_type = input(f'{RED}Insert source type you want to simulate (point, gaussian, extended, diffuse): {RESET}')
     if source_type == 'extended':
         print('Checking TNG Folders')
@@ -291,6 +296,7 @@ if __name__ == '__main__':
     source_types = np.array([source_type]*n_sims)
     output_paths = np.array([output_path]*n_sims)
     tng_paths = np.array([tng_dir]*n_sims)
+    galaxy_paths = np.array([galaxy_zoo_dir]*n_sims)
     main_paths = np.array([main_path]*n_sims)
     ncpus = np.array([ncpu]*n_sims)
     project_names = np.array([project_name]*n_sims)
@@ -302,12 +308,12 @@ if __name__ == '__main__':
     save_secondary = np.array([save_secondary]*n_sims)
     
     input_params = pd.DataFrame(zip(
-        sim_idxs, main_paths, output_paths, tng_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
+        sim_idxs, main_paths, output_paths, tng_paths, galaxy_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
         tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
         n_lines, line_names, save_secondary, inject_serendipitous), 
-        columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'project_name', 'ra', 'dec', 'band', 
+        columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'galaxy_zoo_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
         'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
         'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',

@@ -20,6 +20,30 @@ import math
 from datetime import date
 import time
 from time import strftime, gmtime
+import zipfile
+from kaggle import api
+
+def unzip_all(zip_filepath):
+    with zipfile.ZipFile(zip_filepath, 'r') as zip_ref:
+        zip_ref.extractall()
+    
+def download_kaggle_dataset(save_path):
+    """Downloads a Kaggle dataset to the specified path.
+
+    Args:
+        dataset_name (str): The name of the dataset in the format 'username/dataset-name'.
+        save_path (str): The directory where the dataset should be saved.
+    """
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    api.authenticate()  # Authenticate with your Kaggle credentials
+    dataset_name = 'jaimetrickz/galaxy-zoo-2-images'
+    # Download the dataset as a zip file
+    api.dataset_download_files(dataset_name, path=save_path, unzip=True)
+    print(f"Dataset '{dataset_name}' downloaded to '{save_path}'")
+    print('Unzipping .....')
+    unzip_all(os.path.join(save_path, 'galaxy-zoo-2-images.zip'))
+
 
 def is_float(s):
     try:
@@ -363,7 +387,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
     shutil.rmtree(sim_output_dir)
     
-def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
+def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
               n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
               n_lines, line_names, save_secondary=False, inject_serendipitous=False):
@@ -536,6 +560,12 @@ def simulator2(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, 
                                          angle, n_pix, n_channels)
     elif source_type == 'extended':
         datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
+    elif source_type == 'diffuse':
+        print('To be implemented')
+    elif source_type == 'galaxy-zoo':
+        galaxy_path = os.path.join(galaxy_zoo_dir, 'images_gz2',  'images')
+        pos_z = [int(index) for index in source_channel_index]
+        datacube = usm.insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_pix, n_channels, galaxy_path)
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
                             ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
                             redshift, line_fluxes, line_names, line_frequency, 

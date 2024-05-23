@@ -20,6 +20,14 @@ import six
 from math import pi, ceil
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from dl import queryClient as qc, storeClient as sc, authClient as ac
+from pyvo.dal import sia
+from astropy.utils.data import download_file
+from numpy.core.defchararray import startswith
+import pylab as plt
+from getpass import getpass
+import warnings  
+from astropy.utils.exceptions import AstropyWarning
 
 def write_numpy_to_fits(array, header, path):
     hdu = fits.PrimaryHDU(
@@ -1112,4 +1120,10 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         if snapshot != None:
             f.write('TNG Snapshot ID: {}\n'.format(snapshot))
             f.write('TNG Subhalo ID: {}\n'.format(subhalo))     
-        f.close()     
+        f.close()    
+
+def get_image_from_ssd(ra, dec, fov):
+    DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/sdss_dr9"
+    svc_sdss_dr9 = sia.SIAService(DEF_ACCESS_URL) 
+    ac.whoAmI()
+    imgTable = svc_sdss_dr9.search((ra,dec), (fov/np.cos(dec*np.pi/180), fov), verbosity=2).to_table()
