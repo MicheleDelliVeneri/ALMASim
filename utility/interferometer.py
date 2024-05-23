@@ -48,15 +48,8 @@ class Interferometer():
         self.deltaAng = 1. * self.deg2rad
         self.gamma = 0.5
         self.lfac = 1.e6
-        # PLACEHOLDER MUST BE SUBSTITUTED WITH REAL NUMBER OF SCANS 
-        self.nH = int(self.int_time / (6 * self.second2hour))
-        #if self.nH > 200: 
-        #    self.nH = int(self.int_time / (8.064 * self.second2hour))
-        #if self.nH > 200:
-        #    self.nH = int(self.int_time / 18.144 * self.second2hour)
-        #if self.nH > 200:
-        #    self.nH = int(self.int_time / 30.24 * self.second2hour)
-        print(f'Number of scans: {self.nH}')
+        self._get_nH()
+        print(f'Performing {self.nH} scans a scan time of {self.scan_time} seconds')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
@@ -80,7 +73,6 @@ class Interferometer():
         self.W2W1 = 1     
         self.currcmap = cm.jet
         self.zooming = 0
-        
         # Get the antenna coordinates, and the hour angle coverage
         self._get_observing_location()
         # This function must be checked
@@ -113,6 +105,21 @@ class Interferometer():
         self._plot_sim()
         self._free_space()
 
+    def _get_nH(self):
+        self.scan_time = 6
+        self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+        if self.nH > 200:
+        # Try increasing the divisor to 8.064 to lower nH
+            self.scan_time = 8.064
+            self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+            if self.nH > 200:
+                # Further increase the divisor to 18.144
+                self.scan_time = 18.144
+                self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+                if self.nH > 200:
+                    self.scan_time = 30.24
+                    # Final attempt with the largest divisor (30.24)
+                    self.nH = int(self.int_time / (self.scan_time * self.second2hour))
    
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site('ALMA')
