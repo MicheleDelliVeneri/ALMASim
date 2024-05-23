@@ -49,7 +49,7 @@ class Interferometer():
         self.gamma = 0.5
         self.lfac = 1.e6
         self._get_nH()
-        print(f'Performing {self.nH} scans a scan time of {self.scan_time} seconds')
+        print(f'Performing {self.nH} scans with a scan time of {self.scan_time} seconds')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
