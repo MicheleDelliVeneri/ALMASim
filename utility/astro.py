@@ -844,7 +844,7 @@ def get_line_info(main_path, idxs=None):
 
 def sed_reading(type_, path, cont_sens, freq_min, freq_max, lum_infrared=None, redshift=None):
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
-    if type_ == "extended" or type_ == 'diffuse':
+    if type_ == "extended" or type_ == 'diffuse' or type_ == 'galaxy-zoo':
         file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
         if redshift is None:
             redshift = 10**(-4)

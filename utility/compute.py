@@ -566,6 +566,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
         galaxy_path = os.path.join(galaxy_zoo_dir, 'images_gz2',  'images')
         pos_z = [int(index) for index in source_channel_index]
         datacube = usm.insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_pix, n_channels, galaxy_path)
+    
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
                             ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
                             redshift, line_fluxes, line_names, line_frequency, 
