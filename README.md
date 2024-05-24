@@ -32,7 +32,7 @@ ALMASim entry: https://doi.org/10.1093/mnras/stac3314
 ## Installation Notes
 
 
-ALMASim works with ``python3`` (version ``3.10``), and does not support ``python2``.
+ALMASim works with ``python3`` (version ``3.12``), and does not support ``python2``.
 First create a virtual environment with ``python3`` and activate it. Then install the required packages with ``pip``:
 
 - Create the Python Environment:```python3.12 -m venv astro-env```
