@@ -6,7 +6,7 @@ from illustris_python.snapshot import getSnapOffsets, loadSubset
 from martini.sources.sph_source import SPHSource
 from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import (AdaptiveKernel, CubicSplineKernel,
-                                 GaussianKernel, find_fwhm,  WendlandC2Kernel)
+                                 find_fwhm,  WendlandC2Kernel)
 import astropy.cosmology.units as cu
 from astropy.cosmology import WMAP9
 from astropy import wcs
@@ -15,13 +15,12 @@ import h5py
 from astropy.io import fits
 import utility.astro as uas
 import astropy.constants as C
-import numpy as np
 from itertools import product
 from tqdm import tqdm
 from astropy.time import Time
-from scipy.integrate import quad, nquad
+from scipy.integrate import quad
 import matplotlib.image as plimg
-from scipy.ndimage import zoom 
+from scipy.ndimage import zoom
 
 class myTNGSource(SPHSource):
     def __init__(
@@ -1607,13 +1606,15 @@ def insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_ch
     avimg -= np.min(avimg)
     avimg *= 1 / np.max(avimg)
     avimg = interpolate_array(avimg, n_px)
-    X, Y = np.meshgrid(np.arange(n_px), np.arange(n_px))
+    avimg /= np.sum(avimg)
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
+    cube = np.zeros((n_px, n_px, n_chan))
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in tqdm(range(0, n_chan)):
-        datacube._array[:, :, z] += avimg * (continum[z] + gs[z]) * U.Jy * U.pix**-2 
+        cube[:, :, z] += avimg * (continum[z] + gs[z])
+    datacube._array[:, :, : ] = cube * U.Jy / U.pix **2 
     return datacube 
 
 def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
@@ -1684,6 +1685,42 @@ def insert_extended(datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, 
         print('Mass ratio: {}%'.format(mass_ratio))
     print('Datacube generated, inserting source')    
     return M.datacube
+
+def diffuse_signal(n_px):
+    ift.random.push_sseq(random.randint(1, 1000))
+    space = ift.RGSpace((2*n_px, 2*n_px))
+    args = {
+        'offset_mean': 24,
+        'offset_std': (1, 0.1),
+        'fluctuations': (5., 1.),
+        'loglogavgslope': (-3.5, 0.5),
+        'flexibility': (1.2, 0.4),
+        'asperity': (0.2, 0.2)
+    }
+
+    cf = ift.SimpleCorrelatedField(space, **args)
+    exp_cf = ift.exp(cf)
+    random_pos = ift.from_random(exp_cf.domain)
+    sample = np.log(exp_cf(random_pos))
+    data = sample.val[0:n_px, 0:n_px]
+    normalized_data = (data - np.min(data)) / (np.max(data) - np.min(data))
+    return normalized_data
+
+def insert_diffuse(datacube, continuum, line_fluxes, pos_z, fwhm_z, n_px, n_chan):
+    z_idxs = np.arange(0, n_chan)
+    #idxs = np.indices([n_px_x, n_px_y])
+    #g = gaussian(z_idxs, 1, pos_z, fwhm_z)
+    ts = diffuse_signal(n_px)
+    ts = np.nan_to_num(ts)
+    ts = ts/np.sum(ts)
+    cube = np.zeros((n_px, n_px, n_chan)) * ts
+    gs = np.zeros(n_chan)
+    for i in range(len(line_fluxes)):
+        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
+    for z in tqdm(range(0, n_chan)):
+        cube[:, :, z]*= (continum[z] + gs[z])
+    datacube._array[:, :, :] += cube * U.Jy * U.pix**-2
+    return datacube
 
 def distance_1d(p1, p2):
     return math.sqrt((p1-p2)**2)

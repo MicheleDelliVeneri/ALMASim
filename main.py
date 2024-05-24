@@ -5,21 +5,14 @@ import dask.dataframe as dd
 import numpy as np
 import pandas as pd
 import os
-from random import choices
-from natsort import natsorted
-import math
-from itertools import product
 import random
 import psutil
 import sys
-#current_path = os.getcwd()
-#parent_dir = os.path.join(current_path, "..")
-#sys.path.append(parent_dir)
 import utility.alma as ual
 import utility.astro as uas
 import utility.compute as uc
 import warnings
-from os.path import isfile, expanduser
+from os.path import isfile
 import subprocess
 
 RED = '\033[31m'
@@ -168,9 +161,18 @@ if __name__ == '__main__':
         #redshifts = '0.2'
         redshifts = redshifts.split()
         if len(redshifts) == 1:
+            try:
+                float(redshifts[0])
+            except ValueError:
+                print(f"{YELLOW}Invalid input. Please insert floats.{RESET}")
             redshifts = np.array([float(redshifts[0])] * n_sims)
             z0, z1 = float(redshifts[0]), float(redshifts[0])
         else:
+            try: 
+                z0 = float(redshifts[0])
+                z1 = float(redshifts[1])
+            except ValueError: 
+                print(f"{YELLOW}Invalid input. Please insert floats.{RESET}")   
             z0, z1 = float(redshifts[0]), float(redshifts[1])
             redshifts = np.random.uniform(z0, z1, n_sims)
         n_lines = input(f'{RED}Please provide the number of lines you want to simulate as an integer: {RESET}')

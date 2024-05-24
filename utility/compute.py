@@ -2,9 +2,6 @@ import numpy as np
 import astropy.units as U
 from astropy.constants import c
 from astropy.time import Time
-#from casatasks import exportfits, simobserve, tclean, gaincal, applycal
-#from casatools import table
-#from casatools import simulator as casa_simulator
 import sys
 import os
 import random
@@ -22,6 +19,9 @@ import time
 from time import strftime, gmtime
 import zipfile
 from kaggle import api
+#from casatasks import exportfits, simobserve, tclean, gaincal, applycal
+#from casatools import table
+#from casatools import simulator as casa_simulator
 
 def unzip_all(zip_filepath):
     with zipfile.ZipFile(zip_filepath, 'r') as zip_ref:

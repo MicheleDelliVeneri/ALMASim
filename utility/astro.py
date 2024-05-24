@@ -3,7 +3,6 @@ from astropy.cosmology import FlatLambdaCDM
 from astropy.io import fits
 from astropy.coordinates import SkyCoord
 from astropy.constants import c
-from collections import OrderedDict
 import h5py
 import illustris_python as il
 from random import choices
@@ -13,21 +12,12 @@ import numpy as np
 import pandas as pd 
 from scipy.optimize import curve_fit
 import random
-import shutil
 from os.path import isfile, expanduser
 import subprocess
 import six
 from math import pi, ceil
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-from dl import queryClient as qc, storeClient as sc, authClient as ac
 from pyvo.dal import sia
-from astropy.utils.data import download_file
-from numpy.core.defchararray import startswith
-import pylab as plt
-from getpass import getpass
-import warnings  
-from astropy.utils.exceptions import AstropyWarning
 
 def write_numpy_to_fits(array, header, path):
     hdu = fits.PrimaryHDU(

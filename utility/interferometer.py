@@ -15,7 +15,6 @@ from astropy.constants import M_earth, R_earth, G
 import pandas as pd
 from scipy.integrate import odeint
 from astropy.time import Time
-import numba 
 
 def showError(message):
         raise Exception(message)
@@ -135,9 +134,17 @@ class Interferometer():
         #self.start_time = sidereal_time
         #self.middle_time = sidereal_time + self.int_time.to(U.hourangle) / 2
         #self.end_time = sidereal_time.value + self.int_time.to(U.hournangle)
-        start = (sidereal_start - sidereal_middle)
-        end = (sidereal_end - sidereal_middle)
-        self.Hcov = [start.value , end.value]
+        min_start = -0.1 * self.Hfac
+        min_finish = 0.1 * self.Hfac
+        start = (sidereal_start - sidereal_middle).value
+        end = (sidereal_end - sidereal_middle).value
+
+        if start > min_start:
+            start = min_start
+        if end < min_finish:
+            end = min_finish
+        
+        self.Hcov = [start , end]
         
     def _get_az_el(self):
         self._get_observing_location()

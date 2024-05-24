@@ -8,9 +8,6 @@ import numpy as np
 import pandas as pd
 import os 
 import sys
-#from casatasks import exportfits, simobserve, tclean, gaincal, applycal
-#from casatools import table
-#from casatools import simulator as casa_simulator
 import random
 from math import pi
 import matplotlib.pyplot as plt
