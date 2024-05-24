@@ -48,17 +48,11 @@ def check_dir_exists(absolute_path):
     if not absolute_path.startswith(os.path.sep):
         absolute_path = os.path.sep + absolute_path
     output_dir = absolute_path.split(os.path.sep)[-1]
-    parent_dir = os.path.join(*absolute_path.split(os.path.sep)[:-1])
-    if not (os.path.exists(parent_dir) and
-           os.path.access(parent_dir, os.R_OK) and
-           os.path.access(parent_dir, os.W_OK)):
+    parent_dir = os.path.join(os.path.sep, *absolute_path.split(os.path.sep)[:-1])
+    if not os.path.exists(parent_dir):
         return False
     else: 
         return True
-        
-
-
-
 
 def is_float(s):
     try:
