@@ -58,13 +58,21 @@ class MemoryLimitPlugin(WorkerPlugin):
 if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
-    #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    #output_dir = "/srv/Fast01/delliven/almasim-test-24-5-14"
-    output_dir = '/Users/michele/Documents/almasim-test-24-5-22'
-    #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
-    #galaxy_zoo_dir = input("Insert absolute path of the Galaxy Zoo directory, if this is the first time running ALMASim this directory will be created: ")
-    galaxy_zoo_dir = '/Users/michele/Downloads/GalaxyZooArchive'
-    tng_dir = "/Users/michele/Documents/TNGData"
+    output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
+    if uc.check_dir_exists(output_dir) == False:
+        print(f"{YELLOW}Path does not exists or doesn't have correct W/R permissions.{RESET}")
+        output_dir = input("Insert absolute path of the output directory: ")
+
+    tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
+    if uc.check_dir_exists(tng_dir) == False:
+        print(f"{YELLOW}Path does not exists or doesn't have correct W/R permissions.{RESET}")
+        tng_dir = input("Insert absolute path of the TNG directory: ")
+    galaxy_zoo_dir = input("Insert absolute path of the Galaxy Zoo directory, if this is the first time running ALMASim this directory will be created: ")
+    if uc.check_dir_exists(galaxy_zoo_dir) == False:
+        print(f"{YELLOW}Path does not exists or doesn't have correct W/R permissions.{RESET}")
+        galaxy_zoo_dir = input("Insert absolute path of the Galaxy Zoo directory: ")
+    #galaxy_zoo_dir = '/Users/michele/Downloads/GalaxyZooArchive'
+    #tng_dir = "/Users/michele/Documents/TNGData"
     project_name = input(f"{RED}Insert the name of the project: {RESET}")
     #project_name = 'test-int'
     if not os.path.exists(output_dir):
