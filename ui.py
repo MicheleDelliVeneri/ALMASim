@@ -9,7 +9,10 @@ from PyQt6.QtWidgets import (
 class ALMASimulatorUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ALMASim: welcome setup your simulations")
+        self.initialize_ui()
+        
+    def initialize_ui(self):
+        self.setWindowTitle("ALMASim: set up your simulation parameters")
 
         # --- Create Widgets ---
         self.output_label = QLabel("Output Directory:")

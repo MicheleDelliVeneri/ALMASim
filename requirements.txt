@@ -8,7 +8,6 @@ pyQt6
 tqdm
 scipy
 h5py
-pyvo
 kaggle
 dask
 dask-expr
