@@ -345,7 +345,6 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     #if np.nanmin(dirty) < 0:
     #    dirty = dirty + np.nanmin(dirty)
     dirty_total_flux = np.nansum(dirty)
-    print(f'Total Flux detected in skymodel cube: {round(sky_total_flux, 2)}')
     if sky_total_flux != dirty_total_flux:
         print('Normalizing')
         dirty = dirty * (sky_total_flux / dirty_total_flux)
@@ -490,7 +489,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
     print('Spectral Window: {}'.format(band_range))
     print('Freq Support: {}'.format(freq_sup))
     print('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
-    print('Redshift: {}'.format(redshift))
+    print('Redshift: {}'.format(round(redshift, 3)))
     print('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
     print('Band: ', band)
     print('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))

@@ -875,14 +875,17 @@ def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
     cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
     cont_fluxes = sed[cont_mask]['Jy'].values
     min_ = np.min(cont_fluxes)
+    print('Minimum continum flux: {:.2e}'.format(min_))
+    print('Continum sensitivity: {:.2e}'.format(cont_sens))
     lum_save = lum_infrared
-    while min_ < cont_sens:
-        lum_infrared += 0.1 * lum_infrared
+    while min_ > cont_sens:
+        lum_infrared -= 0.1 * lum_infrared
         lum_infrared_erg_s = so_to_erg_s * lum_infrared
         sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
         cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
         cont_fluxes = sed[cont_mask]['Jy'].values
         min_ = np.min(cont_fluxes)
+    
     if lum_save != lum_infrared:
         print('To match the desired SNR, luminosity has been set to {:.2e}'.format(lum_infrared))
     return sed, lum_infrared_erg_s, lum_infrared
@@ -920,6 +923,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     freq_max = central_frequency + delta_freq / 2
     save_freq_min = freq_min
     save_freq_max = freq_max
+    start_redshift = redshift
     # Example data: Placeholder for cont and lines from SED processing
     sed, flux_infrared, lum_infrared = sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared)
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
@@ -948,21 +952,25 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             n_possible = (db_line['shifted_freq(GHz)'].astype(float) <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) >= freq_min).sum()
             ##if n_possible != 0:
             #    redshift += 0.01
-            freq_min -= freq_min / 10
-            freq_max += freq_max / 10
-        pbar.set_description("Increasing Bandwidth {}".format(round(freq_max - freq_min), 3))
+            #freq_min -= freq_min / 10
+            #freq_max += freq_max / 10
+            redshift += 0.01
+            #print(n_possible)
+        #pbar.set_description("Increasing Redshift{}".format(redshift))
         if len(filtered_lines) > r_len:
             pbar.update(1)   
         recorded_length = len(filtered_lines)
     pbar.update(1) 
     pbar.close()
-    if len(filtered_lines) > initial_len:
-        print('Warning: Bandwidth increased to match the desired number of lines.')
-        increment = freq_max - save_freq_max
-        freq_max += increment
-        freq_min -= increment
-        print('New Bandwidth: {} GHz'.format(round(freq_max - freq_min, 3)))
-    freq_max += freq_max / 10      
+    if redshift != start_redshift:
+        print('Redshift increased to match the desired number of lines.')
+    #if len(filtered_lines) > initial_len:
+    #    print('Warning: Bandwidth increased to match the desired number of lines.')
+    #    increment = freq_max - save_freq_max
+    #    freq_max += increment
+    #    freq_min -= increment
+    #    print('New Bandwidth: {} GHz'.format(round(freq_max - freq_min, 3)))
+    #req_max += freq_max / 10      
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) != len(line_names):

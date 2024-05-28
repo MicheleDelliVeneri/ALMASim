@@ -77,16 +77,25 @@ class MemoryLimitPlugin(WorkerPlugin):
 if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
-    output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
+    #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
+    output_dir = 'Users/michele/sim-test'
+    if not output_dir.startswith('~') or not output_dir.startswith('/'):
+        output_dir = os.path.join('/', output_dir)
     if uc.check_dir_exists(output_dir) == False:
         print(f"{YELLOW}Path does not exists or doesn't have correct W/R permissions.{RESET}")
         output_dir = input("Insert absolute path of the output directory: ")
 
-    tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
+    #tng_dir = input("Insert absolute path of the TNG directory, if this is the firt time running ALMASim this directory will be created: ")
+    tng_dir = '/Users/michele/TNGData'
+    if not tng_dir.startswith('~') or not tng_dir.startswith('/'):
+        tng_dir = os.path.join('/', tng_dir)
     if uc.check_dir_exists(tng_dir) == False:
         print(f"{YELLOW}Path does not exists or doesn't have correct W/R permissions.{RESET}")
         tng_dir = input("Insert absolute path of the TNG directory: ")
-    galaxy_zoo_dir = input("Insert absolute path of the Galaxy Zoo directory, if this is the first time running ALMASim this directory will be created: ")
+    #galaxy_zoo_dir = input("Insert absolute path of the Galaxy Zoo directory, if this is the first time running ALMASim this directory will be created: ")
+    galaxy_zoo_dir = '/Users/michele/GalaxyZoo'
+    if not galaxy_zoo_dir.startswith('~') or not galaxy_zoo_dir.startswith('/'):
+        galaxy_zoo_dir = os.path.join('/', galaxy_zoo_dir)
     if uc.check_dir_exists(galaxy_zoo_dir) == False:
         print(f"{YELLOW}Path does not exists or doesn't have correct W/R permissions.{RESET}")
         galaxy_zoo_dir = input("Insert absolute path of the Galaxy Zoo directory: ")
@@ -110,8 +119,8 @@ if __name__ == '__main__':
     
     
     # Getting Sims Configuration
-    n_sims = input(f"{BLUE}Insert number of simulations to run: {RESET}")
-    #n_sims = 1
+    #n_sims = input(f"{BLUE}Insert number of simulations to run: {RESET}")
+    n_sims = 1
     try:
         n_sims = int(n_sims)
     except ValueError:
@@ -120,8 +129,8 @@ if __name__ == '__main__':
         n_sims = int(n_sims)
     
     sim_idxs = np.arange(n_sims)
-    ncpu = input(f"{RED}Insert total number of CPUs to use: {RESET}")
-    #ncpu = 10
+    #ncpu = input(f"{RED}Insert total number of CPUs to use: {RESET}")
+    ncpu = 10
     try:
         ncpu = int(ncpu)
     except ValueError:
@@ -129,13 +138,13 @@ if __name__ == '__main__':
         ncpu = input(f"{BLUE}Insert total number of CPUs to use: {RESET}")
         ncpu = int(ncpu)
     
-    comp_mode = input(f'{RED}Do you want to simulate sequentially or in parallel? (sequential/parallel) {RESET}')
-    #comp_mode = 'sequential'
+    #comp_mode = input(f'{RED}Do you want to simulate sequentially or in parallel? (sequential/parallel) {RESET}')
+    comp_mode = 'sequential'
     if comp_mode != 'sequential' and comp_mode != 'parallel':
         print(f'{YELLOW}Invalid Input. Please insert sequential or parallel {RESET}')
         comp_mode = input(f'{RED} sequential or parallel? {RESET}')
-    query = input(f'{BLUE}Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) {RESET}')
-    #query = 'get'
+    #query = input(f'{BLUE}Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) {RESET}')
+    query = 'get'
     if query != 'query' and query != 'get':
         print(f"{YELLOW}Invalid input. Please insert query or get.{RESET}")
         query = input(f'{RED}Do you want to query for metadata or get an available file stored in the metadata directory? (query/get) {RESET}')
@@ -160,14 +169,14 @@ if __name__ == '__main__':
                 metadata_name = metadata_name + '.csv'
             metadata = ual.query_for_metadata_by_science_type(metadata_name, main_path)
     else:
-        metadata_name = input(f"{BLUE}Insert the name of the metadata file you want to use. Make sure to add .csv: {RESET}")
-        #metadata_name = 'AGN_all_bands'
+        #metadata_name = input(f"{BLUE}Insert the name of the metadata file you want to use. Make sure to add .csv: {RESET}")
+        metadata_name = 'test'
         if '.csv' not in metadata_name:
             metadata_name = metadata_name.split('.')[0]
             metadata_name = metadata_name + '.csv'
         metadata = uc.load_metadata(main_path, metadata_name)
-    line_mode = input(f"{RED}Do you want to simulate a specific line/s? (y/n) {RESET}")
-    #line_mode = 'n'
+    #line_mode = input(f"{RED}Do you want to simulate a specific line/s? (y/n) {RESET}")
+    line_mode = 'n'
     if line_mode != "y" and line_mode != "n":
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         line_mode = input(f"{BLUE}Do you want to simulate a specific line/s? (y/n) {RESET}")
@@ -184,8 +193,8 @@ if __name__ == '__main__':
         line_names = np.array([line_names]*n_sims)
         z1 = None
     else:
-        redshifts = input(f'{BLUE}Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space. If a single value is given, all simualtions will be performed at the same redshift: {RESET}')
-        #redshifts = '0.2'
+        #redshifts = input(f'{BLUE}Please provide the boundaries of the redshift interval you want to simulate as two float or integers separated by a space. If a single value is given, all simualtions will be performed at the same redshift: {RESET}')
+        redshifts = '0.2'
         redshifts = redshifts.split()
         if len(redshifts) == 1:
             try:
@@ -202,21 +211,21 @@ if __name__ == '__main__':
                 print(f"{YELLOW}Invalid input. Please insert floats.{RESET}")   
             z0, z1 = float(redshifts[0]), float(redshifts[1])
             redshifts = np.random.uniform(z0, z1, n_sims)
-        n_lines = input(f'{RED}Please provide the number of lines you want to simulate as an integer: {RESET}')
-        #n_lines = '3'
+        #n_lines = input(f'{RED}Please provide the number of lines you want to simulate as an integer: {RESET}')
+        n_lines = '2'
         n_lines = np.array([int(n_lines)]*n_sims)
         rest_freq, _ = uas.get_line_info(main_path)
         line_names = np.array([None]*n_sims)
         rest_freqs = np.array([None]*n_sims)
     
-    set_infrared = input(f'{BLUE}Do you want to provide infrared luminosities for SED normalization? (y/n), if not provided, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: {RESET}')
-    #set_infrared  = 'y'
+    #set_infrared = input(f'{BLUE}Do you want to provide infrared luminosities for SED normalization? (y/n), if not provided, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: {RESET}')
+    set_infrared  = 'y'
     if set_infrared != "y" and set_infrared != "n":
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         set_infrared = input(f'{BLUE}Do you want to provide infrared luminosities for SED normalization? (y/n), if not provided, they will be automatically computed based on the minimum continuum flux observable by the ALMA configuration: {RESET}')
     if set_infrared == "y":
-        lum_infrared = input(f'{RED}Insert infrared luminosity (in solar masses), you can input a single value, or an interval as two floats (es. 1e10) separated by a space: {RESET}')
-        #lum_infrared = '1e12'
+        #lum_infrared = input(f'{RED}Insert infrared luminosity (in solar masses), you can input a single value, or an interval as two floats (es. 1e10) separated by a space: {RESET}')
+        lum_infrared = '1e9'
         lum_infrared = [float(lum) for lum in lum_infrared.split()]
         if len(lum_infrared) == 1:
             lum_ir = np.array([lum_infrared[0]]*n_sims)
@@ -224,8 +233,8 @@ if __name__ == '__main__':
             lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
     else:
         lum_ir = np.array([None]*n_sims)
-    set_snr = input(f'{RED}Do you want to provide a desired SNR for the simulated observations? (y/n) {RESET}')
-    #set_snr = 'n'
+    #set_snr = input(f'{RED}Do you want to provide a desired SNR for the simulated observations? (y/n) {RESET}')
+    set_snr = 'n'
     if set_snr != "y" and set_snr != "n":
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         set_snr = input(f'{BLUE}Do you want to provide a desired SNR for the simulated observations? (y/n) {RESET}')
@@ -239,31 +248,31 @@ if __name__ == '__main__':
     else:
         snr = np.ones(n_sims)
     
-    fix_spatial = input(f'{BLUE}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
-    #fix_spatial = 'y'
+    #fix_spatial = input(f'{BLUE}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
+    fix_spatial = 'y'
     if fix_spatial != 'y' and fix_spatial != 'n':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         fix_spatial = input(f'{RED}Do you want to fix cube spatial dimensions? (y/n) {RESET}')
     
     if fix_spatial == 'y':
-        n_pix = input(f'{BLUE}Insert the desired cube dimension in pixels: {RESET}')
-        #n_pix = '256'
+        #n_pix = input(f'{BLUE}Insert the desired cube dimension in pixels: {RESET}')
+        n_pix = '256'
         n_pix = int(n_pix)
     else:
         n_pix = None
-    fix_spectral = input(f'{RED}Do you want to fix cube spectral dimensions? (y/n) {RESET}')
-    #fix_spectral = 'y'
+    #fix_spectral = input(f'{RED}Do you want to fix cube spectral dimensions? (y/n) {RESET}')
+    fix_spectral = 'y'
     if fix_spectral != 'y' and fix_spectral != 'n':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         fix_spectral = input(f'{BLUE}Do you want to fix cube spectral dimensions? (y/n) {RESET}')
     if fix_spectral == 'y':
-        n_channels = input(f'{RED}Insert the desired number of channels: {RESET}')
-        #n_channels = '256'
+        #n_channels = input(f'{RED}Insert the desired number of channels: {RESET}')
+        n_channels = '256'
         n_channels = int(n_channels)
     else:
         n_channels = None
-    source_type = input(f'{BLUE}Insert source type you want to simulate (point, gaussian, extended, diffuse, galaxy-zoo): {RESET}')
-    #source_type = 'gaussian'
+    #source_type = input(f'{BLUE}Insert source type you want to simulate (point, gaussian, extended, diffuse, galaxy-zoo): {RESET}')
+    source_type = 'galaxy-zoo'
     if source_type != 'point' and source_type != 'gaussian' and source_type != 'extended' and source_type != 'diffuse' and source_type != 'galaxy-zoo':
         print(f"{YELLOW}Invalid input. Please insert point, gaussian, extended, diffuse or galaxy-zoo.{RESET}")
         source_type = input(f'{RED}Insert source type you want to simulate (point, gaussian, extended, diffuse): {RESET}')
@@ -296,8 +305,8 @@ if __name__ == '__main__':
     else:
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False, z1)
     print('\nMetadata retrieved\n')
-    inject_ser = input(f'{RED}Do you want to inject serendipitous sources? (y/n) {RESET}')
-    #inject_ser = 'y'
+    #inject_ser = input(f'{RED}Do you want to inject serendipitous sources? (y/n) {RESET}')
+    inject_ser = 'n'
     if inject_ser != 'y' and inject_ser != 'n':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         inject_ser = input(f'{BLUE}Do you want to inject serendipitous sources? (y/n) {RESET}')
