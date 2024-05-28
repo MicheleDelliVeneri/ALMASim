@@ -105,12 +105,12 @@ def compute_redshift(rest_frequency, observed_frequency):
     # Input validation
     if rest_frequency <= 0 or observed_frequency <= 0:
         raise ValueError("Rest and observed frequencies must be positive values.")
-    if rest_frequency >= observed_frequency:
-        raise ValueError("Observed frequency must be greater than the rest frequency.")
+    if rest_frequency < observed_frequency:
+        raise ValueError("Observed frequency must be lower than the rest frequency.")
 
 
     # Compute redshift
-    redshift = (observed_frequency.value - rest_frequency.value) / rest_frequency.value
+    redshift = (rest_frequency.value - observed_frequency.value) / rest_frequency.value
     return redshift
 
 def luminosity_to_jy(velocity, data, line_name):
@@ -128,19 +128,19 @@ def luminosity_to_jy(velocity, data, line_name):
         """
         def sigma_CO10(df, velocity, rest_frequency):
                 alpha = 3.255e7
-                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift'])**3 * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
         def sigma_CO21(df, velocity, rest_frequency):
                 alpha = 3.255e7
-                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift'])**3 * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
         def sigma_H10(df, velocity, rest_frequency):
                 alpha = 3.255e7
-                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift'])**3 * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
         def sigma_H21(df, velocity, rest_frequency):
                 alpha = 3.255e7
-                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift'])**3 * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
         def sigma_O32(df, velocity, rest_frequency):
                 alpha = 3.255e7
-                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift']) * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
+                return df['Luminosity(K km s-1 pc2)'] * ( (1 + df['#redshift'])**3 * rest_frequency **2) / (alpha * velocity * (df['luminosity distance(Mpc)']**2))
         rest_frequency = get_line_rest_frequency(line_name)
         print(rest_frequency)
         function = {
@@ -925,7 +925,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
     # Shift the cont and line frequencies by (1 + redshift)
-    sed['GHz'] = sed['GHz'] * (1 + redshift)
+    sed['GHz'] = sed['GHz'] / (1 + redshift)
     filtered_lines = db_line.copy()
     filtered_lines.drop(filtered_lines.index, inplace=True)
     if line_names is None:
@@ -941,7 +941,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         r_len = len(filtered_lines)
         filtered_lines = db_line.copy()
         filtered_lines.drop(filtered_lines.index, inplace=True)
-        db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] * (1 + redshift)
+        db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] / (1 + redshift)
         line_mask = (db_line['shifted_freq(GHz)'].astype(float) >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) <= freq_max)
         filtered_lines = db_line[line_mask]
         if len(filtered_lines) < n:
@@ -1006,7 +1006,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x)))
     freq_steps = np.array([new_cont_freq[line_index + fwhm] - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
     freq_steps = freq_steps.to(U.Hz).value
-    line_fluxes = int_cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared) + line_ratios) / freq_steps
+    line_fluxes = int_cont_fluxes[line_indexes] + 10**(np.log10(flux_infrared / freq_steps)  + line_ratios) 
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
@@ -1014,7 +1014,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
     db_line['freq(GHz)'] = db_line['freq(GHz)'].astype(float)
-    source_freqs  = db_line['freq(GHz)'].values * (1 + redshift)
+    source_freqs  = db_line['freq(GHz)'].values / (1 + redshift)
     freq_names =  db_line['Line'].values
     closest_freq = min(source_freqs, key=lambda x:abs(x-source_freq))
     line_name = freq_names[np.where(source_freqs == closest_freq)][0]
@@ -1043,7 +1043,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     print(f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}")
     print(f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}")
     print('Filtering metadata based on line catalogue...')
-    metadata = metadata[metadata['Freq'] >= rest_frequency]
+    metadata = metadata[metadata['Freq'] <= rest_frequency]
     print(f'Remaining metadata: {len(metadata)}')
     freqs = metadata['Freq'].values
     redshifts = [compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
