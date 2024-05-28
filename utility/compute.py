@@ -27,7 +27,7 @@ def unzip_all(zip_filepath):
     with zipfile.ZipFile(zip_filepath, 'r') as zip_ref:
         zip_ref.extractall()
     
-def download_kaggle_dataset(save_path):
+def download_galaxy_zoo(save_path):
     """Downloads a Kaggle dataset to the specified path.
 
     Args:

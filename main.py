@@ -14,6 +14,7 @@ import utility.compute as uc
 import warnings
 from os.path import isfile
 import subprocess
+from kaggle import api
 
 RED = '\033[31m'
 BLUE = '\033[34m'
@@ -22,6 +23,24 @@ RESET = '\033[0m'
 
 warnings.simplefilter(action="ignore", category=UserWarning)
 MALLOC_TRIM_THRESHOLD_ = 0
+
+def download_galaxy_zoo(save_path):
+    """Downloads a Kaggle dataset to the specified path.
+
+    Args:
+        dataset_name (str): The name of the dataset in the format 'username/dataset-name'.
+        save_path (str): The directory where the dataset should be saved.
+    """
+    print('Galaxy Zoo data not found on disk, downloading from Kaggle...')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    api.authenticate()  # Authenticate with your Kaggle credentials
+    dataset_name = 'jaimetrickz/galaxy-zoo-2-images'
+    # Download the dataset as a zip file
+    api.dataset_download_files(dataset_name, path=save_path, unzip=True)
+    print(f"Dataset '{dataset_name}' downloaded to '{save_path}'")
+
+
 class MemoryMonitor(WorkerPlugin):
     def __init__(self, memory_limit):
         self.memory_limit = memory_limit
@@ -81,7 +100,7 @@ if __name__ == '__main__':
         os.makedirs(tng_dir)
     if not os.path.exists(galaxy_zoo_dir):
         os.makedirs(galaxy_zoo_dir)
-        uc.download_galaxy_zoo(galaxy_zoo_dir)
+        download_galaxy_zoo(galaxy_zoo_dir)
     output_path = os.path.join(output_dir, project_name)
     if not os.path.exists(os.path.join(output_dir, project_name)):
         os.makedirs(output_path)

@@ -1,6 +1,9 @@
 import sys
 import numpy as np
 import pandas as pd
+import zipfile
+from kaggle import api
+import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox
@@ -134,8 +137,11 @@ class ALMASimulatorUI(QMainWindow):
         if directory:
             self.galaxy_zoo_entry.setText(directory)
 
+
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = ALMASimulatorUI()
-    window.show()
-    sys.exit(app.exec())
+    #app = QApplication(sys.argv)
+    #window = ALMASimulatorUI()
+    #window.show()
+    #sys.exit(app.exec())
+    save_path = '/Users/michele/GalaxyZoo'
+    download_galaxy_zoo(save_path)
