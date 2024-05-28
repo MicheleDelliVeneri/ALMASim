@@ -17,32 +17,9 @@ import math
 from datetime import date
 import time
 from time import strftime, gmtime
-import zipfile
-from kaggle import api
 #from casatasks import exportfits, simobserve, tclean, gaincal, applycal
 #from casatools import table
 #from casatools import simulator as casa_simulator
-
-def unzip_all(zip_filepath):
-    with zipfile.ZipFile(zip_filepath, 'r') as zip_ref:
-        zip_ref.extractall()
-    
-def download_galaxy_zoo(save_path):
-    """Downloads a Kaggle dataset to the specified path.
-
-    Args:
-        dataset_name (str): The name of the dataset in the format 'username/dataset-name'.
-        save_path (str): The directory where the dataset should be saved.
-    """
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    api.authenticate()  # Authenticate with your Kaggle credentials
-    dataset_name = 'jaimetrickz/galaxy-zoo-2-images'
-    # Download the dataset as a zip file
-    api.dataset_download_files(dataset_name, path=save_path, unzip=True)
-    print(f"Dataset '{dataset_name}' downloaded to '{save_path}'")
-    print('Unzipping .....')
-    unzip_all(os.path.join(save_path, 'galaxy-zoo-2-images.zip'))
 
 def check_dir_exists(absolute_path):
     if not absolute_path.startswith(os.path.sep):

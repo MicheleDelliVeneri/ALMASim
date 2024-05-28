@@ -1,8 +1,6 @@
 import sys
 import numpy as np
 import pandas as pd
-import zipfile
-from kaggle import api
 import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
