@@ -85,9 +85,9 @@ class Interferometer():
             self.channel = channel
             self._get_channel_range()
             self._prepare_2d_arrays()
-            self._prepare_baselines()
-            self.set_noise()
-            self._set_baselines()
+            self._prepare_baselines() # get the baseline numbers
+            self.set_noise() # set noise level
+            self._set_baselines() # compute baseline vectors and the u-v components
             self._grid_uv()
             self._set_beam()
             self._check_lfac()
@@ -285,6 +285,9 @@ class Interferometer():
         self.dirtyvisCube[self.channel] = self.dirtyvis
 
     def _prepare_baselines(self):
+        """
+        This function determines all the unique pairs of antennas (baselines) in the interferometer array.  
+        """
         # Calculate the number of unique baselines in an array of N antennas
         self.Nbas = self.Nant * (self.Nant - 1) // 2
         # Create a redundant variable for the number of baselines
@@ -344,48 +347,70 @@ class Interferometer():
                         loc=0.0, scale=self.noise, size=np.shape(self.Noise))
 
     def _set_baselines(self, antidx=-1):
+        """
+        This function is responsible for calculating the baseline vectors (in wavelengths) and the corresponding u and v coordinates (spatial frequencies) in the UV plane for each baseline in the interferometer array.
+        """
+        # Determine which baselines to update:
         if antidx == -1:
-                bas2change = range(self.Nbas)
-        elif antidx < self.Nant:
-            bas2change = self.basnum[antidx].flatten()
-        else:
-            bas2change = []
-        for currBas in bas2change:
-            n1, n2 = self.antnum[currBas]
-            self.B[currBas, 0] = -(self.antPos[n2][1] - self.antPos[n1][1]) \
-                                 * self.trlat[0] / self.wavelength[2]
-            self.B[currBas, 1] = (self.antPos[n2][0] - self.antPos[n1][0]) \
-                                 / self.wavelength[2]
-            self.B[currBas, 2] = (self.antPos[n2][1] - self.antPos[n1][1]) \
-                                 * self.trlat[1] / self.wavelength[2]
-            self.u[currBas, :] = -(self.B[currBas, 0] * self.H[0] + self.B[currBas, 1] * self.H[1])
-            self.v[currBas, :] = -self.B[currBas, 0] * self.trdec[0] * self.H[1] \
-                                 + self.B[currBas, 1] * self.trdec[0] * self.H[0] \
-                                 + self.trdec[1] * self.B[currBas, 2]
-    
-    def _grid_uv(self, antidx=-1):
-        
-        if antidx == -1:
+            # Update all baselines if no specific antenna index is provided.
             bas2change = range(self.Nbas)
+        elif antidx < self.Nant:
+            # Update only baselines involving the specified antenna.
+            bas2change = self.basnum[antidx].flatten()  # Get baselines associated with antidx
+        else:
+            # If the provided antidx is invalid, update no baselines.
+            bas2change = []
+        # Iterate over the baselines that need updating
+        for currBas in bas2change:
+            # Get the antenna indices that form the current baseline
+            n1, n2 = self.antnum[currBas]  
+            # Calculate the baseline vector components (B_x, B_y, B_z) in wavelengths:
+            # B_x: Projection of baseline onto the plane perpendicular to Earth's rotation axis.
+            self.B[currBas, 0] = -(self.antPos[n2][1] - self.antPos[n1][1]) * self.trlat[0] / self.wavelength[2]  
+            # B_y: Projection of baseline onto the East-West direction.
+            self.B[currBas, 1] = (self.antPos[n2][0] - self.antPos[n1][0]) / self.wavelength[2]  
+            # B_z: Projection of baseline onto the North-South direction.
+            self.B[currBas, 2] = (self.antPos[n2][1] - self.antPos[n1][1]) * self.trlat[1] / self.wavelength[2] 
+            # Calculate u and v coordinates (spatial frequencies) in wavelengths:
+            # u: Projection of the baseline vector onto the UV plane (East-West component).
+            self.u[currBas, :] = -(self.B[currBas, 0] * self.H[0] + self.B[currBas, 1] * self.H[1])  
+            # v: Projection of the baseline vector onto the UV plane (North-South component).
+            self.v[currBas, :] = -self.B[currBas, 0] * self.trdec[0] * self.H[1] + self.B[currBas, 1] * self.trdec[0] * self.H[0] + self.trdec[1] * self.B[currBas, 2]
+
+    def _grid_uv(self, antidx=-1):
+        """
+        The main purpose of the _grid_uv function is to take the continuous visibility measurements collected by the interferometer 
+        (represented by u and v coordinates for each baseline) and "grid" them onto a discrete grid in the UV plane. 
+        """
+        # Determine which baselines to grid:
+        if antidx == -1:
+            # Grid all baselines if no specific antenna is provided
+            bas2change = range(self.Nbas)
+            # Initialize lists to store pixel positions for each baseline.
             self.pixpos = [[] for nb in bas2change]
+            # Reset sampling, gain, and noise arrays for a clean grid.
             self.totsampling[:] = 0.0
             self.Gsampling[:] = 0.0
             self.noisemap[:] = 0.0
         elif antidx < self.Nant:
+            # Grid only the baselines associated with the specified antenna.
             bas2change = list(map(int, list(self.basnum[antidx].flatten())))
         else:
+            # Don't grid any baselines if the provided antenna index is invalid.
             bas2change = []
         # set the pixsize in the UV plane
         self.UVpixsize = 2. / (self.imsize * np.pi / 180. / 3600.)
         self.baseline_phases = {}
         self.bas2change = bas2change
         for nb in self.bas2change:
-            # Computes pixel positions in the UV plane 
+            # Calculate the pixel coordinates (pixU, pixV) in the UV plane for each visibility
+            # sample of the current baseline.  Rounding to the nearest integer determines the 
+            # UV pixel location
             pixU = np.rint(self.u[nb] / self.UVpixsize).flatten().astype(
                 np.int32)
             pixV = np.rint(self.v[nb] / self.UVpixsize).flatten().astype(
                 np.int32)
-            # select pixels within the half field 
+            # Filter out visibility samples that fall outside the field of view (half-plane).
             goodpix = np.where(
                 np.logical_and(
                     np.abs(pixU) < self.Nphf,
@@ -393,12 +418,15 @@ class Interferometer():
             # added to introduce Atmospheric Errors 
             phase_nb = np.angle(self.Gains[nb, goodpix])
             self.baseline_phases[nb] = phase_nb
+            # Calculate positive and negative pixel indices (accounting for the shift in the FFT).
             # Isolates positives and negative pixels 
             pU = pixU[goodpix] + self.Nphf
             pV = pixV[goodpix] + self.Nphf
             mU = -pixU[goodpix] + self.Nphf
             mV = -pixV[goodpix] + self.Nphf
             if antidx != -1:
+                 # If we are only updating baselines for a single antenna, subtract the old 
+                # contributions of the baseline from the total sampling and gains.
                 # subtracting previous gains and sampling contributions based on
                 # stored positions 
                 self.totsampling[self.pixpos[nb][1], self.pixpos[nb][2]] -= 1.0
@@ -422,6 +450,7 @@ class Interferometer():
                 np.copy(mU),
                 np.copy(mV)
             ]
+            # Iterate over the good pixels for the current baseline and update:
             for pi, gp in enumerate(goodpix):
                 # computes the absolute gains for the current baseline
                 gabs = np.abs(self.Gains[nb, gp])
@@ -429,6 +458,8 @@ class Interferometer():
                 mUi = mU[pi]
                 mVi = mV[pi]
                 pUi = pU[pi]
+                # Update the sampling counts, gains, and noise at the corresponding pixel 
+                # locations in the UV grid.
                 self.totsampling[pVi, mUi] += 1.0
                 self.totsampling[mVi, pUi] += 1.0
                 self.Gsampling[pVi, mUi] += self.Gains[nb, gp]
@@ -436,6 +467,7 @@ class Interferometer():
                 self.noisemap[pVi, mUi] += self.Noise[nb, gp] * gabs
                 self.noisemap[mVi, pUi] += np.conjugate(
                     self.Noise[nb, gp]) * gabs
+        # Calculate a robustness factor based on the total sampling and a user-defined parameter.
         self.robfac = (5. * 10.**(-self.robust))**2. * (
             2. * self.Nbas * self.nH) / np.sum(self.totsampling**2.)
 
