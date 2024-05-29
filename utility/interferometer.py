@@ -214,21 +214,23 @@ class Interferometer():
         obs_antennas = self.antenna_array.split(' ')
         obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
         obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
+        # Read Antenna coordinates from the antenna array
         antenna_coordinates = obs_coordinates[['x', 'y']].values
         antPos = []
         Xmax = 0.0
-        # PLACEHOLDER MUSTE BE SUBSTITUTED WITH REAL TIME RANGE
-        #Hcov = [-3.0 * self.Hfac, 3.0 * self.Hfac]
         for line in antenna_coordinates:
+            # Convert them in meters
             antPos.append([line[0] * 1e-3, line[1] * 1e-3])
+            # Get the maximum distance between any two antennas to be used in the covariance matrix
             Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
         self.Xmax = Xmax
         self.antPos = antPos
-        #self.Hcov = Hcov
+        # Computes the sine of the difference between lat and dec and checks that is less then 1 which means that the angle of observation is valid
         cosW = -np.tan(self.lat) * np.tan(self.dec)
         if np.abs(cosW) < 1.0:
             Hhor = np.arccos(cosW)
-        elif np.abs(lat - dec) > np.pi / 2.:
+        # if the difference
+        elif np.abs(self.lat - self.dec) > np.pi / 2.:
             Hhor = 0
         else:
             Hhor = np.pi
@@ -240,6 +242,7 @@ class Interferometer():
                 self.Hcov[1] = Hhor
 
         self.Hmax = Hhor
+        # the H array is constructed 
         H = np.linspace(self.Hcov[0], self.Hcov[1],
                         self.nH)[np.newaxis, :]
         
@@ -282,28 +285,47 @@ class Interferometer():
         self.dirtyvisCube[self.channel] = self.dirtyvis
 
     def _prepare_baselines(self):
+        # Calculate the number of unique baselines in an array of N antennas
         self.Nbas = self.Nant * (self.Nant - 1) // 2
+        # Create a redundant variable for the number of baselines
         NBmax = self.Nbas
+        # Initialize arrays to store baseline parameters and visibility data:
+        # B: Baseline vectors (x, y, z components) for each baseline at each hour angle.
         self.B = np.zeros((NBmax, self.nH), dtype=np.float32)
+        # basnum: A matrix storing the baseline index for each pair of antennas.
         self.basnum = np.zeros((self.Nant, self.Nant - 1), dtype=np.int8)
+        # basidx: A square matrix storing the baseline index for each pair of antennas (redundant storage).
         self.basidx = np.zeros((self.Nant, self.Nant), dtype=np.int8)
+        # antnum: Stores the antenna pair indices for each baseline.
         self.antnum = np.zeros((NBmax, 2), dtype=np.int8)
+        # Gains: Complex gains for each baseline at each hour angle (initialized to 1).
         self.Gains = np.ones((self.Nbas, self.nH), dtype=np.complex64)
+        # Noise:  Complex noise values for each baseline at each hour angle (initialized to 0).
         self.Noise = np.zeros((self.Nbas, self.nH), dtype=np.complex64)
+        # Horig:  Original hour angle values, evenly spaced over the observation time.
         self.Horig = np.linspace(self.Hcov[0], self.Hcov[1], self.nH)
-        H = self.Horig[np.newaxis, :]
+        H = self.Horig[np.newaxis, :] # Add a new axis for broadcasting
+        # Trigonometric values (sine and cosine) of the hour angles.
         self.H = [np.sin(H), np.cos(H)]
-        bi = 0
+        bi = 0 # bi: Baseline index counter (starts at 0).
+        # nii: List to keep track of the next available index in basnum for each antenna.
         nii = [0 for n in range(self.Nant)]
+        # Iterate over all unique antenna pairs
         for n1 in range(self.Nant - 1):
             for n2 in range(n1 + 1, self.Nant):
+                # Assign a baseline index to each antenna pair in both basnum and basidx.
                 self.basnum[n1, nii[n1]] = np.int8(bi)
                 self.basnum[n2, nii[n2]] = np.int8(bi)
                 self.basidx[n1, n2] = np.int8(bi)
+                # Store the antenna pair indices for the current baseline.
                 self.antnum[bi] = [n1, n2]
+                # Increment the next available index for each antenna in basnum.
                 nii[n1] += 1
                 nii[n2] += 1
+                # Increment the baseline index counter
                 bi += np.int8(1)
+        # Initialize arrays to store u and v coordinates (in wavelengths)
+        # for each baseline at each hour angle.
         self.u = np.zeros((NBmax, self.nH))
         self.v = np.zeros((NBmax, self.nH))
         self.ravelDims = (NBmax, self.nH)
