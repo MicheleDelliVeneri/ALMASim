@@ -482,13 +482,28 @@ class Interferometer():
         #self.img += np.random.normal(scale=mean_val / self.snr)
 
     def _set_beam(self):
+        """
+        The function calculates the "dirty beam" of the interferometer.
+        """
+        # 1. Robust Weighting Calculation:
+        #   - denom: Denominator used for robust weighting to balance data points with varying noise and sampling density.
         denom = 1. + self.robfac * self.totsampling
+        # 2. Apply Robust Weighting to Sampling, Gains, and Noise:
+        #   - robustsamp: Weighted sampling distribution in the UV plane.
         self.robustsamp[:] = self.totsampling / denom
         self.Grobustsamp[:] = self.Gsampling / denom
         self.GrobustNoise[:] = self.noisemap / denom
+        # 3. Dirty Beam Calculation:
+        #   - np.fft.fftshift(self.robustsamp): Shift the zero-frequency component of the weighted sampling to the center for FFT.
+        #   - np.fft.ifft2(...): Perform the 2D inverse Fourier Transform to get the dirty beam in the image domain.
+        #   - np.fft.ifftshift(...): Shift the zero-frequency component back to the original corner.
+        #   - .real: Extract the real part of the complex result, as the beam is a real-valued function.
+        #   -  / (1. + self.W2W1): Normalize the beam by a factor determined by `W2W1`.
         self.beam[:] = np.fft.ifftshift(
             np.fft.ifft2(np.fft.fftshift(
                 self.robustsamp))).real / (1. + self.W2W1)
+        # 4. Beam Scaling and Normalization:
+        #   - Find the maximum value of the beam within a central region (likely to avoid edge effects).
         self.beamScale = np.max(self.beam[self.Nphf:self.Nphf +1, self.Nphf:self.Nphf + 1])
         self.beam[:] /= self.beamScale
 
