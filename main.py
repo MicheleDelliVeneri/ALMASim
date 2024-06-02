@@ -78,7 +78,7 @@ if __name__ == '__main__':
     # Creating Working directories
     main_path = os.getcwd()
     #output_dir = input("Insert absolute path of the output directory, if this is the first time running ALMASim this directory will be created: ")
-    output_dir = 'Users/michele/sim-test'
+    output_dir = 'Users/michele/sim-test-31-05-2024'
     if not output_dir.startswith('~') or not output_dir.startswith('/'):
         output_dir = os.path.join('/', output_dir)
     if uc.check_dir_exists(output_dir) == False:

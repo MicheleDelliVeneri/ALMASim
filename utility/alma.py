@@ -16,8 +16,7 @@ from tqdm import tqdm
 
 # Utility function to get a TAP service from a list of URLs, cycling through until one works
 def get_tap_service():
-    urls = [
-        "https://almascience.eso.org/tap",
+    urls = [        "https://almascience.eso.org/tap",
         "https://almascience.nao.ac.jp/tap",
         "https://almascience.nrao.edu/tap"
     ]

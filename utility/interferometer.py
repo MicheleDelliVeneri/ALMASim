@@ -24,7 +24,7 @@ class Interferometer():
     def __init__(self, idx, skymodel, main_dir, 
                 output_dir, ra, dec, central_freq, band_range, 
                 fov, antenna_array, noise, int_time, obs_date, 
-                robust=0.5):
+                header, save_mode, robust=0.5):
         self.idx = idx
         self.skymodel = skymodel
         self.antenna_array = antenna_array
@@ -41,6 +41,8 @@ class Interferometer():
         self.Hfac = np.pi / 180. * 15.
         self.deg2rad = np.pi / 180.
         self.rad2deg = 180. / np.pi
+        self.deg2arcsec = 3600.0
+        self.arcsec2deg = 1. / 3600.
         self.second2hour = 1. / 3600.
         self.curzoom = [0, 0, 0, 0]
         self.robust = robust
@@ -72,6 +74,8 @@ class Interferometer():
         self.W2W1 = 1     
         self.currcmap = cm.jet
         self.zooming = 0
+        self.header = header
+        self.save_mode = save_mode
         # Get the antenna coordinates, and the hour angle coverage
         self._get_observing_location()
         # This function must be checked
@@ -119,7 +123,8 @@ class Interferometer():
                     self.scan_time = 30.24
                     # Final attempt with the largest divisor (30.24)
                     self.nH = int(self.int_time / (self.scan_time * self.second2hour))
-   
+        self.header.append(("EPOCH", self.nH))
+    
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site('ALMA')
 
@@ -619,6 +624,23 @@ class Interferometer():
 
         self.modelimTrue[self.modelimTrue < 0.0] = 0.0
 
+    def _set_elliptical_beam(self):
+        cov_matrix = np.cov(self.u, self.v)
+        # Eigen decomposition of the covariance matrix
+        eigvals, eigvecs = np.linalg.eigh(cov_matrix)
+        # Eigenvector corresponding to the largest eigenvalue gives the major axis direction
+        major_axis_vector = eigvecs[:, np.argmax(eigvals)]
+        BPA_rad = self.rad2deg(np.arctan2(major_axis_vector[1], major_axis_vector[0]))
+        scale_factor = 1220 * self.deg2arcsec *  self.wavelength[2] / self.Diameters[0] / 2.3548
+        # Rotate the coordinates
+        x_rot = x * np.cos(BPA_rad) + y * np.sin(BPA_rad)
+        y_rot = -x * np.sin(BPA_rad) + y * np.cos(BPA_rad)
+        # Eigenvalues correspond to the variances along the major and minor axes
+        sigma_major = np.sqrt(np.max(eigvals)) * scale_factor
+        sigma_minor = np.sqrt(np.min(eigvals)) * scale_factor
+        PB = ((x_rot / sigma_major)**2 + (y_rot / sigma_minor)**2)
+        self.beamImg = np.exp(self.distmat/PB)
+        
     def _set_primary_beam(self):
         """
         Calculates and applies the primary beam of the telescope to the model image.
@@ -638,6 +660,12 @@ class Interferometer():
         #       - 2.3548: Factor related to the full-width-half-maximum (FWHM) of the Airy disk.
         PB = 2. * (1220. * 180. / np.pi * 3600. * self.wavelength[2] / self.Diameters[0] / 2.3548)**2.
 
+        #BMAJ  # Beam FWHM along major axis [deg]
+        #BMIN # Beam FWHM along minor axis [deg]
+        #BPA # Beam position angle [deg]
+        self.header.append(('BMAJ', 180. * np.sqrt(PB) / np.pi , 'Beam FWHM along major axis [deg]'))
+        self.header.append(('BMIN', 180. * np.sqrt(PB) / np.pi , 'Beam FWHM along minor axis [deg]'))
+        self.header.append(('BPA', 0.0, 'Beam position angle [deg]'))
         # 2. Create Primary Beam Image:
         #   - Creates a 2D Gaussian image (`beamImg`) representing the primary beam.
         #   - self.distmat: Pre-calculated matrix of squared distances from the image center.
@@ -705,10 +733,39 @@ class Interferometer():
         max_clean = np.sum(self.modelCube)
         self.dirtyCube = self.dirtyCube / max_dirty 
         self.dirtyCube =  self.dirtyCube * max_clean
-        np.savez_compressed(os.path.join(self.output_dir, 'clean-cube_{}.npz'.format(str(self.idx))), self.modelCube)
-        np.savez_compressed(os.path.join(self.output_dir, 'dirty-cube_{}.npz'.format(str(self.idx))), self.dirtyCube)
-        np.savez_compressed(os.path.join(self.output_dir, 'dirty-vis-cube_{}.npz'.format(str(self.idx))), self.dirtyvisCube)
-        np.savez_compressed(os.path.join(self.output_dir, 'clean-vis-cube_{}.npz'.format(str(self.idx))), self.visCube)
+        if self.save_mode == 'npz':
+            np.savez_compressed(os.path.join(self.output_dir, 'clean-cube_{}.npz'.format(str(self.idx))), self.modelCube)
+            np.savez_compressed(os.path.join(self.output_dir, 'dirty-cube_{}.npz'.format(str(self.idx))), self.dirtyCube)
+            np.savez_compressed(os.path.join(self.output_dir, 'dirty-vis-cube_{}.npz'.format(str(self.idx))), self.dirtyvisCube)
+            np.savez_compressed(os.path.join(self.output_dir, 'clean-vis-cube_{}.npz'.format(str(self.idx))), self.visCube)
+        elif self.save_mode == 'hdf5':
+            with h5py.File(os.path.join(self.output_dir, 'clean-cube_{}.h5'.format(str(self.idx))), 'w') as f:
+                f.create_dataset('clean_cube', data=self.modelCube)
+            with h5py.File(os.path.join(self.output_dir, 'dirty-cube_{}.h5'.format(str(self.idx))), 'w') as f:
+                f.create_dataset('dirty_cube', data=self.dirtyCube)
+            with h5py.File(os.path.join(self.output_dir, 'dirty-vis-cube_{}.h5'.format(str(self.idx))), 'w') as f:
+                f.create_dataset('dirty_vis_cube', data=self.dirtyvisCube)
+            with h5py.File(os.path.join(self.output_dir, 'clean-vis-cube_{}.h5'.format(str(self.idx))), 'w') as f:
+                f.create_dataset('clean_vis_cube', data=self.visCube)
+        elif self.save_mode == 'fits':
+            self.clean_header = self.header
+            self.clean_header.append(
+            ("DATAMAX", np.max(self.modelCube) * U.Jy / U.beam))
+            self.clean_header.append(
+            ("DATAMIN", np.min(self.modelCube) * U.Jy / U.beam))
+            hdu = fits.PrimaryHDU(header=self.clean_header,  data=self.modelCube)
+            hdu.writeto(os.path.join(self.output_dir, 'clean-cube_{}.fits'.format(str(self.idx))), overwrite=True)
+            self.dirty_header = self.header
+            self.dirty_header.append(
+            ("DATAMAX", np.max(self.dirtyCube) * U.Jy / U.beam))
+            self.dirty_header.append(("DATAMIN", np.min(self.dirtyCube) * U.Jy / U.beam))
+            hdu = fits.PrimaryHDU(header=self.dirty_header, data=self.dirtyCube)
+            hdu.writeto(os.path.join(self.output_dir, 'dirty-cube_{}.fits'.format(str(self.idx))), overwrite=True)
+            hdu = fits.PrimaryHDU(self.dirtyvisCube)
+            hdu.writeto(os.path.join(self.output_dir, 'dirty-vis-cube_{}.fits'.format(str(self.idx))), overwrite=True)
+            hdu = fits.PrimaryHDU(self.visCube)
+            hdu.writeto(os.path.join(self.output_dir, 'clean-vis-cube_{}.fits'.format(str(self.idx))), overwrite=True)
+
         print(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
         print(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
     

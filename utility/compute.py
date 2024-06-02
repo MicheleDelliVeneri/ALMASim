@@ -568,6 +568,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
     #filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
     #print('Writing datacube to {}'.format(filename))
     #usm.write_datacube_to_fits(datacube, filename, obs_date)
+    header = usm.get_datacube_header(datacube, obs_date)
     model = datacube._array.to_value(datacube._array.unit).T
     totflux = np.sum(model) 
     print(f'Total Flux injected in model cube: {round(totflux, 3)} Jy')
@@ -576,7 +577,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
     print('Observing with ALMA')
     #upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
     uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value * 3, 
-                        int_time.value * second2hour, obs_date)
+                        int_time.value * second2hour, obs_date, header)
     print('Finished')
     stop = time.time()
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))

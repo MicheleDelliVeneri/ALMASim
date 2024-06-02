@@ -57,7 +57,7 @@ def convert_to_j2000_string(ra_deg, dec_deg):
   if not (-90 <= dec_deg <= 90):
       raise ValueError("Declination (Dec) must be between -90 and 90 degrees.")
 
-  # Convert RA to sexagesimal string (hours:minutes:seconds)
+  # Convert RA to sexagesimal string (
   hours = int(ra_deg / 15)
   minutes = int((ra_deg % 15) * 60)
   seconds = (ra_deg % 15 - minutes / 60) * 3600  # Ensure higher precision
