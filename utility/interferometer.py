@@ -49,6 +49,7 @@ class Interferometer():
         self.deltaAng = 1. * self.deg2rad
         self.gamma = 0.5
         self.lfac = 1.e6
+        self.header = header
         self._get_nH()
         print(f'Performing {self.nH} scans with a scan time of {self.scan_time} seconds')
         self.Hmax = np.pi
@@ -74,7 +75,6 @@ class Interferometer():
         self.W2W1 = 1     
         self.currcmap = cm.jet
         self.zooming = 0
-        self.header = header
         self.save_mode = save_mode
         # Get the antenna coordinates, and the hour angle coverage
         self._get_observing_location()
@@ -738,7 +738,7 @@ class Interferometer():
             np.savez_compressed(os.path.join(self.output_dir, 'dirty-cube_{}.npz'.format(str(self.idx))), self.dirtyCube)
             np.savez_compressed(os.path.join(self.output_dir, 'dirty-vis-cube_{}.npz'.format(str(self.idx))), self.dirtyvisCube)
             np.savez_compressed(os.path.join(self.output_dir, 'clean-vis-cube_{}.npz'.format(str(self.idx))), self.visCube)
-        elif self.save_mode == 'hdf5':
+        elif self.save_mode == 'h5':
             with h5py.File(os.path.join(self.output_dir, 'clean-cube_{}.h5'.format(str(self.idx))), 'w') as f:
                 f.create_dataset('clean_cube', data=self.modelCube)
             with h5py.File(os.path.join(self.output_dir, 'dirty-cube_{}.h5'.format(str(self.idx))), 'w') as f:

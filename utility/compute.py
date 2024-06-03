@@ -375,7 +375,7 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
 def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
               pwv, int_time, total_time, bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
               n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
-              n_lines, line_names, save_secondary=False, inject_serendipitous=False):
+              n_lines, line_names, save_mode, save_secondary=False, inject_serendipitous=False):
     """
     Runs a simulation for a given set of input parameters.
     Args:
@@ -577,7 +577,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
     print('Observing with ALMA')
     #upl.plot_skymodel(filename, inx, output_dir, line_names, line_frequency, source_channel_index, cont_frequencies, show=False)
     uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value * 3, 
-                        int_time.value * second2hour, obs_date, header)
+                        int_time.value * second2hour, obs_date, header, save_mode)
     print('Finished')
     stop = time.time()
     print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))

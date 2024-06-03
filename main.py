@@ -138,6 +138,14 @@ if __name__ == '__main__':
         ncpu = input(f"{BLUE}Insert total number of CPUs to use: {RESET}")
         ncpu = int(ncpu)
     
+    #save_mode = input(f"{RED}Select the save format between (npz, fits, h5): {RESET}")
+    save_mode = 'npz'
+    if save_mode != 'npz' and save_mode != 'fits' and save_mode != 'h5':
+        print(f"{YELLOW}Invalid input. Please insert npz, fits or h5.{RESET}")
+        save_mode = input(f"{RED}Select the save format between (npz, fits, h5): {RESET}")
+    save_mode = np.array([save_mode]*n_sims)
+
+
     #comp_mode = input(f'{RED}Do you want to simulate sequentially or in parallel? (sequential/parallel) {RESET}')
     comp_mode = 'sequential'
     if comp_mode != 'sequential' and comp_mode != 'parallel':
@@ -350,12 +358,12 @@ if __name__ == '__main__':
         obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
         tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
-        n_lines, line_names, save_secondary, inject_serendipitous), 
+        n_lines, line_names, save_mode, save_secondary, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'galaxy_zoo_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
         'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
         'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
-        'n_lines', 'line_names', 'save_secondary', 'inject_serendipitous'])
+        'n_lines', 'line_names', 'save_mode', 'save_secondary', 'inject_serendipitous'])
 
     if comp_mode == 'parallel':
     # Dask utils

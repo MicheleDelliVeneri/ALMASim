@@ -113,7 +113,7 @@ class PlotWindow(QWidget):
 
             # Check if plots need to be generated
             if not all(os.path.exists(os.path.join(plot_dir, plot)) for plot in expected_plots):
-                ual.plot_science_keywords_distributions(os.getcwd())  # Generate plots if not found
+                self.plot_science_keywords_distributions(os.getcwd())  # Generate plots if not found
 
             row, col = 0, 0
             for plot_file in expected_plots:  # Iterate through the expected plot files
@@ -295,6 +295,262 @@ class ALMASimulatorUI(QMainWindow):
             self.add_query_widgets()
         self.toggle_metadata_browse(current_mode)  # Call here
 
+    def get_tap_service(self):
+        urls = ["https://almascience.eso.org/tap", "https://almascience.nao.ac.jp/tap",
+                "https://almascience.nrao.edu/tap"
+        ]
+        while True:  # Infinite loop to keep trying until successful
+            for url in urls:
+                try:
+                    service = pyvo.dal.TAPService(url)
+                    # Test the connection with a simple query to ensure the service is working
+                    result = service.search("SELECT TOP 1 * FROM ivoa.obscore")
+                    self.terminal.add_log(f"Connected successfully to {url}")
+                    return service
+                except Exception as e:
+                    self.terminal.add_log(f"Failed to connect to {url}: {e}")
+                    self.terminal.add_log("Retrying other servers...")
+            self.terminal.add_log("All URLs attempted and failed, retrying...")
+    
+    def get_science_types(self):
+        service = self.get_tap_service()
+        query = f"""  
+                SELECT science_keyword, scientific_category  
+                FROM ivoa.obscore  
+                WHERE science_observation = 'T'    
+                """
+        db = service.search(query).to_table().to_pandas()
+        science_keywords = db['science_keyword'].unique()
+        scientific_category = db['scientific_category'].unique()
+        science_keywords = list(filter(lambda x: x != "", science_keywords))
+        scientific_category = list(filter(lambda x: x != "", scientific_category))
+
+        unique_keywords = []
+        # Iterazione attraverso ogni stringa nella lista
+        for keywords_string in science_keywords:
+        # Dividi la stringa in base alla virgola e rimuovi gli spazi bianchi
+            keywords_list = [keyword.strip() for keyword in keywords_string.split(',')]
+        # Aggiungi le parole alla lista dei valori univoci
+            unique_keywords.extend(keywords_list)
+        # Utilizza il set per ottenere i valori univoci
+        unique_keywords = sorted(set(unique_keywords))
+        unique_keywords = [keyword for keyword in unique_keywords if (
+                            keyword != 'Evolved stars: Shaping/physical structure' and
+                            keyword != 'Exoplanets' and 
+                            keyword != 'Galaxy structure &evolution')]
+
+        return  unique_keywords, scientific_category
+    
+    def query_by_science_type(self, science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
+        """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
+
+        Parameters:
+        service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+
+        Returns:
+        pandas.DataFrame: A table of query results.
+        """
+        service = self.get_tap_service()
+        # Default values for parameters if they are None
+        if science_keyword is None:
+            science_keyword = ""
+        if scientific_category is None:
+            scientific_category = ""
+        if band is None:
+            band = ""
+
+        # Build query components based on the type and content of each parameter
+        science_keyword_query = f"science_keyword like '%{science_keyword}%'"
+        if isinstance(science_keyword, list):
+            if len(science_keyword) == 1:
+                science_keyword_query = f"science_keyword like '%{science_keyword[0]}%'"
+            else:
+                science_keywords = "', '".join(science_keyword)
+                science_keyword_query = f"science_keyword in ('{science_keywords}')"
+
+        scientific_category_query = f"scientific_category like '%{scientific_category}%'"
+        if isinstance(scientific_category, list):
+            if len(scientific_category) == 1:
+                scientific_category_query = f"scientific_category like '%{scientific_category[0]}%'"
+            else:
+                scientific_categories = "', '".join(scientific_category)
+                scientific_category_query = f"scientific_category in ('{scientific_categories}')"
+
+        band_query = f"band_list like '%{band}%'"
+        if isinstance(band, list):
+            if len(band) == 1:
+                band_query = f"band_list like '%{band[0]}%'"
+            else:
+                bands = [str(x) for x in band]
+                bands = "', '".join(bands)
+                band_query = f"band_list in ('{bands}')"
+
+        # Additional filtering based on ranges
+        if fov_range is None:
+            fov_query = ""
+        else:
+            fov_query = f"s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}"
+        if time_resolution_range is None:
+            time_resolution_query = ""
+        else:
+            time_resolution_query = f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
+
+        if total_time_range is None:
+            total_time_query = ""
+        else:    
+            total_time_query = f"t_max BETWEEN {total_time_range[0]} AND {total_time_range[1]}"
+
+        if frequency_range is None:
+            frequency_query = ""
+        else:
+            frequency_query = f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
+
+        # Combine all conditions into one WHERE clause
+        conditions = [science_keyword_query, scientific_category_query, band_query, fov_query, time_resolution_query, total_time_query, frequency_query]
+        conditions = [cond for cond in conditions if cond]  # Remove empty conditions
+        where_clause = " AND ".join(conditions)
+        where_clause += " AND is_mosaic = 'F' AND science_observation = 'T'"  # Add fixed conditions
+
+        query = f"""
+                SELECT *
+                FROM ivoa.obscore
+                WHERE {where_clause}
+                """
+
+        result = service.search(query).to_table().to_pandas()
+
+        return result
+
+    def plot_science_keywords_distributions(master_path):
+        service = self.get_tap_service()
+        plot_dir = os.path.join(master_path, "plots")
+
+        # Check if plot directory exists
+        if not os.path.exists(plot_dir):
+            os.makedirs(plot_dir)
+            existing_plots = []  # Initialize as empty list if plot directory doesn't exist
+        else:
+            # Check if plot files already exist
+            existing_plots = [f for f in os.listdir(plot_dir) if f.endswith('.png')]
+
+        expected_plots = ['science_vs_bands.png', 'science_vs_int_time.png', 'science_vs_source_freq.png',
+                          'science_vs_FoV.png']
+
+        if all(plot_file in existing_plots for plot_file in expected_plots):
+            return
+        else:
+            self.terminal.add_log(f"Generating helping plots to guide you in the scientific query, check them in {plot_dir}.")
+            # Identify missing plots
+        missing_plots = [plot for plot in expected_plots if plot not in existing_plots]
+
+        # Query only for variables associated with missing plots
+        query_variables = set()
+        for missing_plot in missing_plots:
+            if missing_plot == 'science_vs_bands.png':
+                query_variables.update(['science_keyword', 'band_list'])
+            elif missing_plot == 'science_vs_int_time.png':
+                query_variables.update(['science_keyword', 't_resolution'])
+            elif missing_plot == 'science_vs_source_freq.png':
+                query_variables.update(['science_keyword', 'frequency'])
+            elif missing_plot == 'science_vs_FoV.png':
+                query_variables.update(['science_keyword', 'band_list'])
+        query = f"""  
+                SELECT {', '.join(query_variables)}, member_ous_uid
+                FROM ivoa.obscore  
+                WHERE science_observation = 'T'
+                AND is_mosaic = 'F'
+                """
+
+        custom_palette = sns.color_palette("tab20")
+        sns.set_palette(custom_palette)
+        db = service.search(query).to_table().to_pandas()
+        db = db.drop_duplicates(subset='member_ous_uid')
+
+        # Splitting the science keywords at commas
+        db['science_keyword'] = db['science_keyword'].str.split(',')
+        db['science_keyword'] = db['science_keyword'].apply(lambda x: [y.strip() for y in x])
+        db = db.explode('science_keyword')
+        db = db.drop(db[db['science_keyword'] == ''].index)
+        db = db.drop(db[db['science_keyword'] == 'Exoplanets'].index)
+        db = db.drop(db[db['science_keyword'] == 'Galaxy structure &evolution'].index)
+        db = db.drop(db[db['science_keyword'] == 'Evolved stars: Shaping/physical structure'].index)
+        short_keyword = {
+            'Solar system - Trans-Neptunian Objects (TNOs)' : 'Solar System - TNOs',
+            'Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)': 'Photon/X-Ray Domanited Regions',
+            'Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)': 'LIRG & ULIRG',
+            'Cosmic Microwave Background (CMB)/Sunyaev-Zel\'dovich Effect (SZE)': 'CMB/Sunyaev-Zel\'dovich Effect',
+            'Active Galactic Nuclei (AGN)/Quasars (QSO)': 'AGN/QSO',
+            'Inter-Stellar Medium (ISM)/Molecular clouds': 'ISM & Molecular Clouds',
+        }
+
+        db['science_keyword'] = db['science_keyword'].replace(short_keyword)
+
+        for missing_plot in missing_plots:
+            if missing_plot == 'science_vs_bands.png':
+                db['band_list'] = db['band_list'].str.split(' ')
+                db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
+                db = db.explode('band_list')
+
+                db_sk_b = db.groupby(['science_keyword', 'band_list']).size().unstack(fill_value=0)
+
+                plt.rcParams["figure.figsize"] = (28,20)
+                db_sk_b.plot(kind='barh', stacked=True, color=custom_palette)
+                plt.title('Science Keywords vs. ALMA Bands')
+                plt.xlabel('Counts')
+                plt.ylabel('Science Keywords')
+                plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='ALMA Bands')
+                plt.savefig(os.path.join(plot_dir, 'science_vs_bands.png'))
+                plt.close()
+
+            elif missing_plot == 'science_vs_int_time.png':
+                db = db[db['t_resolution'] <= 3e4]
+                time_bins = np.arange(db['t_resolution'].min(), db['t_resolution'].max(), 1000)  # 1000 second bins
+                db['time_bin'] = pd.cut(db['t_resolution'], bins=time_bins)
+
+                db_sk_t = db.groupby(['science_keyword', 'time_bin']).size().unstack(fill_value=0)
+
+                plt.rcParams["figure.figsize"] = (28,20)
+                db_sk_t.plot(kind='barh', stacked=True)
+                plt.title('Science Keywords vs. Integration Time')
+                plt.xlabel('Counts')
+                plt.ylabel('Science Keywords')
+                plt.legend(title='Integration Time', loc='upper left', bbox_to_anchor=(1.01, 1))
+                plt.savefig(os.path.join(plot_dir, 'science_vs_int_time.png'))
+                plt.close()
+
+            elif missing_plot == 'science_vs_source_freq.png':
+                frequency_bins = np.arange(db['frequency'].min(), db['frequency'].max(), 50)  # 50 GHz bins
+                db['frequency_bin'] = pd.cut(db['frequency'], bins=frequency_bins)
+
+                db_sk_f = db.groupby(['science_keyword', 'frequency_bin']).size().unstack(fill_value=0)
+
+                plt.rcParams["figure.figsize"] = (28,20)
+                db_sk_f.plot(kind='barh', stacked=True, color=custom_palette)
+                plt.title('Science Keywords vs. Source Frequency')
+                plt.xlabel('Counts')
+                plt.ylabel('Science Keywords')
+                plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='Frequency')
+                plt.savefig(os.path.join(plot_dir, 'science_vs_source_freq.png')) 
+                plt.close()
+
+            elif missing_plot == 'science_vs_FoV.png':
+                db['band_list'] = db['band_list'].str.split(' ')
+                db['band_list'] = db['band_list'].apply(lambda x: [y.strip() for y in x])
+                db = db.explode('band_list')
+                db['fov'] = db['band_list'].apply(lambda x: get_fov_from_band(int(x)))
+                fov_bins = np.arange(db['fov'].min(), db['fov'].max(), 10)  #  10 arcsec bins
+                db['fov_bins'] = pd.cut(db['fov'], bins=fov_bins)
+
+                db_sk_fov = db.groupby(['science_keyword', 'fov_bins']).size().unstack(fill_value=0)
+
+                plt.rcParams["figure.figsize"] = (28,20)
+                db_sk_fov.plot(kind='barh', stacked=True, color=custom_palette)
+                plt.title('Science Keywords vs. FoV')
+                plt.xlabel('Counts')
+                plt.ylabel('Science Keywords')
+                plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left',title='FoV')
+                plt.savefig(os.path.join(plot_dir, 'science_vs_FoV.png'))
+                plt.close()
 
     def browse_output_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
@@ -354,7 +610,6 @@ class ALMASimulatorUI(QMainWindow):
         if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
             self.download_galaxy_zoo()
         
-    
     def closeEvent(self, event):
         self.settings.setValue("output_directory", self.output_entry.text())
         self.settings.setValue("tng_directory", self.tng_entry.text())
@@ -428,7 +683,54 @@ class ALMASimulatorUI(QMainWindow):
             self.remove_metadata_query_widgets()
         self.add_metadata_query_widgets()
         self.metadata_query_widgets_added = True
-       
+        science_keyword_number = self.science_keyword_entry.text()
+        scientific_category_number = self.scientific_category_entry.text()
+        band = self.band_entry.text()
+        fov_input = self.fov_entry.text()
+        time_resolution_input = self.time_resolution_entry.text()
+        frequency_input = self.frequency_entry.text()
+        save_to_input = self.query_save_entry.text()
+
+        # Get selected science keywords and categories
+        science_keyword = [self.science_keywords[int(i)] for i in science_keyword_number.split()] if science_keyword_number else None
+        scientific_category = [self.scientific_categories[int(i)] for i in scientific_category_number.split()] if scientific_category_number else None
+        bands = [int(x) for x in band.split()] if band else None
+        def to_range(text):
+            values = [float(x) for x in text.split()] if text else None
+            return tuple(values) if values and len(values) > 1 else (0, values[0]) if values else None
+        fov_range = to_range(fov_input)
+        time_resolution_range = to_range(time_resolution_input)
+        frequency_range = to_range(frequency_input)
+        df = self.query_by_science_type(science_keyword, scientific_category, bands, fov_range, time_resolution_range, None, frequency_range)
+        df = df.drop_duplicates(subset='member_ous_uid').drop(df[df['science_keyword'] == ''].index)
+        # Rename columns and select relevant data
+        rename_columns = {
+            'target_name': 'ALMA_source_name',
+            'pwv': 'PWV',
+            'schedblock_name': 'SB_name',
+            'velocity_resolution': 'Vel.res.',
+            'spatial_resolution': 'Ang.res.',
+            's_ra': 'RA',
+            's_dec': 'Dec',
+            's_fov': 'FOV',
+            't_resolution': 'Int.Time',
+            'cont_sensitivity_bandwidth': 'Cont_sens_mJybeam',
+            'sensitivity_10kms': 'Line_sens_10kms_mJybeam',
+            'obs_release_date': 'Obs.date',
+            'band_list': 'Band',
+            'bandwidth': 'Bandwidth',
+            'frequency': 'Freq',
+            'frequency_support': 'Freq.sup.'
+        }
+        df.rename(columns=rename_columns, inplace=True)
+        database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time',
+                      'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq',
+                       'Freq.sup.', 'antenna_arrays']]
+        database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
+        database.to_csv(save_to_input, index=False)
+        self.metadata = dataabase
+        self.terminal.add_log(f"Metadata saved to {save_to_input}")
+        del database
 
     def add_metadata_query_widgets(self):
         # Create widgets for querying parameters
@@ -490,7 +792,6 @@ class ALMASimulatorUI(QMainWindow):
         self.left_layout.insertLayout(16, frequency_row)
         self.left_layout.insertWidget(17, execute_query_button)
         
-
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
         # all the rows and widgets added in add_metadata_query_widgets.
