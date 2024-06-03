@@ -4,13 +4,14 @@ import pandas as pd
 import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QScrollArea, QGridLayout, 
-    QGroupBox, QCheckBox, QRadioButton, QButtonGroup, QSizePolicy,
+    QGroupBox, QCheckBox, QRadioButton, QButtonGroup, QSizePolicy, QCheckBox,
     QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox, QPlainTextEdit  
 )
 from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap
 from kaggle import api
 import utility.alma as ual
+import utility.astro as uas
 
 class EmittingStream(QIODevice):
     def __init__(self, parent=None):
@@ -157,34 +158,40 @@ class ALMASimulatorUI(QMainWindow):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
 
         # --- Create Widgets ---
+
+        # 1
         self.output_label = QLabel("Output Directory:")
         self.output_entry = QLineEdit()
         self.output_button = QPushButton("Browse")
         self.output_button.clicked.connect(self.browse_output_directory)
-
+        # 2
         self.tng_label = QLabel("TNG Directory:")
         self.tng_entry = QLineEdit()
         self.tng_button = QPushButton("Browse")
         self.tng_button.clicked.connect(self.browse_tng_directory)
-
+        # 3
         self.galaxy_zoo_label = QLabel("Galaxy Zoo Directory:")
         self.galaxy_zoo_entry = QLineEdit()
         self.galaxy_zoo_button = QPushButton("Browse")
         self.galaxy_zoo_button.clicked.connect(self.browse_galaxy_zoo_directory)
-
+        # 4
         self.project_name_label = QLabel("Project Name:")
         self.project_name_entry = QLineEdit()
-
+        # 5
         self.n_sims_label = QLabel("Number of Simulations:")
         self.n_sims_entry = QLineEdit()
-
+        # 6
         self.ncpu_label = QLabel("Total Number of CPUs:")
         self.ncpu_entry = QLineEdit()
-
+        # 7
+        self.save_format_label = QLabel("Save Format:")
+        self.save_format_combo = QComboBox()
+        self.save_format_combo.addItems(["npz", "fits", 'h5'])
+        # 8
         self.comp_mode_label = QLabel("Computation Mode:")
         self.comp_mode_combo = QComboBox()
         self.comp_mode_combo.addItems(["sequential", "parallel"])
-
+        # 9
         self.metadata_mode_label = QLabel("Metadata Retrieval Mode:")
         self.metadata_mode_combo = QComboBox()
         self.metadata_mode_combo.addItems(["query", "get"])
@@ -256,6 +263,12 @@ class ALMASimulatorUI(QMainWindow):
         ncpu_row.addWidget(self.ncpu_entry)
         self.left_layout.addLayout(ncpu_row)
 
+        # Save format Row
+        save_format_row = QHBoxLayout()
+        save_format_row.addWidget(self.save_format_label)
+        save_format_row.addWidget(self.save_format_combo)
+        self.left_layout.addLayout(save_format_row)
+
         # Computation Mode Row
         comp_mode_row = QHBoxLayout()
         comp_mode_row.addWidget(self.comp_mode_label)
@@ -280,19 +293,20 @@ class ALMASimulatorUI(QMainWindow):
         main_layout.addLayout(self.left_layout)
         main_layout.addLayout(right_layout)
 
+        self.line_displayed = False
+        self.add_line_widgets()
+        self.add_query_widgets()
         # Load saved settings
         self.load_settings()
-
         # Redirect stdout and stderr
         #sys.stdout = EmittingStream(self.terminal)
         #sys.stderr = EmittingStream(self.terminal)
         self.terminal.start_log("")
         # Check metadata mode on initialization
+        self.toggle_line_mode_widgets()
         self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
         #self.load_metadata(self.metadata_path_entry.text())
         current_mode = self.metadata_mode_combo.currentText()
-        if current_mode == 'query':
-            self.add_query_widgets()
         self.toggle_metadata_browse(current_mode)  # Call here
 
     def get_tap_service(self):
@@ -593,6 +607,9 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_mode_combo.setCurrentText("get")
         self.comp_mode_combo.setCurrentText("sequential")
         self.query_save_entry.clear()
+        self.save_format_combo.setCurrentText("npz")
+        self.redshift_entry.clear()
+        self.num_lines_entry.clear()
 
     def load_settings(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
@@ -603,12 +620,21 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", "get"))
         self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", "sequential"))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
-        if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text():
+        self.save_format_combo.setCurrentText(self.settings.value("save_format", "npz"))
+        if self.metadata_mode_combo.currentText() == "get":
             self.load_metadata(self.metadata_path_entry.text())
-        elif self.metadata_mode_combo.currentText() == "query" and self.settings.value("query_save_entry", ""):
+        elif self.metadata_mode_combo.currentText() == "query":
             self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
         if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
             self.download_galaxy_zoo()
+        line_mode = self.settings.value("line_mode", False, type=bool)
+        self.line_mode_checkbox.setChecked(line_mode)
+        if line_mode:
+            self.line_index_entry.setText(self.settings.value("line_indices", ""))
+        else:
+            # Load non-line mode values
+            self.redshift_entry.setText(self.settings.value("redshifts", ""))
+            self.num_lines_entry.setText(self.settings.value("num_lines", ""))
         
     def closeEvent(self, event):
         self.settings.setValue("output_directory", self.output_entry.text())
@@ -616,7 +642,21 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
         self.settings.setValue('n_sims', self.n_sims_entry.text())
         self.settings.setValue("ncpu", self.ncpu_entry.text())
-        self.settings.setValue("metadata_path", self.metadata_path_entry.text())
+        if self.metadata_mode_combo.currentText() == "get":
+            self.settings.setValue("metadata_path", self.metadata_path_entry.text())
+        elif self.metadata_mode_combo.currentText() == "query":
+            self.settings.setValue("query_save_entry", self.query_save_entry.text())
+        self.settings.setValue("metadata_mode", self.metadata_mode_combo.currentText())
+        self.settings.setValue("comp_mode", self.comp_mode_combo.currentText())
+        self.settings.setValue("save_format", self.save_format_combo.currentText())
+        self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
+        if self.line_mode_checkbox.isChecked():
+            self.settings.setValue("line_indices", self.line_index_entry.text())
+        else:
+            # Save non-line mode values
+            self.settings.setValue("redshifts", self.redshift_entry.text())
+            self.settings.setValue("num_lines", self.num_lines_entry.text())
+
         super().closeEvent(event)
 
     def toggle_metadata_browse(self, mode):
@@ -645,7 +685,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(8, self.metadata_path_row)
+        self.left_layout.insertLayout(13, self.metadata_path_row)
         self.left_layout.update() 
 
     def update_query_save_label(self, query_type):
@@ -670,7 +710,7 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log("Querying metadata by science type...")
         self.plot_window = PlotWindow()
         self.plot_window.show()
-        self.science_keywords, self.scientific_categories = ual.get_science_types()
+        self.science_keywords, self.scientific_categories = self.get_science_types()
         self.terminal.add_log('Available science keywords:')
         for i, keyword in enumerate(self.science_keywords):
             self.terminal.add_log(f'{i}: {keyword}')
@@ -728,7 +768,7 @@ class ALMASimulatorUI(QMainWindow):
                        'Freq.sup.', 'antenna_arrays']]
         database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
         database.to_csv(save_to_input, index=False)
-        self.metadata = dataabase
+        self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         del database
 
@@ -784,13 +824,13 @@ class ALMASimulatorUI(QMainWindow):
         execute_query_row.addWidget(execute_query_button)
 
         # Insert rows into left_layout (adjust index if needed)
-        self.left_layout.insertLayout(11, science_keyword_row)
-        self.left_layout.insertLayout(12, scientific_category_row)
-        self.left_layout.insertLayout(13, band_row)
-        self.left_layout.insertLayout(14, fov_row)
-        self.left_layout.insertLayout(15, time_resolution_row)
-        self.left_layout.insertLayout(16, frequency_row)
-        self.left_layout.insertWidget(17, execute_query_button)
+        self.left_layout.insertLayout(15, science_keyword_row)
+        self.left_layout.insertLayout(16, scientific_category_row)
+        self.left_layout.insertLayout(17, band_row)
+        self.left_layout.insertLayout(18, fov_row)
+        self.left_layout.insertLayout(19, time_resolution_row)
+        self.left_layout.insertLayout(20, frequency_row)
+        self.left_layout.insertWidget(21, execute_query_button)
         
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
@@ -839,9 +879,9 @@ class ALMASimulatorUI(QMainWindow):
         self.query_save_row.addWidget(self.query_save_entry)
         self.query_save_row.addWidget(self.query_save_button)
         # Insert layouts at the correct positions
-        self.left_layout.insertLayout(8, self.query_type_row)
-        self.left_layout.insertLayout(9, self.query_save_row)
-        self.left_layout.insertWidget(10, self.query_execute_button)
+        self.left_layout.insertLayout(13, self.query_type_row)
+        self.left_layout.insertLayout(14, self.query_save_row)
+        self.left_layout.insertWidget(15, self.query_execute_button)
 
     def remove_metadata_browse(self):
         if self.metadata_path_row.parent() is not None:
@@ -908,6 +948,90 @@ class ALMASimulatorUI(QMainWindow):
             import traceback
             traceback.print_exc()
         
+    def add_line_widgets(self):
+        self.line_mode_checkbox = QCheckBox("Line Mode")
+        self.line_mode_checkbox.stateChanged.connect(self.toggle_line_mode_widgets)
+        self.left_layout.insertWidget(8, self.line_mode_checkbox) 
+        # Widgets for Line Mode
+        line_index_label = QLabel('Select Line Indices (space-separated):')
+        self.line_index_entry = QLineEdit()
+
+        self.line_mode_row = QHBoxLayout()
+        self.line_mode_row.addWidget(line_index_label)
+        self.line_mode_row.addWidget(self.line_index_entry)
+        # Widgets for Non-Line Mode
+        redshift_label = QLabel('Redshifts (space-separated):')
+        self.redshift_entry = QLineEdit()
+        num_lines_label = QLabel('Number of Lines to Simulate:')
+        self.num_lines_entry = QLineEdit()
+        self.non_line_mode_row1 = QHBoxLayout()
+        self.non_line_mode_row1.addWidget(redshift_label)
+        self.non_line_mode_row1.addWidget(self.redshift_entry)
+        self.non_line_mode_row2 = QHBoxLayout()
+        self.non_line_mode_row2.addWidget(num_lines_label)
+        self.non_line_mode_row2.addWidget(self.num_lines_entry)
+
+        
+        self.left_layout.insertLayout(9, self.line_mode_row)    # Insert at the end 
+        self.left_layout.insertLayout(9, self.non_line_mode_row1) # Insert at the end
+        self.left_layout.insertLayout(10, self.non_line_mode_row2) # Insert at the end
+        # Initially hide both line and non-line mode widgets
+
+        for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
+            for i in range(row.count()):
+                item = row.itemAt(i)
+                if item.widget():
+                    item.widget().hide()
+
+    def toggle_line_mode_widgets(self):
+        """Shows/hides the appropriate input rows based on line mode checkbox state."""
+        if self.line_mode_checkbox.isChecked():
+            # Show the widgets in line_mode_row
+            for i in range(self.line_mode_row.count()):
+                item = self.line_mode_row.itemAt(i)
+                if item.widget():
+                    item.widget().show()  
+            # Hide the widgets in non_line_mode_row1 and non_line_mode_row2
+            for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
+                for i in range(row.count()):
+                    item = row.itemAt(i)
+                    if item.widget():
+                        item.widget().hide()
+            if self.line_displayed == False:
+                self.line_display()
+        else:
+            # Hide the widgets in line_mode_row
+            for i in range(self.line_mode_row.count()):
+                item = self.line_mode_row.itemAt(i)
+                if item.widget():
+                    item.widget().hide()
+            # Show the widgets in non_line_mode_row1 and non_line_mode_row2
+            for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
+                for i in range(row.count()):
+                    item = row.itemAt(i)
+                    if item.widget():
+                        item.widget().show()
+
+    def line_display(self):
+        """
+        Display the line emission's rest frequency.
+
+        Parameter:
+        main_path (str): Path to the directory where the file.csv is stored.
+
+        Return:
+        pd.DataFrame : Dataframe with line names and rest frequencies.
+        """
+        
+        path_line_emission_csv = os.path.join(os.getcwd(), 'brightnes', 'calibrated_lines.csv')
+        db_line = uas.read_line_emission_csv(path_line_emission_csv, sep=',').sort_values(by='Line')
+        line_names = db_line['Line'].values
+        rest_frequencies = db_line['freq(GHz)'].values
+        self.terminal.add_log('Please choose the lines from the following list\n')
+        for i in range(len(line_names)):
+            self.terminal.add_log(f'{i}: {line_names[i]} - {rest_frequencies[i]:.2e} GHz\n')
+        self.line_displayed = True
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
