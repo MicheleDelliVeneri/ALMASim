@@ -1,0 +1,88 @@
+Line N2H+(4–3):
+Line N2H+(4–3):
+Luminosity given by process_spectral_data: nan Jy
+Luminosity given by luminosity_to_jy: -1.08e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: nan
+Frequency steps value: 1.56e-01
+
+Line H2O(4-3):
+Line H2O(4-3):
+Luminosity given by process_spectral_data: 2.24e-03 Jy
+Luminosity given by luminosity_to_jy: 4.36e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: -6.68e+00
+Frequency steps value: 1.56e-01
+
+Line HNC(4–3):
+Line HNC(4–3):
+Luminosity given by process_spectral_data: 2.12e-03 Jy
+Luminosity given by luminosity_to_jy: 9.18e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: -6.38e+00
+Frequency steps value: 1.56e-01
+
+Line SiO(9–8):
+Line SiO(9–8):
+Luminosity given by process_spectral_data: nan Jy
+Luminosity given by luminosity_to_jy: -3.22e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: nan
+Frequency steps value: 1.56e-01
+
+Line CS(8–7):
+Line CS(8–7):
+Luminosity given by process_spectral_data: 5.56e-04 Jy
+Luminosity given by luminosity_to_jy: 1.79e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: -7.05e+00
+Frequency steps value: 1.56e-01
+
+Line HCO+(4–3):
+Line HCO+(4–3):
+Luminosity given by process_spectral_data: 2.29e-03 Jy
+Luminosity given by luminosity_to_jy: 6.41e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: -6.54e+00
+Frequency steps value: 1.56e-01
+
+Line HCN(4–3):
+Line HCN(4–3):
+Luminosity given by process_spectral_data: 2.81e-03 Jy
+Luminosity given by luminosity_to_jy: 7.25e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: -6.49e+00
+Frequency steps value: 1.56e-01
+
+Line H26α:
+Line H26α:
+Luminosity given by process_spectral_data: nan Jy
+Luminosity given by luminosity_to_jy: -5.39e-03 Jy
+Infrared Luminosity: 9.85e+10
+c value: nan
+Frequency steps value: 1.56e-01
+
+Line H25α:
+Line H25α:
+Luminosity given by process_spectral_data: nan Jy
+Luminosity given by luminosity_to_jy: -2.58e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: nan
+Frequency steps value: 1.56e-01
+
+Line CCH(4–3) 349:
+Line CCH(4–3) 349:
+Luminosity given by process_spectral_data: 1.18e-03 Jy
+Luminosity given by luminosity_to_jy: 3.78e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: -6.78e+00
+Frequency steps value: 1.56e-01
+
+Line SiO(8–7):
+Line SiO(8–7):
+Luminosity given by process_spectral_data: nan Jy
+Luminosity given by luminosity_to_jy: -2.65e-02 Jy
+Infrared Luminosity: 9.85e+10
+c value: nan
+Frequency steps value: 1.56e-01
+
