@@ -295,6 +295,8 @@ class ALMASimulatorUI(QMainWindow):
 
         self.line_displayed = False
         self.add_line_widgets()
+        self.add_dim_widgets()
+        self.add_model_widgets()
         self.add_query_widgets()
         # Load saved settings
         self.load_settings()
@@ -610,6 +612,12 @@ class ALMASimulatorUI(QMainWindow):
         self.save_format_combo.setCurrentText("npz")
         self.redshift_entry.clear()
         self.num_lines_entry.clear()
+        self.snr_entry.clear()
+        self.fix_spatial_checkbox.setChecked(False)
+        self.n_pix_entry.clear()
+        self.fix_spectral_checkbox.setChecked(False)
+        self.n_channels_entry.clear()
+        self.model_combo.setCurrentText("Point")
 
     def load_settings(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
@@ -635,6 +643,12 @@ class ALMASimulatorUI(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
+        self.snr_entry.setText(self.settings.value("snr", ""))
+        self.fix_spatial_checkbox.setChecked(self.settings.value("fix_spatial", False, type=bool))
+        self.n_pix_entry.setText(self.settings.value("n_pix", ""))
+        self.fix_spectral_checkbox.setChecked(self.settings.value("fix_spectral", False, type=bool))
+        self.n_channels_entry.setText(self.settings.value("n_channels", ""))
+        self.model_combo.setCurrentText(self.settings.value("model", "Point"))
         
     def closeEvent(self, event):
         self.settings.setValue("output_directory", self.output_entry.text())
@@ -656,6 +670,12 @@ class ALMASimulatorUI(QMainWindow):
             # Save non-line mode values
             self.settings.setValue("redshifts", self.redshift_entry.text())
             self.settings.setValue("num_lines", self.num_lines_entry.text())
+        self.settings.setValue("snr", self.snr_entry.text())
+        self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
+        self.settings.setValue("n_pix", self.n_pix_entry.text())
+        self.settings.setValue("fix_spectral", self.fix_spectral_checkbox.isChecked())
+        self.settings.setValue("n_channels", self.n_channels_entry.text())
+        self.settings.setValue("model", self.model_combo.currentText())
 
         super().closeEvent(event)
 
@@ -685,7 +705,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(13, self.metadata_path_row)
+        self.left_layout.insertLayout(15, self.metadata_path_row)
         self.left_layout.update() 
 
     def update_query_save_label(self, query_type):
@@ -824,13 +844,13 @@ class ALMASimulatorUI(QMainWindow):
         execute_query_row.addWidget(execute_query_button)
 
         # Insert rows into left_layout (adjust index if needed)
-        self.left_layout.insertLayout(15, science_keyword_row)
-        self.left_layout.insertLayout(16, scientific_category_row)
-        self.left_layout.insertLayout(17, band_row)
-        self.left_layout.insertLayout(18, fov_row)
-        self.left_layout.insertLayout(19, time_resolution_row)
-        self.left_layout.insertLayout(20, frequency_row)
-        self.left_layout.insertWidget(21, execute_query_button)
+        self.left_layout.insertLayout(17, science_keyword_row)
+        self.left_layout.insertLayout(18, scientific_category_row)
+        self.left_layout.insertLayout(19, band_row)
+        self.left_layout.insertLayout(20, fov_row)
+        self.left_layout.insertLayout(21, time_resolution_row)
+        self.left_layout.insertLayout(22, frequency_row)
+        self.left_layout.insertWidget(23, execute_query_button)
         
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
@@ -879,9 +899,9 @@ class ALMASimulatorUI(QMainWindow):
         self.query_save_row.addWidget(self.query_save_entry)
         self.query_save_row.addWidget(self.query_save_button)
         # Insert layouts at the correct positions
-        self.left_layout.insertLayout(13, self.query_type_row)
-        self.left_layout.insertLayout(14, self.query_save_row)
-        self.left_layout.insertWidget(15, self.query_execute_button)
+        self.left_layout.insertLayout(15, self.query_type_row)
+        self.left_layout.insertLayout(16, self.query_save_row)
+        self.left_layout.insertWidget(17, self.query_execute_button)
 
     def remove_metadata_browse(self):
         if self.metadata_path_row.parent() is not None:
@@ -1032,6 +1052,45 @@ class ALMASimulatorUI(QMainWindow):
             self.terminal.add_log(f'{i}: {line_names[i]} - {rest_frequencies[i]:.2e} GHz\n')
         self.line_displayed = True
 
+    def add_dim_widgets(self):
+        self.snr_checkbox = QCheckBox("Set SNR")
+        self.snr_entry = QLineEdit()
+        self.snr_entry.setVisible(False) 
+        self.snr_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.snr_entry))
+
+        # --- Fix Spatial Dimension Checkbox and Field ---
+        self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dimension")
+        self.n_pix_entry = QLineEdit()
+        self.n_pix_entry.setVisible(False)
+        self.fix_spatial_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_pix_entry))
+
+        # --- Fix Spectral Dimension Checkbox and Field ---
+        self.fix_spectral_checkbox = QCheckBox("Fix Spectral Dimension")
+        self.n_channels_entry = QLineEdit()
+        self.n_channels_entry.setVisible(False)
+        self.fix_spectral_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry))
+
+        # --- Layout for Checkboxes and Fields ---
+        checkbox_row = QHBoxLayout()
+        checkbox_row.addWidget(self.snr_checkbox)
+        checkbox_row.addWidget(self.snr_entry)
+        checkbox_row.addWidget(self.fix_spatial_checkbox)
+        checkbox_row.addWidget(self.n_pix_entry)
+        checkbox_row.addWidget(self.fix_spectral_checkbox)
+        checkbox_row.addWidget(self.n_channels_entry)
+        self.left_layout.insertLayout(11, checkbox_row)
+
+    def add_model_widgets(self):
+        self.model_label = QLabel("Select Model:")
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["Point", "Gaussian", "Extended", 'Diffuse', 'Galaxy Zoo', 'Hubble 100', 'Molecular'])
+        self.model_row = QHBoxLayout()
+        self.model_row.addWidget(self.model_label)
+        self.model_row.addWidget(self.model_combo)
+        self.left_layout.insertLayout(12, self.model_row)
+    
+    def toggle_dim_widgets_visibility(self, widget):
+         widget.setVisible(self.sender().isChecked())
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
