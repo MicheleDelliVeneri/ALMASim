@@ -618,6 +618,8 @@ class ALMASimulatorUI(QMainWindow):
         self.fix_spectral_checkbox.setChecked(False)
         self.n_channels_entry.clear()
         self.model_combo.setCurrentText("Point")
+        self.line_mode_checkbox.setChecked(False)
+        self.serendipitous_checkbox.setChecked(False)
 
     def load_settings(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
@@ -648,6 +650,7 @@ class ALMASimulatorUI(QMainWindow):
         self.n_pix_entry.setText(self.settings.value("n_pix", ""))
         self.fix_spectral_checkbox.setChecked(self.settings.value("fix_spectral", False, type=bool))
         self.n_channels_entry.setText(self.settings.value("n_channels", ""))
+        self.serendipitous_checkbox.setChecked(self.settings.value("inject_serendipitous", False, type=bool))
         self.model_combo.setCurrentText(self.settings.value("model", "Point"))
         
     def closeEvent(self, event):
@@ -675,6 +678,7 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("n_pix", self.n_pix_entry.text())
         self.settings.setValue("fix_spectral", self.fix_spectral_checkbox.isChecked())
         self.settings.setValue("n_channels", self.n_channels_entry.text())
+        self.settings.setValue("inject_serendipitous", self.serendipitous_checkbox.isChecked())
         self.settings.setValue("model", self.model_combo.currentText())
 
         super().closeEvent(event)
@@ -1059,16 +1063,19 @@ class ALMASimulatorUI(QMainWindow):
         self.snr_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.snr_entry))
 
         # --- Fix Spatial Dimension Checkbox and Field ---
-        self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dimension")
+        self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dim")
         self.n_pix_entry = QLineEdit()
         self.n_pix_entry.setVisible(False)
         self.fix_spatial_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_pix_entry))
 
         # --- Fix Spectral Dimension Checkbox and Field ---
-        self.fix_spectral_checkbox = QCheckBox("Fix Spectral Dimension")
+        self.fix_spectral_checkbox = QCheckBox("Fix Spectral Dim")
         self.n_channels_entry = QLineEdit()
         self.n_channels_entry.setVisible(False)
         self.fix_spectral_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry))
+
+        # --- Inject Serendipitous sources ----
+        self.serendipitous_checkbox = QCheckBox("Inject Serendipitous")
 
         # --- Layout for Checkboxes and Fields ---
         checkbox_row = QHBoxLayout()
@@ -1078,6 +1085,7 @@ class ALMASimulatorUI(QMainWindow):
         checkbox_row.addWidget(self.n_pix_entry)
         checkbox_row.addWidget(self.fix_spectral_checkbox)
         checkbox_row.addWidget(self.n_channels_entry)
+        checkbox_row.addWidget(self.serendipitous_checkbox)
         self.left_layout.insertLayout(11, checkbox_row)
 
     def add_model_widgets(self):
