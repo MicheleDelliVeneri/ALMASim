@@ -201,14 +201,13 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_path_entry = QLineEdit()
         self.metadata_path_button = QPushButton("Browse")
         self.metadata_path_button.clicked.connect(self.browse_metadata_path)
-        #self.metadata_path_entry.editingFinished.connect(self.metadata_path_set)
         self.metadata_path_row = QHBoxLayout()
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
 
         self.start_button = QPushButton("Start Simulation")
-        # self.start_button.clicked.connect(self.start_simulation)
+        self.start_button.clicked.connect(self.start_simulation)
 
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self.reset_fields)
@@ -719,12 +718,14 @@ class ALMASimulatorUI(QMainWindow):
             self.query_save_label.setText("Load Target List:")
 
     def execute_query(self):
+        self.terminal.add_log("Executing query...")
         if self.metadata_mode_combo.currentText() == "query":
             query_type = self.query_type_combo.currentText()
             if query_type == "science":
-                self.query_for_metadata_by_science_type()
+                #metadata_name = self.query_save_entry.text().split(os.sep)[-1]
+                self.metadata = self.query_for_metadata_by_science_type()
             elif query_type == "target":
-                self.query_metadata_from_target_list()
+                self.metadata = ual.query_metadata_from_target_list()
             else:
                 # Handle invalid query type (optional)
                 pass  
@@ -732,9 +733,9 @@ class ALMASimulatorUI(QMainWindow):
     def query_for_metadata_by_science_type(self):
         # Implement the logic to query metadata based on science type
         self.terminal.add_log("Querying metadata by science type...")
-        self.plot_window = PlotWindow()
-        self.plot_window.show()
-        self.science_keywords, self.scientific_categories = self.get_science_types()
+        #self.plot_window = PlotWindow()
+        #self.plot_window.show()
+        self.science_keywords, self.scientific_categories = ual.get_science_types()
         self.terminal.add_log('Available science keywords:')
         for i, keyword in enumerate(self.science_keywords):
             self.terminal.add_log(f'{i}: {keyword}')
@@ -754,7 +755,7 @@ class ALMASimulatorUI(QMainWindow):
         time_resolution_input = self.time_resolution_entry.text()
         frequency_input = self.frequency_entry.text()
         save_to_input = self.query_save_entry.text()
-
+        
         # Get selected science keywords and categories
         science_keyword = [self.science_keywords[int(i)] for i in science_keyword_number.split()] if science_keyword_number else None
         scientific_category = [self.scientific_categories[int(i)] for i in scientific_category_number.split()] if scientific_category_number else None
@@ -765,7 +766,7 @@ class ALMASimulatorUI(QMainWindow):
         fov_range = to_range(fov_input)
         time_resolution_range = to_range(time_resolution_input)
         frequency_range = to_range(frequency_input)
-        df = self.query_by_science_type(science_keyword, scientific_category, bands, fov_range, time_resolution_range, None, frequency_range)
+        df = ual.query_by_science_type(science_keyword, scientific_category, bands, fov_range, time_resolution_range, None, frequency_range)
         df = df.drop_duplicates(subset='member_ous_uid').drop(df[df['science_keyword'] == ''].index)
         # Rename columns and select relevant data
         rename_columns = {
@@ -795,6 +796,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         del database
+        
 
     def add_metadata_query_widgets(self):
         # Create widgets for querying parameters
@@ -816,52 +818,52 @@ class ALMASimulatorUI(QMainWindow):
         frequency_label = QLabel('Select source frequency range (min max) or max only (space-separated):')
         self.frequency_entry = QLineEdit()
         
-        execute_query_button = QPushButton("Continue Query")
-        execute_query_button.clicked.connect(self.execute_query)
+        self.execute_query_button = QPushButton("Continue Query")
+        self.execute_query_button.clicked.connect(self.execute_query)
 
         # Create layouts and add widgets
-        science_keyword_row = QHBoxLayout()
-        science_keyword_row.addWidget(science_keyword_label)
-        science_keyword_row.addWidget(self.science_keyword_entry)
+        self.science_keyword_row = QHBoxLayout()
+        self.science_keyword_row.addWidget(science_keyword_label)
+        self.science_keyword_row.addWidget(self.science_keyword_entry)
 
-        scientific_category_row = QHBoxLayout()
-        scientific_category_row.addWidget(scientific_category_label)
-        scientific_category_row.addWidget(self.scientific_category_entry)
+        self.scientific_category_row = QHBoxLayout()
+        self.scientific_category_row.addWidget(scientific_category_label)
+        self.scientific_category_row.addWidget(self.scientific_category_entry)
 
-        band_row = QHBoxLayout()
-        band_row.addWidget(band_label)
-        band_row.addWidget(self.band_entry)
+        self.band_row = QHBoxLayout()
+        self.band_row.addWidget(band_label)
+        self.band_row.addWidget(self.band_entry)
 
-        fov_row = QHBoxLayout()
-        fov_row.addWidget(fov_label)
-        fov_row.addWidget(self.fov_entry)
+        self.fov_row = QHBoxLayout()
+        self.fov_row.addWidget(fov_label)
+        self.fov_row.addWidget(self.fov_entry)
 
-        time_resolution_row  = QHBoxLayout()
-        time_resolution_row.addWidget(time_resolution_label)
-        time_resolution_row.addWidget(self.time_resolution_entry)
+        self.time_resolution_row  = QHBoxLayout()
+        self.time_resolution_row.addWidget(time_resolution_label)
+        self.time_resolution_row.addWidget(self.time_resolution_entry)
 
-        frequency_row = QHBoxLayout()
-        frequency_row.addWidget(frequency_label)
-        frequency_row.addWidget(self.frequency_entry)
+        self.frequency_row = QHBoxLayout()
+        self.frequency_row.addWidget(frequency_label)
+        self.frequency_row.addWidget(self.frequency_entry)
 
-        execute_query_row = QHBoxLayout()
-        execute_query_row.addWidget(execute_query_button)
+        self.execute_query_row = QHBoxLayout()
+        self.execute_query_row.addWidget(self.execute_query_button)
 
         # Insert rows into left_layout (adjust index if needed)
-        self.left_layout.insertLayout(17, science_keyword_row)
-        self.left_layout.insertLayout(18, scientific_category_row)
-        self.left_layout.insertLayout(19, band_row)
-        self.left_layout.insertLayout(20, fov_row)
-        self.left_layout.insertLayout(21, time_resolution_row)
-        self.left_layout.insertLayout(22, frequency_row)
-        self.left_layout.insertWidget(23, execute_query_button)
+        self.left_layout.insertLayout(17, self.science_keyword_row)
+        self.left_layout.insertLayout(18, self.scientific_category_row)
+        self.left_layout.insertLayout(19, self.band_row)
+        self.left_layout.insertLayout(20, self.fov_row)
+        self.left_layout.insertLayout(21, self.time_resolution_row)
+        self.left_layout.insertLayout(22, self.frequency_row)
+        self.left_layout.insertWidget(23, self.execute_query_button)
         
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
         # all the rows and widgets added in add_metadata_query_widgets.
         widgets_to_remove = [
             self.science_keyword_row, self.scientific_category_row, self.band_row,
-            self.fov_row, self.time_resolution_row, self.total_time_row, self.frequency_row,
+            self.fov_row, self.time_resolution_row,  self.frequency_row, self.execute_query_row
         ]
 
         for widget in widgets_to_remove:
@@ -1057,10 +1059,17 @@ class ALMASimulatorUI(QMainWindow):
         self.line_displayed = True
 
     def add_dim_widgets(self):
+        # --- Set SNR ---
         self.snr_checkbox = QCheckBox("Set SNR")
         self.snr_entry = QLineEdit()
         self.snr_entry.setVisible(False) 
         self.snr_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.snr_entry))
+
+        # --- Set Infrared Luminosity ---
+        self.ir_luminosity_checkbox = QCheckBox("Set IR Luminosity")
+        self.ir_luminosity_entry = QLineEdit()
+        self.ir_luminosity_entry.setVisible(False)
+        self.ir_luminosity_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.ir_luminosity_entry))
 
         # --- Fix Spatial Dimension Checkbox and Field ---
         self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dim")
@@ -1074,6 +1083,7 @@ class ALMASimulatorUI(QMainWindow):
         self.n_channels_entry.setVisible(False)
         self.fix_spectral_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry))
 
+
         # --- Inject Serendipitous sources ----
         self.serendipitous_checkbox = QCheckBox("Inject Serendipitous")
 
@@ -1081,6 +1091,8 @@ class ALMASimulatorUI(QMainWindow):
         checkbox_row = QHBoxLayout()
         checkbox_row.addWidget(self.snr_checkbox)
         checkbox_row.addWidget(self.snr_entry)
+        checkbox_row.addWidget(self.ir_luminosity_checkbox)
+        checkbox_row.addWidget(self.ir_luminosity_entry)
         checkbox_row.addWidget(self.fix_spatial_checkbox)
         checkbox_row.addWidget(self.n_pix_entry)
         checkbox_row.addWidget(self.fix_spectral_checkbox)
@@ -1099,6 +1111,36 @@ class ALMASimulatorUI(QMainWindow):
     
     def toggle_dim_widgets_visibility(self, widget):
          widget.setVisible(self.sender().isChecked())
+
+    def start_simulation(self):
+        # Implement the logic to start the simulation
+        self.terminal.add_log("Starting simulation...")
+        ras = self.metadata['RA'].values
+        decs = self.metadata['Dec'].values
+        bands = self.metadata['Band'].values
+        ang_ress = self.metadata['Ang.res.'].values
+        vel_ress = self.metadata['Vel.res.'].values
+        fovs = self.metadata['FOV'].values
+        obs_dates = self.metadata['Obs.date'].values
+        pwvs = self.metadata['PWV'].values
+        int_times = self.metadata['Int.Time'].values
+        bandwidths = self.metadata['Bandwidth'].values
+        freqs = self.metadata['Freq'].values
+        freq_supports = self.metadata['Freq.sup.'].values
+        antenna_arrays = self.metadata['antenna_arrays'].values
+        cont_sens = self.metadata['Cont_sens_mJybeam'].values
+        n_sims = int(self.n_sims_entry.text())
+        n_pixs = np.array([int(self.n_pix_entry.text())] * n_sims)
+        n_channels = np.array([int(self.n_channels_entry.text())] * n_sims)
+        source_types = np.array([self.model_combo.currentText()] * n_sims)
+        output_paths = np.array([self.output_entry.text()] * n_sims)
+        tng_paths = np.array([self.tng_entry.text()] * n_sims)
+        galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
+        main_paths = np.array([os.getcwd()] * n_sims)
+        ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
+        project_names = np.array([self.project_name_entry.text()] * n_sims)
+        
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -13,10 +13,11 @@ from math import pi
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Utility function to get a TAP service from a list of URLs, cycling through until one works
 def get_tap_service():
-    urls = [        "https://almascience.eso.org/tap",
+    urls = ["https://almascience.eso.org/tap",
         "https://almascience.nao.ac.jp/tap",
         "https://almascience.nrao.edu/tap"
     ]
@@ -318,6 +319,7 @@ def query_for_metadata_by_targets(targets, path):
     database.to_csv(path, index=False)
     return database
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_science_types():
     service = get_tap_service()
     query = f"""  
@@ -325,7 +327,11 @@ def get_science_types():
             FROM ivoa.obscore  
             WHERE science_observation = 'T'    
             """
-    db = service.search(query).to_table().to_pandas()
+    try:
+        db = service.search(query).to_table().to_pandas()
+    except(pyvo.dal.exceptions.DALServiceError, requests.exceptions.RequestException) as e:
+        print(f"Error querying TAP service: {e}")
+        raise
     science_keywords = db['science_keyword'].unique()
     scientific_category = db['scientific_category'].unique()
     science_keywords = list(filter(lambda x: x != "", science_keywords))
@@ -346,7 +352,13 @@ def get_science_types():
                         keyword != 'Galaxy structure &evolution')]
     
     return  unique_keywords, scientific_category
-    
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+
+def search_with_retry(service, query):
+    return service.search(query, response_timeout=120).to_table().to_pandas()
+
+
 def query_by_science_type(science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
@@ -357,6 +369,14 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     pandas.DataFrame: A table of query results.
     """
     service = get_tap_service()
+    columns = [
+        'target_name', 'member_ous_uid', 'pwv', 'schedblock_name',  'velocity_resolution',
+        'spatial_resolution', 's_ra', 's_dec', 's_fov', 't_resolution',
+        'cont_sensitivity_bandwidth', 'sensitivity_10kms', 'obs_release_date', 
+        'band_list', 'bandwidth', 'frequency', 'frequency_support', 
+        'science_keyword', 'scientific_category', 'antenna_arrays', 't_max'
+    ]
+    columns_str = ', '.join(columns)
     # Default values for parameters if they are None
     if science_keyword is None:
         science_keyword = ""
@@ -415,17 +435,18 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     conditions = [science_keyword_query, scientific_category_query, band_query, fov_query, time_resolution_query, total_time_query, frequency_query]
     conditions = [cond for cond in conditions if cond]  # Remove empty conditions
     where_clause = " AND ".join(conditions)
-    where_clause += " AND is_mosaic = 'F' AND science_observation = 'T'"  # Add fixed conditions
+    where_clause = where_clause + " AND is_mosaic = 'F' AND science_observation = 'T'"  
 
     query = f"""
-            SELECT *
+            SELECT {columns_str}
             FROM ivoa.obscore
             WHERE {where_clause}
             """
 
-    result = service.search(query).to_table().to_pandas()
 
-    return result
+    results = search_with_retry(service, query)
+    return results
+    
 
 def plot_science_keywords_distributions(master_path):
     service = get_tap_service()
