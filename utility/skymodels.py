@@ -1878,7 +1878,10 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
     fwhm_xs = np.random.randint(1, fwhm_x, n_sources)
     fwhm_ys = np.random.randint(1, fwhm_y, n_sources)
     # generate a random number of lines for each serendipitous source
-    n_lines = np.random.randint(1, len(line_fluxes), n_sources)
+    if len(line_fluxes) == 1:
+        n_lines = np.array([1] * n_sources)
+    else:
+        n_lines = np.random.randint(1, 3, n_sources)
     # generate the width of the first line based on the first line of the central source
     s_fwhm_zs = np.random.randint(2, fwhm_zs[0], n_sources)
     # get posx and poy of the centtral source

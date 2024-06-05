@@ -220,7 +220,7 @@ if __name__ == '__main__':
             z0, z1 = float(redshifts[0]), float(redshifts[1])
             redshifts = np.random.uniform(z0, z1, n_sims)
         #n_lines = input(f'{RED}Please provide the number of lines you want to simulate as an integer: {RESET}')
-        n_lines = '2'
+        n_lines = '1'
         n_lines = np.array([int(n_lines)]*n_sims)
         rest_freq, _ = uas.get_line_info(main_path)
         line_names = np.array([None]*n_sims)
@@ -308,13 +308,14 @@ if __name__ == '__main__':
     else:
         tng_apis = np.array([None]*n_sims)    
     
+    print(z1)
     if source_type == 'extended': 
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, True, z1)
     else:
         metadata = uas.sample_given_redshift(metadata, n_sims, rest_freq, False, z1)
     print('\nMetadata retrieved\n')
     #inject_ser = input(f'{RED}Do you want to inject serendipitous sources? (y/n) {RESET}')
-    inject_ser = 'n'
+    inject_ser = 'y'
     if inject_ser != 'y' and inject_ser != 'n':
         print(f"{YELLOW}Invalid input. Please insert y or n.{RESET}")
         inject_ser = input(f'{BLUE}Do you want to inject serendipitous sources? (y/n) {RESET}')
@@ -355,15 +356,15 @@ if __name__ == '__main__':
     
     input_params = pd.DataFrame(zip(
         sim_idxs, main_paths, output_paths, tng_paths, galaxy_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
-        obs_dates, pwvs, int_times, total_times, bandwidths, freqs, freq_supports, cont_sens,
+        obs_dates, pwvs, int_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
         tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
-        n_lines, line_names, save_mode, save_secondary, inject_serendipitous), 
+        n_lines, line_names, save_mode, inject_serendipitous), 
         columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'galaxy_zoo_dir', 'project_name', 'ra', 'dec', 'band', 
-        'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'total_time', 'bandwidth', 
+        'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'bandwidth', 
         'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
         'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
-        'n_lines', 'line_names', 'save_mode', 'save_secondary', 'inject_serendipitous'])
+        'n_lines', 'line_names', 'save_mode', 'inject_serendipitous'])
 
     if comp_mode == 'parallel':
     # Dask utils

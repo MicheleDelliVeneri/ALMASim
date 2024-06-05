@@ -10,8 +10,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap
 from kaggle import api
+from os.path import isfile
+import dask
+from distributed import Client, LocalCluster, WorkerPlugin
+import multiprocessing
+import dask.dataframe as dd
 import utility.alma as ual
 import utility.astro as uas
+import utility.compute as uc
 
 class EmittingStream(QIODevice):
     def __init__(self, parent=None):
@@ -146,7 +152,6 @@ class PlotWindow(QWidget):
         
         except Exception as e:  # Catch any potential exceptions
             self.terminal.add_log(f"Error in create_science_keyword_plots: {e}")  # Log the error
-
 
 class ALMASimulatorUI(QMainWindow):
     def __init__(self):
@@ -612,11 +617,14 @@ class ALMASimulatorUI(QMainWindow):
         self.save_format_combo.setCurrentText("npz")
         self.redshift_entry.clear()
         self.num_lines_entry.clear()
+        self.snr_checkbox.setChecked(False)
         self.snr_entry.clear()
         self.fix_spatial_checkbox.setChecked(False)
         self.n_pix_entry.clear()
         self.fix_spectral_checkbox.setChecked(False)
         self.n_channels_entry.clear()
+        self.ir_luminosity_checkbox.setChecked(False)
+        self.ir_luminosity_entry.clear()
         self.model_combo.setCurrentText("Point")  # Reset to default model
         self.tng_api_key_entry.clear()
         self.line_mode_checkbox.setChecked(False)
@@ -629,9 +637,9 @@ class ALMASimulatorUI(QMainWindow):
         self.n_sims_entry.setText(self.settings.value("n_sims", ""))
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
         self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", ""))
-        self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", "sequential"))
+        self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
-        self.save_format_combo.setCurrentText(self.settings.value("save_format", "npz"))
+        self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
         if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text() != "":
             self.load_metadata(self.metadata_path_entry.text())
         elif self.metadata_mode_combo.currentText() == "query":
@@ -648,6 +656,7 @@ class ALMASimulatorUI(QMainWindow):
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
         self.snr_entry.setText(self.settings.value("snr", ""))
+        self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(self.settings.value("fix_spatial", False, type=bool))
         self.n_pix_entry.setText(self.settings.value("n_pix", ""))
         self.fix_spectral_checkbox.setChecked(self.settings.value("fix_spectral", False, type=bool))
@@ -656,6 +665,8 @@ class ALMASimulatorUI(QMainWindow):
         self.model_combo.setCurrentText(self.settings.value("model", ""))
         self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
         self.toggle_tng_api_key_row()
+        self.ir_luminosity_checkbox.setChecked(self.settings.value("set_ir_luminosity", False, type=bool))
+        self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
         
     def closeEvent(self, event):
         self.settings.setValue("output_directory", self.output_entry.text())
@@ -677,6 +688,7 @@ class ALMASimulatorUI(QMainWindow):
             # Save non-line mode values
             self.settings.setValue("redshifts", self.redshift_entry.text())
             self.settings.setValue("num_lines", self.num_lines_entry.text())
+        self.settings.setValue('set_snr', self.snr_checkbox.isChecked())
         self.settings.setValue("snr", self.snr_entry.text())
         self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
         self.settings.setValue("n_pix", self.n_pix_entry.text())
@@ -684,7 +696,9 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("n_channels", self.n_channels_entry.text())
         self.settings.setValue("inject_serendipitous", self.serendipitous_checkbox.isChecked())
         self.settings.setValue("model", self.model_combo.currentText())
-
+        self.settings.setValue("tng_api_key", self.tng_api_key_entry.text())
+        self.settings.setValue("set_ir_luminosity", self.ir_luminosity_checkbox.isChecked())
+        self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
         super().closeEvent(event)
 
     def toggle_metadata_browse(self, mode):
@@ -1208,28 +1222,30 @@ class ALMASimulatorUI(QMainWindow):
         api.dataset_download_files(dataset_name, path=self.galaxy_zoo_entry.text(), unzip=True)
         self.terminal.add_log(f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}")
 
+    def transform_source_type_label(self):
+        if self.model_combo.currentText() == 'Galaxy Zoo':
+           self.source_type = 'galaxy-zoo'
+        elif self.model_combo.currentText() == 'Hubble 100':
+            self.source_type = 'hubble-100'
+        elif self.model_combo.currentText() == 'Molecular':
+            self.source_type = 'molecular'
+        elif self.model_combo.currentText() == 'Diffuse':
+            self.source_type = 'diffuse'
+        elif self.model_combo.currentText() == 'Gaussian':
+            self.source_type = 'gaussian'
+        elif self.model_combo.currentText() == 'Point':
+            self.source_type = 'point'
+        elif self.model_combo.currentText() == 'Extended':
+            self.source_type = 'extended'
+
     def start_simulation(self):
         # Implement the logic to start the simulation
         self.terminal.add_log("Starting simulation...")
-
-        ras = self.metadata['RA'].values
-        decs = self.metadata['Dec'].values
-        bands = self.metadata['Band'].values
-        ang_ress = self.metadata['Ang.res.'].values
-        vel_ress = self.metadata['Vel.res.'].values
-        fovs = self.metadata['FOV'].values
-        obs_dates = self.metadata['Obs.date'].values
-        pwvs = self.metadata['PWV'].values
-        int_times = self.metadata['Int.Time'].values
-        bandwidths = self.metadata['Bandwidth'].values
-        freqs = self.metadata['Freq'].values
-        freq_supports = self.metadata['Freq.sup.'].values
-        antenna_arrays = self.metadata['antenna_arrays'].values
-        cont_sens = self.metadata['Cont_sens_mJybeam'].values
         n_sims = int(self.n_sims_entry.text())
         n_cpu = int(self.ncpu_entry.text())
         sim_idxs = np.arange(n_sims)
-        source_types = np.array([self.model_combo.currentText()] * n_sims)
+        self.transform_source_type_label()
+        source_types = np.array([self.source_type] * n_sims)
         output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
         if not os.path.exists(output_path):
             os.makedirs(output_path)
@@ -1238,13 +1254,13 @@ class ALMASimulatorUI(QMainWindow):
         if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
             self.download_galaxy_zoo()
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
-        plot_path = os.path.joint(output_path, 'plots')
+        plot_path = os.path.join(output_path, 'plots')
         if not os.path.exists(plot_path):
             os.makedirs(plot_path)
         main_paths = np.array([os.getcwd()] * n_sims)
         ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
         project_names = np.array([self.project_name_entry.text()] * n_sims)
-        save_mode = np.array([self.save_format_row.currentText()] * n_sims)
+        save_mode = np.array([self.save_format_combo.currentText()] * n_sims)
 
         # Checking Line Mode
         if self.line_mode_checkbox.isChecked():
@@ -1266,13 +1282,16 @@ class ALMASimulatorUI(QMainWindow):
                 z0, z1 = float(redshifts[0]), float(redshifts[1])
                 redshifts = np.random.uniform(z0, z1, n_sims)
             n_lines = np.array([int(self.num_lines_entry.text())] * n_sims)
-            rest_freq, _ = uas.get_line_info(main_path)
+            rest_freq, _ = uas.get_line_info(os.getcwd())
             rest_freqs = np.array([None]*n_sims)
             line_names = np.array([None]*n_sims)
 
         # Checking Infrared Luminosity
         if self.ir_luminosity_checkbox.isChecked():
-            lum_infrared = [float(lum) for lum in ir_luminosity_entry.text().split()]
+            lum_infrared = [float(lum) for lum in self.
+            
+            
+            ir_luminosity_entry.text().split()]
             if len(lum_infrared) == 1:
                 lum_ir = np.array([lum_infrared[0]] * n_sims)
             else:
@@ -1300,10 +1319,64 @@ class ALMASimulatorUI(QMainWindow):
         if self.fix_spectral_checkbox.isChecked():
             n_channels = np.array([int(self.n_channels_entry.text())] * n_sims)
         else:
-            n_channels = np.array([None] * n_sims)
+            n_channels = np.array([None] * n_sims)        
+        if self.model_combo.currentText() == 'Extended':
+            self.check_tng_dirs()
+            tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
+            self.metadata = uas.sample_given_redshift(self.metadata, n_sims, rest_freq, True, z1)
+        else:
+            tng_apis = np.array([None] * n_sims)
+            self.metadata = uas.sample_given_redshift(self.metadata, n_sims, rest_freq, False, z1)
         
-        
-        
+        ras = self.metadata['RA'].values
+        decs = self.metadata['Dec'].values
+        bands = self.metadata['Band'].values
+        ang_ress = self.metadata['Ang.res.'].values
+        vel_ress = self.metadata['Vel.res.'].values
+        fovs = self.metadata['FOV'].values
+        obs_dates = self.metadata['Obs.date'].values
+        pwvs = self.metadata['PWV'].values
+        int_times = self.metadata['Int.Time'].values
+        bandwidths = self.metadata['Bandwidth'].values
+        freqs = self.metadata['Freq'].values
+        freq_supports = self.metadata['Freq.sup.'].values
+        antenna_arrays = self.metadata['antenna_arrays'].values
+        cont_sens = self.metadata['Cont_sens_mJybeam'].values
+        self.terminal.add_log('Metadata retrived successfully\n')
+        if self.serendipitous_checkbox.isChecked():
+            inject_serendipitous = np.array([True] * n_sims)
+        else:
+            inject_serendipitous = np.array([False] * n_sims)
+        input_params = pd.DataFrame(zip(
+        sim_idxs, main_paths, output_paths, tng_paths, galaxy_zoo_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
+        obs_dates, pwvs, int_times, bandwidths, freqs, freq_supports, cont_sens,
+        antenna_arrays, n_pixs, n_channels, source_types,
+        tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
+        n_lines, line_names, save_mode, inject_serendipitous), 
+        columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'galaxy_zoo_dir', 'project_name', 'ra', 'dec', 'band', 
+        'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'bandwidth', 
+        'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
+        'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
+        'n_lines', 'line_names', 'save_mode', 'inject_serendipitous'])
+        if self.comp_mode_combo.currentText() == 'Parallel':
+            dask.config.set({'temporary_directory': output_path})
+            total_memory = psutil.virtual_memory().total
+            num_processes = multiprocessing.cpu_count() // 4
+            memory_limit = int(0.9 * total_memory / num_processes)
+            ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
+            cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+            output_type = "object"
+            client = Client(cluster)
+            client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+            results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator2(*row), axis=1), meta=output_type).compute()
+            client.close()
+            cluster.close()
+        else:
+            for i in range(n_sims):
+                uc.simulator2(*input_params.iloc[i])
+        uc.remove_logs()
+            
+    
 
 
 if __name__ == "__main__":
