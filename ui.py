@@ -298,6 +298,8 @@ class ALMASimulatorUI(QMainWindow):
 
         main_layout.addLayout(self.left_layout)
         main_layout.addLayout(right_layout)
+        main_layout.setStretch(0, 1)  # left_layout stretch factor
+        main_layout.setStretch(1, 2)  # right_layout stretch factor
 
         self.line_displayed = False
         self.add_line_widgets()
