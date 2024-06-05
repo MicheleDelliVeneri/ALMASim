@@ -980,17 +980,24 @@ class ALMASimulatorUI(QMainWindow):
             import traceback
             traceback.print_exc()
         
-    def add_line_widgets(self):
+    def has_widget(self, layout, widget_type):
+        """Check if the layout contains a widget of a specific type."""
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if isinstance(item.widget(), widget_type):
+                return True
+        return False
+
+    def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
         self.line_mode_checkbox.stateChanged.connect(self.toggle_line_mode_widgets)
-        self.left_layout.insertWidget(8, self.line_mode_checkbox) 
+        #self.left_layout.insertWidget(8, self.line_mode_checkbox) 
         # Widgets for Line Mode
-        line_index_label = QLabel('Select Line Indices (space-separated):')
+        self.line_index_label = QLabel('Select Line Indices (space-separated):')
         self.line_index_entry = QLineEdit()
-
         self.line_mode_row = QHBoxLayout()
-        self.line_mode_row.addWidget(line_index_label)
-        self.line_mode_row.addWidget(self.line_index_entry)
+        self.line_mode_row.addWidget(self.line_mode_checkbox)
+        self.left_layout.insertLayout(8, self.line_mode_row)    # Insert at the end
         # Widgets for Non-Line Mode
         redshift_label = QLabel('Redshifts (space-separated):')
         self.redshift_entry = QLineEdit()
@@ -1004,11 +1011,15 @@ class ALMASimulatorUI(QMainWindow):
         self.non_line_mode_row2.addWidget(self.num_lines_entry)
 
         
-        self.left_layout.insertLayout(9, self.line_mode_row)    # Insert at the end 
+        #self.left_layout.insertLayout(9, self.line_mode_row)    # Insert at the end 
         self.left_layout.insertLayout(9, self.non_line_mode_row1) # Insert at the end
         self.left_layout.insertLayout(10, self.non_line_mode_row2) # Insert at the end
         # Initially hide both line and non-line mode widgets
-
+        #for rpw in self.line_mode_row:
+        #    for i in range(row.count()):
+        #        item = row.itemAt(i)
+        #        if item.widget():
+        #            item.widget().hide()
         for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
             for i in range(row.count()):
                 item = row.itemAt(i)
@@ -1018,6 +1029,9 @@ class ALMASimulatorUI(QMainWindow):
     def toggle_line_mode_widgets(self):
         """Shows/hides the appropriate input rows based on line mode checkbox state."""
         if self.line_mode_checkbox.isChecked():
+            if not self.has_widget(self.line_mode_row, QLabel):
+                self.line_mode_row.addWidget(self.line_index_label)
+                self.line_mode_row.addWidget(self.line_index_entry)
             # Show the widgets in line_mode_row
             for i in range(self.line_mode_row.count()):
                 item = self.line_mode_row.itemAt(i)
@@ -1035,8 +1049,12 @@ class ALMASimulatorUI(QMainWindow):
             # Hide the widgets in line_mode_row
             for i in range(self.line_mode_row.count()):
                 item = self.line_mode_row.itemAt(i)
-                if item.widget():
+                if item.widget() and not isinstance(item.widget(), QCheckBox):
                     item.widget().hide()
+            if self.has_widget(self.line_mode_row, QLabel):
+                self.line_mode_row.removeWidget(self.line_index_label)
+                self.line_mode_row.removeWidget(self.line_index_entry)
+
             # Show the widgets in non_line_mode_row1 and non_line_mode_row2
             for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
                 for i in range(row.count()):
@@ -1118,9 +1136,21 @@ class ALMASimulatorUI(QMainWindow):
     def toggle_dim_widgets_visibility(self, widget):
          widget.setVisible(self.sender().isChecked())
 
+    def download_galaxy_zoo(self):
+        """
+        Downloads a Kaggle dataset to the specified path.
+        """
+        self.terminal.add_log('\nGalaxy Zoo data not found on disk, downloading from Kaggle...')
+        api.authenticate()  # Authenticate with your Kaggle credentials
+        dataset_name = 'jaimetrickz/galaxy-zoo-2-images'
+        # Download the dataset as a zip file
+        api.dataset_download_files(dataset_name, path=self.galaxy_zoo_entry.text(), unzip=True)
+        self.terminal.add_log(f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}")
+
     def start_simulation(self):
         # Implement the logic to start the simulation
         self.terminal.add_log("Starting simulation...")
+
         ras = self.metadata['RA'].values
         decs = self.metadata['Dec'].values
         bands = self.metadata['Band'].values
@@ -1136,15 +1166,52 @@ class ALMASimulatorUI(QMainWindow):
         antenna_arrays = self.metadata['antenna_arrays'].values
         cont_sens = self.metadata['Cont_sens_mJybeam'].values
         n_sims = int(self.n_sims_entry.text())
-        n_pixs = np.array([int(self.n_pix_entry.text())] * n_sims)
-        n_channels = np.array([int(self.n_channels_entry.text())] * n_sims)
+        n_cpu = int(self.ncpu_entry.text())
+        sim_idxs = np.arange(n_sims)
         source_types = np.array([self.model_combo.currentText()] * n_sims)
-        output_paths = np.array([self.output_entry.text()] * n_sims)
+        output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+        output_paths = np.array([output_path] * n_sims)
         tng_paths = np.array([self.tng_entry.text()] * n_sims)
+        if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
+            self.download_galaxy_zoo()
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
+        plot_path = os.path.joint(output_path, 'plots')
+        if not os.path.exists(plot_path):
+            os.makedirs(plot_path)
         main_paths = np.array([os.getcwd()] * n_sims)
         ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
         project_names = np.array([self.project_name_entry.text()] * n_sims)
+        save_mode = np.array([self.save_format_row.currentText()] * n_sims)
+        #if self.line_mode_checkbox.isChecked():
+
+        if self.ir_luminosity_checkbox.isChecked():
+            lum_infrared = [float(lum) for lum in ir_luminosity_entry.text().split()]
+            if len(lum_infrared) == 1:
+                lum_ir = np.array([lum_infrared[0]] * n_sims)
+            else:
+                lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
+        else:
+            lum_ir = np.array([None]*n_sims)
+        if self.snr_checkbox.isChecked():
+            snr = [float(snr) for snr in self.snr_entry.text().split()]
+            if len(snr) == 1:
+                snr = np.array([snr[0]]*n_sims)
+            else:
+                snr = np.random.uniform(snr[0], snr[1], n_sims)
+        else:
+            snr = np.ones(n_sims)
+        if self.fix_spatial_checkbox.isChecked():
+            n_pixs = np.array([int(self.n_pix_entry.text())] * n_sims)
+        else:
+            n_pixs = np.array([None] * n_sims)
+        if self.fix_spectral_checkbox.isChecked():
+            n_channels = np.array([int(self.n_channels_entry.text())] * n_sims)
+        else:
+            n_channels = np.array([None] * n_sims)
+        
+        
         
 
 
