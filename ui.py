@@ -722,15 +722,22 @@ class ALMASimulatorUI(QMainWindow):
         if self.metadata_mode_combo.currentText() == "query":
             query_type = self.query_type_combo.currentText()
             if query_type == "science":
-                #metadata_name = self.query_save_entry.text().split(os.sep)[-1]
-                self.metadata = self.query_for_metadata_by_science_type()
+                if not hasattr(self, 'metadata_query_widgets_added') or not self.metadata_query_widgets_added:
+                    self.show_scientific_keywords()
+                    self.add_metadata_query_widgets()
+                    self.metadata_query_widgets_added = True
+                    self.query_execute_button.hide()
+                else:
+                    self.metadata = self.query_for_metadata_by_science_type()
+                    self.remove_metadata_query_widgets()
+                    self.query_execute_button.show()
             elif query_type == "target":
                 self.metadata = ual.query_metadata_from_target_list()
             else:
                 # Handle invalid query type (optional)
                 pass  
     
-    def query_for_metadata_by_science_type(self):
+    def show_scientific_keywords(self):
         # Implement the logic to query metadata based on science type
         self.terminal.add_log("Querying metadata by science type...")
         #self.plot_window = PlotWindow()
@@ -742,12 +749,8 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log('\nAvailable scientific categories:')
         for i, category in enumerate(self.scientific_categories):
             self.terminal.add_log(f'{i}: {category}')
-
-        # Check if widgets already exist, remove them if so
-        if hasattr(self, 'metadata_query_widgets_added') and self.metadata_query_widgets_added:
-            self.remove_metadata_query_widgets()
-        self.add_metadata_query_widgets()
-        self.metadata_query_widgets_added = True
+    
+    def query_for_metadata_by_science_type(self):
         science_keyword_number = self.science_keyword_entry.text()
         scientific_category_number = self.scientific_category_entry.text()
         band = self.band_entry.text()
@@ -797,7 +800,6 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         del database
         
-
     def add_metadata_query_widgets(self):
         # Create widgets for querying parameters
         science_keyword_label = QLabel('Select Science Keyword by number (space-separated):')
@@ -818,8 +820,8 @@ class ALMASimulatorUI(QMainWindow):
         frequency_label = QLabel('Select source frequency range (min max) or max only (space-separated):')
         self.frequency_entry = QLineEdit()
         
-        self.execute_query_button = QPushButton("Continue Query")
-        self.execute_query_button.clicked.connect(self.execute_query)
+        self.continue_query_button = QPushButton("Continue Query")
+        self.continue_query_button.clicked.connect(self.execute_query)
 
         # Create layouts and add widgets
         self.science_keyword_row = QHBoxLayout()
@@ -846,8 +848,8 @@ class ALMASimulatorUI(QMainWindow):
         self.frequency_row.addWidget(frequency_label)
         self.frequency_row.addWidget(self.frequency_entry)
 
-        self.execute_query_row = QHBoxLayout()
-        self.execute_query_row.addWidget(self.execute_query_button)
+        self.continue_query_row = QHBoxLayout()
+        self.continue_query_row.addWidget(self.continue_query_button)
 
         # Insert rows into left_layout (adjust index if needed)
         self.left_layout.insertLayout(17, self.science_keyword_row)
@@ -856,14 +858,16 @@ class ALMASimulatorUI(QMainWindow):
         self.left_layout.insertLayout(20, self.fov_row)
         self.left_layout.insertLayout(21, self.time_resolution_row)
         self.left_layout.insertLayout(22, self.frequency_row)
-        self.left_layout.insertWidget(23, self.execute_query_button)
+        self.left_layout.insertWidget(23, self.continue_query_button)
+        self.terminal.add_log("\n\nFill out the fields and click 'Continue Query' to proceed.")
+        self.query_execute_button.hide()  # Hide the execute query button
         
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
         # all the rows and widgets added in add_metadata_query_widgets.
         widgets_to_remove = [
             self.science_keyword_row, self.scientific_category_row, self.band_row,
-            self.fov_row, self.time_resolution_row,  self.frequency_row, self.execute_query_row
+            self.fov_row, self.time_resolution_row,  self.frequency_row
         ]
 
         for widget in widgets_to_remove:
@@ -877,6 +881,8 @@ class ALMASimulatorUI(QMainWindow):
                         item.widget().deleteLater()
 
         self.metadata_query_widgets_added = False
+        self.query_execute_button.hide()
+        self.continue_query_button.hide()
     
     def query_metadata_from_target_list(self):
         # Implement the logic to query metadata based on a target list
