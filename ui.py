@@ -1374,7 +1374,7 @@ class ALMASimulatorUI(QMainWindow):
         else:
             for i in range(n_sims):
                 uc.simulator2(*input_params.iloc[i])
-        uc.remove_logs()
+        uc.remove_logs(os.getcwd())
             
     
 
