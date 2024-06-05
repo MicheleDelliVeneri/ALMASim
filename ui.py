@@ -966,6 +966,23 @@ class ALMASimulatorUI(QMainWindow):
             self.metadata_path_row.setParent(None)  # Set the parent to None
             self.metadata = None  # Clear any loaded metadata
 
+    def check_tng_dirs(self):
+        tng_dir = self.tng_entry.text()
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'output')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'output'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets'))
+        if not isfile(os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5')):
+            print('Downloading simulation file')
+            url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+            cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(self.tng_api_key_entry.text(), os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
+            subprocess.check_call(cmd, shell=True)
+            print('Done.')
+
     def remove_query_widgets(self):
         """Removes the query type and save location rows from the layout."""
         
@@ -1055,22 +1072,12 @@ class ALMASimulatorUI(QMainWindow):
         self.non_line_mode_row2 = QHBoxLayout()
         self.non_line_mode_row2.addWidget(num_lines_label)
         self.non_line_mode_row2.addWidget(self.num_lines_entry)
-
-        
-        #self.left_layout.insertLayout(9, self.line_mode_row)    # Insert at the end 
         self.left_layout.insertLayout(9, self.non_line_mode_row1) # Insert at the end
         self.left_layout.insertLayout(10, self.non_line_mode_row2) # Insert at the end
-        # Initially hide both line and non-line mode widgets
-        #for rpw in self.line_mode_row:
-        #    for i in range(row.count()):
-        #        item = row.itemAt(i)
-        #        if item.widget():
-        #            item.widget().hide()
-        for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
-            for i in range(row.count()):
-                item = row.itemAt(i)
-                if item.widget():
-                    item.widget().hide()
+        self.show_hide_widgets(self.non_line_mode_row1, show=False)
+        self.show_hide_widgets(self.non_line_mode_row2, show=False)
+
+
 
     def toggle_line_mode_widgets(self):
         """Shows/hides the appropriate input rows based on line mode checkbox state."""
@@ -1079,34 +1086,21 @@ class ALMASimulatorUI(QMainWindow):
                 self.line_mode_row.addWidget(self.line_index_label)
                 self.line_mode_row.addWidget(self.line_index_entry)
             # Show the widgets in line_mode_row
-            for i in range(self.line_mode_row.count()):
-                item = self.line_mode_row.itemAt(i)
-                if item.widget():
-                    item.widget().show()  
+            self.show_hide_widgets(self.line_mode_row, show=True)
             # Hide the widgets in non_line_mode_row1 and non_line_mode_row2
-            for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
-                for i in range(row.count()):
-                    item = row.itemAt(i)
-                    if item.widget():
-                        item.widget().hide()
+            self.show_hide_widgets(self.non_line_mode_row1, show=False)
+            self.show_hide_widgets(self.non_line_mode_row2, show=False)
             if self.line_displayed == False:
                 self.line_display()
         else:
             # Hide the widgets in line_mode_row
-            for i in range(self.line_mode_row.count()):
-                item = self.line_mode_row.itemAt(i)
-                if item.widget() and not isinstance(item.widget(), QCheckBox):
-                    item.widget().hide()
+            self.show_hide_widgets(self.line_mode_row, show=False)
             if self.has_widget(self.line_mode_row, QLabel):
                 self.line_mode_row.removeWidget(self.line_index_label)
                 self.line_mode_row.removeWidget(self.line_index_entry)
-
             # Show the widgets in non_line_mode_row1 and non_line_mode_row2
-            for row in [self.non_line_mode_row1, self.non_line_mode_row2]:
-                for i in range(row.count()):
-                    item = row.itemAt(i)
-                    if item.widget():
-                        item.widget().show()
+            self.show_hide_widgets(self.non_line_mode_row1, show=True)
+            self.show_hide_widgets(self.non_line_mode_row2, show=True)
 
     def line_display(self):
         """
@@ -1178,7 +1172,26 @@ class ALMASimulatorUI(QMainWindow):
         self.model_row.addWidget(self.model_label)
         self.model_row.addWidget(self.model_combo)
         self.left_layout.insertLayout(12, self.model_row)
-    
+        self.tng_api_key_label = QLabel("TNG API Key:")
+        self.tng_api_key_entry = QLineEdit()
+        self.tng_api_key_row = QHBoxLayout()
+        self.tng_api_key_row.addWidget(self.tng_api_key_label)
+        self.tng_api_key_row.addWidget(self.tng_api_key_entry)
+
+        # Initially hide the TNG API key row
+        self.show_hide_widgets(self.tng_api_key_row, show=False)
+
+        self.left_layout.insertLayout(13, self.tng_api_key_row)  # Insert after model_row
+        # Connect the model_combo's signal to update visibility
+        self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
+
+    def toggle_tng_api_key_row(self):
+        """Shows/hides the TNG API key row based on the selected model."""
+        if self.model_combo.currentText() == "Extended":
+            self.show_hide_widgets(self.tng_api_key_row, show=True)
+        else:
+            self.show_hide_widgets(self.tng_api_key_row, show=False)
+
     def toggle_dim_widgets_visibility(self, widget):
          widget.setVisible(self.sender().isChecked())
 
