@@ -631,7 +631,7 @@ class ALMASimulatorUI(QMainWindow):
         self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", "sequential"))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", "npz"))
-        if self.metadata_mode_combo.currentText() == "get":
+        if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text() != "":
             self.load_metadata(self.metadata_path_entry.text())
         elif self.metadata_mode_combo.currentText() == "query":
             self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
@@ -711,12 +711,25 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_button)
         self.left_layout.insertLayout(15, self.metadata_path_row)
         self.left_layout.update() 
+    
+    def show_hide_widgets(self, layout, show=True):
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget():
+                if show:
+                    item.widget().show()
+                else:
+                    item.widget().hide()
 
     def update_query_save_label(self, query_type):
+        """Shows/hides the target list row and query save row based on query type."""
         if query_type == "science":
-            self.query_save_label.setText("Save Query To:")
+            self.show_hide_widgets(self.target_list_row, show=False)  # Hide target list row
+            self.show_hide_widgets(self.query_save_row, show=True)   # Show query save row
+            self.query_save_label.setText("Save Metadata to:")
         else:  # query_type == "target"
-            self.query_save_label.setText("Load Target List:")
+            self.show_hide_widgets(self.target_list_row, show=True)   # Show target list row
+            self.show_hide_widgets(self.query_save_row, show=True)  # Hide query save row
 
     def execute_query(self):
         self.terminal.add_log("Executing query...")
@@ -733,7 +746,10 @@ class ALMASimulatorUI(QMainWindow):
                     self.remove_metadata_query_widgets()
                     self.query_execute_button.show()
             elif query_type == "target":
-                self.metadata = ual.query_metadata_from_target_list()
+                if self.target_list_entry.text():
+                    target_list = pd.read_csv(self.target_list_entry.text())
+                    target_list = target_list.tolist()
+                self.metadata = ual.query_metadata_from_target_list(target_list, )
             else:
                 # Handle invalid query type (optional)
                 pass  
@@ -889,6 +905,12 @@ class ALMASimulatorUI(QMainWindow):
         # Implement the logic to query metadata based on a target list
         self.terminal.add_log("Querying metadata from target list...")
 
+    def browse_target_list(self):
+        """Opens a file dialog to select the target list file."""
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Target List", "", "CSV Files (*.csv)")
+        if file_path:
+            self.target_list_entry.setText(file_path)
+
     def add_query_widgets(self):
         # Create widgets for querying
         self.query_type_label = QLabel("Query Type:")
@@ -898,9 +920,9 @@ class ALMASimulatorUI(QMainWindow):
         self.query_type_row.addWidget(self.query_type_label)
         self.query_type_row.addWidget(self.query_type_combo)
         self.query_save_label = QLabel("Save Metadata to:")
-        self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
+        
         # Set the initial label text
-        self.update_query_save_label(self.query_type_combo.currentText())
+        #self.update_query_save_label(self.query_type_combo.currentText())
         self.query_save_entry = QLineEdit()
         self.query_save_button = QPushButton("Browse")
         # Connect browse button to appropriate method (you'll need to implement this)
@@ -911,10 +933,24 @@ class ALMASimulatorUI(QMainWindow):
         self.query_save_row.addWidget(self.query_save_label)
         self.query_save_row.addWidget(self.query_save_entry)
         self.query_save_row.addWidget(self.query_save_button)
+        self.target_list_label = QLabel("Load Target List:")
+        self.target_list_entry = QLineEdit()
+        self.target_list_button = QPushButton("Browse")
+        self.target_list_button.clicked.connect(self.browse_target_list)  # Add function for browsing
+        self.target_list_row = QHBoxLayout()
+        self.target_list_row.addWidget(self.target_list_label)
+        self.target_list_row.addWidget(self.target_list_entry)
+        self.target_list_row.addWidget(self.target_list_button)
+        #self.target_list_row.hide()  # Initially hide the row
+        self.show_hide_widgets(self.target_list_row, show=False)
+
         # Insert layouts at the correct positions
         self.left_layout.insertLayout(15, self.query_type_row)
-        self.left_layout.insertLayout(16, self.query_save_row)
-        self.left_layout.insertWidget(17, self.query_execute_button)
+        self.left_layout.insertLayout(16, self.target_list_row)  # Insert target list row
+        self.left_layout.insertLayout(17, self.query_save_row)
+        self.left_layout.insertWidget(18, self.query_execute_button)
+
+        self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
 
     def remove_metadata_browse(self):
         if self.metadata_path_row.parent() is not None:
@@ -966,6 +1002,15 @@ class ALMASimulatorUI(QMainWindow):
                 item = layout.takeAt(index)
                 if item.widget() is not None: 
                     item.widget().deleteLater()
+        if self.target_list_row.parent() is not None:
+            layout = self.target_list_row.parent()
+            layout.removeItem(self.target_list_row)
+            self.target_list_row.setParent(None)
+            for i in reversed(range(self.target_list_row.count())):
+                item = self.target_list_row.takeAt(i)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
 
         self.metadata_query_widgets_added = False
         
@@ -1185,8 +1230,32 @@ class ALMASimulatorUI(QMainWindow):
         ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
         project_names = np.array([self.project_name_entry.text()] * n_sims)
         save_mode = np.array([self.save_format_row.currentText()] * n_sims)
-        #if self.line_mode_checkbox.isChecked():
 
+        # Checking Line Mode
+        if self.line_mode_checkbox.isChecked():
+            line_indices = [int(i) for i in self.line_index_entry.text().split()]
+            rest_freq, line_names = uas.get_line_info(os.getcwd(), line_indices)
+            if len(rest_freq) == 1:
+                rest_freq = rest_freq[0]
+            rest_freqs = np.array([rest_freq]*n_sims)
+            redshifts = np.array([None]*n_sims)
+            n_lines = np.array([None]*n_sims)
+            line_names = np.array([line_names]*n_sims)
+            z1 = None
+        else:
+            redshifts = [float(z) for z in self.redshift_entry.text().split()]
+            if len(redshifts) == 1:
+                redshifts = np.array([redshifts[0]] * n_sims)
+                z0, z1 = float(redshifts[0]), float(redshifts[0])
+            else:
+                z0, z1 = float(redshifts[0]), float(redshifts[1])
+                redshifts = np.random.uniform(z0, z1, n_sims)
+            n_lines = np.array([int(self.num_lines_entry.text())] * n_sims)
+            rest_freq, _ = uas.get_line_info(main_path)
+            rest_freqs = np.array([None]*n_sims)
+            line_names = np.array([None]*n_sims)
+
+        # Checking Infrared Luminosity
         if self.ir_luminosity_checkbox.isChecked():
             lum_infrared = [float(lum) for lum in ir_luminosity_entry.text().split()]
             if len(lum_infrared) == 1:
@@ -1195,6 +1264,8 @@ class ALMASimulatorUI(QMainWindow):
                 lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
         else:
             lum_ir = np.array([None]*n_sims)
+
+        # Checking SNR
         if self.snr_checkbox.isChecked():
             snr = [float(snr) for snr in self.snr_entry.text().split()]
             if len(snr) == 1:
@@ -1203,10 +1274,14 @@ class ALMASimulatorUI(QMainWindow):
                 snr = np.random.uniform(snr[0], snr[1], n_sims)
         else:
             snr = np.ones(n_sims)
+
+        # Checking Number of Pixesl 
         if self.fix_spatial_checkbox.isChecked():
             n_pixs = np.array([int(self.n_pix_entry.text())] * n_sims)
         else:
             n_pixs = np.array([None] * n_sims)
+
+        # Checking Number of Channels 
         if self.fix_spectral_checkbox.isChecked():
             n_channels = np.array([int(self.n_channels_entry.text())] * n_sims)
         else:
