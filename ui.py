@@ -13,25 +13,24 @@ from kaggle import api
 from os.path import isfile
 import dask
 from distributed import Client, LocalCluster, WorkerPlugin
+import astropy.units as U
+from astropy.constants import c
+from astropy.time import Time
+import math
+from math import pi, ceil
+from datetime import date
+import time
+import shutil
+from time import strftime, gmtime
 import multiprocessing
 import dask.dataframe as dd
 import utility.alma as ual
 import utility.astro as uas
 import utility.compute as uc
+import utility.skymodels as usm
+import utility.plotting as upl
+import utility.interferometer as uin
 
-class EmittingStream(QIODevice):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-    def writeData(self, data):
-        if isinstance(data, str):  # Check if data is a string
-            data = data.encode('utf-8')  # Encode string into bytes if needed
-
-        self.parent().appendPlainText(data.decode("utf-8"))  # Decode and write to QPlainTextEdit
-        return len(data)  # Indicate successful write
-
-    def flush(self):  # Optional: Implement flush if needed for buffering
-        pass
 
 class LogView(QPlainTextEdit):
     def __init__(self, parent=None):
@@ -48,6 +47,8 @@ class LogView(QPlainTextEdit):
 
     def add_log(self, message):
         self.appendPlainText(message.rstrip())
+        self.ensureCursorVisible()  # Ensure the cursor is visible after adding text
+        QApplication.processEvents()  # Process all pending events to force UI update
 
     def handle_stdout(self):
         message = self._process.readAllStandardOutput().data().decode()
@@ -305,9 +306,6 @@ class ALMASimulatorUI(QMainWindow):
         self.add_query_widgets()
         # Load saved settings
         self.load_settings()
-        # Redirect stdout and stderr
-        #sys.stdout = EmittingStream(self.terminal)
-        #sys.stderr = EmittingStream(self.terminal)
         self.terminal.start_log("")
         # Check metadata mode on initialization
         self.toggle_line_mode_widgets()
@@ -995,11 +993,11 @@ class ALMASimulatorUI(QMainWindow):
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets')):
             os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets'))
         if not isfile(os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5')):
-            print('Downloading simulation file')
+            self.terminal.add_log('Downloading simulation file')
             url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
             cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(self.tng_api_key_entry.text(), os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
             subprocess.check_call(cmd, shell=True)
-            print('Done.')
+            self.terminal.add_log('Done.')
 
     def remove_query_widgets(self):
         """Removes the query type and save location rows from the layout."""
@@ -1238,6 +1236,48 @@ class ALMASimulatorUI(QMainWindow):
         elif self.model_combo.currentText() == 'Extended':
             self.source_type = 'extended'
 
+    def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
+        pd.options.mode.chained_assignment = None
+        if isinstance(rest_frequency, np.ndarray):
+            rest_frequency = np.sort(np.array(rest_frequency))[0]
+        self.terminal.add_log(f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}")
+        self.terminal.add_log(f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}")
+        self.terminal.add_log('Filtering metadata based on line catalogue...')
+        metadata = metadata[metadata['Freq'] <= rest_frequency]
+        self.terminal.add_log(f'Remaining metadata: {len(metadata)}')
+        freqs = metadata['Freq'].values
+        redshifts = [uas.compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz) for source_freq in freqs]
+        metadata.loc[:, 'redshift'] = redshifts
+
+        n_metadata = 0
+        z_save = zmax
+        self.terminal.add_log('Computing redshifts')
+        while n_metadata < ceil(n / 10):
+            s_metadata = n_metadata
+            if zmax != None:
+                f_metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
+            else:
+                f_metadata = metadata[metadata['redshift'] >= 0]
+            n_metadata = len(f_metadata)
+            if n_metadata == s_metadata:
+                zmax += 0.1
+        if zmax != None:
+                metadata = metadata[(metadata['redshift'] <= zmax) & (metadata['redshift'] >= 0)]
+        else:
+            metadata = metadata[metadata['redshift'] >= 0]
+        if z_save != zmax:
+            self.terminal.add_log(f'Max redshift has been adjusted fit metadata, new max redshift: {round(zmax, 3)}')
+        self.terminal.add_log(f'Remaining metadata: {len(metadata)}')
+        snapshots = [uas.redshift_to_snapshot(redshift) for redshift in metadata['redshift'].values]
+        metadata['snapshot'] = snapshots
+        if extended == True:
+            #metatada = metadata[metadata['redshift'] < 0.05]
+            metadata = metadata[(metadata['snapshot'] == 99) | (metadata['snapshot'] == 95)]
+
+        sample = metadata.sample(n, replace=True)
+        return sample
+
+
     def start_simulation(self):
         # Implement the logic to start the simulation
         self.terminal.add_log("Starting simulation...")
@@ -1323,10 +1363,10 @@ class ALMASimulatorUI(QMainWindow):
         if self.model_combo.currentText() == 'Extended':
             self.check_tng_dirs()
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
-            self.metadata = uas.sample_given_redshift(self.metadata, n_sims, rest_freq, True, z1)
+            self.metadata = self.sample_given_redshift(self.metadata, n_sims, rest_freq, True, z1)
         else:
             tng_apis = np.array([None] * n_sims)
-            self.metadata = uas.sample_given_redshift(self.metadata, n_sims, rest_freq, False, z1)
+            self.metadata = self.sample_given_redshift(self.metadata, n_sims, rest_freq, False, z1)
         
         ras = self.metadata['RA'].values
         decs = self.metadata['Dec'].values
@@ -1368,15 +1408,245 @@ class ALMASimulatorUI(QMainWindow):
             output_type = "object"
             client = Client(cluster)
             client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-            results =  ddf.map_partitions(lambda df: df.apply(lambda row: uc.simulator2(*row), axis=1), meta=output_type).compute()
+            results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
             client.close()
             cluster.close()
         else:
             for i in range(n_sims):
-                uc.simulator2(*input_params.iloc[i])
-        uc.remove_logs(os.getcwd())
-            
-    
+                self.simulator(*input_params.iloc[i])
+
+    def remove_non_numeric(self, text):
+        """Removes non-numeric characters from a string.
+        Args:
+            text: The string to process.
+
+        Returns:
+            A new string containing only numeric characters and the decimal point (.).
+        """
+        numbers = "0123456789."
+        return "".join(char for char in text if char in numbers)
+
+    def closest_power_of_2(self, x):
+        op = math.floor if bin(x)[3] != "1" else math.ceil
+        return 2 ** op(math.log(x, 2))
+
+    def simulator(self, inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
+                pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
+                n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
+                n_lines, line_names, save_mode, inject_serendipitous=False):
+        """
+        Simulates the ALMA observations for the given input parameters.
+
+        Parameters:
+        idx (int): Index of the simulation.
+        main_path (str): Path to the directory where the file.csv is stored.
+        output_dir (str): Path to the output directory.
+        tng_dir (str): Path to the TNG directory.
+        galaxy_zoo_dir (str): Path to the Galaxy Zoo directory.
+        project_name (str): Name of the project.
+        ra (float): Right ascension.
+        dec (float): Declination.
+        band (str): Observing band.
+        ang_res (float): Angular resolution.
+        vel_res (float): Velocity resolution.
+        fov (float): Field of view.
+        obs_date (str): Observation date.
+        pwv (float): Precipitable water vapor.
+        int_time (float): Integration time.
+        bandwidth (float): Bandwidth.
+        freq (float): Frequency.
+        freq_support (float): Frequency support.
+        cont_sens (float): Continuum sensitivity.
+        antenna_array (str): Antenna array.
+        n_pix (int): Number of pixels.
+        n_channels (int): Number of channels.
+        source_type (str): Type of source.
+        tng_api_key (str): TNG API key.
+        ncpu (int): Number of CPUs.
+        rest_frequency (float): Rest frequency.
+        redshift (float): Redshift.
+        lum_infrared (float): Infrared luminosity.
+        snr (float): Signal-to-noise ratio.
+        n_lines (int): Number of lines.
+        line_names (str): Names of the lines.
+        save_mode (str): Save mode.
+        inject_serendipitous (bool): Inject serendipitous sources.
+
+        Returns:
+        str: Path to the output file.
+        """
+        self.terminal.add_log('\nRunning simulation {}'.format(inx))
+        start = time.time()
+        second2hour = 1 / 3600
+        ra = ra * U.deg
+        dec = dec * U.deg
+        fov = fov * 3600 * U.arcsec
+        ang_res = ang_res * U.arcsec
+        vel_res = vel_res * U.km / U.s
+        int_time = int_time * U.s
+        freq_support = freq_support.split(' U ')[0].split(',')[1]
+        freq_sup = float(self.remove_non_numeric(freq_support)) * U.kHz
+        freq_sup = freq_sup.to(U.MHz)   
+        band_range = ual.get_band_range(int(band))
+        band_range = band_range[1] - band_range[0]
+        band_range = band_range * U.GHz
+        source_freq = freq * U.GHz
+        central_freq = ual.get_band_central_freq(int(band)) * U.GHz
+        sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
+        if not os.path.exists(sim_output_dir):
+            os.makedirs(sim_output_dir)
+        os.chdir(output_dir)
+        self.terminal.add_log('\nRA: {}'.format(ra))
+        self.terminal.add_log('\nDEC: {}'.format(dec))
+        self.terminal.add_log('\nIntegration Time: {}'.format(int_time))
+        ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
+        antennalist = os.path.join(sim_output_dir, "antenna.cfg")
+        antenna_name = 'antenna'
+        max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
+        self.terminal.add_log('\nField of view: {} arcsec'.format(round(fov.value, 3)) )
+        beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
+        beam_solid_angle = np.pi * (beam_size / 2) ** 2
+        cont_sens = cont_sens * U.mJy / (U.arcsec ** 2)
+        cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
+        cont_sens  = cont_sens_jy  * snr
+        self.terminal.add_log("Minimum detectable continum: {}".format(cont_sens_jy))
+        cell_size = beam_size / 5
+        if n_pix is None: 
+            #cell_size = beam_size / 5
+            n_pix = self.closest_power_of_2(int(1.5 * fov / cell_size))
+        else:
+            n_pix = self.closest_power_of_2(n_pix)
+            cell_size = fov / n_pix
+            # just added
+            #beam_size = cell_size * 5
+        if n_channels is None:
+            n_channels = int(band_range / freq_sup)
+        else:
+            band_range = n_channels * freq_sup 
+            band_range = band_range.to(U.GHz)
+        if redshift is None:
+            if isinstance(rest_frequency, np.ndarray):
+                rest_frequency = np.sort(np.array(rest_frequency))[0]
+            rest_frequency = rest_frequency * U.GHz
+            redshift = uas.compute_redshift(rest_frequency, source_freq)
+        else:
+            rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
+        continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, cont_frequencies, fwhm_z, lum_infrared  = uas.process_spectral_data(
+                                                                            source_type,
+                                                                            main_dir,
+                                                                            redshift, 
+                                                                            central_freq.value,
+                                                                            band_range.value,
+                                                                            source_freq.value,
+                                                                            n_channels,
+                                                                            lum_infrared,
+                                                                            cont_sens.value,
+                                                                            line_names,
+                                                                            n_lines,
+                                                                            )
+        if n_channels_nw != n_channels:
+            freq_sup = freq_sup_nw * U.MHz
+            n_channels = n_channels_nw
+            band_range  = n_channels * freq_sup
+        central_channel_index = n_channels // 2
+        self.terminal.add_log('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
+        self.terminal.add_log('Central Frequency: {}'.format(central_freq))
+        self.terminal.add_log('Spectral Window: {}'.format(band_range))
+        self.terminal.add_log('Freq Support: {}'.format(freq_sup))
+        self.terminal.add_log('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
+        self.terminal.add_log('Redshift: {}'.format(round(redshift, 3)))
+        self.terminal.add_log('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
+        self.terminal.add_log('Band: {}'.format(band))
+        self.terminal.add_log('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
+        self.terminal.add_log('Angular resolution: {} arcsec'.format(round(ang_res.value, 3)))
+        self.terminal.add_log('Infrared Luminosity: {:.2e}'.format(lum_infrared))
+        if source_type == 'extended':
+            snapshot = uas.redshift_to_snapshot(redshift)
+            self.terminal.add_log('Snapshot: {}'.format(snapshot))
+            tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+            self.terminal.add_log('Subhaloid ID: {}'.format(tng_subhaloid))
+            outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
+            part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
+            self.terminal.add_log('Number of particles: {}'.format(part_num))
+            while part_num == 0:
+                self.terminal.add_log('No particles found. Checking another subhalo.')
+                tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+                outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
+                part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
+                self.terminal.add_log('Number of particles: {}'.format(part_num))
+        else:
+            snapshot = None
+            tng_subhaloid = None
+        if type(line_names) == list or isinstance(line_names, np.ndarray):
+            for line_name, line_flux in zip(line_names, line_fluxes): 
+                self.terminal.add_log('\nSimulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
+        else:
+            self.terminal.add_log('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
+        self.terminal.add_log('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
+        self.terminal.add_log('Continuum Sensitity: {:.2e}'.format(cont_sens))
+        self.terminal.add_log('Generating skymodel cube ...')
+        datacube = usm.DataCube(
+            n_px_x=n_pix, 
+            n_px_y=n_pix,
+            n_channels=n_channels, 
+            px_size=cell_size, 
+            channel_width=freq_sup, 
+            velocity_centre=central_freq, 
+            ra=ra, 
+            dec=dec)
+        wcs = datacube.wcs
+        fwhm_x, fwhm_y, angle = None, None, None
+        if source_type == 'point':
+            pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_pointlike(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_z, n_channels)
+        elif source_type == 'gaussian':
+            pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+            pos_z = [int(index) for index in source_channel_index]
+            fwhm_x = np.random.randint(3, 10) 
+            fwhm_y = np.random.randint(3, 10)    
+            angle = np.random.randint(0, 180)
+            datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z,
+                                             angle, n_pix, n_channels)
+        elif source_type == 'extended':
+            datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
+        elif source_type == 'diffuse':
+            self.terminal.add_log('\nTo be implemented')
+        elif source_type == 'galaxy-zoo':
+            galaxy_path = os.path.join(galaxy_zoo_dir, 'images_gz2',  'images')
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_pix, n_channels, galaxy_path)
+
+        uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
+                                ra, dec, ang_res, vel_res, int_time, band, band_range, central_freq,
+                                redshift, line_fluxes, line_names, line_frequency, 
+                                continum, fov, beam_size, cell_size, n_pix, 
+                                n_channels, snapshot, tng_subhaloid, lum_infrared, fwhm_z, source_type, fwhm_x, fwhm_y, angle)
+
+        if inject_serendipitous == True:
+            if source_type != 'gaussian':
+                fwhm_x = np.random.randint(3, 10)
+                fwhm_y = np.random.randint(3, 10)
+            datacube = usm.insert_serendipitous(datacube, continum, cont_sens.value, line_fluxes, line_names, line_frequency, 
+                                                freq_sup.value, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
+                                                os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)))
+        #filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
+        #self.terminal.add_log('\nWriting datacube to {}'.format(filename))
+        #usm.write_datacube_to_fits(datacube, filename, obs_date)
+        header = usm.get_datacube_header(datacube, obs_date)
+        model = datacube._array.to_value(datacube._array.unit).T
+        totflux = np.sum(model) 
+        self.terminal.add_log(f'Total Flux injected in model cube: {round(totflux, 3)} Jy')
+        self.terminal.add_log('Done')
+        del datacube
+        self.terminal.add_log('Observing with ALMA')
+        uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value, 
+                            int_time.value * second2hour, obs_date, header, save_mode)
+        self.terminal.add_log('Finished')
+        stop = time.time()
+        self.terminal.add_log('\nExecution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
+        shutil.rmtree(sim_output_dir)
+       
 
 
 if __name__ == "__main__":
