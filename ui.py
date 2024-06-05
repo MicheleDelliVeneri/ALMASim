@@ -285,6 +285,7 @@ class ALMASimulatorUI(QMainWindow):
         button_row.addStretch()
         button_row.addWidget(self.reset_button)
         button_row.addWidget(self.start_button)
+        self.left_layout.addStretch(1)
         self.left_layout.addLayout(button_row)
 
         right_layout.addWidget(self.terminal)
