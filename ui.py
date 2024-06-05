@@ -617,7 +617,8 @@ class ALMASimulatorUI(QMainWindow):
         self.n_pix_entry.clear()
         self.fix_spectral_checkbox.setChecked(False)
         self.n_channels_entry.clear()
-        self.model_combo.setCurrentText("Point")
+        self.model_combo.setCurrentText("Point")  # Reset to default model
+        self.tng_api_key_entry.clear()
         self.line_mode_checkbox.setChecked(False)
         self.serendipitous_checkbox.setChecked(False)
 
@@ -627,7 +628,7 @@ class ALMASimulatorUI(QMainWindow):
         self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
         self.n_sims_entry.setText(self.settings.value("n_sims", ""))
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
-        self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", "get"))
+        self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", ""))
         self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", "sequential"))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", "npz"))
@@ -638,6 +639,7 @@ class ALMASimulatorUI(QMainWindow):
         if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
             self.download_galaxy_zoo()
         line_mode = self.settings.value("line_mode", False, type=bool)
+        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
         self.line_mode_checkbox.setChecked(line_mode)
         if line_mode:
             self.line_index_entry.setText(self.settings.value("line_indices", ""))
@@ -651,7 +653,9 @@ class ALMASimulatorUI(QMainWindow):
         self.fix_spectral_checkbox.setChecked(self.settings.value("fix_spectral", False, type=bool))
         self.n_channels_entry.setText(self.settings.value("n_channels", ""))
         self.serendipitous_checkbox.setChecked(self.settings.value("inject_serendipitous", False, type=bool))
-        self.model_combo.setCurrentText(self.settings.value("model", "Point"))
+        self.model_combo.setCurrentText(self.settings.value("model", ""))
+        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
+        self.toggle_tng_api_key_row()
         
     def closeEvent(self, event):
         self.settings.setValue("output_directory", self.output_entry.text())
@@ -1076,8 +1080,6 @@ class ALMASimulatorUI(QMainWindow):
         self.left_layout.insertLayout(10, self.non_line_mode_row2) # Insert at the end
         self.show_hide_widgets(self.non_line_mode_row1, show=False)
         self.show_hide_widgets(self.non_line_mode_row2, show=False)
-
-
 
     def toggle_line_mode_widgets(self):
         """Shows/hides the appropriate input rows based on line mode checkbox state."""
