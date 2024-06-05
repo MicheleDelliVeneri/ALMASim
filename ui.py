@@ -804,7 +804,7 @@ class ALMASimulatorUI(QMainWindow):
         fov_range = to_range(fov_input)
         time_resolution_range = to_range(time_resolution_input)
         frequency_range = to_range(frequency_input)
-        df = ual.query_by_science_type(science_keyword, scientific_category, bands, fov_range, time_resolution_range, None, frequency_range)
+        df = ual.query_by_science_type(science_keyword, scientific_category, bands, fov_range, time_resolution_range, frequency_range)
         df = df.drop_duplicates(subset='member_ous_uid').drop(df[df['science_keyword'] == ''].index)
         # Rename columns and select relevant data
         rename_columns = {
@@ -828,7 +828,7 @@ class ALMASimulatorUI(QMainWindow):
         df.rename(columns=rename_columns, inplace=True)
         database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time',
                       'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq',
-                       'Freq.sup.', 'antenna_arrays']]
+                       'Freq.sup.', 'antenna_arrays', 'proposal_id', 'member_ous_uid', 'group_ous_uid']]
         database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
         database.to_csv(save_to_input, index=False)
         self.metadata = database
@@ -1278,7 +1278,6 @@ class ALMASimulatorUI(QMainWindow):
 
         sample = metadata.sample(n, replace=True)
         return sample
-
 
     def start_simulation(self):
         # Implement the logic to start the simulation
