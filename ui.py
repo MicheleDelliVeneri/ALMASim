@@ -4,7 +4,7 @@ import pandas as pd
 import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QScrollArea, QGridLayout, 
-    QGroupBox, QCheckBox, QRadioButton, QButtonGroup, QSizePolicy, QCheckBox,
+    QGroupBox, QCheckBox, QRadioButton, QButtonGroup, QSizePolicy, QCheckBox, QSplitter,
     QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox, QPlainTextEdit  
 )
 from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt
@@ -165,7 +165,73 @@ class ALMASimulatorUI(QMainWindow):
 
         # --- Create Widgets ---
 
-        # 1
+        
+       
+
+        self.metadata_path_label = QLabel("Metadata Path:")
+        self.metadata_path_entry = QLineEdit()
+        self.metadata_path_button = QPushButton("Browse")
+        self.metadata_path_button.clicked.connect(self.browse_metadata_path)
+        self.metadata_path_row = QHBoxLayout()
+        self.metadata_path_row.addWidget(self.metadata_path_label)
+        self.metadata_path_row.addWidget(self.metadata_path_entry)
+        self.metadata_path_row.addWidget(self.metadata_path_button)
+
+        self.start_button = QPushButton("Start Simulation")
+        self.start_button.clicked.connect(self.start_simulation)
+
+        self.reset_button = QPushButton("Reset")
+        self.reset_button.clicked.connect(self.reset_fields)
+
+
+        #self.terminal = QPlainTextEdit()
+        #self.terminal.setReadOnly(True)
+        self.terminal = LogView()
+        # --- Layout ---
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+        self.left_layout = QVBoxLayout()
+        right_layout = QVBoxLayout()
+
+        
+        # Button Row
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        button_row.addWidget(self.reset_button)
+        button_row.addWidget(self.start_button)
+        self.left_layout.addStretch(1)
+        self.left_layout.addLayout(button_row)
+
+        right_layout.addWidget(self.terminal)
+        
+        main_layout.addLayout(self.left_layout)
+        main_layout.addLayout(right_layout)
+        main_layout.setStretch(0, 3)  # left_layout stretch factor
+        main_layout.setStretch(1, 2)  # right_layout stretch factor
+
+        self.line_displayed = False
+        self.add_folder_widgets()
+        self.add_line_widgets()
+        self.add_dim_widgets()
+        self.add_model_widgets()
+        self.add_meta_widgets()
+        self.add_query_widgets()
+        # Load saved settings
+        self.load_settings()
+        self.terminal.start_log("")
+        # Check metadata mode on initialization
+        self.toggle_line_mode_widgets()
+        self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
+        if self.metadata_path_entry.text() != "" and isfile(self.metadata_path_entry.text()):
+            self.load_metadata(self.metadata_path_entry.text())
+        current_mode = self.metadata_mode_combo.currentText()
+        self.toggle_metadata_browse(current_mode)  # Call here
+
+
+    # Add and remove folder widgets 1 - 9
+    def add_folder_widgets(self):
+         # 1
         self.output_label = QLabel("Output Directory:")
         self.output_entry = QLineEdit()
         self.output_button = QPushButton("Browse")
@@ -197,12 +263,206 @@ class ALMASimulatorUI(QMainWindow):
         self.comp_mode_label = QLabel("Computation Mode:")
         self.comp_mode_combo = QComboBox()
         self.comp_mode_combo.addItems(["sequential", "parallel"])
-        # 9
+
+        self.flux_mode_label = QLabel('Flux Simulation Mode:')
+        self.flux_mode_combo = QComboBox()
+        self.flux_mode_combo.addItems(["direct", 'line-ratios'])
+        # 9  
+        # Output Directory Row
+        output_row = QHBoxLayout()
+        output_row.addWidget(self.output_label)
+        output_row.addWidget(self.output_entry)
+        output_row.addWidget(self.output_button)
+        self.left_layout.insertLayout(1, output_row)
+
+        # TNG Directory Row
+        tng_row = QHBoxLayout()
+        tng_row.addWidget(self.tng_label)
+        tng_row.addWidget(self.tng_entry)
+        tng_row.addWidget(self.tng_button)
+        self.left_layout.insertLayout(2, tng_row)
+
+        # Galaxy Zoo Directory Row
+        galaxy_row = QHBoxLayout()
+        galaxy_row.addWidget(self.galaxy_zoo_label)
+        galaxy_row.addWidget(self.galaxy_zoo_entry)
+        galaxy_row.addWidget(self.galaxy_zoo_button)
+        self.left_layout.insertLayout(3, galaxy_row)
+
+        # Project Name Row
+        project_name_row = QHBoxLayout()
+        project_name_row.addWidget(self.project_name_label)
+        project_name_row.addWidget(self.project_name_entry)
+        self.left_layout.insertLayout(4, project_name_row)
+
+        # Number of Simulations Row
+        n_sims_row = QHBoxLayout()
+        n_sims_row.addWidget(self.n_sims_label)
+        n_sims_row.addWidget(self.n_sims_entry)
+        self.left_layout.insertLayout(5, n_sims_row)
+
+        # Number of CPUs Row
+        ncpu_row = QHBoxLayout()
+        ncpu_row.addWidget(self.ncpu_label)
+        ncpu_row.addWidget(self.ncpu_entry)
+        self.left_layout.insertLayout(6, ncpu_row)
+
+        # Save format Row
+        save_format_row = QHBoxLayout()
+        save_format_row.addWidget(self.save_format_label)
+        save_format_row.addWidget(self.save_format_combo)
+        self.left_layout.insertLayout(7, save_format_row)
+
+        # Computation Mode Row
+        comp_mode_row = QHBoxLayout()
+        comp_mode_row.addWidget(self.comp_mode_label)
+        comp_mode_row.addWidget(self.comp_mode_combo)
+        self.left_layout.insertLayout(8, comp_mode_row)
+
+        flux_mode_row = QHBoxLayout()
+        flux_mode_row.addWidget(self.flux_mode_label)
+        flux_mode_row.addWidget(self.flux_mode_combo)
+        self.left_layout.insertLayout(9, flux_mode_row)
+    # Add Line mode widgets 10 - 12
+    def add_line_widgets(self): 
+        self.line_mode_checkbox = QCheckBox("Line Mode")
+        self.line_mode_checkbox.stateChanged.connect(self.toggle_line_mode_widgets)
+        #self.left_layout.insertWidget(8, self.line_mode_checkbox) 
+        # Widgets for Line Mode
+        self.line_index_label = QLabel('Select Line Indices (space-separated):')
+        self.line_index_entry = QLineEdit()
+        self.line_mode_row = QHBoxLayout()
+        self.line_mode_row.addWidget(self.line_mode_checkbox)
+        self.left_layout.insertLayout(10, self.line_mode_row)    # Insert at the end
+        # Widgets for Non-Line Mode
+        redshift_label = QLabel('Redshifts (space-separated):')
+        self.redshift_entry = QLineEdit()
+        num_lines_label = QLabel('Number of Lines to Simulate:')
+        self.num_lines_entry = QLineEdit()
+        self.non_line_mode_row1 = QHBoxLayout()
+        self.non_line_mode_row1.addWidget(redshift_label)
+        self.non_line_mode_row1.addWidget(self.redshift_entry)
+        self.non_line_mode_row2 = QHBoxLayout()
+        self.non_line_mode_row2.addWidget(num_lines_label)
+        self.non_line_mode_row2.addWidget(self.num_lines_entry)
+        self.left_layout.insertLayout(11, self.non_line_mode_row1) # Insert at the end
+        self.left_layout.insertLayout(12, self.non_line_mode_row2) # Insert at the end
+        self.show_hide_widgets(self.non_line_mode_row1, show=False)
+        self.show_hide_widgets(self.non_line_mode_row2, show=False)
+
+    def toggle_line_mode_widgets(self):
+        """Shows/hides the appropriate input rows based on line mode checkbox state."""
+        if self.line_mode_checkbox.isChecked():
+            if not self.has_widget(self.line_mode_row, QLabel):
+                self.line_mode_row.addWidget(self.line_index_label)
+                self.line_mode_row.addWidget(self.line_index_entry)
+            # Show the widgets in line_mode_row
+            self.show_hide_widgets(self.line_mode_row, show=True)
+            # Hide the widgets in non_line_mode_row1 and non_line_mode_row2
+            self.show_hide_widgets(self.non_line_mode_row1, show=False)
+            self.show_hide_widgets(self.non_line_mode_row2, show=False)
+            if self.line_displayed == False:
+                self.line_display()
+        else:
+            # Hide the widgets in line_mode_row
+            self.show_hide_widgets(self.line_mode_row, show=False)
+            if self.has_widget(self.line_mode_row, QLabel):
+                self.line_mode_row.removeWidget(self.line_index_label)
+                self.line_mode_row.removeWidget(self.line_index_entry)
+            self.show_hide_widgets(self.line_mode_row, show=True)
+            # Show the widgets in non_line_mode_row1 and non_line_mode_row2
+            self.show_hide_widgets(self.non_line_mode_row1, show=True)
+            self.show_hide_widgets(self.non_line_mode_row2, show=True)
+
+    # Add dim widgets 13
+    def add_dim_widgets(self):
+        # --- Set SNR ---
+        self.snr_checkbox = QCheckBox("Set SNR")
+        self.snr_entry = QLineEdit()
+        self.snr_entry.setVisible(False) 
+        self.snr_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.snr_entry))
+
+        # --- Set Infrared Luminosity ---
+        self.ir_luminosity_checkbox = QCheckBox("Set IR Luminosity")
+        self.ir_luminosity_entry = QLineEdit()
+        self.ir_luminosity_entry.setVisible(False)
+        self.ir_luminosity_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.ir_luminosity_entry))
+
+        # --- Fix Spatial Dimension Checkbox and Field ---
+        self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dim")
+        self.n_pix_entry = QLineEdit()
+        self.n_pix_entry.setVisible(False)
+        self.fix_spatial_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_pix_entry))
+
+        # --- Fix Spectral Dimension Checkbox and Field ---
+        self.fix_spectral_checkbox = QCheckBox("Fix Spectral Dim")
+        self.n_channels_entry = QLineEdit()
+        self.n_channels_entry.setVisible(False)
+        self.fix_spectral_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry))
+
+
+        # --- Inject Serendipitous sources ----
+        self.serendipitous_checkbox = QCheckBox("Inject Serendipitous")
+
+        # --- Layout for Checkboxes and Fields ---
+        checkbox_row = QHBoxLayout()
+        checkbox_row.addWidget(self.snr_checkbox)
+        checkbox_row.addWidget(self.snr_entry)
+        checkbox_row.addWidget(self.ir_luminosity_checkbox)
+        checkbox_row.addWidget(self.ir_luminosity_entry)
+        checkbox_row.addWidget(self.fix_spatial_checkbox)
+        checkbox_row.addWidget(self.n_pix_entry)
+        checkbox_row.addWidget(self.fix_spectral_checkbox)
+        checkbox_row.addWidget(self.n_channels_entry)
+        checkbox_row.addWidget(self.serendipitous_checkbox)
+        self.left_layout.insertLayout(13, checkbox_row)
+
+    # Add model widgets 14
+    def add_model_widgets(self):
+        self.model_label = QLabel("Select Model:")
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["Point", "Gaussian", "Extended", 'Diffuse', 'Galaxy Zoo', 'Hubble 100', 'Molecular'])
+        self.model_row = QHBoxLayout()
+        self.model_row.addWidget(self.model_label)
+        self.model_row.addWidget(self.model_combo)
+        self.left_layout.insertLayout(14, self.model_row)
+        self.tng_api_key_label = QLabel("TNG API Key:")
+        self.tng_api_key_entry = QLineEdit()
+        self.tng_api_key_row = QHBoxLayout()
+        self.tng_api_key_row.addWidget(self.tng_api_key_label)
+        self.tng_api_key_row.addWidget(self.tng_api_key_entry)
+
+        # Initially hide the TNG API key row
+        self.show_hide_widgets(self.tng_api_key_row, show=False)
+
+        self.left_layout.insertLayout(15, self.tng_api_key_row)  # Insert after model_row
+        # Connect the model_combo's signal to update visibility
+        self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
+    
+    def toggle_tng_api_key_row(self):
+        """Shows/hides the TNG API key row based on the selected model."""
+        if self.model_combo.currentText() == "Extended":
+            self.show_hide_widgets(self.tng_api_key_row, show=True)
+        else:
+            self.show_hide_widgets(self.tng_api_key_row, show=False)
+
+    def toggle_dim_widgets_visibility(self, widget):
+         widget.setVisible(self.sender().isChecked())
+
+    # Metadata query switch 15
+    def add_meta_widgets(self):
         self.metadata_mode_label = QLabel("Metadata Retrieval Mode:")
         self.metadata_mode_combo = QComboBox()
         self.metadata_mode_combo.addItems(["query", "get"])
         self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
+        # Metadata Retrieval Mode Row
+        self.metadata_mode_row = QHBoxLayout()
+        self.metadata_mode_row.addWidget(self.metadata_mode_label)
+        self.metadata_mode_row.addWidget(self.metadata_mode_combo)
+        self.left_layout.insertLayout(16, self.metadata_mode_row)
 
+
+    def add_metadata_widgets(self):
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
         self.metadata_path_button = QPushButton("Browse")
@@ -211,110 +471,190 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
+        self.left_layout.insertLayout(17, self.metadata_path_row)
+        self.left_layout.update() 
 
-        self.start_button = QPushButton("Start Simulation")
-        self.start_button.clicked.connect(self.start_simulation)
+    def add_query_widgets(self):
+        # Create widgets for querying
+        self.query_type_label = QLabel("Query Type:")
+        self.query_type_combo = QComboBox()
+        self.query_type_combo.addItems(["science", "target"])
+        self.query_type_row = QHBoxLayout()
+        self.query_type_row.addWidget(self.query_type_label)
+        self.query_type_row.addWidget(self.query_type_combo)
+        self.query_save_label = QLabel("Save Metadata to:")
+        
+        # Set the initial label text
+        #self.update_query_save_label(self.query_type_combo.currentText())
+        self.query_save_entry = QLineEdit()
+        self.query_save_button = QPushButton("Browse")
+        # Connect browse button to appropriate method (you'll need to implement this)
+        self.query_save_button.clicked.connect(self.select_metadata_path)
+        self.query_execute_button = QPushButton("Execute Query")
+        self.query_execute_button.clicked.connect(self.execute_query)
+        self.query_save_row = QHBoxLayout()
+        self.query_save_row.addWidget(self.query_save_label)
+        self.query_save_row.addWidget(self.query_save_entry)
+        self.query_save_row.addWidget(self.query_save_button)
+        self.target_list_label = QLabel("Load Target List:")
+        self.target_list_entry = QLineEdit()
+        self.target_list_button = QPushButton("Browse")
+        self.target_list_button.clicked.connect(self.browse_target_list)  # Add function for browsing
+        self.target_list_row = QHBoxLayout()
+        self.target_list_row.addWidget(self.target_list_label)
+        self.target_list_row.addWidget(self.target_list_entry)
+        self.target_list_row.addWidget(self.target_list_button)
+        #self.target_list_row.hide()  # Initially hide the row
+        self.show_hide_widgets(self.target_list_row, show=False)
 
-        self.reset_button = QPushButton("Reset")
-        self.reset_button.clicked.connect(self.reset_fields)
+        # Insert layouts at the correct positions
+        self.left_layout.insertLayout(17, self.query_type_row)
+        self.left_layout.insertLayout(18, self.target_list_row)  # Insert target list row
+        self.left_layout.insertLayout(19, self.query_save_row)
+        self.left_layout.insertWidget(20, self.query_execute_button)
+        self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
 
+    def remove_metadata_browse(self):
+        if self.metadata_path_row.parent() is not None:
+            layout = self.metadata_path_row.parent()  # Get the parent layout
 
-        #self.terminal = QPlainTextEdit()
-        #self.terminal.setReadOnly(True)
-        self.terminal = LogView()
-        # --- Layout ---
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        self.left_layout = QVBoxLayout()
-        right_layout = QVBoxLayout()
+            # Remove all items from the layout
+            for i in reversed(range(self.metadata_path_row.count())):
+                item = self.metadata_path_row.takeAt(i)
+                if item.widget():
+                    item.widget().deleteLater()
 
-        # Output Directory Row
-        output_row = QHBoxLayout()
-        output_row.addWidget(self.output_label)
-        output_row.addWidget(self.output_entry)
-        output_row.addWidget(self.output_button)
-        self.left_layout.addLayout(output_row)
+            layout.removeItem(self.metadata_path_row)  # Remove the row layout from its parent
+            self.metadata_path_row.setParent(None)  # Set the parent to None
+            self.metadata = None  # Clear any loaded metadata
 
-        # TNG Directory Row
-        tng_row = QHBoxLayout()
-        tng_row.addWidget(self.tng_label)
-        tng_row.addWidget(self.tng_entry)
-        tng_row.addWidget(self.tng_button)
-        self.left_layout.addLayout(tng_row)
+    def toggle_metadata_browse(self, mode):
+        if mode == "get":
+            if self.metadata_path_row.parent() is None:  # Check if already added
+                #self.left_layout.insertLayout(8, self.metadata_path_row) # Re-insert at correct position
+                #self.left_layout.update()  # Force layout update to show the row
+                self.remove_query_widgets()  # Remove query widgets if present
+                self.add_metadata_widgets()
+                if self.metadata_query_widgets_added:
+                    self.remove_metadata_query_widgets()
+        elif mode == "query":
+            if self.query_type_row.parent() is None:
+                self.remove_metadata_browse()  # Remove browse widgets if present
+                self.add_query_widgets()
+        else:
+            self.remove_metadata_browse()
+            self.remove_query_widgets()
 
-        # Galaxy Zoo Directory Row
-        galaxy_row = QHBoxLayout()
-        galaxy_row.addWidget(self.galaxy_zoo_label)
-        galaxy_row.addWidget(self.galaxy_zoo_entry)
-        galaxy_row.addWidget(self.galaxy_zoo_button)
-        self.left_layout.addLayout(galaxy_row)
+    def remove_query_widgets(self):
+        """Removes the query type and save location rows from the layout."""
+        
+        # Remove query type row
+        if self.query_type_row.parent() is not None:  # Check if row is in layout
+            layout = self.query_type_row.parent()
+            layout.removeItem(self.query_type_row)   # Remove the row
+            self.query_type_row.setParent(None)      # Disassociate the row from parent
+            
+            # Delete widgets in row
+            for i in reversed(range(self.query_type_row.count())): 
+                item = self.query_type_row.takeAt(i)
+                widget = item.widget()
+                if widget is not None:  # Check if it's a widget before deleting
+                    widget.deleteLater()
+        
+        # Remove query save row (same logic as above)
+        if self.query_save_row.parent() is not None:
+            layout = self.query_save_row.parent()
+            layout.removeItem(self.query_save_row)
+            self.query_save_row.setParent(None)
+            
+            for i in reversed(range(self.query_save_row.count())):
+                item = self.query_save_row.takeAt(i)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+        # Remove execute query button
+        if self.query_execute_button.parent() is not None:
+            layout = self.left_layout # Directly access the main vertical layout 
+            # Remove the widget from the layout
+            index = layout.indexOf(self.query_execute_button) 
+            if index >= 0:  
+                item = layout.takeAt(index)
+                if item.widget() is not None: 
+                    item.widget().deleteLater()
+        if self.target_list_row.parent() is not None:
+            layout = self.target_list_row.parent()
+            layout.removeItem(self.target_list_row)
+            self.target_list_row.setParent(None)
+            for i in reversed(range(self.target_list_row.count())):
+                item = self.target_list_row.takeAt(i)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
 
-        # Project Name Row
-        project_name_row = QHBoxLayout()
-        project_name_row.addWidget(self.project_name_label)
-        project_name_row.addWidget(self.project_name_entry)
-        self.left_layout.addLayout(project_name_row)
+        self.metadata_query_widgets_added = False
 
-        # Number of Simulations Row
-        n_sims_row = QHBoxLayout()
-        n_sims_row.addWidget(self.n_sims_label)
-        n_sims_row.addWidget(self.n_sims_entry)
-        self.left_layout.addLayout(n_sims_row)
+    def add_metadata_query_widgets(self):
+        # Create widgets for querying parameters
+        science_keyword_label = QLabel('Select Science Keyword by number (space-separated):')
+        self.science_keyword_entry = QLineEdit()  # Use QLineEdit instead of input
 
-        # Number of CPUs Row
-        ncpu_row = QHBoxLayout()
-        ncpu_row.addWidget(self.ncpu_label)
-        ncpu_row.addWidget(self.ncpu_entry)
-        self.left_layout.addLayout(ncpu_row)
+        scientific_category_label = QLabel('Select Scientific Category by number (space-separated):')
+        self.scientific_category_entry = QLineEdit()
 
-        # Save format Row
-        save_format_row = QHBoxLayout()
-        save_format_row.addWidget(self.save_format_label)
-        save_format_row.addWidget(self.save_format_combo)
-        self.left_layout.addLayout(save_format_row)
+        band_label = QLabel('Select observing bands (space-separated):')
+        self.band_entry = QLineEdit()
 
-        # Computation Mode Row
-        comp_mode_row = QHBoxLayout()
-        comp_mode_row.addWidget(self.comp_mode_label)
-        comp_mode_row.addWidget(self.comp_mode_combo)
-        self.left_layout.addLayout(comp_mode_row)
+        fov_label = QLabel('Select FOV range (min max) or max only (space-separated):')
+        self.fov_entry = QLineEdit()
 
-        # Metadata Retrieval Mode Row
-        metadata_mode_row = QHBoxLayout()
-        metadata_mode_row.addWidget(self.metadata_mode_label)
-        metadata_mode_row.addWidget(self.metadata_mode_combo)
-        self.left_layout.addLayout(metadata_mode_row)
+        time_resolution_label = QLabel('Select integration time  range (min max) or max only (space-separated):')
+        self.time_resolution_entry = QLineEdit()
 
-        # Button Row
-        button_row = QHBoxLayout()
-        button_row.addStretch()
-        button_row.addWidget(self.reset_button)
-        button_row.addWidget(self.start_button)
-        self.left_layout.addStretch(1)
-        self.left_layout.addLayout(button_row)
+        frequency_label = QLabel('Select source frequency range (min max) or max only (space-separated):')
+        self.frequency_entry = QLineEdit()
+        
+        self.continue_query_button = QPushButton("Continue Query")
+        self.continue_query_button.clicked.connect(self.execute_query)
 
-        right_layout.addWidget(self.terminal)
+        # Create layouts and add widgets
+        self.science_keyword_row = QHBoxLayout()
+        self.science_keyword_row.addWidget(science_keyword_label)
+        self.science_keyword_row.addWidget(self.science_keyword_entry)
 
-        main_layout.addLayout(self.left_layout)
-        main_layout.addLayout(right_layout)
-        main_layout.setStretch(0, 1)  # left_layout stretch factor
-        main_layout.setStretch(1, 2)  # right_layout stretch factor
+        self.scientific_category_row = QHBoxLayout()
+        self.scientific_category_row.addWidget(scientific_category_label)
+        self.scientific_category_row.addWidget(self.scientific_category_entry)
 
-        self.line_displayed = False
-        self.add_line_widgets()
-        self.add_dim_widgets()
-        self.add_model_widgets()
-        self.add_query_widgets()
-        # Load saved settings
-        self.load_settings()
-        self.terminal.start_log("")
-        # Check metadata mode on initialization
-        self.toggle_line_mode_widgets()
-        self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
-        #self.load_metadata(self.metadata_path_entry.text())
-        current_mode = self.metadata_mode_combo.currentText()
-        self.toggle_metadata_browse(current_mode)  # Call here
+        self.band_row = QHBoxLayout()
+        self.band_row.addWidget(band_label)
+        self.band_row.addWidget(self.band_entry)
+
+        self.fov_row = QHBoxLayout()
+        self.fov_row.addWidget(fov_label)
+        self.fov_row.addWidget(self.fov_entry)
+
+        self.time_resolution_row  = QHBoxLayout()
+        self.time_resolution_row.addWidget(time_resolution_label)
+        self.time_resolution_row.addWidget(self.time_resolution_entry)
+
+        self.frequency_row = QHBoxLayout()
+        self.frequency_row.addWidget(frequency_label)
+        self.frequency_row.addWidget(self.frequency_entry)
+
+        self.continue_query_row = QHBoxLayout()
+        self.continue_query_row.addWidget(self.continue_query_button)
+
+        # Insert rows into left_layout (adjust index if needed)
+        self.left_layout.insertLayout(20, self.science_keyword_row)
+        self.left_layout.insertLayout(21, self.scientific_category_row)
+        self.left_layout.insertLayout(22, self.band_row)
+        self.left_layout.insertLayout(23, self.fov_row)
+        self.left_layout.insertLayout(24, self.time_resolution_row)
+        self.left_layout.insertLayout(25, self.frequency_row)
+        self.left_layout.insertWidget(26, self.continue_query_button)
+        self.terminal.add_log("\n\nFill out the fields and click 'Continue Query' to proceed.")
+        self.query_execute_button.hide()  # Hide the execute query button
+
 
     def get_tap_service(self):
         urls = ["https://almascience.eso.org/tap", "https://almascience.nao.ac.jp/tap",
@@ -614,6 +954,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_mode_combo.setCurrentText("get")
         self.comp_mode_combo.setCurrentText("sequential")
         self.query_save_entry.clear()
+        self.project_name_entry.clear()
         self.save_format_combo.setCurrentText("npz")
         self.redshift_entry.clear()
         self.num_lines_entry.clear()
@@ -639,6 +980,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", ""))
         self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
+        self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
         if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text() != "":
             self.load_metadata(self.metadata_path_entry.text())
@@ -674,6 +1016,7 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
         self.settings.setValue('n_sims', self.n_sims_entry.text())
         self.settings.setValue("ncpu", self.ncpu_entry.text())
+        self.settings.setValue("project_name", self.project_name_entry.text())
         if self.metadata_mode_combo.currentText() == "get":
             self.settings.setValue("metadata_path", self.metadata_path_entry.text())
         elif self.metadata_mode_combo.currentText() == "query":
@@ -700,36 +1043,7 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("set_ir_luminosity", self.ir_luminosity_checkbox.isChecked())
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
         super().closeEvent(event)
-
-    def toggle_metadata_browse(self, mode):
-        if mode == "get":
-            if self.metadata_path_row.parent() is None:  # Check if already added
-                #self.left_layout.insertLayout(8, self.metadata_path_row) # Re-insert at correct position
-                #self.left_layout.update()  # Force layout update to show the row
-                self.remove_query_widgets()  # Remove query widgets if present
-                self.add_metadata_widgets()
-                if self.metadata_query_widgets_added:
-                    self.remove_metadata_query_widgets()
-        elif mode == "query":
-            if self.query_type_row.parent() is None:
-                self.remove_metadata_browse()  # Remove browse widgets if present
-                self.add_query_widgets()
-        else:
-            self.remove_metadata_browse()
-            self.remove_query_widgets()
-
-    def add_metadata_widgets(self):
-        self.metadata_path_label = QLabel("Metadata Path:")
-        self.metadata_path_entry = QLineEdit()
-        self.metadata_path_button = QPushButton("Browse")
-        self.metadata_path_button.clicked.connect(self.browse_metadata_path)
-        self.metadata_path_row = QHBoxLayout()
-        self.metadata_path_row.addWidget(self.metadata_path_label)
-        self.metadata_path_row.addWidget(self.metadata_path_entry)
-        self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(15, self.metadata_path_row)
-        self.left_layout.update() 
-    
+  
     def show_hide_widgets(self, layout, show=True):
         for i in range(layout.count()):
             item = layout.itemAt(i)
@@ -835,68 +1149,6 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         del database
         
-    def add_metadata_query_widgets(self):
-        # Create widgets for querying parameters
-        science_keyword_label = QLabel('Select Science Keyword by number (space-separated):')
-        self.science_keyword_entry = QLineEdit()  # Use QLineEdit instead of input
-
-        scientific_category_label = QLabel('Select Scientific Category by number (space-separated):')
-        self.scientific_category_entry = QLineEdit()
-
-        band_label = QLabel('Select observing bands (space-separated):')
-        self.band_entry = QLineEdit()
-
-        fov_label = QLabel('Select FOV range (min max) or max only (space-separated):')
-        self.fov_entry = QLineEdit()
-
-        time_resolution_label = QLabel('Select integration time  range (min max) or max only (space-separated):')
-        self.time_resolution_entry = QLineEdit()
-
-        frequency_label = QLabel('Select source frequency range (min max) or max only (space-separated):')
-        self.frequency_entry = QLineEdit()
-        
-        self.continue_query_button = QPushButton("Continue Query")
-        self.continue_query_button.clicked.connect(self.execute_query)
-
-        # Create layouts and add widgets
-        self.science_keyword_row = QHBoxLayout()
-        self.science_keyword_row.addWidget(science_keyword_label)
-        self.science_keyword_row.addWidget(self.science_keyword_entry)
-
-        self.scientific_category_row = QHBoxLayout()
-        self.scientific_category_row.addWidget(scientific_category_label)
-        self.scientific_category_row.addWidget(self.scientific_category_entry)
-
-        self.band_row = QHBoxLayout()
-        self.band_row.addWidget(band_label)
-        self.band_row.addWidget(self.band_entry)
-
-        self.fov_row = QHBoxLayout()
-        self.fov_row.addWidget(fov_label)
-        self.fov_row.addWidget(self.fov_entry)
-
-        self.time_resolution_row  = QHBoxLayout()
-        self.time_resolution_row.addWidget(time_resolution_label)
-        self.time_resolution_row.addWidget(self.time_resolution_entry)
-
-        self.frequency_row = QHBoxLayout()
-        self.frequency_row.addWidget(frequency_label)
-        self.frequency_row.addWidget(self.frequency_entry)
-
-        self.continue_query_row = QHBoxLayout()
-        self.continue_query_row.addWidget(self.continue_query_button)
-
-        # Insert rows into left_layout (adjust index if needed)
-        self.left_layout.insertLayout(17, self.science_keyword_row)
-        self.left_layout.insertLayout(18, self.scientific_category_row)
-        self.left_layout.insertLayout(19, self.band_row)
-        self.left_layout.insertLayout(20, self.fov_row)
-        self.left_layout.insertLayout(21, self.time_resolution_row)
-        self.left_layout.insertLayout(22, self.frequency_row)
-        self.left_layout.insertWidget(23, self.continue_query_button)
-        self.terminal.add_log("\n\nFill out the fields and click 'Continue Query' to proceed.")
-        self.query_execute_button.hide()  # Hide the execute query button
-        
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
         # all the rows and widgets added in add_metadata_query_widgets.
@@ -929,61 +1181,6 @@ class ALMASimulatorUI(QMainWindow):
         if file_path:
             self.target_list_entry.setText(file_path)
 
-    def add_query_widgets(self):
-        # Create widgets for querying
-        self.query_type_label = QLabel("Query Type:")
-        self.query_type_combo = QComboBox()
-        self.query_type_combo.addItems(["science", "target"])
-        self.query_type_row = QHBoxLayout()
-        self.query_type_row.addWidget(self.query_type_label)
-        self.query_type_row.addWidget(self.query_type_combo)
-        self.query_save_label = QLabel("Save Metadata to:")
-        
-        # Set the initial label text
-        #self.update_query_save_label(self.query_type_combo.currentText())
-        self.query_save_entry = QLineEdit()
-        self.query_save_button = QPushButton("Browse")
-        # Connect browse button to appropriate method (you'll need to implement this)
-        self.query_save_button.clicked.connect(self.select_metadata_path)
-        self.query_execute_button = QPushButton("Execute Query")
-        self.query_execute_button.clicked.connect(self.execute_query)
-        self.query_save_row = QHBoxLayout()
-        self.query_save_row.addWidget(self.query_save_label)
-        self.query_save_row.addWidget(self.query_save_entry)
-        self.query_save_row.addWidget(self.query_save_button)
-        self.target_list_label = QLabel("Load Target List:")
-        self.target_list_entry = QLineEdit()
-        self.target_list_button = QPushButton("Browse")
-        self.target_list_button.clicked.connect(self.browse_target_list)  # Add function for browsing
-        self.target_list_row = QHBoxLayout()
-        self.target_list_row.addWidget(self.target_list_label)
-        self.target_list_row.addWidget(self.target_list_entry)
-        self.target_list_row.addWidget(self.target_list_button)
-        #self.target_list_row.hide()  # Initially hide the row
-        self.show_hide_widgets(self.target_list_row, show=False)
-
-        # Insert layouts at the correct positions
-        self.left_layout.insertLayout(15, self.query_type_row)
-        self.left_layout.insertLayout(16, self.target_list_row)  # Insert target list row
-        self.left_layout.insertLayout(17, self.query_save_row)
-        self.left_layout.insertWidget(18, self.query_execute_button)
-
-        self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
-
-    def remove_metadata_browse(self):
-        if self.metadata_path_row.parent() is not None:
-            layout = self.metadata_path_row.parent()  # Get the parent layout
-
-            # Remove all items from the layout
-            for i in reversed(range(self.metadata_path_row.count())):
-                item = self.metadata_path_row.takeAt(i)
-                if item.widget():
-                    item.widget().deleteLater()
-
-            layout.removeItem(self.metadata_path_row)  # Remove the row layout from its parent
-            self.metadata_path_row.setParent(None)  # Set the parent to None
-            self.metadata = None  # Clear any loaded metadata
-
     def check_tng_dirs(self):
         tng_dir = self.tng_entry.text()
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
@@ -1000,54 +1197,6 @@ class ALMASimulatorUI(QMainWindow):
             cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(self.tng_api_key_entry.text(), os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
             subprocess.check_call(cmd, shell=True)
             self.terminal.add_log('Done.')
-
-    def remove_query_widgets(self):
-        """Removes the query type and save location rows from the layout."""
-        
-        # Remove query type row
-        if self.query_type_row.parent() is not None:  # Check if row is in layout
-            layout = self.query_type_row.parent()
-            layout.removeItem(self.query_type_row)   # Remove the row
-            self.query_type_row.setParent(None)      # Disassociate the row from parent
-            
-            # Delete widgets in row
-            for i in reversed(range(self.query_type_row.count())): 
-                item = self.query_type_row.takeAt(i)
-                widget = item.widget()
-                if widget is not None:  # Check if it's a widget before deleting
-                    widget.deleteLater()
-        
-        # Remove query save row (same logic as above)
-        if self.query_save_row.parent() is not None:
-            layout = self.query_save_row.parent()
-            layout.removeItem(self.query_save_row)
-            self.query_save_row.setParent(None)
-            
-            for i in reversed(range(self.query_save_row.count())):
-                item = self.query_save_row.takeAt(i)
-                widget = item.widget()
-                if widget is not None:
-                    widget.deleteLater()
-        # Remove execute query button
-        if self.query_execute_button.parent() is not None:
-            layout = self.left_layout # Directly access the main vertical layout 
-            # Remove the widget from the layout
-            index = layout.indexOf(self.query_execute_button) 
-            if index >= 0:  
-                item = layout.takeAt(index)
-                if item.widget() is not None: 
-                    item.widget().deleteLater()
-        if self.target_list_row.parent() is not None:
-            layout = self.target_list_row.parent()
-            layout.removeItem(self.target_list_row)
-            self.target_list_row.setParent(None)
-            for i in reversed(range(self.target_list_row.count())):
-                item = self.target_list_row.takeAt(i)
-                widget = item.widget()
-                if widget is not None:
-                    widget.deleteLater()
-
-        self.metadata_query_widgets_added = False
         
     def load_metadata(self, metadata_path):
         try:
@@ -1069,55 +1218,6 @@ class ALMASimulatorUI(QMainWindow):
                 return True
         return False
 
-    def add_line_widgets(self): 
-        self.line_mode_checkbox = QCheckBox("Line Mode")
-        self.line_mode_checkbox.stateChanged.connect(self.toggle_line_mode_widgets)
-        #self.left_layout.insertWidget(8, self.line_mode_checkbox) 
-        # Widgets for Line Mode
-        self.line_index_label = QLabel('Select Line Indices (space-separated):')
-        self.line_index_entry = QLineEdit()
-        self.line_mode_row = QHBoxLayout()
-        self.line_mode_row.addWidget(self.line_mode_checkbox)
-        self.left_layout.insertLayout(8, self.line_mode_row)    # Insert at the end
-        # Widgets for Non-Line Mode
-        redshift_label = QLabel('Redshifts (space-separated):')
-        self.redshift_entry = QLineEdit()
-        num_lines_label = QLabel('Number of Lines to Simulate:')
-        self.num_lines_entry = QLineEdit()
-        self.non_line_mode_row1 = QHBoxLayout()
-        self.non_line_mode_row1.addWidget(redshift_label)
-        self.non_line_mode_row1.addWidget(self.redshift_entry)
-        self.non_line_mode_row2 = QHBoxLayout()
-        self.non_line_mode_row2.addWidget(num_lines_label)
-        self.non_line_mode_row2.addWidget(self.num_lines_entry)
-        self.left_layout.insertLayout(9, self.non_line_mode_row1) # Insert at the end
-        self.left_layout.insertLayout(10, self.non_line_mode_row2) # Insert at the end
-        self.show_hide_widgets(self.non_line_mode_row1, show=False)
-        self.show_hide_widgets(self.non_line_mode_row2, show=False)
-
-    def toggle_line_mode_widgets(self):
-        """Shows/hides the appropriate input rows based on line mode checkbox state."""
-        if self.line_mode_checkbox.isChecked():
-            if not self.has_widget(self.line_mode_row, QLabel):
-                self.line_mode_row.addWidget(self.line_index_label)
-                self.line_mode_row.addWidget(self.line_index_entry)
-            # Show the widgets in line_mode_row
-            self.show_hide_widgets(self.line_mode_row, show=True)
-            # Hide the widgets in non_line_mode_row1 and non_line_mode_row2
-            self.show_hide_widgets(self.non_line_mode_row1, show=False)
-            self.show_hide_widgets(self.non_line_mode_row2, show=False)
-            if self.line_displayed == False:
-                self.line_display()
-        else:
-            # Hide the widgets in line_mode_row
-            self.show_hide_widgets(self.line_mode_row, show=False)
-            if self.has_widget(self.line_mode_row, QLabel):
-                self.line_mode_row.removeWidget(self.line_index_label)
-                self.line_mode_row.removeWidget(self.line_index_entry)
-            # Show the widgets in non_line_mode_row1 and non_line_mode_row2
-            self.show_hide_widgets(self.non_line_mode_row1, show=True)
-            self.show_hide_widgets(self.non_line_mode_row2, show=True)
-
     def line_display(self):
         """
         Display the line emission's rest frequency.
@@ -1137,79 +1237,6 @@ class ALMASimulatorUI(QMainWindow):
         for i in range(len(line_names)):
             self.terminal.add_log(f'{i}: {line_names[i]} - {rest_frequencies[i]:.2e} GHz\n')
         self.line_displayed = True
-
-    def add_dim_widgets(self):
-        # --- Set SNR ---
-        self.snr_checkbox = QCheckBox("Set SNR")
-        self.snr_entry = QLineEdit()
-        self.snr_entry.setVisible(False) 
-        self.snr_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.snr_entry))
-
-        # --- Set Infrared Luminosity ---
-        self.ir_luminosity_checkbox = QCheckBox("Set IR Luminosity")
-        self.ir_luminosity_entry = QLineEdit()
-        self.ir_luminosity_entry.setVisible(False)
-        self.ir_luminosity_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.ir_luminosity_entry))
-
-        # --- Fix Spatial Dimension Checkbox and Field ---
-        self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dim")
-        self.n_pix_entry = QLineEdit()
-        self.n_pix_entry.setVisible(False)
-        self.fix_spatial_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_pix_entry))
-
-        # --- Fix Spectral Dimension Checkbox and Field ---
-        self.fix_spectral_checkbox = QCheckBox("Fix Spectral Dim")
-        self.n_channels_entry = QLineEdit()
-        self.n_channels_entry.setVisible(False)
-        self.fix_spectral_checkbox.stateChanged.connect(lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry))
-
-
-        # --- Inject Serendipitous sources ----
-        self.serendipitous_checkbox = QCheckBox("Inject Serendipitous")
-
-        # --- Layout for Checkboxes and Fields ---
-        checkbox_row = QHBoxLayout()
-        checkbox_row.addWidget(self.snr_checkbox)
-        checkbox_row.addWidget(self.snr_entry)
-        checkbox_row.addWidget(self.ir_luminosity_checkbox)
-        checkbox_row.addWidget(self.ir_luminosity_entry)
-        checkbox_row.addWidget(self.fix_spatial_checkbox)
-        checkbox_row.addWidget(self.n_pix_entry)
-        checkbox_row.addWidget(self.fix_spectral_checkbox)
-        checkbox_row.addWidget(self.n_channels_entry)
-        checkbox_row.addWidget(self.serendipitous_checkbox)
-        self.left_layout.insertLayout(11, checkbox_row)
-
-    def add_model_widgets(self):
-        self.model_label = QLabel("Select Model:")
-        self.model_combo = QComboBox()
-        self.model_combo.addItems(["Point", "Gaussian", "Extended", 'Diffuse', 'Galaxy Zoo', 'Hubble 100', 'Molecular'])
-        self.model_row = QHBoxLayout()
-        self.model_row.addWidget(self.model_label)
-        self.model_row.addWidget(self.model_combo)
-        self.left_layout.insertLayout(12, self.model_row)
-        self.tng_api_key_label = QLabel("TNG API Key:")
-        self.tng_api_key_entry = QLineEdit()
-        self.tng_api_key_row = QHBoxLayout()
-        self.tng_api_key_row.addWidget(self.tng_api_key_label)
-        self.tng_api_key_row.addWidget(self.tng_api_key_entry)
-
-        # Initially hide the TNG API key row
-        self.show_hide_widgets(self.tng_api_key_row, show=False)
-
-        self.left_layout.insertLayout(13, self.tng_api_key_row)  # Insert after model_row
-        # Connect the model_combo's signal to update visibility
-        self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
-
-    def toggle_tng_api_key_row(self):
-        """Shows/hides the TNG API key row based on the selected model."""
-        if self.model_combo.currentText() == "Extended":
-            self.show_hide_widgets(self.tng_api_key_row, show=True)
-        else:
-            self.show_hide_widgets(self.tng_api_key_row, show=False)
-
-    def toggle_dim_widgets_visibility(self, widget):
-         widget.setVisible(self.sender().isChecked())
 
     def download_galaxy_zoo(self):
         """
@@ -1368,7 +1395,7 @@ class ALMASimulatorUI(QMainWindow):
         else:
             tng_apis = np.array([None] * n_sims)
             self.metadata = self.sample_given_redshift(self.metadata, n_sims, rest_freq, False, z1)
-        
+        source_names = self.metadata['ALMA_source_name'].values
         ras = self.metadata['RA'].values
         decs = self.metadata['Dec'].values
         bands = self.metadata['Band'].values
@@ -1389,12 +1416,12 @@ class ALMASimulatorUI(QMainWindow):
         else:
             inject_serendipitous = np.array([False] * n_sims)
         input_params = pd.DataFrame(zip(
-        sim_idxs, main_paths, output_paths, tng_paths, galaxy_zoo_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
+        sim_idxs, source_names, main_paths, output_paths, tng_paths, galaxy_zoo_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
         tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
         n_lines, line_names, save_mode, inject_serendipitous), 
-        columns = ['idx', 'main_path', 'output_dir', 'tng_dir', 'galaxy_zoo_dir', 'project_name', 'ra', 'dec', 'band', 
+        columns = ['idx', 'source_name', 'main_path', 'output_dir', 'tng_dir', 'galaxy_zoo_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'bandwidth', 
         'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
         'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
@@ -1431,7 +1458,7 @@ class ALMASimulatorUI(QMainWindow):
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
 
-    def simulator(self, inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
+    def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
                 pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
                 n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
                 n_lines, line_names, save_mode, inject_serendipitous=False):
@@ -1477,6 +1504,8 @@ class ALMASimulatorUI(QMainWindow):
         str: Path to the output file.
         """
         self.terminal.add_log('\nRunning simulation {}'.format(inx))
+        self.terminal.add_log('Source Name: {}'.format(source_name))
+        print(source_name)
         start = time.time()
         second2hour = 1 / 3600
         ra = ra * U.deg
@@ -1497,14 +1526,14 @@ class ALMASimulatorUI(QMainWindow):
         if not os.path.exists(sim_output_dir):
             os.makedirs(sim_output_dir)
         os.chdir(output_dir)
-        self.terminal.add_log('\nRA: {}'.format(ra))
-        self.terminal.add_log('\nDEC: {}'.format(dec))
-        self.terminal.add_log('\nIntegration Time: {}'.format(int_time))
+        self.terminal.add_log('RA: {}'.format(ra))
+        self.terminal.add_log('DEC: {}'.format(dec))
+        self.terminal.add_log('Integration Time: {}'.format(int_time))
         ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
         antennalist = os.path.join(sim_output_dir, "antenna.cfg")
         antenna_name = 'antenna'
         max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
-        self.terminal.add_log('\nField of view: {} arcsec'.format(round(fov.value, 3)) )
+        self.terminal.add_log('Field of view: {} arcsec'.format(round(fov.value, 3)) )
         beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
         beam_solid_angle = np.pi * (beam_size / 2) ** 2
         cont_sens = cont_sens * U.mJy / (U.arcsec ** 2)
@@ -1580,7 +1609,7 @@ class ALMASimulatorUI(QMainWindow):
             tng_subhaloid = None
         if type(line_names) == list or isinstance(line_names, np.ndarray):
             for line_name, line_flux in zip(line_names, line_fluxes): 
-                self.terminal.add_log('\nSimulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
+                self.terminal.add_log('Simulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
         else:
             self.terminal.add_log('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
         self.terminal.add_log('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
@@ -1612,7 +1641,7 @@ class ALMASimulatorUI(QMainWindow):
         elif source_type == 'extended':
             datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
         elif source_type == 'diffuse':
-            self.terminal.add_log('\nTo be implemented')
+            self.terminal.add_log('To be implemented')
         elif source_type == 'galaxy-zoo':
             galaxy_path = os.path.join(galaxy_zoo_dir, 'images_gz2',  'images')
             pos_z = [int(index) for index in source_channel_index]
@@ -1645,7 +1674,7 @@ class ALMASimulatorUI(QMainWindow):
                             int_time.value * second2hour, obs_date, header, save_mode)
         self.terminal.add_log('Finished')
         stop = time.time()
-        self.terminal.add_log('\nExecution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
+        self.terminal.add_log('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
         shutil.rmtree(sim_output_dir)
        
 
