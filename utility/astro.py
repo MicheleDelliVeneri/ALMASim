@@ -1091,7 +1091,7 @@ def sample_given_redshift(metadata, n, rest_frequency, extended, zmax=None):
     return sample
 
 def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
-                        total_time, band, band_range, central_freq, redshift,
+                        band, band_range, central_freq, redshift,
                         line_fluxes, line_names, line_frequencies, continum,
                         fov, beam_size, cell_size, n_pix, n_channels, snapshot, 
                         subhalo, lum_infrared, fwhm_z, source_type, fwhm_x=None, fwhm_y=None, angle=None):
@@ -1109,7 +1109,6 @@ def write_sim_parameters(path, ra, dec, ang_res, vel_res, int_time,
         f.write('Velocity Resolution: {}\n'.format(vel_res))
         f.write('Redshift: {}\n'.format(redshift))
         f.write('Integration Time: {}\n'.format(int_time))
-        f.write('Total Time: {}\n'.format(total_time))
         f.write('Cube Size: {} x {} x {} pixels\n'.format(n_pix, n_pix, n_channels))
         f.write('Mean Continum Flux: {}\n'.format(np.mean(continum)))
         f.write('Infrared Luminosity: {}\n'.format(lum_infrared))

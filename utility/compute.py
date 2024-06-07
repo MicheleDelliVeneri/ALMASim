@@ -373,9 +373,9 @@ def simulator(inx, main_dir, output_dir, tng_dir, project_name, ra, dec, band, a
     shutil.rmtree(sim_output_dir)
     
 def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
-              pwv, int_time, total_time, bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
+              pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
               n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
-              n_lines, line_names, save_mode, save_secondary=False, inject_serendipitous=False):
+              n_lines, line_names, save_mode, inject_serendipitous=False):
     """
     Runs a simulation for a given set of input parameters.
     Args:
@@ -391,7 +391,6 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
         obs_date (str): Observation date for the simulation.
         pwv (float): Precipitable water vapor for the simulation.
         int_time (float): Integration time for the simulation in seconds.
-        total_time (float): Total time for the simulation in seconds.
         bandwidth (float): Bandwidth of the simulation in GHz.
         freq (float): Frequency of the simulation in GHz.
         freq_support (str): Frequency support for the simulation.
@@ -411,7 +410,6 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
     ang_res = ang_res * U.arcsec
     vel_res = vel_res * U.km / U.s
     int_time = int_time * U.s
-    total_time = total_time * U.s
     freq_support = freq_support.split(' U ')[0].split(',')[1]
     freq_sup = float(remove_non_numeric(freq_support)) * U.kHz
     freq_sup = freq_sup.to(U.MHz)   
@@ -478,6 +476,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
                                                                         line_names,
                                                                         n_lines,
                                                                         )
+
     #print(continum.shape, line_fluxes, line_names)
     if n_channels_nw != n_channels:
         freq_sup = freq_sup_nw * U.MHz
@@ -553,7 +552,7 @@ def simulator2(inx, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name,
         datacube = usm.insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_pix, n_channels, galaxy_path)
     
     uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
-                            ra, dec, ang_res, vel_res, int_time, total_time, band, band_range, central_freq,
+                            ra, dec, ang_res, vel_res, int_time, band, band_range, central_freq,
                             redshift, line_fluxes, line_names, line_frequency, 
                             continum, fov, beam_size, cell_size, n_pix, 
                             n_channels, snapshot, tng_subhaloid, lum_infrared, fwhm_z, source_type, fwhm_x, fwhm_y, angle)

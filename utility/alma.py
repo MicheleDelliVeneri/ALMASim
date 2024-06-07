@@ -354,12 +354,12 @@ def get_science_types():
     return  unique_keywords, scientific_category
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-
 def search_with_retry(service, query):
     return service.search(query, response_timeout=120).to_table().to_pandas()
 
 
-def query_by_science_type(science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, total_time_range=None, frequency_range=None):
+def query_by_science_type(science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, 
+                        frequency_range=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
     Parameters:
@@ -370,8 +370,8 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     """
     service = get_tap_service()
     columns = [
-        'target_name', 'member_ous_uid', 'pwv', 'schedblock_name',  'velocity_resolution',
-        'spatial_resolution', 's_ra', 's_dec', 's_fov', 't_resolution',
+        'target_name', 'member_ous_uid', 'group_ous_uid', 'pwv', 'schedblock_name',  'velocity_resolution',
+        'spatial_resolution', 's_ra', 's_dec', 's_fov', 't_resolution', 'proposal_id',
         'cont_sensitivity_bandwidth', 'sensitivity_10kms', 'obs_release_date', 
         'band_list', 'bandwidth', 'frequency', 'frequency_support', 
         'science_keyword', 'scientific_category', 'antenna_arrays', 't_max'
@@ -421,18 +421,13 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     else:
         time_resolution_query = f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
 
-    if total_time_range is None:
-        total_time_query = ""
-    else:    
-        total_time_query = f"t_max BETWEEN {total_time_range[0]} AND {total_time_range[1]}"
-
     if frequency_range is None:
         frequency_query = ""
     else:
         frequency_query = f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
 
     # Combine all conditions into one WHERE clause
-    conditions = [science_keyword_query, scientific_category_query, band_query, fov_query, time_resolution_query, total_time_query, frequency_query]
+    conditions = [science_keyword_query, scientific_category_query, band_query, fov_query, time_resolution_query,frequency_query]
     conditions = [cond for cond in conditions if cond]  # Remove empty conditions
     where_clause = " AND ".join(conditions)
     where_clause = where_clause + " AND is_mosaic = 'F' AND science_observation = 'T'"  
@@ -442,8 +437,6 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
             FROM ivoa.obscore
             WHERE {where_clause}
             """
-
-
     results = search_with_retry(service, query)
     return results
     
