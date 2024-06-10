@@ -240,17 +240,25 @@ def query_observations(member_ous_uid, target_name):
     Returns:
     pandas.DataFrame: A table of query results.
     """
-
+    service = get_tap_service()
+    columns = [
+        'target_name', 'member_ous_uid', 'group_ous_uid', 'pwv', 'schedblock_name',  'velocity_resolution',
+        'spatial_resolution', 's_ra', 's_dec', 's_fov', 't_resolution', 'proposal_id',
+        'cont_sensitivity_bandwidth', 'sensitivity_10kms', 'obs_release_date', 
+        'band_list', 'bandwidth', 'frequency', 'frequency_support', 
+        'science_keyword', 'scientific_category', 'antenna_arrays', 't_max'
+    ]
+    columns_str = ', '.join(columns)
     query = f"""
-            SELECT *
+            SELECT {columns_str}
             FROM ivoa.obscore
             WHERE member_ous_uid = '{member_ous_uid}'
             AND target_name = '{target_name}'
             AND is_mosaic = 'F'
             AND science_observation = 'T'    
             """
-    service = get_tap_service()
-    result = service.search(query).to_table().to_pandas()
+    
+    result = search_with_retry(service, query)
 
     return result
 
@@ -357,7 +365,6 @@ def get_science_types():
 def search_with_retry(service, query):
     return service.search(query, response_timeout=120).to_table().to_pandas()
 
-
 def query_by_science_type(science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, 
                         frequency_range=None):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
@@ -440,7 +447,6 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     results = search_with_retry(service, query)
     return results
     
-
 def plot_science_keywords_distributions(master_path):
     service = get_tap_service()
     plot_dir = os.path.join(master_path, "plots")

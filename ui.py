@@ -228,7 +228,6 @@ class ALMASimulatorUI(QMainWindow):
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
 
-
     # Add and remove folder widgets 1 - 9
     def add_folder_widgets(self):
          # 1
@@ -269,7 +268,7 @@ class ALMASimulatorUI(QMainWindow):
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", 'remote'])
 
-        self.remote_address_label = QLabel('Insert Cluster IP')
+        self.remote_address_label = QLabel('Insert Remote Cluster IP or FQDN')
         self.remote_address_entry = QLineEdit()
         
         # 10  
@@ -1113,9 +1112,10 @@ class ALMASimulatorUI(QMainWindow):
                     self.query_execute_button.show()
             elif query_type == "target":
                 if self.target_list_entry.text():
+                    self.terminal.add_log(f'Loading target list {self.target_list_entry.text()}')
                     target_list = pd.read_csv(self.target_list_entry.text())
-                    target_list = target_list.tolist()
-                self.metadata = ual.query_metadata_from_target_list(target_list, )
+                    self.target_list = target_list.values.tolist()
+                    self.metadata = self.query_for_metadata_by_targets()
             else:
                 # Handle invalid query type (optional)
                 pass  
@@ -1134,6 +1134,7 @@ class ALMASimulatorUI(QMainWindow):
             self.terminal.add_log(f'{i}: {category}')
     
     def query_for_metadata_by_science_type(self):
+        self.terminal.add_log('Querying by Science Keyword')
         science_keyword_number = self.science_keyword_entry.text()
         scientific_category_number = self.scientific_category_entry.text()
         band = self.band_entry.text()
@@ -1182,6 +1183,50 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         del database
+
+    def query_for_metadata_by_targets(self):
+        """Query for metadata for all predefined targets and compile the results into a single DataFrame.
+
+        Parameters:
+        service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+        targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+        path (str): The path to save the results to.
+
+        Returns:
+        pandas.DataFrame: A DataFrame containing the results for all queried targets.
+        """
+        # Query all targets and compile the results
+        self.terminal.add_log("Querying metadata from target list...")
+        df = ual.query_all_targets(self.target_list)
+        df = df.drop_duplicates(subset='member_ous_uid')
+        save_to_input = self.query_save_entry.text()
+        # Define a dictionary to map existing column names to new names with unit initials
+        rename_columns = {
+            'target_name': 'ALMA_source_name',
+            'pwv': 'PWV',
+            'schedblock_name': 'SB_name',
+            'velocity_resolution': 'Vel.res.',
+            'spatial_resolution': 'Ang.res.',
+            's_ra': 'RA',
+            's_dec': 'Dec',
+            's_fov': 'FOV',
+            't_resolution': 'Int.Time',
+            'cont_sensitivity_bandwidth': 'Cont_sens_mJybeam',
+            'sensitivity_10kms': 'Line_sens_10kms_mJybeam',
+            'obs_release_date': 'Obs.date',
+            'band_list': 'Band',
+            'bandwidth': 'Bandwidth',
+            'frequency': 'Freq',
+            'frequency_support': 'Freq.sup.'
+        }
+        df.rename(columns=rename_columns, inplace=True)
+        database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time',
+                      'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq',
+                       'Freq.sup.', 'antenna_arrays', 'proposal_id', 'member_ous_uid', 'group_ous_uid']]
+        database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
+        database.to_csv(save_to_input, index=False)
+        self.metadata = database
+        self.terminal.add_log(f"Metadata saved to {save_to_input}")
         
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
@@ -1204,11 +1249,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_query_widgets_added = False
         self.query_execute_button.hide()
         self.continue_query_button.hide()
-    
-    def query_metadata_from_target_list(self):
-        # Implement the logic to query metadata based on a target list
-        self.terminal.add_log("Querying metadata from target list...")
-
+        
     def browse_target_list(self):
         """Opens a file dialog to select the target list file."""
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Target List", "", "CSV Files (*.csv)")
@@ -1342,7 +1383,10 @@ class ALMASimulatorUI(QMainWindow):
 
     def start_simulation(self):
         # Implement the logic to start the simulation
-        self.terminal.add_log("Starting simulation...")
+        if self.local_mode_combo.currentText() == 'local':
+            self.terminal.add_log('Starting simulation on your local machine')
+        else: 
+            self.terminal.add_log(f'Starting simulation on {self.remote_address_entry.text()}')
         n_sims = int(self.n_sims_entry.text())
         n_cpu = int(self.ncpu_entry.text())
         sim_idxs = np.arange(n_sims)
@@ -1466,7 +1510,9 @@ class ALMASimulatorUI(QMainWindow):
             num_processes = multiprocessing.cpu_count() // 4
             memory_limit = int(0.9 * total_memory / num_processes)
             ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-            cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+            
+            if self.local_mode_combo.currentText() == 'local':
+                cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
             output_type = "object"
             client = Client(cluster)
             client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
