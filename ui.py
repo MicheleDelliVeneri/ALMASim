@@ -1510,7 +1510,6 @@ class ALMASimulatorUI(QMainWindow):
             num_processes = multiprocessing.cpu_count() // 4
             memory_limit = int(0.9 * total_memory / num_processes)
             ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-            
             if self.local_mode_combo.currentText() == 'local':
                 cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
             output_type = "object"
