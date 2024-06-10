@@ -228,7 +228,6 @@ class ALMASimulatorUI(QMainWindow):
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
 
-
     # Add and remove folder widgets 1 - 9
     def add_folder_widgets(self):
          # 1
@@ -264,10 +263,19 @@ class ALMASimulatorUI(QMainWindow):
         self.comp_mode_combo = QComboBox()
         self.comp_mode_combo.addItems(["sequential", "parallel"])
 
+        # 9
+        self.local_mode_label = QLabel('Local or Remote')
+        self.local_mode_combo = QComboBox()
+        self.local_mode_combo.addItems(["local", 'remote'])
+
+        self.remote_address_label = QLabel('Insert Remote Cluster IP or FQDN')
+        self.remote_address_entry = QLineEdit()
+        
+        # 10  
         self.flux_mode_label = QLabel('Flux Simulation Mode:')
         self.flux_mode_combo = QComboBox()
         self.flux_mode_combo.addItems(["direct", 'line-ratios'])
-        # 9  
+        
         # Output Directory Row
         output_row = QHBoxLayout()
         output_row.addWidget(self.output_label)
@@ -319,10 +327,30 @@ class ALMASimulatorUI(QMainWindow):
         comp_mode_row.addWidget(self.comp_mode_combo)
         self.left_layout.insertLayout(8, comp_mode_row)
 
+        # Local Mode Row
+        local_mode_row = QHBoxLayout()
+        local_mode_row.addWidget(self.local_mode_label)
+        local_mode_row.addWidget(self.local_mode_combo)
+        self.left_layout.insertLayout(9, local_mode_row)
+
+        self.remote_address_row = QHBoxLayout()
+        self.remote_address_row.addWidget(self.remote_address_label)
+        self.remote_address_row.addWidget(self.remote_address_entry)
+        self.left_layout.insertLayout(10, self.remote_address_row)
+        self.show_hide_widgets(self.remote_address_row, show=False)
+        self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_address_row)
+
+        # Flux Mode Row
         flux_mode_row = QHBoxLayout()
         flux_mode_row.addWidget(self.flux_mode_label)
         flux_mode_row.addWidget(self.flux_mode_combo)
-        self.left_layout.insertLayout(9, flux_mode_row)
+        self.left_layout.insertLayout(11, flux_mode_row)
+    
+    def toggle_remote_address_row(self):
+        if self.local_mode_combo.currentText() == 'remote':
+            self.show_hide_widgets(self.remote_address_row, show=True)
+        else:
+            self.show_hide_widgets(self.remote_address_row, show=False)
     # Add Line mode widgets 10 - 12
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
@@ -333,7 +361,7 @@ class ALMASimulatorUI(QMainWindow):
         self.line_index_entry = QLineEdit()
         self.line_mode_row = QHBoxLayout()
         self.line_mode_row.addWidget(self.line_mode_checkbox)
-        self.left_layout.insertLayout(10, self.line_mode_row)    # Insert at the end
+        self.left_layout.insertLayout(12, self.line_mode_row)    # Insert at the end
         # Widgets for Non-Line Mode
         redshift_label = QLabel('Redshifts (space-separated):')
         self.redshift_entry = QLineEdit()
@@ -345,8 +373,8 @@ class ALMASimulatorUI(QMainWindow):
         self.non_line_mode_row2 = QHBoxLayout()
         self.non_line_mode_row2.addWidget(num_lines_label)
         self.non_line_mode_row2.addWidget(self.num_lines_entry)
-        self.left_layout.insertLayout(11, self.non_line_mode_row1) # Insert at the end
-        self.left_layout.insertLayout(12, self.non_line_mode_row2) # Insert at the end
+        self.left_layout.insertLayout(13, self.non_line_mode_row1) # Insert at the end
+        self.left_layout.insertLayout(14, self.non_line_mode_row2) # Insert at the end
         self.show_hide_widgets(self.non_line_mode_row1, show=False)
         self.show_hide_widgets(self.non_line_mode_row2, show=False)
 
@@ -373,7 +401,7 @@ class ALMASimulatorUI(QMainWindow):
             # Show the widgets in non_line_mode_row1 and non_line_mode_row2
             self.show_hide_widgets(self.non_line_mode_row1, show=True)
             self.show_hide_widgets(self.non_line_mode_row2, show=True)
-
+    
     # Add dim widgets 13
     def add_dim_widgets(self):
         # --- Set SNR ---
@@ -415,7 +443,7 @@ class ALMASimulatorUI(QMainWindow):
         checkbox_row.addWidget(self.fix_spectral_checkbox)
         checkbox_row.addWidget(self.n_channels_entry)
         checkbox_row.addWidget(self.serendipitous_checkbox)
-        self.left_layout.insertLayout(13, checkbox_row)
+        self.left_layout.insertLayout(15, checkbox_row)
 
     # Add model widgets 14
     def add_model_widgets(self):
@@ -425,7 +453,7 @@ class ALMASimulatorUI(QMainWindow):
         self.model_row = QHBoxLayout()
         self.model_row.addWidget(self.model_label)
         self.model_row.addWidget(self.model_combo)
-        self.left_layout.insertLayout(14, self.model_row)
+        self.left_layout.insertLayout(16, self.model_row)
         self.tng_api_key_label = QLabel("TNG API Key:")
         self.tng_api_key_entry = QLineEdit()
         self.tng_api_key_row = QHBoxLayout()
@@ -435,7 +463,7 @@ class ALMASimulatorUI(QMainWindow):
         # Initially hide the TNG API key row
         self.show_hide_widgets(self.tng_api_key_row, show=False)
 
-        self.left_layout.insertLayout(15, self.tng_api_key_row)  # Insert after model_row
+        self.left_layout.insertLayout(17, self.tng_api_key_row)  # Insert after model_row
         # Connect the model_combo's signal to update visibility
         self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
     
@@ -448,7 +476,6 @@ class ALMASimulatorUI(QMainWindow):
 
     def toggle_dim_widgets_visibility(self, widget):
          widget.setVisible(self.sender().isChecked())
-
     # Metadata query switch 15
     def add_meta_widgets(self):
         self.metadata_mode_label = QLabel("Metadata Retrieval Mode:")
@@ -459,8 +486,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_mode_row = QHBoxLayout()
         self.metadata_mode_row.addWidget(self.metadata_mode_label)
         self.metadata_mode_row.addWidget(self.metadata_mode_combo)
-        self.left_layout.insertLayout(16, self.metadata_mode_row)
-
+        self.left_layout.insertLayout(18, self.metadata_mode_row)
 
     def add_metadata_widgets(self):
         self.metadata_path_label = QLabel("Metadata Path:")
@@ -471,7 +497,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(17, self.metadata_path_row)
+        self.left_layout.insertLayout(19, self.metadata_path_row)
         self.left_layout.update() 
 
     def add_query_widgets(self):
@@ -508,10 +534,10 @@ class ALMASimulatorUI(QMainWindow):
         self.show_hide_widgets(self.target_list_row, show=False)
 
         # Insert layouts at the correct positions
-        self.left_layout.insertLayout(17, self.query_type_row)
-        self.left_layout.insertLayout(18, self.target_list_row)  # Insert target list row
-        self.left_layout.insertLayout(19, self.query_save_row)
-        self.left_layout.insertWidget(20, self.query_execute_button)
+        self.left_layout.insertLayout(19, self.query_type_row)
+        self.left_layout.insertLayout(20, self.target_list_row)  # Insert target list row
+        self.left_layout.insertLayout(21, self.query_save_row)
+        self.left_layout.insertWidget(22, self.query_execute_button)
         self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
 
     def remove_metadata_browse(self):
@@ -645,16 +671,15 @@ class ALMASimulatorUI(QMainWindow):
         self.continue_query_row.addWidget(self.continue_query_button)
 
         # Insert rows into left_layout (adjust index if needed)
-        self.left_layout.insertLayout(20, self.science_keyword_row)
-        self.left_layout.insertLayout(21, self.scientific_category_row)
-        self.left_layout.insertLayout(22, self.band_row)
-        self.left_layout.insertLayout(23, self.fov_row)
-        self.left_layout.insertLayout(24, self.time_resolution_row)
-        self.left_layout.insertLayout(25, self.frequency_row)
-        self.left_layout.insertWidget(26, self.continue_query_button)
+        self.left_layout.insertLayout(22, self.science_keyword_row)
+        self.left_layout.insertLayout(23, self.scientific_category_row)
+        self.left_layout.insertLayout(24, self.band_row)
+        self.left_layout.insertLayout(25, self.fov_row)
+        self.left_layout.insertLayout(26, self.time_resolution_row)
+        self.left_layout.insertLayout(27, self.frequency_row)
+        self.left_layout.insertWidget(28, self.continue_query_button)
         self.terminal.add_log("\n\nFill out the fields and click 'Continue Query' to proceed.")
         self.query_execute_button.hide()  # Hide the execute query button
-
 
     def get_tap_service(self):
         urls = ["https://almascience.eso.org/tap", "https://almascience.nao.ac.jp/tap",
@@ -953,7 +978,9 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_path_entry.clear()
         self.metadata_mode_combo.setCurrentText("get")
         self.comp_mode_combo.setCurrentText("sequential")
-        self.query_save_entry.clear()
+        self.local_mode_combo.setCurrentText('local')
+        if self.metadata_mode_combo.currentText() == 'query':
+            self.query_save_entry.clear()
         self.project_name_entry.clear()
         self.save_format_combo.setCurrentText("npz")
         self.redshift_entry.clear()
@@ -979,6 +1006,9 @@ class ALMASimulatorUI(QMainWindow):
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
         self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", ""))
         self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", ""))
+        self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
+        if self.local_mode_combo.currentText() == "remote" and self.remote_address_entry.text() != "":
+            self.remote_address_entry.setText(self.settings.value("remote_address", ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
@@ -1023,6 +1053,9 @@ class ALMASimulatorUI(QMainWindow):
             self.settings.setValue("query_save_entry", self.query_save_entry.text())
         self.settings.setValue("metadata_mode", self.metadata_mode_combo.currentText())
         self.settings.setValue("comp_mode", self.comp_mode_combo.currentText())
+        self.settings.setValue("local_mode", self.local_mode_combo.currentText())
+        if self.local_mode_combo.currentText() == 'remote':
+            self.settings.setvalue('remote_address', self.remote_address_entry.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -1079,9 +1112,10 @@ class ALMASimulatorUI(QMainWindow):
                     self.query_execute_button.show()
             elif query_type == "target":
                 if self.target_list_entry.text():
+                    self.terminal.add_log(f'Loading target list {self.target_list_entry.text()}')
                     target_list = pd.read_csv(self.target_list_entry.text())
-                    target_list = target_list.tolist()
-                self.metadata = ual.query_metadata_from_target_list(target_list, )
+                    self.target_list = target_list.values.tolist()
+                    self.metadata = self.query_for_metadata_by_targets()
             else:
                 # Handle invalid query type (optional)
                 pass  
@@ -1100,6 +1134,7 @@ class ALMASimulatorUI(QMainWindow):
             self.terminal.add_log(f'{i}: {category}')
     
     def query_for_metadata_by_science_type(self):
+        self.terminal.add_log('Querying by Science Keyword')
         science_keyword_number = self.science_keyword_entry.text()
         scientific_category_number = self.scientific_category_entry.text()
         band = self.band_entry.text()
@@ -1148,6 +1183,50 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         del database
+
+    def query_for_metadata_by_targets(self):
+        """Query for metadata for all predefined targets and compile the results into a single DataFrame.
+
+        Parameters:
+        service (pyvo.dal.TAPService): A TAPService instance for querying the database.
+        targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+        path (str): The path to save the results to.
+
+        Returns:
+        pandas.DataFrame: A DataFrame containing the results for all queried targets.
+        """
+        # Query all targets and compile the results
+        self.terminal.add_log("Querying metadata from target list...")
+        df = ual.query_all_targets(self.target_list)
+        df = df.drop_duplicates(subset='member_ous_uid')
+        save_to_input = self.query_save_entry.text()
+        # Define a dictionary to map existing column names to new names with unit initials
+        rename_columns = {
+            'target_name': 'ALMA_source_name',
+            'pwv': 'PWV',
+            'schedblock_name': 'SB_name',
+            'velocity_resolution': 'Vel.res.',
+            'spatial_resolution': 'Ang.res.',
+            's_ra': 'RA',
+            's_dec': 'Dec',
+            's_fov': 'FOV',
+            't_resolution': 'Int.Time',
+            'cont_sensitivity_bandwidth': 'Cont_sens_mJybeam',
+            'sensitivity_10kms': 'Line_sens_10kms_mJybeam',
+            'obs_release_date': 'Obs.date',
+            'band_list': 'Band',
+            'bandwidth': 'Bandwidth',
+            'frequency': 'Freq',
+            'frequency_support': 'Freq.sup.'
+        }
+        df.rename(columns=rename_columns, inplace=True)
+        database = df[['ALMA_source_name', 'Band', 'PWV', 'SB_name', 'Vel.res.', 'Ang.res.', 'RA', 'Dec', 'FOV', 'Int.Time',
+                      'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Obs.date', 'Bandwidth', 'Freq',
+                       'Freq.sup.', 'antenna_arrays', 'proposal_id', 'member_ous_uid', 'group_ous_uid']]
+        database.loc[:, 'Obs.date'] = database['Obs.date'].apply(lambda x: x.split('T')[0])
+        database.to_csv(save_to_input, index=False)
+        self.metadata = database
+        self.terminal.add_log(f"Metadata saved to {save_to_input}")
         
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
@@ -1170,11 +1249,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_query_widgets_added = False
         self.query_execute_button.hide()
         self.continue_query_button.hide()
-    
-    def query_metadata_from_target_list(self):
-        # Implement the logic to query metadata based on a target list
-        self.terminal.add_log("Querying metadata from target list...")
-
+        
     def browse_target_list(self):
         """Opens a file dialog to select the target list file."""
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Target List", "", "CSV Files (*.csv)")
@@ -1308,7 +1383,10 @@ class ALMASimulatorUI(QMainWindow):
 
     def start_simulation(self):
         # Implement the logic to start the simulation
-        self.terminal.add_log("Starting simulation...")
+        if self.local_mode_combo.currentText() == 'local':
+            self.terminal.add_log('Starting simulation on your local machine')
+        else: 
+            self.terminal.add_log(f'Starting simulation on {self.remote_address_entry.text()}')
         n_sims = int(self.n_sims_entry.text())
         n_cpu = int(self.ncpu_entry.text())
         sim_idxs = np.arange(n_sims)
@@ -1432,7 +1510,9 @@ class ALMASimulatorUI(QMainWindow):
             num_processes = multiprocessing.cpu_count() // 4
             memory_limit = int(0.9 * total_memory / num_processes)
             ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
-            cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+            
+            if self.local_mode_combo.currentText() == 'local':
+                cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
             output_type = "object"
             client = Client(cluster)
             client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
