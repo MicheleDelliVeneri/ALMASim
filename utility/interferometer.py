@@ -761,10 +761,13 @@ class Interferometer():
             self.dirty_header.append(("DATAMIN", np.min(self.dirtyCube) * U.Jy / U.beam))
             hdu = fits.PrimaryHDU(header=self.dirty_header, data=self.dirtyCube)
             hdu.writeto(os.path.join(self.output_dir, 'dirty-cube_{}.fits'.format(str(self.idx))), overwrite=True)
+            hdu.close()
             hdu = fits.PrimaryHDU(self.dirtyvisCube)
             hdu.writeto(os.path.join(self.output_dir, 'dirty-vis-cube_{}.fits'.format(str(self.idx))), overwrite=True)
+            hdu.close()
             hdu = fits.PrimaryHDU(self.visCube)
             hdu.writeto(os.path.join(self.output_dir, 'clean-vis-cube_{}.fits'.format(str(self.idx))), overwrite=True)
+            hdu.close()
 
         print(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
         print(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
