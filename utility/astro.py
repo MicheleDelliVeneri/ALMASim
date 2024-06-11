@@ -872,9 +872,15 @@ def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
     so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
     lum_infrared_erg_s = lum_infrared * so_to_erg_s  # luminosity in erg/s -XX
     sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
-    cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
-    cont_fluxes = sed[cont_mask]['Jy'].values
-    min_ = np.min(cont_fluxes)
+    cont_mask = (sed['GHz'].values >= freq_min) & (sed['GHz'].values <= freq_max)
+    if sum(cont_mask) > 0:
+        cont_fluxes = sed['Jy'].values[cont_mask]
+        min_ = np.min(cont_fluxes)
+    else: 
+        freq_point = np.argmin(np.abs(sed['GHz'].values - freq_min))
+        cont_fluxes = sed['Jy'].values[freq_point]
+        min_ = cont_fluxes
+    
     print('Minimum continum flux: {:.2e}'.format(min_))
     print('Continum sensitivity: {:.2e}'.format(cont_sens))
     lum_save = lum_infrared
@@ -883,8 +889,13 @@ def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max)
         lum_infrared_erg_s = so_to_erg_s * lum_infrared
         sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
         cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
-        cont_fluxes = sed[cont_mask]['Jy'].values
-        min_ = np.min(cont_fluxes)
+        if sum(cont_mask) > 0:
+            cont_fluxes = sed['Jy'].values[cont_mask]
+            min_ = np.min(cont_fluxes)
+        else: 
+            freq_point = np.argmin(np.abs(sed['GHz'].values - freq_min))
+            cont_fluxes = sed['Jy'].values[freq_point]
+            min_ = cont_fluxes
     
     if lum_save != lum_infrared:
         print('To match the desired SNR, luminosity has been set to {:.2e}'.format(lum_infrared))
