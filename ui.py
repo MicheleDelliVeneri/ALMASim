@@ -268,13 +268,15 @@ class ALMASimulatorUI(QMainWindow):
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", 'remote'])
 
-        self.remote_address_label = QLabel('Insert Remote Cluster IP or FQDN')
+        self.remote_address_label = QLabel('Insert Remote Cluster IP or FQDN or ALIAS')
         self.remote_address_entry = QLineEdit()
+        self.remote_port_label = QLabel('Insert the port of the Dask scheduler')
+        self.remote_port_entry = QLineEdit()
         
-        # 10  
-        self.flux_mode_label = QLabel('Flux Simulation Mode:')
-        self.flux_mode_combo = QComboBox()
-        self.flux_mode_combo.addItems(["direct", 'line-ratios'])
+        ## 10  
+        #self.flux_mode_label = QLabel('Flux Simulation Mode:')
+        #self.flux_mode_combo = QComboBox()
+        #self.flux_mode_combo.addItems(["direct", 'line-ratios'])
         
         # Output Directory Row
         output_row = QHBoxLayout()
@@ -338,19 +340,26 @@ class ALMASimulatorUI(QMainWindow):
         self.remote_address_row.addWidget(self.remote_address_entry)
         self.left_layout.insertLayout(10, self.remote_address_row)
         self.show_hide_widgets(self.remote_address_row, show=False)
-        self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_address_row)
+        self.remote_port_row = QHBoxLayout()
+        self.remote_port_row.addWidget(self.remote_port_label)
+        self.remote_port_row.addWidget(self.remote_port_entry)
+        self.left_layout.insertLayout(11, self.remote_port_row)
+        self.show_hide_widgets(self.remote_port_row, show=False)
+        self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
         # Flux Mode Row
-        flux_mode_row = QHBoxLayout()
-        flux_mode_row.addWidget(self.flux_mode_label)
-        flux_mode_row.addWidget(self.flux_mode_combo)
-        self.left_layout.insertLayout(11, flux_mode_row)
+        #flux_mode_row = QHBoxLayout()
+        #lux_mode_row.addWidget(self.flux_mode_label)
+        #flux_mode_row.addWidget(self.flux_mode_combo)
+        #self.left_layout.insertLayout(11, flux_mode_row)
     
-    def toggle_remote_address_row(self):
+    def toggle_remote_row(self):
         if self.local_mode_combo.currentText() == 'remote':
             self.show_hide_widgets(self.remote_address_row, show=True)
+            self.show_hide_widgets(self.remote_port_row, show=True)
         else:
             self.show_hide_widgets(self.remote_address_row, show=False)
+            self.show_hide_widgets(self.remote_port_row, show=False)
     # Add Line mode widgets 10 - 12
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
@@ -976,11 +985,14 @@ class ALMASimulatorUI(QMainWindow):
         self.ncpu_entry.clear()
         self.n_sims_entry.clear()
         self.metadata_path_entry.clear()
-        self.metadata_mode_combo.setCurrentText("get")
         self.comp_mode_combo.setCurrentText("sequential")
+        if self.local_mode_combo.currentText() == 'remote':
+            self.remote_address_entry.clear()
+            self.remote_port_entry.clear()
         self.local_mode_combo.setCurrentText('local')
         if self.metadata_mode_combo.currentText() == 'query':
             self.query_save_entry.clear()
+        self.metadata_mode_combo.setCurrentText("get")
         self.project_name_entry.clear()
         self.save_format_combo.setCurrentText("npz")
         self.redshift_entry.clear()
@@ -1009,6 +1021,7 @@ class ALMASimulatorUI(QMainWindow):
         self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
         if self.local_mode_combo.currentText() == "remote" and self.remote_address_entry.text() != "":
             self.remote_address_entry.setText(self.settings.value("remote_address", ""))
+            self.remote_port_entry.setText(self.settings.value("remote_port", ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
@@ -1056,6 +1069,7 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("local_mode", self.local_mode_combo.currentText())
         if self.local_mode_combo.currentText() == 'remote':
             self.settings.setvalue('remote_address', self.remote_address_entry.text())
+            self.settings.setvalue('remote_port', self.remote_port_entry.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -1512,6 +1526,8 @@ class ALMASimulatorUI(QMainWindow):
             ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
             if self.local_mode_combo.currentText() == 'local':
                 cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+            #elif self.local_mode_combo.currentText() == 'remote':
+
             output_type = "object"
             client = Client(cluster)
             client.register_worker_plugin(MemoryLimitPlugin(memory_limit))

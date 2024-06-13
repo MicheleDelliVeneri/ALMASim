@@ -15,6 +15,7 @@ from astropy.constants import M_earth, R_earth, G
 import pandas as pd
 from scipy.integrate import odeint
 from astropy.time import Time
+from astropy.io import fits
 
 def showError(message):
         raise Exception(message)
@@ -750,25 +751,32 @@ class Interferometer():
         elif self.save_mode == 'fits':
             self.clean_header = self.header
             self.clean_header.append(
-            ("DATAMAX", np.max(self.modelCube) * U.Jy / U.beam))
+            ("DATAMAX", np.max(self.modelCube)))
             self.clean_header.append(
-            ("DATAMIN", np.min(self.modelCube) * U.Jy / U.beam))
+            ("DATAMIN", np.min(self.modelCube)))
             hdu = fits.PrimaryHDU(header=self.clean_header,  data=self.modelCube)
             hdu.writeto(os.path.join(self.output_dir, 'clean-cube_{}.fits'.format(str(self.idx))), overwrite=True)
             self.dirty_header = self.header
             self.dirty_header.append(
-            ("DATAMAX", np.max(self.dirtyCube) * U.Jy / U.beam))
-            self.dirty_header.append(("DATAMIN", np.min(self.dirtyCube) * U.Jy / U.beam))
+            ("DATAMAX", np.max(self.dirtyCube)))
+            self.dirty_header.append(("DATAMIN", np.min(self.dirtyCube)))
             hdu = fits.PrimaryHDU(header=self.dirty_header, data=self.dirtyCube)
             hdu.writeto(os.path.join(self.output_dir, 'dirty-cube_{}.fits'.format(str(self.idx))), overwrite=True)
-            hdu.close()
-            hdu = fits.PrimaryHDU(self.dirtyvisCube)
-            hdu.writeto(os.path.join(self.output_dir, 'dirty-vis-cube_{}.fits'.format(str(self.idx))), overwrite=True)
-            hdu.close()
-            hdu = fits.PrimaryHDU(self.visCube)
-            hdu.writeto(os.path.join(self.output_dir, 'clean-vis-cube_{}.fits'.format(str(self.idx))), overwrite=True)
-            hdu.close()
-
+            real_part = np.real(self.dirtyvisCube)
+            imag_part = np.imag(self.dirtyvisCube)
+            hdu_real = fits.PrimaryHDU(real_part)
+            hdu_imag = fits.PrimaryHDU(imag_part)
+            #hdu = fits.HDUList(hdus=[hdu_real, hdu_imag])
+            hdu_real.writeto(os.path.join(self.output_dir, 'dirty-vis-cube_real{}.fits'.format(str(self.idx))), overwrite=True)
+            hdu_imag.writeto(os.path.join(self.output_dir, 'dirty-vis-cube_imag{}.fits'.format(str(self.idx))), overwrite=True)
+            real_part = np.real(self.visCube)
+            imag_part = np.imag(self.visCube)
+            hdu_real = fits.PrimaryHDU(real_part)
+            hdu_imag = fits.PrimaryHDU(imag_part)
+            hdu_real.writeto(os.path.join(self.output_dir, 'clean-vis-cube_real{}.fits'.format(str(self.idx))), overwrite=True)
+            hdu_imag.writeto(os.path.join(self.output_dir, 'clean-vis-cube_imag{}.fits'.format(str(self.idx))), overwrite=True)
+            del real_part
+            del imag_part
         print(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
         print(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
     
