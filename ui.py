@@ -268,13 +268,15 @@ class ALMASimulatorUI(QMainWindow):
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", 'remote'])
 
-        self.remote_address_label = QLabel('Insert Remote Cluster IP or FQDN')
+        self.remote_address_label = QLabel('Insert Remote Cluster IP or FQDN or ALIAS')
         self.remote_address_entry = QLineEdit()
+        self.remote_port_label = QLabel('Insert the port of the Dask scheduler')
+        self.remote_port_entry = QLineEdit()
         
-        # 10  
-        self.flux_mode_label = QLabel('Flux Simulation Mode:')
-        self.flux_mode_combo = QComboBox()
-        self.flux_mode_combo.addItems(["direct", 'line-ratios'])
+        ## 10  
+        #self.flux_mode_label = QLabel('Flux Simulation Mode:')
+        #self.flux_mode_combo = QComboBox()
+        #self.flux_mode_combo.addItems(["direct", 'line-ratios'])
         
         # Output Directory Row
         output_row = QHBoxLayout()
@@ -338,19 +340,26 @@ class ALMASimulatorUI(QMainWindow):
         self.remote_address_row.addWidget(self.remote_address_entry)
         self.left_layout.insertLayout(10, self.remote_address_row)
         self.show_hide_widgets(self.remote_address_row, show=False)
-        self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_address_row)
+        self.remote_port_row = QHBoxLayout()
+        self.remote_port_row.addWidget(self.remote_port_label)
+        self.remote_port_row.addWidget(self.remote_port_entry)
+        self.left_layout.insertLayout(11, self.remote_port_row)
+        self.show_hide_widgets(self.remote_port_row, show=False)
+        self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
         # Flux Mode Row
-        flux_mode_row = QHBoxLayout()
-        flux_mode_row.addWidget(self.flux_mode_label)
-        flux_mode_row.addWidget(self.flux_mode_combo)
-        self.left_layout.insertLayout(11, flux_mode_row)
+        #flux_mode_row = QHBoxLayout()
+        #lux_mode_row.addWidget(self.flux_mode_label)
+        #flux_mode_row.addWidget(self.flux_mode_combo)
+        #self.left_layout.insertLayout(11, flux_mode_row)
     
-    def toggle_remote_address_row(self):
+    def toggle_remote_row(self):
         if self.local_mode_combo.currentText() == 'remote':
             self.show_hide_widgets(self.remote_address_row, show=True)
+            self.show_hide_widgets(self.remote_port_row, show=True)
         else:
             self.show_hide_widgets(self.remote_address_row, show=False)
+            self.show_hide_widgets(self.remote_port_row, show=False)
     # Add Line mode widgets 10 - 12
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
@@ -976,11 +985,14 @@ class ALMASimulatorUI(QMainWindow):
         self.ncpu_entry.clear()
         self.n_sims_entry.clear()
         self.metadata_path_entry.clear()
-        self.metadata_mode_combo.setCurrentText("get")
         self.comp_mode_combo.setCurrentText("sequential")
+        if self.local_mode_combo.currentText() == 'remote':
+            self.remote_address_entry.clear()
+            self.remote_port_entry.clear()
         self.local_mode_combo.setCurrentText('local')
         if self.metadata_mode_combo.currentText() == 'query':
             self.query_save_entry.clear()
+        self.metadata_mode_combo.setCurrentText("get")
         self.project_name_entry.clear()
         self.save_format_combo.setCurrentText("npz")
         self.redshift_entry.clear()
@@ -1009,6 +1021,7 @@ class ALMASimulatorUI(QMainWindow):
         self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
         if self.local_mode_combo.currentText() == "remote" and self.remote_address_entry.text() != "":
             self.remote_address_entry.setText(self.settings.value("remote_address", ""))
+            self.remote_port_entry.setText(self.settings.value("remote_port", ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
@@ -1056,6 +1069,7 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("local_mode", self.local_mode_combo.currentText())
         if self.local_mode_combo.currentText() == 'remote':
             self.settings.setvalue('remote_address', self.remote_address_entry.text())
+            self.settings.setvalue('remote_port', self.remote_port_entry.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -1512,6 +1526,8 @@ class ALMASimulatorUI(QMainWindow):
             ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
             if self.local_mode_combo.currentText() == 'local':
                 cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+            #elif self.local_mode_combo.currentText() == 'remote':
+
             output_type = "object"
             client = Client(cluster)
             client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
@@ -1536,6 +1552,31 @@ class ALMASimulatorUI(QMainWindow):
     def closest_power_of_2(self, x):
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
+
+    def freq_supp_extractor(self, freq_sup):
+        freq_band, n_channels, freq_mins, freq_maxs = [], [], [], []
+        freq_sup = freq_sup.split('U')
+        for i in range(len(freq_sup)):
+            sup = freq_sup[i][1:-1].split(',')
+            sup = [su.split('..') for su in sup][:2]
+            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(self.remove_non_numeric(sup[0][1]))
+            freq_d = float(self.remove_non_numeric(sup[1][0]))
+            freq_min = freq_min * U.GHz 
+            freq_max = freq_max * U.GHz
+            freq_d = freq_d * U.kHz
+            freq_d = freq_d.to(U.GHz)
+            freq_b = freq_max - freq_min
+            n_chan = int(freq_b / freq_d)
+            freq_band.append(freq_b)
+            n_channels.append(n_chan)
+            freq_mins.append(freq_min)
+            freq_maxs.append(freq_max)
+        n_channels = np.sum(n_channels)
+        freq_min, freq_max = freq_mins[0], freq_maxs[-1]
+        band_range = freq_max - freq_min
+        central_freq = freq_min + band_range / 2
+        return band_range, central_freq, n_channels, freq_d
+
 
     def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
                 pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
@@ -1593,14 +1634,10 @@ class ALMASimulatorUI(QMainWindow):
         ang_res = ang_res * U.arcsec
         vel_res = vel_res * U.km / U.s
         int_time = int_time * U.s
-        freq_support = freq_support.split(' U ')[0].split(',')[1]
-        freq_sup = float(self.remove_non_numeric(freq_support)) * U.kHz
-        freq_sup = freq_sup.to(U.MHz)   
-        band_range = ual.get_band_range(int(band))
-        band_range = band_range[1] - band_range[0]
-        band_range = band_range * U.GHz
         source_freq = freq * U.GHz
-        central_freq = ual.get_band_central_freq(int(band)) * U.GHz
+        band_range, central_freq, t_channels, delta_freq = self.freq_supp_extractor(freq_support)
+        
+        
         sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
         if not os.path.exists(sim_output_dir):
             os.makedirs(sim_output_dir)
@@ -1629,10 +1666,9 @@ class ALMASimulatorUI(QMainWindow):
             # just added
             #beam_size = cell_size * 5
         if n_channels is None:
-            n_channels = int(band_range / freq_sup)
+            n_channels = t_channels
         else:
-            band_range = n_channels * freq_sup 
-            band_range = band_range.to(U.GHz)
+            band_range = n_channels * delta_freq
         if redshift is None:
             if isinstance(rest_frequency, np.ndarray):
                 rest_frequency = np.sort(np.array(rest_frequency))[0]
@@ -1661,7 +1697,7 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
         self.terminal.add_log('Central Frequency: {}'.format(central_freq))
         self.terminal.add_log('Spectral Window: {}'.format(band_range))
-        self.terminal.add_log('Freq Support: {}'.format(freq_sup))
+        self.terminal.add_log('Freq Support: {}'.format(delta_freq))
         self.terminal.add_log('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
         self.terminal.add_log('Redshift: {}'.format(round(redshift, 3)))
         self.terminal.add_log('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
@@ -1699,7 +1735,7 @@ class ALMASimulatorUI(QMainWindow):
             n_px_y=n_pix,
             n_channels=n_channels, 
             px_size=cell_size, 
-            channel_width=freq_sup, 
+            channel_width=delta_freq, 
             velocity_centre=central_freq, 
             ra=ra, 
             dec=dec)
@@ -1737,7 +1773,7 @@ class ALMASimulatorUI(QMainWindow):
                 fwhm_x = np.random.randint(3, 10)
                 fwhm_y = np.random.randint(3, 10)
             datacube = usm.insert_serendipitous(datacube, continum, cont_sens.value, line_fluxes, line_names, line_frequency, 
-                                                freq_sup.value, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
+                                                delta_freq.value, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
                                                 os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)))
         #filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
         #self.terminal.add_log('\nWriting datacube to {}'.format(filename))

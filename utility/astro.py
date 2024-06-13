@@ -1005,8 +1005,16 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
     filtered_lines.sort_values(by='distance', inplace=True)
     cont_mask = (sed['GHz'] >= freq_min) & (sed['GHz'] <= freq_max)
-    cont_fluxes = sed[cont_mask]['Jy'].values
-    cont_frequencies = sed[cont_mask]['GHz'].values
+    if sum(cont_mask) > 0:
+        cont_fluxes = sed['Jy'].values[cont_mask]
+        cont_frequencies = sed['GHz'].values[cont_mask]
+        min_ = np.min(cont_fluxes)
+    else: 
+        freq_point = np.argmin(np.abs(sed['GHz'].values - freq_min))
+        cont_fluxes = [sed['Jy'].values[freq_point]]
+        cont_frequencies = [sed['GHz'].values[freq_point]]
+    #cont_fluxes = sed[cont_mask]['Jy'].values
+    
     if n_lines != None:
         if n_lines > len(filtered_lines):
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
