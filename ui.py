@@ -1537,6 +1537,31 @@ class ALMASimulatorUI(QMainWindow):
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
 
+    def freq_supp_extractor(self, freq_sup):
+        freq_band, n_channels, freq_mins, freq_maxs = [], [], [], []
+        freq_sup = freq_sup.split('U')
+        for i in range(len(freq_sup)):
+            sup = freq_sup[i][1:-1].split(',')
+            sup = [su.split('..') for su in sup][:2]
+            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(self.remove_non_numeric(sup[0][1]))
+            freq_d = float(self.remove_non_numeric(sup[1][0]))
+            freq_min = freq_min * U.GHz 
+            freq_max = freq_max * U.GHz
+            freq_d = freq_d * U.kHz
+            freq_d = freq_d.to(U.GHz)
+            freq_b = freq_max - freq_min
+            n_chan = int(freq_b / freq_d)
+            freq_band.append(freq_b)
+            n_channels.append(n_chan)
+            freq_mins.append(freq_min)
+            freq_maxs.append(freq_max)
+        n_channels = np.sum(n_channels)
+        freq_min, freq_max = freq_mins[0], freq_maxs[-1]
+        band_range = freq_max - freq_min
+        central_freq = freq_min + band_range / 2
+        return band_range, central_freq, n_channels, freq_d
+
+
     def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
                 pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
                 n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
@@ -1593,14 +1618,10 @@ class ALMASimulatorUI(QMainWindow):
         ang_res = ang_res * U.arcsec
         vel_res = vel_res * U.km / U.s
         int_time = int_time * U.s
-        freq_support = freq_support.split(' U ')[0].split(',')[1]
-        freq_sup = float(self.remove_non_numeric(freq_support)) * U.kHz
-        freq_sup = freq_sup.to(U.MHz)   
-        band_range = ual.get_band_range(int(band))
-        band_range = band_range[1] - band_range[0]
-        band_range = band_range * U.GHz
         source_freq = freq * U.GHz
-        central_freq = ual.get_band_central_freq(int(band)) * U.GHz
+        band_range, central_freq, t_channels, delta_freq = self.freq_supp_extractor(freq_support)
+        
+        
         sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
         if not os.path.exists(sim_output_dir):
             os.makedirs(sim_output_dir)
@@ -1629,10 +1650,9 @@ class ALMASimulatorUI(QMainWindow):
             # just added
             #beam_size = cell_size * 5
         if n_channels is None:
-            n_channels = int(band_range / freq_sup)
+            n_channels = t_channels
         else:
-            band_range = n_channels * freq_sup 
-            band_range = band_range.to(U.GHz)
+            band_range = n_channels * delta_freq
         if redshift is None:
             if isinstance(rest_frequency, np.ndarray):
                 rest_frequency = np.sort(np.array(rest_frequency))[0]
@@ -1661,7 +1681,7 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
         self.terminal.add_log('Central Frequency: {}'.format(central_freq))
         self.terminal.add_log('Spectral Window: {}'.format(band_range))
-        self.terminal.add_log('Freq Support: {}'.format(freq_sup))
+        self.terminal.add_log('Freq Support: {}'.format(delta_freq))
         self.terminal.add_log('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
         self.terminal.add_log('Redshift: {}'.format(round(redshift, 3)))
         self.terminal.add_log('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
@@ -1699,7 +1719,7 @@ class ALMASimulatorUI(QMainWindow):
             n_px_y=n_pix,
             n_channels=n_channels, 
             px_size=cell_size, 
-            channel_width=freq_sup, 
+            channel_width=delta_freq, 
             velocity_centre=central_freq, 
             ra=ra, 
             dec=dec)
@@ -1737,7 +1757,7 @@ class ALMASimulatorUI(QMainWindow):
                 fwhm_x = np.random.randint(3, 10)
                 fwhm_y = np.random.randint(3, 10)
             datacube = usm.insert_serendipitous(datacube, continum, cont_sens.value, line_fluxes, line_names, line_frequency, 
-                                                freq_sup.value, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
+                                                delta_freq.value, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
                                                 os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)))
         #filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
         #self.terminal.add_log('\nWriting datacube to {}'.format(filename))
