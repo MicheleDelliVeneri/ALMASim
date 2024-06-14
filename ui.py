@@ -22,6 +22,8 @@ from datetime import date
 import time
 import shutil
 from time import strftime, gmtime
+import paramiko
+import pysftp
 import multiprocessing
 import dask.dataframe as dd
 import utility.alma as ual
@@ -277,10 +279,15 @@ class ALMASimulatorUI(QMainWindow):
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", 'remote'])
 
-        self.remote_address_label = QLabel('Insert Remote Cluster IP or FQDN or ALIAS')
+        self.remote_address_label = QLabel('Remote Host:')
         self.remote_address_entry = QLineEdit()
-        self.remote_port_label = QLabel('Insert the port of the Dask scheduler')
-        self.remote_port_entry = QLineEdit()
+        self.remote_user_label = QLabel('Username')
+        self.remote_user_entry = QLineEdit()
+
+        self.remote_key_label = QLabel('SSH Key:')
+        self.remote_key_entry = QLineEdit()
+        self.key_button = QPushButton("Browse", self)
+        self.key_button.clicked.connect(self.browse_ssh_key)
         
         ## 10  
         #self.flux_mode_label = QLabel('Flux Simulation Mode:')
@@ -349,11 +356,14 @@ class ALMASimulatorUI(QMainWindow):
         self.remote_address_row.addWidget(self.remote_address_entry)
         self.left_layout.insertLayout(10, self.remote_address_row)
         self.show_hide_widgets(self.remote_address_row, show=False)
-        self.remote_port_row = QHBoxLayout()
-        self.remote_port_row.addWidget(self.remote_port_label)
-        self.remote_port_row.addWidget(self.remote_port_entry)
-        self.left_layout.insertLayout(11, self.remote_port_row)
-        self.show_hide_widgets(self.remote_port_row, show=False)
+        self.remote_info_row = QHBoxLayout()
+        self.remote_info_row.addWidget(self.remote_user_label)
+        self.remote_info_row.addWidget(self.remote_user_entry)
+        self.remote_info_row.addWidget(self.remote_key_label)
+        self.remote_info_row.addWidget(self.remote_key_entry)
+        self.remote_info_row.addWidget(self.key_button)
+        self.left_layout.insertLayout(11, self.remote_info_row)
+        self.show_hide_widgets(self.remote_info_row, show=False)
         self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
         # Flux Mode Row
@@ -365,10 +375,10 @@ class ALMASimulatorUI(QMainWindow):
     def toggle_remote_row(self):
         if self.local_mode_combo.currentText() == 'remote':
             self.show_hide_widgets(self.remote_address_row, show=True)
-            self.show_hide_widgets(self.remote_port_row, show=True)
+            self.show_hide_widgets(self.remote_info_row, show=True)
         else:
             self.show_hide_widgets(self.remote_address_row, show=False)
-            self.show_hide_widgets(self.remote_port_row, show=False)
+            self.show_hide_widgets(self.remote_info_row, show=False)
 
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
@@ -667,7 +677,8 @@ class ALMASimulatorUI(QMainWindow):
         self.comp_mode_combo.setCurrentText("sequential")
         if self.local_mode_combo.currentText() == 'remote':
             self.remote_address_entry.clear()
-            self.remote_port_entry.clear()
+            self.remote_user_entry.clear()
+            self.remote_key_entry.clear()
         self.local_mode_combo.setCurrentText('local')
         if self.metadata_mode_combo.currentText() == 'query':
             self.query_save_entry.clear()
@@ -700,7 +711,8 @@ class ALMASimulatorUI(QMainWindow):
         self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
         if self.local_mode_combo.currentText() == "remote" and self.remote_address_entry.text() != "":
             self.remote_address_entry.setText(self.settings.value("remote_address", ""))
-            self.remote_port_entry.setText(self.settings.value("remote_port", ""))
+            self.remote_user_entry.setText(self.settings.value("remote_user", ""))
+            self.remote_key_entry.setText(self.settings.value("remote_key", ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
@@ -748,7 +760,8 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("local_mode", self.local_mode_combo.currentText())
         if self.local_mode_combo.currentText() == 'remote':
             self.settings.setvalue('remote_address', self.remote_address_entry.text())
-            self.settings.setvalue('remote_port', self.remote_port_entry.text())
+            self.settings.setvalue('remote_user', self.remote_user_entry.text())
+            self.settings.setvalue('remote_key', self.remote_key_entry.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -863,6 +876,12 @@ class ALMASimulatorUI(QMainWindow):
             self.metadata_path_entry.setText(file)
             self.metadata_path_set()
 
+    def browse_ssh_key(self):
+        file_dialog = QFileDialog()
+        ssh_key_file, _ = file_dialog.getOpenFileName(self, "Select SSH Key File")
+        if ssh_key_file:
+            self.remote_key_entry.setText(ssh_key_file)
+    
     def select_metadata_path(self):
         file, _ = QFileDialog.getSaveFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
         if file:

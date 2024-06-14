@@ -87,7 +87,7 @@ class Interferometer():
         self._prepare_cubes()
         print(f'Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}')
         for channel in tqdm(range(self.Nchan)):
-            self._image_channel()
+            self._image_channel(channel, skymodel)
         self._savez_compressed_cubes()
         self._plot_sim()
         self._free_space()
@@ -248,14 +248,11 @@ class Interferometer():
         self.visCube = np.zeros((self.Nchan, self.Npix, self.Npix), dtype=np.complex64)
         self.dirtyvisCube = np.zeros((self.Nchan, self.Npix, self.Npix), dtype=np.complex64)
     
-    def _free_space(self):
-        del self.modelCube
-        del self.dirtyCube
-        del self.dirtyvisCube
-        del self.visCube
+    def _hz_to_m(self, freq):
+        return self.c_ms / freq
 
     # ------- Imaging and Interferometric Functions ------
-    def _image_channel(self):
+    def _image_channel(self, channel, skymodel):
         self.channel = channel
         self._get_channel_wavelength()
         self._prepare_2d_arrays()
@@ -799,9 +796,9 @@ class Interferometer():
         self.dirtyCube[self.channel] = self.dirtymap
         self.visCube[self.channel] = self.modelvis
         self.dirtyvisCube[self.channel] = self.dirtyvis
-    
-    # ------------ Noise Functions ------------------------ # 
 
+    # ------------ Noise Functions ------------------------   
+    
     def _add_atmospheric_noise(self):
         for nb in self.bas2change:
             phase_rms = np.std(self.baseline_phases[nb]) # Standard deviation is RMS for phases
@@ -811,6 +808,7 @@ class Interferometer():
     def _add_thermal_noise(self):
         mean_val = np.mean(self.img)
         #self.img += np.random.normal(scale=mean_val / self.snr)
+
     # ----------------- Plotting Functions ----------------- #
 
     def _plot_beam(self):
@@ -891,7 +889,7 @@ class Interferometer():
         plt.title('UV Coverage')
         plt.savefig(os.path.join(self.plot_dir, 'uv_coverage_{}.png'.format(str(self.idx))))
         plt.close()
-   
+    
     def _plot_sim(self):
         simPlot, ax = plt.subplots(2, 2, figsize=(12, 12))
         sim_img = np.sum(self.modelCube, axis=0)
@@ -977,9 +975,8 @@ class Interferometer():
         ax[1].set_xlabel('$\\lambda$ [mm]')
         ax[1].set_title('DIRTY SPECTRUM')
         plt.savefig(os.path.join(self.plot_dir, 'spectra_{}.png'.format(str(self.idx))))
-    
-    # ---------- IO Functions ------------------------------- @
 
+    # ------------------- IO Functions
     def _savez_compressed_cubes(self):
         min_dirty = np.min(self.dirtyCube)
         if min_dirty < 0:
@@ -1034,7 +1031,10 @@ class Interferometer():
         print(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
         print(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
     
-    
-    
+    def _free_space(self):
+        del self.modelCube
+        del self.dirtyCube
+        del self.dirtyvisCube
+        del self.visCube
 
-
+    
