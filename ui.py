@@ -228,7 +228,16 @@ class ALMASimulatorUI(QMainWindow):
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
 
-    # Add and remove folder widgets 1 - 9
+ 
+ # -------- Widgets and UI -------------------------
+    def has_widget(self, layout, widget_type):
+        """Check if the layout contains a widget of a specific type."""
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if isinstance(item.widget(), widget_type):
+                return True
+        return False
+
     def add_folder_widgets(self):
          # 1
         self.output_label = QLabel("Output Directory:")
@@ -360,7 +369,7 @@ class ALMASimulatorUI(QMainWindow):
         else:
             self.show_hide_widgets(self.remote_address_row, show=False)
             self.show_hide_widgets(self.remote_port_row, show=False)
-    # Add Line mode widgets 10 - 12
+
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
         self.line_mode_checkbox.stateChanged.connect(self.toggle_line_mode_widgets)
@@ -411,7 +420,6 @@ class ALMASimulatorUI(QMainWindow):
             self.show_hide_widgets(self.non_line_mode_row1, show=True)
             self.show_hide_widgets(self.non_line_mode_row2, show=True)
     
-    # Add dim widgets 13
     def add_dim_widgets(self):
         # --- Set SNR ---
         self.snr_checkbox = QCheckBox("Set SNR")
@@ -454,7 +462,6 @@ class ALMASimulatorUI(QMainWindow):
         checkbox_row.addWidget(self.serendipitous_checkbox)
         self.left_layout.insertLayout(15, checkbox_row)
 
-    # Add model widgets 14
     def add_model_widgets(self):
         self.model_label = QLabel("Select Model:")
         self.model_combo = QComboBox()
@@ -485,7 +492,7 @@ class ALMASimulatorUI(QMainWindow):
 
     def toggle_dim_widgets_visibility(self, widget):
          widget.setVisible(self.sender().isChecked())
-    # Metadata query switch 15
+
     def add_meta_widgets(self):
         self.metadata_mode_label = QLabel("Metadata Retrieval Mode:")
         self.metadata_mode_combo = QComboBox()
@@ -548,6 +555,28 @@ class ALMASimulatorUI(QMainWindow):
         self.left_layout.insertLayout(21, self.query_save_row)
         self.left_layout.insertWidget(22, self.query_execute_button)
         self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
+
+    def remove_metadata_query_widgets(self):
+        # Similar to remove_query_widgets from the previous response, but remove
+        # all the rows and widgets added in add_metadata_query_widgets.
+        widgets_to_remove = [
+            self.science_keyword_row, self.scientific_category_row, self.band_row,
+            self.fov_row, self.time_resolution_row,  self.frequency_row
+        ]
+
+        for widget in widgets_to_remove:
+            if widget.parent() is not None:
+                layout = widget.parent()
+                layout.removeItem(widget)
+                widget.setParent(None)
+                for i in reversed(range(widget.count())):
+                    item = widget.takeAt(i)
+                    if item.widget():
+                        item.widget().deleteLater()
+
+        self.metadata_query_widgets_added = False
+        self.query_execute_button.hide()
+        self.continue_query_button.hide()
 
     def remove_metadata_browse(self):
         if self.metadata_path_row.parent() is not None:
@@ -628,6 +657,129 @@ class ALMASimulatorUI(QMainWindow):
 
         self.metadata_query_widgets_added = False
 
+     def reset_fields(self):
+        self.output_entry.clear()
+        self.tng_entry.clear()
+        self.galaxy_zoo_entry.clear()
+        self.ncpu_entry.clear()
+        self.n_sims_entry.clear()
+        self.metadata_path_entry.clear()
+        self.comp_mode_combo.setCurrentText("sequential")
+        if self.local_mode_combo.currentText() == 'remote':
+            self.remote_address_entry.clear()
+            self.remote_port_entry.clear()
+        self.local_mode_combo.setCurrentText('local')
+        if self.metadata_mode_combo.currentText() == 'query':
+            self.query_save_entry.clear()
+        self.metadata_mode_combo.setCurrentText("get")
+        self.project_name_entry.clear()
+        self.save_format_combo.setCurrentText("npz")
+        self.redshift_entry.clear()
+        self.num_lines_entry.clear()
+        self.snr_checkbox.setChecked(False)
+        self.snr_entry.clear()
+        self.fix_spatial_checkbox.setChecked(False)
+        self.n_pix_entry.clear()
+        self.fix_spectral_checkbox.setChecked(False)
+        self.n_channels_entry.clear()
+        self.ir_luminosity_checkbox.setChecked(False)
+        self.ir_luminosity_entry.clear()
+        self.model_combo.setCurrentText("Point")  # Reset to default model
+        self.tng_api_key_entry.clear()
+        self.line_mode_checkbox.setChecked(False)
+        self.serendipitous_checkbox.setChecked(False)
+
+    def load_settings(self):
+        self.output_entry.setText(self.settings.value("output_directory", ""))
+        self.tng_entry.setText(self.settings.value("tng_directory", ""))
+        self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
+        self.n_sims_entry.setText(self.settings.value("n_sims", ""))
+        self.ncpu_entry.setText(self.settings.value("ncpu", ""))
+        self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", ""))
+        self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", ""))
+        self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
+        if self.local_mode_combo.currentText() == "remote" and self.remote_address_entry.text() != "":
+            self.remote_address_entry.setText(self.settings.value("remote_address", ""))
+            self.remote_port_entry.setText(self.settings.value("remote_port", ""))
+        self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
+        self.project_name_entry.setText(self.settings.value("project_name", ""))
+        self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
+        if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text() != "":
+            self.load_metadata(self.metadata_path_entry.text())
+        elif self.metadata_mode_combo.currentText() == "query":
+            self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
+        if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
+            self.download_galaxy_zoo()
+        line_mode = self.settings.value("line_mode", False, type=bool)
+        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
+        self.line_mode_checkbox.setChecked(line_mode)
+        if line_mode:
+            self.line_index_entry.setText(self.settings.value("line_indices", ""))
+        else:
+            # Load non-line mode values
+            self.redshift_entry.setText(self.settings.value("redshifts", ""))
+            self.num_lines_entry.setText(self.settings.value("num_lines", ""))
+        self.snr_entry.setText(self.settings.value("snr", ""))
+        self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
+        self.fix_spatial_checkbox.setChecked(self.settings.value("fix_spatial", False, type=bool))
+        self.n_pix_entry.setText(self.settings.value("n_pix", ""))
+        self.fix_spectral_checkbox.setChecked(self.settings.value("fix_spectral", False, type=bool))
+        self.n_channels_entry.setText(self.settings.value("n_channels", ""))
+        self.serendipitous_checkbox.setChecked(self.settings.value("inject_serendipitous", False, type=bool))
+        self.model_combo.setCurrentText(self.settings.value("model", ""))
+        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
+        self.toggle_tng_api_key_row()
+        self.ir_luminosity_checkbox.setChecked(self.settings.value("set_ir_luminosity", False, type=bool))
+        self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
+        
+    def closeEvent(self, event):
+        self.settings.setValue("output_directory", self.output_entry.text())
+        self.settings.setValue("tng_directory", self.tng_entry.text())
+        self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
+        self.settings.setValue('n_sims', self.n_sims_entry.text())
+        self.settings.setValue("ncpu", self.ncpu_entry.text())
+        self.settings.setValue("project_name", self.project_name_entry.text())
+        if self.metadata_mode_combo.currentText() == "get":
+            self.settings.setValue("metadata_path", self.metadata_path_entry.text())
+        elif self.metadata_mode_combo.currentText() == "query":
+            self.settings.setValue("query_save_entry", self.query_save_entry.text())
+        self.settings.setValue("metadata_mode", self.metadata_mode_combo.currentText())
+        self.settings.setValue("comp_mode", self.comp_mode_combo.currentText())
+        self.settings.setValue("local_mode", self.local_mode_combo.currentText())
+        if self.local_mode_combo.currentText() == 'remote':
+            self.settings.setvalue('remote_address', self.remote_address_entry.text())
+            self.settings.setvalue('remote_port', self.remote_port_entry.text())
+        self.settings.setValue("save_format", self.save_format_combo.currentText())
+        self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
+        if self.line_mode_checkbox.isChecked():
+            self.settings.setValue("line_indices", self.line_index_entry.text())
+        else:
+            # Save non-line mode values
+            self.settings.setValue("redshifts", self.redshift_entry.text())
+            self.settings.setValue("num_lines", self.num_lines_entry.text())
+        self.settings.setValue('set_snr', self.snr_checkbox.isChecked())
+        self.settings.setValue("snr", self.snr_entry.text())
+        self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
+        self.settings.setValue("n_pix", self.n_pix_entry.text())
+        self.settings.setValue("fix_spectral", self.fix_spectral_checkbox.isChecked())
+        self.settings.setValue("n_channels", self.n_channels_entry.text())
+        self.settings.setValue("inject_serendipitous", self.serendipitous_checkbox.isChecked())
+        self.settings.setValue("model", self.model_combo.currentText())
+        self.settings.setValue("tng_api_key", self.tng_api_key_entry.text())
+        self.settings.setValue("set_ir_luminosity", self.ir_luminosity_checkbox.isChecked())
+        self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
+        super().closeEvent(event)
+  
+    def show_hide_widgets(self, layout, show=True):
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget():
+                if show:
+                    item.widget().show()
+                else:
+                    item.widget().hide()
+
+    # -------- Browse Functions ------------------
     def add_metadata_query_widgets(self):
         # Create widgets for querying parameters
         science_keyword_label = QLabel('Select Science Keyword by number (space-separated):')
@@ -689,6 +841,39 @@ class ALMASimulatorUI(QMainWindow):
         self.left_layout.insertWidget(28, self.continue_query_button)
         self.terminal.add_log("\n\nFill out the fields and click 'Continue Query' to proceed.")
         self.query_execute_button.hide()  # Hide the execute query button
+
+     def browse_output_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if directory:
+            self.output_entry.setText(directory)
+
+    def browse_tng_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select TNG Directory")
+        if directory:
+            self.tng_entry.setText(directory)
+
+    def browse_galaxy_zoo_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Galaxy Zoo Directory")
+        if directory:
+            self.galaxy_zoo_entry.setText(directory)
+
+    def browse_metadata_path(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
+        if file:
+            self.metadata_path_entry.setText(file)
+            self.metadata_path_set()
+
+    def select_metadata_path(self):
+        file, _ = QFileDialog.getSaveFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
+        if file:
+            self.query_save_entry.setText(file)
+            #self.metadata_path_set()
+            
+    def metadata_path_set(self):
+        metadata_path = self.metadata_path_entry.text()
+        self.load_metadata(metadata_path)  # Pass only the metadata_path 
+
+    # -------- Query ALMA Database Functions -------
 
     def get_tap_service(self):
         urls = ["https://almascience.eso.org/tap", "https://almascience.nao.ac.jp/tap",
@@ -947,159 +1132,6 @@ class ALMASimulatorUI(QMainWindow):
                 plt.savefig(os.path.join(plot_dir, 'science_vs_FoV.png'))
                 plt.close()
 
-    def browse_output_directory(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
-        if directory:
-            self.output_entry.setText(directory)
-
-    def browse_tng_directory(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select TNG Directory")
-        if directory:
-            self.tng_entry.setText(directory)
-
-    def browse_galaxy_zoo_directory(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Galaxy Zoo Directory")
-        if directory:
-            self.galaxy_zoo_entry.setText(directory)
-
-    def browse_metadata_path(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
-        if file:
-            self.metadata_path_entry.setText(file)
-            self.metadata_path_set()
-
-    def select_metadata_path(self):
-        file, _ = QFileDialog.getSaveFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
-        if file:
-            self.query_save_entry.setText(file)
-            #self.metadata_path_set()
-            
-    def metadata_path_set(self):
-        metadata_path = self.metadata_path_entry.text()
-        self.load_metadata(metadata_path)  # Pass only the metadata_path 
-
-    def reset_fields(self):
-        self.output_entry.clear()
-        self.tng_entry.clear()
-        self.galaxy_zoo_entry.clear()
-        self.ncpu_entry.clear()
-        self.n_sims_entry.clear()
-        self.metadata_path_entry.clear()
-        self.comp_mode_combo.setCurrentText("sequential")
-        if self.local_mode_combo.currentText() == 'remote':
-            self.remote_address_entry.clear()
-            self.remote_port_entry.clear()
-        self.local_mode_combo.setCurrentText('local')
-        if self.metadata_mode_combo.currentText() == 'query':
-            self.query_save_entry.clear()
-        self.metadata_mode_combo.setCurrentText("get")
-        self.project_name_entry.clear()
-        self.save_format_combo.setCurrentText("npz")
-        self.redshift_entry.clear()
-        self.num_lines_entry.clear()
-        self.snr_checkbox.setChecked(False)
-        self.snr_entry.clear()
-        self.fix_spatial_checkbox.setChecked(False)
-        self.n_pix_entry.clear()
-        self.fix_spectral_checkbox.setChecked(False)
-        self.n_channels_entry.clear()
-        self.ir_luminosity_checkbox.setChecked(False)
-        self.ir_luminosity_entry.clear()
-        self.model_combo.setCurrentText("Point")  # Reset to default model
-        self.tng_api_key_entry.clear()
-        self.line_mode_checkbox.setChecked(False)
-        self.serendipitous_checkbox.setChecked(False)
-
-    def load_settings(self):
-        self.output_entry.setText(self.settings.value("output_directory", ""))
-        self.tng_entry.setText(self.settings.value("tng_directory", ""))
-        self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
-        self.n_sims_entry.setText(self.settings.value("n_sims", ""))
-        self.ncpu_entry.setText(self.settings.value("ncpu", ""))
-        self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", ""))
-        self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", ""))
-        self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
-        if self.local_mode_combo.currentText() == "remote" and self.remote_address_entry.text() != "":
-            self.remote_address_entry.setText(self.settings.value("remote_address", ""))
-            self.remote_port_entry.setText(self.settings.value("remote_port", ""))
-        self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
-        self.project_name_entry.setText(self.settings.value("project_name", ""))
-        self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
-        if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text() != "":
-            self.load_metadata(self.metadata_path_entry.text())
-        elif self.metadata_mode_combo.currentText() == "query":
-            self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
-        if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
-            self.download_galaxy_zoo()
-        line_mode = self.settings.value("line_mode", False, type=bool)
-        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
-        self.line_mode_checkbox.setChecked(line_mode)
-        if line_mode:
-            self.line_index_entry.setText(self.settings.value("line_indices", ""))
-        else:
-            # Load non-line mode values
-            self.redshift_entry.setText(self.settings.value("redshifts", ""))
-            self.num_lines_entry.setText(self.settings.value("num_lines", ""))
-        self.snr_entry.setText(self.settings.value("snr", ""))
-        self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
-        self.fix_spatial_checkbox.setChecked(self.settings.value("fix_spatial", False, type=bool))
-        self.n_pix_entry.setText(self.settings.value("n_pix", ""))
-        self.fix_spectral_checkbox.setChecked(self.settings.value("fix_spectral", False, type=bool))
-        self.n_channels_entry.setText(self.settings.value("n_channels", ""))
-        self.serendipitous_checkbox.setChecked(self.settings.value("inject_serendipitous", False, type=bool))
-        self.model_combo.setCurrentText(self.settings.value("model", ""))
-        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
-        self.toggle_tng_api_key_row()
-        self.ir_luminosity_checkbox.setChecked(self.settings.value("set_ir_luminosity", False, type=bool))
-        self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
-        
-    def closeEvent(self, event):
-        self.settings.setValue("output_directory", self.output_entry.text())
-        self.settings.setValue("tng_directory", self.tng_entry.text())
-        self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
-        self.settings.setValue('n_sims', self.n_sims_entry.text())
-        self.settings.setValue("ncpu", self.ncpu_entry.text())
-        self.settings.setValue("project_name", self.project_name_entry.text())
-        if self.metadata_mode_combo.currentText() == "get":
-            self.settings.setValue("metadata_path", self.metadata_path_entry.text())
-        elif self.metadata_mode_combo.currentText() == "query":
-            self.settings.setValue("query_save_entry", self.query_save_entry.text())
-        self.settings.setValue("metadata_mode", self.metadata_mode_combo.currentText())
-        self.settings.setValue("comp_mode", self.comp_mode_combo.currentText())
-        self.settings.setValue("local_mode", self.local_mode_combo.currentText())
-        if self.local_mode_combo.currentText() == 'remote':
-            self.settings.setvalue('remote_address', self.remote_address_entry.text())
-            self.settings.setvalue('remote_port', self.remote_port_entry.text())
-        self.settings.setValue("save_format", self.save_format_combo.currentText())
-        self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
-        if self.line_mode_checkbox.isChecked():
-            self.settings.setValue("line_indices", self.line_index_entry.text())
-        else:
-            # Save non-line mode values
-            self.settings.setValue("redshifts", self.redshift_entry.text())
-            self.settings.setValue("num_lines", self.num_lines_entry.text())
-        self.settings.setValue('set_snr', self.snr_checkbox.isChecked())
-        self.settings.setValue("snr", self.snr_entry.text())
-        self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
-        self.settings.setValue("n_pix", self.n_pix_entry.text())
-        self.settings.setValue("fix_spectral", self.fix_spectral_checkbox.isChecked())
-        self.settings.setValue("n_channels", self.n_channels_entry.text())
-        self.settings.setValue("inject_serendipitous", self.serendipitous_checkbox.isChecked())
-        self.settings.setValue("model", self.model_combo.currentText())
-        self.settings.setValue("tng_api_key", self.tng_api_key_entry.text())
-        self.settings.setValue("set_ir_luminosity", self.ir_luminosity_checkbox.isChecked())
-        self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
-        super().closeEvent(event)
-  
-    def show_hide_widgets(self, layout, show=True):
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if item.widget():
-                if show:
-                    item.widget().show()
-                else:
-                    item.widget().hide()
-
     def update_query_save_label(self, query_type):
         """Shows/hides the target list row and query save row based on query type."""
         if query_type == "science":
@@ -1242,28 +1274,6 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         
-    def remove_metadata_query_widgets(self):
-        # Similar to remove_query_widgets from the previous response, but remove
-        # all the rows and widgets added in add_metadata_query_widgets.
-        widgets_to_remove = [
-            self.science_keyword_row, self.scientific_category_row, self.band_row,
-            self.fov_row, self.time_resolution_row,  self.frequency_row
-        ]
-
-        for widget in widgets_to_remove:
-            if widget.parent() is not None:
-                layout = widget.parent()
-                layout.removeItem(widget)
-                widget.setParent(None)
-                for i in reversed(range(widget.count())):
-                    item = widget.takeAt(i)
-                    if item.widget():
-                        item.widget().deleteLater()
-
-        self.metadata_query_widgets_added = False
-        self.query_execute_button.hide()
-        self.continue_query_button.hide()
-        
     def browse_target_list(self):
         """Opens a file dialog to select the target list file."""
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Target List", "", "CSV Files (*.csv)")
@@ -1286,7 +1296,9 @@ class ALMASimulatorUI(QMainWindow):
             cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(self.tng_api_key_entry.text(), os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
             subprocess.check_call(cmd, shell=True)
             self.terminal.add_log('Done.')
-        
+
+    # ----- Auxiliary Functions -----------------
+
     def load_metadata(self, metadata_path):
         try:
             self.terminal.add_log(f"Loading metadata from {metadata_path}")
@@ -1298,15 +1310,7 @@ class ALMASimulatorUI(QMainWindow):
             self.terminal.add_log(f"Error loading metadata: {e}")
             import traceback
             traceback.print_exc()
-        
-    def has_widget(self, layout, widget_type):
-        """Check if the layout contains a widget of a specific type."""
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if isinstance(item.widget(), widget_type):
-                return True
-        return False
-
+    
     def line_display(self):
         """
         Display the line emission's rest frequency.
@@ -1395,6 +1399,54 @@ class ALMASimulatorUI(QMainWindow):
         sample = metadata.sample(n, replace=True)
         return sample
 
+    def remove_non_numeric(self, text):
+        """Removes non-numeric characters from a string.
+        Args:
+            text: The string to process.
+
+        Returns:
+            A new string containing only numeric characters and the decimal point (.).
+        """
+        numbers = "0123456789."
+        return "".join(char for char in text if char in numbers)
+
+    def closest_power_of_2(self, x):
+        op = math.floor if bin(x)[3] != "1" else math.ceil
+        return 2 ** op(math.log(x, 2))
+
+    def freq_supp_extractor(self, freq_sup, obs_freq):
+        freq_band, n_channels, freq_mins, freq_maxs, freq_ds = [], [], [], [], []
+        freq_sup = freq_sup.split('U')
+        for i in range(len(freq_sup)):
+            sup = freq_sup[i][1:-1].split(',')
+            sup = [su.split('..') for su in sup][:2]
+            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(self.remove_non_numeric(sup[0][1]))
+            freq_d = float(self.remove_non_numeric(sup[1][0]))
+            freq_min = freq_min * U.GHz 
+            freq_max = freq_max * U.GHz
+            freq_d = freq_d * U.kHz
+            freq_d = freq_d.to(U.GHz)
+            freq_b = freq_max - freq_min
+            n_chan = int(freq_b / freq_d)
+            freq_band.append(freq_b)
+            n_channels.append(n_chan)
+            freq_mins.append(freq_min)
+            freq_maxs.append(freq_max)
+            freq_ds.append(freq_d)
+        freq_ranges = np.array([[freq_mins[i], freq_maxs[i]] for i in range(len(freq_mins))])
+        idx_ = np.argwhere((obs_freq >= freq_ranges[:, 0]) & (obs_freq <= freq_ranges[:, 1]))
+        freq_range = freq_ranges[idx_]
+        band_range = freq_range[1] - freq_range[0]
+        n_channels = n_channels[idx_]
+        central_freq = freq_range[0] + band_range / 2
+        freq_d = freq_ds[idx_]
+        #n_channels = np.sum(n_channels)
+        #freq_min, freq_max = freq_mins[0], freq_maxs[-1]
+        #band_range = freq_max - freq_min
+        #central_freq = freq_min + band_range / 2
+        return band_range, central_freq, n_channels, freq_d
+
+    # -------- Simulation Functions ------------------------
     def start_simulation(self):
         # Implement the logic to start the simulation
         if self.local_mode_combo.currentText() == 'local':
@@ -1538,44 +1590,6 @@ class ALMASimulatorUI(QMainWindow):
             for i in range(n_sims):
                 self.simulator(*input_params.iloc[i])
 
-    def remove_non_numeric(self, text):
-        """Removes non-numeric characters from a string.
-        Args:
-            text: The string to process.
-
-        Returns:
-            A new string containing only numeric characters and the decimal point (.).
-        """
-        numbers = "0123456789."
-        return "".join(char for char in text if char in numbers)
-
-    def closest_power_of_2(self, x):
-        op = math.floor if bin(x)[3] != "1" else math.ceil
-        return 2 ** op(math.log(x, 2))
-
-    def freq_supp_extractor(self, freq_sup):
-        freq_band, n_channels, freq_mins, freq_maxs = [], [], [], []
-        freq_sup = freq_sup.split('U')
-        for i in range(len(freq_sup)):
-            sup = freq_sup[i][1:-1].split(',')
-            sup = [su.split('..') for su in sup][:2]
-            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(self.remove_non_numeric(sup[0][1]))
-            freq_d = float(self.remove_non_numeric(sup[1][0]))
-            freq_min = freq_min * U.GHz 
-            freq_max = freq_max * U.GHz
-            freq_d = freq_d * U.kHz
-            freq_d = freq_d.to(U.GHz)
-            freq_b = freq_max - freq_min
-            n_chan = int(freq_b / freq_d)
-            freq_band.append(freq_b)
-            n_channels.append(n_chan)
-            freq_mins.append(freq_min)
-            freq_maxs.append(freq_max)
-        n_channels = np.sum(n_channels)
-        freq_min, freq_max = freq_mins[0], freq_maxs[-1]
-        band_range = freq_max - freq_min
-        central_freq = freq_min + band_range / 2
-        return band_range, central_freq, n_channels, freq_d
 
 
     def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
@@ -1635,9 +1649,7 @@ class ALMASimulatorUI(QMainWindow):
         vel_res = vel_res * U.km / U.s
         int_time = int_time * U.s
         source_freq = freq * U.GHz
-        band_range, central_freq, t_channels, delta_freq = self.freq_supp_extractor(freq_support)
-        
-        
+        band_range, central_freq, t_channels, delta_freq = self.freq_supp_extractor(freq_support, source_freq)
         sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
         if not os.path.exists(sim_output_dir):
             os.makedirs(sim_output_dir)
