@@ -657,7 +657,7 @@ class ALMASimulatorUI(QMainWindow):
 
         self.metadata_query_widgets_added = False
 
-     def reset_fields(self):
+    def reset_fields(self):
         self.output_entry.clear()
         self.tng_entry.clear()
         self.galaxy_zoo_entry.clear()
@@ -842,7 +842,7 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log("\n\nFill out the fields and click 'Continue Query' to proceed.")
         self.query_execute_button.hide()  # Hide the execute query button
 
-     def browse_output_directory(self):
+    def browse_output_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if directory:
             self.output_entry.setText(directory)
@@ -1433,18 +1433,14 @@ class ALMASimulatorUI(QMainWindow):
             freq_mins.append(freq_min)
             freq_maxs.append(freq_max)
             freq_ds.append(freq_d)
-        freq_ranges = np.array([[freq_mins[i], freq_maxs[i]] for i in range(len(freq_mins))])
-        idx_ = np.argwhere((obs_freq >= freq_ranges[:, 0]) & (obs_freq <= freq_ranges[:, 1]))
+        freq_ranges = np.array([[freq_mins[i].value, freq_maxs[i].value] for i in range(len(freq_mins))])
+        idx_ = np.argwhere((obs_freq.value >= freq_ranges[:, 0]) & (obs_freq.value <= freq_ranges[:, 1]))[0][0]
         freq_range = freq_ranges[idx_]
         band_range = freq_range[1] - freq_range[0]
         n_channels = n_channels[idx_]
         central_freq = freq_range[0] + band_range / 2
         freq_d = freq_ds[idx_]
-        #n_channels = np.sum(n_channels)
-        #freq_min, freq_max = freq_mins[0], freq_maxs[-1]
-        #band_range = freq_max - freq_min
-        #central_freq = freq_min + band_range / 2
-        return band_range, central_freq, n_channels, freq_d
+        return band_range * U.GHz, central_freq * U.GHz, n_channels, freq_d
 
     # -------- Simulation Functions ------------------------
     def start_simulation(self):
@@ -1589,8 +1585,6 @@ class ALMASimulatorUI(QMainWindow):
         else:
             for i in range(n_sims):
                 self.simulator(*input_params.iloc[i])
-
-
 
     def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
                 pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
