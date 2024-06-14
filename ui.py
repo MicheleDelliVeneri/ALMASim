@@ -288,6 +288,9 @@ class ALMASimulatorUI(QMainWindow):
         self.remote_key_entry = QLineEdit()
         self.key_button = QPushButton("Browse", self)
         self.key_button.clicked.connect(self.browse_ssh_key)
+        self.remote_key_pass_label = QLabel('Key Passwd:')
+        self.remote_key_pass_entry = QLineEdit()
+        self.remote_key_pass_entry.setEchoMode(QLineEdit.EchoMode.Password)
         
         ## 10  
         #self.flux_mode_label = QLabel('Flux Simulation Mode:')
@@ -362,6 +365,8 @@ class ALMASimulatorUI(QMainWindow):
         self.remote_info_row.addWidget(self.remote_key_label)
         self.remote_info_row.addWidget(self.remote_key_entry)
         self.remote_info_row.addWidget(self.key_button)
+        self.remote_info_row.addWidget(self.remote_key_pass_label)
+        self.remote_info_row.addWidget(self.remote_key_pass_entry)
         self.left_layout.insertLayout(11, self.remote_info_row)
         self.show_hide_widgets(self.remote_info_row, show=False)
         self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
@@ -679,6 +684,7 @@ class ALMASimulatorUI(QMainWindow):
             self.remote_address_entry.clear()
             self.remote_user_entry.clear()
             self.remote_key_entry.clear()
+            self.remote_key_pass_entry.clear()
         self.local_mode_combo.setCurrentText('local')
         if self.metadata_mode_combo.currentText() == 'query':
             self.query_save_entry.clear()
@@ -713,6 +719,7 @@ class ALMASimulatorUI(QMainWindow):
             self.remote_address_entry.setText(self.settings.value("remote_address", ""))
             self.remote_user_entry.setText(self.settings.value("remote_user", ""))
             self.remote_key_entry.setText(self.settings.value("remote_key", ""))
+            self.remote_key_pass_entry.setText(self.settings.value('remote_key_pass', ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
@@ -759,9 +766,10 @@ class ALMASimulatorUI(QMainWindow):
         self.settings.setValue("comp_mode", self.comp_mode_combo.currentText())
         self.settings.setValue("local_mode", self.local_mode_combo.currentText())
         if self.local_mode_combo.currentText() == 'remote':
-            self.settings.setvalue('remote_address', self.remote_address_entry.text())
-            self.settings.setvalue('remote_user', self.remote_user_entry.text())
-            self.settings.setvalue('remote_key', self.remote_key_entry.text())
+            self.settings.setValue('remote_address', self.remote_address_entry.text())
+            self.settings.setValue('remote_user', self.remote_user_entry.text())
+            self.settings.setValue('remote_key', self.remote_key_entry.text())
+            self.settings.setValue('remote_key_pass', self.remote_key_pass_entry.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -857,18 +865,56 @@ class ALMASimulatorUI(QMainWindow):
 
     def browse_output_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
-        if directory:
-            self.output_entry.setText(directory)
+        if self.local_mode_combo.currentText() == 'remote' and self.remote_address_entry.text() != "" and self.remote_key_entry.text() != "" and self.remote_user_entry != "":
+            if directory: 
+                remote_dir = self.map_to_remote_directory(directory)
+                if self.remote_key_pass_entry.text() != "":
+                    with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text()) as sftp:
+                        sftp.mkdir(remote_dir)
+                else:
+                    with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
+                        sftp.mkdir(remote_dir)
+                self.output_entry.setText(remote_dir)
+        else:
+            if directory:
+                self.output_entry.setText(directory)
+
+    def map_to_remote_directory(self, directory):
+        directory_name = directory.split(os.path.sep)[-1]
+        directory_path = os.path.join('/home', self.remote_user_entry.text(), directory_name)
+        return directory_path
 
     def browse_tng_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select TNG Directory")
-        if directory:
-            self.tng_entry.setText(directory)
+        if self.local_mode_combo.currentText() == 'remote' and self.remote_address_entry.text() != "" and self.remote_key_entry.text() != "" and self.remote_user_entry != "":
+            if directory: 
+                remote_dir = self.map_to_remote_directory(directory)
+                if self.remote_key_pass_entry.text() != "":
+                    with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text()) as sftp:
+                        sftp.mkdir(remote_dir)
+                else:
+                    with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
+                        sftp.mkdir(remote_dir)
+                self.output_entry.setText(remote_dir)
+        else:
+            if directory:
+                self.output_entry.setText(directory)
 
     def browse_galaxy_zoo_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Galaxy Zoo Directory")
-        if directory:
-            self.galaxy_zoo_entry.setText(directory)
+        if self.local_mode_combo.currentText() == 'remote' and self.remote_address_entry.text() != "" and self.remote_key_entry.text() != "" and self.remote_user_entry != "":
+            if directory: 
+                remote_dir = self.map_to_remote_directory(directory)
+                if self.remote_key_pass_entry.text() != "":
+                    with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text()) as sftp:
+                        sftp.mkdir(remote_dir)
+                else:
+                    with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
+                        sftp.mkdir(remote_dir)
+                self.output_entry.setText(remote_dir)
+        else:
+            if directory:
+                self.output_entry.setText(directory)
 
     def browse_metadata_path(self):
         file, _ = QFileDialog.getOpenFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
@@ -1594,6 +1640,8 @@ class ALMASimulatorUI(QMainWindow):
             if self.local_mode_combo.currentText() == 'local':
                 cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
             #elif self.local_mode_combo.currentText() == 'remote':
+            else:
+                
 
             output_type = "object"
             client = Client(cluster)
