@@ -1345,22 +1345,7 @@ class ALMASimulatorUI(QMainWindow):
         if file_path:
             self.target_list_entry.setText(file_path)
 
-    def check_tng_dirs(self):
-        tng_dir = self.tng_entry.text()
-        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
-            os.makedirs(os.path.join(tng_dir, 'TNG100-1'))
-        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'output')):
-            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'output'))
-        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing')):
-            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing'))
-        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets')):
-            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets'))
-        if not isfile(os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5')):
-            self.terminal.add_log('Downloading simulation file')
-            url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
-            cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(self.tng_api_key_entry.text(), os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
-            subprocess.check_call(cmd, shell=True)
-            self.terminal.add_log('Done.')
+    
 
     # ----- Auxiliary Functions -----------------
 
@@ -1406,6 +1391,44 @@ class ALMASimulatorUI(QMainWindow):
         # Download the dataset as a zip file
         api.dataset_download_files(dataset_name, path=self.galaxy_zoo_entry.text(), unzip=True)
         self.terminal.add_log(f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}")
+
+    def check_tng_dirs(self):
+        tng_dir = self.tng_entry.text()
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'output')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'output'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing'))
+        if not os.path.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets')):
+            os.makedirs(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets'))
+        if not isfile(os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5')):
+            self.terminal.add_log('Downloading simulation file')
+            url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+            cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(self.tng_api_key_entry.text(), os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
+            subprocess.check_call(cmd, shell=True)
+            self.terminal.add_log('Done.')
+    
+    def create_remote_environment(self):
+        repo_url = 'https://github.com/MicheleDelliVeneri/ALMASim.git'
+        venv_dir = 'almasim_env'
+        repo_dir = self.output_entry.text()
+        if ssh.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+        commands = f"""
+            if [ ! -d {repo_dir} ]; then
+                git clone {repo_url} {repo_dir}
+            fi
+            cd {repo_dir}
+            if [ ! -d {venv_dir} ]; then
+                python3 -m venv {venv_dir}
+            fi
+            source {venv_dir}/bin/activate
+            pip install -r requirements.txt
+            """
+        client = paramiko.SSHClient()
 
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -1640,8 +1663,8 @@ class ALMASimulatorUI(QMainWindow):
             if self.local_mode_combo.currentText() == 'local':
                 cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
             #elif self.local_mode_combo.currentText() == 'remote':
-            else:
-                
+            #else:
+
 
             output_type = "object"
             client = Client(cluster)

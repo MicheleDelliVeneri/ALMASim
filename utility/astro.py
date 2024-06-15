@@ -952,9 +952,14 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     else:
         n = len(line_names)
 
-    fwhms = [np.random.randint(3, 10) for i in range(n)]
-    fwhms_freq = fwhms * U.GHz * freq_step
-    max_fwhm = np.max(fwhms_freq)
+    #fwhms = [np.random.randint(3, 10) for i in range(n)]
+    #fwhms_freq = fwhms * U.GHz * freq_step
+    delta_v = 300 * U.km / U.s
+    c_km_s = c.to(U.km / U.s)
+    fwhms = 0.84*(db_line['freq(GHz)'].values*(1+redshift)*(delta_v/c_km_s)*1e9) * U.Hz
+    fwhms_GHz = fwhms.to(U.GHz).value
+    #max_fwhm = np.max(fwhms_GHz)
+    #print(max_fwhm)
     pbar = tqdm(desc='Searching lines....', total=n)
     initial_len = len(filtered_lines)
     while len(filtered_lines) < n:
@@ -962,10 +967,10 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         filtered_lines = db_line.copy()
         filtered_lines.drop(filtered_lines.index, inplace=True)
         db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] / (1 + redshift)
-        line_mask = (db_line['shifted_freq(GHz)'].astype(float) - max_fwhm >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) + max_fwhm <= freq_max)
+        line_mask = (db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2 >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2 <= freq_max)
         filtered_lines = db_line[line_mask]
         if len(filtered_lines) < n:
-            n_possible = (db_line['shifted_freq(GHz)'].astype(float) + max_fwhm <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) - max_fwhm >= freq_min).sum()
+            n_possible = (db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2 <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2 >= freq_min).sum()
             ##if n_possible != 0:
             #    redshift += 0.01
             #freq_min -= freq_min / 10
@@ -1029,18 +1034,20 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
     line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
     line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz 
+    fwhms_GHz = (0.84*(line_frequencies * (delta_v/c_km_s)*1e9) * U.Hz).to(U.GHz)
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1: 
         int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
     else:
         int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x)))
-    freq_steps = np.array([new_cont_freq[line_index + fwhm] - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms, line_indexes)]) * U.GHz
+    freq_steps = np.array([new_cont_freq[line_index] + fwhm.value - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms_GHz, line_indexes)]) * U.GHz
     freq_steps = freq_steps.to(U.Hz).value
     #line_fluxes = int_cont_fluxes[line_indexes] + (10**(np.log10(flux_infrared)  + line_ratios) / freq_steps)
     line_fluxes = 10**(np.log10(flux_infrared)  + line_ratios) / freq_steps
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
+    fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
     return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
