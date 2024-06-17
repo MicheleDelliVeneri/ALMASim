@@ -803,7 +803,7 @@ class ALMASimulatorUI(QMainWindow):
                 else:
                     item.widget().hide()
 
-    # -------- Browse Functions ------------------
+# -------- Browse Functions ------------------
     def add_metadata_query_widgets(self):
         # Create widgets for querying parameters
         science_keyword_label = QLabel('Select Science Keyword by number (space-separated):')
@@ -898,10 +898,10 @@ class ALMASimulatorUI(QMainWindow):
                 else:
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
                         sftp.mkdir(remote_dir)
-                self.output_entry.setText(remote_dir)
+                self.tng_entry.setText(remote_dir)
         else:
             if directory:
-                self.output_entry.setText(directory)
+                self.tng_entry.setText(directory)
 
     def browse_galaxy_zoo_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Galaxy Zoo Directory")
@@ -914,10 +914,10 @@ class ALMASimulatorUI(QMainWindow):
                 else:
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
                         sftp.mkdir(remote_dir)
-                self.output_entry.setText(remote_dir)
+                self.galaxy_zoo_entry.setText(remote_dir)
         else:
             if directory:
-                self.output_entry.setText(directory)
+                self.galaxy_zoo_entry.setText(directory)
 
     def browse_metadata_path(self):
         file, _ = QFileDialog.getOpenFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
@@ -952,8 +952,8 @@ class ALMASimulatorUI(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Target List", "", "CSV Files (*.csv)")
         if file_path:
             self.target_list_entry.setText(file_path)
-    # -------- Query ALMA Database Functions -------
 
+# -------- Query ALMA Database Functions -------
     def get_tap_service(self):
         urls = ["https://almascience.eso.org/tap", "https://almascience.nao.ac.jp/tap",
                 "https://almascience.nrao.edu/tap"
@@ -1353,7 +1353,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         
-    # ----- Auxiliary Functions -----------------
+# ----- Auxiliary Functions -----------------
 
     def load_metadata(self, metadata_path):
         try:
@@ -1685,7 +1685,7 @@ class ALMASimulatorUI(QMainWindow):
         freq_d = freq_ds[idx_]
         return band_range * U.GHz, central_freq * U.GHz, n_channels, freq_d
 
-    # -------- Simulation Functions ------------------------
+# -------- Simulation Functions ------------------------
     def start_simulation(self):
         # Implement the logic to start the simulation
         if self.local_mode_combo.currentText() == 'local':
