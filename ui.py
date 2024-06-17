@@ -1458,10 +1458,12 @@ class ALMASimulatorUI(QMainWindow):
             self.terminal.add_log('Done.')
     
     def create_remote_environment(self):
+        self.terminal.add_log('Checking ALMASim environment')
         repo_url = 'https://github.com/MicheleDelliVeneri/ALMASim.git'
         venv_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'almasim_env')
         repo_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'ALMASim')
         self.remote_main_dir = repo_dir
+        self.remote_venv_dir = venv_dir
         if self.remote_key_pass_entry.text() != "":
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
         else:
@@ -1487,12 +1489,14 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log(stdout.read().decode())
         self.terminal.add_log(stderr.read().decode())
 
-    def create_remote_output_dir(self, output_path, plot_path):
+    def create_remote_output_dir(self):
         if self.remote_key_pass_entry.text() != "":
             sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text())
                 
         else:
             sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
+        output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
+        plot_path = os.path.join(output_path, 'plots')
         if not sftp.exists(output_path):
             sftp.mkdir(output_path)
         if not sftp.exists(plot_path):
@@ -1538,58 +1542,8 @@ class ALMASimulatorUI(QMainWindow):
             
         
         dask_commands = f"""
-            cd {self.remote_main_dir}
-            source almasim_env/bin/activate
-            python -c \"
-            import sys
-            import numpy as np
-            import pandas as pd
-            import os
-            from kaggle import api
-            from os.path import isfile
-            import dask
-            from distributed import Client, LocalCluster, WorkerPlugin
-            from dask_jobqueue import SLURMCluster
-            import json
-            import astropy.units as U
-            from astropy.constants import c
-            from astropy.time import Time
-            import math
-            from math import pi, ceil
-            from datetime import date
-            import time
-            import shutil
-            from time import strftime, gmtime
-            import paramiko
-            import pysftp
-            import dask.dataframe as dd
-            import utility.alma as ual
-            import utility.astro as uas
-            import utility.compute as uc
-            import utility.skymodels as usm
-            import utility.plotting as upl
-            import utility.interferometer as uin
-            # Load SLURMCluster configuration from JSON file
-            with open('slurm_config.json', 'r') as f:
-                config = json.load(f)
-            cluster = SLURMCluster(
-                queue=config['queue'],
-                account=config['account'],
-                cores=config['cores'],
-                memory=config['memory'],
-                interface=config['interface'],
-                scheduler_options={{'host': config['scheduler']}},
-                job_extra=config['job_extra'],
-            )
-            cluster.scale(jobs={int(self.ncpu_entry.text())})
-            client = Client(cluster)
-            ddf = dd.from_pandas({self.input_params}, npartitions={int(self.ncpu_entry.text())})
-            output_type = "object"
-            results = ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
-            client.close()
-            cluster.close()
-            \"
-            """
+        cd {self.remote_main_dir} && source almasim_env/bin/activate && python -c \\"import sys; import numpy as np; import pandas as pd; import os; from kaggle import api; from os.path import isfile; import dask; from distributed import Client, LocalCluster, WorkerPlugin; from dask_jobqueue import SLURMCluster; import json; import astropy.units as U; from astropy.constants import c; from astropy.time import Time; import math; from math import pi, ceil; from datetime import date; import time; import shutil; from time import strftime, gmtime; import paramiko; import pysftp; import dask.dataframe as dd; import utility.alma as ual; import utility.astro as uas; import utility.compute as uc; import utility.skymodels as usm; import utility.plotting as upl; import utility.interferometer as uin; with open('slurm_config.json', 'r') as f: config = json.load(f); cluster = SLURMCluster(queue=config['queue'], account=config['account'], cores=config['cores'], memory=config['memory'], interface=config['interface'], scheduler_options={{'host': config['scheduler']}}, job_extra=config['job_extra']); cluster.scale(jobs={int(self.ncpu_entry.text())}); client = Client(cluster); ddf = dd.from_pandas({self.input_params}, npartitions={int(self.ncpu_entry.text())}); output_type = \\"object\\"; results = ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute(); client.close(); cluster.close();\\""
+        """
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
@@ -1718,7 +1672,7 @@ class ALMASimulatorUI(QMainWindow):
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
         else:
-            self.create_remote_output_dir(output_path, plot_path)
+            self.create_remote_output_dir()
 
         output_paths = np.array([output_path] * n_sims)
         tng_paths = np.array([self.tng_entry.text()] * n_sims)
