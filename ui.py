@@ -873,10 +873,12 @@ class ALMASimulatorUI(QMainWindow):
                 remote_dir = self.map_to_remote_directory(directory)
                 if self.remote_key_pass_entry.text() != "":
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text()) as sftp:
-                        sftp.mkdir(remote_dir)
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
                 else:
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
-                        sftp.mkdir(remote_dir)
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
                 self.output_entry.setText(remote_dir)
         else:
             if directory:
@@ -894,10 +896,12 @@ class ALMASimulatorUI(QMainWindow):
                 remote_dir = self.map_to_remote_directory(directory)
                 if self.remote_key_pass_entry.text() != "":
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text()) as sftp:
-                        sftp.mkdir(remote_dir)
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
                 else:
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
-                        sftp.mkdir(remote_dir)
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
                 self.tng_entry.setText(remote_dir)
         else:
             if directory:
@@ -910,10 +914,12 @@ class ALMASimulatorUI(QMainWindow):
                 remote_dir = self.map_to_remote_directory(directory)
                 if self.remote_key_pass_entry.text() != "":
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text()) as sftp:
-                        sftp.mkdir(remote_dir)
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
                 else:
                     with pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text()) as sftp:
-                        sftp.mkdir(remote_dir)
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
                 self.galaxy_zoo_entry.setText(remote_dir)
         else:
             if directory:
