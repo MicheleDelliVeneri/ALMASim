@@ -11,6 +11,9 @@ h5py
 kaggle
 dask
 dask-expr
+dask_jobqueue
 distributed
 astromartini
 Hdecompose
+paramiko
+pysftp

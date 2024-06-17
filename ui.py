@@ -13,6 +13,8 @@ from kaggle import api
 from os.path import isfile
 import dask
 from distributed import Client, LocalCluster, WorkerPlugin
+from dask_jobqueue import SLURMCluster
+import json
 import astropy.units as U
 from astropy.constants import c
 from astropy.time import Time
@@ -24,7 +26,6 @@ import shutil
 from time import strftime, gmtime
 import paramiko
 import pysftp
-import multiprocessing
 import dask.dataframe as dd
 import utility.alma as ual
 import utility.astro as uas
@@ -166,10 +167,6 @@ class ALMASimulatorUI(QMainWindow):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
 
         # --- Create Widgets ---
-
-        
-       
-
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
         self.metadata_path_button = QPushButton("Browse")
@@ -263,7 +260,7 @@ class ALMASimulatorUI(QMainWindow):
         self.n_sims_label = QLabel("Number of Simulations:")
         self.n_sims_entry = QLineEdit()
         # 6
-        self.ncpu_label = QLabel("Total Number of CPUs:")
+        self.ncpu_label = QLabel("N. CPUs / Processes:")
         self.ncpu_entry = QLineEdit()
         # 7
         self.save_format_label = QLabel("Save Format:")
@@ -281,9 +278,12 @@ class ALMASimulatorUI(QMainWindow):
 
         self.remote_address_label = QLabel('Remote Host:')
         self.remote_address_entry = QLineEdit()
+        self.remote_config_label = QLabel('Slurm Config:')
+        self.remote_config_entry = QLineEdit()
+        self.remote_config_button = QPushButton('Browse', self)
+        self.remote_config_button.clicked.connect(self.browse_slurm_config)
         self.remote_user_label = QLabel('Username')
         self.remote_user_entry = QLineEdit()
-
         self.remote_key_label = QLabel('SSH Key:')
         self.remote_key_entry = QLineEdit()
         self.key_button = QPushButton("Browse", self)
@@ -357,6 +357,9 @@ class ALMASimulatorUI(QMainWindow):
         self.remote_address_row = QHBoxLayout()
         self.remote_address_row.addWidget(self.remote_address_label)
         self.remote_address_row.addWidget(self.remote_address_entry)
+        self.remote_address_row.addWidget(self.remote_config_label)
+        self.remote_address_row.addWidget(self.remote_config_entry)
+        self.remote_address_row.addWidget(self.remote_config_button)
         self.left_layout.insertLayout(10, self.remote_address_row)
         self.show_hide_widgets(self.remote_address_row, show=False)
         self.remote_info_row = QHBoxLayout()
@@ -371,12 +374,6 @@ class ALMASimulatorUI(QMainWindow):
         self.show_hide_widgets(self.remote_info_row, show=False)
         self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
-        # Flux Mode Row
-        #flux_mode_row = QHBoxLayout()
-        #lux_mode_row.addWidget(self.flux_mode_label)
-        #flux_mode_row.addWidget(self.flux_mode_combo)
-        #self.left_layout.insertLayout(11, flux_mode_row)
-    
     def toggle_remote_row(self):
         if self.local_mode_combo.currentText() == 'remote':
             self.show_hide_widgets(self.remote_address_row, show=True)
@@ -685,6 +682,7 @@ class ALMASimulatorUI(QMainWindow):
             self.remote_user_entry.clear()
             self.remote_key_entry.clear()
             self.remote_key_pass_entry.clear()
+            self.remote_config_entry.clear()
         self.local_mode_combo.setCurrentText('local')
         if self.metadata_mode_combo.currentText() == 'query':
             self.query_save_entry.clear()
@@ -715,15 +713,16 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata_mode_combo.setCurrentText(self.settings.value("metadata_mode", ""))
         self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", ""))
         self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
-        if self.local_mode_combo.currentText() == "remote" and self.remote_address_entry.text() != "":
+        if self.local_mode_combo.currentText() == "remote":
             self.remote_address_entry.setText(self.settings.value("remote_address", ""))
             self.remote_user_entry.setText(self.settings.value("remote_user", ""))
             self.remote_key_entry.setText(self.settings.value("remote_key", ""))
             self.remote_key_pass_entry.setText(self.settings.value('remote_key_pass', ""))
+            self.remote_config_entry.setText(self.settings.value('remote_config', ''))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
-        if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text() != "":
+        if self.metadata_mode_combo.currentText() == "get":
             self.load_metadata(self.metadata_path_entry.text())
         elif self.metadata_mode_combo.currentText() == "query":
             self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
@@ -752,6 +751,9 @@ class ALMASimulatorUI(QMainWindow):
         self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
         
     def closeEvent(self, event):
+        if hasattr(self, "pool") and self.pool:
+            self.pool.close()  # Signal to the pool to stop accepting new tasks
+            self.pool.join()   # Wait for all tasks to complete
         self.settings.setValue("output_directory", self.output_entry.text())
         self.settings.setValue("tng_directory", self.tng_entry.text())
         self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
@@ -770,6 +772,7 @@ class ALMASimulatorUI(QMainWindow):
             self.settings.setValue('remote_user', self.remote_user_entry.text())
             self.settings.setValue('remote_key', self.remote_key_entry.text())
             self.settings.setValue('remote_key_pass', self.remote_key_pass_entry.text())
+            self.settings.setValue('remote_config', self.remote_config_entry.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -924,9 +927,15 @@ class ALMASimulatorUI(QMainWindow):
 
     def browse_ssh_key(self):
         file_dialog = QFileDialog()
-        ssh_key_file, _ = file_dialog.getOpenFileName(self, "Select SSH Key File")
+        ssh_key_file, _ = file_dialog.getOpenFileName(self, "Select SSH Key File", os.path.join(os.path.expanduser('~'), '.ssh'), "SSH Key Files (*.pem *.ppk *.key  *rsa)")
         if ssh_key_file:
             self.remote_key_entry.setText(ssh_key_file)
+
+    def browse_slurm_config(self):
+        file_dialog = QFileDialog()
+        slurm_config_file, _ = file_dialog.getOpenFileName(self, "Select Slurm Config File", os.getcwd(), 'Slurm Config Files (*.json)')
+        if slurm_config_file:
+            self.remote_config_entry.setText(slurm_config_file)
     
     def select_metadata_path(self):
         file, _ = QFileDialog.getSaveFileName(self, "Select Metadata File", os.path.join(os.getcwd(), 'metadata'), "CSV Files (*.csv)")
@@ -938,6 +947,11 @@ class ALMASimulatorUI(QMainWindow):
         metadata_path = self.metadata_path_entry.text()
         self.load_metadata(metadata_path)  # Pass only the metadata_path 
 
+    def browse_target_list(self):
+        """Opens a file dialog to select the target list file."""
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Target List", "", "CSV Files (*.csv)")
+        if file_path:
+            self.target_list_entry.setText(file_path)
     # -------- Query ALMA Database Functions -------
 
     def get_tap_service(self):
@@ -1339,14 +1353,6 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         
-    def browse_target_list(self):
-        """Opens a file dialog to select the target list file."""
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select Target List", "", "CSV Files (*.csv)")
-        if file_path:
-            self.target_list_entry.setText(file_path)
-
-    
-
     # ----- Auxiliary Functions -----------------
 
     def load_metadata(self, metadata_path):
@@ -1392,6 +1398,39 @@ class ALMASimulatorUI(QMainWindow):
         api.dataset_download_files(dataset_name, path=self.galaxy_zoo_entry.text(), unzip=True)
         self.terminal.add_log(f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}")
 
+    def download_galaxy_zoo_on_remote(self):
+        """
+        Downloads a Kaggle dataset to the specified path.
+        """
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text())
+                
+        else:
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
+        if not sftp.listdir(self.galaxy_zoo_entry.text()):
+            self.terminal.add_log('\nGalaxy Zoo data not found on disk, downloading from Kaggle...')
+            sftp.mkdir('/home/{}/.kaggle'.format(self.remote_user_entry.text()))
+            sftp.put(os.path.join(os.path.expanduser('~'), '.kaggle', 'kaggle.json', '/home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text())))
+            sftp.chmod('home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text()), 600)
+            if self.remote_key_pass_entry.text() != "":
+                key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+            else:
+                key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+            commands = f"""
+                cd {self.output_entry.text()}
+                source almasim_env/bin/activate
+                python -c "
+                from kaggle import api
+                api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', path=self.galaxy_zoo_entry.text(), unzip=True)
+                "
+            """
+            paramiko_client = paramiko.SSHClient()
+            paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+            stdin, stdout, stderr = client.exec_command(commands)
+            self.terminal.add_log(stdout.read().decode())
+            self.terminal.add_log(stderr.read().decode())
+
     def check_tng_dirs(self):
         tng_dir = self.tng_entry.text()
         if not os.path.exists(os.path.join(tng_dir, 'TNG100-1')):
@@ -1412,8 +1451,9 @@ class ALMASimulatorUI(QMainWindow):
     def create_remote_environment(self):
         repo_url = 'https://github.com/MicheleDelliVeneri/ALMASim.git'
         venv_dir = 'almasim_env'
-        repo_dir = self.output_entry.text()
-        if ssh.remote_key_pass_entry.text() != "":
+        repo_dir = os.path.joint('/home/{}/'.format(self.remote_user_entry.text()), 'ALMASim')
+        self.remote_main_dir = repo_dir
+        if self.remote_key_pass_entry.text() != "":
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
         else:
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
@@ -1428,7 +1468,122 @@ class ALMASimulatorUI(QMainWindow):
             source {venv_dir}/bin/activate
             pip install -r requirements.txt
             """
-        client = paramiko.SSHClient()
+        
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+        stdin, stdout, stderr = client.exec_command(commands)
+        self.terminal.add_log(stdout.read().decode())
+        self.terminal.add_log(stderr.read().decode())
+
+    def create_remote_output_dir(self, output_path, plot_path):
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text())
+                
+        else:
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
+        sftp.mkdir(output_path)
+        sftp.mkdir(plot_path)
+    
+    def remote_check_tng_dirs(self):
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text())
+                
+        else:
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
+        tng_dir = self.tng_entry.text()
+        if not sftp.exists(os.path.join(tng_dir, 'TNG100-1')):
+            sftp.mkdir(os.path.join(tng_dir, 'TNG100-1'))
+        if not sftp.exists(os.path.join(tng_dir, 'TNG100-1', 'output')):
+            sftp.mkdir(os.path.join(tng_dir, 'TNG100-1', 'output'))
+        if not sftp.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing')):
+            sftp.mkdir(os.path.join(tng_dir, 'TNG100-1', 'postprocessing'))
+        if not sftp.exists(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets')):
+            sftp.mkdir(os.path.join(tng_dir, 'TNG100-1', 'postprocessing', 'offsets'))
+        if not sftp.exists(os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5')):
+            self.terminal.add_log('Downloading simulation file')
+            url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+            cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(self.tng_api_key_entry.text(), os.path.join(tng_dir, 'TNG100-1', 'simulation.hdf5'), url)
+            if self.remote_key_pass_entry.text() != "":
+                key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+            else:
+                key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+            paramiko_client = paramiko.SSHClient()
+            paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+            stdin, stdout, stderr = client.exec_command(cmd)
+            self.terminal.add_log(stdout.read().decode())
+            self.terminal.add_log(stderr.read().decode())
+            self.terminal.add_log('Done.')
+
+    def run_on_slurm_cluster(self):
+        slurm_config = self.remote_config_entry.text()
+        if self.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+            
+        
+        dask_commands = f"""
+            cd {self.remote_main_dir}
+            source almasim_env/bin/activate
+            python -c "
+            import sys
+            import numpy as np
+            import pandas as pd
+            import os
+            from kaggle import api
+            from os.path import isfile
+            import dask
+            from distributed import Client, LocalCluster, WorkerPlugin
+            from dask_jobqueue import SLURMCluster
+            import json
+            import astropy.units as U
+            from astropy.constants import c
+            from astropy.time import Time
+            import math
+            from math import pi, ceil
+            from datetime import date
+            import time
+            import shutil
+            from time import strftime, gmtime
+            import paramiko
+            import pysftp
+            import dask.dataframe as dd
+            import utility.alma as ual
+            import utility.astro as uas
+            import utility.compute as uc
+            import utility.skymodels as usm
+            import utility.plotting as upl
+            import utility.interferometer as uin
+            # Load SLURMCluster configuration from JSON file
+            with open('slurm_config.json', 'r') as f:
+                config = json.load(f)
+            cluster = SLURMCluster(
+                queue=config['queue'],
+                account=config['account'],
+                cores=config['cores'],
+                memory=config['memory'],
+                interface=config['interface'],
+                scheduler_options={'host': config['scheduler_host']},
+                job_extra=config['job_extra'],
+            )
+            cluster.scale(jobs={int(self.ncpu_entry.text())})
+            client = Client(cluster)
+            ddf = dd.from_pandas({self.input_params}, npartitions={int(self.ncpu_entry.text())})
+            output_type = "object"
+            results =  ddf.map_partitions(lambda df: df.apply(lambda row: {self.simulator(*row)}, axis=1), meta=output_type).compute()
+            client.close()
+            cluster.close()
+            "
+        """
+        
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+        stdin, stdout, stderr = client.exec_command(dask_commands)
+        self.terminal.add_log(stdout.read().decode())
+        self.terminal.add_log(stderr.read().decode())
 
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -1543,17 +1698,33 @@ class ALMASimulatorUI(QMainWindow):
         self.transform_source_type_label()
         source_types = np.array([self.source_type] * n_sims)
         output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
+        plot_path = os.path.join(output_path, 'plots')
+        # Output Directory 
+        if self.local_mode_combo.currentText() == 'local':
+            if not os.path.exists(output_path):
+                os.makedirs(output_path)
+            if not os.path.exists(plot_path):
+                os.makedirs(plot_path)
+        else:
+            create_remote_output_dir(output_path, plot_path)
+
         output_paths = np.array([output_path] * n_sims)
         tng_paths = np.array([self.tng_entry.text()] * n_sims)
-        if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
-            self.download_galaxy_zoo()
+
+        # Galaxy Zoo Directory 
+        if self.local_mode_combo.currentText() == 'local':
+            if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
+                self.download_galaxy_zoo()
+        else:
+            self.create_remote_environment()
+            self.download_galaxy_zoo_on_remote()
+
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
-        plot_path = os.path.join(output_path, 'plots')
-        if not os.path.exists(plot_path):
-            os.makedirs(plot_path)
-        main_paths = np.array([os.getcwd()] * n_sims)
+        
+        if self.local_mode_combo.currentText() == 'local':
+            main_paths = np.array([os.getcwd()] * n_sims)
+        else: 
+            main_paths = np.array[[os.path.joint('/home/{}/'.format(self.remote_user_entry.text()), 'ALMASim')] * n_sims]
         ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
         project_names = np.array([self.project_name_entry.text()] * n_sims)
         save_mode = np.array([self.save_format_combo.currentText()] * n_sims)
@@ -1617,7 +1788,10 @@ class ALMASimulatorUI(QMainWindow):
         else:
             n_channels = np.array([None] * n_sims)        
         if self.model_combo.currentText() == 'Extended':
-            self.check_tng_dirs()
+            if self.local_mode_combo.currentText() == 'local':
+                self.check_tng_dirs()
+            else:
+                self.remote_check_tng_dirs()
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
             self.metadata = self.sample_given_redshift(self.metadata, n_sims, rest_freq, True, z1)
         else:
@@ -1643,7 +1817,7 @@ class ALMASimulatorUI(QMainWindow):
             inject_serendipitous = np.array([True] * n_sims)
         else:
             inject_serendipitous = np.array([False] * n_sims)
-        input_params = pd.DataFrame(zip(
+        self.input_params = pd.DataFrame(zip(
         sim_idxs, source_names, main_paths, output_paths, tng_paths, galaxy_zoo_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
@@ -1655,23 +1829,22 @@ class ALMASimulatorUI(QMainWindow):
         'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
         'n_lines', 'line_names', 'save_mode', 'inject_serendipitous'])
         if self.comp_mode_combo.currentText() == 'Parallel':
-            dask.config.set({'temporary_directory': output_path})
-            total_memory = psutil.virtual_memory().total
-            num_processes = multiprocessing.cpu_count() // 4
-            memory_limit = int(0.9 * total_memory / num_processes)
-            ddf = dd.from_pandas(input_params, npartitions=multiprocessing.cpu_count() // 4)
             if self.local_mode_combo.currentText() == 'local':
+                dask.config.set({'temporary_directory': output_path})
+                total_memory = psutil.virtual_memory().total
+                num_processes = int(self.ncpu_entry.text()) // 4
+                memory_limit = int(0.9 * total_memory / num_processes)
+                ddf = dd.from_pandas(self.input_params, npartitions=num_processes)
                 cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+                output_type = "object"
+                client = Client(cluster)
+                client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+                results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
+                client.close()
+                cluster.close()
             #elif self.local_mode_combo.currentText() == 'remote':
-            #else:
-
-
-            output_type = "object"
-            client = Client(cluster)
-            client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-            results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
-            client.close()
-            cluster.close()
+            else:
+                self.run_on_slurm_cluster()   
         else:
             for i in range(n_sims):
                 self.simulator(*input_params.iloc[i])
