@@ -726,9 +726,9 @@ class ALMASimulatorUI(QMainWindow):
             self.load_metadata(self.metadata_path_entry.text())
         elif self.metadata_mode_combo.currentText() == "query":
             self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
-        if self.galaxy_zoo_entry.text():
+        if self.galaxy_zoo_entry.text() != '':
             if self.local_mode_combo.currentText() == 'local':
-                if not os.listdir(self.galaxy_zoo_entry.text()):
+                if os.path.exists(self.galaxy_zoo_entry.text()) and os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
                     self.download_galaxy_zoo()
             else:
                 self.download_galaxy_zoo_on_remote()
@@ -1679,7 +1679,7 @@ class ALMASimulatorUI(QMainWindow):
 
         # Galaxy Zoo Directory 
         if self.local_mode_combo.currentText() == 'local':
-            if self.galaxy_zoo_entry.text() and not os.listdir(self.galaxy_zoo_entry.text()):
+            if self.galaxy_zoo_entry.text() and os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
                 self.download_galaxy_zoo()
         else:
             self.create_remote_environment()
@@ -1813,7 +1813,7 @@ class ALMASimulatorUI(QMainWindow):
                 self.run_on_slurm_cluster()   
         else:
             for i in range(n_sims):
-                self.simulator(*input_params.iloc[i])
+                self.simulator(*self.input_params.iloc[i])
 
     def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
                 pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
