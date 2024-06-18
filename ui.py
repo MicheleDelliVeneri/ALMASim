@@ -1600,7 +1600,7 @@ class ALMASimulatorUI(QMainWindow):
             cores=config['cores'],
             memory=config['memory'],
             interface=config['interface'],
-            scheduler_options={{'host': config['scheduler']}},
+            scheduler_options={'host': config['scheduler']},
             job_extra=config['job_extra'],
             )
         cluster.scale(jobs={int(cls.ncpu_entry.text())})
