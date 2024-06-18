@@ -17,3 +17,5 @@ astromartini
 Hdecompose
 paramiko
 pysftp
+setuptools
+tenacity
