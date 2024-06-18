@@ -4,7 +4,7 @@
     "cores": 4,            
     "memory": "16GB",
     "interface": "eth0" ,
-    "scheduler": "Ibisco-service01.na.infn.it",
+    "scheduler": "ibisco-service01.na.infn.it",
     "job_extra": [
         "--nodelist=ibisco-gpu06.na.infn.it"
     ]
