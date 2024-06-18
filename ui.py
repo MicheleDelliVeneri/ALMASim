@@ -1565,7 +1565,7 @@ class ALMASimulatorUI(QMainWindow):
         
         self.input_params.to_csv('input_params.csv', index=False)
         if not sftp.exists(self.remote_main_dir + '/input_params.csv'):
-            sftp.put('input_params.csv', self.remote_main_dir + '/intpu_params.csv')
+            sftp.put('input_params.csv', self.remote_main_dir + '/input_params.csv')
         os.remove('input_params.csv')
 
     def run_on_slurm_cluster(self):
