@@ -161,7 +161,9 @@ class ALMASimulatorUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
+        self.settings_path = self.settings.fileName()
         self.initialize_ui()
+        self.terminal.add_log('Setting file path is {}'.format(self.settings_path))
         
     def initialize_ui(self):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
@@ -1417,28 +1419,29 @@ class ALMASimulatorUI(QMainWindow):
                 
         else:
             sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
-        if not sftp.listdir(self.galaxy_zoo_entry.text()):
-            self.terminal.add_log('\nGalaxy Zoo data not found on disk, downloading from Kaggle...')
-            if not sftp.exists('/home/{}/.kaggle'.format(self.remote_user_entry.text())):
-                sftp.mkdir('/home/{}/.kaggle'.format(self.remote_user_entry.text()))
-            if not sftp.exists('/home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text())):
-                sftp.put(os.path.join(os.path.expanduser('~'), '.kaggle', 'kaggle.json'), '/home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text()))
-                sftp.chmod('/home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text()), 600)
-            if self.remote_key_pass_entry.text() != "":
-                key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
-            else:
-                key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-            venv_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'almasim_env')
-            commands = f"""
-            source {venv_dir}/bin/activate
-            python -c "from kaggle import api; api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', path='{self.galaxy_zoo_entry.text()}', unzip=True)"
-            """     
-            paramiko_client = paramiko.SSHClient()
-            paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
-            stdin, stdout, stderr = paramiko_client.exec_command(commands)
-            self.terminal.add_log(stdout.read().decode())
-            self.terminal.add_log(stderr.read().decode())
+        if sftp.exists(self.galaxy_zoo_entry.text()):
+            if not sftp.listdir(self.galaxy_zoo_entry.text()):
+                self.terminal.add_log('\nGalaxy Zoo data not found on disk, downloading from Kaggle...')
+                if not sftp.exists('/home/{}/.kaggle'.format(self.remote_user_entry.text())):
+                    sftp.mkdir('/home/{}/.kaggle'.format(self.remote_user_entry.text()))
+                if not sftp.exists('/home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text())):
+                    sftp.put(os.path.join(os.path.expanduser('~'), '.kaggle', 'kaggle.json'), '/home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text()))
+                    sftp.chmod('/home/{}/.kaggle/kaggle.json'.format(self.remote_user_entry.text()), 600)
+                if self.remote_key_pass_entry.text() != "":
+                    key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+                else:
+                    key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+                venv_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'almasim_env')
+                commands = f"""
+                source {venv_dir}/bin/activate
+                python -c "from kaggle import api; api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', path='{self.galaxy_zoo_entry.text()}', unzip=True)"
+                """     
+                paramiko_client = paramiko.SSHClient()
+                paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+                stdin, stdout, stderr = paramiko_client.exec_command(commands)
+                self.terminal.add_log(stdout.read().decode())
+                self.terminal.add_log(stderr.read().decode())
 
     def check_tng_dirs(self):
         tng_dir = self.tng_entry.text()
@@ -1462,12 +1465,26 @@ class ALMASimulatorUI(QMainWindow):
         repo_url = 'https://github.com/MicheleDelliVeneri/ALMASim.git'
         venv_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'almasim_env')
         repo_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'ALMASim')
+        illustris_url = 'https://github.com/illustristng/illustris_python.git'
+        illustris_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'illustris_python')
         self.remote_main_dir = repo_dir
         self.remote_venv_dir = venv_dir
         if self.remote_key_pass_entry.text() != "":
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
         else:
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text())
+                
+        else:
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
+        if not sftp.exists('/home/{}/.config'.format(self.remote_user_entry.text())):
+            sftp.mkdir('/home/{}/.config'.format(self.remote_user_entry.text()))
+        
+        if not sftp.exists('/home/.config/{}/{}'.format(self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1])):
+            sftp.put(self.settings_path, '/home/{}/.config/{}'.format(self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]))
+        sftp.chmod('/home/{}/.config/{}'.format(self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]), 600)
         commands = f"""
             if [ ! -d {repo_dir} ]; then
                 git clone {repo_url} {repo_dir}
@@ -1475,10 +1492,16 @@ class ALMASimulatorUI(QMainWindow):
             cd {repo_dir}
             git pull
             if [ ! -d {venv_dir} ]; then
-                python3 -m venv {venv_dir}
+                python3.12 -m venv {venv_dir}
                 source {venv_dir}/bin/activate
                 pip install --upgrade pip
                 pip install -r requirements.txt
+            fi
+            if [ ! -d {illustris_dir} ]; then
+                git clone {illustris_url} {illustris_dir}
+                source {venv_dir}/bin/activate
+                cd {illustris_dir}
+                pip install .
             fi
             """
         
@@ -1533,6 +1556,18 @@ class ALMASimulatorUI(QMainWindow):
             self.terminal.add_log(stderr.read().decode())
             self.terminal.add_log('Done.')
 
+    def copy_metadata_on_remote(self):
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text())
+                
+        else:
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
+        
+        self.input_params.to_csv('input_params.csv', index=False)
+        if not sftp.exists(self.remote_main_dir + '/input_params.csv'):
+            sftp.put('input_params.csv', self.remote_main_dir + '/intpu_params.csv')
+        os.remove('input_params.csv')
+
     def run_on_slurm_cluster(self):
         slurm_config = self.remote_config_entry.text()
         if self.remote_key_pass_entry.text() != "":
@@ -1542,7 +1577,10 @@ class ALMASimulatorUI(QMainWindow):
             
         
         dask_commands = f"""
-        cd {self.remote_main_dir} && source almasim_env/bin/activate && python -c \\"import sys; import numpy as np; import pandas as pd; import os; from kaggle import api; from os.path import isfile; import dask; from distributed import Client, LocalCluster, WorkerPlugin; from dask_jobqueue import SLURMCluster; import json; import astropy.units as U; from astropy.constants import c; from astropy.time import Time; import math; from math import pi, ceil; from datetime import date; import time; import shutil; from time import strftime, gmtime; import paramiko; import pysftp; import dask.dataframe as dd; import utility.alma as ual; import utility.astro as uas; import utility.compute as uc; import utility.skymodels as usm; import utility.plotting as upl; import utility.interferometer as uin; with open('slurm_config.json', 'r') as f: config = json.load(f); cluster = SLURMCluster(queue=config['queue'], account=config['account'], cores=config['cores'], memory=config['memory'], interface=config['interface'], scheduler_options={{'host': config['scheduler']}}, job_extra=config['job_extra']); cluster.scale(jobs={int(self.ncpu_entry.text())}); client = Client(cluster); ddf = dd.from_pandas({self.input_params}, npartitions={int(self.ncpu_entry.text())}); output_type = \\"object\\"; results = ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute(); client.close(); cluster.close();\\""
+        cd {self.remote_main_dir}
+        source {self.remote_venv_dir}/bin/activate
+        export QT_QPA_PLATFORM=offscreen
+        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); window=ui.ALMASimulatorUI(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
         """
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -1550,6 +1588,28 @@ class ALMASimulatorUI(QMainWindow):
         stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
         self.terminal.add_log(stdout.read().decode())
         self.terminal.add_log(stderr.read().decode())
+
+    @classmethod
+    def create_slurm_cluster_and_run(cls):
+        input_params = pd.read_csv('input_params.csv')
+        with open('slurm_config.json', 'r') as f:
+            config = json.load(f)
+        cluster = SLURMCluster(
+            queue=config['queue'],
+            account=config['account'],
+            cores=config['cores'],
+            memory=config['memory'],
+            interface=config['interface'],
+            scheduler_options={{'host': config['scheduler']}},
+            job_extra=config['job_extra'],
+            )
+        cluster.scale(jobs={int(cls.ncpu_entry.text())})
+        client = Client(cluster)
+        ddf = dd.from_pandas({input_params}, npartitions={int(cls.ncpu_entry.text())})
+        output_type = "object"
+        results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
+        client.close()
+        cluster.close()
 
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -1794,6 +1854,8 @@ class ALMASimulatorUI(QMainWindow):
         'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
         'tng_api_key', 'ncpu', 'rest_frequency', 'redshift', 'lum_infrared', 'snr',
         'n_lines', 'line_names', 'save_mode', 'inject_serendipitous'])
+        if self.local_mode_combo.currentText() == 'remote':
+            self.copy_metadata_on_remote()
         if self.comp_mode_combo.currentText() == 'parallel':
             if self.local_mode_combo.currentText() == 'local':
                 dask.config.set({'temporary_directory': output_path})
