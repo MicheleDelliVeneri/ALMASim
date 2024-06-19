@@ -4,6 +4,6 @@
     "cores": 4,            
     "memory": "16GB",
     "job_extra": [
-        "--nodelist=ibisco-gpu06.na.infn.it"
+        "--nodelist=ibisco-gpu06"
     ]
 }
