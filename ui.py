@@ -1961,8 +1961,12 @@ class ALMASimulatorUI(QMainWindow):
                 else:
                     self.run_on_mpi_machine()   
         else:
-            for i in range(n_sims):
-                self.simulator(*self.input_params.iloc[i])
+            if self.local_mode_combo.currentText() == 'local':
+                for i in range(n_sims):
+                    self.simulator(*self.input_params.iloc[i])
+            else:
+                self.terminal.add_log('Cannot run on remote in sequential mode, changing it to parallel')
+                self.comp_mode_combo.setCurrentText('parallel')
 
     def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
                 pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
@@ -2011,7 +2015,6 @@ class ALMASimulatorUI(QMainWindow):
         """
         self.terminal.add_log('\nRunning simulation {}'.format(inx))
         self.terminal.add_log('Source Name: {}'.format(source_name))
-        print(source_name)
         start = time.time()
         second2hour = 1 / 3600
         ra = ra * U.deg
