@@ -1675,7 +1675,6 @@ class ALMASimulatorUI(QMainWindow):
             account=config['account'],
             cores=config['cores'],
             memory=config['memory'],
-            interface=config['interface'],
             job_extra_directives=config['job_extra'],
             )
         cluster.scale(jobs={int(cls.ncpu_entry.text())//4})
