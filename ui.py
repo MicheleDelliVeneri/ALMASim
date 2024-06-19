@@ -1671,7 +1671,7 @@ class ALMASimulatorUI(QMainWindow):
         cd {self.remote_main_dir}
         source {self.remote_venv_dir}/bin/activate
         export QT_QPA_PLATFORM=offscreen
-        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ALMASimulatorUI.settings_file = {self.remote_main_dir}/settings.plist; window=ui.ALMASimulatorUI(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
+        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulatorUI.settings_file = {self.remote_main_dir}/settings.plist; window=ui.ALMASimulatorUI(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
         """
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
