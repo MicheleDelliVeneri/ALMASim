@@ -1533,10 +1533,16 @@ class ALMASimulatorUI(QMainWindow):
     def create_remote_environment(self):
         self.terminal.add_log('Checking ALMASim environment')
         repo_url = 'https://github.com/MicheleDelliVeneri/ALMASim.git'
-        venv_dir = os.path.join('/home/{}'.format(self.remote_user_entry.text()), 'almasim_env')
-        repo_dir = os.path.join('/home/{}'.format(self.remote_user_entry.text()), 'ALMASim')
         illustris_url = 'https://github.com/illustristng/illustris_python.git'
-        illustris_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'illustris_python')
+        if self.remote_dir_line.text() != '':
+            work_dir = self.remote_dir_line.text()
+            repo_dir = os.path.join(work_dir, 'ALMASim')
+            venv_dir = os.path.join(work_dir, 'almasim_env')
+            illustris_dir = os.path.join(work_dir, 'illustris_python')
+        else:
+            venv_dir = os.path.join('/home/{}'.format(self.remote_user_entry.text()), 'almasim_env')
+            repo_dir = os.path.join('/home/{}'.format(self.remote_user_entry.text()), 'ALMASim')
+            illustris_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'illustris_python')
         self.remote_main_dir = repo_dir
         self.remote_venv_dir = venv_dir
         if self.remote_key_pass_entry.text() != "":
