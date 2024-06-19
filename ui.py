@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox, QPlainTextEdit  
 )
 from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QGuiApplication
 from kaggle import api
 from os.path import isfile
 import dask
@@ -158,6 +158,7 @@ class PlotWindow(QWidget):
             self.terminal.add_log(f"Error in create_science_keyword_plots: {e}")  # Log the error
 
 class ALMASimulatorUI(QMainWindow):
+    
     def __init__(self):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
@@ -165,6 +166,7 @@ class ALMASimulatorUI(QMainWindow):
         self.initialize_ui()
         self.terminal.add_log('Setting file path is {}'.format(self.settings_path))
         
+    # -------- Widgets and UI -------------------------
     def initialize_ui(self):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
 
@@ -228,9 +230,21 @@ class ALMASimulatorUI(QMainWindow):
             self.load_metadata(self.metadata_path_entry.text())
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
+        self.set_window_size()
+    
+    def set_window_size(self):
+        screen = QGuiApplication.primaryScreen().geometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        window_width = int(screen_width * 0.7)
+        window_height = int(screen_height * 0.5)
+        self.setGeometry(
+            (screen_width - window_width) // 2,
+            (screen_height - window_height) // 2,
+            window_width,
+            window_height
+        )
 
- 
- # -------- Widgets and UI -------------------------
     def has_widget(self, layout, widget_type):
         """Check if the layout contains a widget of a specific type."""
         for i in range(layout.count()):
@@ -274,10 +288,17 @@ class ALMASimulatorUI(QMainWindow):
         self.comp_mode_combo.addItems(["sequential", "parallel"])
 
         # 9
-        self.local_mode_label = QLabel('Local or Remote')
+        self.local_mode_label = QLabel('Local or Remote:')
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", 'remote'])
 
+        self.remote_mode_label = QLabel('Mode:')
+        self.remote_mode_combo = QComboBox()
+        self.remote_mode_combo.addItems(['MPI', 'SLURM', 'PBS'])
+        self.remote_folder_checkbox = QCheckBox("Set Work Directory:")
+        self.remote_dir_line = QLineEdit()
+        self.remote_folder_checkbox.stateChanged.connect(self.toggle_remote_dir_line)
+        
         self.remote_address_label = QLabel('Remote Host:')
         self.remote_address_entry = QLineEdit()
         self.remote_config_label = QLabel('Slurm Config:')
@@ -349,12 +370,23 @@ class ALMASimulatorUI(QMainWindow):
         comp_mode_row.addWidget(self.comp_mode_label)
         comp_mode_row.addWidget(self.comp_mode_combo)
         self.left_layout.insertLayout(8, comp_mode_row)
+        
 
         # Local Mode Row
         local_mode_row = QHBoxLayout()
         local_mode_row.addWidget(self.local_mode_label)
         local_mode_row.addWidget(self.local_mode_combo)
+        local_mode_row.addWidget(self.remote_mode_label)
+        local_mode_row.addWidget(self.remote_mode_combo)
+        local_mode_row.addWidget(self.remote_folder_checkbox)
+        local_mode_row.addWidget(self.remote_dir_line)
         self.left_layout.insertLayout(9, local_mode_row)
+        self.remote_mode_label.hide()
+        self.remote_mode_combo.hide()
+        self.remote_folder_checkbox.hide()
+        self.remote_dir_line.hide()
+        self.remote_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
+
 
         self.remote_address_row = QHBoxLayout()
         self.remote_address_row.addWidget(self.remote_address_label)
@@ -364,6 +396,7 @@ class ALMASimulatorUI(QMainWindow):
         self.remote_address_row.addWidget(self.remote_config_button)
         self.left_layout.insertLayout(10, self.remote_address_row)
         self.show_hide_widgets(self.remote_address_row, show=False)
+
         self.remote_info_row = QHBoxLayout()
         self.remote_info_row.addWidget(self.remote_user_label)
         self.remote_info_row.addWidget(self.remote_user_entry)
@@ -376,13 +409,35 @@ class ALMASimulatorUI(QMainWindow):
         self.show_hide_widgets(self.remote_info_row, show=False)
         self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
+    def toggle_config_label(self):
+        if self.remote_mode_combo.currentText() == 'SLURM':
+            self.remote_config_label.setText('Slurm Config:')
+        elif self.remote_mode_combo.currentText() == 'PBS':
+            self.remote_config_label.setText('PBS Config:')
+        else:
+            self.remote_config_label.setText('MPI Config')
+
     def toggle_remote_row(self):
         if self.local_mode_combo.currentText() == 'remote':
             self.show_hide_widgets(self.remote_address_row, show=True)
             self.show_hide_widgets(self.remote_info_row, show=True)
+            self.toggle_config_label()
+            self.remote_mode_label.show()
+            self.remote_mode_combo.show()
+            self.remote_folder_checkbox.show()
         else:
             self.show_hide_widgets(self.remote_address_row, show=False)
             self.show_hide_widgets(self.remote_info_row, show=False)
+            self.remote_mode_label.hide()
+            self.remote_mode_combo.hide()
+            self.remote_folder_checkbox.hide()
+            self.remote_dir_line.hide()
+    
+    def toggle_remote_dir_line(self):
+        if self.remote_folder_checkbox.isChecked():
+            self.remote_dir_line.show()
+        else:
+            self.remote_dir_line.hide()
 
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
@@ -541,7 +596,6 @@ class ALMASimulatorUI(QMainWindow):
         self.query_save_label = QLabel("Save Metadata to:")
         
         # Set the initial label text
-        #self.update_query_save_label(self.query_type_combo.currentText())
         self.query_save_entry = QLineEdit()
         self.query_save_button = QPushButton("Browse")
         # Connect browse button to appropriate method (you'll need to implement this)
@@ -685,6 +739,9 @@ class ALMASimulatorUI(QMainWindow):
             self.remote_key_entry.clear()
             self.remote_key_pass_entry.clear()
             self.remote_config_entry.clear()
+            self.remote_mode_combo.setCurrentText('MPI')
+            self.remote_dir_line.clear()
+            self.remote_folder_checkbox.setChecked(False)
         self.local_mode_combo.setCurrentText('local')
         if self.metadata_mode_combo.currentText() == 'query':
             self.query_save_entry.clear()
@@ -721,10 +778,15 @@ class ALMASimulatorUI(QMainWindow):
             self.remote_key_entry.setText(self.settings.value("remote_key", ""))
             self.remote_key_pass_entry.setText(self.settings.value('remote_key_pass', ""))
             self.remote_config_entry.setText(self.settings.value('remote_config', ''))
+            self.remote_mode_combo.setCurrentText(self.settings.value('remote_mode', ''))
+            remote_folder = self.settings.value('remote_folder', False, type=bool)
+            self.remote_folder_checkbox.setChecked(remote_folder)
+            if remote_folder:
+                self.remote_dir_line.setText(self.settings.value('remote_dir', ''))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
-        if self.metadata_mode_combo.currentText() == "get":
+        if self.metadata_mode_combo.currentText() == "get" and self.metadata_path_entry.text() != '':
             self.load_metadata(self.metadata_path_entry.text())
         elif self.metadata_mode_combo.currentText() == "query":
             self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
@@ -733,7 +795,8 @@ class ALMASimulatorUI(QMainWindow):
                 if os.path.exists(self.galaxy_zoo_entry.text()) and os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
                     self.download_galaxy_zoo()
             else:
-                self.download_galaxy_zoo_on_remote()
+                if self.remote_address_entry.text() != '' and self.remote_user_entry.text() != '' and self.remote_key_entry.text() != '':
+                    self.download_galaxy_zoo_on_remote()
         line_mode = self.settings.value("line_mode", False, type=bool)
         self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
         self.line_mode_checkbox.setChecked(line_mode)
@@ -779,6 +842,8 @@ class ALMASimulatorUI(QMainWindow):
             self.settings.setValue('remote_key', self.remote_key_entry.text())
             self.settings.setValue('remote_key_pass', self.remote_key_pass_entry.text())
             self.settings.setValue('remote_config', self.remote_config_entry.text())
+            self.settings.setValue('remote_mode', self.remote_mode_combo.currentText())
+            self.settings.setValue('remote_folder', self.remote_dir_line.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -809,7 +874,7 @@ class ALMASimulatorUI(QMainWindow):
                 else:
                     item.widget().hide()
 
-# -------- Browse Functions ------------------
+    # -------- Browse Functions ------------------
     def add_metadata_query_widgets(self):
         # Create widgets for querying parameters
         science_keyword_label = QLabel('Select Science Keyword by number (space-separated):')
@@ -892,7 +957,12 @@ class ALMASimulatorUI(QMainWindow):
 
     def map_to_remote_directory(self, directory):
         directory_name = directory.split(os.path.sep)[-1]
-        directory_path = os.path.join('/home', self.remote_user_entry.text(), directory_name)
+        if self.remote_dir_line.text() != "":
+            if not self.remote_dir_line.text().startswith('/'):
+                self.remote_dir_line.setText('/' + self.remote_dir_line.text())
+            directory_path = os.path.join(self.remote_dir_line.text(), directory_name)
+        else:
+            directory_path = os.path.join('/home', self.remote_user_entry.text(), directory_name)
         return directory_path
 
     def browse_tng_directory(self):
@@ -965,7 +1035,7 @@ class ALMASimulatorUI(QMainWindow):
         if file_path:
             self.target_list_entry.setText(file_path)
 
-# -------- Query ALMA Database Functions -------
+    # -------- Query ALMA Database Functions -------
     def get_tap_service(self):
         urls = ["https://almascience.eso.org/tap", "https://almascience.nao.ac.jp/tap",
                 "https://almascience.nrao.edu/tap"
@@ -1365,7 +1435,7 @@ class ALMASimulatorUI(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
         
-# ----- Auxiliary Functions -----------------
+    # ----- Auxiliary Functions -----------------
 
     def load_metadata(self, metadata_path):
         try:
@@ -1463,8 +1533,8 @@ class ALMASimulatorUI(QMainWindow):
     def create_remote_environment(self):
         self.terminal.add_log('Checking ALMASim environment')
         repo_url = 'https://github.com/MicheleDelliVeneri/ALMASim.git'
-        venv_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'almasim_env')
-        repo_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'ALMASim')
+        venv_dir = os.path.join('/home/{}'.format(self.remote_user_entry.text()), 'almasim_env')
+        repo_dir = os.path.join('/home/{}'.format(self.remote_user_entry.text()), 'ALMASim')
         illustris_url = 'https://github.com/illustristng/illustris_python.git'
         illustris_dir = os.path.join('/home/{}/'.format(self.remote_user_entry.text()), 'illustris_python')
         self.remote_main_dir = repo_dir
@@ -1603,13 +1673,19 @@ class ALMASimulatorUI(QMainWindow):
             scheduler_options={'host': config['scheduler']},
             job_extra_directives=config['job_extra'],
             )
-        cluster.scale(jobs={int(cls.ncpu_entry.text())})
+        cluster.scale(jobs={int(cls.ncpu_entry.text())//4})
         client = Client(cluster)
-        ddf = dd.from_pandas({input_params}, npartitions={int(cls.ncpu_entry.text())})
+        ddf = dd.from_pandas({input_params}, npartitions={int(cls.ncpu_entry.text()) // 4})
         output_type = "object"
         results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
         client.close()
         cluster.close()
+
+    def run_on_pbs_cluster(self):
+        print('To be implemented')
+
+    def run_on_mpi_machine(self):
+        print('To be implemented')
 
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -1711,7 +1787,7 @@ class ALMASimulatorUI(QMainWindow):
         freq_d = freq_ds[idx_]
         return band_range * U.GHz, central_freq * U.GHz, n_channels, freq_d
 
-# -------- Simulation Functions ------------------------
+    # -------- Simulation Functions ------------------------
     def start_simulation(self):
         # Implement the logic to start the simulation
         if self.local_mode_combo.currentText() == 'local':
@@ -1872,7 +1948,12 @@ class ALMASimulatorUI(QMainWindow):
                 cluster.close()
             #elif self.local_mode_combo.currentText() == 'remote':
             else:
-                self.run_on_slurm_cluster()   
+                if self.remote_mode_combo.currentText() == 'SLURM':
+                    self.run_on_slurm_cluster()
+                elif self.remote_mode_combo.currentText() == 'PBS':
+                    self.run_on_pbs_cluster()
+                else:
+                    self.run_on_mpi_machine()   
         else:
             for i in range(n_sims):
                 self.simulator(*self.input_params.iloc[i])
