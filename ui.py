@@ -1560,8 +1560,8 @@ class ALMASimulatorUI(QMainWindow):
         
         if not sftp.exists('/home/.config/{}/{}'.format(self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1])):
             sftp.put(self.settings_path, '/home/{}/.config/{}'.format(self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]))
-        sftp.chmod('/home/{}/.config/{}'.format(self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]), 600)
         commands = f"""
+            chmod 600 /home/{self.remote_user_entry.text()}/.config/{self.settings_path.split(os.sep)[-1]}
             if [ ! -d {repo_dir} ]; then
                 git clone {repo_url} {repo_dir}
             fi
