@@ -1677,11 +1677,11 @@ class ALMASimulatorUI(QMainWindow):
             memory=config['memory'],
             job_extra_directives=config['job_extra'],
             )
-        cluster.scale(jobs={int(self.ncpu_entry.text())//4})
+        cluster.scale(jobs={int(cls.ncpu_entry.text())//4})
         client = Client(cluster)
-        ddf = dd.from_pandas({input_params}, npartitions={int(self.ncpu_entry.text()) // 4})
+        ddf = dd.from_pandas({input_params}, npartitions={int(cls.ncpu_entry.text()) // 4})
         output_type = "object"
-        results = ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
+        results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
         client.close()
         cluster.close()
 
