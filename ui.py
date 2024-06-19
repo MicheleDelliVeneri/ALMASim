@@ -168,6 +168,9 @@ class ALMASimulatorUI(QMainWindow):
                 settings_data = plistlib.load(f)
                 for key, value in settings_data.items():
                     self.settings.setValue(key, value)
+            self.on_remote = True
+        else:
+            self.on_remote = False
         
         self.settings_path = self.settings.fileName()
         self.initialize_ui()
@@ -228,7 +231,10 @@ class ALMASimulatorUI(QMainWindow):
         self.add_meta_widgets()
         self.add_query_widgets()
         # Load saved settings
-        self.load_settings()
+        if self.on_remote is True:
+            self.load_settings_on_remote()
+        else:
+            self.load_settings()
         self.terminal.start_log("")
         # Check metadata mode on initialization
         self.toggle_line_mode_widgets()
@@ -825,7 +831,9 @@ class ALMASimulatorUI(QMainWindow):
         self.toggle_tng_api_key_row()
         self.ir_luminosity_checkbox.setChecked(self.settings.value("set_ir_luminosity", False, type=bool))
         self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
-        
+
+    def load_settings_on_remote(self):
+        print('To be implemented')    
     def closeEvent(self, event):
         if hasattr(self, "pool") and self.pool:
             self.pool.close()  # Signal to the pool to stop accepting new tasks
