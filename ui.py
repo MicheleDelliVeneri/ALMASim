@@ -1667,7 +1667,7 @@ class ALMASimulatorUI(QMainWindow):
         else:
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
             
-        settings_path= os.paht.join(self.remote_main_dir, 'settings.plist')
+        settings_path= os.path.join(self.remote_main_dir, 'settings.plist')
         dask_commands = f"""
         cd {self.remote_main_dir}
         source {self.remote_venv_dir}/bin/activate
