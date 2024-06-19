@@ -1677,7 +1677,7 @@ class ALMASimulatorUI(QMainWindow):
             memory=config['memory'],
             job_extra_directives=config['job_extra'],
             )
-        cluster.scale(jobs={int(cls.ncpu_entry.text())//4})
+        cluster.scale(jobs={int(self.ncpu_entry.text())//4})
         client = Client(cluster)
         ddf = dd.from_pandas({input_params}, npartitions={int(self.ncpu_entry.text()) // 4})
         output_type = "object"
