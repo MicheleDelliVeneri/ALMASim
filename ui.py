@@ -161,12 +161,13 @@ class ALMASimulatorUI(QMainWindow):
     settings_file = None
     def __init__(self):
         super().__init__()
+        self.settings = QSettings("INFN Section of Naples", "ALMASim")
         if ALMASimulatorUI.settings_file is not None:
             with open(ALMASimulatorUI.settings_file, 'rb') as f:
                 settings_data = plistlib.load(f)
                 for key, value in settings_data.items():
                     self.settings.setValue(key, value)
-        self.settings = QSettings("INFN Section of Naples", "ALMASim")
+        
         self.settings_path = self.settings.fileName()
         self.initialize_ui()
         self.terminal.add_log('Setting file path is {}'.format(self.settings_path))
@@ -1666,12 +1667,12 @@ class ALMASimulatorUI(QMainWindow):
         else:
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
             
-        
+        settings_path= os.paht.join(self.remote_main_dir, 'settings.plist')
         dask_commands = f"""
         cd {self.remote_main_dir}
         source {self.remote_venv_dir}/bin/activate
         export QT_QPA_PLATFORM=offscreen
-        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); settings_path={self.remote_main_dir}/settings.plist; ui.ALMASimulatorUI.settings_file = settings_path; window=ui.ALMASimulatorUI(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
+        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulatorUI.settings_file = '{settings_path}'; window=ui.ALMASimulatorUI(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
         """
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
