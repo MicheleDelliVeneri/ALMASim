@@ -1568,7 +1568,7 @@ class ALMASimulatorUI(QMainWindow):
             cd {repo_dir}
             git pull
             if [ ! -d {venv_dir} ]; then
-                python3.12 -m venv {venv_dir}
+                /usr/bin/python3.12 -m venv {venv_dir}
                 source {venv_dir}/bin/activate
                 pip install --upgrade pip
                 pip install -r requirements.txt
@@ -1688,7 +1688,25 @@ class ALMASimulatorUI(QMainWindow):
         cluster.close()
 
     def run_on_pbs_cluster(self):
-        print('To be implemented')
+        pbs_config = self.remote_config_entry.text()
+        if self.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+            
+        
+        dask_commands = f"""
+        cd {self.remote_main_dir}
+        source {self.remote_venv_dir}/bin/activate
+        export QT_QPA_PLATFORM=offscreen
+        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); window=ui.ALMASimulatorUI(); window.create_pbs_cluster_and_run(); sys.exit(app.exec())"
+        """
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+        stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
+        self.terminal.add_log(stdout.read().decode())
+        self.terminal.add_log(stderr.read().decode())
 
     def run_on_mpi_machine(self):
         print('To be implemented')
