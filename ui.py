@@ -158,9 +158,14 @@ class PlotWindow(QWidget):
             self.terminal.add_log(f"Error in create_science_keyword_plots: {e}")  # Log the error
 
 class ALMASimulatorUI(QMainWindow):
-    
+    settings_file = None
     def __init__(self):
         super().__init__()
+        if ALMASimulatorUI.settings_file is not None:
+            with open(ALMASimulatorUI.settings_file, 'rb') as f:
+                settings_data = plistlib.load(f)
+                for key, value in settings_data.items():
+                    self.settings.setValue(key, value)
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
         self.settings_path = self.settings.fileName()
         self.initialize_ui()
@@ -1644,6 +1649,16 @@ class ALMASimulatorUI(QMainWindow):
             sftp.put('input_params.csv', self.remote_main_dir + '/input_params.csv')
         os.remove('input_params.csv')
 
+    def copy_settings_on_remote(self):
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text(), private_key_pass=self.remote_key_pass_entry.text())
+                
+        else:
+            sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
+
+        if not sftp.exists(self.remote_main_dir + '/settings.json'):
+            sftp.put(self.settings_path, self.remote_main_dir + '/settings.plist')
+
     def run_on_slurm_cluster(self):
         slurm_config = self.remote_config_entry.text()
         if self.remote_key_pass_entry.text() != "":
@@ -1656,7 +1671,7 @@ class ALMASimulatorUI(QMainWindow):
         cd {self.remote_main_dir}
         source {self.remote_venv_dir}/bin/activate
         export QT_QPA_PLATFORM=offscreen
-        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); window=ui.ALMASimulatorUI(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
+        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ALMASimulatorUI.settings_file = {self.remote_main_dir}/settings.plist; window=ui.ALMASimulatorUI(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
         """
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -1954,6 +1969,7 @@ class ALMASimulatorUI(QMainWindow):
         'n_lines', 'line_names', 'save_mode', 'inject_serendipitous'])
         if self.local_mode_combo.currentText() == 'remote':
             self.copy_metadata_on_remote()
+            self.copy_settings_on_remote()
         if self.comp_mode_combo.currentText() == 'parallel':
             if self.local_mode_combo.currentText() == 'local':
                 dask.config.set({'temporary_directory': output_path})
