@@ -1715,7 +1715,6 @@ class ALMASimulatorUI(QMainWindow):
     @classmethod
     def create_slurm_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv', na_values='None')
-        input_params = input_params.applymap(cls.nan_to_none)
         with open('slurm_config.json', 'r') as f:
             config = json.load(f)
         cluster = SLURMCluster(
@@ -2143,6 +2142,27 @@ class ALMASimulatorUI(QMainWindow):
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
+            if pd.isna(n_pix):
+                n_pix = None
+            if pd.isna(n_channels):
+                n_channels = None
+            if pd.isna(tng_api_key):
+                tng_api_key = None
+            if pd.isna(rest_frequency):
+                rest_frequency = None
+            if pd.isna(redshift):
+                redshift = None
+            if pd.isna(lum_infrared):
+                lum_infrared = None
+            if pd.isna(snr):
+                snr = None
+            if pd.isna(n_lines):
+                n_lines = None
+            if pd.isna(line_names):
+                line_names = None
+            
+
+
         else:
             ALMASimulatorUI.terminal.add_log('\nRunning simulation {}'.format(inx))
             ALMASimulatorUI.terminal.add_log('Source Name: {}'.format(source_name))
