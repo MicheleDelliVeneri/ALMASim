@@ -1723,8 +1723,8 @@ class ALMASimulatorUI(QMainWindow):
         print("Workers: {}".format(len(client.scheduler_info()['workers'])))
         print("Total threads: {}".format(sum(w['nthreads'] for w in client.scheduler_info()['workers'].values())))
         print("Total memory: {}".format(sum(w['memory_limit'] for w in client.scheduler_info()['workers'].values())))
-        cluster.scale(jobs={int(cls.ncpu_entry.text())//4})
-        ddf = dd.from_pandas({input_params}, npartitions={int(cls.ncpu_entry.text()) // 4})
+        cluster.scale(jobs=int(cls.ncpu_entry.text())//4)
+        ddf = dd.from_pandas(input_params, npartitions=int(cls.ncpu_entry.text()) // 4)
         output_type = "object"
         results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
         client.close()
@@ -1752,7 +1752,38 @@ class ALMASimulatorUI(QMainWindow):
         self.terminal.add_log(stderr.read().decode())
 
     def run_on_mpi_machine(self):
-        print('To be implemented')
+        slurm_config = self.remote_config_entry.text()
+        if self.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+            
+        settings_path= os.path.join(self.remote_main_dir, 'settings.plist')
+        dask_commands = f"""
+        cd {self.remote_main_dir}
+        source {self.remote_venv_dir}/bin/activate
+        export QT_QPA_PLATFORM=offscreen
+        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulatorUI.settings_file = '{settings_path}'; window=ui.ALMASimulatorUI(); window.create_local_cluster_and_run(); sys.exit(app.exec())"
+        """
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+        stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
+        self.terminal.add_log(stdout.read().decode())
+        self.terminal.add_log(stderr.read().decode())
+        
+    @classmethod
+    def create_local_cluster_and_run(cls):
+        input_params = pd.read_csv('input_params.csv')
+        output_type = "object"
+        cluster = LocalCluster(n_workers=int(cls.ncpu_entry.text()) // 4, threads_per_worker=4, dashboard_address=':8787')
+        client = Client(cluster)
+        ddf = dd.from_pandas(input_params, npartitions=int(cls.ncpu_entry.text()) // 4)
+        results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
+        client.close()
+        cluster.close()
+    
+
 
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -2021,8 +2052,10 @@ class ALMASimulatorUI(QMainWindow):
                     self.run_on_slurm_cluster()
                 elif self.remote_mode_combo.currentText() == 'PBS':
                     self.run_on_pbs_cluster()
-                else:
+                elif self.remote_mode_combo.currentText() == 'MPI':
                     self.run_on_mpi_machine()   
+                else:
+                    self.terminal.add_log('Please select a valid remote mode')
         else:
             if self.local_mode_combo.currentText() == 'local':
                 for i in range(n_sims):
