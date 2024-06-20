@@ -2136,7 +2136,7 @@ class ALMASimulatorUI(QMainWindow):
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
-            if n_pix == np.nan:
+            if math.is_nan(n_pix):
                 n_pix = None
                 print("CHECK HERE", n_pix)
 
