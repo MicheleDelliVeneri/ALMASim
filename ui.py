@@ -2118,6 +2118,7 @@ class ALMASimulatorUI(QMainWindow):
         str: Path to the output file.
         """
         print(n_pix)
+        print(type(n_pix))
         print(n_channels)
         print(source_type)
         print(tng_api_key)
