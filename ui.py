@@ -1669,8 +1669,7 @@ class ALMASimulatorUI(QMainWindow):
             sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
         
         self.input_params.to_csv('input_params.csv', index=False)
-        if not sftp.exists(self.remote_main_dir + '/input_params.csv'):
-            sftp.put('input_params.csv', self.remote_main_dir + '/input_params.csv')
+        sftp.put('input_params.csv', self.remote_main_dir + '/input_params.csv')
         os.remove('input_params.csv')
 
     def copy_settings_on_remote(self):
