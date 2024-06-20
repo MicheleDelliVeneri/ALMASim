@@ -1856,6 +1856,7 @@ class ALMASimulatorUI(QMainWindow):
 
     @staticmethod
     def closest_power_of_2(x):
+        print(x)
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
 
@@ -2199,6 +2200,7 @@ class ALMASimulatorUI(QMainWindow):
         cell_size = beam_size / 5
         if n_pix is None: 
             #cell_size = beam_size / 5
+            print(n_pix)
             n_pix = ALMASimulatorUI.closest_power_of_2(int(1.5 * fov / cell_size))
         else:
             n_pix = ALMASimulatorUI.closest_power_of_2(n_pix)
