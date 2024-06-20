@@ -2226,6 +2226,7 @@ class ALMASimulatorUI(QMainWindow):
                                                                             line_names,
                                                                             n_lines,
                                                                             )
+        print('OK process spectral data')
         if n_channels_nw != n_channels:
             freq_sup = freq_sup_nw * U.MHz
             n_channels = n_channels_nw
