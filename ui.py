@@ -2130,7 +2130,7 @@ class ALMASimulatorUI(QMainWindow):
         print(pwv)
         print(int_time)
         print(bandwidth)
-        print(freq_sup)
+        print(freq_support)
         print(cont_sens)
         print(antenna_array)
         print(n_pix)
