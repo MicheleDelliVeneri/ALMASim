@@ -1709,6 +1709,7 @@ class ALMASimulatorUI(QMainWindow):
     @classmethod
     def create_slurm_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv', na_values='None')
+        print(input_params)
         with open('slurm_config.json', 'r') as f:
             config = json.load(f)
         cluster = SLURMCluster(
