@@ -2137,6 +2137,7 @@ class ALMASimulatorUI(QMainWindow):
             print('Source Name: {}'.format(source_name))
             if n_pix == np.nan:
                 n_pix = None
+                print("CHECK HERE", n_pix)
 
         else:
             ALMASimulatorUI.terminal.add_log('\nRunning simulation {}'.format(inx))
