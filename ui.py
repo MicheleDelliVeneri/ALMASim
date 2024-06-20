@@ -1862,7 +1862,6 @@ class ALMASimulatorUI(QMainWindow):
 
     @staticmethod
     def closest_power_of_2(x):
-        print('ATTENTION INTEGER', x)
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
 
@@ -2123,22 +2122,6 @@ class ALMASimulatorUI(QMainWindow):
         Returns:
         str: Path to the output file.
         """
-        print(n_pix)
-        print(type(n_pix))
-        print(n_channels)
-        print(source_type)
-        print(tng_api_key)
-        print(ncpu)
-        print(rest_frequency)
-        print(redshift)
-        print(lum_infrared)
-        print(snr)
-        print(n_lines)
-        print(line_names)
-        print(save_mode)
-        print(inject_serendipitous)
-        print(remote)
-        print("\n\n")
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
