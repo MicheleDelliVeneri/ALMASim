@@ -2113,6 +2113,13 @@ class ALMASimulatorUI(QMainWindow):
         Returns:
         str: Path to the output file.
         """
+        print(inx)
+        print(source_name)
+        print(main_dir)
+        print(output_dir)
+        print(tng_dir)
+        print(galaxy_zoo_dir)
+        print(project_name)
         print(ra)
         print(dec)
         print(band)
@@ -2140,6 +2147,7 @@ class ALMASimulatorUI(QMainWindow):
         print(save_mode)
         print(inject_serendipitous)
         print(remote)
+        print("\n\n")
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
