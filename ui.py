@@ -1777,7 +1777,6 @@ class ALMASimulatorUI(QMainWindow):
     @classmethod
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
-        input_params = input_params.replace(np.nan, None)
         output_type = "object"
         cluster = LocalCluster(n_workers=int(int(cls.ncpu_entry.text()) // 4), threads_per_worker=4, dashboard_address=':8787')
         client = Client(cluster)
@@ -2136,6 +2135,8 @@ class ALMASimulatorUI(QMainWindow):
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
+            if n_pix == np.nan:
+                n_pix = None
 
         else:
             ALMASimulatorUI.terminal.add_log('\nRunning simulation {}'.format(inx))
