@@ -161,7 +161,7 @@ class PlotWindow(QWidget):
 class ALMASimulatorUI(QMainWindow):
     settings_file = None
     ncpu_entry = None
-    terminla = None
+    terminal = None
     def __init__(self):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
@@ -1783,8 +1783,6 @@ class ALMASimulatorUI(QMainWindow):
         client.close()
         cluster.close()
     
-
-
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
            self.source_type = 'galaxy-zoo'
@@ -1841,6 +1839,7 @@ class ALMASimulatorUI(QMainWindow):
 
         sample = metadata.sample(n, replace=True)
         return sample
+    
     @staticmethod
     def remove_non_numeric(text):
         """Removes non-numeric characters from a string.
@@ -2115,6 +2114,7 @@ class ALMASimulatorUI(QMainWindow):
         Returns:
         str: Path to the output file.
         """
+        print(remote)
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
