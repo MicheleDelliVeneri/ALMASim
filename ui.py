@@ -1719,10 +1719,10 @@ class ALMASimulatorUI(QMainWindow):
        
         client = Client(cluster)
         # Get information
-        cls.terminal.add_log("Dashboard Link:", client.dashboard_link)
-        cls.terminal.add_log("Workers:", len(client.scheduler_info()['workers']))
-        cls.terminal.add_log("Total threads:", sum(w['nthreads'] for w in client.scheduler_info()['workers'].values()))
-        cls.terminal.add_log("Total memory:", sum(w['memory_limit'] for w in client.scheduler_info()['workers'].values()))
+        cls.terminal.add_log("Dashboard Link: {}".format(client.dashboard_link))
+        cls.terminal.add_log("Workers: {}".format(len(client.scheduler_info()['workers'])))
+        cls.terminal.add_log("Total threads: {}".format(sum(w['nthreads'] for w in client.scheduler_info()['workers'].values())))
+        cls.terminal.add_log("Total memory: {}".format(sum(w['memory_limit'] for w in client.scheduler_info()['workers'].values())))
         cluster.scale(jobs={int(cls.ncpu_entry.text())//4})
         ddf = dd.from_pandas({input_params}, npartitions={int(cls.ncpu_entry.text()) // 4})
         output_type = "object"
