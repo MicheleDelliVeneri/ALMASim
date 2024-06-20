@@ -160,6 +160,8 @@ class PlotWindow(QWidget):
 
 class ALMASimulatorUI(QMainWindow):
     settings_file = None
+    ncpu_entry = None
+    terminla = None
     def __init__(self):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
@@ -244,6 +246,7 @@ class ALMASimulatorUI(QMainWindow):
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
         self.set_window_size()
+        ALMASimulatorUI.populate_class_variables(self.terminal, self.ncpu_entry)
     
     def set_window_size(self):
         screen = QGuiApplication.primaryScreen().geometry()
@@ -833,7 +836,18 @@ class ALMASimulatorUI(QMainWindow):
         self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
 
     def load_settings_on_remote(self):
-        print('To be implemented')    
+        self.output_entry.setText(self.settings.value("output_directory", ""))
+        self.tng_entry.setText(self.settings.value("tng_directory", ""))
+        self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
+        self.n_sims_entry.setText(self.settings.value("n_sims", ""))
+        self.ncpu_entry.setText(self.settings.value("ncpu", ""))
+        self.metadata_path_entry.setText("")
+    
+    @classmethod
+    def populate_class_variables(cls, terminal, ncpu_entry):
+        cls.terminal = terminal
+        cls.ncpu_entry = ncpu_entry
+
     def closeEvent(self, event):
         if hasattr(self, "pool") and self.pool:
             self.pool.close()  # Signal to the pool to stop accepting new tasks
@@ -1802,7 +1816,8 @@ class ALMASimulatorUI(QMainWindow):
         numbers = "0123456789."
         return "".join(char for char in text if char in numbers)
 
-    def closest_power_of_2(self, x):
+    @staticmethod
+    def closest_power_of_2(x):
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
 
@@ -1991,7 +2006,7 @@ class ALMASimulatorUI(QMainWindow):
                 output_type = "object"
                 client = Client(cluster)
                 client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
-                results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
+                results =  ddf.map_partitions(lambda df: df.apply(lambda row: ALMASimulatorUI.simulator(*row), axis=1), meta=output_type).compute()
                 client.close()
                 cluster.close()
             #elif self.local_mode_combo.currentText() == 'remote':
@@ -2005,12 +2020,13 @@ class ALMASimulatorUI(QMainWindow):
         else:
             if self.local_mode_combo.currentText() == 'local':
                 for i in range(n_sims):
-                    self.simulator(*self.input_params.iloc[i])
+                    ALMASimulatorUI.simulator(*self.input_params.iloc[i])
             else:
                 self.terminal.add_log('Cannot run on remote in sequential mode, changing it to parallel')
                 self.comp_mode_combo.setCurrentText('parallel')
 
-    def simulator(self, inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
+    @staticmethod
+    def simulator(inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
                 pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
                 n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
                 n_lines, line_names, save_mode, inject_serendipitous=False):
@@ -2088,9 +2104,9 @@ class ALMASimulatorUI(QMainWindow):
         cell_size = beam_size / 5
         if n_pix is None: 
             #cell_size = beam_size / 5
-            n_pix = self.closest_power_of_2(int(1.5 * fov / cell_size))
+            n_pix = ALMASimulatorUI.closest_power_of_2(int(1.5 * fov / cell_size))
         else:
-            n_pix = self.closest_power_of_2(n_pix)
+            n_pix = ALMASimulatorUI.closest_power_of_2(n_pix)
             cell_size = fov / n_pix
             # just added
             #beam_size = cell_size * 5
