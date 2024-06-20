@@ -2019,15 +2019,15 @@ class ALMASimulatorUI(QMainWindow):
         else:
             inject_serendipitous = np.array([False] * n_sims)
         if self.local_mode_combo.currentText() == 'local':
-            remote_flag = np.array([False] * n_sims)
+            remote = np.array([False] * n_sims)
         else:
-            remote_flag = np.array([True] * n_sims)
+            remote = np.array([True] * n_sims)
         self.input_params = pd.DataFrame(zip(
         sim_idxs, source_names, main_paths, output_paths, tng_paths, galaxy_zoo_paths, project_names, ras, decs, bands, ang_ress, vel_ress, fovs, 
         obs_dates, pwvs, int_times, bandwidths, freqs, freq_supports, cont_sens,
         antenna_arrays, n_pixs, n_channels, source_types,
         tng_apis, ncpus, rest_freqs, redshifts, lum_ir, snr,
-        n_lines, line_names, save_mode, inject_serendipitous, remote_flag), 
+        n_lines, line_names, save_mode, inject_serendipitous, remote), 
         columns = ['idx', 'source_name', 'main_path', 'output_dir', 'tng_dir', 'galaxy_zoo_dir', 'project_name', 'ra', 'dec', 'band', 
         'ang_res', 'vel_res', 'fov', 'obs_date', 'pwv', 'int_time', 'bandwidth', 
         'freq', 'freq_support', 'cont_sens', 'antenna_array', 'n_pix', 'n_channels', 'source_type',
