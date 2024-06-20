@@ -2200,7 +2200,7 @@ class ALMASimulatorUI(QMainWindow):
         cell_size = beam_size / 5
         if n_pix is None: 
             #cell_size = beam_size / 5
-            print(n_pix)
+            print(n_pix, fov, cell_size)
             n_pix = ALMASimulatorUI.closest_power_of_2(int(1.5 * fov / cell_size))
         else:
             n_pix = ALMASimulatorUI.closest_power_of_2(n_pix)
