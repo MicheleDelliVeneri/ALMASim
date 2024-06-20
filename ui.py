@@ -27,6 +27,7 @@ from time import strftime, gmtime
 import paramiko
 import pysftp
 import plistlib
+import psutil
 import dask.dataframe as dd
 import utility.alma as ual
 import utility.astro as uas
@@ -808,8 +809,10 @@ class ALMASimulatorUI(QMainWindow):
             self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
         if self.galaxy_zoo_entry.text() != '':
             if self.local_mode_combo.currentText() == 'local':
-                if os.path.exists(self.galaxy_zoo_entry.text()) and os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
-                    self.download_galaxy_zoo()
+                if os.path.exists(self.galaxy_zoo_entry.text()):
+                    if not os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
+                        print('Downloading Galaxy Zoo')
+                        self.download_galaxy_zoo()
             else:
                 if self.remote_address_entry.text() != '' and self.remote_user_entry.text() != '' and self.remote_key_entry.text() != '':
                     self.download_galaxy_zoo_on_remote()
@@ -1722,8 +1725,8 @@ class ALMASimulatorUI(QMainWindow):
         print("Workers: {}".format(len(client.scheduler_info()['workers'])))
         print("Total threads: {}".format(sum(w['nthreads'] for w in client.scheduler_info()['workers'].values())))
         print("Total memory: {}".format(sum(w['memory_limit'] for w in client.scheduler_info()['workers'].values())))
-        cluster.scale(jobs=int(cls.ncpu_entry.text())//4)
-        ddf = dd.from_pandas(input_params, npartitions=int(cls.ncpu_entry.text()) // 4)
+        cluster.scale(jobs=int(int(cls.ncpu_entry.text())//4))
+        ddf = dd.from_pandas(input_params, npartitions=int(int(cls.ncpu_entry.text()) // 4))
         output_type = "object"
         results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
         client.close()
@@ -1775,9 +1778,9 @@ class ALMASimulatorUI(QMainWindow):
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
         output_type = "object"
-        cluster = LocalCluster(n_workers=int(cls.ncpu_entry.text()) // 4, threads_per_worker=4, dashboard_address=':8787')
+        cluster = LocalCluster(n_workers=int(int(cls.ncpu_entry.text()) // 4), threads_per_worker=4, dashboard_address=':8787')
         client = Client(cluster)
-        ddf = dd.from_pandas(input_params, npartitions=int(cls.ncpu_entry.text()) // 4)
+        ddf = dd.from_pandas(input_params, npartitions=int(int(cls.ncpu_entry.text()) // 4))
         results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
         client.close()
         cluster.close()
@@ -1913,7 +1916,7 @@ class ALMASimulatorUI(QMainWindow):
 
         # Galaxy Zoo Directory 
         if self.local_mode_combo.currentText() == 'local':
-            if self.galaxy_zoo_entry.text() and os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
+            if self.galaxy_zoo_entry.text() and not os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
                 self.download_galaxy_zoo()
         else:
             self.create_remote_environment()
