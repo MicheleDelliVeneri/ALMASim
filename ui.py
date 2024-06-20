@@ -1705,11 +1705,17 @@ class ALMASimulatorUI(QMainWindow):
         stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
         self.terminal.add_log(stdout.read().decode())
         self.terminal.add_log(stderr.read().decode())
+    
+    @staticmethod
+    def nan_to_none(value):
+        if pd.isna(value):
+            return None
+        return value
 
     @classmethod
     def create_slurm_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv', na_values='None')
-        print(input_params)
+        input_params = input_params.applymap(cls.nan_to_none)
         with open('slurm_config.json', 'r') as f:
             config = json.load(f)
         cluster = SLURMCluster(
@@ -2137,10 +2143,6 @@ class ALMASimulatorUI(QMainWindow):
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
-            if pd.isna(n_pix):
-                n_pix = None
-                print("CHECK HERE", n_pix)
-
         else:
             ALMASimulatorUI.terminal.add_log('\nRunning simulation {}'.format(inx))
             ALMASimulatorUI.terminal.add_log('Source Name: {}'.format(source_name))
