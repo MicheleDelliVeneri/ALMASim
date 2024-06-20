@@ -1671,7 +1671,7 @@ class ALMASimulatorUI(QMainWindow):
         else:
             sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
         
-        self.input_params.to_csv('input_params.csv', index=False)
+        self.input_params.to_csv('input_params.csv', index=False, na_rep='None')
         sftp.put('input_params.csv', self.remote_main_dir + '/input_params.csv')
         os.remove('input_params.csv')
 
@@ -1708,7 +1708,7 @@ class ALMASimulatorUI(QMainWindow):
 
     @classmethod
     def create_slurm_cluster_and_run(cls):
-        input_params = pd.read_csv('input_params.csv')
+        input_params = pd.read_csv('input_params.csv', na_values='None')
         with open('slurm_config.json', 'r') as f:
             config = json.load(f)
         cluster = SLURMCluster(
