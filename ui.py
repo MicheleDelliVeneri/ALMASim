@@ -1777,6 +1777,7 @@ class ALMASimulatorUI(QMainWindow):
     @classmethod
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
+        input_params = input_params.replace(np.nan, None)
         output_type = "object"
         cluster = LocalCluster(n_workers=int(int(cls.ncpu_entry.text()) // 4), threads_per_worker=4, dashboard_address=':8787')
         client = Client(cluster)
@@ -2117,26 +2118,6 @@ class ALMASimulatorUI(QMainWindow):
         Returns:
         str: Path to the output file.
         """
-        print(inx)
-        print(source_name)
-        print(main_dir)
-        print(output_dir)
-        print(tng_dir)
-        print(galaxy_zoo_dir)
-        print(project_name)
-        print(ra)
-        print(dec)
-        print(band)
-        print(ang_res)
-        print(vel_res)
-        print(fov)
-        print(obs_date)
-        print(pwv)
-        print(int_time)
-        print(bandwidth)
-        print(freq_support)
-        print(cont_sens)
-        print(antenna_array)
         print(n_pix)
         print(n_channels)
         print(source_type)
@@ -2155,6 +2136,7 @@ class ALMASimulatorUI(QMainWindow):
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
+
         else:
             ALMASimulatorUI.terminal.add_log('\nRunning simulation {}'.format(inx))
             ALMASimulatorUI.terminal.add_log('Source Name: {}'.format(source_name))
