@@ -1856,7 +1856,7 @@ class ALMASimulatorUI(QMainWindow):
 
     @staticmethod
     def closest_power_of_2(x):
-        print(x)
+        print('ATTENTION INTEGER', x)
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
 
