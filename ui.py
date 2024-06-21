@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QCheckBox, QRadioButton, QTextEdit, QButtonGroup, QSizePolicy, QCheckBox, QSplitter,
     QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox, QPlainTextEdit  
 )
-from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt, QObject, QThread, QRunnable, QThreadPool
+from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt, QObject, QThread, QRunnable, QThreadPool,  pyqtSlot
 from PyQt6.QtGui import QPixmap, QGuiApplication
 from kaggle import api
 from os.path import isfile
@@ -110,31 +110,42 @@ class TerminalLogger(QObject):
         message = message.replace("\r", "").replace("\n", "")
         self.log_signal.emit(message)
 
-class TqdmLoggingRunnable(QRunnable):
-    """QRunnable to handle tqdm updates and log them to the terminal."""
-    def __init__(self, pbar, logger):
-        super().__init__()
-        self.pbar = pbar
-        self.logger = logger  # TerminalLogger instance
-        self.signal = pyqtSignal(str)
-        self.signal.connect(self.logger.add_log)  # Connect directly to the logger
+    @pyqtSlot(int)
+    def update_progress(self, value):
+        # Update terminal or GUI with progress value
+        #print(f"Progress: {value}%")
+        self.add_log(f"Progress: {value}%")
 
+class TqdmLoggingRunnable(QObject, QRunnable):
+    """QRunnable to handle tqdm updates and log them to the terminal."""
+    progress_update = pyqtSignal(int)  # Signal to communicate progress updates
+
+    def __init__(self, total):
+        super().__init__()
+        self.total = total
+    
+    
     def run(self):
         class TqdmWriteStream(object):
-            """Custom file-like object to write tqdm output to the signal."""
-
-            def __init__(self, signal_emit):
-                self.signal_emit = signal_emit
+            def __init__(self, signal_emitter):
+                self.signal_emitter = signal_emitter
 
             def write(self, msg):
-                self.signal_emit(msg.replace("\r", "").replace("\n", ""))  # Remove special chars
+                message = msg.replace("\r", "").replace("\n", "")
+                try:
+                    value = int(message)
+                    self.signal_emitter.emit(value)
+                except ValueError:
+                    pass
+
             def flush(self):
                 pass
 
-        with tqdm(desc='Searching lines...', total=self.pbar.total, file=TqdmWriteStream(self.signal.emit), mininterval=0.1) as pbar:
-            while not self.pbar.finished:  # Check if original pbar is done
-                pbar.update(self.pbar.n - pbar.n)  # Sync progress with original pbar
-                time.sleep(0.1)  # Small delay to prevent excessive updates
+        tqdm_out = TqdmWriteStream(self.progress_update)
+        with tqdm(total=self.total, file=tqdm_out, mininterval=0.1) as pbar:
+            for i in range(self.total):
+                pbar.update(i - pbar.n)
+                time.sleep(0.1)
 
 class PlotWindow(QWidget):
     def __init__(self, parent=None):
@@ -2139,7 +2150,7 @@ class ALMASimulator(QMainWindow):
                 cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
                 output_type = "object"
                 client = Client(cluster)
-                client.register_worker_plugin(MemoryLimitPlugin(memory_limit))
+                client.register_plugin(MemoryLimitPlugin(memory_limit))
                 results =  ddf.map_partitions(lambda df: df.apply(lambda row: ALMASimulator.simulator(*row), axis=1), meta=output_type).compute()
                 client.close()
                 cluster.close()
@@ -2244,6 +2255,11 @@ class ALMASimulator(QMainWindow):
         sed = sed.sort_values(by='GHz', ascending=True) 
         return sed, flux_infrared, lum_infrared
 
+    @pyqtSlot()
+    def update_progress(self, value):
+        # Update your GUI or terminal with the progress value
+        print(f"Progress: {value}%")
+    
     @staticmethod
     def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
         source_frequency, n_channels, lum_infrared, cont_sens, line_names=None, n_lines=None, remote=False):
@@ -2271,7 +2287,6 @@ class ALMASimulator(QMainWindow):
         save_freq_min = freq_min
         save_freq_max = freq_max
         start_redshift = redshift
-        print('REDSHIFT: ', redshift)
         # Example data: Placeholder for cont and lines from SED processing
         sed, flux_infrared, lum_infrared = ALMASimulator.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, remote, lum_infrared)
         # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
@@ -2290,12 +2305,15 @@ class ALMASimulator(QMainWindow):
 
         delta_v = 300 * U.km / U.s
         c_km_s = c.to(U.km / U.s)
-        fwhms = 0.84*(db_line['freq(GHz)'].values*(1+redshift)*(delta_v/c_km_s)*1e9) * U.Hz
+        fwhms = 0.084*(db_line['freq(GHz)'].values*(1+redshift)*(delta_v/c_km_s)*1e9) * U.Hz
         fwhms_GHz = fwhms.to(U.GHz).value
         pbar = tqdm(desc='Searching lines....', total=n)
         if remote == False:
-            tqdm_runnable = TqdmLoggingRunnable(pbar, ALMASimulator.terminal)
-            pool.start(tqdm_runnable)
+            runnable = TqdmLoggingRunnable(n)
+            runnable.progress_update.connect(ALMASimulator.terminal.update_progress)
+            pool = QThreadPool.globalInstance()
+            pool.start(runnable)
+
         initial_len = len(filtered_lines)
         while len(filtered_lines) < n:
             r_len = len(filtered_lines)
@@ -2530,7 +2548,6 @@ class ALMASimulator(QMainWindow):
                                                                             n_lines,
                                                                             remote
                                                                             )
-        print('OK process spectral data')
         if n_channels_nw != n_channels:
             freq_sup = freq_sup_nw * U.MHz
             n_channels = n_channels_nw
