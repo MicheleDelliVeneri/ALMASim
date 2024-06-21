@@ -2146,7 +2146,6 @@ class ALMASimulator(QMainWindow):
             freq_point = np.argmin(np.abs(sed['GHz'].values - freq_min))
             cont_fluxes = sed['Jy'].values[freq_point]
             min_ = cont_fluxes
-        print('ATTENTION REMOTE', remote)
         if remote == True:
             print('Minimum continum flux: {:.2e}'.format(min_))
             print('Continum sensitivity: {:.2e}'.format(cont_sens))
@@ -2203,7 +2202,6 @@ class ALMASimulator(QMainWindow):
         # Convert to GHz
         sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
         # Re normalize the SED and convert to Jy from erg/s/Hz
-        print('ATTENTION SED READING REMOTE {}'.format(remote))
         sed, lum_infrared_erg_s, lum_infrared = ALMASimulator.normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote)
         #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
         flux_infrared = lum_infrared_erg_s * 1e+23 / solid_angle # Jy * Hz 
@@ -2239,11 +2237,10 @@ class ALMASimulator(QMainWindow):
         save_freq_min = freq_min
         save_freq_max = freq_max
         start_redshift = redshift
-        print('ATTENTION REMOTE {}'.format(remote))
         # Example data: Placeholder for cont and lines from SED processing
         sed, flux_infrared, lum_infrared = ALMASimulator.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, remote, lum_infrared)
         # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
-        db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
+        db_line = uas.read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
         # Shift the cont and line frequencies by (1 + redshift)
         sed['GHz'] = sed['GHz'] / (1 + redshift)
         filtered_lines = db_line.copy()
