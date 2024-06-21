@@ -39,6 +39,39 @@ import utility.plotting as upl
 import utility.interferometer as uin
 import threading
 
+class MemoryMonitor(WorkerPlugin):
+    def __init__(self, memory_limit):
+        self.memory_limit = memory_limit
+
+    def setup(self, worker):
+        self.worker = worker
+        self.process = psutil.Process()
+        self.process_memory_limit = self.memory_limit * 1024 * 1024 * 1024  # Convert GB to bytes
+
+    async def monitor_memory(self):
+        while True:
+            memory_usage = self.process.memory_info().rss
+            if memory_usage > self.process_memory_limit:
+                print("Memory limit exceeded. Closing worker.")
+                await self.worker.close(close_workers=True)
+                break
+            await asyncio.sleep(1)
+
+class MemoryLimitPlugin(WorkerPlugin):
+    def __init__(self, memory_limit):
+        self.memory_limit = memory_limit
+
+    def setup(self, worker):
+        pass
+
+    def teardown(self, worker):
+        pass
+
+    def transition(self, key, start, finish, *args, **kwargs):
+        if finish == 'memory' and psutil.virtual_memory().percent > self.memory_limit:
+            # If memory usage exceeds the limit, skip the task
+            return 'erred'
+
 class LogView(QPlainTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
