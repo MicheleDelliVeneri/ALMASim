@@ -951,15 +951,11 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
             n = 1
     else:
         n = len(line_names)
-
-    #fwhms = [np.random.randint(3, 10) for i in range(n)]
-    #fwhms_freq = fwhms * U.GHz * freq_step
+        
     delta_v = 300 * U.km / U.s
     c_km_s = c.to(U.km / U.s)
     fwhms = 0.84*(db_line['freq(GHz)'].values*(1+redshift)*(delta_v/c_km_s)*1e9) * U.Hz
     fwhms_GHz = fwhms.to(U.GHz).value
-    #max_fwhm = np.max(fwhms_GHz)
-    #print(max_fwhm)
     pbar = tqdm(desc='Searching lines....', total=n)
     initial_len = len(filtered_lines)
     while len(filtered_lines) < n:
@@ -971,27 +967,14 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         filtered_lines = db_line[line_mask]
         if len(filtered_lines) < n:
             n_possible = (db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2 <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2 >= freq_min).sum()
-            ##if n_possible != 0:
-            #    redshift += 0.01
-            #freq_min -= freq_min / 10
-            #freq_max += freq_max / 10
             redshift += 0.01
-            #print(n_possible)
-        #pbar.set_description("Increasing Redshift{}".format(redshift))
         if len(filtered_lines) > r_len:
             pbar.update(1)   
         recorded_length = len(filtered_lines)
     pbar.update(1) 
     pbar.close()
     if redshift != start_redshift:
-        print('Redshift increased to match the desired number of lines.')
-    #if len(filtered_lines) > initial_len:
-    #    print('Warning: Bandwidth increased to match the desired number of lines.')
-    #    increment = freq_max - save_freq_max
-    #    freq_max += increment
-    #    freq_min -= increment
-    #    print('New Bandwidth: {} GHz'.format(round(freq_max - freq_min, 3)))
-    #req_max += freq_max / 10      
+        print('Redshift increased to match the desired number of lines.')    
     if type(line_names) == list or isinstance(line_names, np.ndarray):
         user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
         if len(user_lines) != len(line_names):
@@ -1018,8 +1001,7 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
         freq_point = np.argmin(np.abs(sed['GHz'].values - freq_min))
         cont_fluxes = [sed['Jy'].values[freq_point]]
         cont_frequencies = [sed['GHz'].values[freq_point]]
-    #cont_fluxes = sed[cont_mask]['Jy'].values
-    
+ 
     if n_lines != None:
         if n_lines > len(filtered_lines):
             print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
@@ -1029,9 +1011,6 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     cs = filtered_lines['c'].values
     cdeltas = filtered_lines['err_c'].values
     line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
-    # Get the index of the continuum where the line fall
-    #line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(cont_frequencies, float(x)))
-    # Line Flux (integrated over the line) = Cont_flux + 10^(log(L_infrared / line_width_in_Hz) + c)
     line_frequencies =  filtered_lines['shifted_freq(GHz)'].values 
     line_rest_frequencies = filtered_lines['freq(GHz)'].values * U.GHz 
     fwhms_GHz = (0.84*(line_frequencies * (delta_v/c_km_s)*1e9) * U.Hz).to(U.GHz)
@@ -1043,7 +1022,6 @@ def process_spectral_data(type_, master_path, redshift, central_frequency, delta
     line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: cont_finder(new_cont_freq, float(x)))
     freq_steps = np.array([new_cont_freq[line_index] + fwhm.value - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms_GHz, line_indexes)]) * U.GHz
     freq_steps = freq_steps.to(U.Hz).value
-    #line_fluxes = int_cont_fluxes[line_indexes] + (10**(np.log10(flux_infrared)  + line_ratios) / freq_steps)
     line_fluxes = 10**(np.log10(flux_infrared)  + line_ratios) / freq_steps
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
