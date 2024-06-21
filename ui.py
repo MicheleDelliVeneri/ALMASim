@@ -2274,7 +2274,8 @@ class ALMASimulator(QMainWindow):
                 n_possible = (db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2 <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2 >= freq_min).sum()
                 redshift += 0.01
             if len(filtered_lines) > r_len:
-                pbar.update(1)   
+                pbar.update(1)  
+            print(len(filtered_lines)) 
             recorded_length = len(filtered_lines)
         pbar.update(1) 
         pbar.close()
