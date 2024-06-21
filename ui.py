@@ -2146,6 +2146,7 @@ class ALMASimulator(QMainWindow):
             freq_point = np.argmin(np.abs(sed['GHz'].values - freq_min))
             cont_fluxes = sed['Jy'].values[freq_point]
             min_ = cont_fluxes
+        print('ATTENTION REMOTE', remote)
         if remote == True:
             print('Minimum continum flux: {:.2e}'.format(min_))
             print('Continum sensitivity: {:.2e}'.format(cont_sens))
@@ -2198,7 +2199,7 @@ class ALMASimulator(QMainWindow):
         distance_cm = distance_Mpc * Mpc_to_cm # distance in cm  -XX
         solid_angle = 4 * pi  * distance_cm**2 # solid angle in cm^2 -XX
         # Load the SED
-        sed = pd.read_csv(file_path, sep="\s+")
+        sed = pd.read_csv(file_path, sep=r"\s+")
         # Convert to GHz
         sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
         # Re normalize the SED and convert to Jy from erg/s/Hz
@@ -2434,6 +2435,7 @@ class ALMASimulator(QMainWindow):
         if not os.path.exists(sim_output_dir):
             os.makedirs(sim_output_dir)
         os.chdir(output_dir)
+        print('ATTENTION REMOTE {}'.format(remote))
         if remote == True:
             print('RA: {}'.format(ra))
             print('DEC: {}'.format(dec))
