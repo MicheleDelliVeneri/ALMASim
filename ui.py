@@ -1777,8 +1777,17 @@ class ALMASimulatorUI(QMainWindow):
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
         stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
-        self.terminal.add_log(stdout.read().decode())
-        self.terminal.add_log(stderr.read().decode())
+        while True:
+            line = stdout.readline()
+            if not line:
+                break
+            self.terminal.add_log(line.strip())
+    
+        err = stderr.read().decode()
+        if err:
+            self.terminal.add_log(err)
+
+        paramiko_client.close()
         
     @classmethod
     def create_local_cluster_and_run(cls):
