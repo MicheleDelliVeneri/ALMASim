@@ -24,6 +24,7 @@ from math import pi, ceil
 from datetime import date
 import time
 import shutil
+from tqdm import tqdm
 from time import strftime, gmtime
 import paramiko
 import pysftp
