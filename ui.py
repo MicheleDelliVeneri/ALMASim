@@ -2238,6 +2238,7 @@ class ALMASimulator(QMainWindow):
         save_freq_min = freq_min
         save_freq_max = freq_max
         start_redshift = redshift
+        print('ATTENTION REMOTE {}'.format(remote))
         # Example data: Placeholder for cont and lines from SED processing
         sed, flux_infrared, lum_infrared = ALMASimulator.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared, remote)
         # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
@@ -2435,7 +2436,7 @@ class ALMASimulator(QMainWindow):
         if not os.path.exists(sim_output_dir):
             os.makedirs(sim_output_dir)
         os.chdir(output_dir)
-        print('ATTENTION REMOTE {}'.format(remote))
+        
         if remote == True:
             print('RA: {}'.format(ra))
             print('DEC: {}'.format(dec))
@@ -2464,8 +2465,6 @@ class ALMASimulator(QMainWindow):
         cell_size = beam_size / 5
         if n_pix is None: 
             #cell_size = beam_size / 5
-            print("-----------------------------------------------------")
-            print(n_pix, fov, cell_size)
             n_pix = ALMASimulator.closest_power_of_2(int(1.5 * fov.value / cell_size.value))
         else:
             n_pix = ALMASimulator.closest_power_of_2(n_pix)
