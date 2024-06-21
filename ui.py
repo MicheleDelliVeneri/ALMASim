@@ -35,7 +35,7 @@ import utility.compute as uc
 import utility.skymodels as usm
 import utility.plotting as upl
 import utility.interferometer as uin
-
+import threading
 
 class LogView(QPlainTextEdit):
     def __init__(self, parent=None):
@@ -2074,7 +2074,7 @@ class ALMASimulatorUI(QMainWindow):
                 elif self.remote_mode_combo.currentText() == 'PBS':
                     self.run_on_pbs_cluster()
                 elif self.remote_mode_combo.currentText() == 'MPI':
-                    self.run_on_mpi_machine()   
+                    threading.Thread(taget=self.run_on_mpi_machine).start()   
                 else:
                     self.terminal.add_log('Please select a valid remote mode')
         else:
