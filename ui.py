@@ -2175,7 +2175,7 @@ class ALMASimulator(QMainWindow):
         return sed, lum_infrared_erg_s, lum_infrared
 
     @staticmethod
-    def sed_reading(type_, path, cont_sens, freq_min, freq_max, lum_infrared=None, redshift=None, remote=False):
+    def sed_reading(type_, path, cont_sens, freq_min, freq_max, remote, lum_infrared=None, redshift=None):
         cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
         if type_ == "extended" or type_ == 'diffuse' or type_ == 'galaxy-zoo':
             file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
@@ -2241,7 +2241,7 @@ class ALMASimulator(QMainWindow):
         start_redshift = redshift
         print('ATTENTION REMOTE {}'.format(remote))
         # Example data: Placeholder for cont and lines from SED processing
-        sed, flux_infrared, lum_infrared = ALMASimulator.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, lum_infrared, remote)
+        sed, flux_infrared, lum_infrared = ALMASimulator.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, remote, lum_infrared)
         # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
         db_line = read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
         # Shift the cont and line frequencies by (1 + redshift)
