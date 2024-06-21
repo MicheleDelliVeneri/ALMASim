@@ -2203,6 +2203,7 @@ class ALMASimulator(QMainWindow):
         # Convert to GHz
         sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
         # Re normalize the SED and convert to Jy from erg/s/Hz
+        print('ATTENTION SED READING REMOTE {}'.format(remote))
         sed, lum_infrared_erg_s, lum_infrared = ALMASimulator.normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote)
         #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
         flux_infrared = lum_infrared_erg_s * 1e+23 / solid_angle # Jy * Hz 
