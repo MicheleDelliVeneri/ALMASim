@@ -2238,6 +2238,7 @@ class ALMASimulator(QMainWindow):
         save_freq_min = freq_min
         save_freq_max = freq_max
         start_redshift = redshift
+        print('REDSHIFT: ', redshift)
         # Example data: Placeholder for cont and lines from SED processing
         sed, flux_infrared, lum_infrared = ALMASimulator.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, remote, lum_infrared)
         # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
@@ -2275,7 +2276,7 @@ class ALMASimulator(QMainWindow):
                 redshift += 0.01
             if len(filtered_lines) > r_len:
                 pbar.update(1)  
-            print(len(filtered_lines)) 
+            #print(len(filtered_lines)) 
             recorded_length = len(filtered_lines)
         pbar.update(1) 
         pbar.close()
