@@ -243,6 +243,24 @@ class PlotWindow(QWidget):
         except Exception as e:  # Catch any potential exceptions
             self.terminal.add_log(f"Error in create_science_keyword_plots: {e}")  # Log the error
 
+class SimulatorRunnable(QRunnable):
+    def __init__(self, alma_simulator_instance):  
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance  # Store a reference to the main UI class
+
+    def run(self):
+        """Downloads Galaxy Zoo data."""
+        self.alma_simulator.simulator()
+class DownloadGalaxyZooRunnable(QRunnable):
+    """Runnable for downloading Galaxy Zoo data in a separate thread."""
+
+    def __init__(self, alma_simulator_instance):  
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance  # Store a reference to the main UI class
+
+    def run(self):
+        """Downloads Galaxy Zoo data."""
+        self.alma_simulator.download_galaxy_zoo()
 class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
@@ -320,6 +338,7 @@ class ALMASimulator(QMainWindow):
         self.add_model_widgets()
         self.add_meta_widgets()
         self.add_query_widgets()
+        ALMASimulator.populate_class_variables(self.terminal, self.ncpu_entry)
         # Load saved settings
         if self.on_remote is True:
             self.load_settings_on_remote()
@@ -898,8 +917,11 @@ class ALMASimulator(QMainWindow):
             if self.local_mode_combo.currentText() == 'local':
                 if os.path.exists(self.galaxy_zoo_entry.text()):
                     if not os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
-                        print('Downloading Galaxy Zoo')
-                        self.download_galaxy_zoo()
+                        ALMASimulator.terminal.add_log('Downloading Galaxy Zoo')
+                        pool = QThreadPool.globalInstance()
+                        runnable = DownloadGalaxyZooRunnable(self)
+                        pool.start(runnable)
+                        
             else:
                 if self.remote_address_entry.text() != '' and self.remote_user_entry.text() != '' and self.remote_key_entry.text() != '':
                     self.download_galaxy_zoo_on_remote()
@@ -2019,7 +2041,10 @@ class ALMASimulator(QMainWindow):
         # Galaxy Zoo Directory 
         if self.local_mode_combo.currentText() == 'local':
             if self.galaxy_zoo_entry.text() and not os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
-                self.download_galaxy_zoo()
+                ALMASimulator.terminal.add_log('Downloading Galaxy Zoo')
+                pool = QThreadPool.globalInstance()
+                runnable = DownloadGalaxyZooRunnable(self)
+                pool.start(runnable)
         else:
             self.create_remote_environment()
             self.download_galaxy_zoo_on_remote()
@@ -2166,11 +2191,16 @@ class ALMASimulator(QMainWindow):
                     self.terminal.add_log('Please select a valid remote mode')
         else:
             if self.local_mode_combo.currentText() == 'local':
-                for i in range(n_sims):
-                    ALMASimulator.simulator(*self.input_params.iloc[i])
+                self.run_simulator_sequentially()
+                #for i in range(n_sims):
+                #    ALMASimulator.simulator(*self.input_params.iloc[i])
             else:
                 self.terminal.add_log('Cannot run on remote in sequential mode, changing it to parallel')
                 self.comp_mode_combo.setCurrentText('parallel')
+
+    def run_simulator_sequentially(self):
+        for i in range(int(self.n_sims_entry.text())):
+            ALMASimulator.simulator(*self.input_params.iloc[i])
 
     @staticmethod
     def cont_finder(cont_frequencies,line_frequency):
@@ -2302,32 +2332,33 @@ class ALMASimulator(QMainWindow):
                 n = 1
         else:
             n = len(line_names)
-
         delta_v = 300 * U.km / U.s
         c_km_s = c.to(U.km / U.s)
         fwhms = 0.084*(db_line['freq(GHz)'].values*(1+redshift)*(delta_v/c_km_s)*1e9) * U.Hz
         fwhms_GHz = fwhms.to(U.GHz).value
-        pbar = tqdm(desc='Searching lines....', total=n)
-        if remote == False:
-            runnable = TqdmLoggingRunnable(n)
-            runnable.progress_update.connect(ALMASimulator.terminal.update_progress)
-            pool = QThreadPool.globalInstance()
-            pool.start(runnable)
 
+        pbar = tqdm(desc=f'Searching {n} lines....', total=n)
+        #if remote == False:
+        #    runnable = TqdmLoggingRunnable(n)
+        #    runnable.progress_update.connect(ALMASimulator.terminal.update_progress)
+        #    pool = QThreadPool.globalInstance()
+        #    pool.start(runnable)
+        
         initial_len = len(filtered_lines)
         while len(filtered_lines) < n:
             r_len = len(filtered_lines)
             filtered_lines = db_line.copy()
             filtered_lines.drop(filtered_lines.index, inplace=True)
             db_line['shifted_freq(GHz)'] = db_line['freq(GHz)'] / (1 + redshift)
-            line_mask = (db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2 >= freq_min) & (db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2 <= freq_max)
+            line_starts =  db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2
+            line_ends = db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2
+            line_mask = (line_starts >= freq_min) & (line_ends <= freq_max)
             filtered_lines = db_line[line_mask]
             if len(filtered_lines) < n:
                 n_possible = (db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2 <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2 >= freq_min).sum()
                 redshift += 0.01
             if len(filtered_lines) > r_len:
                 pbar.update(1)  
-            #print(len(filtered_lines)) 
             recorded_length = len(filtered_lines)
         pbar.update(1) 
         pbar.close()
