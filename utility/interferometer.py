@@ -1,6 +1,8 @@
 import os
 import time
 import sys
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np 
 import matplotlib.cm as cm
@@ -16,16 +18,19 @@ import pandas as pd
 from scipy.integrate import odeint
 from astropy.time import Time
 from astropy.io import fits
+from PyQt6.QtCore import QObject, pyqtSignal
 
 def showError(message):
         raise Exception(message)
 
-class Interferometer():
 
+class Interferometer(QObject):
+    simulationFinished = pyqtSignal(object)  
     def __init__(self, idx, skymodel, main_dir, 
                 output_dir, ra, dec, central_freq, band_range, 
                 fov, antenna_array, noise, int_time, obs_date, 
                 header, save_mode, robust=0.5):
+        super().__init__() 
         self.idx = idx
         self.skymodel = skymodel
         self.antenna_array = antenna_array
@@ -86,10 +91,29 @@ class Interferometer():
         self._get_wavelengths()
         self._prepare_cubes()
         print(f'Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}')
+        
+    def run_interferometric_sim(self):
         for channel in tqdm(range(self.Nchan)):
-            self._image_channel(channel, skymodel)
+            self._image_channel(channel, self.skymodel)
         self._savez_compressed_cubes()
-        self._plot_sim()
+        simulation_results = {
+            'modelCube': self.modelCube,
+            'dirtyCube': self.dirtyCube,
+            'visCube': self.visCube,
+            'dirtyvisCube': self.dirtyvisCube,
+            'Npix': self.Npix,
+            'Np4': self.Np4,
+            'gamma': self.gamma,
+            'currcmap': self.currcmap,
+            'Xaxmax': self.Xaxmax,
+            'lfac': self.lfac,
+            'UVpixsize': self.UVpixsize,
+            'w_min': self.w_min,
+            'w_max': self.w_max,
+            'plot_dir': self.plot_dir,
+            'idx': self.idx
+        }
+        self.simulationFinished.emit(simulation_results)
         self._free_space()
 
     # ------- Utility Functions --------------------------
@@ -262,10 +286,10 @@ class Interferometer():
         self._grid_uv()
         self._set_beam()
         self._check_lfac()
-        if self.channel == self.Nchan // 2:
-            self._plot_beam()
-            self._plot_antennas()
-            self._plot_uv_coverage()
+        #if self.channel == self.Nchan // 2:
+            #self._plot_beam()
+            #self._plot_antennas()
+            #self._plot_uv_coverage()
         self.img = skymodel[channel]
         self._prepare_model()
         self._set_primary_beam()

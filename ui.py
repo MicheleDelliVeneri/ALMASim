@@ -5,10 +5,10 @@ import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QScrollArea, QGridLayout, 
     QGroupBox, QCheckBox, QRadioButton, QTextEdit, QButtonGroup, QSizePolicy, QCheckBox, QSplitter,
-    QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox, QPlainTextEdit  
+    QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox, QPlainTextEdit, QProgressBar
 )
 from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt, QObject, QThread, QRunnable, QThreadPool,  pyqtSlot
-from PyQt6.QtGui import QPixmap, QGuiApplication
+from PyQt6.QtGui import QPixmap, QGuiApplication 
 from kaggle import api
 from os.path import isfile
 import dask
@@ -38,7 +38,9 @@ import utility.skymodels as usm
 import utility.plotting as upl
 import utility.interferometer as uin
 import threading
-
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 class MemoryMonitor(WorkerPlugin):
     def __init__(self, memory_limit):
         self.memory_limit = memory_limit
@@ -244,23 +246,28 @@ class PlotWindow(QWidget):
             self.terminal.add_log(f"Error in create_science_keyword_plots: {e}")  # Log the error
 
 class SimulatorRunnable(QRunnable):
-    def __init__(self, alma_simulator_instance):  
+    def __init__(self, alma_simulator_instance, *args, **kwargs):  
         super().__init__()
         self.alma_simulator = alma_simulator_instance  # Store a reference to the main UI class
-
+        self.args = args # Store the positional arguments
+        self.kwargs = kwargs # Store the keyword arguments
+    @pyqtSlot()
     def run(self):
-        """Downloads Galaxy Zoo data."""
-        self.alma_simulator.simulator()
+        """Executes the ALMASimulator.simulator static method with the given arguments."""
+        ALMASimulator.simulator(*self.args, **self.kwargs) 
+
 class DownloadGalaxyZooRunnable(QRunnable):
     """Runnable for downloading Galaxy Zoo data in a separate thread."""
 
     def __init__(self, alma_simulator_instance):  
         super().__init__()
         self.alma_simulator = alma_simulator_instance  # Store a reference to the main UI class
+        
 
     def run(self):
         """Downloads Galaxy Zoo data."""
         self.alma_simulator.download_galaxy_zoo()
+
 class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
@@ -548,6 +555,12 @@ class ALMASimulator(QMainWindow):
             self.remote_mode_label.show()
             self.remote_mode_combo.show()
             self.remote_folder_checkbox.show()
+            if self.output_entry.text() != "" and self.remote_user_entry.text() != "":
+                self.output_entry.setText(self.map_to_remote_directory(self.output_entry.text()))
+            if self.tng_entry.text() != "" and self.remote_user_entry.text() != "":
+                self.tng_entry.setText(self.map_to_remote_directory(self.tng_entry.text()))
+            if self.galaxy_zoo_entry.text() != "" and self.remote_user_entry.text() != "":
+                self.galaxy_zoo_entry.setText(self.map_to_remote_directory(self.galaxy_zoo_entry.text()))
         else:
             self.show_hide_widgets(self.remote_address_row, show=False)
             self.show_hide_widgets(self.remote_info_row, show=False)
@@ -555,7 +568,16 @@ class ALMASimulator(QMainWindow):
             self.remote_mode_combo.hide()
             self.remote_folder_checkbox.hide()
             self.remote_dir_line.hide()
-    
+            if self.output_entry.text() != "":
+                folder = self.output_entry.text().split(os.path.sep)[-1]
+                self.output_entry.setText(os.path.join(os.path.expanduser("~"), folder))
+            if self.tng_entry.text() != "":
+                folder = self.tng_entry.text().split(os.path.sep)[-1]
+                self.tng_entry.setText(os.path.join(os.path.expanduser("~"), folder))
+            if self.galaxy_zoo_entry.text() != "":
+                folder = self.galaxy_zoo_entry.text().split(os.path.sep)[-1]
+                self.galaxy_zoo_entry.setText(os.path.join(os.path.expanduser("~"), folder))
+
     def toggle_remote_dir_line(self):
         if self.remote_folder_checkbox.isChecked():
             self.remote_dir_line.show()
@@ -2192,15 +2214,15 @@ class ALMASimulator(QMainWindow):
         else:
             if self.local_mode_combo.currentText() == 'local':
                 self.run_simulator_sequentially()
-                #for i in range(n_sims):
-                #    ALMASimulator.simulator(*self.input_params.iloc[i])
             else:
                 self.terminal.add_log('Cannot run on remote in sequential mode, changing it to parallel')
                 self.comp_mode_combo.setCurrentText('parallel')
 
     def run_simulator_sequentially(self):
+        pool = QThreadPool.globalInstance()
         for i in range(int(self.n_sims_entry.text())):
-            ALMASimulator.simulator(*self.input_params.iloc[i])
+            runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
+            pool.start(runnable)
 
     @staticmethod
     def cont_finder(cont_frequencies,line_frequency):
@@ -2430,7 +2452,6 @@ class ALMASimulator(QMainWindow):
         freq_support = bandwidth / n_channels
         fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
         return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
-
 
     @staticmethod
     def simulator(inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
@@ -2717,8 +2738,10 @@ class ALMASimulator(QMainWindow):
             print('Observing with ALMA')
         else:
             ALMASimulator.terminal.add_log('Observing with ALMA')
-        uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value, 
+        interferometer = uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value, 
                             int_time.value * second2hour, obs_date, header, save_mode)
+        ALMASimulator.connect_interferometer_signals(ALMASimulator, interferometer)
+        interferometer.run_interferometric_sim()
         if remote == True:
             print('Finished')
         else: 
@@ -2729,8 +2752,121 @@ class ALMASimulator(QMainWindow):
         else:
             ALMASimulator.terminal.add_log('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
         shutil.rmtree(sim_output_dir)
-       
+    
+    
+    def connect_interferometer_signals(self, interferometer):
+        # Connect the custom signal to a slot in your main UI class
+        interferometer.simulationFinished.connect(lambda results: self.plot_simulation_results(ALMASimulator, results))
+    
+    @pyqtSlot(object)
+    def plot_simulation_results(self, simulation_results):
+        # Extract data from the simulation_results dictionary
+        self.modelCube = simulation_results['modelCube']
+        self.dirtyCube = simulation_results['dirtyCube']
+        self.visCube = simulation_results['visCube']
+        self.dirtyvisCube = simulation_results['dirtyvisCube']
+        self.Npix = simulation_results['Npix']
+        self.Np4 = simulation_results['Np4']
+        self.gamma = simulation_results['gamma']
+        self.currcmap = simulation_results['currcmap']
+        self.Xaxmax = simulation_results['Xaxmax']
+        self.lfac = simulation_results['lfac']
+        self.UVpixsize = simulation_results['UVpixsize']
+        self.w_min = simulation_results['w_min']
+        self.w_max = simulation_results['w_max']
+        self.plot_dir = simulation_results['plot_dir']
+        self.idx = simulation_results['idx']
+        self._plot_sim(ALMASimulator)
 
+    def _plot_sim(self):
+        print('HELLOE')
+        simPlot, ax = plt.subplots(2, 2, figsize=(12, 12))
+        sim_img = np.sum(self.modelCube, axis=0)
+        simPlotPlot = ax[0, 0].imshow(
+            np.power(
+            sim_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4], self.gamma),
+            picker=True,
+            interpolation='nearest',
+            vmin=0.0,
+            vmax=np.max(sim_img)**self.gamma,
+            cmap=self.currcmap)
+        plt.setp(simPlotPlot,
+            extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
+                    -self.Xaxmax / 2., self.Xaxmax / 2.)) 
+        ax[0, 0].set_ylabel('Dec offset (as)')
+        ax[0, 0].set_xlabel('RA offset (as)')
+        totflux = np.sum(sim_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4])
+        ax[0, 0].set_title('MODEL IMAGE: %.2e Jy' % totflux)
+        simPlotPlot.norm.vmin = np.min(sim_img)
+        simPlotPlot.norm.vmax = np.max(sim_img)
+        dirty_img = np.sum(self.dirtyCube, axis=0)
+        dirtyPlotPlot = ax[0, 1].imshow(
+            dirty_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
+            picker=True,
+            interpolation='nearest')
+        plt.setp(dirtyPlotPlot,
+            extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
+                    -self.Xaxmax / 2., self.Xaxmax / 2.))
+        ax[0, 1].set_ylabel('Dec offset (as)')
+        ax[0, 1].set_xlabel('RA offset (as)')
+        totflux = np.sum(dirty_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4])
+        ax[0, 1].set_title('DIRTY IMAGE: %.2e Jy' % totflux)
+        dirtyPlotPlot.norm.vmin = np.min(dirty_img)
+        dirtyPlotPlot.norm.vmax = np.max(dirty_img)
+        self.UVmax = self.Npix / 2. / self.lfac * self.UVpixsize
+        self.UVSh = -self.UVmax / self.Npix
+        toplot = np.sum(np.abs(self.visCube), axis=0)
+        mval = np.min(toplot)
+        Mval = np.max(toplot)
+        dval = (Mval - mval) / 2.
+        UVPlotFFTPlot = ax[1, 0].imshow(toplot,
+                                        cmap=self.currcmap,
+                                        vmin=0.0,
+                                        vmax=Mval + dval,
+                                        picker=5)
+        plt.setp(UVPlotFFTPlot,
+                    extent=(-self.UVmax + self.UVSh, self.UVmax + self.UVSh,
+                            -self.UVmax - self.UVSh, self.UVmax - self.UVSh))
+
+        ax[1, 0].set_ylabel('V (k$\\lambda$)')
+        ax[1, 0].set_xlabel('U (k$\\lambda$)')
+        ax[1, 0].set_title('MODEL VISIBILITY')
+
+        toplot = np.sum(np.abs(self.dirtyvisCube), axis=0)
+        mval = np.min(toplot)
+        Mval = np.max(toplot)
+        dval = (Mval - mval) / 2.
+        UVPlotDirtyFFTPlot = ax[1, 1].imshow(toplot,
+                                        cmap=self.currcmap,
+                                        vmin=0.0,
+                                        vmax=Mval + dval,
+                                        picker=5)
+        plt.setp(UVPlotDirtyFFTPlot,
+                    extent=(-self.UVmax + self.UVSh, self.UVmax + self.UVSh,
+                            -self.UVmax - self.UVSh, self.UVmax - self.UVSh))
+        ax[1, 1].set_ylabel('V (k$\\lambda$)')
+        ax[1, 1].set_xlabel('U (k$\\lambda$)')
+        ax[1, 1].set_title('DIRTY VISIBILITY')
+        print('HELLOE')
+        plt.savefig(os.path.join(self.plot_dir, 'sim_{}.png'.format(str(self.idx))))
+        print('SAVING COMPLETE')
+        plt.close()
+
+        sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
+        dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))
+        wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
+        x_ticks = np.round(wavelenghts, 2)
+        specPlot, ax = plt.subplots(1, 2, figsize=(12, 6))
+        ax[0].plot(wavelenghts, sim_spectrum)
+        ax[0].set_ylabel('Jy/$pix^{2}$')
+        ax[0].set_xlabel('$\\lambda$ [mm]')
+        ax[0].set_title('MODEL SPECTRUM')
+        ax[1].plot(wavelenghts, dirty_spectrum)
+        ax[1].set_ylabel('Jy/$pix^{2}$')
+        ax[1].set_xlabel('$\\lambda$ [mm]')
+        ax[1].set_title('DIRTY SPECTRUM')
+        plt.savefig(os.path.join(self.plot_dir, 'spectra_{}.png'.format(str(self.idx))))
+        print('HELLO')
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
