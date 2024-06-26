@@ -1985,7 +1985,7 @@ class ALMASimulator(QMainWindow):
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
         output_type = "object"
-        cls.initiate_parallel_simulation_remote(input_params)
+        cls.initiate_parallel_simulation_remote(cls, input_params)
     
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
