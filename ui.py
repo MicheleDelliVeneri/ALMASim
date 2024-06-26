@@ -2002,6 +2002,7 @@ class ALMASimulator(QMainWindow):
         # Wait for the command to finish
         output_thread.join()
         paramiko_client.close()
+        output_trhread.close()
     
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
