@@ -1983,7 +1983,6 @@ class ALMASimulator(QMainWindow):
         channel = paramiko_client.invoke_shell()
         # Continuously read and display output
         def read_output():
-            buffer
             while True:
                 if channel.recv_ready():
                     output = channel.recv(1024).decode()
@@ -2268,7 +2267,7 @@ class ALMASimulator(QMainWindow):
                     self.run_on_pbs_cluster()
                 elif self.remote_mode_combo.currentText() == 'MPI':
                     thread = threading.Thread(target=self.run_on_mpi_machine,  daemon=True)
-                    thread.start()
+                    thread.start() 
                 else:
                     self.terminal.add_log('Please select a valid remote mode')
         else:
