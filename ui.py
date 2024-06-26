@@ -44,6 +44,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import logging
+import re
+
 class MemoryMonitor(WorkerPlugin):
     def __init__(self, memory_limit):
         self.memory_limit = memory_limit
