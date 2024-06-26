@@ -1876,9 +1876,7 @@ class ALMASimulator(QMainWindow):
                 
         else:
             sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
-
-        if not sftp.exists(self.remote_main_dir + '/settings.json'):
-            sftp.put(self.settings_path, self.remote_main_dir + '/settings.plist')
+        sftp.put(self.settings_path, self.remote_main_dir + '/settings.plist')
 
     def run_on_slurm_cluster(self):
         slurm_config = self.remote_config_entry.text()
