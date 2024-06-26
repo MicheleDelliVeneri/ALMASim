@@ -1969,17 +1969,31 @@ class ALMASimulator(QMainWindow):
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
-        stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
-        while True:
-            line = stdout.readline()
-            if not line:
-                break
-            self.terminal.add_log(line.strip())
+        #stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
+        #while True:
+        #    line = stdout.readline()
+        #    if not line:
+        #        break
+        #    self.terminal.add_log(line.strip())
     
-        err = stderr.read().decode()
-        if err:
-            self.terminal.add_log(err)
+        #err = stderr.read().decode()
+        #if err:
+        #    self.terminal.add_log(err)
+        channel = paramiko_client.invoke_shell()
+        # Continuously read and display output
+        def read_output():
+            while True:
+                if channel.recv_ready():
+                    output = channel.recv(1024).decode()
+                    self.terminal.add_log(output)
+                if channel.exit_status_ready():
+                    break
+        output_thread = threading.Thread(target=read_output)
+        output_thread.start()
+        channel.send(dask_commands + "\n")  
 
+        # Wait for the command to finish
+        output_thread.join()
         paramiko_client.close()
     
     def transform_source_type_label(self):
