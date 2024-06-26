@@ -1987,7 +1987,7 @@ class ALMASimulator(QMainWindow):
     @classmethod
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
-        window_instance = QtWidgets.QApplication.activeWindow()
+        window_instance = QApplication.activeWindow()
         cls.initiate_parallel_simulation_remote(window_istance, input_params)
     
     def transform_source_type_label(self):
