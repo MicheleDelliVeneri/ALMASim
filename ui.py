@@ -287,7 +287,7 @@ class ParallelSimulatorRunnableRemote(QRunnable):
 
     @pyqtSlot()
     def run(self):
-        self.alma_simulator.run_simulator_parallel_remote(self.alma_simulator, self.input_params)
+        self.alma_simulator.run_simulator_parallel_remote(self.input_params)
     
 class SimulatorWorker(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, df, *args, **kwargs):
@@ -1985,7 +1985,7 @@ class ALMASimulator(QMainWindow):
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
         output_type = "object"
-        cls.initiate_parallel_simulation_remote(cls, input_params)
+        cls.initiate_parallel_simulation_remote(input_params)
     
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -2319,9 +2319,9 @@ class ALMASimulator(QMainWindow):
         runnable = ParallelSimulatorRunnable(self)
         pool.start(runnable)
 
-    def initiate_parallel_simulation_remote(self, input_params):
+    def initiate_parallel_simulation_remote(cls, input_params):
         pool = QThreadPool.globalInstance()
-        runnable = ParallelSimulatorRunnableRemote(self, input_params)
+        runnable = ParallelSimulatorRunnableRemote(cls, input_params)
         pool.start(runnable)
             
     def cont_finder(self, cont_frequencies,line_frequency):
