@@ -1987,28 +1987,31 @@ class ALMASimulator(QMainWindow):
             while True:
                 if channel.recv_ready():
                     output = channel.recv(1024).decode()
-                    buffer += output  # Add the new output to the buffer
-                    
+                    buffer += output
+        
                     lines = buffer.splitlines()
-                    if lines:  # Check if we have at least one complete line
-                        last_line_complete = lines[-1][-1] == '\n' #Check if the last line is complete
-                    else: 
-                        last_line_complete = False
+                    if not lines:  # Handle the case where there are no lines yet
+                        continue
+                    
+                    last_line_complete = lines[-1].endswith('\n')  # Check if last line ends with newline
                     filtered_output = ""
+        
                     for line in lines[:-1]:  # Process all but the last line if incomplete
-                        # Exclude lines matching the specific commands
                         if not exclude_pattern.search(line):
                             filtered_output += line + "\n"
                             
-                    if last_line_complete: 
+                    if last_line_complete:
                         if not exclude_pattern.search(lines[-1]): #Filter the last line if complete
-                            filtered_output += lines[-1] 
-                        buffer="" #Reset the buffer
-                    else: 
-                        buffer = lines[-1] #If the last line is not complete, save it in the buffer
+                            filtered_output += lines[-1]
+                        buffer = ""  # Reset the buffer
+                    else:
+                        buffer = lines[-1]  # Save the incomplete last line in the buffer
         
                     if filtered_output:  # Only add to the log if there's filtered output
                         simulator_instance.terminal.add_log(filtered_output)
+        
+                if channel.exit_status_ready():
+                    break
         output_thread = threading.Thread(target=read_output)
         output_thread.start()
         channel.send(dask_commands + "\n")  
