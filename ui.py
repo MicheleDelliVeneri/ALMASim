@@ -1951,9 +1951,12 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(stderr.read().decode())
 
     def run_on_mpi_machine(self):
-        # ... (SSH setup remains the same)
-        with paramiko.SFTPClient.from_transport(paramiko_client.get_transport()) as sftp:
-            sftp.put('input_params.csv', os.path.join(self.remote_main_dir, 'input_params.csv'))
+        slurm_config = self.remote_config_entry.text()
+        if self.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+            
         settings_path = os.path.join(self.remote_main_dir, 'settings.plist')
         dask_commands = f"""
             cd {self.remote_main_dir}
