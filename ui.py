@@ -282,14 +282,12 @@ class ParallelSimulatorRunnable(QRunnable):
 class ParallelSimulatorRunnableRemote(QRunnable):
     def __init__(self, alma_simulator_instance, input_params):
         super().__init__()
-        self.alma_simulator_instance = alma_simulator_instance  # Store the instance
+        self.alma_simulator_instance = alma_simulator_instance
         self.input_params = input_params
 
     @pyqtSlot()
     def run(self):
-        # Call the method on the instance, not the class
         self.alma_simulator_instance.run_simulator_parallel_remote(self.input_params)
-
 
     
 class SimulatorWorker(QRunnable, QObject):
@@ -1953,18 +1951,17 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(stderr.read().decode())
 
     def run_on_mpi_machine(self):
-        slurm_config = self.remote_config_entry.text()
-        if self.remote_key_pass_entry.text() != "":
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
-        else:
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-            
-        settings_path= os.path.join(self.remote_main_dir, 'settings.plist')
+        # ... (SSH setup remains the same)
+        with paramiko.SFTPClient.from_transport(paramiko_client.get_transport()) as sftp:
+            sftp.put('input_params.csv', os.path.join(self.remote_main_dir, 'input_params.csv'))
+        settings_path = os.path.join(self.remote_main_dir, 'settings.plist')
         dask_commands = f"""
-        cd {self.remote_main_dir}
-        source {self.remote_venv_dir}/bin/activate
-        export QT_QPA_PLATFORM=offscreen
-        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); window.create_local_cluster_and_run(); sys.exit(app.exec())"
+            cd {self.remote_main_dir}
+            source {self.remote_venv_dir}/bin/activate
+            export QT_QPA_PLATFORM=offscreen
+
+            # Call initiate_parallel_simulation_remote with window instance
+            python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); ui.ALMASimulator.initiate_parallel_simulation_remote(window, window.input_params); sys.exit(app.exec())"
         """
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -2268,11 +2265,11 @@ class ALMASimulator(QMainWindow):
             runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
 
-    @classmethod
-    def run_simulator_parallel_remote(cls, input_params):
-        dask.config.set({'temporary_directory': cls.output_path})
+    def run_simulator_parallel_remote(self, input_params):
+        # Access instance attributes here using `self`
+        dask.config.set({'temporary_directory': self.output_path})
         total_memory = psutil.virtual_memory().total
-        num_workers = int(cls.ncpu_entry.text()) // 4
+        num_workers = int(self.ncpu_entry.text()) // 4
         memory_limit = int(0.9 * total_memory / num_workers)
 
         ddf = dd.from_pandas(input_params, npartitions=num_workers)
@@ -2283,14 +2280,14 @@ class ALMASimulator(QMainWindow):
 
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 for df in ddf.partitions:
-                    worker = SimulatorWorker(cls, df)
-                    cls.update_progress.connect(cls.update_progress_bar)
-                    worker.signals.simulationFinished.connect(cls.plot_simulation_results)
+                    worker = SimulatorWorker(self, df)
+                    # Connect signals using the instance ('self')
+                    self.update_progress.connect(self.update_progress_bar)  
+                    worker.signals.simulationFinished.connect(self.plot_simulation_results)
                     futures.append(executor.submit(worker.run))
 
-            # Optionally wait for all workers to complete before proceeding
             for future in futures:
-                future.result()  # This blocks until the worker is done
+                future.result()
 
     def run_simulator_parallel(self):
         dask.config.set({'temporary_directory': self.output_path})
@@ -2321,10 +2318,11 @@ class ALMASimulator(QMainWindow):
         pool.start(runnable)
 
     @classmethod
-    def initiate_parallel_simulation_remote(cls, input_params):
+    def initiate_parallel_simulation_remote(cls, window_instance, input_params):
         pool = QThreadPool.globalInstance()
-        runnable = ParallelSimulatorRunnableRemote(cls, input_params)
+        runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
         pool.start(runnable)
+
 
             
     def cont_finder(self, cont_frequencies,line_frequency):
