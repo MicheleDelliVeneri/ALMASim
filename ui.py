@@ -288,6 +288,7 @@ class ParallelSimulatorRunnableRemote(QRunnable):
     @pyqtSlot()
     def run(self):
         self.alma_simulator_instance.run_simulator_parallel_remote(self.input_params)
+
     
 class SimulatorWorker(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, df, *args, **kwargs):
@@ -300,8 +301,6 @@ class SimulatorWorker(QRunnable, QObject):
     @pyqtSlot()
     def run(self):
         for i, row in self.df.iterrows():
-            progress = int(i / len(self.df) * 100)  # Calculate progress percentage
-            print(f"PROGRESS:{progress}") 
             row = row.where(~row.isna(), None)
             results = self.alma_simulator.simulator(*row)
             self.signals.simulationFinished.emit(results)
@@ -1970,6 +1969,16 @@ class ALMASimulator(QMainWindow):
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+        #stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
+        #while True:
+        #    line = stdout.readline()
+        #    if not line:
+        #        break
+        #    self.terminal.add_log(line.strip())
+    
+        #err = stderr.read().decode()
+        #if err:
+        #    self.terminal.add_log(err)
         channel = paramiko_client.invoke_shell()
         # Continuously read and display output
         def read_output():
@@ -1977,9 +1986,6 @@ class ALMASimulator(QMainWindow):
                 if channel.recv_ready():
                     output = channel.recv(1024).decode()
                     self.terminal.add_log(output)
-                    if output.startswith("PROGRESS:"):
-                        progress = int(output.split(":")[1])
-                        self.update_progress_bar(progress)
                 if channel.exit_status_ready():
                     break
         output_thread = threading.Thread(target=read_output)
@@ -2332,7 +2338,7 @@ class ALMASimulator(QMainWindow):
         pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
         pool.start(runnable)
-          
+  
     def cont_finder(self, cont_frequencies,line_frequency):
         #cont_frequencies=sed['GHz'].values
         distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
