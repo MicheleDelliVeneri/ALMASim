@@ -1,6 +1,8 @@
 import os
 import time
 import sys
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np 
 import matplotlib.cm as cm
@@ -16,17 +18,21 @@ import pandas as pd
 from scipy.integrate import odeint
 from astropy.time import Time
 from astropy.io import fits
+from PyQt6.QtCore import QObject, pyqtSignal
 
 def showError(message):
         raise Exception(message)
 
-class Interferometer():
 
+class Interferometer(QObject):
+    progress_signal = pyqtSignal(int)
     def __init__(self, idx, skymodel, main_dir, 
                 output_dir, ra, dec, central_freq, band_range, 
                 fov, antenna_array, noise, int_time, obs_date, 
-                header, save_mode, robust=0.5):
+                header, save_mode, terminal, robust=0.5):
+        super().__init__() 
         self.idx = idx
+        self.terminal = terminal
         self.skymodel = skymodel
         self.antenna_array = antenna_array
         self.noise = noise
@@ -52,7 +58,7 @@ class Interferometer():
         self.lfac = 1.e6
         self.header = header
         self._get_nH()
-        print(f'Performing {self.nH} scans with a scan time of {self.scan_time} seconds')
+        self.terminal.add_log(f'Performing {self.nH} scans with a scan time of {self.scan_time} seconds')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
@@ -85,12 +91,44 @@ class Interferometer():
         # Get the observing wavelengths for each channel 
         self._get_wavelengths()
         self._prepare_cubes()
-        print(f'Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}')
-        for channel in tqdm(range(self.Nchan)):
-            self._image_channel(channel, skymodel)
+        self.terminal.add_log(f'Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}')
+        
+    def run_interferometric_sim(self):
+        for channel in range(self.Nchan):
+            self._image_channel(channel, self.skymodel)
+            self.progress_signal.emit((channel + 1) * 100 // self.Nchan)
         self._savez_compressed_cubes()
-        self._plot_sim()
+        simulation_results = {
+            'modelCube': self.modelCube,
+            'dirtyCube': self.dirtyCube,
+            'visCube': self.visCube,
+            'dirtyvisCube': self.dirtyvisCube,
+            'Npix': self.Npix,
+            'Np4': self.Np4,
+            'Nchan': self.Nchan,
+            'gamma': self.gamma,
+            'currcmap': self.currcmap,
+            'Xaxmax': self.Xaxmax,
+            'lfac': self.lfac,
+            'UVpixsize': self.UVpixsize,
+            'w_min': self.w_min,
+            'w_max': self.w_max,
+            'plot_dir': self.plot_dir,
+            'idx': self.idx,
+            'beam': self.s_beam,
+            'fmtB': self.s_fmtB,
+            'totsampling': self.s_totsampling,
+            'wavelength': self.s_wavelength,
+            'curzoom': self.curzoom,
+            'Nphf': self.Nphf,
+            'Xmax': self.Xmax,
+            'u': self.s_u,
+            'v': self.s_v,
+            'antPos': self.antPos,
+            'Nant': self.Nant
+        }
         self._free_space()
+        return simulation_results
 
     # ------- Utility Functions --------------------------
     def _get_observing_location(self):
@@ -263,9 +301,15 @@ class Interferometer():
         self._set_beam()
         self._check_lfac()
         if self.channel == self.Nchan // 2:
-            self._plot_beam()
-            self._plot_antennas()
-            self._plot_uv_coverage()
+            self.s_wavelength = self.wavelength
+            self.s_fmtB = self.fmtB
+            self.s_totsampling = self.totsampling
+            self.s_beam = self.beam
+            self.s_u = self.u 
+            self.s_v = self.v
+            #self._plot_beam()
+            #self._plot_antennas()
+            #self._plot_uv_coverage()
         self.img = skymodel[channel]
         self._prepare_model()
         self._set_primary_beam()
@@ -809,173 +853,6 @@ class Interferometer():
         mean_val = np.mean(self.img)
         #self.img += np.random.normal(scale=mean_val / self.snr)
 
-    # ----------------- Plotting Functions ----------------- #
-
-    def _plot_beam(self):
-        beamPlot = plt.figure(figsize=(8, 8))
-        beamPlotPlot = plt.imshow(
-            self.beam[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
-            picker=True,
-            interpolation='nearest',
-            cmap=self.currcmap)
-        beamText = plt.text(
-            0.80,
-            0.80,
-            self.fmtB % (1.0, 0.0, 0.0),
-            bbox=dict(facecolor='white', alpha=0.7))
-        plt.ylabel('Dec offset (as)')
-        plt.xlabel('RA offset (as)')
-        plt.setp(beamPlotPlot,
-                extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
-                        -self.Xaxmax / 2., self.Xaxmax / 2.))
-        self.curzoom[0] = (self.Xaxmax / 2., -self.Xaxmax / 2.,
-                           -self.Xaxmax / 2., self.Xaxmax / 2.)
-        plt.title('DIRTY BEAM')
-        plt.colorbar()
-        nptot = np.sum(self.totsampling[:])
-        beamPlotPlot.norm.vmin = np.min(self.beam)
-        beamPlotPlot.norm.vmax = 1.0
-        if np.sum(self.totsampling[self.Nphf - 4:self.Nphf + 4, self.Nphf -
-                                   4:self.Nphf + 4]) == nptot:
-            warn = 'WARNING!\nToo short baselines for such a small image\nPLEASE, INCREASE THE IMAGE SIZE!\nAND/OR DECREASE THE WAVELENGTH'
-            beamText.set_text(warn)
-
-        plt.savefig(os.path.join(self.plot_dir, 'beam_{}.png'.format(str(self.idx))))
-        plt.close()
-
-    def _plot_antennas(self):
-        antPlot = plt.figure(figsize=(8, 8))
-        toplot = np.array(self.antPos[:self.Nant])
-        antPlotBas = plt.plot([0], [0], '-b')[0]
-        antPlotPlot = plt.plot(toplot[:, 0], toplot[:, 1],
-                                                    'o',
-                                                    color='lime',
-                                                    picker=5)[0]
-        plt.xlim(-self.Xmax, self.Xmax)
-        plt.ylim(-self.Xmax, self.Xmax)
-        plt.xlabel('East-West offset (Km)')
-        plt.ylabel('North-South offset (Km)')
-        plt.title('Antenna Configuration')
-        plt.savefig(os.path.join(self.plot_dir, 'antenna_config_{}.png'.format(str(self.idx))))
-        plt.close()
-
-    def _plot_uv_coverage(self):
-        self.ulab = r'U (k$\lambda$)'
-        self.vlab = r'V (k$\lambda$)'
-        UVPlot = plt.figure(figsize=(8, 8))
-        UVPlotPlot = []
-        toplotu = self.u.flatten() / self.lfac
-        toplotv = self.v.flatten() / self.lfac
-        UVPlotPlot.append(
-            plt.plot(toplotu,
-                             toplotv,
-                             '.',
-                             color='lime',
-                             markersize=1,
-                             picker=2)[0])
-        UVPlotPlot.append(
-            plt.plot(-toplotu,
-                             -toplotv,
-                             '.',
-                             color='lime',
-                             markersize=1,
-                             picker=2)[0])
-        plt.xlim((2. * self.Xmax / self.wavelength[2] / self.lfac,
-                         -2. * self.Xmax / self.wavelength[2] / self.lfac))
-        plt.ylim((2. * self.Xmax / self.wavelength[2] / self.lfac,
-                         -2. * self.Xmax / self.wavelength[2] / self.lfac))
-        plt.xlabel(self.ulab)
-        plt.ylabel(self.vlab)
-        plt.title('UV Coverage')
-        plt.savefig(os.path.join(self.plot_dir, 'uv_coverage_{}.png'.format(str(self.idx))))
-        plt.close()
-    
-    def _plot_sim(self):
-        simPlot, ax = plt.subplots(2, 2, figsize=(12, 12))
-        sim_img = np.sum(self.modelCube, axis=0)
-        simPlotPlot = ax[0, 0].imshow(
-            np.power(
-            sim_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4], self.gamma),
-            picker=True,
-            interpolation='nearest',
-            vmin=0.0,
-            vmax=np.max(sim_img)**self.gamma,
-            cmap=self.currcmap)
-        plt.setp(simPlotPlot,
-            extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
-                    -self.Xaxmax / 2., self.Xaxmax / 2.)) 
-        ax[0, 0].set_ylabel('Dec offset (as)')
-        ax[0, 0].set_xlabel('RA offset (as)')
-        totflux = np.sum(sim_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4])
-        ax[0, 0].set_title('MODEL IMAGE: %.2e Jy' % totflux)
-        simPlotPlot.norm.vmin = np.min(sim_img)
-        simPlotPlot.norm.vmax = np.max(sim_img)
-        dirty_img = np.sum(self.dirtyCube, axis=0)
-        dirtyPlotPlot = ax[0, 1].imshow(
-            dirty_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
-            picker=True,
-            interpolation='nearest')
-        plt.setp(dirtyPlotPlot,
-            extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
-                    -self.Xaxmax / 2., self.Xaxmax / 2.))
-        ax[0, 1].set_ylabel('Dec offset (as)')
-        ax[0, 1].set_xlabel('RA offset (as)')
-        totflux = np.sum(dirty_img[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4])
-        ax[0, 1].set_title('DIRTY IMAGE: %.2e Jy' % totflux)
-        dirtyPlotPlot.norm.vmin = np.min(dirty_img)
-        dirtyPlotPlot.norm.vmax = np.max(dirty_img)
-        self.UVmax = self.Npix / 2. / self.lfac * self.UVpixsize
-        self.UVSh = -self.UVmax / self.Npix
-        toplot = np.sum(np.abs(self.visCube), axis=0)
-        mval = np.min(toplot)
-        Mval = np.max(toplot)
-        dval = (Mval - mval) / 2.
-        UVPlotFFTPlot = ax[1, 0].imshow(toplot,
-                                        cmap=self.currcmap,
-                                        vmin=0.0,
-                                        vmax=Mval + dval,
-                                        picker=5)
-        plt.setp(UVPlotFFTPlot,
-                    extent=(-self.UVmax + self.UVSh, self.UVmax + self.UVSh,
-                            -self.UVmax - self.UVSh, self.UVmax - self.UVSh))
-
-        ax[1, 0].set_ylabel('V (k$\\lambda$)')
-        ax[1, 0].set_xlabel('U (k$\\lambda$)')
-        ax[1, 0].set_title('MODEL VISIBILITY')
-
-        toplot = np.sum(np.abs(self.dirtyvisCube), axis=0)
-        mval = np.min(toplot)
-        Mval = np.max(toplot)
-        dval = (Mval - mval) / 2.
-        UVPlotDirtyFFTPlot = ax[1, 1].imshow(toplot,
-                                        cmap=self.currcmap,
-                                        vmin=0.0,
-                                        vmax=Mval + dval,
-                                        picker=5)
-        plt.setp(UVPlotDirtyFFTPlot,
-                    extent=(-self.UVmax + self.UVSh, self.UVmax + self.UVSh,
-                            -self.UVmax - self.UVSh, self.UVmax - self.UVSh))
-        ax[1, 1].set_ylabel('V (k$\\lambda$)')
-        ax[1, 1].set_xlabel('U (k$\\lambda$)')
-        ax[1, 1].set_title('DIRTY VISIBILITY')
-        plt.savefig(os.path.join(self.plot_dir, 'sim_{}.png'.format(str(self.idx))))
-        plt.close()
-
-        sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
-        dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))
-        wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
-        x_ticks = np.round(wavelenghts, 2)
-        specPlot, ax = plt.subplots(1, 2, figsize=(12, 6))
-        ax[0].plot(wavelenghts, sim_spectrum)
-        ax[0].set_ylabel('Jy/$pix^{2}$')
-        ax[0].set_xlabel('$\\lambda$ [mm]')
-        ax[0].set_title('MODEL SPECTRUM')
-        ax[1].plot(wavelenghts, dirty_spectrum)
-        ax[1].set_ylabel('Jy/$pix^{2}$')
-        ax[1].set_xlabel('$\\lambda$ [mm]')
-        ax[1].set_title('DIRTY SPECTRUM')
-        plt.savefig(os.path.join(self.plot_dir, 'spectra_{}.png'.format(str(self.idx))))
-
     # ------------------- IO Functions
     def _savez_compressed_cubes(self):
         min_dirty = np.min(self.dirtyCube)
@@ -1028,8 +905,8 @@ class Interferometer():
             hdu_imag.writeto(os.path.join(self.output_dir, 'clean-vis-cube_imag{}.fits'.format(str(self.idx))), overwrite=True)
             del real_part
             del imag_part
-        print(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
-        print(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
+        self.terminal.add_log(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
+        self.terminal.add_log(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
     
     def _free_space(self):
         del self.modelCube

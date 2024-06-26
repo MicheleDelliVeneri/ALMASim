@@ -1541,7 +1541,7 @@ def gaussian2d(x, y, amp, cen_x, cen_y, fwhm_x, fwhm_y, angle):
     
     return result
 
-def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_chan):
+def insert_pointlike(update_progress, datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_chan):
     """
     Inserts a point source into the datacube at the specified position and amplitude.
     datacube: datacube object
@@ -1556,11 +1556,12 @@ def insert_pointlike(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
     for i in range(len(line_fluxes)):
-        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])  
+        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
+        update_progress.emit(i/len(line_fluxes) * 100)
     datacube._array[pos_x, pos_y, ] = (continum + gs) * U.Jy * U.pix**-2
     return datacube 
 
-def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_chan):
+def insert_gaussian(update_progress, datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_chan):
     """
     Inserts a 3D Gaussian into the datacube at the specified position and amplitude.
     datacube: datacube object
@@ -1580,22 +1581,21 @@ def insert_gaussian(datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x
     gs = np.zeros(n_chan)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
-    for z in tqdm(range(0, n_chan)):
+    for z in range(0, n_chan):
         cont = gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
         line =  gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
         slice_ = cont + line
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2 
+        update_progress.emit(z/n_chan * 100)
     return datacube 
 
-def download_gz_data(path):
-    return
 
 def interpolate_array(arr, n_px):
     """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
     zoom_factor = n_px / arr.shape[0]   
     return zoom(arr, zoom_factor)
 
-def insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan, data_path):
+def insert_galaxy_zoo(update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan, data_path):
     files = np.array(os.listdir(data_path))
     imfile = os.path.join(data_path, np.random.choice(files))
     img = plimg.imread(imfile).astype(np.float32)
@@ -1612,8 +1612,9 @@ def insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_ch
     cube = np.zeros((n_px, n_px, n_chan))
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
-    for z in tqdm(range(0, n_chan)):
+    for z in range(0, n_chan):
         cube[:, :, z] += avimg * (continum[z] + gs[z])
+        update_progress.emit(z / n_chan * 100)
     datacube._array[:, :, : ] = cube * U.Jy / U.pix **2 
     return datacube 
 

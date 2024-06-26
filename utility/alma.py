@@ -187,7 +187,7 @@ def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, 
 def compute_distance(x1, y1, z1, x2, y2, z2):
     return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
-def get_max_baseline_from_antenna_config(antenna_config):
+def get_max_baseline_from_antenna_config(update_progress, antenna_config):
     """
     takes an antenna configuration .cfg file as input and outputs
     """
@@ -204,13 +204,14 @@ def get_max_baseline_from_antenna_config(antenna_config):
     positions = np.array(positions)
     max_baseline = 0
     
-    for i in tqdm(range(len(positions)), total=len(positions)):
+    for i in range(len(positions)):
         x1, y1, z1 = positions[i]
         for j in range(i + 1, len(positions)):
             x2, y2, z2 = positions[j]
             dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
             if dist > max_baseline:
                 max_baseline = dist
+        update_progress.emit((i/len(positions) * 100))
 
     return max_baseline
 
