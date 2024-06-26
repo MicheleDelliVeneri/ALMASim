@@ -282,12 +282,15 @@ class ParallelSimulatorRunnable(QRunnable):
 class ParallelSimulatorRunnableRemote(QRunnable):
     def __init__(self, alma_simulator_instance, input_params):
         super().__init__()
-        self.alma_simulator = alma_simulator_instance
+        self.alma_simulator_instance = alma_simulator_instance  # Store the instance
         self.input_params = input_params
 
     @pyqtSlot()
     def run(self):
-        self.alma_simulator.run_simulator_parallel_remote(self.alma_simulator, self.input_params)
+        # Call the method on the instance, not the class
+        self.alma_simulator_instance.run_simulator_parallel_remote(self.input_params)
+
+
     
 class SimulatorWorker(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, df, *args, **kwargs):
@@ -2320,10 +2323,11 @@ class ALMASimulator(QMainWindow):
         pool.start(runnable)
 
     @classmethod
-    def initiate_parallel_simulation_remote(cls, input_params):
+    def initiate_parallel_simulation_remote(cls, window_instance, input_params):
         pool = QThreadPool.globalInstance()
-        runnable = ParallelSimulatorRunnableRemote(cls, input_params)
+        runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
         pool.start(runnable)
+
             
     def cont_finder(self, cont_frequencies,line_frequency):
         #cont_frequencies=sed['GHz'].values
