@@ -291,7 +291,17 @@ class ParallelSimulatorRunnableRemote(QRunnable):
     def run(self):
         self.alma_simulator_instance.run_simulator_parallel_remote(self.input_params)
 
-    
+class SlurmSimulatorRunnableRemote(QRunnable):
+    def __init__(self, alma_simulator_instance, input_params):
+        super().__init__()
+        self.alma_simulator_instance = alma_simulator_instance
+        self.input_params = input_params
+
+    @pyqtSlot()
+    def run(self):
+        self.alma_simulator_instance.run_simulator_slurm_remote(self.input_params)
+
+
 class SimulatorWorker(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, df, *args, **kwargs):
         super().__init__()
@@ -1878,58 +1888,11 @@ class ALMASimulator(QMainWindow):
             sftp = pysftp.Connection(self.remote_address_entry.text(), username=self.remote_user_entry.text(), private_key=self.remote_key_entry.text())
         sftp.put(self.settings_path, self.remote_main_dir + '/settings.plist')
 
-    def run_on_slurm_cluster(self):
-        slurm_config = self.remote_config_entry.text()
-        if self.remote_key_pass_entry.text() != "":
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
-        else:
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-            
-        settings_path= os.path.join(self.remote_main_dir, 'settings.plist')
-        dask_commands = f"""
-        cd {self.remote_main_dir}
-        source {self.remote_venv_dir}/bin/activate
-        export QT_QPA_PLATFORM=offscreen
-        python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); window.create_slurm_cluster_and_run(); sys.exit(app.exec())"
-        """
-        paramiko_client = paramiko.SSHClient()
-        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
-        stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
-        self.terminal.add_log(stdout.read().decode())
-        self.terminal.add_log(stderr.read().decode())
-    
     @staticmethod
     def nan_to_none(value):
         if pd.isna(value):
             return None
         return value
-
-    @classmethod
-    def create_slurm_cluster_and_run(cls):
-        input_params = pd.read_csv('input_params.csv', na_values='None')
-        with open('slurm_config.json', 'r') as f:
-            config = json.load(f)
-        cluster = SLURMCluster(
-            queue=config['queue'],
-            account=config['account'],
-            cores=config['cores'],
-            memory=config['memory'],
-            job_extra_directives=config['job_extra'],
-            )
-       
-        client = Client(cluster)
-        # Get information
-        print("Dashboard Link: {}".format(client.dashboard_link))
-        print("Workers: {}".format(len(client.scheduler_info()['workers'])))
-        print("Total threads: {}".format(sum(w['nthreads'] for w in client.scheduler_info()['workers'].values())))
-        print("Total memory: {}".format(sum(w['memory_limit'] for w in client.scheduler_info()['workers'].values())))
-        cluster.scale(jobs=int(int(cls.ncpu_entry.text())//4))
-        ddf = dd.from_pandas(input_params, npartitions=int(int(cls.ncpu_entry.text()) // 4))
-        output_type = "object"
-        results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
-        client.close()
-        cluster.close()
 
     def run_on_pbs_cluster(self):
         pbs_config = self.remote_config_entry.text()
@@ -1974,6 +1937,58 @@ class ALMASimulator(QMainWindow):
             |(source /home/astro/almasim_env/bin/activate$)
             |(export QT_QPA_PLATFORM=offscreen$)
             |(python -c "import sys.*initiate_parallel_simulation_remote\(window\); sys.exit\(app.exec\(\)"\s*$)
+            # Pattern 2: ANSI escape codes
+            |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))  
+        """, re.VERBOSE) 
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
+        channel = paramiko_client.invoke_shell()
+        # Continuously read and display output
+        def read_output():
+            while True:
+                if channel.recv_ready():
+                    output = channel.recv(1024).decode()
+                    # Filter out unwanted lines
+                    filtered_output = ""
+                    for line in output.splitlines():
+                        if not exclude_pattern.search(line):
+                            filtered_output += line + "\n"
+                    if filtered_output:  # Only add to the log if there's filtered output
+                        self.terminal.add_log(filtered_output)
+                if channel.exit_status_ready():
+                    break
+        output_thread = threading.Thread(target=read_output)
+        output_thread.start()
+        channel.send(dask_commands + "\n")  
+
+        # Wait for the command to finish
+        output_thread.join()
+        paramiko_client.close()
+        output_trhread.close()
+
+    def run_on_slurm_cluster(self):
+        slurm_config = self.remote_config_entry.text()
+        if self.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text(), password=self.remote_key_pass_entry.text())
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+            
+        settings_path = os.path.join(self.remote_main_dir, 'settings.plist')
+        dask_commands = f"""
+            cd {self.remote_main_dir}
+            source {self.remote_venv_dir}/bin/activate
+            export QT_QPA_PLATFORM=offscreen
+
+            # Call initiate_parallel_simulation_remote with window instance
+            python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); ui.ALMASimulator.initiate_slurm_simulation_remote(window); sys.exit(app.exec())"
+        """
+        exclude_pattern = re.compile(r"""
+            # Pattern 1: Specific command lines
+            (^cd /home/astro/ALMASim$)
+            |(source /home/astro/almasim_env/bin/activate$)
+            |(export QT_QPA_PLATFORM=offscreen$)
+            |(python -c "import sys.*initiate_slurm_simulation_remote\(window\); sys.exit\(app.exec\(\)"\s*$)
             # Pattern 2: ANSI escape codes
             |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))  
         """, re.VERBOSE) 
@@ -2313,6 +2328,31 @@ class ALMASimulator(QMainWindow):
         client.close()
         cluster.close()
 
+    def run_simulator_slurm_remote(self, input_params):
+        self.output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
+        with open('slurm_config.json', 'r') as f:
+            config = json.load(f)
+        with SLURMCluster(queue=config['queue'],account=config['account'],cores=config['cores'], memory=config['memory'],job_extra_directives=config['job_extra']) as cluster, Client(cluster) as client:
+            self.terminal.add_log("Dashboard Link: {}".format(client.dashboard_link))
+            self.terminal.add_log("Workers: {}".format(len(client.scheduler_info()['workers'])))
+            self.terminal.add_log("Total threads: {}".format(sum(w['nthreads'] for w in client.scheduler_info()['workers'].values())))
+            self.terminal.add_log("Total memory: {}".format(sum(w['memory_limit'] for w in client.scheduler_info()['workers'].values())))
+            cluster.scale(jobs=int(int(cls.ncpu_entry.text())//4))
+            ddf = dd.from_pandas(input_params, npartitions=cluster.n_workers)
+            output_type = "object"
+            futures = []
+            with ThreadPoolExecutor(max_workers=cluster.n_workers) as executor:
+                for df in ddf.partitions:
+                    worker = SimulatorWorker(self, df)
+                    self.update_progress.connect(self.update_progress_bar)
+                    worker.signals.simulationFinished.connect(self.plot_simulation_results)
+                    futures.append(executor.submit(worker.run))
+
+            for future in futures:
+                future.result()
+        client.close()
+        cluster.close()
+
     def run_simulator_parallel(self):
         dask.config.set({'temporary_directory': self.output_path})
         total_memory = psutil.virtual_memory().total
@@ -2346,6 +2386,13 @@ class ALMASimulator(QMainWindow):
         input_params = pd.read_csv('input_params.csv')
         pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
+        pool.start(runnable)
+
+    @classmethod
+    def initialize_slurm_simulation_remote(cls, window_istance)
+        input_params = pd.read_csv('input_params.csv')
+        pool = QThreadPool.globalInstance()
+        runnable = SlurmSimulatorRunnableRemote(window_instance, input_params)
         pool.start(runnable)
   
     def cont_finder(self, cont_frequencies,line_frequency):
