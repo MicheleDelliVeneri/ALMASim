@@ -357,10 +357,6 @@ class ALMASimulator(QMainWindow):
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self.reset_fields)
 
-
-        #self.terminal = QPlainTextEdit()
-        #self.terminal.setReadOnly(True)
-        #self.terminal = LogView()
         self.term = QTextEdit(self)
         self.term.setReadOnly(True)
         self.terminal = TerminalLogger(self.term)
@@ -477,6 +473,7 @@ class ALMASimulator(QMainWindow):
         self.local_mode_label = QLabel('Local or Remote:')
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", 'remote'])
+        self.local_mode_combo.currentTextChanged.connect(self.toggle_comp_mode)
 
         self.remote_mode_label = QLabel('Mode:')
         self.remote_mode_combo = QComboBox()
@@ -639,6 +636,14 @@ class ALMASimulator(QMainWindow):
             self.remote_dir_line.show()
         else:
             self.remote_dir_line.hide()
+    
+    def toggle_comp_mode(self):
+        if self.local_mode_combo.currentText() == 'remote':
+            self.comp_mode_combo.clear()
+            self.comp_mode_combo.addItems(["parallel"])
+        else:
+            self.comp_mode_combo.clear()
+            self.comp_mode_combo.addItems(["sequential", "parallel"])
 
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
