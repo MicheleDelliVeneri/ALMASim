@@ -2301,6 +2301,8 @@ class ALMASimulator(QMainWindow):
 
             for future in futures:
                 future.result()
+        client.close()
+        cluster.close()
 
     def run_simulator_parallel(self):
         dask.config.set({'temporary_directory': self.output_path})
@@ -2336,9 +2338,7 @@ class ALMASimulator(QMainWindow):
         pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
         pool.start(runnable)
-
-
-            
+          
     def cont_finder(self, cont_frequencies,line_frequency):
         #cont_frequencies=sed['GHz'].values
         distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
