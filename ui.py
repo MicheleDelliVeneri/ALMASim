@@ -41,6 +41,7 @@ import threading
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import logging
 class MemoryMonitor(WorkerPlugin):
     def __init__(self, memory_limit):
         self.memory_limit = memory_limit
@@ -247,6 +248,7 @@ class PlotWindow(QWidget):
 
 class SignalEmitter(QObject):
     simulationFinished = pyqtSignal(object)
+    progress = pyqtSignal(int)
 
 class SimulatorRunnable(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, *args, **kwargs):
@@ -260,11 +262,17 @@ class SimulatorRunnable(QRunnable, QObject):
     @pyqtSlot()
     def run(self):
         try:
-            results = ALMASimulator.simulator(*self.args, **self.kwargs)
+            results = self.alma_simulator.simulator(*self.args, **self.kwargs)
             self.signals.simulationFinished.emit(results)  # Emit the results when done
+
         except Exception as e:
             logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
-            
+
+    @pyqtSlot(int)
+    def handle_progress(self, value):
+        self.signals.progress.emit(value)
+    
+
 class DownloadGalaxyZooRunnable(QRunnable):
     """Runnable for downloading Galaxy Zoo data in a separate thread."""
 
@@ -281,6 +289,7 @@ class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
     terminal = None
+    update_progress = pyqtSignal(int)
     def __init__(self):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
@@ -324,6 +333,9 @@ class ALMASimulator(QMainWindow):
         self.term = QTextEdit(self)
         self.term.setReadOnly(True)
         self.terminal = TerminalLogger(self.term)
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, 100)
         # --- Layout ---
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -341,6 +353,8 @@ class ALMASimulator(QMainWindow):
         self.left_layout.addLayout(button_row)
 
         right_layout.addWidget(self.term)
+        right_layout.addWidget(self.progress_bar)
+        
         
         main_layout.addLayout(self.left_layout)
         main_layout.addLayout(right_layout)
@@ -2231,6 +2245,7 @@ class ALMASimulator(QMainWindow):
         pool = QThreadPool.globalInstance()
         for i in range(int(self.n_sims_entry.text())):
             runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
+            self.update_progress.connect(self.update_progress_bar)
             runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
 
@@ -2316,11 +2331,6 @@ class ALMASimulator(QMainWindow):
         sed.drop(columns=['um', 'erg/s/Hz'], inplace=True)
         sed = sed.sort_values(by='GHz', ascending=True) 
         return sed, flux_infrared, lum_infrared
-
-    @pyqtSlot()
-    def update_progress(self, value):
-        # Update your GUI or terminal with the progress value
-        print(f"Progress: {value}%")
     
     @staticmethod
     def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
@@ -2370,11 +2380,6 @@ class ALMASimulator(QMainWindow):
         fwhms_GHz = fwhms.to(U.GHz).value
 
         pbar = tqdm(desc=f'Searching {n} lines....', total=n)
-        #if remote == False:
-        #    runnable = TqdmLoggingRunnable(n)
-        #    runnable.progress_update.connect(ALMASimulator.terminal.update_progress)
-        #    pool = QThreadPool.globalInstance()
-        #    pool.start(runnable)
         
         initial_len = len(filtered_lines)
         while len(filtered_lines) < n:
@@ -2463,11 +2468,8 @@ class ALMASimulator(QMainWindow):
         fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
         return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
 
-    @staticmethod
-    def simulator(inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, 
-                pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, 
-                n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,
-                n_lines, line_names, save_mode, inject_serendipitous=False, remote=False):
+    
+    def simulator(self, *args, **kwargs):
         """
         Simulates the ALMA observations for the given input parameters.
 
@@ -2509,6 +2511,8 @@ class ALMASimulator(QMainWindow):
         Returns:
         str: Path to the output file.
         """
+        inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,n_lines, line_names, save_mode, inject_serendipitous, remote = args
+
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
@@ -2750,7 +2754,7 @@ class ALMASimulator(QMainWindow):
             ALMASimulator.terminal.add_log('Observing with ALMA')
         interferometer = uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value, 
                             int_time.value * second2hour, obs_date, header, save_mode)
-
+        interferometer.progress_signal.connect(self.handle_progress)
         simulation_results = interferometer.run_interferometric_sim()
         if remote == True:
             print('Finished')
@@ -2763,7 +2767,14 @@ class ALMASimulator(QMainWindow):
             ALMASimulator.terminal.add_log('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
         shutil.rmtree(sim_output_dir)
         return simulation_results
-    
+
+    @pyqtSlot(int)
+    def handle_progress(self, value):
+        self.update_progress.emit(value)
+
+    @pyqtSlot(int)
+    def update_progress_bar(self, value):
+        self.progress_bar.setValue(value)
     
     @pyqtSlot(object)
     def plot_simulation_results(self, simulation_results):
