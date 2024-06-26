@@ -1964,7 +1964,7 @@ class ALMASimulator(QMainWindow):
             export QT_QPA_PLATFORM=offscreen
 
             # Call initiate_parallel_simulation_remote with window instance
-            python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); ui.ALMASimulator.initiate_parallel_simulation_remote(window, window.input_params); sys.exit(app.exec())"
+            python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); ui.ALMASimulator.initiate_parallel_simulation_remote(window); sys.exit(app.exec())"
         """
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -1981,11 +1981,6 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log(err)
 
         paramiko_client.close()
-        
-    @classmethod
-    def create_local_cluster_and_run(cls):
-        input_params = pd.read_csv('input_params.csv')
-        cls.initiate_parallel_simulation_remote(input_params)
     
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -2321,7 +2316,8 @@ class ALMASimulator(QMainWindow):
         pool.start(runnable)
 
     @classmethod
-    def initiate_parallel_simulation_remote(cls, window_instance, input_params):
+    def initiate_parallel_simulation_remote(cls, window_instance):
+        input_params = pd.read_csv('input_params.csv')
         pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
         pool.start(runnable)
