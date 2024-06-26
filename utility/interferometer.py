@@ -25,7 +25,6 @@ def showError(message):
 
 
 class Interferometer(QObject):
-    simulationFinished = pyqtSignal(object)  
     def __init__(self, idx, skymodel, main_dir, 
                 output_dir, ra, dec, central_freq, band_range, 
                 fov, antenna_array, noise, int_time, obs_date, 
@@ -103,6 +102,7 @@ class Interferometer(QObject):
             'dirtyvisCube': self.dirtyvisCube,
             'Npix': self.Npix,
             'Np4': self.Np4,
+            'Nchan': self.Nchan,
             'gamma': self.gamma,
             'currcmap': self.currcmap,
             'Xaxmax': self.Xaxmax,
@@ -111,10 +111,21 @@ class Interferometer(QObject):
             'w_min': self.w_min,
             'w_max': self.w_max,
             'plot_dir': self.plot_dir,
-            'idx': self.idx
+            'idx': self.idx,
+            'beam': self.s_beam,
+            'fmtB': self.s_fmtB,
+            'totsampling': self.s_totsampling,
+            'wavelength': self.s_wavelength,
+            'curzoom': self.curzoom,
+            'Nphf': self.Nphf,
+            'Xmax': self.Xmax,
+            'u': self.s_u,
+            'v': self.s_v,
+            'antPos': self.antPos,
+            'Nant': self.Nant
         }
-        self.simulationFinished.emit(simulation_results)
         self._free_space()
+        return simulation_results
 
     # ------- Utility Functions --------------------------
     def _get_observing_location(self):
@@ -286,7 +297,13 @@ class Interferometer(QObject):
         self._grid_uv()
         self._set_beam()
         self._check_lfac()
-        #if self.channel == self.Nchan // 2:
+        if self.channel == self.Nchan // 2:
+            self.s_wavelength = self.wavelength
+            self.s_fmtB = self.fmtB
+            self.s_totsampling = self.totsampling
+            self.s_beam = self.beam
+            self.s_u = self.u 
+            self.s_v = self.v
             #self._plot_beam()
             #self._plot_antennas()
             #self._plot_uv_coverage()

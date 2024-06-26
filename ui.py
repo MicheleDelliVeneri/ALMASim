@@ -245,17 +245,26 @@ class PlotWindow(QWidget):
         except Exception as e:  # Catch any potential exceptions
             self.terminal.add_log(f"Error in create_science_keyword_plots: {e}")  # Log the error
 
-class SimulatorRunnable(QRunnable):
-    def __init__(self, alma_simulator_instance, *args, **kwargs):  
+class SignalEmitter(QObject):
+    simulationFinished = pyqtSignal(object)
+
+class SimulatorRunnable(QRunnable, QObject):
+    def __init__(self, alma_simulator_instance, *args, **kwargs):
         super().__init__()
-        self.alma_simulator = alma_simulator_instance  # Store a reference to the main UI class
-        self.args = args # Store the positional arguments
-        self.kwargs = kwargs # Store the keyword arguments
+        QObject.__init__(self)  # Initialize QObject
+        self.alma_simulator = alma_simulator_instance
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = SignalEmitter()  # Create an instance of the SignalEmitter
+
     @pyqtSlot()
     def run(self):
-        """Executes the ALMASimulator.simulator static method with the given arguments."""
-        ALMASimulator.simulator(*self.args, **self.kwargs) 
-
+        try:
+            results = ALMASimulator.simulator(*self.args, **self.kwargs)
+            self.signals.simulationFinished.emit(results)  # Emit the results when done
+        except Exception as e:
+            logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
+            
 class DownloadGalaxyZooRunnable(QRunnable):
     """Runnable for downloading Galaxy Zoo data in a separate thread."""
 
@@ -2222,6 +2231,7 @@ class ALMASimulator(QMainWindow):
         pool = QThreadPool.globalInstance()
         for i in range(int(self.n_sims_entry.text())):
             runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
+            runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
 
     @staticmethod
@@ -2740,8 +2750,8 @@ class ALMASimulator(QMainWindow):
             ALMASimulator.terminal.add_log('Observing with ALMA')
         interferometer = uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value, 
                             int_time.value * second2hour, obs_date, header, save_mode)
-        ALMASimulator.connect_interferometer_signals(ALMASimulator, interferometer)
-        interferometer.run_interferometric_sim()
+
+        simulation_results = interferometer.run_interferometric_sim()
         if remote == True:
             print('Finished')
         else: 
@@ -2752,11 +2762,8 @@ class ALMASimulator(QMainWindow):
         else:
             ALMASimulator.terminal.add_log('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
         shutil.rmtree(sim_output_dir)
+        return simulation_results
     
-    
-    def connect_interferometer_signals(self, interferometer):
-        # Connect the custom signal to a slot in your main UI class
-        interferometer.simulationFinished.connect(lambda results: self.plot_simulation_results(ALMASimulator, results))
     
     @pyqtSlot(object)
     def plot_simulation_results(self, simulation_results):
@@ -2767,19 +2774,112 @@ class ALMASimulator(QMainWindow):
         self.dirtyvisCube = simulation_results['dirtyvisCube']
         self.Npix = simulation_results['Npix']
         self.Np4 = simulation_results['Np4']
+        self.Nchan = simulation_results['Nchan']
         self.gamma = simulation_results['gamma']
         self.currcmap = simulation_results['currcmap']
         self.Xaxmax = simulation_results['Xaxmax']
         self.lfac = simulation_results['lfac']
+        self.u = simulation_results['u']
+        self.v = simulation_results['v']
         self.UVpixsize = simulation_results['UVpixsize']
         self.w_min = simulation_results['w_min']
         self.w_max = simulation_results['w_max']
         self.plot_dir = simulation_results['plot_dir']
         self.idx = simulation_results['idx']
-        self._plot_sim(ALMASimulator)
+        self.wavelength = simulation_results['wavelength']
+        self.totsampling = simulation_results['totsampling']
+        self.beam = simulation_results['beam']
+        self.fmtB = simulation_results['fmtB']
+        self.curzoom = simulation_results['curzoom']
+        self.Nphf = simulation_results['Nphf']
+        self.Xmax = simulation_results['Xmax']
+        self.antPos = simulation_results['antPos']
+        self.Nant = simulation_results['Nant']
+        self._plot_beam()
+        self._plot_uv_coverage()
+        self._plot_antennas()
+        self._plot_sim()
+
+    def _plot_antennas(self):
+        antPlot = plt.figure(figsize=(8, 8))
+        toplot = np.array(self.antPos[:self.Nant])
+        antPlotBas = plt.plot([0], [0], '-b')[0]
+        antPlotPlot = plt.plot(toplot[:, 0], toplot[:, 1],
+                                                    'o',
+                                                    color='lime',
+                                                    picker=5)[0]
+        plt.xlim(-self.Xmax, self.Xmax)
+        plt.ylim(-self.Xmax, self.Xmax)
+        plt.xlabel('East-West offset (Km)')
+        plt.ylabel('North-South offset (Km)')
+        plt.title('Antenna Configuration')
+        plt.savefig(os.path.join(self.plot_dir, 'antenna_config_{}.png'.format(str(self.idx))))
+        plt.close()
+
+    def _plot_uv_coverage(self):
+        self.ulab = r'U (k$\lambda$)'
+        self.vlab = r'V (k$\lambda$)'
+        UVPlot = plt.figure(figsize=(8, 8))
+        UVPlotPlot = []
+        toplotu = self.u.flatten() / self.lfac
+        toplotv = self.v.flatten() / self.lfac
+        UVPlotPlot.append(
+            plt.plot(toplotu,
+                             toplotv,
+                             '.',
+                             color='lime',
+                             markersize=1,
+                             picker=2)[0])
+        UVPlotPlot.append(
+            plt.plot(-toplotu,
+                             -toplotv,
+                             '.',
+                             color='lime',
+                             markersize=1,
+                             picker=2)[0])
+        plt.xlim((2. * self.Xmax / self.wavelength[2] / self.lfac,
+                         -2. * self.Xmax / self.wavelength[2] / self.lfac))
+        plt.ylim((2. * self.Xmax / self.wavelength[2] / self.lfac,
+                         -2. * self.Xmax / self.wavelength[2] / self.lfac))
+        plt.xlabel(self.ulab)
+        plt.ylabel(self.vlab)
+        plt.title('UV Coverage')
+        plt.savefig(os.path.join(self.plot_dir, 'uv_coverage_{}.png'.format(str(self.idx))))
+        plt.close()
+
+    def _plot_beam(self):
+        beamPlot = plt.figure(figsize=(8, 8))
+        beamPlotPlot = plt.imshow(
+            self.beam[self.Np4:self.Npix - self.Np4, self.Np4:self.Npix - self.Np4],
+            picker=True,
+            interpolation='nearest',
+            cmap=self.currcmap)
+        beamText = plt.text(
+            0.80,
+            0.80,
+            self.fmtB % (1.0, 0.0, 0.0),
+            bbox=dict(facecolor='white', alpha=0.7))
+        plt.ylabel('Dec offset (as)')
+        plt.xlabel('RA offset (as)')
+        plt.setp(beamPlotPlot,
+                extent=(self.Xaxmax / 2., -self.Xaxmax / 2.,
+                        -self.Xaxmax / 2., self.Xaxmax / 2.))
+        self.curzoom[0] = (self.Xaxmax / 2., -self.Xaxmax / 2.,
+                           -self.Xaxmax / 2., self.Xaxmax / 2.)
+        plt.title('DIRTY BEAM')
+        plt.colorbar()
+        nptot = np.sum(self.totsampling[:])
+        beamPlotPlot.norm.vmin = np.min(self.beam)
+        beamPlotPlot.norm.vmax = 1.0
+        if np.sum(self.totsampling[self.Nphf - 4:self.Nphf + 4, self.Nphf -
+                                   4:self.Nphf + 4]) == nptot:
+            warn = 'WARNING!\nToo short baselines for such a small image\nPLEASE, INCREASE THE IMAGE SIZE!\nAND/OR DECREASE THE WAVELENGTH'
+            beamText.set_text(warn)
+
+        plt.savefig(os.path.join(self.plot_dir, 'beam_{}.png'.format(str(self.idx))))
+        plt.close()
 
     def _plot_sim(self):
-        print('HELLOE')
         simPlot, ax = plt.subplots(2, 2, figsize=(12, 12))
         sim_img = np.sum(self.modelCube, axis=0)
         simPlotPlot = ax[0, 0].imshow(
@@ -2847,11 +2947,8 @@ class ALMASimulator(QMainWindow):
         ax[1, 1].set_ylabel('V (k$\\lambda$)')
         ax[1, 1].set_xlabel('U (k$\\lambda$)')
         ax[1, 1].set_title('DIRTY VISIBILITY')
-        print('HELLOE')
         plt.savefig(os.path.join(self.plot_dir, 'sim_{}.png'.format(str(self.idx))))
-        print('SAVING COMPLETE')
         plt.close()
-
         sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
         dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))
         wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
@@ -2866,7 +2963,6 @@ class ALMASimulator(QMainWindow):
         ax[1].set_xlabel('$\\lambda$ [mm]')
         ax[1].set_title('DIRTY SPECTRUM')
         plt.savefig(os.path.join(self.plot_dir, 'spectra_{}.png'.format(str(self.idx))))
-        print('HELLO')
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
