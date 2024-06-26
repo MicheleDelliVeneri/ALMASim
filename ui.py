@@ -1987,8 +1987,7 @@ class ALMASimulator(QMainWindow):
     @classmethod
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
-        window_instance = QApplication.activeWindow()
-        cls.initiate_parallel_simulation_remote(ALMASimulator, input_params)
+        cls.initiate_parallel_simulation_remote(input_params)
     
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -2271,10 +2270,11 @@ class ALMASimulator(QMainWindow):
             runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
 
-    def run_simulator_parallel_remote(self, input_params):
-        dask.config.set({'temporary_directory': self.output_path})
+    @classmethod
+    def run_simulator_parallel_remote(cls, input_params):
+        dask.config.set({'temporary_directory': cls.output_path})
         total_memory = psutil.virtual_memory().total
-        num_workers = int(self.ncpu_entry.text()) // 4
+        num_workers = int(cls.ncpu_entry.text()) // 4
         memory_limit = int(0.9 * total_memory / num_workers)
 
         ddf = dd.from_pandas(input_params, npartitions=num_workers)
@@ -2285,9 +2285,9 @@ class ALMASimulator(QMainWindow):
 
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 for df in ddf.partitions:
-                    worker = SimulatorWorker(self, df)
-                    self.update_progress.connect(self.update_progress_bar)
-                    worker.signals.simulationFinished.connect(self.plot_simulation_results)
+                    worker = SimulatorWorker(cls, df)
+                    cls.update_progress.connect(cls.update_progress_bar)
+                    worker.signals.simulationFinished.connect(cls.plot_simulation_results)
                     futures.append(executor.submit(worker.run))
 
             # Optionally wait for all workers to complete before proceeding
