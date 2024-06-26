@@ -12,8 +12,11 @@ from PyQt6.QtGui import QPixmap, QGuiApplication
 from kaggle import api
 from os.path import isfile
 import dask
+import dask.config
+import dask.dataframe as dd
 from distributed import Client, LocalCluster, WorkerPlugin
 from dask_jobqueue import SLURMCluster
+from concurrent.futures import ThreadPoolExecutor
 import json
 import astropy.units as U
 from astropy.constants import c
@@ -30,7 +33,6 @@ import paramiko
 import pysftp
 import plistlib
 import psutil
-import dask.dataframe as dd
 import utility.alma as ual
 import utility.astro as uas
 import utility.compute as uc
@@ -268,7 +270,19 @@ class SimulatorRunnable(QRunnable, QObject):
         except Exception as e:
             logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
 
-    
+class SimulatorWorker(QRunnable, QObject):
+    def __init__(self, alma_simulator_instance, df, *args, **kwargs):
+        super().__init__()
+        QObject.__init__(self)
+        self.alma_simulator = alma_simulator_instance
+        self.df = df
+        self.signals = SignalEmitter()
+
+    @pyqtSlot()
+    def run(self):
+        for i, row in self.df.iterrows():
+            results = self.alma_simulator.simulator(*row)
+            self.signals.simulationFinished.emit(results)
 
 class DownloadGalaxyZooRunnable(QRunnable):
     """Runnable for downloading Galaxy Zoo data in a separate thread."""
@@ -2066,18 +2080,18 @@ class ALMASimulator(QMainWindow):
         sim_idxs = np.arange(n_sims)
         self.transform_source_type_label()
         source_types = np.array([self.source_type] * n_sims)
-        output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
-        plot_path = os.path.join(output_path, 'plots')
+        self.output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
+        plot_path = os.path.join(self.output_path, 'plots')
         # Output Directory 
         if self.local_mode_combo.currentText() == 'local':
-            if not os.path.exists(output_path):
-                os.makedirs(output_path)
+            if not os.path.exists(self.output_path):
+                os.makedirs(self.output_path)
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
         else:
             self.create_remote_output_dir()
 
-        output_paths = np.array([output_path] * n_sims)
+        output_paths = np.array([self.output_path] * n_sims)
         tng_paths = np.array([self.tng_entry.text()] * n_sims)
 
         # Galaxy Zoo Directory 
@@ -2209,18 +2223,19 @@ class ALMASimulator(QMainWindow):
             self.copy_settings_on_remote()
         if self.comp_mode_combo.currentText() == 'parallel':
             if self.local_mode_combo.currentText() == 'local':
-                dask.config.set({'temporary_directory': output_path})
-                total_memory = psutil.virtual_memory().total
-                num_processes = int(self.ncpu_entry.text()) // 4
-                memory_limit = int(0.9 * total_memory / num_processes)
-                ddf = dd.from_pandas(self.input_params, npartitions=num_processes)
-                cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
-                output_type = "object"
-                client = Client(cluster)
-                client.register_plugin(MemoryLimitPlugin(memory_limit))
-                results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
-                client.close()
-                cluster.close()
+                #dask.config.set({'temporary_directory': output_path})
+                #total_memory = psutil.virtual_memory().total
+                #num_processes = int(self.ncpu_entry.text()) // 4
+                #memory_limit = int(0.9 * total_memory / num_processes)
+                #ddf = dd.from_pandas(self.input_params, npartitions=num_processes)
+                #cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
+                #output_type = "object"
+                #client = Client(cluster)
+                #client.register_plugin(MemoryLimitPlugin(memory_limit))
+                #results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
+                #client.close()
+                #cluster.close()
+                self.run_simulator_parallel()
             #elif self.local_mode_combo.currentText() == 'remote':
             else:
                 if self.remote_mode_combo.currentText() == 'SLURM':
@@ -2245,6 +2260,32 @@ class ALMASimulator(QMainWindow):
             self.update_progress.connect(self.update_progress_bar)
             runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
+
+
+    def run_simulator_parallel(self):
+        dask.config.set({'temporary_directory': self.output_path})
+        total_memory = psutil.virtual_memory().total
+        num_workers = int(self.ncpu_entry.text()) // 4
+        memory_limit = int(0.9 * total_memory / num_workers)
+
+        ddf = dd.from_pandas(self.input_params, npartitions=num_workers)
+        with LocalCluster(n_workers=num_workers, threads_per_worker=4, dashboard_address=':8787') as cluster, Client(cluster) as client:
+            client.register_plugin(MemoryLimitPlugin(memory_limit))
+            output_type = "object"
+            futures = []
+
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                for df in ddf.partitions:
+                    worker = SimulatorWorker(self, df)
+                    self.update_progress.connect(self.update_progress_bar)
+                    worker.signals.simulationFinished.connect(self.plot_simulation_results)
+                    futures.append(executor.submit(worker.run))
+
+            # Optionally wait for all workers to complete before proceeding
+            for future in futures:
+                results = future.result()  # This blocks until the worker is done
+            
+
 
     def cont_finder(self, cont_frequencies,line_frequency):
         #cont_frequencies=sed['GHz'].values
@@ -2556,7 +2597,7 @@ class ALMASimulator(QMainWindow):
         antennalist = os.path.join(sim_output_dir, "antenna.cfg")
         antenna_name = 'antenna'
         self.progress_bar_entry.setText('Computing Max baseline')
-        max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
+        max_baseline = ual.get_max_baseline_from_antenna_config(self.update_progress, antennalist) * U.km
         if remote == True:
             print('Field of view: {} arcsec'.format(round(fov.value, 3)))
         else:
@@ -2694,23 +2735,26 @@ class ALMASimulator(QMainWindow):
         if source_type == 'point':
             pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
             pos_z = [int(index) for index in source_channel_index]
-            datacube = usm.insert_pointlike(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_z, n_channels)
+            self.progress_bar_entry.setText('Inserting Point Source Model')
+            datacube = usm.insert_pointlike(self.update_progress, datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_z, n_channels)
         elif source_type == 'gaussian':
+            self.progress_bar_entry.setText('Inserting Gaussian Source Model')
             pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
             pos_z = [int(index) for index in source_channel_index]
             fwhm_x = np.random.randint(3, 10) 
             fwhm_y = np.random.randint(3, 10)    
             angle = np.random.randint(0, 180)
-            datacube = usm.insert_gaussian(datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z,
+            datacube = usm.insert_gaussian(self.update_progress, datacube, continum, line_fluxes, int(pos_x), int(pos_y), pos_z, fwhm_x, fwhm_y, fwhm_z,
                                              angle, n_pix, n_channels)
         elif source_type == 'extended':
             datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
         elif source_type == 'diffuse':
             self.terminal.add_log('To be implemented')
         elif source_type == 'galaxy-zoo':
+            self.progress_bar_entry.setText('Inserting Galaxy Zoo Source Mode')
             galaxy_path = os.path.join(galaxy_zoo_dir, 'images_gz2',  'images')
             pos_z = [int(index) for index in source_channel_index]
-            datacube = usm.insert_galaxy_zoo(datacube, continum, line_fluxes, pos_z, fwhm_z, n_pix, n_channels, galaxy_path)
+            datacube = usm.insert_galaxy_zoo(self.update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_pix, n_channels, galaxy_path)
 
         uas.write_sim_parameters(os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)),
                                 ra, dec, ang_res, vel_res, int_time, band, band_range, central_freq,
