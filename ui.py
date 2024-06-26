@@ -269,6 +269,7 @@ class SimulatorRunnable(QRunnable, QObject):
 
         except Exception as e:
             logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
+
 class ParallelSimulatorRunnable(QRunnable):
     def __init__(self, alma_simulator_instance):
         super().__init__()
@@ -277,6 +278,16 @@ class ParallelSimulatorRunnable(QRunnable):
     @pyqtSlot()
     def run(self):
         self.alma_simulator.run_simulator_parallel()
+
+class ParallelSimulatorRunnableRemote(QRunnable):
+    def __init__(self, alma_simulator_instance, input_params):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.input_params = input_params
+
+    @pyqtSlot()
+    def run(self):
+        self.alma_simulator.run_simulator_parallel_remote(self.input_params)
     
 class SimulatorWorker(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, df, *args, **kwargs):
@@ -346,10 +357,6 @@ class ALMASimulator(QMainWindow):
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self.reset_fields)
 
-
-        #self.terminal = QPlainTextEdit()
-        #self.terminal.setReadOnly(True)
-        #self.terminal = LogView()
         self.term = QTextEdit(self)
         self.term.setReadOnly(True)
         self.terminal = TerminalLogger(self.term)
@@ -466,6 +473,7 @@ class ALMASimulator(QMainWindow):
         self.local_mode_label = QLabel('Local or Remote:')
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", 'remote'])
+        self.local_mode_combo.currentTextChanged.connect(self.toggle_comp_mode)
 
         self.remote_mode_label = QLabel('Mode:')
         self.remote_mode_combo = QComboBox()
@@ -628,6 +636,14 @@ class ALMASimulator(QMainWindow):
             self.remote_dir_line.show()
         else:
             self.remote_dir_line.hide()
+    
+    def toggle_comp_mode(self):
+        if self.local_mode_combo.currentText() == 'remote':
+            self.comp_mode_combo.clear()
+            self.comp_mode_combo.addItems(["parallel"])
+        else:
+            self.comp_mode_combo.clear()
+            self.comp_mode_combo.addItems(["sequential", "parallel"])
 
     def add_line_widgets(self): 
         self.line_mode_checkbox = QCheckBox("Line Mode")
@@ -1969,12 +1985,7 @@ class ALMASimulator(QMainWindow):
     def create_local_cluster_and_run(cls):
         input_params = pd.read_csv('input_params.csv')
         output_type = "object"
-        cluster = LocalCluster(n_workers=int(int(cls.ncpu_entry.text()) // 4), threads_per_worker=4, dashboard_address=':8787')
-        client = Client(cluster)
-        ddf = dd.from_pandas(input_params, npartitions=int(int(cls.ncpu_entry.text()) // 4))
-        results = ddf.map_partitions(lambda df: df.apply(lambda row: cls.simulator(*row), axis=1), meta=output_type).compute()
-        client.close()
-        cluster.close()
+        cls.initiate_parallel_simulation_remote(input_params)
     
     def transform_source_type_label(self):
         if self.model_combo.currentText() == 'Galaxy Zoo':
@@ -2232,20 +2243,7 @@ class ALMASimulator(QMainWindow):
             self.copy_settings_on_remote()
         if self.comp_mode_combo.currentText() == 'parallel':
             if self.local_mode_combo.currentText() == 'local':
-                #dask.config.set({'temporary_directory': output_path})
-                #total_memory = psutil.virtual_memory().total
-                #num_processes = int(self.ncpu_entry.text()) // 4
-                #memory_limit = int(0.9 * total_memory / num_processes)
-                #ddf = dd.from_pandas(self.input_params, npartitions=num_processes)
-                #cluster = LocalCluster(n_workers=num_processes, threads_per_worker=4, dashboard_address=':8787')
-                #output_type = "object"
-                #client = Client(cluster)
-                #client.register_plugin(MemoryLimitPlugin(memory_limit))
-                #results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
-                #client.close()
-                #cluster.close()
                 self.initiate_parallel_simulation()
-            #elif self.local_mode_combo.currentText() == 'remote':
             else:
                 if self.remote_mode_combo.currentText() == 'SLURM':
                     self.run_on_slurm_cluster()
@@ -2269,6 +2267,29 @@ class ALMASimulator(QMainWindow):
             self.update_progress.connect(self.update_progress_bar)
             runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
+
+    def run_simulator_parallel_remote(self, input_params):
+        dask.config.set({'temporary_directory': self.output_path})
+        total_memory = psutil.virtual_memory().total
+        num_workers = int(self.ncpu_entry.text()) // 4
+        memory_limit = int(0.9 * total_memory / num_workers)
+
+        ddf = dd.from_pandas(input_params, npartitions=num_workers)
+        with LocalCluster(n_workers=num_workers, threads_per_worker=4, dashboard_address=':8787') as cluster, Client(cluster) as client:
+            client.register_plugin(MemoryLimitPlugin(memory_limit))
+            output_type = "object"
+            futures = []
+
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                for df in ddf.partitions:
+                    worker = SimulatorWorker(self, df)
+                    self.update_progress.connect(self.update_progress_bar)
+                    worker.signals.simulationFinished.connect(self.plot_simulation_results)
+                    futures.append(executor.submit(worker.run))
+
+            # Optionally wait for all workers to complete before proceeding
+            for future in futures:
+                future.result()  # This blocks until the worker is done
 
     def run_simulator_parallel(self):
         dask.config.set({'temporary_directory': self.output_path})
@@ -2296,6 +2317,11 @@ class ALMASimulator(QMainWindow):
     def initiate_parallel_simulation(self):
         pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnable(self)
+        pool.start(runnable)
+
+    def initiate_parallel_simulation_remote(self, input_params):
+        pool = QThreadPool.globalInstance()
+        runnable = ParallelSimulatorRunnableRemote(self, input_params)
         pool.start(runnable)
             
     def cont_finder(self, cont_frequencies,line_frequency):
@@ -2519,7 +2545,8 @@ class ALMASimulator(QMainWindow):
             except Exception as e:
                 print(f"Error printing variable '{name}': {e}")
                 print(f"    Type: {type(value).__name__}")
-                print("-" * 40)           
+                print("-" * 40)  
+
     def simulator(self, *args, **kwargs):
         """
         Simulates the ALMA observations for the given input parameters.
