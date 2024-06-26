@@ -2265,6 +2265,7 @@ class ALMASimulator(QMainWindow):
 
     def run_simulator_parallel_remote(self, input_params):
         # Access instance attributes here using `self`
+        self.output_path = os.path.join(self.output_entry.text(), self.project_name_entry.text())
         dask.config.set({'temporary_directory': self.output_path})
         total_memory = psutil.virtual_memory().total
         num_workers = int(self.ncpu_entry.text()) // 4
