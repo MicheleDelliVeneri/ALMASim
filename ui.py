@@ -268,9 +268,6 @@ class SimulatorRunnable(QRunnable, QObject):
         except Exception as e:
             logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
 
-    @pyqtSlot(int)
-    def handle_progress(self, value):
-        self.signals.progress.emit(value)
     
 
 class DownloadGalaxyZooRunnable(QRunnable):
@@ -334,6 +331,7 @@ class ALMASimulator(QMainWindow):
         self.term.setReadOnly(True)
         self.terminal = TerminalLogger(self.term)
 
+        self.progress_bar_entry = QLabel()
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 100)
         # --- Layout ---
@@ -353,6 +351,7 @@ class ALMASimulator(QMainWindow):
         self.left_layout.addLayout(button_row)
 
         right_layout.addWidget(self.term)
+        right_layout.addWidget(self.progress_bar_entry)
         right_layout.addWidget(self.progress_bar)
         
         
@@ -962,7 +961,7 @@ class ALMASimulator(QMainWindow):
             if self.local_mode_combo.currentText() == 'local':
                 if os.path.exists(self.galaxy_zoo_entry.text()):
                     if not os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
-                        ALMASimulator.terminal.add_log('Downloading Galaxy Zoo')
+                        self.terminal.add_log('Downloading Galaxy Zoo')
                         pool = QThreadPool.globalInstance()
                         runnable = DownloadGalaxyZooRunnable(self)
                         pool.start(runnable)
@@ -2011,8 +2010,7 @@ class ALMASimulator(QMainWindow):
         sample = metadata.sample(n, replace=True)
         return sample
     
-    @staticmethod
-    def remove_non_numeric(text):
+    def remove_non_numeric(self, text):
         """Removes non-numeric characters from a string.
         Args:
             text: The string to process.
@@ -2028,15 +2026,14 @@ class ALMASimulator(QMainWindow):
         op = math.floor if bin(x)[3] != "1" else math.ceil
         return 2 ** op(math.log(x, 2))
 
-    @staticmethod
-    def freq_supp_extractor(freq_sup, obs_freq):
+    def freq_supp_extractor(self, freq_sup, obs_freq):
         freq_band, n_channels, freq_mins, freq_maxs, freq_ds = [], [], [], [], []
         freq_sup = freq_sup.split('U')
         for i in range(len(freq_sup)):
             sup = freq_sup[i][1:-1].split(',')
             sup = [su.split('..') for su in sup][:2]
-            freq_min, freq_max = float(ALMASimulator.remove_non_numeric(sup[0][0])), float(ALMASimulator.remove_non_numeric(sup[0][1]))
-            freq_d = float(ALMASimulator.remove_non_numeric(sup[1][0]))
+            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(self.remove_non_numeric(sup[0][1]))
+            freq_d = float(self.remove_non_numeric(sup[1][0]))
             freq_min = freq_min * U.GHz 
             freq_max = freq_max * U.GHz
             freq_d = freq_d * U.kHz
@@ -2086,7 +2083,7 @@ class ALMASimulator(QMainWindow):
         # Galaxy Zoo Directory 
         if self.local_mode_combo.currentText() == 'local':
             if self.galaxy_zoo_entry.text() and not os.path.exists(os.path.join(self.galaxy_zoo_entry.text(), 'images_gz2')):
-                ALMASimulator.terminal.add_log('Downloading Galaxy Zoo')
+                self.terminal.add_log('Downloading Galaxy Zoo')
                 pool = QThreadPool.globalInstance()
                 runnable = DownloadGalaxyZooRunnable(self)
                 pool.start(runnable)
@@ -2221,7 +2218,7 @@ class ALMASimulator(QMainWindow):
                 output_type = "object"
                 client = Client(cluster)
                 client.register_plugin(MemoryLimitPlugin(memory_limit))
-                results =  ddf.map_partitions(lambda df: df.apply(lambda row: ALMASimulator.simulator(*row), axis=1), meta=output_type).compute()
+                results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
                 client.close()
                 cluster.close()
             #elif self.local_mode_combo.currentText() == 'remote':
@@ -2249,14 +2246,12 @@ class ALMASimulator(QMainWindow):
             runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
 
-    @staticmethod
-    def cont_finder(cont_frequencies,line_frequency):
+    def cont_finder(self, cont_frequencies,line_frequency):
         #cont_frequencies=sed['GHz'].values
         distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
         return np.argmin(distances)
 
-    @staticmethod
-    def normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote=False):
+    def normalize_sed(self, sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote=False):
         so_to_erg_s = 3.846e+33 # Solar luminosity to erg/s -XX
         lum_infrared_erg_s = lum_infrared * so_to_erg_s  # luminosity in erg/s -XX
         sed['Jy'] = lum_infrared_erg_s * sed['erg/s/Hz'] * 1e+23 / solid_angle
@@ -2272,8 +2267,8 @@ class ALMASimulator(QMainWindow):
             print('Minimum continum flux: {:.2e}'.format(min_))
             print('Continum sensitivity: {:.2e}'.format(cont_sens))
         else:
-            ALMASimulator.terminal.add_log('Minimum continum flux: {:.2e}'.format(min_))
-            ALMASimulator.terminal.add_log('Continum sensitivity: {:.2e}'.format(cont_sens))
+            self.terminal.add_log('Minimum continum flux: {:.2e}'.format(min_))
+            self.terminal.add_log('Continum sensitivity: {:.2e}'.format(cont_sens))
         lum_save = lum_infrared
         while min_ > cont_sens:
             lum_infrared -= 0.1 * lum_infrared
@@ -2292,11 +2287,10 @@ class ALMASimulator(QMainWindow):
             if remote == True: 
                 print('To match the desired SNR, luminosity has been set to {:.2e}'.format(lum_infrared))
             else:
-                ALMASimulator.terminal.add_log('To match the desired SNR, luminosity has been set to {:.2e}'.format(lum_infrared))
+                self.terminal.add_log('To match the desired SNR, luminosity has been set to {:.2e}'.format(lum_infrared))
         return sed, lum_infrared_erg_s, lum_infrared
 
-    @staticmethod
-    def sed_reading(type_, path, cont_sens, freq_min, freq_max, remote, lum_infrared=None, redshift=None):
+    def sed_reading(self, type_, path, cont_sens, freq_min, freq_max, remote, lum_infrared=None, redshift=None):
         cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
         if type_ == "extended" or type_ == 'diffuse' or type_ == 'galaxy-zoo':
             file_path = os.path.join(path, 'SED_low_z_warm_star_forming_galaxy.dat')
@@ -2324,7 +2318,7 @@ class ALMASimulator(QMainWindow):
         # Convert to GHz
         sed['GHz'] = sed['um'].apply(lambda x: (x* U.um).to(U.GHz, equivalencies=U.spectral()).value)
         # Re normalize the SED and convert to Jy from erg/s/Hz
-        sed, lum_infrared_erg_s, lum_infrared = ALMASimulator.normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote)
+        sed, lum_infrared_erg_s, lum_infrared = self.normalize_sed(sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote)
         #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
         flux_infrared = lum_infrared_erg_s * 1e+23 / solid_angle # Jy * Hz 
         #flux_infrared_jy = flux_infrared  / (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
@@ -2332,8 +2326,7 @@ class ALMASimulator(QMainWindow):
         sed = sed.sort_values(by='GHz', ascending=True) 
         return sed, flux_infrared, lum_infrared
     
-    @staticmethod
-    def process_spectral_data(type_, master_path, redshift, central_frequency, delta_freq, 
+    def process_spectral_data(self, type_, master_path, redshift, central_frequency, delta_freq, 
         source_frequency, n_channels, lum_infrared, cont_sens, line_names=None, n_lines=None, remote=False):
         """
         Process spectral data based on the type of source, wavelength conversion,
@@ -2360,7 +2353,7 @@ class ALMASimulator(QMainWindow):
         save_freq_max = freq_max
         start_redshift = redshift
         # Example data: Placeholder for cont and lines from SED processing
-        sed, flux_infrared, lum_infrared = ALMASimulator.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, remote, lum_infrared)
+        sed, flux_infrared, lum_infrared = self.sed_reading(type_,os.path.join(master_path,'brightnes'), cont_sens, freq_min, freq_max, remote, lum_infrared)
         # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
         db_line = uas.read_line_emission_csv(os.path.join(master_path,'brightnes','calibrated_lines.csv'), sep=',')
         # Shift the cont and line frequencies by (1 + redshift)
@@ -2378,9 +2371,7 @@ class ALMASimulator(QMainWindow):
         c_km_s = c.to(U.km / U.s)
         fwhms = 0.084*(db_line['freq(GHz)'].values*(1+redshift)*(delta_v/c_km_s)*1e9) * U.Hz
         fwhms_GHz = fwhms.to(U.GHz).value
-
-        pbar = tqdm(desc=f'Searching {n} lines....', total=n)
-        
+        self.terminal.add_log(f'Searching {n} compatible lines')
         initial_len = len(filtered_lines)
         while len(filtered_lines) < n:
             r_len = len(filtered_lines)
@@ -2394,23 +2385,22 @@ class ALMASimulator(QMainWindow):
             if len(filtered_lines) < n:
                 n_possible = (db_line['shifted_freq(GHz)'].astype(float) + fwhms_GHz / 2 <= freq_max).sum() + (db_line['shifted_freq(GHz)'].astype(float) - fwhms_GHz / 2 >= freq_min).sum()
                 redshift += 0.01
-            if len(filtered_lines) > r_len:
-                pbar.update(1)  
-            recorded_length = len(filtered_lines)
-        pbar.update(1) 
-        pbar.close()
+            if len(filtered_lines) > r_len: 
+                recorded_length = len(filtered_lines)
+                self.update_progress.emit((recorded_length / n) * 100)
+
         if redshift != start_redshift:
             if remote == True:
                 print('Redshift increased to match the desired number of lines.')
             else:
-                ALMASimulator.terminal.add_log('Redshift increased to match the desired number of lines.')    
+                self.terminal.add_log('Redshift increased to match the desired number of lines.')    
         if type(line_names) == list or isinstance(line_names, np.ndarray):
             user_lines = filtered_lines[np.isin(filtered_lines['Line'], line_names)]
             if len(user_lines) != len(line_names):
                 if remote == True:
                     print('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
                 else:
-                    ALMASimulator.terminal.add_log('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
+                    self.terminal.add_log('Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines.')
                 # Find rows in filtered_lines that are not already in user_lines
                 additional_lines = filtered_lines[~filtered_lines.index.isin(user_lines.index)]
                 # Add rows from filtered_lines to user_lines until the length matches len(line_names)
@@ -2424,7 +2414,7 @@ class ALMASimulator(QMainWindow):
         if remote == True:
             print('Injecting {} lines'.format(len(filtered_lines)))
         else:
-            ALMASimulator.terminal.add_log('Injecting {} lines'.format(len(filtered_lines)))
+            self.terminal.add_log('Injecting {} lines'.format(len(filtered_lines)))
             
         filtered_lines['distance'] = np.abs(filtered_lines['shifted_freq(GHz)'].astype(float) - source_frequency)
         filtered_lines.sort_values(by='distance', inplace=True)
@@ -2443,7 +2433,7 @@ class ALMASimulator(QMainWindow):
                 if remote == True:
                     print(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
                 else:
-                    ALMASimulator.terminal.add_log(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
+                    self.terminal.add_log(f'Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}.')
                 
             else:
                 filtered_lines = filtered_lines.head(n_lines)
@@ -2459,7 +2449,7 @@ class ALMASimulator(QMainWindow):
             int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
         else:
             int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
-        line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: ALMASimulator.cont_finder(new_cont_freq, float(x)))
+        line_indexes = filtered_lines['shifted_freq(GHz)'].apply(lambda x: self.cont_finder(new_cont_freq, float(x)))
         freq_steps = np.array([new_cont_freq[line_index] + fwhm.value - new_cont_freq[line_index] for fwhm, line_index in zip(fwhms_GHz, line_indexes)]) * U.GHz
         freq_steps = freq_steps.to(U.Hz).value
         line_fluxes = 10**(np.log10(flux_infrared)  + line_ratios) / freq_steps
@@ -2468,7 +2458,6 @@ class ALMASimulator(QMainWindow):
         fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
         return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
 
-    
     def simulator(self, *args, **kwargs):
         """
         Simulates the ALMA observations for the given input parameters.
@@ -2538,8 +2527,8 @@ class ALMASimulator(QMainWindow):
 
 
         else:
-            ALMASimulator.terminal.add_log('\nRunning simulation {}'.format(inx))
-            ALMASimulator.terminal.add_log('Source Name: {}'.format(source_name))
+            self.terminal.add_log('\nRunning simulation {}'.format(inx))
+            self.terminal.add_log('Source Name: {}'.format(source_name))
         start = time.time()
         second2hour = 1 / 3600
         ra = ra * U.deg
@@ -2549,7 +2538,7 @@ class ALMASimulator(QMainWindow):
         vel_res = vel_res * U.km / U.s
         int_time = int_time * U.s
         source_freq = freq * U.GHz
-        band_range, central_freq, t_channels, delta_freq = ALMASimulator.freq_supp_extractor(freq_support, source_freq)
+        band_range, central_freq, t_channels, delta_freq = self.freq_supp_extractor(freq_support, source_freq)
         sim_output_dir = os.path.join(output_dir, project_name + '_{}'.format(inx))
         if not os.path.exists(sim_output_dir):
             os.makedirs(sim_output_dir)
@@ -2560,17 +2549,18 @@ class ALMASimulator(QMainWindow):
             print('DEC: {}'.format(dec))
             print('Integration Time: {}'.format(int_time))
         else:
-            ALMASimulator.terminal.add_log('RA: {}'.format(ra))
-            ALMASimulator.terminal.add_log('DEC: {}'.format(dec))
-            ALMASimulator.terminal.add_log('Integration Time: {}'.format(int_time))
+            self.terminal.add_log('RA: {}'.format(ra))
+            self.terminal.add_log('DEC: {}'.format(dec))
+            self.terminal.add_log('Integration Time: {}'.format(int_time))
         ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
         antennalist = os.path.join(sim_output_dir, "antenna.cfg")
         antenna_name = 'antenna'
+        self.progress_bar_entry.setText('Computing Max baseline')
         max_baseline = ual.get_max_baseline_from_antenna_config(antennalist) * U.km
         if remote == True:
             print('Field of view: {} arcsec'.format(round(fov.value, 3)))
         else:
-            ALMASimulator.terminal.add_log('Field of view: {} arcsec'.format(round(fov.value, 3)) )
+            self.terminal.add_log('Field of view: {} arcsec'.format(round(fov.value, 3)) )
         beam_size = ual.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
         beam_solid_angle = np.pi * (beam_size / 2) ** 2
         cont_sens = cont_sens * U.mJy / (U.arcsec ** 2)
@@ -2579,13 +2569,13 @@ class ALMASimulator(QMainWindow):
         if remote == True:
             print('Minimum detectable continum: {}'.format(cont_sens_jy))
         else:
-            ALMASimulator.terminal.add_log("Minimum detectable continum: {}".format(cont_sens_jy))
+            self.terminal.add_log("Minimum detectable continum: {}".format(cont_sens_jy))
         cell_size = beam_size / 5
         if n_pix is None: 
             #cell_size = beam_size / 5
-            n_pix = ALMASimulator.closest_power_of_2(int(1.5 * fov.value / cell_size.value))
+            n_pix = self.closest_power_of_2(int(1.5 * fov.value / cell_size.value))
         else:
-            n_pix = ALMASimulator.closest_power_of_2(n_pix)
+            n_pix = self.closest_power_of_2(n_pix)
             cell_size = fov / n_pix
             # just added
             #beam_size = cell_size * 5
@@ -2600,7 +2590,7 @@ class ALMASimulator(QMainWindow):
             redshift = uas.compute_redshift(rest_frequency, source_freq)
         else:
             rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
-        continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, cont_frequencies, fwhm_z, lum_infrared  = ALMASimulator.process_spectral_data(
+        continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, cont_frequencies, fwhm_z, lum_infrared  = self.process_spectral_data(
                                                                             source_type,
                                                                             main_dir,
                                                                             redshift, 
@@ -2632,17 +2622,17 @@ class ALMASimulator(QMainWindow):
             print('Angular resolution: {} arcsec'.format(round(ang_res.value, 3)))
             print('Infrared Luminosity: {:.2e}'.format(lum_infrared))
         else:
-            ALMASimulator.terminal.add_log('Central Frequency: {}'.format(central_freq))
-            ALMASimulator.terminal.add_log('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
-            ALMASimulator.terminal.add_log('Spectral Window: {}'.format(band_range))
-            ALMASimulator.terminal.add_log('Freq Support: {}'.format(delta_freq))
-            ALMASimulator.terminal.add_log('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
-            ALMASimulator.terminal.add_log('Redshift: {}'.format(round(redshift, 3)))
-            ALMASimulator.terminal.add_log('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
-            ALMASimulator.terminal.add_log('Band: {}'.format(band))
-            ALMASimulator.terminal.add_log('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
-            ALMASimulator.terminal.add_log('Angular resolution: {} arcsec'.format(round(ang_res.value, 3)))
-            ALMASimulator.terminal.add_log('Infrared Luminosity: {:.2e}'.format(lum_infrared))
+            self.terminal.add_log('Central Frequency: {}'.format(central_freq))
+            self.terminal.add_log('Beam size: {} arcsec'.format(round(beam_size.value, 4)))
+            self.terminal.add_log('Spectral Window: {}'.format(band_range))
+            self.terminal.add_log('Freq Support: {}'.format(delta_freq))
+            self.terminal.add_log('Cube Dimensions: {} x {} x {}'.format(n_pix, n_pix, n_channels))
+            self.terminal.add_log('Redshift: {}'.format(round(redshift, 3)))
+            self.terminal.add_log('Source frequency: {} GHz'.format(round(source_freq.value, 2)))
+            self.terminal.add_log('Band: {}'.format(band))
+            self.terminal.add_log('Velocity resolution: {} Km/s'.format(round(vel_res.value, 2)))
+            self.terminal.add_log('Angular resolution: {} arcsec'.format(round(ang_res.value, 3)))
+            self.terminal.add_log('Infrared Luminosity: {:.2e}'.format(lum_infrared))
         if source_type == 'extended':
             snapshot = uas.redshift_to_snapshot(redshift)
             tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
@@ -2653,21 +2643,21 @@ class ALMASimulator(QMainWindow):
                 print('Subhaloid ID: {}'.format(tng_subhaloid))
                 print('Number of particles: {}'.format(part_num))
             else:
-                ALMASimulator.terminal.add_log('Snapshot: {}'.format(snapshot))
-                ALMASimulator.terminal.add_log('Subhaloid ID: {}'.format(tng_subhaloid))
-                ALMASimulator.terminal.add_log('Number of particles: {}'.format(part_num))
+                self.terminal.add_log('Snapshot: {}'.format(snapshot))
+                self.terminal.add_log('Subhaloid ID: {}'.format(tng_subhaloid))
+                self.terminal.add_log('Number of particles: {}'.format(part_num))
             while part_num == 0:
                 if remote == True:
                     print('No particles found. Checking another subhalo.')
                 else:
-                    ALMASimulator.terminal.add_log('No particles found. Checking another subhalo.')
+                    self.terminal.add_log('No particles found. Checking another subhalo.')
                 tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
                 outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
                 part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
                 if remote == True:
                     print('Number of particles: {}'.format(part_num))
                 else:
-                    ALMASimulator.terminal.add_log('Number of particles: {}'.format(part_num))
+                    self.terminal.add_log('Number of particles: {}'.format(part_num))
         else:
             snapshot = None
             tng_subhaloid = None
@@ -2676,20 +2666,20 @@ class ALMASimulator(QMainWindow):
                 if remote == True:
                     print('Simulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
                 else:     
-                    ALMASimulator.terminal.add_log('Simulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
+                    self.terminal.add_log('Simulating Line {} Flux: {:.3e} at z {}'.format(line_name, line_flux, redshift))
         else:
             if remote == True: 
                 print('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
             else:
-                ALMASimulator.terminal.add_log('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
+                self.terminal.add_log('Simulating Line {} Flux: {} at z {}'.format(line_names[0], line_fluxes[0], redshift))
         if remote == True: 
             print('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
             print('Continuum Sensitity: {:.2e}'.format(cont_sens))
             print('Generating skymodel cube ...')
         else:
-            ALMASimulator.terminal.add_log('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
-            ALMASimulator.terminal.add_log('Continuum Sensitity: {:.2e}'.format(cont_sens))
-            ALMASimulator.terminal.add_log('Generating skymodel cube ...')
+            self.terminal.add_log('Simulating Continum Flux: {:.2e}'.format(np.mean(continum)))
+            self.terminal.add_log('Continuum Sensitity: {:.2e}'.format(cont_sens))
+            self.terminal.add_log('Generating skymodel cube ...')
         datacube = usm.DataCube(
             n_px_x=n_pix, 
             n_px_y=n_pix,
@@ -2716,7 +2706,7 @@ class ALMASimulator(QMainWindow):
         elif source_type == 'extended':
             datacube = usm.insert_extended(datacube, tng_dir, snapshot, int(tng_subhaloid), redshift, ra, dec, tng_api_key, ncpu)
         elif source_type == 'diffuse':
-            ALMASimulator.terminal.add_log('To be implemented')
+            self.terminal.add_log('To be implemented')
         elif source_type == 'galaxy-zoo':
             galaxy_path = os.path.join(galaxy_zoo_dir, 'images_gz2',  'images')
             pos_z = [int(index) for index in source_channel_index]
@@ -2745,26 +2735,27 @@ class ALMASimulator(QMainWindow):
             print('Total Flux injected in model cube: {:.3f} Jy'.format(totflux))
             print('Done')
         else:
-            ALMASimulator.terminal.add_log(f'Total Flux injected in model cube: {round(totflux, 3)} Jy')
-            ALMASimulator.terminal.add_log('Done')
+            self.terminal.add_log(f'Total Flux injected in model cube: {round(totflux, 3)} Jy')
+            self.terminal.add_log('Done')
         del datacube
         if remote == True: 
             print('Observing with ALMA')
         else:
-            ALMASimulator.terminal.add_log('Observing with ALMA')
+            self.terminal.add_log('Observing with ALMA')
         interferometer = uin.Interferometer(inx, model, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, cont_sens.value, 
-                            int_time.value * second2hour, obs_date, header, save_mode)
+                            int_time.value * second2hour, obs_date, header, save_mode, self.terminal)
         interferometer.progress_signal.connect(self.handle_progress)
+        self.progress_bar_entry.setText('Observing with ALMA')
         simulation_results = interferometer.run_interferometric_sim()
         if remote == True:
             print('Finished')
         else: 
-            ALMASimulator.terminal.add_log('Finished')
+            self.terminal.add_log('Finished')
         stop = time.time()
         if remote == True:
             print('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
         else:
-            ALMASimulator.terminal.add_log('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
+            self.terminal.add_log('Execution took {} seconds'.format(strftime("%H:%M:%S", gmtime(stop - start))))
         shutil.rmtree(sim_output_dir)
         return simulation_results
 

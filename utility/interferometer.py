@@ -29,9 +29,10 @@ class Interferometer(QObject):
     def __init__(self, idx, skymodel, main_dir, 
                 output_dir, ra, dec, central_freq, band_range, 
                 fov, antenna_array, noise, int_time, obs_date, 
-                header, save_mode, robust=0.5):
+                header, save_mode, terminal, robust=0.5):
         super().__init__() 
         self.idx = idx
+        self.terminal = terminal
         self.skymodel = skymodel
         self.antenna_array = antenna_array
         self.noise = noise
@@ -57,7 +58,7 @@ class Interferometer(QObject):
         self.lfac = 1.e6
         self.header = header
         self._get_nH()
-        print(f'Performing {self.nH} scans with a scan time of {self.scan_time} seconds')
+        self.terminal.add_log(f'Performing {self.nH} scans with a scan time of {self.scan_time} seconds')
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
@@ -90,7 +91,7 @@ class Interferometer(QObject):
         # Get the observing wavelengths for each channel 
         self._get_wavelengths()
         self._prepare_cubes()
-        print(f'Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}')
+        self.terminal.add_log(f'Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}')
         
     def run_interferometric_sim(self):
         for channel in range(self.Nchan):
@@ -904,8 +905,8 @@ class Interferometer(QObject):
             hdu_imag.writeto(os.path.join(self.output_dir, 'clean-vis-cube_imag{}.fits'.format(str(self.idx))), overwrite=True)
             del real_part
             del imag_part
-        print(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
-        print(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
+        self.terminal.add_log(f'Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy')
+        self.terminal.add_log(f'Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy')
     
     def _free_space(self):
         del self.modelCube
