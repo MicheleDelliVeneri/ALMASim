@@ -1979,7 +1979,7 @@ class ALMASimulator(QMainWindow):
                     self.terminal.add_log(output)
                     if output.startswith("PROGRESS:"):
                         progress = int(output.split(":")[1])
-                        self.update_progress_bar.emit(progress)
+                        self.update_progress_bar(progress)
                 if channel.exit_status_ready():
                     break
         output_thread = threading.Thread(target=read_output)
