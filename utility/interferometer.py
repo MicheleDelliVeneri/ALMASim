@@ -432,7 +432,7 @@ class Interferometer(QObject):
                 nii[n1] += 1
                 nii[n2] += 1
                 # Increment the baseline index counter
-                bi += np.int8(1)
+                bi += np.int16(1)
         # Initialize arrays to store u and v coordinates (in wavelengths)
         # for each baseline at each hour angle.
         self.u = np.zeros((NBmax, self.nH))
