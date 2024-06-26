@@ -287,7 +287,7 @@ class ParallelSimulatorRunnableRemote(QRunnable):
 
     @pyqtSlot()
     def run(self):
-        self.alma_simulator.run_simulator_parallel_remote(self.input_params)
+        self.alma_simulator.run_simulator_parallel_remote(self, self.input_params)
     
 class SimulatorWorker(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, df, *args, **kwargs):
