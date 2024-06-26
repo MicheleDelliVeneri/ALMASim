@@ -269,7 +269,15 @@ class SimulatorRunnable(QRunnable, QObject):
 
         except Exception as e:
             logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
+class ParallelSimulatorRunnable(QRunnable):
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
 
+    @pyqtSlot()
+    def run(self):
+        self.alma_simulator.run_simulator_parallel()
+    
 class SimulatorWorker(QRunnable, QObject):
     def __init__(self, alma_simulator_instance, df, *args, **kwargs):
         super().__init__()
@@ -281,6 +289,7 @@ class SimulatorWorker(QRunnable, QObject):
     @pyqtSlot()
     def run(self):
         for i, row in self.df.iterrows():
+            row = row.where(~row.isna(), None)
             results = self.alma_simulator.simulator(*row)
             self.signals.simulationFinished.emit(results)
 
@@ -2235,7 +2244,7 @@ class ALMASimulator(QMainWindow):
                 #results =  ddf.map_partitions(lambda df: df.apply(lambda row: self.simulator(*row), axis=1), meta=output_type).compute()
                 #client.close()
                 #cluster.close()
-                self.run_simulator_parallel()
+                self.initiate_parallel_simulation()
             #elif self.local_mode_combo.currentText() == 'remote':
             else:
                 if self.remote_mode_combo.currentText() == 'SLURM':
@@ -2261,7 +2270,6 @@ class ALMASimulator(QMainWindow):
             runnable.signals.simulationFinished.connect(self.plot_simulation_results)  # Connect the signal
             pool.start(runnable)
 
-
     def run_simulator_parallel(self):
         dask.config.set({'temporary_directory': self.output_path})
         total_memory = psutil.virtual_memory().total
@@ -2283,10 +2291,13 @@ class ALMASimulator(QMainWindow):
 
             # Optionally wait for all workers to complete before proceeding
             for future in futures:
-                results = future.result()  # This blocks until the worker is done
+                future.result()  # This blocks until the worker is done
+    
+    def initiate_parallel_simulation(self):
+        pool = QThreadPool.globalInstance()
+        runnable = ParallelSimulatorRunnable(self)
+        pool.start(runnable)
             
-
-
     def cont_finder(self, cont_frequencies,line_frequency):
         #cont_frequencies=sed['GHz'].values
         distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies))*line_frequency)
@@ -2498,7 +2509,17 @@ class ALMASimulator(QMainWindow):
         freq_support = bandwidth / n_channels
         fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
         return int_cont_fluxes, line_fluxes, line_names, redshift, line_frequencies, line_indexes, n_channels, bandwidth, freq_support, new_cont_freq, fwhms, lum_infrared
-
+    
+    def print_variable_info(self, args):
+        for value in args:
+            try:  # Catch potential errors in printing some types
+                print(f"    Type: {type(value).__name__}")
+                print(f"    Content: {value}")
+                print("-" * 40)  # Divider for clarity
+            except Exception as e:
+                print(f"Error printing variable '{name}': {e}")
+                print(f"    Type: {type(value).__name__}")
+                print("-" * 40)           
     def simulator(self, *args, **kwargs):
         """
         Simulates the ALMA observations for the given input parameters.
@@ -2542,7 +2563,6 @@ class ALMASimulator(QMainWindow):
         str: Path to the output file.
         """
         inx, source_name, main_dir, output_dir, tng_dir, galaxy_zoo_dir, project_name, ra, dec, band, ang_res, vel_res, fov, obs_date, pwv, int_time,  bandwidth, freq, freq_support, cont_sens, antenna_array, n_pix, n_channels, source_type, tng_api_key, ncpu, rest_frequency, redshift, lum_infrared, snr,n_lines, line_names, save_mode, inject_serendipitous, remote = args
-
         if remote == True:
             print('\nRunning simulation {}'.format(inx))
             print('Source Name: {}'.format(source_name))
@@ -2564,12 +2584,18 @@ class ALMASimulator(QMainWindow):
                 n_lines = None
             if pd.isna(line_names):
                 line_names = None
-            
-
-
         else:
             self.terminal.add_log('\nRunning simulation {}'.format(inx))
             self.terminal.add_log('Source Name: {}'.format(source_name))
+
+        if isinstance(line_names, str):
+            # Remove brackets and split into elements
+            line_names = line_names.strip("[]").split(",")  # Or .split() if single space delimited
+            # Convert to NumPy array 
+            line_names = np.array([name.strip("' ") for name in line_names])  
+            
+
+        
         start = time.time()
         second2hour = 1 / 3600
         ra = ra * U.deg
