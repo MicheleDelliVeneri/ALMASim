@@ -2319,6 +2319,7 @@ class ALMASimulator(QMainWindow):
         runnable = ParallelSimulatorRunnable(self)
         pool.start(runnable)
 
+    @classmethod
     def initiate_parallel_simulation_remote(cls, input_params):
         pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(cls, input_params)
