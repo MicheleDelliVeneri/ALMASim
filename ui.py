@@ -1966,6 +1966,7 @@ class ALMASimulator(QMainWindow):
             # Call initiate_parallel_simulation_remote with window instance
             python -c "import sys; import os; import ui; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); ui.ALMASimulator.initiate_parallel_simulation_remote(window); sys.exit(app.exec())"
         """
+        exclude_pattern = re.compile(r'\[\d+m|\[\?\d+h|\[\w+;\d+m|\[\d+;\d+m|\x1B\[[0-?]*[ -/]*[@-~]')
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         paramiko_client.connect(self.remote_address_entry.text(), username=self.remote_user_entry.text(), pkey=key)
@@ -1985,7 +1986,13 @@ class ALMASimulator(QMainWindow):
             while True:
                 if channel.recv_ready():
                     output = channel.recv(1024).decode()
-                    self.terminal.add_log(output)
+                    # Filter out unwanted lines
+                    filtered_output = ""
+                    for line in output.splitlines():
+                        if not exclude_pattern.search(line):
+                            filtered_output += line + "\n"
+                    if filtered_output:  # Only add to the log if there's filtered output
+                        self.terminal.add_log(filtered_output)
                 if channel.exit_status_ready():
                     break
         output_thread = threading.Thread(target=read_output)
@@ -2286,7 +2293,7 @@ class ALMASimulator(QMainWindow):
         memory_limit = int(0.9 * total_memory / num_workers)
 
         ddf = dd.from_pandas(input_params, npartitions=num_workers)
-        with LocalCluster(n_workers=num_workers, threads_per_worker=4, dashboard_address=':8787') as cluster, Client(cluster) as client:
+        with LocalCluster(n_workers=num_workers, threads_per_worker=4, dashboard_address=None) as cluster, Client(cluster) as client:
             client.register_plugin(MemoryLimitPlugin(memory_limit))
             output_type = "object"
             futures = []
@@ -2311,7 +2318,7 @@ class ALMASimulator(QMainWindow):
         memory_limit = int(0.9 * total_memory / num_workers)
 
         ddf = dd.from_pandas(self.input_params, npartitions=num_workers)
-        with LocalCluster(n_workers=num_workers, threads_per_worker=4, dashboard_address=':8787') as cluster, Client(cluster) as client:
+        with LocalCluster(n_workers=num_workers, threads_per_worker=4, dashboard_address=None) as cluster, Client(cluster) as client:
             client.register_plugin(MemoryLimitPlugin(memory_limit))
             output_type = "object"
             futures = []
