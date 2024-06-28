@@ -1020,7 +1020,12 @@ class ALMASimulator(QMainWindow):
                         
             else:
                 if self.remote_address_entry.text() != '' and self.remote_user_entry.text() != '' and self.remote_key_entry.text() != '':
-                    self.download_galaxy_zoo_on_remote()
+                    try:
+                        self.download_galaxy_zoo_on_remote()
+                    except Exception as e:  # Catch any exception that occurs during download
+                        error_message = f"Error downloading Galaxy Zoo data on remote machine: {e}"
+                        print(error_message)  # Print the error to the console 
+                        self.terminal.add_log(error_message)  # Add the error to your ALMASimulator terminal
         line_mode = self.settings.value("line_mode", False, type=bool)
         self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
         self.line_mode_checkbox.setChecked(line_mode)
@@ -2389,7 +2394,7 @@ class ALMASimulator(QMainWindow):
         pool.start(runnable)
 
     @classmethod
-    def initialize_slurm_simulation_remote(cls, window_istance)
+    def initialize_slurm_simulation_remote(cls, window_istance):
         input_params = pd.read_csv('input_params.csv')
         pool = QThreadPool.globalInstance()
         runnable = SlurmSimulatorRunnableRemote(window_instance, input_params)

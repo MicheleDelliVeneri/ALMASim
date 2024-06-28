@@ -1,4 +1,4 @@
-![Alt text](pictures/ALMASim_banner.png)
+![Alt text](pictures/ALMASimBanner.jpeg)
 
 ## Overview
 
