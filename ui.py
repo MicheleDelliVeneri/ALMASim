@@ -2163,7 +2163,7 @@ class ALMASimulator(QMainWindow):
             self.download_galaxy_zoo_on_remote()
 
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
-        
+        self.main_path = os.getcwd()
         if self.local_mode_combo.currentText() == 'local':
             main_paths = np.array([os.getcwd()] * n_sims)
         else: 
@@ -2297,7 +2297,7 @@ class ALMASimulator(QMainWindow):
             else:
                 self.terminal.add_log('Cannot run on remote in sequential mode, changing it to parallel')
                 self.comp_mode_combo.setCurrentText('parallel')
-
+        os.chdir(self.main_path)
     def run_simulator_sequentially(self):
         pool = QThreadPool.globalInstance()
         for i in range(int(self.n_sims_entry.text())):
