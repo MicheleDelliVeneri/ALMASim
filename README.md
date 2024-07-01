@@ -55,3 +55,4 @@ To run the simulation, just navigate to the ALMASim folder and execute:
 ## Notes
 
 Cube size will dictate simulation speed and RAM usage. To gauge what you can affor to run, we advice to start with a single simulation of a 256 x 256 x 256 cube.
+1.85 GHZ is the descriminator between line and continuum spectral window. 
