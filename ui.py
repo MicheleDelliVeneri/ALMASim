@@ -2892,10 +2892,11 @@ class ALMASimulator(QMainWindow):
                                 n_channels, snapshot, tng_subhaloid, lum_infrared, fwhm_z, source_type, fwhm_x, fwhm_y, angle)
 
         if inject_serendipitous == True:
+            self.progress_bar_entry.setText('Inserting Serendipitous Sources')
             if source_type != 'gaussian':
                 fwhm_x = np.random.randint(3, 10)
                 fwhm_y = np.random.randint(3, 10)
-            datacube = usm.insert_serendipitous(datacube, continum, cont_sens.value, line_fluxes, line_names, line_frequency, 
+            datacube = usm.insert_serendipitous(self.terminal, self.update_progress, datacube, continum, cont_sens.value, line_fluxes, line_names, line_frequency, 
                                                 delta_freq.value, pos_z, fwhm_x, fwhm_y, fwhm_z, n_pix, n_channels, 
                                                 os.path.join(output_dir, 'sim_params_{}.txt'.format(inx)))
         #filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
