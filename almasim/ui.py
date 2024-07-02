@@ -58,8 +58,12 @@ import threading
 import matplotlib
 import matplotlib.pyplot as plt
 import logging
+import pyvo
 import re
+import seaborn as sns
+import subprocess
 matplotlib.use("Agg")
+
 
 class MemoryLimitPlugin(WorkerPlugin):
     def __init__(self, memory_limit):
@@ -476,7 +480,7 @@ class ALMASimulator(QMainWindow):
         self.remote_key_pass_entry = QLineEdit()
         self.remote_key_pass_entry.setEchoMode(QLineEdit.EchoMode.Password)
 
-        ## 10
+        # 10
         # self.flux_mode_label = QLabel('Flux Simulation Mode:')
         # self.flux_mode_combo = QComboBox()
         # self.flux_mode_combo.addItems(["direct", 'line-ratios'])
@@ -669,7 +673,7 @@ class ALMASimulator(QMainWindow):
             # Hide the widgets in non_line_mode_row1 and non_line_mode_row2
             self.show_hide_widgets(self.non_line_mode_row1, show=False)
             self.show_hide_widgets(self.non_line_mode_row2, show=False)
-            if self.line_displayed == False:
+            if self.line_displayed is False:
                 self.line_display()
         else:
             # Hide the widgets in line_mode_row
@@ -885,7 +889,8 @@ class ALMASimulator(QMainWindow):
     def toggle_metadata_browse(self, mode):
         if mode == "get":
             if self.metadata_path_row.parent() is None:  # Check if already added
-                # self.left_layout.insertLayout(8, self.metadata_path_row) # Re-insert at correct position
+                # self.left_layout.insertLayout(8, self.metadata_path_row)
+                # # Re-insert at correct position
                 # self.left_layout.update()  # Force layout update to show the row
                 self.remove_query_widgets()  # Remove query widgets if present
                 self.add_metadata_widgets()
@@ -1402,8 +1407,9 @@ class ALMASimulator(QMainWindow):
             for url in urls:
                 try:
                     service = pyvo.dal.TAPService(url)
-                    # Test the connection with a simple query to ensure the service is working
-                    result = service.search("SELECT TOP 1 * FROM ivoa.obscore")
+                    # Test the connection with a simple query to ensure the service is
+                    # working
+                    service.search("SELECT TOP 1 * FROM ivoa.obscore")
                     self.terminal.add_log(f"Connected successfully to {url}")
                     return service
                 except Exception as e:
@@ -1411,7 +1417,7 @@ class ALMASimulator(QMainWindow):
                     self.terminal.add_log("Retrying other servers...")
             self.terminal.add_log("All URLs attempted and failed, retrying...")
 
-    def plot_science_keywords_distributions(master_path):
+    def plot_science_keywords_distributions(self, master_path):
         service = self.get_tap_service()
         plot_dir = os.path.join(master_path, "plots")
 
@@ -1436,7 +1442,8 @@ class ALMASimulator(QMainWindow):
             return
         else:
             self.terminal.add_log(
-                f"Generating helping plots to guide you in the scientific query, check them in {plot_dir}."
+                f"Generating helping plots to guide you in the scientific query, \
+                    check them in {plot_dir}."
             )
             # Identify missing plots
         missing_plots = [plot for plot in expected_plots if plot not in existing_plots]
@@ -1452,9 +1459,9 @@ class ALMASimulator(QMainWindow):
                 query_variables.update(["science_keyword", "frequency"])
             elif missing_plot == "science_vs_FoV.png":
                 query_variables.update(["science_keyword", "band_list"])
-        query = f"""  
+        query = f"""
                 SELECT {', '.join(query_variables)}, member_ous_uid
-                FROM ivoa.obscore  
+                FROM ivoa.obscore
                 WHERE science_observation = 'T'
                 AND is_mosaic = 'F'
                 """
@@ -1480,9 +1487,12 @@ class ALMASimulator(QMainWindow):
         )
         short_keyword = {
             "Solar system - Trans-Neptunian Objects (TNOs)": "Solar System - TNOs",
-            "Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)": "Photon/X-Ray Domanited Regions",
-            "Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)": "LIRG & ULIRG",
-            "Cosmic Microwave Background (CMB)/Sunyaev-Zel'dovich Effect (SZE)": "CMB/Sunyaev-Zel'dovich Effect",
+            "Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)":
+                "Photon/X-Ray Domanited Regions",
+            "Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)":
+                "LIRG & ULIRG",
+            "Cosmic Microwave Background (CMB)/Sunyaev-Zel'dovich Effect (SZE)":
+                "CMB/Sunyaev-Zel'dovich Effect",
             "Active Galactic Nuclei (AGN)/Quasars (QSO)": "AGN/QSO",
             "Inter-Stellar Medium (ISM)/Molecular clouds": "ISM & Molecular Clouds",
         }
@@ -1567,10 +1577,10 @@ class ALMASimulator(QMainWindow):
                     lambda x: [y.strip() for y in x]
                 )
                 db = db.explode("band_list")
-                db["fov"] = db["band_list"].apply(lambda x: get_fov_from_band(int(x)))
+                db["fov"] = db["band_list"].apply(lambda x: ual.get_fov_from_band(int(x)))
                 fov_bins = np.arange(
                     db["fov"].min(), db["fov"].max(), 10
-                )  #  10 arcsec bins
+                )  # 10 arcsec bins
                 db["fov_bins"] = pd.cut(db["fov"], bins=fov_bins)
 
                 db_sk_fov = (
@@ -1749,11 +1759,13 @@ class ALMASimulator(QMainWindow):
         del database
 
     def query_for_metadata_by_targets(self):
-        """Query for metadata for all predefined targets and compile the results into a single DataFrame.
+        """Query for metadata for all predefined targets and compile the results
+            into a single DataFrame.
 
         Parameters:
         service (pyvo.dal.TAPService): A TAPService instance for querying the database.
-        targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+        targets (list of tuples): A list where each tuple contains
+                (target_name, member_ous_uid).
         path (str): The path to save the results to.
 
         Returns:
@@ -1931,7 +1943,9 @@ class ALMASimulator(QMainWindow):
                 )
                 commands = f"""
                 source {venv_dir}/bin/activate
-                python -c "from kaggle import api; api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', path='{self.galaxy_zoo_entry.text()}', unzip=True)"
+                python -c "from kaggle import api; \
+                    api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
+                        path='{self.galaxy_zoo_entry.text()}', unzip=True)"
                 """
                 paramiko_client = paramiko.SSHClient()
                 paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -2024,7 +2038,8 @@ class ALMASimulator(QMainWindow):
                 ),
             )
         commands = f"""
-            chmod 600 /home/{self.remote_user_entry.text()}/.config/{self.settings_path.split(os.sep)[-1]}
+            chmod 600 /home/{self.remote_user_entry.text()}/.config/\
+                {self.settings_path.split(os.sep)[-1]}
             if [ ! -d {repo_dir} ]; then
                 git clone {repo_url} {repo_dir}
             fi
@@ -2178,20 +2193,31 @@ class ALMASimulator(QMainWindow):
         return value
 
     def run_on_pbs_cluster(self):
-        pbs_config = self.remote_config_entry.text()
+        # pbs_config = self.remote_config_entry.text()
         if self.remote_key_pass_entry.text() != "":
             key = paramiko.RSAKey.from_private_key_file(
                 self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
             )
         else:
             key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-
+        settings_path = os.path.join(self.remote_main_dir, "settings.plist")
         dask_commands = f"""
         cd {self.remote_main_dir}
         source {self.remote_venv_dir}/bin/activate
-        export QT_QPA_PLATFORM=offscreen
-        python -c "import sys; import os; import almasim.ui as ui; app = ui.QApplication(sys.argv); window=ui.ALMASimulator(); window.create_pbs_cluster_and_run(); sys.exit(app.exec())"
         """
+
+        _QApplication = QApplication
+        python_command = [
+            'python -c "import sys; import os; import almasim.ui as ui; ',
+            f'app = ui.{_QApplication}(sys.argv); ',
+            f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
+            'window=ui.ALMASimulator(); ',
+            'window.create_pbs_cluster_and_run()',
+            'sys.exit(app.exec())"',
+        ]
+        python_command_str = "".join(python_command)
+        # Add it as a new line to dask_commands, and add a newline character
+        dask_commands += "\n" + python_command_str
         paramiko_client = paramiko.SSHClient()
         paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         paramiko_client.connect(
@@ -2204,7 +2230,7 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(stderr.read().decode())
 
     def run_on_mpi_machine(self):
-        slurm_config = self.remote_config_entry.text()
+        # slurm_config = self.remote_config_entry.text()
         if self.remote_key_pass_entry.text() != "":
             key = paramiko.RSAKey.from_private_key_file(
                 self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
@@ -2217,19 +2243,31 @@ class ALMASimulator(QMainWindow):
             cd {self.remote_main_dir}
             source {self.remote_venv_dir}/bin/activate
             export QT_QPA_PLATFORM=offscreen
-
-            # Call initiate_parallel_simulation_remote with window instance
-            python -c "import sys; import os; import almasim.ui as ui; app = ui.QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); ui.ALMASimulator.initiate_parallel_simulation_remote(window); sys.exit(app.exec())"
         """
+        # Separate the Python command for readability and maintainability
+        _QApplication = QApplication
+        python_command = [
+            'python -c "import sys; import os; import almasim.ui as ui; ',
+            f'app = ui.{_QApplication}(sys.argv); ',
+            f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
+            'window=ui.ALMASimulator(); ',
+            'ui.ALMASimulator.initiate_parallel_simulation_remote(window); ',
+            'sys.exit(app.exec())"',
+        ]
+        # Join the list elements into a single string
+        python_command_str = "".join(python_command)
+        # Add it as a new line to dask_commands, and add a newline character
+        dask_commands += "\n" + python_command_str
         exclude_pattern = re.compile(
             r"""
             # Pattern 1: Specific command lines
             (^cd /home/astro/ALMASim$)
             |(source /home/astro/almasim_env/bin/activate$)
             |(export QT_QPA_PLATFORM=offscreen$)
-            |(python -c "import sys.*initiate_parallel_simulation_remote\(window\); sys.exit\(app.exec\(\)"\s*$)
+            |(python -c "import sys.*initiate_parallel_simulation_remote\(window\);)
+            |(sys.exit\(app.exec\(\)"\s*$)
             # Pattern 2: ANSI escape codes
-            |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))  
+            |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))
         """,
             re.VERBOSE,
         )
@@ -2266,10 +2304,10 @@ class ALMASimulator(QMainWindow):
         # Wait for the command to finish
         output_thread.join()
         paramiko_client.close()
-        output_trhread.close()
+        output_thread.close()
 
     def run_on_slurm_cluster(self):
-        slurm_config = self.remote_config_entry.text()
+        # slurm_config = self.remote_config_entry.text()
         if self.remote_key_pass_entry.text() != "":
             key = paramiko.RSAKey.from_private_key_file(
                 self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
@@ -2282,19 +2320,30 @@ class ALMASimulator(QMainWindow):
             cd {self.remote_main_dir}
             source {self.remote_venv_dir}/bin/activate
             export QT_QPA_PLATFORM=offscreen
-
-            # Call initiate_parallel_simulation_remote with window instance
-            python -c "import sys; import os; import almasim.ui as ui; app = ui.QApplication(sys.argv); ui.ALMASimulator.settings_file = '{settings_path}'; window=ui.ALMASimulator(); ui.ALMASimulator.initiate_slurm_simulation_remote(window); sys.exit(app.exec())"
         """
+        _QApplication = QApplication
+        python_command = [
+            'python -c "import sys; import os; import almasim.ui as ui; ',
+            f'app = ui.{_QApplication}(sys.argv); ',
+            f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
+            'window=ui.ALMASimulator(); ',
+            'ui.ALMASimulator.initiate_slurm_simulation_remote(window); ',
+            'sys.exit(app.exec())"',
+        ]
+        # Join the list elements into a single string
+        python_command_str = "".join(python_command)
+        # Add it as a new line to dask_commands, and add a newline character
+        dask_commands += "\n" + python_command_str
         exclude_pattern = re.compile(
             r"""
             # Pattern 1: Specific command lines
             (^cd /home/astro/ALMASim$)
             |(source /home/astro/almasim_env/bin/activate$)
             |(export QT_QPA_PLATFORM=offscreen$)
-            |(python -c "import sys.*initiate_slurm_simulation_remote\(window\); sys.exit\(app.exec\(\)"\s*$)
+            |(python -c "import sys.*initiate_slurm_simulation_remote\(window\);)
+            |(sys.exit\(app.exec\(\)"\s*$)
             # Pattern 2: ANSI escape codes
-            |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))  
+            |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))
         """,
             re.VERBOSE,
         )
@@ -2331,7 +2380,7 @@ class ALMASimulator(QMainWindow):
         # Wait for the command to finish
         output_thread.join()
         paramiko_client.close()
-        output_trhread.close()
+        output_thread.close()
 
     def transform_source_type_label(self):
         if self.model_combo.currentText() == "Galaxy Zoo":
@@ -2374,7 +2423,7 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log("Computing redshifts")
         while n_metadata < ceil(n / 10):
             s_metadata = n_metadata
-            if zmax != None:
+            if zmax is not None:
                 f_metadata = metadata[
                     (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
                 ]
@@ -2383,7 +2432,7 @@ class ALMASimulator(QMainWindow):
             n_metadata = len(f_metadata)
             if n_metadata == s_metadata:
                 zmax += 0.1
-        if zmax != None:
+        if zmax is not None:
             metadata = metadata[
                 (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
             ]
@@ -2391,8 +2440,8 @@ class ALMASimulator(QMainWindow):
             metadata = metadata[metadata["redshift"] >= 0]
         if z_save != zmax:
             self.terminal.add_log(
-                f"Max redshift has been adjusted fit metadata, new max redshift: {round(zmax, 3)}"
-            )
+                f"Max redshift has been adjusted fit metadata,\
+                     new max redshift: {round(zmax, 3)}")
         self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
         snapshots = [
             uas.redshift_to_snapshot(redshift)
@@ -2469,7 +2518,6 @@ class ALMASimulator(QMainWindow):
                 f"Starting simulation on {self.remote_address_entry.text()}"
             )
         n_sims = int(self.n_sims_entry.text())
-        n_cpu = int(self.ncpu_entry.text())
         sim_idxs = np.arange(n_sims)
         self.transform_source_type_label()
         source_types = np.array([self.source_type] * n_sims)
@@ -2748,7 +2796,6 @@ class ALMASimulator(QMainWindow):
             Client(cluster) as client,
         ):
             client.register_plugin(MemoryLimitPlugin(memory_limit))
-            output_type = "object"
             futures = []
 
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -2802,9 +2849,8 @@ class ALMASimulator(QMainWindow):
                     )
                 )
             )
-            cluster.scale(jobs=int(int(cls.ncpu_entry.text()) // 4))
+            cluster.scale(jobs=int(int(self.ncpu_entry.text()) // 4))
             ddf = dd.from_pandas(input_params, npartitions=cluster.n_workers)
-            output_type = "object"
             futures = []
             with ThreadPoolExecutor(max_workers=cluster.n_workers) as executor:
                 for df in ddf.partitions:
@@ -2834,7 +2880,6 @@ class ALMASimulator(QMainWindow):
             Client(cluster) as client,
         ):
             client.register_plugin(MemoryLimitPlugin(memory_limit))
-            output_type = "object"
             futures = []
 
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -2863,7 +2908,7 @@ class ALMASimulator(QMainWindow):
         pool.start(runnable)
 
     @classmethod
-    def initialize_slurm_simulation_remote(cls, window_istance):
+    def initialize_slurm_simulation_remote(cls, window_instance):
         input_params = pd.read_csv("input_params.csv")
         pool = QThreadPool.globalInstance()
         runnable = SlurmSimulatorRunnableRemote(window_instance, input_params)
@@ -2977,7 +3022,8 @@ class ALMASimulator(QMainWindow):
         )
         #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
         flux_infrared = lum_infrared_erg_s * 1e23 / solid_angle  # Jy * Hz
-        # flux_infrared_jy = flux_infrared  / (sed['GHz'].values * U.GHz).to(U.Hz).value  # Jy
+        # flux_infrared_jy = flux_infrared  / (sed['GHz'].values *
+        # U.GHz).to(U.Hz).value  # Jy
         sed.drop(columns=["um", "erg/s/Hz"], inplace=True)
         sed = sed.sort_values(by="GHz", ascending=True)
         return sed, flux_infrared, lum_infrared
@@ -3017,9 +3063,8 @@ class ALMASimulator(QMainWindow):
         # Define the frequency range based on central frequency and bandwidth
         freq_min = central_frequency - delta_freq / 2
         freq_max = central_frequency + delta_freq / 2
-        freq_step = delta_freq / n_channels
-        save_freq_min = freq_min
-        save_freq_max = freq_max
+        # save_freq_min = freq_min
+        # save_freq_max = freq_max
         start_redshift = redshift
         # Example data: Placeholder for cont and lines from SED processing
         sed, flux_infrared, lum_infrared = self.sed_reading(
@@ -3031,7 +3076,8 @@ class ALMASimulator(QMainWindow):
             remote,
             lum_infrared,
         )
-        # Placeholder for line data: line_name, observed_frequency (GHz), line_ratio, line_error
+        # Placeholder for line data: line_name, observed_frequency (GHz),
+        # line_ratio, line_error
         db_line = uas.read_line_emission_csv(
             os.path.join(master_path, "almasim", "brightnes", "calibrated_lines.csv"),
             sep=",",
@@ -3041,7 +3087,7 @@ class ALMASimulator(QMainWindow):
         filtered_lines = db_line.copy()
         filtered_lines.drop(filtered_lines.index, inplace=True)
         if line_names is None:
-            if n_lines != None:
+            if n_lines is not None:
                 n = n_lines
             else:
                 n = 1
@@ -3056,7 +3102,6 @@ class ALMASimulator(QMainWindow):
         )
         fwhms_GHz = fwhms.to(U.GHz).value
         self.terminal.add_log(f"Searching {n} compatible lines")
-        initial_len = len(filtered_lines)
         while len(filtered_lines) < n:
             r_len = len(filtered_lines)
             filtered_lines = db_line.copy()
@@ -3067,13 +3112,6 @@ class ALMASimulator(QMainWindow):
             line_mask = (line_starts >= freq_min) & (line_ends <= freq_max)
             filtered_lines = db_line[line_mask]
             if len(filtered_lines) < n:
-                n_possible = (
-                    db_line["shifted_freq(GHz)"].astype(float) + fwhms_GHz / 2
-                    <= freq_max
-                ).sum() + (
-                    db_line["shifted_freq(GHz)"].astype(float) - fwhms_GHz / 2
-                    >= freq_min
-                ).sum()
                 redshift += 0.01
             if len(filtered_lines) > r_len:
                 recorded_length = len(filtered_lines)
@@ -3086,22 +3124,25 @@ class ALMASimulator(QMainWindow):
                 self.terminal.add_log(
                     "Redshift increased to match the desired number of lines."
                 )
-        if type(line_names) == list or isinstance(line_names, np.ndarray):
+        if isinstance(line_names, list) or isinstance(line_names, np.ndarray):
             user_lines = filtered_lines[np.isin(filtered_lines["Line"], line_names)]
             if len(user_lines) != len(line_names):
                 if remote is True:
                     print(
-                        "Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines."
+                        "Warning: Selected lines do not fall in the provided band, \
+                            automaticaly computing most probable lines."
                     )
                 else:
                     self.terminal.add_log(
-                        "Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines."
+                        "Warning: Selected lines do not fall in the provided band, \
+                            automaticaly computing most probable lines."
                     )
                 # Find rows in filtered_lines that are not already in user_lines
                 additional_lines = filtered_lines[
                     ~filtered_lines.index.isin(user_lines.index)
                 ]
-                # Add rows from filtered_lines to user_lines until the length matches len(line_names)
+                # Add rows from filtered_lines to user_lines until the length matches
+                # len(line_names)
                 num_additional_rows = len(line_names) - len(user_lines)
                 additional_lines = additional_lines.iloc[
                     :num_additional_rows
@@ -3124,21 +3165,22 @@ class ALMASimulator(QMainWindow):
         if sum(cont_mask) > 0:
             cont_fluxes = sed["Jy"].values[cont_mask]
             cont_frequencies = sed["GHz"].values[cont_mask]
-            min_ = np.min(cont_fluxes)
         else:
             freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
             cont_fluxes = [sed["Jy"].values[freq_point]]
             cont_frequencies = [sed["GHz"].values[freq_point]]
 
-        if n_lines != None:
+        if n_lines is not None:
             if n_lines > len(filtered_lines):
                 if remote is True:
                     print(
-                        f"Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}."
+                        f"Warning: Cant insert {n_lines}, injecting {
+                            len(filtered_lines)}."
                     )
                 else:
                     self.terminal.add_log(
-                        f"Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}."
+                        f"Warning: Cant insert {n_lines}, injecting {
+                            len(filtered_lines)}."
                     )
 
             else:
@@ -3148,7 +3190,7 @@ class ALMASimulator(QMainWindow):
         cdeltas = filtered_lines["err_c"].values
         line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
         line_frequencies = filtered_lines["shifted_freq(GHz)"].values
-        line_rest_frequencies = filtered_lines["freq(GHz)"].values * U.GHz
+        # line_rest_frequencies = filtered_lines["freq(GHz)"].values * U.GHz
         fwhms_GHz = (0.84 * (line_frequencies * (delta_v / c_km_s) * 1e9) * U.Hz).to(
             U.GHz
         )
@@ -3188,17 +3230,6 @@ class ALMASimulator(QMainWindow):
             fwhms,
             lum_infrared,
         )
-
-    def print_variable_info(self, args):
-        for value in args:
-            try:  # Catch potential errors in printing some types
-                print(f"    Type: {type(value).__name__}")
-                print(f"    Content: {value}")
-                print("-" * 40)  # Divider for clarity
-            except Exception as e:
-                print(f"Error printing variable '{name}': {e}")
-                print(f"    Type: {type(value).__name__}")
-                print("-" * 40)
 
     def simulator(self, *args, **kwargs):
         """
@@ -3341,7 +3372,6 @@ class ALMASimulator(QMainWindow):
             antenna_array, os.path.join(main_dir, "almasim"), sim_output_dir
         )
         antennalist = os.path.join(sim_output_dir, "antenna.cfg")
-        antenna_name = "antenna"
         self.progress_bar_entry.setText("Computing Max baseline")
         max_baseline = (
             ual.get_max_baseline_from_antenna_config(self.update_progress, antennalist)
@@ -3422,7 +3452,6 @@ class ALMASimulator(QMainWindow):
             freq_sup = freq_sup_nw * U.MHz
             n_channels = n_channels_nw
             band_range = n_channels * freq_sup
-        central_channel_index = n_channels // 2
         if remote is True:
             print("Beam size: {} arcsec".format(round(beam_size.value, 4)))
             print("Central Frequency: {}".format(central_freq))
@@ -3499,7 +3528,7 @@ class ALMASimulator(QMainWindow):
         else:
             snapshot = None
             tng_subhaloid = None
-        if type(line_names) == list or isinstance(line_names, np.ndarray):
+        if isinstance(line_names, list) or isinstance(line_names, np.ndarray):
             for line_name, line_flux in zip(line_names, line_fluxes):
                 if remote is True:
                     print(
@@ -3782,12 +3811,10 @@ class ALMASimulator(QMainWindow):
         self._plot_sim()
 
     def _plot_antennas(self):
-        antPlot = plt.figure(figsize=(8, 8))
+        plt.figure(figsize=(8, 8))
         toplot = np.array(self.antPos[: self.Nant])
-        antPlotBas = plt.plot([0], [0], "-b")[0]
-        antPlotPlot = plt.plot(toplot[:, 0], toplot[:, 1], "o", color="lime", picker=5)[
-            0
-        ]
+        plt.plot([0], [0], "-b")[0]
+        plt.plot(toplot[:, 0], toplot[:, 1], "o", color="lime", picker=5)[0]
         plt.xlim(-self.Xmax, self.Xmax)
         plt.ylim(-self.Xmax, self.Xmax)
         plt.xlabel("East-West offset (Km)")
@@ -3801,7 +3828,7 @@ class ALMASimulator(QMainWindow):
     def _plot_uv_coverage(self):
         self.ulab = r"U (k$\lambda$)"
         self.vlab = r"V (k$\lambda$)"
-        UVPlot = plt.figure(figsize=(8, 8))
+        plt.figure(figsize=(8, 8))
         UVPlotPlot = []
         toplotu = self.u.flatten() / self.lfac
         toplotv = self.v.flatten() / self.lfac
@@ -3832,9 +3859,9 @@ class ALMASimulator(QMainWindow):
         plt.close()
 
     def _plot_beam(self):
-        beamPlot = plt.figure(figsize=(8, 8))
+        plt.figure(figsize=(8, 8))
         beamPlotPlot = plt.imshow(
-            self.beam[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            self.beam[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
             picker=True,
             interpolation="nearest",
             cmap=self.currcmap,
@@ -3870,12 +3897,13 @@ class ALMASimulator(QMainWindow):
         if (
             np.sum(
                 self.totsampling[
-                    self.Nphf - 4 : self.Nphf + 4, self.Nphf - 4 : self.Nphf + 4
+                    self.Nphf - 4: self.Nphf + 4, self.Nphf - 4 : self.Nphf + 4
                 ]
             )
             == nptot
         ):
-            warn = "WARNING!\nToo short baselines for such a small image\nPLEASE, INCREASE THE IMAGE SIZE!\nAND/OR DECREASE THE WAVELENGTH"
+            warn = "WARNING!\nToo short baselines for such a small image\nPLEASE, \
+                INCREASE THE IMAGE SIZE!\nAND/OR DECREASE THE WAVELENGTH"
             beamText.set_text(warn)
 
         plt.savefig(os.path.join(self.plot_dir, "beam_{}.png".format(str(self.idx))))
@@ -3887,7 +3915,7 @@ class ALMASimulator(QMainWindow):
         simPlotPlot = ax[0, 0].imshow(
             np.power(
                 sim_img[
-                    self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4
+                    self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4
                 ],
                 self.gamma,
             ),
@@ -3909,14 +3937,14 @@ class ALMASimulator(QMainWindow):
         ax[0, 0].set_ylabel("Dec offset (as)")
         ax[0, 0].set_xlabel("RA offset (as)")
         totflux = np.sum(
-            sim_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
+            sim_img[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
         )
         ax[0, 0].set_title("MODEL IMAGE: %.2e Jy" % totflux)
         simPlotPlot.norm.vmin = np.min(sim_img)
         simPlotPlot.norm.vmax = np.max(sim_img)
         dirty_img = np.sum(self.dirtyCube, axis=0)
         dirtyPlotPlot = ax[0, 1].imshow(
-            dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            dirty_img[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
             picker=True,
             interpolation="nearest",
         )
@@ -3932,7 +3960,7 @@ class ALMASimulator(QMainWindow):
         ax[0, 1].set_ylabel("Dec offset (as)")
         ax[0, 1].set_xlabel("RA offset (as)")
         totflux = np.sum(
-            dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
+            dirty_img[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
         )
         ax[0, 1].set_title("DIRTY IMAGE: %.2e Jy" % totflux)
         dirtyPlotPlot.norm.vmin = np.min(dirty_img)
@@ -3984,7 +4012,6 @@ class ALMASimulator(QMainWindow):
         sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
         dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))
         wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
-        x_ticks = np.round(wavelenghts, 2)
         specPlot, ax = plt.subplots(1, 2, figsize=(12, 6))
         ax[0].plot(wavelenghts, sim_spectrum)
         ax[0].set_ylabel("Jy/$pix^{2}$")
