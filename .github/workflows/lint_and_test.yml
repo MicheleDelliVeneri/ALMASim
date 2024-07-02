@@ -43,6 +43,8 @@ jobs:
           git submodule update --init    
           cd illustris_python
           pip install . 
+      - name: Install required libraries
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx
       - name: Set up Headless Environment
         run: export QT_QPA_PLATFORM=offscreen
       - name: Run stubtest
