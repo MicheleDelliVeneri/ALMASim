@@ -703,8 +703,8 @@ class Interferometer(QObject):
         self.baseline_phases = {}
         self.bas2change = bas2change
         for nb in self.bas2change:
-            # Calculate the pixel coordinates (pixU, pixV) in the UV plane 
-            # for each visibility sample of the current baseline.  
+            # Calculate the pixel coordinates (pixU, pixV) in the UV plane
+            # for each visibility sample of the current baseline.
             # Rounding to the nearest integer determines the UV pixel location
             pixU = np.rint(self.u[nb] / self.UVpixsize).flatten().astype(np.int32)
             pixV = np.rint(self.v[nb] / self.UVpixsize).flatten().astype(np.int32)
@@ -716,7 +716,7 @@ class Interferometer(QObject):
             # added to introduce Atmospheric Errors
             phase_nb = np.angle(self.Gains[nb, goodpix])
             self.baseline_phases[nb] = phase_nb
-            # Calculate positive and negative pixel indices 
+            # Calculate positive and negative pixel indices
             # (accounting for the shift in the FFT).
             # Isolates positives and negative pixels
             pU = pixU[goodpix] + self.Nphf
@@ -771,17 +771,17 @@ class Interferometer(QObject):
     def _set_beam(self):
         """
         This method calculates the "dirty beam" of the interferometer, which is the
-         Fourier transform of the weighted sampling distribution in the UV plane. 
+         Fourier transform of the weighted sampling distribution in the UV plane.
          It first calculates a denominator for robust weighting,
         which is used to balance data points with varying noise and sampling density.
         The denominator is calculated as 1 plus the product of a robustness factor and
          the total sampling.
-        Then the method applies robust weighting to the total sampling, gains, 
+        Then the method applies robust weighting to the total sampling, gains,
         and noise by dividing each of
         these quantities by the calculated denominator.
         The results are stored in the instance variables `robustsamp`,
          `Grobustsamp`, and `GrobustNoise`, respectively.
-        The method then calculates the dirty beam by performing a 
+        The method then calculates the dirty beam by performing a
          2D inverse Fourier transform
         on the weighted sampling distribution. The zero-frequency component of the
          weighted sampling is shifted to the center before the Fourier transform and
@@ -800,7 +800,7 @@ class Interferometer(QObject):
         - self.beamScale: The maximum value of the beam within a central region.
         """
         # 1. Robust Weighting Calculation:
-        #   - denom: Denominator used for robust weighting to balance data 
+        #   - denom: Denominator used for robust weighting to balance data
         #      points with varying noise and sampling density.
         denom = 1.0 + self.robfac * self.totsampling
         # 2. Apply Robust Weighting to Sampling, Gains, and Noise:
@@ -834,7 +834,7 @@ class Interferometer(QObject):
         This method checks and adjusts the scale factor (`lfac`)
          used for the UV plane coordinates
         and updates the labels (`ulab` and `vlab`) accordingly.
-        The function first calculates a metric `mw` 
+        The function first calculates a metric `mw`
         based on the maximum X coordinate (`Xmax`),
         the third element of the wavelength array, and the current scale factor (`lfac`).
         If `mw` is less than 0.1 and the current scale factor is 1.e6 (indicating
@@ -929,7 +929,7 @@ class Interferometer(QObject):
         #       - 180/np.pi * 3600: Conversion from radians to arcseconds.
         #       - self.wavelength[2]: Observing wavelength at the center of the channel.
         #       - self.Diameters[0]: Diameter of the primary reflector (antenna dish).
-        #       - 2.3548: Factor related to the full-width-half-maximum 
+        #       - 2.3548: Factor related to the full-width-half-maximum
         #           (FWHM) of the Airy disk.
         PB = (
             2.0
@@ -957,40 +957,54 @@ class Interferometer(QObject):
         self.header.append(("BPA", 0.0, "Beam position angle [deg]"))
         # 2. Create Primary Beam Image:
         #   - Creates a 2D Gaussian image (`beamImg`) representing the primary beam.
-        #   - self.distmat: Pre-calculated matrix of squared 
+        #   - self.distmat: Pre-calculated matrix of squared
         #           distances from the image center.
-        #   - np.exp(self.distmat / PB): Calculates 
+        #   - np.exp(self.distmat / PB): Calculates
         #       the Gaussian profile of the beam based on
         #            the distances and primary beam width.
         beamImg = np.exp(self.distmat / PB)
 
         # 3. Apply Primary Beam to Model:
-        #   - Multiplies the original model image (`self.modelimTrue`) by the primary beam image (`beamImg`).
-        #   - This effectively attenuates the model image towards the edges, simulating the telescope's sensitivity pattern.
+        #   - Multiplies the original model image (`self.modelimTrue`)
+        #       by the primary beam image (`beamImg`).
+        #   - This effectively attenuates the model image towards the edges,
+        #       simulating the telescope's sensitivity pattern.
         #   - The result is stored in the first element of the `self.modelim` list
         self.modelim[0][:] = self.modelimTrue * beamImg
 
         # 4. Calculate Model FFT:
-        #   - Computes the 2D Fast Fourier Transform (FFT) of the primary beam-corrected model image.
-        #   - np.fft.fftshift(...): Shifts the zero-frequency component to the center of the array before the FFT, as required for correct FFT interpretation.
+        #   - Computes the 2D Fast Fourier Transform (FFT) of the primary
+        #       beam-corrected model image.
+        #   - np.fft.fftshift(...): Shifts the zero-frequency component to the
+        #  center of the array before the FFT, as required for correct FFT interpretation.
         self.modelfft = np.fft.fft2(np.fft.fftshift(self.modelim[0]))
 
     def _observe(self):
         """
-        Simulates the observation process of the interferometer, generating a 'dirty map' and 'dirty visibilities.'
+        Simulates the observation process of the interferometer,
+            generating a 'dirty map' and 'dirty visibilities.'
 
-        The dirty map is the image obtained directly from the observed visibilities without any deconvolution,
+        The dirty map is the image obtained directly from the observed
+             visibilities without any deconvolution,
         and the dirty visibilities are the Fourier transform of the dirty map.
         """
 
         # 1. Calculate Dirty Map:
-        #   - np.fft.ifftshift(self.GrobustNoise), np.fft.ifftshift(self.Grobustsamp): Shift the zero-frequency components to the corners before inverse FFT.
-        #   - self.modelfft * np.fft.ifftshift(self.Grobustsamp): Element-wise multiplication of the model FFT and the shifted weighted sampling to incorporate the effect of the instrument.
-        #   - ... + self.modelfft * ... : Add the complex noise to the model's visibility after scaling by the robust sampling to obtain the observed visibilities.
-        #   - np.fft.ifft2(...): Perform the 2D inverse Fast Fourier Transform (IFFT) on the combined visibilities (shifted noise + weighted model).
+        #   - np.fft.ifftshift(self.GrobustNoise), np.fft.ifftshift(self.Grobustsamp):
+        #  Shift the zero-frequency components to the corners before inverse FFT.
+        #   - self.modelfft * np.fft.ifftshift(self.Grobustsamp): Element-wise
+        #       multiplication of the model FFT and the shifted weighted sampling to
+        #       incorporate the effect of the instrument.
+        #   - ... + self.modelfft * ... : Add the complex noise to the model's
+        #            visibility after scaling by the robust sampling
+        #           to obtain the observed visibilities.
+        #   - np.fft.ifft2(...): Perform the 2D inverse Fast Fourier Transform (IFFT)
+        #           on the combined visibilities (shifted noise + weighted model).
         #   - np.fft.fftshift(...): Shift the zero-frequency component back to the center.
-        #   - .real: Extract the real part of the IFFT result to get the dirty map, which is a real-valued image.
-        #   - / (1. + self.W2W1): Normalize the dirty map by a factor related to the weighting scheme (`W2W1`).
+        #   - .real: Extract the real part of the IFFT result to get the dirty map, which
+        #       is a real-valued image.
+        #   - / (1. + self.W2W1): Normalize the dirty map by a factor related to the
+        #  weighting scheme (`W2W1`).
         self.dirtymap[:] = (
             np.fft.fftshift(
                 np.fft.ifft2(
@@ -1001,26 +1015,32 @@ class Interferometer(QObject):
         ).real / (1.0 + self.W2W1)
 
         # 2. Normalize Dirty Map:
-        #   - Divide the dirty map by the beam scale factor (`self.beamScale`) calculated earlier in `_set_beam`.
-        #   - This normalization ensures that the peak brightness in the dirty map is consistent with the beam's peak intensity.
+        #   - Divide the dirty map by the beam scale factor (`self.beamScale`)
+        #       calculated earlier in `_set_beam`.
+        #   - This normalization ensures that the peak brightness in the dirty map
+        #        is consistent with the beam's peak intensity.
         self.dirtymap /= self.beamScale
 
         # 3. Correct Negative Values in Dirty Map (Optional):
         #   - Find the minimum value in the dirty map.
         min_dirty = np.min(self.dirtymap)
-        #   - If there are negative values, shift the whole dirty map upwards to make all values non-negative.
-        #   - This step might be necessary to avoid issues with certain image display or processing algorithms.
+        #   - If there are negative values, shift the whole dirty map
+        #        upwards to make all values non-negative.
+        #   - This step might be necessary to avoid issues with certain
+        #            image display or processing algorithms.
         if min_dirty < 0.0:
             self.dirtymap += np.abs(min_dirty)
         else:
             self.dirtymap -= min_dirty
 
         # 4. Calculate Model and Dirty Visibilities:
-        #   - modelvis: Shift the zero-frequency component of the model's Fourier transform to the center.
+        #   - modelvis: Shift the zero-frequency component of the
+        #        model's Fourier transform to the center.
         self.modelvis = np.fft.fftshift(
             self.modelfft
         )  # Already calculated in _set_primary_beam
-        #   - dirtyvis: Shift the zero-frequency component of the dirty visibilities (shifted noise + weighted model) to the center.
+        #   - dirtyvis: Shift the zero-frequency component of the dirty
+        #         visibilities (shifted noise + weighted model) to the center.
         self.dirtyvis = np.fft.fftshift(
             np.fft.ifftshift(self.GrobustNoise)
             + self.modelfft * np.fft.ifftshift(self.Grobustsamp)
