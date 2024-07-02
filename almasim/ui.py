@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 import pandas as pd
 import os
@@ -10,7 +9,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QScrollArea,
     QGridLayout,
-    QCheckBox,
     QTextEdit,
     QSizePolicy,
     QCheckBox,
@@ -43,10 +41,8 @@ import json
 import astropy.units as U
 from astropy.constants import c
 from astropy.cosmology import FlatLambdaCDM
-from astropy.time import Time
 import math
 from math import pi, ceil
-from datetime import date
 import time
 import shutil
 from time import strftime, gmtime
@@ -60,7 +56,6 @@ import almasim.skymodels as usm
 import almasim.interferometer as uin
 import threading
 import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import logging
