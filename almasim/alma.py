@@ -47,7 +47,7 @@ def get_tap_service():
                 print(f"Connected successfully to {url}")
                 return service
             except Exception as e:
-                print(f"Failed to connect to {url}: {e}")
+                print("Failed to connect to {}: {}".format(url, e))
                 print("Retrying other servers...")
         print("All URLs attempted and failed, retrying...")
 
@@ -60,7 +60,7 @@ def search_with_retry(service, query):
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_science_types():
     service = get_tap_service()
-    query = f"""
+    query = """
             SELECT science_keyword, scientific_category
             FROM ivoa.obscore
             WHERE science_observation = 'T'
@@ -71,7 +71,7 @@ def get_science_types():
         pyvo.dal.exceptions.DALServiceError,
         requests.exceptions.RequestException,
     ) as e:
-        print(f"Error querying TAP service: {e}")
+        print("Error querying TAP service: {}".format(e))
         raise
     science_keywords = db["science_keyword"].unique()
     scientific_category = db["scientific_category"].unique()
@@ -101,7 +101,7 @@ def query_observations(member_ous_uid, target_name):
     and target name, selecting all columns of interest.
 
     Parameters:
-    service (pyvo.dal.TAPService): A TAPService instance for 
+    service (pyvo.dal.TAPService): A TAPService instance for
                                    querying the database.
     member_ous_uid (str): The unique identifier for the member OUS
                                    to filter observations by.
@@ -151,11 +151,11 @@ def query_observations(member_ous_uid, target_name):
 
 
 def query_all_targets(targets):
-    """Query observations for all predefined targets and compile 
+    """Query observations for all predefined targets and compile
     the results into a single DataFrame.
 
     Parameters:
-    service (pyvo.dal.TAPService): A TAPService instance 
+    service (pyvo.dal.TAPService): A TAPService instance
                                    for querying the database.
     targets (list of tuples): A list where each t
                               uple contains (target_name, member_ous_uid).
@@ -265,7 +265,9 @@ def query_by_science_type(
     if time_resolution_range is None:
         time_resolution_query = ""
     else:
-        time_resolution_query = f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
+        time_resolution_query = f"t_resolution BETWEEN {
+            time_resolution_range[0]} AND {
+            time_resolution_range[1]}"
 
     if frequency_range is None:
         frequency_query = ""
@@ -299,12 +301,13 @@ def query_by_science_type(
 # -------------------- Metadata Processing Functions ---------------------- #
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
     """
-    Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA) in arcseconds.
+    Estimates the beam size of the Atacama Large Millimeter/submillimeter Array (ALMA)
+    in arcseconds.
 
     This function provides an approximation based on the theoretical relationship between
     observing frequency and maximum baseline. The formula used is:
-    beam_size = (speed_of_light / central_frequency) / max_baseline * (180 / pi) * 3600 arcseconds
-    [km]/[s] * [s] / [km] = [radians] * [arcsec /radian] * [arcseconds/degree]
+    beam_size = (speed_of_light / central_frequency) / max_baseline * (180 / pi) * 3600
+    arcseconds [km]/[s] * [s] / [km] = [radians] * [arcsec /radian] * [arcseconds/degree]
 
     Args:
         central_frequency_ghz: Central frequency of the observing band in GHz (float).
@@ -409,7 +412,11 @@ def generate_antenna_config_file_from_antenna_array(
         f.write(intro_string)
         for i in range(len(obs_coordinates)):
             f.write(
-                f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n"
+                f"{
+                    obs_coordinates['x'].values[i]} {
+                    obs_coordinates['y'].values[i]} {
+                    obs_coordinates['z'].values[i]} 12. {
+                    obs_coordinates['name'].values[i]}\n"
             )
     f.close()
 
