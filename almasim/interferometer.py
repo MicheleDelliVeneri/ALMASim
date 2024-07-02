@@ -230,7 +230,7 @@ class Interferometer(QObject):
         self.header.append(("EPOCH", self.nH))
     
     def _read_antennas(self):
-        antenna_coordinates = pd.read_csv(os.path.join(self.main_dir, 'antenna_config', 'antenna_coordinates.csv'))
+        antenna_coordinates = pd.read_csv(os.path.join(self.main_dir, 'almasim', 'antenna_config', 'antenna_coordinates.csv'))
         obs_antennas = self.antenna_array.split(' ')
         obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
         obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]

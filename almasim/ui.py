@@ -2610,7 +2610,7 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log('RA: {}'.format(ra))
             self.terminal.add_log('DEC: {}'.format(dec))
             self.terminal.add_log('Integration Time: {}'.format(int_time))
-        ual.generate_antenna_config_file_from_antenna_array(antenna_array, main_dir, sim_output_dir)
+        ual.generate_antenna_config_file_from_antenna_array(antenna_array, os.path.join(main_dir, 'almasim'), sim_output_dir)
         antennalist = os.path.join(sim_output_dir, "antenna.cfg")
         antenna_name = 'antenna'
         self.progress_bar_entry.setText('Computing Max baseline')
@@ -2647,7 +2647,7 @@ class ALMASimulator(QMainWindow):
             rest_frequency = rest_frequency * U.GHz
             redshift = uas.compute_redshift(rest_frequency, source_freq)
         else:
-            rest_frequency = uas.compute_rest_frequency_from_redshift(main_dir, source_freq.value, redshift) * U.GHz
+            rest_frequency = uas.compute_rest_frequency_from_redshift(os.path.join(main_dir, 'almasim'), source_freq.value, redshift) * U.GHz
         continum, line_fluxes, line_names, redshift, line_frequency, source_channel_index, n_channels_nw, bandwidth, freq_sup_nw, cont_frequencies, fwhm_z, lum_infrared  = self.process_spectral_data(
                                                                             source_type,
                                                                             main_dir,
@@ -2693,7 +2693,7 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log('Infrared Luminosity: {:.2e}'.format(lum_infrared))
         if source_type == 'extended':
             snapshot = uas.redshift_to_snapshot(redshift)
-            tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+            tng_subhaloid = uas.get_subhaloids_from_db(1, os.path.join(main_dir, 'almasim'), snapshot)
             outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
             part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
             if remote == True:
@@ -2709,7 +2709,7 @@ class ALMASimulator(QMainWindow):
                     print('No particles found. Checking another subhalo.')
                 else:
                     self.terminal.add_log('No particles found. Checking another subhalo.')
-                tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+                tng_subhaloid = uas.get_subhaloids_from_db(1, os.path.join(main_dir, 'almasim'), snapshot)
                 outpath = os.path.join(tng_dir, 'TNG100-1', 'output', 'snapdir_0{}'.format(snapshot))
                 part_num = uas.get_particles_num(tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key)
                 if remote == True:
