@@ -370,21 +370,26 @@ class Interferometer(QObject):
 
     def _get_channel_wavelength(self):
         """
-        This method calculates the range of wavelengths for a given channel and formats the output for display.
+        This method calculates the range of wavelengths for a given channel and formats
+         the output for display.
 
-        The method first retrieves the observed wavelengths for the current channel and converts them to a list.
+        The method first retrieves the observed wavelengths for the current channel and
+         converts them to a list.
         It then calculates the average of the  two wavelengths and appends it to the list.
         The list of wavelengths is then stored in the instance variable `self.wavelength`.
 
         The method also prepares two formatted strings for display.
         `self.fmtB1` is a string that displays the average wavelength in millimeters.
-        `self.fmtB` is a string that includes `self.fmtB1` and additional placeholders for flux density (in Jy/beam) and
+        `self.fmtB` is a string that includes `self.fmtB1` and additional placeholders
+        for flux density (in Jy/beam) and
         changes in right ascension and declination (in degrees).
 
         Attributes Set:
-            self.wavelength (list): A list of wavelengths for the current channel, including the average of the first two.
+            self.wavelength (list): A list of wavelengths for the current channel,
+            including the average of the first two.
             self.fmtB1 (str): A formatted string displaying the average wavelength.
-            self.fmtB (str): A formatted string including `self.fmtB1` and placeholders for additional data.
+            self.fmtB (str): A formatted string including `self.fmtB1` and placeholders
+            for additional data.
 
         """
         wavelength = list(self.obs_wavelengths[self.channel] * 1e-3)
@@ -402,9 +407,10 @@ class Interferometer(QObject):
     def _prepare_2d_arrays(self):
         """
         This method initializes several 2D arrays with zeros, each of size (Npix x Npix).
-        The arrays are used to store various types of data related to the interferometer's operation.
-        The method is typically called at the start of a new observation or simulation to ensure that
-        the arrays are in a clean state.
+        The arrays are used to store various types of data related to the interferometer's
+        operation.
+        The method is typically called at the start of a new observation or simulation
+        to ensure that the arrays are in a clean state.
 
         Attributes Set:
             self.beam (np.array): A 2D array to store the beam data.
@@ -428,28 +434,39 @@ class Interferometer(QObject):
     def _prepare_baselines(self):
         """
         This method prepares the baselines for an interferometer array.
-        The method first calculates the number of unique baselines in an array of N antennas.
-        It then initializes several arrays to store baseline parameters and visibility data,
-        including baseline vectors, baseline indices, antenna pair indices, complex gains,
-        complex noise values, and hour angle values.
-        The method also calculates the sine and cosine of the hour angles and stores them in `self.H`.
-        It then iterates over all unique antenna pairs, assigning a baseline index to each pair
+        The method first calculates the number of unique
+        baselines in an array of N antennas.
+        It then initializes several arrays to store baseline parameters and
+        visibility data, including baseline vectors, baseline indices,
+        antenna pair indices, complex gains, complex noise values, and hour angle values.
+        The method also calculates the sine and cosine of the hour angles
+        and stores them in `self.H`.
+        It then iterates over all unique antenna pairs,
+        assigning a baseline index to each pair
         and storing the antenna pair indices for each baseline.
-        Finally, it initializes arrays to store u and v coordinates (in wavelengths) for each
-        baseline at each hour angle, and sets `self.ravelDims` to the shape of these arrays.
+        Finally, it initializes arrays to store u and v coordinates
+        (in wavelengths) for each
+        baseline at each hour angle, and sets `self.ravelDims`
+        to the shape of these arrays.
 
         Attributes Set:
             self.Nbas (int): The number of unique baselines in the array.
             self.B (np.array): Baseline vectors for each baseline at each hour angle.
-            self.basnum (np.array): A matrix storing the baseline index for each pair of antennas.
-            self.basidx (np.array): A square matrix storing the baseline index for each pair of antennas.
+            self.basnum (np.array): A matrix storing the baseline index for each pair
+                                    of antennas.
+            self.basidx (np.array): A square matrix storing the baseline index for each
+                                    pair of antennas.
             self.antnum (np.array): Stores the antenna pair indices for each baseline.
             self.Gains (np.array): Complex gains for each baseline at each hour angle.
-            self.Noise (np.array): Complex noise values for each baseline at each hour angle.
-            self.Horig (np.array): Original hour angle values, evenly spaced over the observation time.
+            self.Noise (np.array): Complex noise values for each baseline at each
+                                   hour angle.
+            self.Horig (np.array): Original hour angle values, evenly spaced over the
+                                   observation time.
             self.H (list): Trigonometric values (sine and cosine) of the hour angles.
-            self.u (np.array): u coordinates (in wavelengths) for each baseline at each hour angle.
-            self.v (np.array): v coordinates (in wavelengths) for each baseline at each hour angle.
+            self.u (np.array): u coordinates (in wavelengths) for each baseline at
+                               each hour angle.
+            self.v (np.array): v coordinates (in wavelengths) for each baseline at
+                               each hour angle.
             self.ravelDims (tuple): The shape of the u and v arrays.
         """
         # Calculate the number of unique baselines in an array of N antennas
@@ -503,17 +520,23 @@ class Interferometer(QObject):
         """
         This method sets the noise level for the interferometer array.
 
-        If the noise level (`self.noise`) is set to 0.0, the method sets all elements of the `self.Noise` array to 0.0.
+        If the noise level (`self.noise`) is set to 0.0, the method sets all elements
+         of the `self.Noise` array to 0.0.
 
-        If the noise level is not 0.0, the method generates a complex random noise distribution with a mean of 0 and a
-        standard deviation equal to the noise level. This distribution is then assigned to the `self.Noise` array.
+        If the noise level is not 0.0, the method generates a complex random noise
+         distribution with a mean of 0 and a
+        standard deviation equal to the noise level. This distribution is then assigned
+         to the `self.Noise` array.
 
-        The noise distribution is generated using the numpy `random.normal` function, which draws random samples from a
-        normal (Gaussian) distribution. The real and imaginary parts of the noise are generated separately, each with a
+        The noise distribution is generated using the numpy `random.normal` function,
+         which draws random samples from a
+        normal (Gaussian) distribution. The real and imaginary parts of the noise are
+        generated separately, each with a
         mean of 0 and a standard deviation equal to the noise level.
 
         Attributes Set:
-            self.Noise (np.array): The noise array for the interferometer array. Each element represents the noise level
+            self.Noise (np.array): The noise array for the interferometer array.
+            Each element represents the noise level
             at a specific baseline and hour angle.
 
         """
@@ -533,24 +556,34 @@ class Interferometer(QObject):
     def _set_baselines(self, antidx=-1):
         """
 
-        This method is responsible for calculating the baseline vectors (in wavelengths) and the
-        corresponding u and v coordinates (spatial frequencies) in the UV plane for each baseline
+        This method is responsible for calculating the baseline vectors
+         (in wavelengths) and the
+        corresponding u and v coordinates (spatial frequencies) in the
+         UV plane for each baseline
         in the interferometer array.
-        The method first determines which baselines to update based on the provided antenna index (`antidx`).
-        If `antidx` is -1, all baselines are updated. If `antidx` is a valid antenna index, only baselines
-        involving that antenna are updated. If `antidx` is invalid, no baselines are updated.
+        The method first determines which baselines to update based on
+         the provided antenna index (`antidx`).
+        If `antidx` is -1, all baselines are updated. If `antidx` is a
+         valid antenna index, only baselines
+        involving that antenna are updated. If `antidx` is invalid,
+         no baselines are updated.
 
-        The method then iterates over the baselines that need updating. For each baseline, it calculates the
-        baseline vector components (B_x, B_y, B_z) in wavelengths, and the u and v coordinates in the UV plane.
+        The method then iterates over the baselines that need updating. For each baseline,
+         it calculates the
+        baseline vector components (B_x, B_y, B_z) in wavelengths, and the u and v
+         coordinates in the UV plane.
 
         Parameters:
-            antidx (int, optional): The index of the antenna for which to update baselines. If -1, all baselines
-            are updated. Defaults to -1.
+            antidx (int, optional): The index of the antenna for which to update
+             baselines. If -1, all baselines are updated. Defaults to -1.
 
         Attributes Set:
-            self.B (np.array): The baseline vectors for each baseline in the interferometer array.
-            self.u (np.array): The u coordinates (spatial frequencies) for each baseline in the UV plane.
-            self.v (np.array): The v coordinates (spatial frequencies) for each baseline in the UV plane.
+            self.B (np.array): The baseline vectors for each baseline in
+                               the interferometer array.
+            self.u (np.array): The u coordinates (spatial frequencies)
+                               for each baseline in the UV plane.
+            self.v (np.array): The v coordinates (spatial frequencies)
+                               for each baseline in the UV plane.
 
         """
         # Determine which baselines to update:
@@ -604,35 +637,50 @@ class Interferometer(QObject):
     def _grid_uv(self, antidx=-1):
         """
         The main purpose of this method is to take the continuous visibility measurements
-        collected by the interferometer (represented by u and v coordinates for each baseline) and "grid" them onto
-        a discrete grid in the UV plane.
+        collected by the interferometer (represented by u and v coordinates for each
+         baseline) and "grid" them onto a discrete grid in the UV plane.
         Parameters:
-            antidx (int): The index of the specific antenna for which to grid the baselines.
-                            If -1, all baselines are gridded. Default is -1.
-        The method first determines which baselines to grid based on the provided antenna index.
-        If no specific antenna is provided (antidx=-1), all baselines are gridded. If a specific antenna index
-        is provided and it is less than the total number of antennas, only the baselines associated with
-        that antenna are gridded. If the provided antenna index is invalid (greater than or equal to the total number
-        of antennas), no baselines are gridded. The method then calculates the pixel size in the UV plane
-        and initializes the baseline phases dictionary and the list of baselines to change.
-        For each baseline in the list of baselines to change, the method calculates the pixel coordinates
-        in the UV plane for each visibility sample of the current baseline. It then filters out visibility samples
-        that fall outside the field of view (half-plane) and calculates the phase of the gains to introduce atmospheric
-        errors.
-        The method then calculates positive and negative pixel indices (accounting for the shift in the FFT)
-        and updates the total sampling, gains, and noise at the corresponding pixel locations in the UV grid for
+            antidx (int): The index of the specific antenna for which to
+                          grid the baselines.
+                          If -1, all baselines are gridded. Default is -1.
+        The method first determines which baselines to grid
+         based on the provided antenna index.
+        If no specific antenna is provided (antidx=-1), all
+         baselines are gridded. If a specific antenna index
+        is provided and it is less than the total number of antennas,
+         only the baselines associated with
+        that antenna are gridded. If the provided antenna index is invalid
+         (greater than or equal to the total number
+        of antennas), no baselines are gridded. The method then calculates
+         the pixel size in the UV plane
+        and initializes the baseline phases dictionary and the
+        list of baselines to change.
+        For each baseline in the list of baselines to change, the method calculates
+         the pixel coordinates
+        in the UV plane for each visibility sample of the current baseline.
+         It then filters out visibility samples
+        that fall outside the field of view (half-plane) and calculates the phase
+         of the gains to introduce atmospheric errors.
+        The method then calculates positive and negative pixel indices
+         (accounting for the shift in the FFT)
+        and updates the total sampling, gains, and noise at the
+         corresponding pixel locations in the UV grid for
         the good pixels of the current baseline.
-        Finally, the method calculates a robustness factor based on the total sampling and a user-defined parameter.
+        Finally, the method calculates a robustness factor based on
+         the total sampling and a user-defined parameter.
 
         The method modifies the following instance variables:
         - self.pixpos: A list of lists storing the pixel positions for each baseline.
-        - self.totsampling: An array storing the total sampling for each pixel in the UV grid.
+        - self.totsampling: An array storing the total sampling for each pixel
+                             in the UV grid.
         - self.Gsampling: An array storing the total gains for each pixel in the UV grid.
         - self.noisemap: An array storing the total noise for each pixel in the UV grid.
         - self.UVpixsize: The pixel size in the UV plane.
-        - self.baseline_phases: A dictionary storing the phase of the gains for each baseline.
+        - self.baseline_phases: A dictionary storing the phase of the gains
+                                for each baseline.
         - self.bas2change: A list of the baselines to change.
-        - self.robfac: A robustness factor based on the total sampling and a user-defined parameter.
+        - self.robfac: A robustness factor based on the total
+                         sampling and a user-defined parameter.
         """
         # Determine which baselines to grid:
         if antidx == -1:
@@ -655,9 +703,9 @@ class Interferometer(QObject):
         self.baseline_phases = {}
         self.bas2change = bas2change
         for nb in self.bas2change:
-            # Calculate the pixel coordinates (pixU, pixV) in the UV plane for each visibility
-            # sample of the current baseline.  Rounding to the nearest integer determines the
-            # UV pixel location
+            # Calculate the pixel coordinates (pixU, pixV) in the UV plane 
+            # for each visibility sample of the current baseline.  
+            # Rounding to the nearest integer determines the UV pixel location
             pixU = np.rint(self.u[nb] / self.UVpixsize).flatten().astype(np.int32)
             pixV = np.rint(self.v[nb] / self.UVpixsize).flatten().astype(np.int32)
             # Filter out visibility samples that fall outside the field of view
@@ -668,7 +716,8 @@ class Interferometer(QObject):
             # added to introduce Atmospheric Errors
             phase_nb = np.angle(self.Gains[nb, goodpix])
             self.baseline_phases[nb] = phase_nb
-            # Calculate positive and negative pixel indices (accounting for the shift in the FFT).
+            # Calculate positive and negative pixel indices 
+            # (accounting for the shift in the FFT).
             # Isolates positives and negative pixels
             pU = pixU[goodpix] + self.Nphf
             pV = pixV[goodpix] + self.Nphf
@@ -721,15 +770,26 @@ class Interferometer(QObject):
 
     def _set_beam(self):
         """
-        This method calculates the "dirty beam" of the interferometer, which is the Fourier transform of
-        the weighted sampling distribution in the UV plane. It first calculates a denominator for robust weighting,
+        This method calculates the "dirty beam" of the interferometer, which is the
+         Fourier transform of the weighted sampling distribution in the UV plane. 
+         It first calculates a denominator for robust weighting,
         which is used to balance data points with varying noise and sampling density.
-        The denominator is calculated as 1 plus the product of a robustness factor and the total sampling.
-        Then the method applies robust weighting to the total sampling, gains, and noise by dividing each of
+        The denominator is calculated as 1 plus the product of a robustness factor and
+         the total sampling.
+        Then the method applies robust weighting to the total sampling, gains, 
+        and noise by dividing each of
         these quantities by the calculated denominator.
-        The results are stored in the instance variables `robustsamp`, `Grobustsamp`, and `GrobustNoise`, respectively.
-        The method then calculates the dirty beam by performing a 2D inverse Fourier transform on the weighted sampling distribution. The zero-frequency component of the weighted sampling is shifted to the center before the Fourier transform and shifted back to the original corner after the Fourier transform. The real part of the result is extracted and normalized by a factor determined by `W2W1`. The result is stored in the instance variable `beam`.
-        Finally, the method scales and normalizes the beam by dividing it by its maximum value within a central region.
+        The results are stored in the instance variables `robustsamp`,
+         `Grobustsamp`, and `GrobustNoise`, respectively.
+        The method then calculates the dirty beam by performing a 
+         2D inverse Fourier transform
+        on the weighted sampling distribution. The zero-frequency component of the
+         weighted sampling is shifted to the center before the Fourier transform and
+          shifted back to the original corner after the Fourier transform.
+           The real part of the result is extracted and normalized by a factor
+            determined by `W2W1`. The result is stored in the instance variable `beam`.
+        Finally, the method scales and normalizes the beam by dividing it by
+         its maximum value within a central region.
         The maximum value is found and stored in the instance variable `beamScale`,
         and the beam is then divided by this value.
         The function modifies the following instance variables:
@@ -740,7 +800,8 @@ class Interferometer(QObject):
         - self.beamScale: The maximum value of the beam within a central region.
         """
         # 1. Robust Weighting Calculation:
-        #   - denom: Denominator used for robust weighting to balance data points with varying noise and sampling density.
+        #   - denom: Denominator used for robust weighting to balance data 
+        #      points with varying noise and sampling density.
         denom = 1.0 + self.robfac * self.totsampling
         # 2. Apply Robust Weighting to Sampling, Gains, and Noise:
         #   - robustsamp: Weighted sampling distribution in the UV plane.
@@ -748,16 +809,21 @@ class Interferometer(QObject):
         self.Grobustsamp[:] = self.Gsampling / denom
         self.GrobustNoise[:] = self.noisemap / denom
         # 3. Dirty Beam Calculation:
-        #   - np.fft.fftshift(self.robustsamp): Shift the zero-frequency component of the weighted sampling to the center for FFT.
-        #   - np.fft.ifft2(...): Perform the 2D inverse Fourier Transform to get the dirty beam in the image domain.
-        #   - np.fft.ifftshift(...): Shift the zero-frequency component back to the original corner.
-        #   - .real: Extract the real part of the complex result, as the beam is a real-valued function.
+        #   - np.fft.fftshift(self.robustsamp): Shift the zero-frequency component
+        #       of the weighted sampling to the center for FFT.
+        #   - np.fft.ifft2(...): Perform the 2D inverse Fourier Transform to
+        #       get the dirty beam in the image domain.
+        #   - np.fft.ifftshift(...): Shift the zero-frequency component back
+        #       to the original corner.
+        #   - .real: Extract the real part of the complex result, as the beam
+        #       is a real-valued function.
         #   -  / (1. + self.W2W1): Normalize the beam by a factor determined by `W2W1`.
         self.beam[:] = np.fft.ifftshift(
             np.fft.ifft2(np.fft.fftshift(self.robustsamp))
         ).real / (1.0 + self.W2W1)
         # 4. Beam Scaling and Normalization:
-        #   - Find the maximum value of the beam within a central region (likely to avoid edge effects).
+        #   - Find the maximum value of the beam within a central region
+        #       (likely to avoid edge effects).
         self.beamScale = np.max(
             self.beam[self.Nphf: self.Nphf + 1, self.Nphf: self.Nphf + 1]
         )
@@ -765,16 +831,22 @@ class Interferometer(QObject):
 
     def _check_lfac(self):
         """
-        This method checks and adjusts the scale factor (`lfac`) used for the UV plane coordinates
+        This method checks and adjusts the scale factor (`lfac`)
+         used for the UV plane coordinates
         and updates the labels (`ulab` and `vlab`) accordingly.
-        The function first calculates a metric `mw` based on the maximum X coordinate (`Xmax`),
+        The function first calculates a metric `mw` 
+        based on the maximum X coordinate (`Xmax`),
         the third element of the wavelength array, and the current scale factor (`lfac`).
-        If `mw` is less than 0.1 and the current scale factor is 1.e6 (indicating that the UV plane coordinates
-        are currently in Mλ), the function changes the scale factor to 1.e3 (to switch the UV plane coordinates to kλ)
+        If `mw` is less than 0.1 and the current scale factor is 1.e6 (indicating
+         that the UV plane coordinates
+        are currently in Mλ), the function changes the scale factor to 1.e3
+         (to switch the UV plane coordinates to kλ)
         and updates the labels accordingly.
 
-        If `mw` is greater than or equal to 100 and the current scale factor is 1.e3 (indicating that the UV
-        plane coordinates are currently in kλ), the function changes the scale factor to 1.e6 (to switch the UV
+        If `mw` is greater than or equal to 100 and the current scale factor is 1.e3
+         (indicating that the UV
+        plane coordinates are currently in kλ), the function changes the scale factor
+         to 1.e6 (to switch the UV
         plane coordinates to Mλ) and updates the labels accordingly.
 
         The function modifies the following instance variables:
@@ -850,13 +922,15 @@ class Interferometer(QObject):
 
         # 1. Primary Beam Calculation:
         #   - Calculates the primary beam width (PB) in units of pixels squared.
-        #   - The formula is derived from the Airy disk pattern for a circular aperture (telescope dish).
+        #   - The formula is derived from the Airy disk pattern
+        #   for a circular aperture (telescope dish).
         #   - Key factors:
         #       - 1220:  Scaling factor related to the Airy disk.
         #       - 180/np.pi * 3600: Conversion from radians to arcseconds.
         #       - self.wavelength[2]: Observing wavelength at the center of the channel.
         #       - self.Diameters[0]: Diameter of the primary reflector (antenna dish).
-        #       - 2.3548: Factor related to the full-width-half-maximum (FWHM) of the Airy disk.
+        #       - 2.3548: Factor related to the full-width-half-maximum 
+        #           (FWHM) of the Airy disk.
         PB = (
             2.0
             * (
@@ -883,8 +957,11 @@ class Interferometer(QObject):
         self.header.append(("BPA", 0.0, "Beam position angle [deg]"))
         # 2. Create Primary Beam Image:
         #   - Creates a 2D Gaussian image (`beamImg`) representing the primary beam.
-        #   - self.distmat: Pre-calculated matrix of squared distances from the image center.
-        #   - np.exp(self.distmat / PB): Calculates the Gaussian profile of the beam based on the distances and primary beam width.
+        #   - self.distmat: Pre-calculated matrix of squared 
+        #           distances from the image center.
+        #   - np.exp(self.distmat / PB): Calculates 
+        #       the Gaussian profile of the beam based on
+        #            the distances and primary beam width.
         beamImg = np.exp(self.distmat / PB)
 
         # 3. Apply Primary Beam to Model:
