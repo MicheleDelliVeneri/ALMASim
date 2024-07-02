@@ -44,7 +44,7 @@ jobs:
           cd illustris_python
           pip install . 
       - name: Install required libraries
-        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx && sudo find / -name "libEGL.so.1"
       - name: Set up Headless Environment
         run: export QT_QPA_PLATFORM=offscreen
       - name: Run stubtest
