@@ -56,11 +56,10 @@ import almasim.skymodels as usm
 import almasim.interferometer as uin
 import threading
 import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import logging
 import re
-
+matplotlib.use("Agg")
 
 class MemoryLimitPlugin(WorkerPlugin):
     def __init__(self, memory_limit):
