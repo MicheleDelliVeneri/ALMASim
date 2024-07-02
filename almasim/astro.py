@@ -1,21 +1,12 @@
-import astropy.units as U
-from astropy.cosmology import FlatLambdaCDM
-from astropy.io import fits
-from astropy.coordinates import SkyCoord
-from astropy.constants import c
 import h5py
 import illustris_python as il
 from random import choices
-import sys
 import os
 import numpy as np
 import pandas as pd
 from os.path import isfile, expanduser
 import subprocess
 import six
-from math import pi
-from tqdm import tqdm
-from pyvo.dal import sia
 
 
 # -------------------- TNG Auxiliary Functions ----------------------------- #
@@ -316,12 +307,12 @@ def loadObjects(basePath, snapNum, gName, nName, fields):
 
             # read data local to the current file
             if len(shape) == 1:
-                result[field][wOffset : wOffset + shape[0]] = f[gName][field][
-                    0 : shape[0]
+                result[field][wOffset: wOffset + shape[0]] = f[gName][field][
+                    0: shape[0]
                 ]
             else:
-                result[field][wOffset : wOffset + shape[0], :] = f[gName][field][
-                    0 : shape[0], :
+                result[field][wOffset: wOffset + shape[0], :] = f[gName][field][
+                    0: shape[0], :
                 ]
 
         wOffset += shape[0]
@@ -453,7 +444,7 @@ def loadSubset(
       For example, fields=['Coordinates', 'Masses'] and mdi=[1, None] returns a 1D array
       of y-Coordinates only, together with Masses.
     If sq is True, return a numpy array instead of a dict if len(fields)==1.
-    If float32 is True, load any float64 datatype arrays directly as float32 (save memory).
+    If float32 is True, load any float64 datatype arrays directly as float32.
     """
     result = {}
 
@@ -470,7 +461,11 @@ def loadSubset(
     if not isfile(snapPath(basePath, snapNum)):
         print("Downloading Snapshot {}...".format(snapNum))
         url = f"http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}"
-        cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{0}.hdf5 -O {snapPath2(basePath, snapNum)}'
+        wget_options = "-q --progress=bar --content-disposition"
+        api_key_header = f'--header="API-Key:{api_key}"'
+        filename = f"{url}.{0}.hdf5"
+        output_file = f'-O {snapPath2(basePath, snapNum)}'
+        cmd = f"{wget_options} {api_key_header} {filename} {output_file}"
         subprocess.check_call(cmd, shell=True)
     with h5py.File(snapPath(basePath, snapNum), "r") as f:
 
@@ -504,10 +499,15 @@ def loadSubset(
                 f = h5py.File(snapPath(basePath, snapNum, i), "r")
             else:
                 print("Not Found")
-                url = f"http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}"
-                subdir = os.path.join("output", "snapdir_0{}".format(str(i)))
-                cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{i}.hdf5'
-                print(f"Downloading {message} {i} ...")
+                url = f"http://www.tng-project.org/api/TNG100-1/files/snapshot-{
+                    str(snapNum)}"
+                # subdir = os.path.join("output", "snapdir_0{}".format(str(i)))
+                cmd = (
+                    f'wget -q --progress=bar --content-disposition '
+                    f'--header="API-Key:{api_key}" '  # Separate f-string for clarity
+                    f'{url}.{i}.hdf5'
+                )
+                print(f"Downloading snapshot {i} ...")
                 if outPath is not None:
                     os.chdir(outPath)
                 subprocess.check_call(cmd, shell=True)
@@ -561,9 +561,13 @@ def loadSubset(
             url = (
                 f"http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}"
             )
-            subdir = os.path.join("output", "snapdir_0{}".format(str(fileNum)))
+            # subdir = os.path.join("output", "snapdir_0{}".format(str(fileNum)))
             savePath = os.path.join(basePath, "snapdir_0{}".format(str(snapNum)))
-            cmd = f'wget -P {savePath} -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url}.{fileNum}.hdf5'
+            cmd = (
+                f'wget -P {savePath} -q --progress=bar --content-disposition '
+                f'--header="API-Key:{api_key}" '
+                f'{url}.{fileNum}.hdf5'
+            )
             if outPath is not None:
                 os.chdir(outPath)
             print(f"Downloading Snapshot {fileNum} in {savePath}...")
@@ -586,20 +590,15 @@ def loadSubset(
 
         if fileOff + numToReadLocal > numTypeLocal:
             numToReadLocal = numTypeLocal - fileOff
-
-        # print('['+str(fileNum).rjust(3)+'] off='+str(fileOff)+' read ['+str(numToReadLocal)+\
-        #      '] of ['+str(numTypdeLocal)+'] remaining = '+str(numToRead-numToReadLocal))
-
-        # loop over each requested field for this particle type
         for i, field in enumerate(fields):
             # read data local to the current file
             if mdi is None or mdi[i] is None:
-                result[field][wOffset : wOffset + numToReadLocal] = f[gName][field][
-                    fileOff : fileOff + numToReadLocal
+                result[field][wOffset: wOffset + numToReadLocal] = f[gName][field][
+                    fileOff: fileOff + numToReadLocal
                 ]
             else:
-                result[field][wOffset : wOffset + numToReadLocal] = f[gName][field][
-                    fileOff : fileOff + numToReadLocal, mdi[i]
+                result[field][wOffset: wOffset + numToReadLocal] = f[gName][field][
+                    fileOff: fileOff + numToReadLocal, mdi[i]
                 ]
 
         wOffset += numToReadLocal
@@ -631,7 +630,12 @@ def download_groupcat(basePath, snapNum, fileNum, api_key):
     url = "http://www.tng-project.org/api/TNG100-1/files/groupcat-{}.{}.hdf5".format(
         snapNum, fileNum
     )
-    cmd = f'wget -nd -nc -nv -e robots=off -l 1 -A hdf5 --content-disposition --header="API-Key:{api_key}" {url} -O {gcPath(basePath, snapNum, fileNum)}'
+    cmd = (
+        f"wget -nd -nc -nv -e robots=off -l 1 -A hdf5 "
+        f'--content-disposition --header="API-Key:{api_key}" '  # Split here
+        f"{url} "
+        f"-O {gcPath(basePath, snapNum, fileNum)}"
+    )
     subprocess.check_call(cmd, shell=True)
     print("Done.")
 
@@ -639,7 +643,7 @@ def download_groupcat(basePath, snapNum, fileNum, api_key):
 def getSnapOffsets(basePath, snapNum, id, type, api_key):
     """Compute offsets within snapshot for a particular group/subgroup."""
     r = {}
-    print(f"Checking offset")
+    print("Checking offset")
     # old or new format
     if "fof_subhalo" in gcPath(basePath, snapNum):
         # use separate 'offsets_nnn.hdf5' files
@@ -650,7 +654,12 @@ def getSnapOffsets(basePath, snapNum, id, type, api_key):
                     snapNum
                 )
             )
-            cmd = f'wget -q --progress=bar  --content-disposition --header="API-Key:{api_key}" {url} -O {offsetPath(basePath, snapNum)}'
+            cmd = (
+                f'wget -q --progress=bar  --content-disposition '
+                f'--header="API-Key:{api_key}" '
+                f'{url} '
+                f'-O {offsetPath(basePath, snapNum)}'
+            )
             subprocess.check_call(cmd, shell=True)
             print("Done.")
         if not isfile(gcPath(basePath, snapNum, 0)):
@@ -684,7 +693,8 @@ def getSnapOffsets(basePath, snapNum, id, type, api_key):
         download_groupcat(basePath, snapNum, fileNum, api_key)
         with h5py.File(gcPath(basePath, snapNum, fileNum), "r") as f:
             r["lenType"] = f[type][type + "LenType"][groupOffset, :]
-    # old or new format: load the offset (by type) of  this group/subgroup within the snapshot
+    # old or new format: load the offset (by type) of  this group/subgroup
+    # within the snapshot
     if "fof_subhalo" in gcPath(basePath, snapNum):
         with h5py.File(offsetPath(basePath, snapNum), "r") as f:
             r["offsetType"] = f[type + "/SnapByType"][id, :]
@@ -708,10 +718,10 @@ def get_particles_num(basePath, outputPath, snapNum, subhaloID, tng_api_key):
     )
     print("Looking for Subhalo %d in snapshot %d" % (subhaloID, snapNum))
     partType = "gas"
-    subset = getSnapOffsets(basePath, snapNum, subhaloID, "Subhalo", tng_api_key)
-    subhalo = loadSubset(
-        basePath, snapNum, partType, subset=subset, api_key=tng_api_key
-    )
+    # subset = getSnapOffsets(basePath, snapNum, subhaloID, "Subhalo", tng_api_key)
+    # subhalo = loadSubset(
+    #    basePath, snapNum, partType, subset=subset, api_key=tng_api_key
+    # )
     os.chdir(basePath)
     gas = il.snapshot.loadSubhalo(basePath, snapNum, subhaloID, partType)
     if "Coordinates" in gas.keys():
@@ -749,7 +759,8 @@ def read_line_emission_csv(path_line_emission_csv, sep=";"):
     Read the csv file in which are stored the line emission's rest frequency.
 
     Parameter:
-    path_line_emission_csv (str): Path to file.csv within there are the line emission's rest frequency.
+    path_line_emission_csv (str): Path to file.csv within there are the line
+                                  emission's rest frequency.
 
     Return:
     pd.DataFrame : Dataframe with line names and rest frequencies.
@@ -839,20 +850,19 @@ def write_sim_parameters(
             f.write("Projection Angle: {}\n".format(angle))
         for i in range(len(line_fluxes)):
             f.write(
-                "Line: {} - Frequency: {} GHz - Flux: {} Jy  - Width (Channels): {}\n".format(
-                    line_names[i], line_frequencies[i], line_fluxes[i], fwhm_z[i]
-                )
+                f"Line: {line_names[i]} - Frequency: {line_frequencies[i]} GHz "
+                f"- Flux: {line_fluxes[i]} Jy  - Width (Channels): {fwhm_z[i]}\n"
             )
-        if snapshot != None:
+        if snapshot is not None:
             f.write("TNG Snapshot ID: {}\n".format(snapshot))
             f.write("TNG Subhalo ID: {}\n".format(subhalo))
         f.close()
 
 
-def get_image_from_ssd(ra, dec, fov):
-    DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/sdss_dr9"
-    svc_sdss_dr9 = sia.SIAService(DEF_ACCESS_URL)
-    ac.whoAmI()
-    imgTable = svc_sdss_dr9.search(
-        (ra, dec), (fov / np.cos(dec * np.pi / 180), fov), verbosity=2
-    ).to_table()
+# def get_image_from_ssd(ra, dec, fov):
+#    DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/sdss_dr9"
+#    svc_sdss_dr9 = sia.SIAService(DEF_ACCESS_URL)
+#    ac.whoAmI()
+#    imgTable = svc_sdss_dr9.search(
+#        (ra, dec), (fov / np.cos(dec * np.pi / 180), fov), verbosity=2
+#    ).to_table()

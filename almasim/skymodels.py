@@ -2,11 +2,10 @@ import numpy as np
 import math
 import astropy.units as U
 from Hdecompose.atomic_frac import atomic_frac
-from illustris_python.snapshot import getSnapOffsets, loadSubset
+from illustris_python.snapshot import loadSubset
 from martini.sources.sph_source import SPHSource
 from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import (
-    AdaptiveKernel,
     CubicSplineKernel,
     find_fwhm,
     WendlandC2Kernel,
@@ -15,16 +14,17 @@ import astropy.cosmology.units as cu
 from astropy.cosmology import WMAP9
 from astropy import wcs
 import os
-import h5py
 from astropy.io import fits
 import almasim.astro as uas
 import astropy.constants as C
 from itertools import product
 from tqdm import tqdm
 from astropy.time import Time
-from scipy.integrate import quad
 import matplotlib.image as plimg
 from scipy.ndimage import zoom
+from scipy.signal import fftconvolve
+import nifty8 as ift
+import random
 
 
 # ----------------- Martini Modified Functions ---------------------- #
@@ -54,14 +54,6 @@ class myTNGSource(SPHSource):
             "GFM_Metals",
         )
         mdi_full = [None, None, None, None, None, None, 0]
-        mini_fields_g = (
-            "Masses",
-            "Velocities",
-            "InternalEnergy",
-            "ElectronAbundance",
-            "Density",
-            "Coordinates",
-        )
         data_header = uas.loadHeader(basePath, snapNum)
         data_sub = uas.loadSingle(basePath, snapNum, subhaloID=subID)
         haloID = data_sub["SubhaloGrNr"]
@@ -810,7 +802,7 @@ class Martini:
 
         self.sph_kernel._init_sm_lengths(source=self.source, datacube=self.datacube)
         self.sph_kernel._init_sm_ranges()
-        if self.find_distance == False:
+        if self.find_distance is False:
             self._prune_particles()  # prunes both source, and kernel if applicable
             self.spectral_model.init_spectra(self.source, self.datacube)
             self.inserted_mass = 0
@@ -823,7 +815,7 @@ class Martini:
         """
 
         if self.beam is None:
-            warn("Skipping beam convolution, no beam object provided to " "Martini.")
+            print("Skipping beam convolution, no beam object provided to " "Martini.")
             return
 
         unit = self.datacube._array.unit
@@ -855,7 +847,7 @@ class Martini:
         """
 
         if self.noise is None:
-            warn("Skipping noise, no noise object provided to Martini.")
+            print("Skipping noise, no noise object provided to Martini.")
             return
 
         # this unit conversion means noise can be added before or after source insertion:
@@ -1189,7 +1181,6 @@ class Martini:
             header.append(("CTYPE4", wcs_header["CTYPE4"]))
             header.append(("CUNIT4", "PAR"))
         header.append(("EPOCH", 2000))
-        header.append(("INSTRUME", "MARTINI", martini_version))
         # header.append(('BLANK', -32768)) #only for integer data
         header.append(("BSCALE", 1.0))
         header.append(("BZERO", 0.0))
@@ -1200,7 +1191,6 @@ class Martini:
         header.append(
             ("DATAMIN", np.min(self.datacube._array.to_value(datacube_array_units)))
         )
-        header.append(("ORIGIN", "astropy v" + astropy_version))
         # long names break fits format, don't let the user set this
         header.append(("OBJECT", "MOCK"))
         if self.beam is not None:
@@ -1316,10 +1306,8 @@ class Martini:
         header.append(("OBSERVER", "K. Oman"))
         # long names break fits format
         header.append(("OBJECT", "MOCKBEAM"))
-        header.append(("INSTRUME", "MARTINI", martini_version))
         header.append(("DATAMAX", np.max(self.beam.kernel.to_value(beam_kernel_units))))
         header.append(("DATAMIN", np.min(self.beam.kernel.to_value(beam_kernel_units))))
-        header.append(("ORIGIN", "astropy v" + astropy_version))
 
         # flip axes to write
         hdu = fits.PrimaryHDU(
@@ -1449,8 +1437,6 @@ class Martini:
             c.attrs["BeamMajor_in_deg"] = self.beam.bmaj.to_value(U.deg)
             c.attrs["BeamMinor_in_deg"] = self.beam.bmin.to_value(U.deg)
         c.attrs["DateCreated"] = str(Time.now())
-        # c.attrs["MartiniVersion"] = martini_version
-        # c.attrs["AstropyVersion"] = astropy_version
         if self.beam is not None:
             if self.beam.kernel is None:
                 raise ValueError(
@@ -1480,8 +1466,6 @@ class Martini:
             b.attrs["BeamMajor_in_deg"] = self.beam.bmaj.to_value(U.deg)
             b.attrs["BeamMinor_in_deg"] = self.beam.bmin.to_value(U.deg)
             b.attrs["DateCreated"] = str(Time.now())
-            # b.attrs["MartiniVersion"] = martini_version
-            # b.attrs["AstropyVersion"] = astropy_version
 
         if channels == "frequency":
             self.datacube.velocity_channels()
@@ -1664,7 +1648,6 @@ def insert_galaxy_zoo(
     img = plimg.imread(imfile).astype(np.float32)
     dims = np.shape(img)
     d3 = min(2, dims[2])
-    d1 = float(max(dims))
     avimg = np.average(img[:, :, :d3], axis=2)
     avimg -= np.min(avimg)
     avimg *= 1 / np.max(avimg)
@@ -1738,7 +1721,6 @@ def insert_extended(
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
     tngpath = os.path.join(tngpath, "TNG100-1", "output")
-    data_header = uas.loadHeader(tngpath, snapshot)
     redshift = redshift * cu.redshift
     distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))
     terminal.add_log(
@@ -1816,7 +1798,7 @@ def diffuse_signal(n_px):
 
 
 def insert_diffuse(
-    update_progress, datacube, continuum, line_fluxes, pos_z, fwhm_z, n_px, n_chan
+    update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan
 ):
     z_idxs = np.arange(0, n_chan)
     ts = diffuse_signal(n_px)
@@ -2130,9 +2112,8 @@ def insert_serendipitous(
             f.write("Projection Angle: {}\n".format(pas[c_id]))
             for i in range(len(s_freq)):
                 f.write(
-                    "Line: {} - Frequency: {} GHz - Flux: {} Jy - Width (Channels): {}\n".format(
-                        s_line_names[i], s_freq[i], line_fluxes[i], fwhmsz[i]
-                    )
+                    f"Line: {s_line_names[i]} - Frequency: {s_freq[i]} GHz "
+                    f"- Flux: {line_fluxes[i]} Jy - Width (Channels): {fwhmsz[i]}\n"
                 )
             datacube = insert_gaussian(
                 update_progress,

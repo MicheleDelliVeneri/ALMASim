@@ -1,25 +1,25 @@
+from PyQt6.QtCore import QObject, pyqtSignal
+from astropy.io import fits
+from astropy.time import Time
+from scipy.integrate import odeint
+import pandas as pd
+from astropy.constants import M_earth, R_earth, G
+from astropy.coordinates import EarthLocation, SkyCoord, AltAz
+import astropy.time
+from tqdm import tqdm
+import astropy.units as U
+from astropy.constants import c
+import scipy.ndimage.interpolation as spndint
+import matplotlib.image as plimg
+import matplotlib.cm as cm
+import numpy as np
+import matplotlib.pyplot as plt
 import os
 import time
 import sys
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.cm as cm
-import matplotlib.image as plimg
-import scipy.ndimage.interpolation as spndint
-from astropy.constants import c
-import astropy.units as U
-from tqdm import tqdm
-import astropy.time
-from astropy.coordinates import EarthLocation, SkyCoord, AltAz
-from astropy.constants import M_earth, R_earth, G
-import pandas as pd
-from scipy.integrate import odeint
-from astropy.time import Time
-from astropy.io import fits
-from PyQt6.QtCore import QObject, pyqtSignal
 
 
 def showError(message):
@@ -297,11 +297,13 @@ class Interferometer(QObject):
         for line in antenna_coordinates:
             # Convert them in meters
             antPos.append([line[0] * 1e-3, line[1] * 1e-3])
-            # Get the maximum distance between any two antennas to be used in the covariance matrix
+            # Get the maximum distance between any two antennas to be used in the
+            # covariance matrix
             Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
         self.Xmax = Xmax
         self.antPos = antPos
-        # Computes the sine of the difference between lat and dec and checks that is less then 1 which means that the angle of observation is valid
+        # Computes the sine of the difference between lat and dec and checks that
+        # is less then 1 which means that the angle of observation is valid
         cosW = -np.tan(self.lat) * np.tan(self.dec)
         if np.abs(cosW) < 1.0:
             Hhor = np.arccos(cosW)
@@ -469,13 +471,15 @@ class Interferometer(QObject):
         self.B = np.zeros((NBmax, self.nH), dtype=np.float32)
         # basnum: A matrix storing the baseline index for each pair of antennas.
         self.basnum = np.zeros((self.Nant, self.Nant - 1), dtype=np.int8)
-        # basidx: A square matrix storing the baseline index for each pair of antennas (redundant storage).
+        # basidx: A square matrix storing the baseline index for each pair of
+        # antennas (redundant storage).
         self.basidx = np.zeros((self.Nant, self.Nant), dtype=np.int8)
         # antnum: Stores the antenna pair indices for each baseline.
         self.antnum = np.zeros((NBmax, 2), dtype=np.int8)
         # Gains: Complex gains for each baseline at each hour angle (initialized to 1).
         self.Gains = np.ones((self.Nbas, self.nH), dtype=np.complex64)
-        # Noise:  Complex noise values for each baseline at each hour angle (initialized to 0).
+        # Noise:  Complex noise values for each baseline at each hour angle
+        # (initialized to 0).
         self.Noise = np.zeros((self.Nbas, self.nH), dtype=np.complex64)
         # Horig:  Original hour angle values, evenly spaced over the observation time.
         self.Horig = np.linspace(self.Hcov[0], self.Hcov[1], self.nH)
@@ -576,7 +580,8 @@ class Interferometer(QObject):
             # Get the antenna indices that form the current baseline
             n1, n2 = self.antnum[currBas]
             # Calculate the baseline vector components (B_x, B_y, B_z) in wavelengths:
-            # B_x: Projection of baseline onto the plane perpendicular to Earth's rotation axis.
+            # B_x: Projection of baseline onto the plane perpendicular to Earth's
+            # rotation axis.
             self.B[currBas, 0] = (
                 -(self.antPos[n2][1] - self.antPos[n1][1])
                 * self.trlat[0]
@@ -593,11 +598,13 @@ class Interferometer(QObject):
                 / self.wavelength[2]
             )
             # Calculate u and v coordinates (spatial frequencies) in wavelengths:
-            # u: Projection of the baseline vector onto the UV plane (East-West component).
+            # u: Projection of the baseline vector onto the UV plane (East-West
+            # component).
             self.u[currBas, :] = -(
                 self.B[currBas, 0] * self.H[0] + self.B[currBas, 1] * self.H[1]
             )
-            # v: Projection of the baseline vector onto the UV plane (North-South component).
+            # v: Projection of the baseline vector onto the UV plane (North-South
+            # component).
             self.v[currBas, :] = (
                 -self.B[currBas, 0] * self.trdec[0] * self.H[1]
                 + self.B[currBas, 1] * self.trdec[0] * self.H[0]
@@ -663,7 +670,8 @@ class Interferometer(QObject):
             # UV pixel location
             pixU = np.rint(self.u[nb] / self.UVpixsize).flatten().astype(np.int32)
             pixV = np.rint(self.v[nb] / self.UVpixsize).flatten().astype(np.int32)
-            # Filter out visibility samples that fall outside the field of view (half-plane).
+            # Filter out visibility samples that fall outside the field of view
+            # (half-plane).
             goodpix = np.where(
                 np.logical_and(np.abs(pixU) < self.Nphf, np.abs(pixV) < self.Nphf)
             )[0]
@@ -713,7 +721,8 @@ class Interferometer(QObject):
                 self.Gsampling[mVi, pUi] += np.conjugate(self.Gains[nb, gp])
                 self.noisemap[pVi, mUi] += self.Noise[nb, gp] * gabs
                 self.noisemap[mVi, pUi] += np.conjugate(self.Noise[nb, gp]) * gabs
-        # Calculate a robustness factor based on the total sampling and a user-defined parameter.
+        # Calculate a robustness factor based on the total sampling and a
+        # user-defined parameter.
         self.robfac = (
             (5.0 * 10.0 ** (-self.robust)) ** 2.0
             * (2.0 * self.Nbas * self.nH)
@@ -760,7 +769,7 @@ class Interferometer(QObject):
         # 4. Beam Scaling and Normalization:
         #   - Find the maximum value of the beam within a central region (likely to avoid edge effects).
         self.beamScale = np.max(
-            self.beam[self.Nphf : self.Nphf + 1, self.Nphf : self.Nphf + 1]
+            self.beam[self.Nphf: self.Nphf + 1, self.Nphf: self.Nphf + 1]
         )
         self.beam[:] /= self.beamScale
 
@@ -804,8 +813,8 @@ class Interferometer(QObject):
             sh0 = (self.Nphf - dims[0]) // 2
             sh1 = (self.Nphf - dims[1]) // 2
             self.modelimTrue[
-                sh0 + self.Np4 : sh0 + self.Np4 + dims[0],
-                sh1 + self.Np4 : sh1 + self.Np4 + dims[1],
+                sh0 + self.Np4: sh0 + self.Np4 + dims[0],
+                sh1 + self.Np4: sh1 + self.Np4 + dims[1],
             ] += self.zoomimg
         else:
             zoomimg = spndint.zoom(self.img, float(self.Nphf) / d1)
@@ -815,8 +824,8 @@ class Interferometer(QObject):
             sh0 = (self.Nphf - zdims[0]) // 2
             sh1 = (self.Nphf - zdims[1]) // 2
             self.modelimTrue[
-                sh0 + self.Np4 : sh0 + self.Np4 + zd0,
-                sh1 + self.Np4 : sh1 + self.Np4 + zd1,
+                sh0 + self.Np4: sh0 + self.Np4 + zd0,
+                sh1 + self.Np4: sh1 + self.Np4 + zd1,
             ] += zoomimg[:zd0, :zd1]
 
         self.modelimTrue[self.modelimTrue < 0.0] = 0.0
@@ -825,7 +834,8 @@ class Interferometer(QObject):
         cov_matrix = np.cov(self.u, self.v)
         # Eigen decomposition of the covariance matrix
         eigvals, eigvecs = np.linalg.eigh(cov_matrix)
-        # Eigenvector corresponding to the largest eigenvalue gives the major axis direction
+        # Eigenvector corresponding to the largest eigenvalue gives the major axis
+        # direction
         major_axis_vector = eigvecs[:, np.argmax(eigvals)]
         BPA_rad = self.rad2deg(np.arctan2(major_axis_vector[1], major_axis_vector[0]))
         scale_factor = (
