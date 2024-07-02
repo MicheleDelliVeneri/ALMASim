@@ -43,9 +43,10 @@ jobs:
           git submodule update --init    
           cd illustris_python
           pip install . 
+      - name: Set up Headless Environment
+        run: export QT_QPA_PLATFORM=offscreen
       - name: Run stubtest
         run: |
-          sudo apt-get install -y libgl1-mesa-glx
           chmod +x ./run_stubtest
           ./run_stubtest
       
@@ -82,10 +83,10 @@ jobs:
         git submodule update --init    
         cd illustris_python
         pip install . 
+    - name: Set up Headless Environment
+      run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
-      run: |
-        sudo apt-get install -y libgl1-mesa-glx
-        pytest
+      run: pytest
 
   tests-and-coverage:
     needs: lint
@@ -115,11 +116,11 @@ jobs:
         pip install -e .
         git submodule update --init
         cd illustris_python
-        pip install .                         
+        pip install .
+    - name: Set up Headless Environment
+      run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
-      run: |
-        sudo apt-get install -y libgl1-mesa-glx
-        pytest --cov=./ --cov-report=xml
+      run: pytest --cov=./ --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       env:
