@@ -6,10 +6,8 @@ import pyvo
 import numpy as np
 import pandas as pd
 import os
-import sys
-import random
-from math import pi
 from tenacity import retry, stop_after_attempt, wait_exponential
+import requests
 
 
 # -------------- Database Query Functions --------------------------- #
@@ -45,7 +43,7 @@ def get_tap_service():
             try:
                 service = pyvo.dal.TAPService(url)
                 # Test the connection with a simple query to ensure the service is working
-                result = service.search("SELECT TOP 1 * FROM ivoa.obscore")
+                service.search("SELECT TOP 1 * FROM ivoa.obscore")
                 print(f"Connected successfully to {url}")
                 return service
             except Exception as e:
@@ -62,10 +60,10 @@ def search_with_retry(service, query):
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_science_types():
     service = get_tap_service()
-    query = f"""  
-            SELECT science_keyword, scientific_category  
-            FROM ivoa.obscore  
-            WHERE science_observation = 'T'    
+    query = f"""
+            SELECT science_keyword, scientific_category
+            FROM ivoa.obscore
+            WHERE science_observation = 'T'
             """
     try:
         db = service.search(query).to_table().to_pandas()
@@ -99,11 +97,14 @@ def get_science_types():
 
 
 def query_observations(member_ous_uid, target_name):
-    """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
+    """Query for all science observations of given member OUS UID
+    and target name, selecting all columns of interest.
 
     Parameters:
-    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
-    member_ous_uid (str): The unique identifier for the member OUS to filter observations by.
+    service (pyvo.dal.TAPService): A TAPService instance for 
+                                   querying the database.
+    member_ous_uid (str): The unique identifier for the member OUS
+                                   to filter observations by.
     target_name (str): The target name to filter observations by.
 
     Returns:
@@ -142,7 +143,7 @@ def query_observations(member_ous_uid, target_name):
             WHERE member_ous_uid = '{member_ous_uid}'
             AND target_name = '{target_name}'
             AND is_mosaic = 'F'
-            AND science_observation = 'T'    
+            AND science_observation = 'T'
             """
 
     result = search_with_retry(service, query)
@@ -150,11 +151,14 @@ def query_observations(member_ous_uid, target_name):
 
 
 def query_all_targets(targets):
-    """Query observations for all predefined targets and compile the results into a single DataFrame.
+    """Query observations for all predefined targets and compile 
+    the results into a single DataFrame.
 
     Parameters:
-    service (pyvo.dal.TAPService): A TAPService instance for querying the database.
-    targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+    service (pyvo.dal.TAPService): A TAPService instance 
+                                   for querying the database.
+    targets (list of tuples): A list where each t
+                              uple contains (target_name, member_ous_uid).
 
     Returns:
     pandas.DataFrame: A DataFrame containing the results for all queried targets.
@@ -179,7 +183,8 @@ def query_by_science_type(
     time_resolution_range=None,
     frequency_range=None,
 ):
-    """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
+    """Query for all science observations of given member OUS UID and target name,
+       selecting all columns of interest.
 
     Parameters:
     service (pyvo.dal.TAPService): A TAPService instance for querying the database.
@@ -317,9 +322,9 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
             "Central frequency and maximum baseline must be positive values."
         )
 
-    if type(central_frequency_ghz) != Quantity:
+    if not isinstance(central_frequency_ghz, Quantity):
         central_frequency_ghz = central_frequency_ghz * U.GHz
-    if type(max_baseline_km) != Quantity:
+    if not isinstance(max_baseline_km, Quantity):
         max_baseline_km = max_baseline_km * U.km
 
     # Speed of light in meters per second
@@ -336,7 +341,7 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
 
     # Convert theta from radians to arcseconds
     beam_size_arcsec = theta_radians * (180 / math.pi) * 3600 * U.arcsec
-    if return_value == True:
+    if return_value is True:
         return beam_size_arcsec.value
     else:
         return beam_size_arcsec
@@ -380,7 +385,7 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     fov = 1.22 * wavelength / antenna_diameter
     # fov in arcsec
     fov = fov * (180 / math.pi) * 3600 * U.arcsec
-    if return_value == True:
+    if return_value is True:
         return fov.value
     else:
         return fov
@@ -532,77 +537,3 @@ def get_antennas_distances_from_reference(antenna_config):
         zzref = zz[i] - zz[nref]
         zztot.append(np.sqrt(zxref**2 + zyref**2 + zzref**2))
     return zztot, frefant
-
-
-def generate_prms(antbl, scaleF):
-    """
-    This function generates the phase rms for the atmosphere
-    as a function of antenna baseline length.
-    It is based on the structure function of the atmosphere and
-    it gives 30 deg phase rms at 10000m = 10km.
-
-    Input:
-    antbl = antenna baseline length in meters
-    scaleF = scale factor for the phase rms
-    Output:
-    prms = phase rms
-    """
-    Lrms = 1.0 / 52.83 * antbl**0.8  # phase rms ~0.8 power to 10 km
-    Hrms = 3.0 * antbl**0.25  # phase rms `0.25 power beyond 10 km
-    if antbl < 10000.0:
-        prms = scaleF * Lrms
-    if antbl >= 10000.0:
-        prms = scaleF * Hrms
-    return prms
-
-
-def simulate_atmospheric_noise(sim_output_dir, project, scale, ms, antennalist):
-    zztot, frefant = get_antennas_distances_from_reference(antennalist)
-    gaincal(
-        vis=ms,
-        caltable=os.path.join(sim_output_dir, project + "_atmosphere.gcal"),
-        refant=str(frefant),  # name of the reference antenna
-        minsnr=0.00,  # ignore solution with SNR below this
-        calmode="p",  # phase
-        solint="inf",  # solution interval,
-    )
-    tb = table()
-    tb.open(os.path.join(sim_output_dir, project + "_atmosphere.gcal"), nomodify=False)
-    yant = tb.getcol("ANTENNA1")
-    ytime = tb.getcol("TIME")
-    ycparam = tb.getcol("CPARAM")
-    nycparam = ycparam.copy()
-    nant = len(yant)
-    for i in range(nant):
-        antbl = zztot[yant[i]]
-        # get rms phase for each antenna
-        prms = generate_prms(antbl, scale)
-        # determine random GAUSSIAN phase error from rms phase
-        perror = random.gauss(0, prms)
-        # adding a random phase error to the solution, it will be
-        # substituted by a frequency that depends from frequency
-        # of observation and baseline length
-        perror = perror + random.gauss(0, 0.05 * perror)
-        # convert phase error to complex number
-        rperror = np.cos(perror * pi / 180.0)
-        iperror = np.sin(perror * pi / 180.0)
-        nycparam[0][0][i] = 1.0 * complex(rperror, iperror)  # X POL
-        nycparam[1][0][i] = 1.0 * complex(rperror, iperror)  # Y POL  ASSUMED SAME
-    tb.putcol("CPARAM", nycparam)
-    tb.flush()
-    tb.close()
-    applycal(
-        vis=ms, gaintable=os.path.join(sim_output_dir, project + "_atmosphere.gcal")
-    )
-    # os.system("rm -rf " + os.path.join(sim_output_dir, project + "_atmosphere.gcal"))
-    return
-
-
-def simulate_gain_errors(ms, amplitude: float = 0.01):
-    sm = casa_simulator()
-    sm.openfromms(ms)
-    sm.setseed(42)
-    sm.setgain(mode="fbm", amplitude=[amplitude])
-    sm.corrupt()
-    sm.close()
-    return

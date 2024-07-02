@@ -2405,7 +2405,7 @@ class ALMASimulator(QMainWindow):
             for redshift in metadata["redshift"].values
         ]
         metadata["snapshot"] = snapshots
-        if extended == True:
+        if extended is True:
             # metatada = metadata[metadata['redshift'] < 0.05]
             metadata = metadata[
                 (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
@@ -2903,7 +2903,7 @@ class ALMASimulator(QMainWindow):
             freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
             cont_fluxes = sed["Jy"].values[freq_point]
             min_ = cont_fluxes
-        if remote == True:
+        if remote is True:
             print("Minimum continum flux: {:.2e}".format(min_))
             print("Continum sensitivity: {:.2e}".format(cont_sens))
         else:
@@ -2924,7 +2924,7 @@ class ALMASimulator(QMainWindow):
                 min_ = cont_fluxes
 
         if lum_save != lum_infrared:
-            if remote == True:
+            if remote is True:
                 print(
                     "To match the desired SNR, luminosity has been set to {:.2e}".format(
                         lum_infrared
@@ -3086,7 +3086,7 @@ class ALMASimulator(QMainWindow):
                 self.update_progress.emit((recorded_length / n) * 100)
 
         if redshift != start_redshift:
-            if remote == True:
+            if remote is True:
                 print("Redshift increased to match the desired number of lines.")
             else:
                 self.terminal.add_log(
@@ -3095,7 +3095,7 @@ class ALMASimulator(QMainWindow):
         if type(line_names) == list or isinstance(line_names, np.ndarray):
             user_lines = filtered_lines[np.isin(filtered_lines["Line"], line_names)]
             if len(user_lines) != len(line_names):
-                if remote == True:
+                if remote is True:
                     print(
                         "Warning: Selected lines do not fall in the provided band, automaticaly computing most probable lines."
                     )
@@ -3117,7 +3117,7 @@ class ALMASimulator(QMainWindow):
                 filtered_lines = user_lines
             else:
                 filtered_lines = user_lines
-        if remote == True:
+        if remote is True:
             print("Injecting {} lines".format(len(filtered_lines)))
         else:
             self.terminal.add_log("Injecting {} lines".format(len(filtered_lines)))
@@ -3138,7 +3138,7 @@ class ALMASimulator(QMainWindow):
 
         if n_lines != None:
             if n_lines > len(filtered_lines):
-                if remote == True:
+                if remote is True:
                     print(
                         f"Warning: Cant insert {n_lines}, injecting {len(filtered_lines)}."
                     )
@@ -3285,7 +3285,7 @@ class ALMASimulator(QMainWindow):
             inject_serendipitous,
             remote,
         ) = args
-        if remote == True:
+        if remote is True:
             print("\nRunning simulation {}".format(inx))
             print("Source Name: {}".format(source_name))
             if pd.isna(n_pix):
@@ -3335,7 +3335,7 @@ class ALMASimulator(QMainWindow):
             os.makedirs(sim_output_dir)
         os.chdir(output_dir)
 
-        if remote == True:
+        if remote is True:
             print("RA: {}".format(ra))
             print("DEC: {}".format(dec))
             print("Integration Time: {}".format(int_time))
@@ -3353,7 +3353,7 @@ class ALMASimulator(QMainWindow):
             ual.get_max_baseline_from_antenna_config(self.update_progress, antennalist)
             * U.km
         )
-        if remote == True:
+        if remote is True:
             print("Field of view: {} arcsec".format(round(fov.value, 3)))
         else:
             self.terminal.add_log(
@@ -3366,7 +3366,7 @@ class ALMASimulator(QMainWindow):
         cont_sens = cont_sens * U.mJy / (U.arcsec**2)
         cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
         cont_sens = cont_sens_jy * snr
-        if remote == True:
+        if remote is True:
             print("Minimum detectable continum: {}".format(cont_sens_jy))
         else:
             self.terminal.add_log(
@@ -3429,7 +3429,7 @@ class ALMASimulator(QMainWindow):
             n_channels = n_channels_nw
             band_range = n_channels * freq_sup
         central_channel_index = n_channels // 2
-        if remote == True:
+        if remote is True:
             print("Beam size: {} arcsec".format(round(beam_size.value, 4)))
             print("Central Frequency: {}".format(central_freq))
             print("Spectral Window: {}".format(band_range))
@@ -3474,7 +3474,7 @@ class ALMASimulator(QMainWindow):
             part_num = uas.get_particles_num(
                 tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key
             )
-            if remote == True:
+            if remote is True:
                 print("Snapshot: {}".format(snapshot))
                 print("Subhaloid ID: {}".format(tng_subhaloid))
                 print("Number of particles: {}".format(part_num))
@@ -3483,7 +3483,7 @@ class ALMASimulator(QMainWindow):
                 self.terminal.add_log("Subhaloid ID: {}".format(tng_subhaloid))
                 self.terminal.add_log("Number of particles: {}".format(part_num))
             while part_num == 0:
-                if remote == True:
+                if remote is True:
                     print("No particles found. Checking another subhalo.")
                 else:
                     self.terminal.add_log(
@@ -3498,7 +3498,7 @@ class ALMASimulator(QMainWindow):
                 part_num = uas.get_particles_num(
                     tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key
                 )
-                if remote == True:
+                if remote is True:
                     print("Number of particles: {}".format(part_num))
                 else:
                     self.terminal.add_log("Number of particles: {}".format(part_num))
@@ -3507,7 +3507,7 @@ class ALMASimulator(QMainWindow):
             tng_subhaloid = None
         if type(line_names) == list or isinstance(line_names, np.ndarray):
             for line_name, line_flux in zip(line_names, line_fluxes):
-                if remote == True:
+                if remote is True:
                     print(
                         "Simulating Line {} Flux: {:.3e} at z {}".format(
                             line_name, line_flux, redshift
@@ -3520,7 +3520,7 @@ class ALMASimulator(QMainWindow):
                         )
                     )
         else:
-            if remote == True:
+            if remote is True:
                 print(
                     "Simulating Line {} Flux: {} at z {}".format(
                         line_names[0], line_fluxes[0], redshift
@@ -3532,7 +3532,7 @@ class ALMASimulator(QMainWindow):
                         line_names[0], line_fluxes[0], redshift
                     )
                 )
-        if remote == True:
+        if remote is True:
             print("Simulating Continum Flux: {:.2e}".format(np.mean(continum)))
             print("Continuum Sensitity: {:.2e}".format(cont_sens))
             print("Generating skymodel cube ...")
@@ -3661,7 +3661,7 @@ class ALMASimulator(QMainWindow):
             angle,
         )
 
-        if inject_serendipitous == True:
+        if inject_serendipitous is True:
             self.progress_bar_entry.setText("Inserting Serendipitous Sources")
             if source_type != "gaussian":
                 fwhm_x = np.random.randint(3, 10)
@@ -3690,7 +3690,7 @@ class ALMASimulator(QMainWindow):
         header = usm.get_datacube_header(datacube, obs_date)
         model = datacube._array.to_value(datacube._array.unit).T
         totflux = np.sum(model)
-        if remote == True:
+        if remote is True:
             print("Total Flux injected in model cube: {:.3f} Jy".format(totflux))
             print("Done")
         else:
@@ -3699,7 +3699,7 @@ class ALMASimulator(QMainWindow):
             )
             self.terminal.add_log("Done")
         del datacube
-        if remote == True:
+        if remote is True:
             print("Observing with ALMA")
         else:
             self.terminal.add_log("Observing with ALMA")
@@ -3724,12 +3724,12 @@ class ALMASimulator(QMainWindow):
         interferometer.progress_signal.connect(self.handle_progress)
         self.progress_bar_entry.setText("Observing with ALMA")
         simulation_results = interferometer.run_interferometric_sim()
-        if remote == True:
+        if remote is True:
             print("Finished")
         else:
             self.terminal.add_log("Finished")
         stop = time.time()
-        if remote == True:
+        if remote is True:
             print(
                 "Execution took {} seconds".format(
                     strftime("%H:%M:%S", gmtime(stop - start))
