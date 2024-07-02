@@ -54,6 +54,25 @@ class Interferometer(QObject):
     currcmap: Incomplete
     zooming: int
     save_mode: Incomplete
-    def __init__(self, idx, skymodel, main_dir, output_dir, ra, dec, central_freq, band_range, fov, antenna_array, noise, int_time, obs_date, header, save_mode, terminal, robust: float = 0.5) -> None: ...
+    def __init__(
+        self,
+        idx,
+        skymodel,
+        main_dir,
+        output_dir,
+        ra,
+        dec,
+        central_freq,
+        band_range,
+        fov,
+        antenna_array,
+        noise,
+        int_time,
+        obs_date,
+        header,
+        save_mode,
+        terminal,
+        robust: float = 0.5,
+    ) -> None: ...
     def run_interferometric_sim(self): ...
     def set_noise(self) -> None: ...

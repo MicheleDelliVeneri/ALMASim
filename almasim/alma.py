@@ -3,13 +3,14 @@ from astropy.units import Quantity
 import astropy.units as U
 import math
 import pyvo
-import numpy as np 
+import numpy as np
 import pandas as pd
-import os 
+import os
 import sys
 import random
 from math import pi
 from tenacity import retry, stop_after_attempt, wait_exponential
+
 
 # -------------- Database Query Functions --------------------------- #
 def get_tap_service():
@@ -34,9 +35,10 @@ def get_tap_service():
     Dependencies:
         - pyvo: The Python library for Virtual Observatory data access.
     """
-    urls = ["https://almascience.eso.org/tap",
+    urls = [
+        "https://almascience.eso.org/tap",
         "https://almascience.nao.ac.jp/tap",
-        "https://almascience.nrao.edu/tap"
+        "https://almascience.nrao.edu/tap",
     ]
     while True:  # Infinite loop to keep trying until successful
         for url in urls:
@@ -51,9 +53,11 @@ def get_tap_service():
                 print("Retrying other servers...")
         print("All URLs attempted and failed, retrying...")
 
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def search_with_retry(service, query):
     return service.search(query, response_timeout=120).to_table().to_pandas()
+
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_science_types():
@@ -65,25 +69,34 @@ def get_science_types():
             """
     try:
         db = service.search(query).to_table().to_pandas()
-    except(pyvo.dal.exceptions.DALServiceError, requests.exceptions.RequestException) as e:
+    except (
+        pyvo.dal.exceptions.DALServiceError,
+        requests.exceptions.RequestException,
+    ) as e:
         print(f"Error querying TAP service: {e}")
         raise
-    science_keywords = db['science_keyword'].unique()
-    scientific_category = db['scientific_category'].unique()
+    science_keywords = db["science_keyword"].unique()
+    scientific_category = db["scientific_category"].unique()
     science_keywords = list(filter(lambda x: x != "", science_keywords))
     scientific_category = list(filter(lambda x: x != "", scientific_category))
 
     unique_keywords = []
     for keywords_string in science_keywords:
-        keywords_list = [keyword.strip() for keyword in keywords_string.split(',')]
+        keywords_list = [keyword.strip() for keyword in keywords_string.split(",")]
         unique_keywords.extend(keywords_list)
     unique_keywords = sorted(set(unique_keywords))
-    unique_keywords = [keyword for keyword in unique_keywords if (
-                        keyword != 'Evolved stars: Shaping/physical structure' and
-                        keyword != 'Exoplanets' and 
-                        keyword != 'Galaxy structure &evolution')]
-    
-    return  unique_keywords, scientific_category
+    unique_keywords = [
+        keyword
+        for keyword in unique_keywords
+        if (
+            keyword != "Evolved stars: Shaping/physical structure"
+            and keyword != "Exoplanets"
+            and keyword != "Galaxy structure &evolution"
+        )
+    ]
+
+    return unique_keywords, scientific_category
+
 
 def query_observations(member_ous_uid, target_name):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
@@ -98,13 +111,31 @@ def query_observations(member_ous_uid, target_name):
     """
     service = get_tap_service()
     columns = [
-        'target_name', 'member_ous_uid', 'group_ous_uid', 'pwv', 'schedblock_name',  'velocity_resolution',
-        'spatial_resolution', 's_ra', 's_dec', 's_fov', 't_resolution', 'proposal_id',
-        'cont_sensitivity_bandwidth', 'sensitivity_10kms', 'obs_release_date', 
-        'band_list', 'bandwidth', 'frequency', 'frequency_support', 
-        'science_keyword', 'scientific_category', 'antenna_arrays', 't_max'
+        "target_name",
+        "member_ous_uid",
+        "group_ous_uid",
+        "pwv",
+        "schedblock_name",
+        "velocity_resolution",
+        "spatial_resolution",
+        "s_ra",
+        "s_dec",
+        "s_fov",
+        "t_resolution",
+        "proposal_id",
+        "cont_sensitivity_bandwidth",
+        "sensitivity_10kms",
+        "obs_release_date",
+        "band_list",
+        "bandwidth",
+        "frequency",
+        "frequency_support",
+        "science_keyword",
+        "scientific_category",
+        "antenna_arrays",
+        "t_max",
     ]
-    columns_str = ', '.join(columns)
+    columns_str = ", ".join(columns)
     query = f"""
             SELECT {columns_str}
             FROM ivoa.obscore
@@ -113,9 +144,10 @@ def query_observations(member_ous_uid, target_name):
             AND is_mosaic = 'F'
             AND science_observation = 'T'    
             """
-    
+
     result = search_with_retry(service, query)
     return result
+
 
 def query_all_targets(targets):
     """Query observations for all predefined targets and compile the results into a single DataFrame.
@@ -138,8 +170,15 @@ def query_all_targets(targets):
 
     return df
 
-def query_by_science_type(science_keyword=None, scientific_category=None, band=None, fov_range=None, time_resolution_range=None, 
-                        frequency_range=None):
+
+def query_by_science_type(
+    science_keyword=None,
+    scientific_category=None,
+    band=None,
+    fov_range=None,
+    time_resolution_range=None,
+    frequency_range=None,
+):
     """Query for all science observations of given member OUS UID and target name, selecting all columns of interest.
 
     Parameters:
@@ -150,13 +189,31 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     """
     service = get_tap_service()
     columns = [
-        'target_name', 'member_ous_uid', 'group_ous_uid', 'pwv', 'schedblock_name',  'velocity_resolution',
-        'spatial_resolution', 's_ra', 's_dec', 's_fov', 't_resolution', 'proposal_id',
-        'cont_sensitivity_bandwidth', 'sensitivity_10kms', 'obs_release_date', 
-        'band_list', 'bandwidth', 'frequency', 'frequency_support', 
-        'science_keyword', 'scientific_category', 'antenna_arrays', 't_max'
+        "target_name",
+        "member_ous_uid",
+        "group_ous_uid",
+        "pwv",
+        "schedblock_name",
+        "velocity_resolution",
+        "spatial_resolution",
+        "s_ra",
+        "s_dec",
+        "s_fov",
+        "t_resolution",
+        "proposal_id",
+        "cont_sensitivity_bandwidth",
+        "sensitivity_10kms",
+        "obs_release_date",
+        "band_list",
+        "bandwidth",
+        "frequency",
+        "frequency_support",
+        "science_keyword",
+        "scientific_category",
+        "antenna_arrays",
+        "t_max",
     ]
-    columns_str = ', '.join(columns)
+    columns_str = ", ".join(columns)
     # Default values for parameters if they are None
     if science_keyword is None:
         science_keyword = ""
@@ -177,10 +234,14 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     scientific_category_query = f"scientific_category like '%{scientific_category}%'"
     if isinstance(scientific_category, list):
         if len(scientific_category) == 1:
-            scientific_category_query = f"scientific_category like '%{scientific_category[0]}%'"
+            scientific_category_query = (
+                f"scientific_category like '%{scientific_category[0]}%'"
+            )
         else:
             scientific_categories = "', '".join(scientific_category)
-            scientific_category_query = f"scientific_category in ('{scientific_categories}')"
+            scientific_category_query = (
+                f"scientific_category in ('{scientific_categories}')"
+            )
 
     band_query = f"band_list like '%{band}%'"
     if isinstance(band, list):
@@ -204,13 +265,22 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
     if frequency_range is None:
         frequency_query = ""
     else:
-        frequency_query = f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
+        frequency_query = (
+            f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
+        )
 
     # Combine all conditions into one WHERE clause
-    conditions = [science_keyword_query, scientific_category_query, band_query, fov_query, time_resolution_query,frequency_query]
+    conditions = [
+        science_keyword_query,
+        scientific_category_query,
+        band_query,
+        fov_query,
+        time_resolution_query,
+        frequency_query,
+    ]
     conditions = [cond for cond in conditions if cond]  # Remove empty conditions
     where_clause = " AND ".join(conditions)
-    where_clause = where_clause + " AND is_mosaic = 'F' AND science_observation = 'T'"  
+    where_clause = where_clause + " AND is_mosaic = 'F' AND science_observation = 'T'"
 
     query = f"""
             SELECT {columns_str}
@@ -219,6 +289,7 @@ def query_by_science_type(science_keyword=None, scientific_category=None, band=N
             """
     results = search_with_retry(service, query)
     return results
+
 
 # -------------------- Metadata Processing Functions ---------------------- #
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
@@ -242,8 +313,10 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
     """
     # Input validation
     if central_frequency_ghz <= 0 or max_baseline_km <= 0:
-        raise ValueError("Central frequency and maximum baseline must be positive values.")
-    
+        raise ValueError(
+            "Central frequency and maximum baseline must be positive values."
+        )
+
     if type(central_frequency_ghz) != Quantity:
         central_frequency_ghz = central_frequency_ghz * U.GHz
     if type(max_baseline_km) != Quantity:
@@ -268,10 +341,11 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
     else:
         return beam_size_arcsec
 
+
 def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     """
     This function returns the field of view of an ALMA band in arcseconds
-    input: 
+    input:
         band number (int): the band number of the ALMA band, between 1 and 10
         antenna_diameter (int): the diameter of the antenna in meters
     output:
@@ -280,7 +354,7 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     """
     light_speed = c.to(U.m / U.s).value
     if band == 1:
-        central_freq = 43 * U.GHz  
+        central_freq = 43 * U.GHz
     elif band == 2:
         central_freq = 67 * U.GHz
     elif band == 3:
@@ -296,7 +370,7 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     elif band == 8:
         central_freq = 545 * U.GHz
     elif band == 9:
-        central_freq = 650 * U.GHz    
+        central_freq = 650 * U.GHz
     elif band == 10:
         central_freq = 868.5 * U.GHz
     central_freq = central_freq.to(U.Hz).value
@@ -311,38 +385,51 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     else:
         return fov
 
-def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, output_dir):
-    antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
-    obs_antennas = antenna_array.split(' ')
-    obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)]
-    intro_string = "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
-    with open(os.path.join(output_dir, 'antenna.cfg'), 'w') as f:
+
+def generate_antenna_config_file_from_antenna_array(
+    antenna_array, master_path, output_dir
+):
+    antenna_coordinates = pd.read_csv(
+        os.path.join(master_path, "antenna_config", "antenna_coordinates.csv")
+    )
+    obs_antennas = antenna_array.split(" ")
+    obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
+    obs_coordinates = antenna_coordinates[
+        antenna_coordinates["name"].isin(obs_antennas)
+    ]
+    intro_string = (
+        "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
+    )
+    with open(os.path.join(output_dir, "antenna.cfg"), "w") as f:
         f.write(intro_string)
         for i in range(len(obs_coordinates)):
-            f.write(f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n")
+            f.write(
+                f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {obs_coordinates['z'].values[i]} 12. {obs_coordinates['name'].values[i]}\n"
+            )
     f.close()
 
+
 def compute_distance(x1, y1, z1, x2, y2, z2):
-    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
 
 def get_max_baseline_from_antenna_config(update_progress, antenna_config):
     """
     takes an antenna configuration .cfg file as input and outputs
     """
     positions = []
-    with open(antenna_config, 'r') as f:
+    with open(antenna_config, "r") as f:
         lines = f.readlines()
         for line in lines:
-            if not line.strip().startswith('#'):
-                if '\t' in line:
+            if not line.strip().startswith("#"):
+                if "\t" in line:
                     row = [x for x in line.split("\t")][:3]
                 else:
                     row = [x for x in line.split(" ")][:3]
-                positions.append([float(x) for x in row])  
+                positions.append([float(x) for x in row])
     positions = np.array(positions)
     max_baseline = 0
-    
+
     for i in range(len(positions)):
         x1, y1, z1 = positions[i]
         for j in range(i + 1, len(positions)):
@@ -350,15 +437,20 @@ def get_max_baseline_from_antenna_config(update_progress, antenna_config):
             dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
             if dist > max_baseline:
                 max_baseline = dist
-        update_progress.emit((i/len(positions) * 100))
+        update_progress.emit((i / len(positions) * 100))
 
     return max_baseline
 
+
 def get_max_baseline_from_antenna_array(antenna_array, master_path):
-    antenna_coordinates = pd.read_csv(os.path.join(master_path, 'antenna_config', 'antenna_coordinates.csv'))
-    obs_antennas = antenna_array.split(' ')
-    obs_antennas = [antenna.split(':')[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[antenna_coordinates['name'].isin(obs_antennas)].values
+    antenna_coordinates = pd.read_csv(
+        os.path.join(master_path, "antenna_config", "antenna_coordinates.csv")
+    )
+    obs_antennas = antenna_array.split(" ")
+    obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
+    obs_coordinates = antenna_coordinates[
+        antenna_coordinates["name"].isin(obs_antennas)
+    ].values
     max_baseline = 0
     for i in range(len(obs_coordinates)):
         name, x1, y1, z1 = obs_coordinates[i]
@@ -368,6 +460,7 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
             if dist > max_baseline:
                 max_baseline = dist
     return max_baseline
+
 
 # -------------- OLD -------------------------------- #
 def get_band_range(band):
@@ -392,6 +485,7 @@ def get_band_range(band):
     elif band == 10:
         return (787, 950)
 
+
 def get_band_central_freq(band):
     """
     Takes as input the band number and returns its central frequency in GHz
@@ -403,9 +497,9 @@ def get_band_central_freq(band):
     elif band == 3:
         return 100
     elif band == 4:
-        return  143
+        return 143
     elif band == 5:
-        return  217
+        return 217
     elif band == 6:
         return 250
     elif band == 7:
@@ -417,6 +511,7 @@ def get_band_central_freq(band):
     elif band == 10:
         return 850
 
+
 def get_antennas_distances_from_reference(antenna_config):
     f = open(antenna_config)
     lines = f.readlines()
@@ -424,89 +519,90 @@ def get_antennas_distances_from_reference(antenna_config):
     frefant = int((nlines - 1) // 2)
     f.close()
     zx, zy, zz, zztot = [], [], [], []
-    for i in range(3,nlines):
+    for i in range(3, nlines):
         stuff = lines[i].split()
         zx.append(float(stuff[0]))
         zy.append(float(stuff[1]))
         zz.append(float(stuff[2]))
     nant = len(zx)
     nref = int(frefant)
-    for i in range(0,nant):
-        zxref = zx[i]-zx[nref]
-        zyref = zy[i]-zy[nref]
-        zzref = zz[i]-zz[nref]
-        zztot.append(np.sqrt(zxref**2+zyref**2+zzref**2))
+    for i in range(0, nant):
+        zxref = zx[i] - zx[nref]
+        zyref = zy[i] - zy[nref]
+        zzref = zz[i] - zz[nref]
+        zztot.append(np.sqrt(zxref**2 + zyref**2 + zzref**2))
     return zztot, frefant
 
-def generate_prms(antbl,scaleF):
+
+def generate_prms(antbl, scaleF):
     """
     This function generates the phase rms for the atmosphere
     as a function of antenna baseline length.
-    It is based on the structure function of the atmosphere and 
+    It is based on the structure function of the atmosphere and
     it gives 30 deg phase rms at 10000m = 10km.
 
-    Input: 
+    Input:
     antbl = antenna baseline length in meters
     scaleF = scale factor for the phase rms
     Output:
     prms = phase rms
     """
-    Lrms = 1.0/52.83 * antbl**0.8     # phase rms ~0.8 power to 10 km
-    Hrms = 3.0 * antbl**0.25          # phase rms `0.25 power beyond 10 km
+    Lrms = 1.0 / 52.83 * antbl**0.8  # phase rms ~0.8 power to 10 km
+    Hrms = 3.0 * antbl**0.25  # phase rms `0.25 power beyond 10 km
     if antbl < 10000.0:
-        prms = scaleF*Lrms
+        prms = scaleF * Lrms
     if antbl >= 10000.0:
-        prms = scaleF*Hrms
+        prms = scaleF * Hrms
     return prms
+
 
 def simulate_atmospheric_noise(sim_output_dir, project, scale, ms, antennalist):
     zztot, frefant = get_antennas_distances_from_reference(antennalist)
     gaincal(
         vis=ms,
         caltable=os.path.join(sim_output_dir, project + "_atmosphere.gcal"),
-        refant=str(frefant), #name of the reference antenna
-        minsnr=0.00, #ignore solution with SNR below this
-        calmode="p", #phase
-        solint='inf', #solution interval,
+        refant=str(frefant),  # name of the reference antenna
+        minsnr=0.00,  # ignore solution with SNR below this
+        calmode="p",  # phase
+        solint="inf",  # solution interval,
     )
     tb = table()
     tb.open(os.path.join(sim_output_dir, project + "_atmosphere.gcal"), nomodify=False)
-    yant = tb.getcol('ANTENNA1')
-    ytime = tb.getcol('TIME')
-    ycparam = tb.getcol('CPARAM')
+    yant = tb.getcol("ANTENNA1")
+    ytime = tb.getcol("TIME")
+    ycparam = tb.getcol("CPARAM")
     nycparam = ycparam.copy()
     nant = len(yant)
     for i in range(nant):
         antbl = zztot[yant[i]]
         # get rms phase for each antenna
-        prms = generate_prms(antbl,scale)
+        prms = generate_prms(antbl, scale)
         # determine random GAUSSIAN phase error from rms phase
-        perror = random.gauss(0,prms)
-        # adding a random phase error to the solution, it will be 
+        perror = random.gauss(0, prms)
+        # adding a random phase error to the solution, it will be
         # substituted by a frequency that depends from frequency
         # of observation and baseline length
         perror = perror + random.gauss(0, 0.05 * perror)
         # convert phase error to complex number
-        rperror = np.cos(perror*pi/180.0)
-        iperror = np.sin(perror*pi/180.0)
-        nycparam[0][0][i] = 1.0*complex(rperror,iperror)  #X POL
-        nycparam[1][0][i] = 1.0*complex(rperror,iperror)  #Y POL  ASSUMED SAME
-    tb.putcol('CPARAM', nycparam)
+        rperror = np.cos(perror * pi / 180.0)
+        iperror = np.sin(perror * pi / 180.0)
+        nycparam[0][0][i] = 1.0 * complex(rperror, iperror)  # X POL
+        nycparam[1][0][i] = 1.0 * complex(rperror, iperror)  # Y POL  ASSUMED SAME
+    tb.putcol("CPARAM", nycparam)
     tb.flush()
     tb.close()
     applycal(
-        vis = ms,
-        gaintable = os.path.join(sim_output_dir, project + "_atmosphere.gcal")
+        vis=ms, gaintable=os.path.join(sim_output_dir, project + "_atmosphere.gcal")
     )
-    #os.system("rm -rf " + os.path.join(sim_output_dir, project + "_atmosphere.gcal"))
-    return 
+    # os.system("rm -rf " + os.path.join(sim_output_dir, project + "_atmosphere.gcal"))
+    return
+
 
 def simulate_gain_errors(ms, amplitude: float = 0.01):
     sm = casa_simulator()
     sm.openfromms(ms)
     sm.setseed(42)
-    sm.setgain(mode='fbm', amplitude=[amplitude])
+    sm.setgain(mode="fbm", amplitude=[amplitude])
     sm.corrupt()
     sm.close()
     return
-
