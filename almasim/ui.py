@@ -3,11 +3,11 @@ import numpy as np
 import pandas as pd
 import os
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QScrollArea, QGridLayout, 
-    QGroupBox, QCheckBox, QRadioButton, QTextEdit, QButtonGroup, QSizePolicy, QCheckBox, QSplitter,
-    QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, QMessageBox, QPlainTextEdit, QProgressBar
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QGridLayout, 
+    QCheckBox, QTextEdit, QSizePolicy, QCheckBox, QLabel, QLineEdit, QPushButton, QFileDialog, 
+    QComboBox, QProgressBar
 )
-from PyQt6.QtCore import QSettings, QIODevice, QTextStream, QProcess, pyqtSignal, Qt, QObject, QThread, QRunnable, QThreadPool,  pyqtSlot
+from PyQt6.QtCore import QSettings, pyqtSignal, Qt, QObject, QRunnable, QThreadPool, pyqtSlot
 from PyQt6.QtGui import QPixmap, QGuiApplication 
 from kaggle import api
 from os.path import isfile
@@ -27,7 +27,6 @@ from math import pi, ceil
 from datetime import date
 import time
 import shutil
-from tqdm import tqdm
 from time import strftime, gmtime
 import paramiko
 import pysftp
@@ -44,23 +43,6 @@ import matplotlib.pyplot as plt
 import logging
 import re
 
-class MemoryMonitor(WorkerPlugin):
-    def __init__(self, memory_limit):
-        self.memory_limit = memory_limit
-
-    def setup(self, worker):
-        self.worker = worker
-        self.process = psutil.Process()
-        self.process_memory_limit = self.memory_limit * 1024 * 1024 * 1024  # Convert GB to bytes
-
-    async def monitor_memory(self):
-        while True:
-            memory_usage = self.process.memory_info().rss
-            if memory_usage > self.process_memory_limit:
-                print("Memory limit exceeded. Closing worker.")
-                await self.worker.close(close_workers=True)
-                break
-            await asyncio.sleep(1)
 
 class MemoryLimitPlugin(WorkerPlugin):
     def __init__(self, memory_limit):
@@ -76,32 +58,6 @@ class MemoryLimitPlugin(WorkerPlugin):
         if finish == 'memory' and psutil.virtual_memory().percent > self.memory_limit:
             # If memory usage exceeds the limit, skip the task
             return 'erred'
-
-class LogView(QPlainTextEdit):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setReadOnly(True)
-        self._process = QProcess()
-        self._process.readyReadStandardOutput.connect(self.handle_stdout)
-        self._process.readyReadStandardError.connect(self.handle_stderr)
-
-    def start_log(self, program, arguments=None):
-        if arguments is None:
-            arguments = []
-        self._process.start(program, arguments)
-
-    def add_log(self, message):
-        self.appendPlainText(message.rstrip())
-        self.ensureCursorVisible()  # Ensure the cursor is visible after adding text
-        QApplication.processEvents()  # Process all pending events to force UI update
-
-    def handle_stdout(self):
-        message = self._process.readAllStandardOutput().data().decode()
-        self.add_log(message)
-
-    def handle_stderr(self):
-        message = self._process.readAllStandardError().data().decode()
-        self.add_log(message)
 
 class TerminalLogger(QObject):
     log_signal = pyqtSignal(str)
@@ -120,37 +76,6 @@ class TerminalLogger(QObject):
         # Update terminal or GUI with progress value
         #print(f"Progress: {value}%")
         self.add_log(f"Progress: {value}%")
-
-class TqdmLoggingRunnable(QObject, QRunnable):
-    """QRunnable to handle tqdm updates and log them to the terminal."""
-    progress_update = pyqtSignal(int)  # Signal to communicate progress updates
-
-    def __init__(self, total):
-        super().__init__()
-        self.total = total
-    
-    
-    def run(self):
-        class TqdmWriteStream(object):
-            def __init__(self, signal_emitter):
-                self.signal_emitter = signal_emitter
-
-            def write(self, msg):
-                message = msg.replace("\r", "").replace("\n", "")
-                try:
-                    value = int(message)
-                    self.signal_emitter.emit(value)
-                except ValueError:
-                    pass
-
-            def flush(self):
-                pass
-
-        tqdm_out = TqdmWriteStream(self.progress_update)
-        with tqdm(total=self.total, file=tqdm_out, mininterval=0.1) as pbar:
-            for i in range(self.total):
-                pbar.update(i - pbar.n)
-                time.sleep(0.1)
 
 class PlotWindow(QWidget):
     def __init__(self, parent=None):
@@ -2186,6 +2111,7 @@ class ALMASimulator(QMainWindow):
                 self.terminal.add_log('Cannot run on remote in sequential mode, changing it to parallel')
                 self.comp_mode_combo.setCurrentText('parallel')
         os.chdir(self.main_path)
+    
     def run_simulator_sequentially(self):
         pool = QThreadPool.globalInstance()
         for i in range(int(self.n_sims_entry.text())):
