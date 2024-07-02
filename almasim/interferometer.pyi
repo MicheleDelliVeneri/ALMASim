@@ -1,7 +1,5 @@
 from PyQt6.QtCore import QObject
 from _typeshed import Incomplete
-from astropy.constants import G as G, M_earth as M_earth, R_earth as R_earth
-from tqdm import tqdm as tqdm
 
 def showError(message) -> None: ...
 

@@ -1,8 +1,5 @@
 from _typeshed import Incomplete
-from illustris_python.snapshot import getSnapOffsets as getSnapOffsets
 from martini.sources.sph_source import SPHSource
-from martini.sph_kernels import AdaptiveKernel as AdaptiveKernel
-from scipy.integrate import quad as quad
 
 class myTNGSource(SPHSource):
     def __init__(
@@ -157,7 +154,7 @@ def insert_extended(
 ): ...
 def diffuse_signal(n_px): ...
 def insert_diffuse(
-    update_progress, datacube, continuum, line_fluxes, pos_z, fwhm_z, n_px, n_chan
+    update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan
 ): ...
 def distance_1d(p1, p2): ...
 def distance_2d(p1, p2): ...

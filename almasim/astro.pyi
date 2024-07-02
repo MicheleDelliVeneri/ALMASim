@@ -1,10 +1,4 @@
 from _typeshed import Incomplete
-from astropy.constants import c as c
-from astropy.coordinates import SkyCoord as SkyCoord
-from astropy.cosmology import FlatLambdaCDM as FlatLambdaCDM
-from astropy.io import fits as fits
-from math import pi as pi
-from tqdm import tqdm as tqdm
 
 def compute_redshift(rest_frequency, observed_frequency): ...
 def redshift_to_snapshot(redshift): ...
@@ -80,4 +74,4 @@ def write_sim_parameters(
     fwhm_y: Incomplete | None = None,
     angle: Incomplete | None = None,
 ) -> None: ...
-def get_image_from_ssd(ra, dec, fov) -> None: ...
+# def get_image_from_ssd(ra, dec, fov) -> None: ...
