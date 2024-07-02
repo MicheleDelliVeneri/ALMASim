@@ -499,8 +499,8 @@ def loadSubset(
                 f = h5py.File(snapPath(basePath, snapNum, i), "r")
             else:
                 print("Not Found")
-                url = f"http://www.tng-project.org/api/TNG100-1/files/snapshot-{
-                    str(snapNum)}"
+                beg_url = "http://www.tng-project.org/api/TNG100-1/files/snapshot"
+                url = f"{beg_url}-{str(snapNum)}"
                 # subdir = os.path.join("output", "snapdir_0{}".format(str(i)))
                 cmd = (
                     f'wget -q --progress=bar --content-disposition '

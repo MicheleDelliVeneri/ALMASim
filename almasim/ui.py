@@ -3174,15 +3174,12 @@ class ALMASimulator(QMainWindow):
             if n_lines > len(filtered_lines):
                 if remote is True:
                     print(
-                        f"Warning: Cant insert {n_lines}, injecting {
-                            len(filtered_lines)}."
+                        f"Warn: Cant insert {n_lines}, injecting {len(filtered_lines)}."
                     )
                 else:
                     self.terminal.add_log(
-                        f"Warning: Cant insert {n_lines}, injecting {
-                            len(filtered_lines)}."
+                        f"Warn: Cant insert {n_lines}, injecting {len(filtered_lines)}."
                     )
-
             else:
                 filtered_lines = filtered_lines.head(n_lines)
         line_names = filtered_lines["Line"].values
