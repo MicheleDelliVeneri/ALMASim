@@ -1486,13 +1486,21 @@ class ALMASimulator(QMainWindow):
                 db["science_keyword"] == "Evolved stars: Shaping/physical structure"
             ].index
         )
+        old_keys = [
+            "Solar system - Trans-Neptunian Objects (TNOs)",
+            "Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)",
+            "Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)",
+            "Cosmic Microwave Background (CMB)/Sunyaev-Zel'dovich Effect (SZE)",
+            "Active Galactic Nuclei (AGN)/Quasars (QSO)",
+            "Inter-Stellar Medium (ISM)/Molecular clouds",
+        ]
         short_keyword = {
-            "Solar system - Trans-Neptunian Objects (TNOs)": "Solar System - TNOs",
-            "Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)": "Photon/X-Ray Domanited Regions",
-            "Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)": "LIRG & ULIRG",
-            "Cosmic Microwave Background (CMB)/Sunyaev-Zel'dovich Effect (SZE)": "CMB/Sunyaev-Zel'dovich Effect",
-            "Active Galactic Nuclei (AGN)/Quasars (QSO)": "AGN/QSO",
-            "Inter-Stellar Medium (ISM)/Molecular clouds": "ISM & Molecular Clouds",
+            old_keys[0]: "Solar System - TNOs",
+            old_keys[1]: "Photon/X-Ray Domanited Regions",
+            old_keys[2]: "LIRG & ULIRG",
+            old_keys[3]: "CMB/Sunyaev-Zel'dovich Effect",
+            old_keys[4]: "AGN/QSO",
+            old_keys[5]: "ISM & Molecular Clouds",
         }
 
         db["science_keyword"] = db["science_keyword"].replace(short_keyword)
