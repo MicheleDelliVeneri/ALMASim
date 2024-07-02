@@ -19,7 +19,7 @@ jobs:
       - name: Run Black
         uses: psf/black@stable
         with:
-          options: "--check --verbose --exclude experimental"
+          options: "--check --verbose --exclude experimental|illustris_python"
           jupyter: true
       - name: Set up Python environment
         uses: actions/setup-python@v5
@@ -28,7 +28,7 @@ jobs:
       - name: Run flake8
         uses: py-actions/flake8@v2
         with:
-          exclude: experimental
+          exclude: experimental|illustris_python
       - name: Install mypy
         run: pip install mypy
       - name: Install types
