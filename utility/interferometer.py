@@ -130,6 +130,12 @@ class Interferometer(QObject):
         self._free_space()
         return simulation_results
 
+    def _get_hour_angle(self, time):
+        lst = time.sidereal_time('apparent', longitude=self.observing_location.lon)
+        ha = lst.deg - self.ra
+        if ha < 0:
+            ha += 360
+        return ha
     # ------- Utility Functions --------------------------
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site('ALMA')
@@ -137,24 +143,13 @@ class Interferometer(QObject):
     def _get_Hcov(self):
         self.int_time = self.int_time * U.s
         start_time = Time(self.obs_date + 'T00:00:00', format='isot', scale='utc')
-        midle_time = start_time + self.int_time / 2
+        middle_time = start_time + self.int_time / 2
         end_time = start_time + self.int_time
-        sidereal_start = start_time.sidereal_time('apparent', longitude=self.lat)
-        sidereal_middle = midle_time.sidereal_time('apparent', longitude=self.lat)
-        sidereal_end = end_time.sidereal_time('apparent', longitude=self.lat)
-        #self.start_time = sidereal_time
-        #self.middle_time = sidereal_time + self.int_time.to(U.hourangle) / 2
-        #self.end_time = sidereal_time.value + self.int_time.to(U.hournangle)
-        min_start = -0.1 * self.Hfac
-        min_finish = 0.1 * self.Hfac
-        start = (sidereal_start - sidereal_middle).value
-        end = (sidereal_end - sidereal_middle).value
-
-        if start > min_start:
-            start = min_start
-        if end < min_finish:
-            end = min_finish
-        
+        ha_start = self._get_hour_angle(start_time)
+        ha_middle = self._get_hour_angle(middle_time)
+        ha_end = self._get_hour_angle(end_time)
+        start = ha_start - ha_middle
+        end = ha_end - ha_middle
         self.Hcov = [start , end]
         
     def _get_az_el(self):
@@ -432,7 +427,7 @@ class Interferometer(QObject):
                 nii[n1] += 1
                 nii[n2] += 1
                 # Increment the baseline index counter
-                bi += np.int8(1)
+                bi += np.int16(1)
         # Initialize arrays to store u and v coordinates (in wavelengths)
         # for each baseline at each hour angle.
         self.u = np.zeros((NBmax, self.nH))

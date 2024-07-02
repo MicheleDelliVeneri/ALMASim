@@ -1589,7 +1589,6 @@ def insert_gaussian(update_progress, datacube, continum, line_fluxes, pos_x, pos
         update_progress.emit(z/n_chan * 100)
     return datacube 
 
-
 def interpolate_array(arr, n_px):
     """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
     zoom_factor = n_px / arr.shape[0]   
@@ -1801,7 +1800,7 @@ def get_pos(x_radius, y_radius, z_radius):
     z = np.random.randint(-z_radius, z_radius)
     return (x, y, z)
 
-def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,  
+def sample_positions(terminal, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,  
                      n_components, fwhm_xs, fwhm_ys, fwhm_zs,
                      xy_radius, z_radius, sep_xy, sep_z):
     sample = []
@@ -1836,7 +1835,7 @@ def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
                     sample.append(new_p)
                     i += 1
                     n = 0
-                    print('Found {}st component'.format(len(sample)))
+                    terminal.add_log('Found {}st component'.format(len(sample)))
         else:
             spatial_distances = [distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample]
             freq_distances = [distance_1d(new_p[2], p[2]) for p in sample]
@@ -1865,11 +1864,11 @@ def sample_positions(pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
                     i += 1
                     n = 0
                     sample.append(new_p)
-                    print('Found {}st component'.format(len(sample)))
+                    terminal.add_log('Found {}st component'.format(len(sample)))
           
     return sample
 
-def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names, 
+def insert_serendipitous(terminal, update_progress, datacube, continum, cont_sens, line_fluxes, line_names, 
     line_frequencies, freq_sup, pos_zs, fwhm_x, fwhm_y, fwhm_zs, n_px, n_chan, sim_params_path):
     wcs = datacube.wcs
     xy_radius = n_px / 4
@@ -1898,7 +1897,7 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
     # normalize continum to each serendipitous continum maximum
     serendipitous_conts = np.array([continum * serendipitous_norm / cont_peak for serendipitous_norm in serendipitous_norms])
     # sample coordinates of the first line
-    sample_coords = sample_positions(pos_x, pos_y, pos_z, 
+    sample_coords = sample_positions(terminal, pos_x, pos_y, pos_z, 
                                      fwhm_x, fwhm_y, fwhm_zs[0],
                                      n_sources, fwhm_xs, fwhm_ys, s_fwhm_zs,
                                      xy_radius, z_radius, sep_x, sep_z)
@@ -1907,14 +1906,14 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
     with open(sim_params_path, 'w') as f:
         f.write('\n Injected {} serendipitous sources\n'.format(n_sources))
         f.close()
-    for c_id, choords in tqdm(enumerate(sample_coords), total=len(sample_coords)):
+    for c_id, choords in enumerate(sample_coords):
         with open(sim_params_path, 'w') as f:
             n_line = n_lines[c_id]
-            print('Simulating serendipitous source {} with {} lines'.format(c_id + 1, n_line))
+            terminal.add_log('Simulating serendipitous source {} with {} lines'.format(c_id + 1, n_line))
             s_line_fluxes = np.random.uniform(cont_sens, np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
             for s_name, s_flux in zip(s_line_names, s_line_fluxes):
-                print('Line {} Flux: {}'.format(s_name, s_flux))
+                terminal.add_log('Line {} Flux: {}'.format(s_name, s_flux))
             pos_x, pos_y, pos_z = choords
             delta = pos_z - pos_zs[0]
             pos_z = np.array([pos + delta for pos in pos_zs])[:n_line]
@@ -1931,7 +1930,7 @@ def insert_serendipitous(datacube, continum, cont_sens, line_fluxes, line_names,
             f.write('Projection Angle: {}\n'.format(pas[c_id]))
             for i in range(len(s_freq)):
                 f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy - Width (Channels): {}\n'.format(s_line_names[i], s_freq[i], line_fluxes[i], fwhmsz[i]))
-            datacube = insert_gaussian(datacube, s_continum, s_line_fluxes, pos_x, pos_y, pos_z, fwhm_xs[c_id], fwhm_ys[c_id], fwhmsz, 
+            datacube = insert_gaussian(update_progress, datacube, s_continum, s_line_fluxes, pos_x, pos_y, pos_z, fwhm_xs[c_id], fwhm_ys[c_id], fwhmsz, 
                     pas[c_id], n_px, n_chan)
             f.close()
     return datacube
