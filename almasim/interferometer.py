@@ -3,21 +3,15 @@ from astropy.io import fits
 from astropy.time import Time
 from scipy.integrate import odeint
 import pandas as pd
-from astropy.constants import M_earth, R_earth, G
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
-import astropy.time
-from tqdm import tqdm
 import astropy.units as U
 from astropy.constants import c
 import scipy.ndimage.interpolation as spndint
-import matplotlib.image as plimg
 import matplotlib.cm as cm
 import numpy as np
-import matplotlib.pyplot as plt
 import os
-import time
-import sys
 import matplotlib
+import h5py
 
 matplotlib.use("Agg")
 
@@ -214,7 +208,7 @@ class Interferometer(QObject):
                 return -dtau_dt(t)
 
             A, E = y
-            if forward == True:
+            if forward is True:
                 dA_dt = dtau_dt(t) * (
                     (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
                     / np.cos(E)
@@ -230,7 +224,6 @@ class Interferometer(QObject):
 
         self._get_az_el()
         y0 = [self.az, self.el]
-        middle_H = self.el.to(U.hourangle).value
         t_final_solve = np.linspace(self.middle_time, self.end_time, self.nH)
         sol_final = odeint(
             differential_equations, y0, t_final_solve, args=(self.lat, self.az, self.el)
@@ -320,9 +313,6 @@ class Interferometer(QObject):
                 self.Hcov[1] = Hhor
 
         self.Hmax = Hhor
-        # the H array is constructed
-        H = np.linspace(self.Hcov[0], self.Hcov[1], self.nH)[np.newaxis, :]
-
         self.Xmax = self.Xmax * 1.5
         self.Nant = len(self.antPos)
 
@@ -830,25 +820,25 @@ class Interferometer(QObject):
 
         self.modelimTrue[self.modelimTrue < 0.0] = 0.0
 
-    def _set_elliptical_beam(self):
-        cov_matrix = np.cov(self.u, self.v)
-        # Eigen decomposition of the covariance matrix
-        eigvals, eigvecs = np.linalg.eigh(cov_matrix)
-        # Eigenvector corresponding to the largest eigenvalue gives the major axis
-        # direction
-        major_axis_vector = eigvecs[:, np.argmax(eigvals)]
-        BPA_rad = self.rad2deg(np.arctan2(major_axis_vector[1], major_axis_vector[0]))
-        scale_factor = (
-            1220 * self.deg2arcsec * self.wavelength[2] / self.Diameters[0] / 2.3548
-        )
-        # Rotate the coordinates
-        x_rot = x * np.cos(BPA_rad) + y * np.sin(BPA_rad)
-        y_rot = -x * np.sin(BPA_rad) + y * np.cos(BPA_rad)
-        # Eigenvalues correspond to the variances along the major and minor axes
-        sigma_major = np.sqrt(np.max(eigvals)) * scale_factor
-        sigma_minor = np.sqrt(np.min(eigvals)) * scale_factor
-        PB = (x_rot / sigma_major) ** 2 + (y_rot / sigma_minor) ** 2
-        self.beamImg = np.exp(self.distmat / PB)
+    # def _set_elliptical_beam(self):
+    #    cov_matrix = np.cov(self.u, self.v)
+    #    # Eigen decomposition of the covariance matrix
+    #    eigvals, eigvecs = np.linalg.eigh(cov_matrix)
+    #    # Eigenvector corresponding to the largest eigenvalue gives the major axis
+    #    # direction
+    #    major_axis_vector = eigvecs[:, np.argmax(eigvals)]
+    #    BPA_rad = self.rad2deg(np.arctan2(major_axis_vector[1], major_axis_vector[0]))
+    #    scale_factor = (
+    #        1220 * self.deg2arcsec * self.wavelength[2] / self.Diameters[0] / 2.3548
+    #    )
+    #    # Rotate the coordinates
+    #    x_rot = x * np.cos(BPA_rad) + y * np.sin(BPA_rad)
+    #    y_rot = -x * np.sin(BPA_rad) + y * np.cos(BPA_rad)
+    #    # Eigenvalues correspond to the variances along the major and minor axes
+    #    sigma_major = np.sqrt(np.max(eigvals)) * scale_factor
+    #    sigma_minor = np.sqrt(np.min(eigvals)) * scale_factor
+    #    PB = (x_rot / sigma_major) ** 2 + (y_rot / sigma_minor) ** 2
+    #    self.beamImg = np.exp(self.distmat / PB)
 
     def _set_primary_beam(self):
         """
@@ -978,6 +968,7 @@ class Interferometer(QObject):
     def _add_thermal_noise(self):
         mean_val = np.mean(self.img)
         # self.img += np.random.normal(scale=mean_val / self.snr)
+        return mean_val
 
     # ------------------- IO Functions
     def _savez_compressed_cubes(self):
