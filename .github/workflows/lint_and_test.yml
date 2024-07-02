@@ -19,7 +19,7 @@ jobs:
       - name: Run Black
         uses: psf/black@stable
         with:
-          options: "--check --verbose -exclude experimental"
+          options: "--check --verbose --exclude experimental"
           jupyter: true
       - name: Set up Python environment
         uses: actions/setup-python@v5
