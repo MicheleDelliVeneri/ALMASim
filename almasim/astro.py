@@ -307,12 +307,12 @@ def loadObjects(basePath, snapNum, gName, nName, fields):
 
             # read data local to the current file
             if len(shape) == 1:
-                result[field][wOffset: wOffset + shape[0]] = f[gName][field][
-                    0: shape[0]
+                result[field][wOffset : wOffset + shape[0]] = f[gName][field][
+                    0 : shape[0]
                 ]
             else:
-                result[field][wOffset: wOffset + shape[0], :] = f[gName][field][
-                    0: shape[0], :
+                result[field][wOffset : wOffset + shape[0], :] = f[gName][field][
+                    0 : shape[0], :
                 ]
 
         wOffset += shape[0]
@@ -464,7 +464,7 @@ def loadSubset(
         wget_options = "-q --progress=bar --content-disposition"
         api_key_header = f'--header="API-Key:{api_key}"'
         filename = f"{url}.{0}.hdf5"
-        output_file = f'-O {snapPath2(basePath, snapNum)}'
+        output_file = f"-O {snapPath2(basePath, snapNum)}"
         cmd = f"{wget_options} {api_key_header} {filename} {output_file}"
         subprocess.check_call(cmd, shell=True)
     with h5py.File(snapPath(basePath, snapNum), "r") as f:
@@ -503,9 +503,9 @@ def loadSubset(
                 url = f"{beg_url}-{str(snapNum)}"
                 # subdir = os.path.join("output", "snapdir_0{}".format(str(i)))
                 cmd = (
-                    f'wget -q --progress=bar --content-disposition '
+                    f"wget -q --progress=bar --content-disposition "
                     f'--header="API-Key:{api_key}" '  # Separate f-string for clarity
-                    f'{url}.{i}.hdf5'
+                    f"{url}.{i}.hdf5"
                 )
                 print(f"Downloading snapshot {i} ...")
                 if outPath is not None:
@@ -564,9 +564,9 @@ def loadSubset(
             # subdir = os.path.join("output", "snapdir_0{}".format(str(fileNum)))
             savePath = os.path.join(basePath, "snapdir_0{}".format(str(snapNum)))
             cmd = (
-                f'wget -P {savePath} -q --progress=bar --content-disposition '
+                f"wget -P {savePath} -q --progress=bar --content-disposition "
                 f'--header="API-Key:{api_key}" '
-                f'{url}.{fileNum}.hdf5'
+                f"{url}.{fileNum}.hdf5"
             )
             if outPath is not None:
                 os.chdir(outPath)
@@ -593,12 +593,12 @@ def loadSubset(
         for i, field in enumerate(fields):
             # read data local to the current file
             if mdi is None or mdi[i] is None:
-                result[field][wOffset: wOffset + numToReadLocal] = f[gName][field][
-                    fileOff: fileOff + numToReadLocal
+                result[field][wOffset : wOffset + numToReadLocal] = f[gName][field][
+                    fileOff : fileOff + numToReadLocal
                 ]
             else:
-                result[field][wOffset: wOffset + numToReadLocal] = f[gName][field][
-                    fileOff: fileOff + numToReadLocal, mdi[i]
+                result[field][wOffset : wOffset + numToReadLocal] = f[gName][field][
+                    fileOff : fileOff + numToReadLocal, mdi[i]
                 ]
 
         wOffset += numToReadLocal
@@ -655,10 +655,10 @@ def getSnapOffsets(basePath, snapNum, id, type, api_key):
                 )
             )
             cmd = (
-                f'wget -q --progress=bar  --content-disposition '
+                f"wget -q --progress=bar  --content-disposition "
                 f'--header="API-Key:{api_key}" '
-                f'{url} '
-                f'-O {offsetPath(basePath, snapNum)}'
+                f"{url} "
+                f"-O {offsetPath(basePath, snapNum)}"
             )
             subprocess.check_call(cmd, shell=True)
             print("Done.")

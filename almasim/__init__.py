@@ -1,4 +1,5 @@
 from .__version__ import __version__
+
 __doc__ = """
     ALMASim an elegant simulator for the ALMA Observatory for a more civilized age.
 

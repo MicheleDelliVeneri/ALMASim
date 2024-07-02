@@ -825,7 +825,7 @@ class Interferometer(QObject):
         #   - Find the maximum value of the beam within a central region
         #       (likely to avoid edge effects).
         self.beamScale = np.max(
-            self.beam[self.Nphf: self.Nphf + 1, self.Nphf: self.Nphf + 1]
+            self.beam[self.Nphf : self.Nphf + 1, self.Nphf : self.Nphf + 1]
         )
         self.beam[:] /= self.beamScale
 
@@ -875,8 +875,8 @@ class Interferometer(QObject):
             sh0 = (self.Nphf - dims[0]) // 2
             sh1 = (self.Nphf - dims[1]) // 2
             self.modelimTrue[
-                sh0 + self.Np4: sh0 + self.Np4 + dims[0],
-                sh1 + self.Np4: sh1 + self.Np4 + dims[1],
+                sh0 + self.Np4 : sh0 + self.Np4 + dims[0],
+                sh1 + self.Np4 : sh1 + self.Np4 + dims[1],
             ] += self.zoomimg
         else:
             zoomimg = spndint.zoom(self.img, float(self.Nphf) / d1)
@@ -886,8 +886,8 @@ class Interferometer(QObject):
             sh0 = (self.Nphf - zdims[0]) // 2
             sh1 = (self.Nphf - zdims[1]) // 2
             self.modelimTrue[
-                sh0 + self.Np4: sh0 + self.Np4 + zd0,
-                sh1 + self.Np4: sh1 + self.Np4 + zd1,
+                sh0 + self.Np4 : sh0 + self.Np4 + zd0,
+                sh1 + self.Np4 : sh1 + self.Np4 + zd1,
             ] += zoomimg[:zd0, :zd1]
 
         self.modelimTrue[self.modelimTrue < 0.0] = 0.0

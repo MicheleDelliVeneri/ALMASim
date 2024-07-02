@@ -62,6 +62,7 @@ import pyvo
 import re
 import seaborn as sns
 import subprocess
+
 matplotlib.use("Agg")
 
 
@@ -1487,12 +1488,9 @@ class ALMASimulator(QMainWindow):
         )
         short_keyword = {
             "Solar system - Trans-Neptunian Objects (TNOs)": "Solar System - TNOs",
-            "Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)":
-                "Photon/X-Ray Domanited Regions",
-            "Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)":
-                "LIRG & ULIRG",
-            "Cosmic Microwave Background (CMB)/Sunyaev-Zel'dovich Effect (SZE)":
-                "CMB/Sunyaev-Zel'dovich Effect",
+            "Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)": "Photon/X-Ray Domanited Regions",
+            "Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)": "LIRG & ULIRG",
+            "Cosmic Microwave Background (CMB)/Sunyaev-Zel'dovich Effect (SZE)": "CMB/Sunyaev-Zel'dovich Effect",
             "Active Galactic Nuclei (AGN)/Quasars (QSO)": "AGN/QSO",
             "Inter-Stellar Medium (ISM)/Molecular clouds": "ISM & Molecular Clouds",
         }
@@ -1577,7 +1575,9 @@ class ALMASimulator(QMainWindow):
                     lambda x: [y.strip() for y in x]
                 )
                 db = db.explode("band_list")
-                db["fov"] = db["band_list"].apply(lambda x: ual.get_fov_from_band(int(x)))
+                db["fov"] = db["band_list"].apply(
+                    lambda x: ual.get_fov_from_band(int(x))
+                )
                 fov_bins = np.arange(
                     db["fov"].min(), db["fov"].max(), 10
                 )  # 10 arcsec bins
@@ -2209,10 +2209,10 @@ class ALMASimulator(QMainWindow):
         _QApplication = QApplication
         python_command = [
             'python -c "import sys; import os; import almasim.ui as ui; ',
-            f'app = ui.{_QApplication}(sys.argv); ',
+            f"app = ui.{_QApplication}(sys.argv); ",
             f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
-            'window=ui.ALMASimulator(); ',
-            'window.create_pbs_cluster_and_run()',
+            "window=ui.ALMASimulator(); ",
+            "window.create_pbs_cluster_and_run()",
             'sys.exit(app.exec())"',
         ]
         python_command_str = "".join(python_command)
@@ -2248,10 +2248,10 @@ class ALMASimulator(QMainWindow):
         _QApplication = QApplication
         python_command = [
             'python -c "import sys; import os; import almasim.ui as ui; ',
-            f'app = ui.{_QApplication}(sys.argv); ',
+            f"app = ui.{_QApplication}(sys.argv); ",
             f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
-            'window=ui.ALMASimulator(); ',
-            'ui.ALMASimulator.initiate_parallel_simulation_remote(window); ',
+            "window=ui.ALMASimulator(); ",
+            "ui.ALMASimulator.initiate_parallel_simulation_remote(window); ",
             'sys.exit(app.exec())"',
         ]
         # Join the list elements into a single string
@@ -2324,10 +2324,10 @@ class ALMASimulator(QMainWindow):
         _QApplication = QApplication
         python_command = [
             'python -c "import sys; import os; import almasim.ui as ui; ',
-            f'app = ui.{_QApplication}(sys.argv); ',
+            f"app = ui.{_QApplication}(sys.argv); ",
             f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
-            'window=ui.ALMASimulator(); ',
-            'ui.ALMASimulator.initiate_slurm_simulation_remote(window); ',
+            "window=ui.ALMASimulator(); ",
+            "ui.ALMASimulator.initiate_slurm_simulation_remote(window); ",
             'sys.exit(app.exec())"',
         ]
         # Join the list elements into a single string
@@ -2441,7 +2441,8 @@ class ALMASimulator(QMainWindow):
         if z_save != zmax:
             self.terminal.add_log(
                 f"Max redshift has been adjusted fit metadata,\
-                     new max redshift: {round(zmax, 3)}")
+                     new max redshift: {round(zmax, 3)}"
+            )
         self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
         snapshots = [
             uas.redshift_to_snapshot(redshift)
@@ -3858,7 +3859,7 @@ class ALMASimulator(QMainWindow):
     def _plot_beam(self):
         plt.figure(figsize=(8, 8))
         beamPlotPlot = plt.imshow(
-            self.beam[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            self.beam[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
             picker=True,
             interpolation="nearest",
             cmap=self.currcmap,
@@ -3894,7 +3895,7 @@ class ALMASimulator(QMainWindow):
         if (
             np.sum(
                 self.totsampling[
-                    self.Nphf - 4: self.Nphf + 4, self.Nphf - 4 : self.Nphf + 4
+                    self.Nphf - 4 : self.Nphf + 4, self.Nphf - 4 : self.Nphf + 4
                 ]
             )
             == nptot
@@ -3912,7 +3913,7 @@ class ALMASimulator(QMainWindow):
         simPlotPlot = ax[0, 0].imshow(
             np.power(
                 sim_img[
-                    self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4
+                    self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4
                 ],
                 self.gamma,
             ),
@@ -3934,14 +3935,14 @@ class ALMASimulator(QMainWindow):
         ax[0, 0].set_ylabel("Dec offset (as)")
         ax[0, 0].set_xlabel("RA offset (as)")
         totflux = np.sum(
-            sim_img[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
+            sim_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
         )
         ax[0, 0].set_title("MODEL IMAGE: %.2e Jy" % totflux)
         simPlotPlot.norm.vmin = np.min(sim_img)
         simPlotPlot.norm.vmax = np.max(sim_img)
         dirty_img = np.sum(self.dirtyCube, axis=0)
         dirtyPlotPlot = ax[0, 1].imshow(
-            dirty_img[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
             picker=True,
             interpolation="nearest",
         )
@@ -3957,7 +3958,7 @@ class ALMASimulator(QMainWindow):
         ax[0, 1].set_ylabel("Dec offset (as)")
         ax[0, 1].set_xlabel("RA offset (as)")
         totflux = np.sum(
-            dirty_img[self.Np4: self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
+            dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
         )
         ax[0, 1].set_title("DIRTY IMAGE: %.2e Jy" % totflux)
         dirtyPlotPlot.norm.vmin = np.min(dirty_img)
