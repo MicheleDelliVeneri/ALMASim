@@ -41,7 +41,9 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
       - name: Run stubtest
-        run: ./run_stubtest
+        run: |
+          chmod +x ./run_stubtest
+          ./run_stubtest
       
   tests:
     needs: lint
