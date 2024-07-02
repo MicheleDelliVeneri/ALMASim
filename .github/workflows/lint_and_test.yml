@@ -75,8 +75,8 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f optional_requirements.txt ]; then pip install -r optional_requirements.txt; fi
         pip install -e .
-        git submodule update --init --recursive      
-        cd submodules
+        git submodule update --init    
+        cd illustris_python
         pip install . 
     - name: Test with pytest
       run: pytest
@@ -107,8 +107,8 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f optional_requirements.txt ]; then pip install -r optional_requirements.txt; fi
         pip install -e .
-        git submodule update --init --recursive      
-        cd submodules
+        git submodule update --init
+        cd sillustris_python
         pip install .                         
     - name: Test with pytest including coverage report
       run: pytest --cov=./ --cov-report=xml
