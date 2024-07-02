@@ -45,6 +45,7 @@ jobs:
           pip install . 
       - name: Run stubtest
         run: |
+          sudo apt-get install -y libgl1-mesa-glx
           chmod +x ./run_stubtest
           ./run_stubtest
       
@@ -82,7 +83,9 @@ jobs:
         cd illustris_python
         pip install . 
     - name: Test with pytest
-      run: pytest
+      run: |
+        sudo apt-get install -y libgl1-mesa-glx
+        pytest
 
   tests-and-coverage:
     needs: lint
@@ -114,7 +117,9 @@ jobs:
         cd illustris_python
         pip install .                         
     - name: Test with pytest including coverage report
-      run: pytest --cov=./ --cov-report=xml
+      run: |
+        sudo apt-get install -y libgl1-mesa-glx
+        pytest --cov=./ --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       env:
