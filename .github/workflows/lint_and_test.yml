@@ -101,14 +101,6 @@ jobs:
         pip install PyQt6 --upgrade
         pip install pyqtgraph
         cd ..
-    - name: Create kaggle.json from secret
-      env:
-        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
-      run: |
-        sudo mkdir -p /root/.kaggle
-        sudo chown runner:runner /root/.kaggle  # Change ownership to the 'runner' user
-        echo "$KAGGLE_JSON_B64" | sudo base64 --decode > /root/.kaggle/kaggle.json
-        sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
@@ -152,14 +144,6 @@ jobs:
         pip install PyQt6 --upgrade
         pip install pyqtgraph
         cd ..
-    - name: Create kaggle.json from secret
-      env:
-        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
-      run: |
-        sudo mkdir -p /root/.kaggle
-        sudo chown runner:runner /root/.kaggle  # Change ownership to the 'runner' user
-        echo "$KAGGLE_JSON_B64" | sudo base64 --decode > /root/.kaggle/kaggle.json
-        sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
