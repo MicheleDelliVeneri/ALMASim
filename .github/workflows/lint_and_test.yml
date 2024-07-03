@@ -105,9 +105,6 @@ jobs:
       env:
         KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
       run: |
-        mkdir -p /home/runner/.kaggle
-        echo "$KAGGLE_JSON_B64" | base64 --decode > /home/runner/.kaggle/kaggle.json
-        chmod 600 /home/runner/.kaggle/kaggle.json
         sudo mkdir -p /root/.kaggle
         echo "$KAGGLE_JSON_B64" | sudo base64 --decode > /root/.kaggle/kaggle.json
         sudo chmod 600 /root/.kaggle/kaggle.json
@@ -158,9 +155,6 @@ jobs:
       env:
         KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
       run: |
-        mkdir -p /home/runner/.kaggle
-        echo "$KAGGLE_JSON_B64" | base64 --decode > /home/runner/.kaggle/kaggle.json
-        chmod 600 /home/runner/.kaggle/kaggle.json
         sudo mkdir -p /root/.kaggle
         echo "$KAGGLE_JSON_B64" | sudo base64 --decode > /root/.kaggle/kaggle.json
         sudo chmod 600 /root/.kaggle/kaggle.json
