@@ -116,7 +116,7 @@ jobs:
         sudo xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
-              pytest --ignore=illustris_python --rootdir /home/runner/work/AlmaSim
+              pytest --ignore=illustris_python --rootdir /home/runner/work/ALMASim
 
   tests-and-coverage:
     needs: lint
@@ -170,7 +170,7 @@ jobs:
         sudo xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
-              pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir /home/runner/work/AlmaSim
+              pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir /home/runner/work/ALMASim
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
