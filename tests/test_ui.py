@@ -21,9 +21,9 @@ def main_window(qtbot: QtBot):
     """Fixture for setting up the main window."""
     window = ui.ALMASimulator()
     qtbot.addWidget(window)
-    #window.show()
+    # window.show()
     yield window
-    #window.close()
+    # window.close()
 
 
 def test_ALMASimulator_creation(main_window):
