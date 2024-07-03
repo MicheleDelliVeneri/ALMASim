@@ -102,9 +102,9 @@ jobs:
         cd ..
     - name: Copy kaggle.json
       run: |
-        mkdir -p /root/.kaggle
-        cp kaggle.json /root/.kaggle/kaggle.json
-        chmod 600 /root/.kaggle/kaggle.json
+        sudo mkdir -p /root/.kaggle
+        sudo cp kaggle.json /root/.kaggle/kaggle.json
+        sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
@@ -153,9 +153,9 @@ jobs:
         cd ..
     - name: Copy kaggle.json
       run: |
-        mkdir -p /root/.kaggle
-        cp kaggle.json /root/.kaggle/kaggle.json
-        chmod 600 /root/.kaggle/kaggle.json
+        sudo mkdir -p /root/.kaggle
+        sudo cp kaggle.json /root/.kaggle/kaggle.json
+        sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
