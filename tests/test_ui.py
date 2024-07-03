@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import QApplication
 import almasim.ui as ui
 import sys
 import faulthandler
+
 faulthandler.enable()
+
 
 @pytest.fixture(scope="session")
 def app():
