@@ -16,15 +16,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Set up Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.4"
       - name: Run Black
         uses: psf/black@stable
         with:
           options: "--check --verbose --exclude experimental|illustris_python"
           jupyter: true
-      - name: Set up Python environment
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12.4"
       - name: Run flake8
         uses: py-actions/flake8@v2
         with:
@@ -59,7 +59,7 @@ jobs:
         run: |
           chmod +x ./run_stubtest
           ./run_stubtest
-      
+
   tests:
     needs: lint
     runs-on: ubuntu-latest
@@ -68,19 +68,19 @@ jobs:
         python-version: ["3.12"]
     env:
       DISPLAY: ':99.0'
+      PYTHONPATH: ${{ github.workspace }}/ALMASim  # Ensure PYTHONPATH is set
     steps:
     - uses: actions/checkout@v4
       with:
           submodules: recursive
-    - name: Install Qt
-      uses: tlambert03/setup-qt-libs@v1
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Install Qt
+      uses: tlambert03/setup-qt-libs@v1
     - name: Start Xvfb
-      run: |
-        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
+      run: sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -97,18 +97,9 @@ jobs:
         cp kaggle.json /home/runner/.kaggle
         chmod 600 /home/runner/.kaggle/kaggle.json
         sudo apt install python3-qtpy
-        sudo pip install PyQt6 --upgrade
-        sudo pip install pytest
-        sudo pip install pyqtgraph
-        sudo pip install pytest-qt
-        sudo pip install pytest-cov
+        pip install PyQt6 --upgrade
+        pip install pyqtgraph
         cd ..
-
-    - name: Install required libraries
-      run: |
-          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
-          sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
-          # start xvfb in the background
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
@@ -116,26 +107,26 @@ jobs:
         sudo xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
-              pytest --ignore=illustris_python --rootdir /home/runner/work
+              pytest --ignore=illustris_python --rootdir ${{ github.workspace }}
 
   tests-and-coverage:
     needs: lint
     runs-on: ubuntu-latest
     env:
       DISPLAY: ':99.0'
+      PYTHONPATH: ${{ github.workspace }}/ALMASim  # Ensure PYTHONPATH is set
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    - name: Install Qt
-      uses: tlambert03/setup-qt-libs@v1
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:
         python-version: "3.12.4"
+    - name: Install Qt
+      uses: tlambert03/setup-qt-libs@v1
     - name: Start Xvfb
-      run: |
-        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
+      run: sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -152,17 +143,9 @@ jobs:
         cp kaggle.json /home/runner/.kaggle
         chmod 600 /home/runner/.kaggle/kaggle.json
         sudo apt install python3-qtpy
-        sudo pip install PyQt6 --upgrade
-        sudo pip install pytest
-        sudo pip install pyqtgraph
-        sudo pip install pytest-qt
-        sudo pip install pytest-cov
+        pip install PyQt6 --upgrade
+        pip install pyqtgraph
         cd ..
-    - name: Install required libraries
-      run: |
-        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
-        sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
-        # start xvfb in the background
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
@@ -170,7 +153,7 @@ jobs:
         sudo xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
-              pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir /home/runner/work
+              pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
