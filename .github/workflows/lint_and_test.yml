@@ -66,24 +66,18 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.12"]
-
+    env:
+      DISPLAY: ':99.0'
     steps:
     - uses: actions/checkout@v4
       with:
           submodules: recursive
+    - name: Install Qt
+      uses: tlambert03/setup-qt-libs@v1
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Cache pip
-      uses: actions/cache@v4
-      with:
-        # This path is specific to Ubuntu
-        path: ~/.cache/pip
-        # Look to see if there is a cache hit for the corresponding requirements file
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: ${{ runner.os }}-pip-${{ runner.os }}-
-
     - name: Start Xvfb
       run: |
         sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
@@ -102,6 +96,12 @@ jobs:
         mkdir /home/runner/.kaggle
         cp kaggle.json /home/runner/.kaggle
         chmod 600 /home/runner/.kaggle/kaggle.json
+        sudo apt install python3-qtpy
+        sudo pip install PyQt6 --upgrade
+        sudo pip install pytest
+        sudo pip install pyqtgraph
+        sudo pip install pytest-qt
+
     - name: Install required libraries
       run: |
           sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
@@ -115,22 +115,18 @@ jobs:
   tests-and-coverage:
     needs: lint
     runs-on: ubuntu-latest
+    env:
+      DISPLAY: ':99.0'
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
+    - name: Install Qt
+      uses: tlambert03/setup-qt-libs@v1
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:
         python-version: "3.12.4"
-    - name: Cache pip
-      uses: actions/cache@v4
-      with:
-        # This path is specific to Ubuntu
-        path: ~/.cache/pip
-        # Look to see if there is a cache hit for the corresponding requirements file
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: ${{ runner.os }}-pip-${{ runner.os }}-
     - name: Start Xvfb
       run: |
         sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
@@ -149,6 +145,11 @@ jobs:
         mkdir /home/runner/.kaggle
         cp kaggle.json /home/runner/.kaggle
         chmod 600 /home/runner/.kaggle/kaggle.json
+        sudo apt install python3-qtpy
+        sudo pip install PyQt6 --upgrade
+        sudo pip install pytest
+        sudo pip install pyqtgraph
+        sudo pip install pytest-qt
     - name: Install required libraries
       run: |
         sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
