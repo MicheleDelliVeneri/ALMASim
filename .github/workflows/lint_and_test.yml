@@ -105,7 +105,7 @@ jobs:
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
       run: |
-        sudo chmod +x /path/to/xvfb-run  
+        sudo chmod +x /usr/bin/xvfb-run  
         sudo -u runner xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
@@ -149,7 +149,7 @@ jobs:
       run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
       run: |
-        sudo chmod +x /path/to/xvfb-run  
+        sudo chmod +x /usr/bin/xvfb-run  
         sudo -u runner xvfb-run --auto-servernum \ 
                        --server-num=1 \
                        --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
