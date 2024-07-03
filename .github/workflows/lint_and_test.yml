@@ -106,7 +106,7 @@ jobs:
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
-      run: pytest
+      run: pytest --ignore=illustris_python
 
   tests-and-coverage:
     needs: lint
@@ -150,8 +150,8 @@ jobs:
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
-      run: pytest --cov=./ --cov-report=xml
+      run: pytest --ignore=illustris_python --cov=./ --cov-report=xml 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
