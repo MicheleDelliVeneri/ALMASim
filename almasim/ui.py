@@ -1029,6 +1029,14 @@ class ALMASimulator(QMainWindow):
             self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
         if self.galaxy_zoo_entry.text() != "":
             if self.local_mode_combo.currentText() == "local":
+                kaggle_path = os.path.join(os.path.expanduser("~"), ".kaggle")
+                if not os.path.exists(kaggle_path):
+                    os.mkdir(kaggle_path)
+                kaggle_file = os.path.join(kaggle_path, "kaggle.json")
+                if not os.path.exists(kaggle_file):
+                    shutil.copyfile(
+                        os.path.join(os.getcwd(), "kaggle.json"), kaggle_file
+                    )
                 if os.path.exists(self.galaxy_zoo_entry.text()):
                     if not os.path.exists(
                         os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
