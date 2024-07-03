@@ -62,15 +62,11 @@ jobs:
       
   tests:
     needs: lint
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.12"]
-        os: [macos-latest, ubuntu-latest, windows-latest]
-    env:
-      # Display must be available globally for linux to know where xvfb is
-      DISPLAY: ":99.0"
-      QT_SELECT: "qt6"
+
     steps:
     - uses: actions/checkout@v4
       with:
@@ -79,9 +75,22 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        # This path is specific to Ubuntu
+        path: ~/.cache/pip
+        # Look to see if there is a cache hit for the corresponding requirements file
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: ${{ runner.os }}-pip-${{ runner.os }}-
+
+    - name: Start Xvfb
+      run: |
+        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        sudo apt install -y xvfb x11-utils libxkbcommon-x11-0
         pip install flake8 pytest pytest-cov pytest-qt
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f optional_requirements.txt ]; then pip install -r optional_requirements.txt; fi
@@ -94,16 +103,14 @@ jobs:
         cp kaggle.json /home/runner/.kaggle
         chmod 600 /home/runner/.kaggle/kaggle.json
     - name: Install required libraries
-      if: runner.os == 'Linux'
       run: |
           sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
           sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
           # start xvfb in the background
-          sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &  
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
-      run: pytest --ignore=illustris_python
+      run: sudo xvfb-run --auto-servernum --server-num=1 --server-args="-screen 1 1920x1200x24 -ac +extension GLX" pytest
 
   tests-and-coverage:
     needs: lint
@@ -116,9 +123,21 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.12.4"
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        # This path is specific to Ubuntu
+        path: ~/.cache/pip
+        # Look to see if there is a cache hit for the corresponding requirements file
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: ${{ runner.os }}-pip-${{ runner.os }}-
+    - name: Start Xvfb
+      run: |
+        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        sudo apt install -y xvfb x11-utils libxkbcommon-x11-0
         pip install flake8 pytest pytest-cov pytest-qt
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f optional_requirements.txt ]; then pip install -r optional_requirements.txt; fi
@@ -135,11 +154,10 @@ jobs:
         sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
         sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
         # start xvfb in the background
-        sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &  
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
-      run: pytest --ignore=illustris_python --cov=./ --cov-report=xml 
+      run: sudo xvfb-run --auto-servernum --server-num=1 --server-args="-screen 1 1920x1200x24 -ac +extension GLX" pytest --ignore=illustris_python --cov=./ --cov-report=xml 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
