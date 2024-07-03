@@ -44,12 +44,8 @@ jobs:
           cd illustris_python
           pip install . 
           cd ..
-      - name: Create kaggle.json from secret
-        env:
-          KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
-        run: |
-          mkdir -p /home/runner/.kaggle
-          echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
+          mkdir /home/runner/.kaggle
+          cp kaggle.json /home/runner/.kaggle
           chmod 600 /home/runner/.kaggle/kaggle.json
       - name: Install required libraries
         run: |
@@ -63,7 +59,6 @@ jobs:
         run: |
           chmod +x ./run_stubtest
           ./run_stubtest
-
   tests:
     needs: lint
     runs-on: ubuntu-latest
@@ -97,19 +92,26 @@ jobs:
         cd illustris_python
         pip install . 
         cd ..
+        mkdir /home/runner/.kaggle
+        cp kaggle.json /home/runner/.kaggle
+        chmod 600 /home/runner/.kaggle/kaggle.json
         sudo apt install python3-qtpy
         pip install PyQt6 --upgrade
         pip install pyqtgraph
         cd ..
+    - name: Copy kaggle.json
+      run: |
+        sudo mkdir -p /root/.kaggle
+        sudo cp kaggle.json /root/.kaggle/kaggle.json
+        sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
       run: |
-        sudo -u runner xvfb-run --auto-servernum \
+        sudo xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
               /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --rootdir ${{ github.workspace }}
-
   tests-and-coverage:
     needs: lint
     runs-on: ubuntu-latest
@@ -140,18 +142,26 @@ jobs:
         cd illustris_python
         pip install .
         cd ..
+        mkdir /home/runner/.kaggle
+        cp kaggle.json /home/runner/.kaggle
+        chmod 600 /home/runner/.kaggle/kaggle.json
         sudo apt install python3-qtpy
         pip install PyQt6 --upgrade
         pip install pyqtgraph
         cd ..
+    - name: Copy kaggle.json
+      run: |
+        sudo mkdir -p /root/.kaggle
+        sudo cp kaggle.json /root/.kaggle/kaggle.json
+        sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen                         
     - name: Test with pytest including coverage report
       run: |
-        sudo -u runner xvfb-run --auto-servernum \ 
-                       --server-num=1 \
-                       --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
-                       /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
+        sudo xvfb-run --auto-servernum \
+              --server-num=1 \
+              --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
+              /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
