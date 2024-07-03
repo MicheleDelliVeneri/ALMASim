@@ -43,6 +43,10 @@ jobs:
           git submodule update --init    
           cd illustris_python
           pip install . 
+          cd ..
+          mkdir /home/runner/.kaggle
+          cp kaggle.json /home/runner/.kaggle
+          chmod 600 /home/runner/.kaggle/kaggle.json
       - name: Install required libraries
         run: |
           sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
@@ -89,6 +93,10 @@ jobs:
         git submodule update --init    
         cd illustris_python
         pip install . 
+        cd ..
+        mkdir /home/runner/.kaggle
+        cp kaggle.json /home/runner/.kaggle
+        chmod 600 /home/runner/.kaggle/kaggle.json
     - name: Install required libraries
       run: |
           sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
@@ -129,6 +137,10 @@ jobs:
         git submodule update --init
         cd illustris_python
         pip install .
+        cd ..
+        mkdir /home/runner/.kaggle
+        cp kaggle.json /home/runner/.kaggle
+        chmod 600 /home/runner/.kaggle/kaggle.json
     - name: Install required libraries
       run: |
         sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
