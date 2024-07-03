@@ -48,10 +48,9 @@ jobs:
         env:
           KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
         run: |
-          sudo mkdir -p /root/.kaggle
-          sudo chown runner:runner /root/.kaggle  # Change ownership to the 'runner' user
-          echo "$KAGGLE_JSON_B64" | sudo base64 --decode > /root/.kaggle/kaggle.json
-          sudo chmod 600 /root/.kaggle/kaggle.json
+          mkdir -p /home/runner/.kaggle
+          echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
+          chmod 600 /home/runner/.kaggle/kaggle.json
       - name: Install required libraries
         run: |
           sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libxcb-shape0 libglib2.0-0 libgl1-mesa-dev
@@ -106,7 +105,8 @@ jobs:
       env:
         KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
       run: |
-        sudo mkdir /root/.kaggle
+        sudo mkdir -p /root/.kaggle
+        sudo chown runner:runner /root/.kaggle  # Change ownership to the 'runner' user
         echo "$KAGGLE_JSON_B64" | sudo base64 --decode > /root/.kaggle/kaggle.json
         sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
