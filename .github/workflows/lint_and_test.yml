@@ -44,8 +44,12 @@ jobs:
           cd illustris_python
           pip install . 
           cd ..
-          mkdir /home/runner/.kaggle
-          cp kaggle.json /home/runner/.kaggle
+      - name: Create kaggle.json from secret
+        env:
+          KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
+        run: |
+          mkdir -p /home/runner/.kaggle
+          echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
           chmod 600 /home/runner/.kaggle/kaggle.json
       - name: Install required libraries
         run: |
@@ -93,17 +97,18 @@ jobs:
         cd illustris_python
         pip install . 
         cd ..
-        mkdir /home/runner/.kaggle
-        cp kaggle.json /home/runner/.kaggle
-        chmod 600 /home/runner/.kaggle/kaggle.json
         sudo apt install python3-qtpy
         pip install PyQt6 --upgrade
         pip install pyqtgraph
         cd ..
-    - name: Copy kaggle.json
+    - name: Create kaggle.json from secret
+      env:
+        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
       run: |
-        sudo mkdir -p /root/.kaggle
-        sudo cp kaggle.json /root/.kaggle/kaggle.json
+        mkdir -p /home/runner/.kaggle
+        echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
+        chmod 600 /home/runner/.kaggle/kaggle.json
+        sudo echo $KAGGLE_JSON_B64 | base64 --decode > /root/.kaggle/kaggle.json
         sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
@@ -144,17 +149,18 @@ jobs:
         cd illustris_python
         pip install .
         cd ..
-        mkdir /home/runner/.kaggle
-        cp kaggle.json /home/runner/.kaggle
-        chmod 600 /home/runner/.kaggle/kaggle.json
         sudo apt install python3-qtpy
         pip install PyQt6 --upgrade
         pip install pyqtgraph
         cd ..
-    - name: Copy kaggle.json
+    - name: Create kaggle.json from secret
+      env:
+        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
       run: |
-        sudo mkdir -p /root/.kaggle
-        sudo cp kaggle.json /root/.kaggle/kaggle.json
+        mkdir -p /home/runner/.kaggle
+        echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
+        chmod 600 /home/runner/.kaggle/kaggle.json
+        sudo echo $KAGGLE_JSON_B64 | base64 --decode > /root/.kaggle/kaggle.json
         sudo chmod 600 /root/.kaggle/kaggle.json
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen                         

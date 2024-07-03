@@ -16,6 +16,7 @@ on:
 jobs:
   lint-and-test:
     uses: ./.github/workflows/lint_and_test.yml
+
   pypi-publish:
     name: Upload release to PyPI
     needs: [lint-and-test]
@@ -40,9 +41,16 @@ jobs:
         pip install -r requirements.txt
         pip install .
         git submodule update --init --recursive      
-        pip install submodules/illustris_python/.         
-    - name: Build
+        pip install submodules/illustris_python/.
+    - name: Create kaggle.json from secret
+      env:
+        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
       run: |
-        pyproject-build
+        echo $KAGGLE_JSON_B64 | base64 --decode > /root/.kaggle/kaggle.json
+        chmod 600 /root/.kaggle/kaggle.json
+    - name: Build
+      run: pyproject-build
     - name: Publish package distributions to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
