@@ -107,7 +107,7 @@ jobs:
         sudo xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
-              pytest --ignore=illustris_python --rootdir ${{ github.workspace }}
+              /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --rootdir ${{ github.workspace }}
 
   tests-and-coverage:
     needs: lint
@@ -153,7 +153,7 @@ jobs:
         sudo xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
-              pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
+              /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
