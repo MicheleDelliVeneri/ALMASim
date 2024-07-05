@@ -38,6 +38,7 @@ dependencies = [
     "pysftp",
     "setuptools",
     "tenacity",
+    "nifty8"
 ]
 
 [tool.setuptools]

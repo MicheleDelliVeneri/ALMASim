@@ -1,4 +1,7 @@
 ![Alt text](pictures/ALMASimBanner.jpeg)
+| Status |                                        |
+| :---- | :---------------------------------------- |
+| CodeCov | [![codecov](https://codecov.io/github/MicheleDelliVeneri/ALMASim/graph/badge.svg?token=9SZVW78DR2)](https://codecov.io/github/MicheleDelliVeneri/ALMASim) |
 
 ## Overview
 

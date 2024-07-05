@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, overload
 import PyQt6
 from PyQt6.sip import wrappertype
+
 if TYPE_CHECKING:
     from PyQt6.QtCore import QEvent, QPoint, QObject, Qt, QRunnable
     from PyQt6.QtGui import QFont, QPalette, QWindow
@@ -23,13 +24,10 @@ if TYPE_CHECKING:
         QStyle,
     )
 from _typeshed import Incomplete
-from astropy.time import Time as Time
-from datetime import date as date
 from distributed import WorkerPlugin
 
 class _PyQtWrapperType(type):
     pass
-
 
 class MemoryLimitPlugin(WorkerPlugin):
     memory_limit: Incomplete
@@ -98,7 +96,7 @@ class DownloadGalaxyZooRunnable(QRunnable, metaclass=_PyQtWrapperType):
 
     alma_simulator: Incomplete  # Note: This should be "ALMASimulator"
     def __init__(self, alma_simulator_instance) -> None: ...  # Corrected annotation
-    def run(self) -> None: ...    
+    def run(self) -> None: ...
 
 # ... other imports and class definitions ...
 
@@ -149,7 +147,9 @@ class QApplication(PyQt6.QtWidgets.QApplication, metaclass=_PyQtWrapperType):
     @classmethod
     def keyboardInputInterval(cls) -> int: ...
     @classmethod
-    def notify(cls, receiver: QObject | None, event: QEvent | None) -> bool: ...  # Modified
+    def notify(
+        cls, receiver: QObject | None, event: QEvent | None
+    ) -> bool: ...  # Modified
     @overload  # Add overloads
     @classmethod
     def palette(cls) -> QPalette: ...
@@ -202,30 +202,35 @@ class QApplication(PyQt6.QtWidgets.QApplication, metaclass=_PyQtWrapperType):
     def topLevelAt(cls, p: QPoint) -> QWidget | None: ...  # Overload for QApplication
     @overload
     @classmethod
-    def topLevelAt(cls, x: int, y: int) -> QWidget | None: ... # Overload for QApplication
-    @overload                                             # Added to address the error
+    def topLevelAt(
+        cls, x: int, y: int
+    ) -> QWidget | None: ...  # Overload for QApplication
+    @overload  # Added to address the error
     @classmethod
-    def topLevelAt(cls, pos: QPoint) -> QWindow | None: ...  # Overload for QGuiApplication 
-    @classmethod   # Make it a class method
+    def topLevelAt(
+        cls, pos: QPoint
+    ) -> QWindow | None: ...  # Overload for QGuiApplication
+    @classmethod  # Make it a class method
     def topLevelWidgets(cls) -> list[QWidget]: ...
     @classmethod
     def wheelScrollLines(cls) -> int: ...
     @overload
     @classmethod
-    def widgetAt(cls, p: QPoint) -> QWidget | None: ... # Modified
+    def widgetAt(cls, p: QPoint) -> QWidget | None: ...  # Modified
     @overload
     @classmethod
     def widgetAt(cls, x: int, y: int) -> QWidget | None: ...
-
 
 class ALMASimulator(QMainWindow, metaclass=_PyQtWrapperType):
     # ... (attributes)
 
     def __init__(self) -> None: ...
-    @classmethod   # Make it a class method
-    def event(cls, event: QEvent | None) -> bool: ...  
+    @classmethod  # Make it a class method
+    def event(cls, event: QEvent | None) -> bool: ...
     @classmethod
-    def setStyle(cls, style: QStyle | None) -> None: ... # Corrected signature for ALMASimulator
+    def setStyle(
+        cls, style: QStyle | None
+    ) -> None: ...  # Corrected signature for ALMASimulator
     @classmethod
     def style(cls) -> QStyle | None: ...
     settings_file: Incomplete
@@ -378,7 +383,7 @@ class ALMASimulator(QMainWindow, metaclass=_PyQtWrapperType):
     def metadata_path_set(self) -> None: ...
     def browse_target_list(self) -> None: ...
     def get_tap_service(self): ...
-    def plot_science_keywords_distributions(master_path): ...
+    def plot_science_keywords_distributions(self, master_path): ...
     def update_query_save_label(self, query_type) -> None: ...
     target_list: Incomplete
     def execute_query(self) -> None: ...
@@ -404,7 +409,9 @@ class ALMASimulator(QMainWindow, metaclass=_PyQtWrapperType):
     def run_on_slurm_cluster(self) -> None: ...
     source_type: str
     def transform_source_type_label(self) -> None: ...
-    def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax: Incomplete | None = None): ...
+    def sample_given_redshift(
+        self, metadata, n, rest_frequency, extended, zmax: Incomplete | None = None
+    ): ...
     def remove_non_numeric(self, text): ...
     @staticmethod
     def closest_power_of_2(x): ...
@@ -421,12 +428,44 @@ class ALMASimulator(QMainWindow, metaclass=_PyQtWrapperType):
     @classmethod
     def initiate_parallel_simulation_remote(cls, window_instance) -> None: ...
     @classmethod
-    def initialize_slurm_simulation_remote(cls, window_istance) -> None: ...
+    def initialize_slurm_simulation_remote(cls, window_instance) -> None: ...
     def cont_finder(self, cont_frequencies, line_frequency): ...
-    def normalize_sed(self, sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote: bool = False): ...
-    def sed_reading(self, type_, path, cont_sens, freq_min, freq_max, remote, lum_infrared: Incomplete | None = None, redshift: Incomplete | None = None): ...
-    def process_spectral_data(self, type_, master_path, redshift, central_frequency, delta_freq, source_frequency, n_channels, lum_infrared, cont_sens, line_names: Incomplete | None = None, n_lines: Incomplete | None = None, remote: bool = False): ...
-    def print_variable_info(self, args) -> None: ...
+    def normalize_sed(
+        self,
+        sed,
+        lum_infrared,
+        solid_angle,
+        cont_sens,
+        freq_min,
+        freq_max,
+        remote: bool = False,
+    ): ...
+    def sed_reading(
+        self,
+        type_,
+        path,
+        cont_sens,
+        freq_min,
+        freq_max,
+        remote,
+        lum_infrared: Incomplete | None = None,
+        redshift: Incomplete | None = None,
+    ): ...
+    def process_spectral_data(
+        self,
+        type_,
+        master_path,
+        redshift,
+        central_frequency,
+        delta_freq,
+        source_frequency,
+        n_channels,
+        lum_infrared,
+        cont_sens,
+        line_names: Incomplete | None = None,
+        n_lines: Incomplete | None = None,
+        remote: bool = False,
+    ): ...
     def simulator(self, *args, **kwargs): ...
     def handle_progress(self, value) -> None: ...
     def update_progress_bar(self, value) -> None: ...

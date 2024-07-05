@@ -130,3 +130,6 @@ dmypy.json
 .pyre/
 devops/all_alma_data.csv
 metadata/test.csv
+
+# VSCode
+.vscode/

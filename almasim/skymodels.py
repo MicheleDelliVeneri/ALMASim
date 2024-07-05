@@ -2,28 +2,33 @@ import numpy as np
 import math
 import astropy.units as U
 from Hdecompose.atomic_frac import atomic_frac
-from illustris_python.snapshot import getSnapOffsets, loadSubset
+from illustris_python.snapshot import loadSubset
 from martini.sources.sph_source import SPHSource
 from martini.spectral_models import GaussianSpectrum
-from martini.sph_kernels import (AdaptiveKernel, CubicSplineKernel,
-                                 find_fwhm,  WendlandC2Kernel)
+from martini.sph_kernels import (
+    CubicSplineKernel,
+    find_fwhm,
+    WendlandC2Kernel,
+)
 import astropy.cosmology.units as cu
 from astropy.cosmology import WMAP9
 from astropy import wcs
-import os 
-import h5py
+import os
 from astropy.io import fits
 import almasim.astro as uas
 import astropy.constants as C
 from itertools import product
 from tqdm import tqdm
 from astropy.time import Time
-from scipy.integrate import quad
 import matplotlib.image as plimg
 from scipy.ndimage import zoom
+from scipy.signal import fftconvolve
+import nifty8 as ift
+import random
 
 
 # ----------------- Martini Modified Functions ---------------------- #
+
 
 class myTNGSource(SPHSource):
     def __init__(
@@ -49,50 +54,45 @@ class myTNGSource(SPHSource):
             "GFM_Metals",
         )
         mdi_full = [None, None, None, None, None, None, 0]
-        mini_fields_g = (
-            "Masses",
-            "Velocities",
-            "InternalEnergy",
-            "ElectronAbundance",
-            "Density",
-            "Coordinates",
-        )
         data_header = uas.loadHeader(basePath, snapNum)
         data_sub = uas.loadSingle(basePath, snapNum, subhaloID=subID)
         haloID = data_sub["SubhaloGrNr"]
         subset_g = uas.getSnapOffsets(basePath, snapNum, haloID, "Group", api_key)
         try:
             data_g = uas.loadSubset(
-                    basePath,
-                    snapNum,
-                    "gas",
-                    fields=full_fields_g,
-                    subset=subset_g,
-                    mdi=mdi_full,
-                    api_key=api_key,
-                )
+                basePath,
+                snapNum,
+                "gas",
+                fields=full_fields_g,
+                subset=subset_g,
+                mdi=mdi_full,
+                api_key=api_key,
+            )
 
             minisnap = False
         except Exception as exc:
             print(exc.args)
-            if ("Particle type" in exc.args[0]) and ("does not have field" in exc.args[0]):
+            if ("Particle type" in exc.args[0]) and (
+                "does not have field" in exc.args[0]
+            ):
                 data_g.update(
-                        loadSubset(
-                            basePath,
-                            snapNum,
-                            "gas",
-                            fields=("CenterOfMass",),
-                            subset=subset_g,
-                            sq=False,
-                            api_key=api_key,
-                        )
+                    loadSubset(
+                        basePath,
+                        snapNum,
+                        "gas",
+                        fields=("CenterOfMass",),
+                        subset=subset_g,
+                        sq=False,
+                        api_key=api_key,
                     )
+                )
                 minisnap = True
                 X_H_g = X_H
             else:
                 raise
         X_H_g = (
-                X_H if minisnap else data_g["GFM_Metals"])  # only loaded column 0: Hydrogen
+            X_H if minisnap else data_g["GFM_Metals"]
+        )  # only loaded column 0: Hydrogen
         a = data_header["Time"]
         z = data_header["Redshift"]
         h = data_header["HubbleParam"]
@@ -110,7 +110,7 @@ class myTNGSource(SPHSource):
         # tables for TNG will be available soon anyway.
         fatomic_g = atomic_frac(
             z, nH_g, T_g, rho_g, X_H_g, onlyA1=True, TNG_corrections=True
-            )
+        )
         mHI_g = m_g * X_H_g * fatomic_g
         try:
             xyz_g = data_g["CenterOfMass"] * a / h * U.kpc
@@ -119,7 +119,7 @@ class myTNGSource(SPHSource):
         vxyz_g = data_g["Velocities"] * np.sqrt(a) * U.km / U.s
         V_cell = (
             data_g["Masses"] / data_g["Density"] * np.power(a / h * U.kpc, 3)
-            )  # Voronoi cell volume
+        )  # Voronoi cell volume
         r_cell = np.power(3.0 * V_cell / 4.0 / np.pi, 1.0 / 3.0).to(U.kpc)
         # hsm_g has in mind a cubic spline that =0 at r=h, I think
         hsm_g = 2.5 * r_cell * find_fwhm(CubicSplineKernel().kernel)
@@ -141,6 +141,7 @@ class myTNGSource(SPHSource):
             hsm_g=hsm_g,
         )
         return
+
 
 class DataCube(object):
     """
@@ -603,6 +604,7 @@ class DataCube(object):
         """
         return self._array.__repr__()
 
+
 class Martini:
     """
     Creates synthetic HI data cubes from simulation data.
@@ -800,7 +802,7 @@ class Martini:
 
         self.sph_kernel._init_sm_lengths(source=self.source, datacube=self.datacube)
         self.sph_kernel._init_sm_ranges()
-        if self.find_distance == False:
+        if self.find_distance is False:
             self._prune_particles()  # prunes both source, and kernel if applicable
             self.spectral_model.init_spectra(self.source, self.datacube)
             self.inserted_mass = 0
@@ -813,7 +815,7 @@ class Martini:
         """
 
         if self.beam is None:
-            warn("Skipping beam convolution, no beam object provided to " "Martini.")
+            print("Skipping beam convolution, no beam object provided to " "Martini.")
             return
 
         unit = self.datacube._array.unit
@@ -845,7 +847,7 @@ class Martini:
         """
 
         if self.noise is None:
-            warn("Skipping noise, no noise object provided to Martini.")
+            print("Skipping noise, no noise object provided to Martini.")
             return
 
         # this unit conversion means noise can be added before or after source insertion:
@@ -910,7 +912,7 @@ class Martini:
                 f"{self.source.mHI_g.sum():.2e}."
             )
         return
-    
+
     def _compute_particles_num(self):
         new_source = self.source
         new_sph_kernel = self.sph_kernel
@@ -1084,9 +1086,7 @@ class Martini:
             if self.datacube.padx > 0 and self.datacube.pady > 0
             else np.s_[...]
         )
-        inserted_flux = (
-            self.datacube._array[pad_mask].sum() * self.datacube.px_size**2
-        )
+        inserted_flux = self.datacube._array[pad_mask].sum() * self.datacube.px_size**2
         inserted_mass = (
             2.36e5
             * U.Msun
@@ -1181,7 +1181,6 @@ class Martini:
             header.append(("CTYPE4", wcs_header["CTYPE4"]))
             header.append(("CUNIT4", "PAR"))
         header.append(("EPOCH", 2000))
-        header.append(("INSTRUME", "MARTINI", martini_version))
         # header.append(('BLANK', -32768)) #only for integer data
         header.append(("BSCALE", 1.0))
         header.append(("BZERO", 0.0))
@@ -1192,7 +1191,6 @@ class Martini:
         header.append(
             ("DATAMIN", np.min(self.datacube._array.to_value(datacube_array_units)))
         )
-        header.append(("ORIGIN", "astropy v" + astropy_version))
         # long names break fits format, don't let the user set this
         header.append(("OBJECT", "MOCK"))
         if self.beam is not None:
@@ -1308,10 +1306,8 @@ class Martini:
         header.append(("OBSERVER", "K. Oman"))
         # long names break fits format
         header.append(("OBJECT", "MOCKBEAM"))
-        header.append(("INSTRUME", "MARTINI", martini_version))
         header.append(("DATAMAX", np.max(self.beam.kernel.to_value(beam_kernel_units))))
         header.append(("DATAMIN", np.min(self.beam.kernel.to_value(beam_kernel_units))))
-        header.append(("ORIGIN", "astropy v" + astropy_version))
 
         # flip axes to write
         hdu = fits.PrimaryHDU(
@@ -1441,8 +1437,6 @@ class Martini:
             c.attrs["BeamMajor_in_deg"] = self.beam.bmaj.to_value(U.deg)
             c.attrs["BeamMinor_in_deg"] = self.beam.bmin.to_value(U.deg)
         c.attrs["DateCreated"] = str(Time.now())
-        #c.attrs["MartiniVersion"] = martini_version
-        #c.attrs["AstropyVersion"] = astropy_version
         if self.beam is not None:
             if self.beam.kernel is None:
                 raise ValueError(
@@ -1472,8 +1466,6 @@ class Martini:
             b.attrs["BeamMajor_in_deg"] = self.beam.bmaj.to_value(U.deg)
             b.attrs["BeamMinor_in_deg"] = self.beam.bmin.to_value(U.deg)
             b.attrs["DateCreated"] = str(Time.now())
-            #b.attrs["MartiniVersion"] = martini_version
-            #b.attrs["AstropyVersion"] = astropy_version
 
         if channels == "frequency":
             self.datacube.velocity_channels()
@@ -1503,7 +1495,9 @@ class Martini:
             self.datacube.add_pad(self.beam.needs_pad())
         return
 
+
 # ------------------ SkyModels ------------------------------------- #
+
 
 def gaussian(x, amp, cen, fwhm):
     """
@@ -1512,17 +1506,18 @@ def gaussian(x, amp, cen, fwhm):
     amp: amplitude
     fwhm: fwhm
     """
-    #def integrand(x, amp, cen, fwhm):
+    # def integrand(x, amp, cen, fwhm):
     #    return np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
-    #integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
-    gaussian = np.exp(-(x-cen)**2/(2*(fwhm/2.35482)**2))
+    # integral, _ = quad(integrand, -np.inf, np.inf, args=(1, cen, fwhm))
+    gaussian = np.exp(-((x - cen) ** 2) / (2 * (fwhm / 2.35482) ** 2))
     if np.sum(gaussian) != 0:
-        norm = amp /  np.sum(gaussian)
+        norm = amp / np.sum(gaussian)
     else:
         norm = amp
     result = norm * gaussian
-    #norm = 1 / integral
+    # norm = 1 / integral
     return result
+
 
 def gaussian2d(x, y, amp, cen_x, cen_y, fwhm_x, fwhm_y, angle):
     """
@@ -1534,19 +1529,35 @@ def gaussian2d(x, y, amp, cen_x, cen_y, fwhm_x, fwhm_y, angle):
     angle: angle of rotation (in degrees)
     """
     angle_rad = math.radians(angle)
-    
+
     # Rotate coordinates
     xp = (x - cen_x) * np.cos(angle_rad) - (y - cen_y) * np.sin(angle_rad) + cen_x
     yp = (x - cen_x) * np.sin(angle_rad) + (y - cen_y) * np.cos(angle_rad) + cen_y
-    
-    gaussian = np.exp(-((xp-cen_x)**2/(2*(fwhm_x/2.35482)**2) + (yp-cen_y)**2/(2*(fwhm_y/2.35482)**2)))
-    norm = amp /  np.sum(gaussian)
-    
+
+    gaussian = np.exp(
+        -(
+            (xp - cen_x) ** 2 / (2 * (fwhm_x / 2.35482) ** 2)
+            + (yp - cen_y) ** 2 / (2 * (fwhm_y / 2.35482) ** 2)
+        )
+    )
+    norm = amp / np.sum(gaussian)
+
     result = norm * gaussian
-    
+
     return result
 
-def insert_pointlike(update_progress, datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_z, n_chan):
+
+def insert_pointlike(
+    update_progress,
+    datacube,
+    continum,
+    line_fluxes,
+    pos_x,
+    pos_y,
+    pos_z,
+    fwhm_z,
+    n_chan,
+):
     """
     Inserts a point source into the datacube at the specified position and amplitude.
     datacube: datacube object
@@ -1562,11 +1573,31 @@ def insert_pointlike(update_progress, datacube, continum, line_fluxes, pos_x, po
     gs = np.zeros(n_chan)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
-        update_progress.emit(i/len(line_fluxes) * 100)
-    datacube._array[pos_x, pos_y, ] = (continum + gs) * U.Jy * U.pix**-2
-    return datacube 
+        update_progress.emit(i / len(line_fluxes) * 100)
+    datacube._array[
+        pos_x,
+        pos_y,
+    ] = (
+        (continum + gs) * U.Jy * U.pix**-2
+    )
+    return datacube
 
-def insert_gaussian(update_progress, datacube, continum, line_fluxes, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z, angle, n_px, n_chan):
+
+def insert_gaussian(
+    update_progress,
+    datacube,
+    continum,
+    line_fluxes,
+    pos_x,
+    pos_y,
+    pos_z,
+    fwhm_x,
+    fwhm_y,
+    fwhm_z,
+    angle,
+    n_px,
+    n_chan,
+):
     """
     Inserts a 3D Gaussian into the datacube at the specified position and amplitude.
     datacube: datacube object
@@ -1588,24 +1619,35 @@ def insert_gaussian(update_progress, datacube, continum, line_fluxes, pos_x, pos
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
         cont = gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
-        line =  gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
+        line = gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
         slice_ = cont + line
-        datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2 
-        update_progress.emit(z/n_chan * 100)
-    return datacube 
+        datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
+        update_progress.emit(z / n_chan * 100)
+    return datacube
+
 
 def interpolate_array(arr, n_px):
     """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
-    zoom_factor = n_px / arr.shape[0]   
+    zoom_factor = n_px / arr.shape[0]
     return zoom(arr, zoom_factor)
 
-def insert_galaxy_zoo(update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan, data_path):
+
+def insert_galaxy_zoo(
+    update_progress,
+    datacube,
+    continum,
+    line_fluxes,
+    pos_z,
+    fwhm_z,
+    n_px,
+    n_chan,
+    data_path,
+):
     files = np.array(os.listdir(data_path))
     imfile = os.path.join(data_path, np.random.choice(files))
     img = plimg.imread(imfile).astype(np.float32)
     dims = np.shape(img)
     d3 = min(2, dims[2])
-    d1 = float(max(dims))
     avimg = np.average(img[:, :, :d3], axis=2)
     avimg -= np.min(avimg)
     avimg *= 1 / np.max(avimg)
@@ -1619,59 +1661,89 @@ def insert_galaxy_zoo(update_progress, datacube, continum, line_fluxes, pos_z, f
     for z in range(0, n_chan):
         cube[:, :, z] += avimg * (continum[z] + gs[z])
         update_progress.emit(z / n_chan * 100)
-    datacube._array[:, :, : ] = cube * U.Jy / U.pix **2 
-    return datacube 
+    datacube._array[:, :, :] = cube * U.Jy / U.pix**2
+    return datacube
 
-def insert_tng(n_px, n_channels, freq_sup, snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, ra, dec, api_key, ncpu):
+
+def insert_tng(
+    n_px,
+    n_channels,
+    freq_sup,
+    snapshot,
+    subhalo_id,
+    distance,
+    x_rot,
+    y_rot,
+    tngpath,
+    ra,
+    dec,
+    api_key,
+    ncpu,
+):
     source = myTNGSource(
-        snapNum= snapshot,
-        subID = subhalo_id,
-        distance = distance * U.Mpc,
-        rotation = {'L_coords': (x_rot, y_rot)},
-        basePath = tngpath,
+        snapNum=snapshot,
+        subID=subhalo_id,
+        distance=distance * U.Mpc,
+        rotation={"L_coords": (x_rot, y_rot)},
+        basePath=tngpath,
         ra=ra,
         dec=dec,
-        api_key=api_key
+        api_key=api_key,
     )
 
     datacube = DataCube(
-        n_px_x = n_px,
-        n_px_y = n_px,
-        n_channels = n_channels, 
-        px_size = 10 * U.arcsec,
+        n_px_x=n_px,
+        n_px_y=n_px,
+        n_channels=n_channels,
+        px_size=10 * U.arcsec,
         channel_width=freq_sup,
-        velocity_centre=source.vsys, 
-        ra = source.ra,
-        dec = source.dec,
+        velocity_centre=source.vsys,
+        ra=source.ra,
+        dec=source.dec,
     )
-    spectral_model = GaussianSpectrum(
-        sigma="thermal"
-    )
-    sph_kernel =  WendlandC2Kernel()
+    spectral_model = GaussianSpectrum(sigma="thermal")
+    sph_kernel = WendlandC2Kernel()
     M = Martini(
         source=source,
         datacube=datacube,
         sph_kernel=sph_kernel,
         spectral_model=spectral_model,
-        quiet=False, 
-        find_distance=False)
+        quiet=False,
+        find_distance=False,
+    )
     M.insert_source_in_cube(skip_validation=True, progressbar=True, ncpu=ncpu)
     return M
 
-def insert_extended(terminal, datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, api_key, ncpu):
+
+def insert_extended(
+    terminal, datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, api_key, ncpu
+):
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
-    tngpath = os.path.join(tngpath, 'TNG100-1', 'output') 
-    data_header = uas.loadHeader(tngpath, snapshot)
+    tngpath = os.path.join(tngpath, "TNG100-1", "output")
     redshift = redshift * cu.redshift
-    distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind='comoving'))
-    terminal.add_log('Computed a distance of {} for redshift {}'.format(distance, redshift))
+    distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))
+    terminal.add_log(
+        "Computed a distance of {} for redshift {}".format(distance, redshift)
+    )
     distance = 50
-    M = insert_tng(datacube.n_px_x, datacube.n_channels, datacube.channel_width, 
-                    snapshot, subhalo_id, distance, x_rot, y_rot, tngpath,
-                    ra, dec, api_key, ncpu)
+    M = insert_tng(
+        datacube.n_px_x,
+        datacube.n_channels,
+        datacube.channel_width,
+        snapshot,
+        subhalo_id,
+        distance,
+        x_rot,
+        y_rot,
+        tngpath,
+        ra,
+        dec,
+        api_key,
+        ncpu,
+    )
     initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
-    terminal.add_log('Mass ratio: {}%'.format(initial_mass_ratio))
+    terminal.add_log("Mass ratio: {}%".format(initial_mass_ratio))
     mass_ratio = initial_mass_ratio
     while mass_ratio < 50:
         if mass_ratio < 10:
@@ -1680,27 +1752,40 @@ def insert_extended(terminal, datacube, tngpath, snapshot, subhalo_id, redshift,
             distance = distance * 5
         elif mass_ratio < 30:
             distance = distance * 2
-        else:       
+        else:
             distance = distance * 1.5
-        terminal.add_log('Injecting source at distance {}'.format(distance))
-        M = insert_tng(datacube.n_px_x, datacube.n_channels, datacube.channel_width,
-                        snapshot, subhalo_id, distance, x_rot, y_rot, tngpath, 
-                        ra, dec, api_key, ncpu)
+        terminal.add_log("Injecting source at distance {}".format(distance))
+        M = insert_tng(
+            datacube.n_px_x,
+            datacube.n_channels,
+            datacube.channel_width,
+            snapshot,
+            subhalo_id,
+            distance,
+            x_rot,
+            y_rot,
+            tngpath,
+            ra,
+            dec,
+            api_key,
+            ncpu,
+        )
         mass_ratio = M.inserted_mass / M.source.input_mass * 100
-        terminal.add_log('Mass ratio: {}%'.format(mass_ratio))
-    terminal.add_log('Datacube generated, inserting source')    
+        terminal.add_log("Mass ratio: {}%".format(mass_ratio))
+    terminal.add_log("Datacube generated, inserting source")
     return M.datacube
+
 
 def diffuse_signal(n_px):
     ift.random.push_sseq(random.randint(1, 1000))
-    space = ift.RGSpace((2*n_px, 2*n_px))
+    space = ift.RGSpace((2 * n_px, 2 * n_px))
     args = {
-        'offset_mean': 24,
-        'offset_std': (1, 0.1),
-        'fluctuations': (5., 1.),
-        'loglogavgslope': (-3.5, 0.5),
-        'flexibility': (1.2, 0.4),
-        'asperity': (0.2, 0.2)
+        "offset_mean": 24,
+        "offset_std": (1, 0.1),
+        "fluctuations": (5.0, 1.0),
+        "loglogavgslope": (-3.5, 0.5),
+        "flexibility": (1.2, 0.4),
+        "asperity": (0.2, 0.2),
     }
 
     cf = ift.SimpleCorrelatedField(space, **args)
@@ -1711,29 +1796,36 @@ def diffuse_signal(n_px):
     normalized_data = (data - np.min(data)) / (np.max(data) - np.min(data))
     return normalized_data
 
-def insert_diffuse(update_progress, datacube, continuum, line_fluxes, pos_z, fwhm_z, n_px, n_chan):
+
+def insert_diffuse(
+    update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan
+):
     z_idxs = np.arange(0, n_chan)
     ts = diffuse_signal(n_px)
     ts = np.nan_to_num(ts)
-    ts = ts/np.sum(ts)
+    ts = ts / np.sum(ts)
     cube = np.zeros((n_px, n_px, n_chan)) * ts
     gs = np.zeros(n_chan)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
-        cube[:, :, z]*= (continum[z] + gs[z])
+        cube[:, :, z] *= continum[z] + gs[z]
     datacube._array[:, :, :] += cube * U.Jy * U.pix**-2
-    update_progress.emit(z/n_chan * 100)
+    update_progress.emit(z / n_chan * 100)
     return datacube
 
+
 def distance_1d(p1, p2):
-    return math.sqrt((p1-p2)**2)
+    return math.sqrt((p1 - p2) ** 2)
+
 
 def distance_2d(p1, p2):
-    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
 
 def distance_3d(p1, p2):
-    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2)
+    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 + (p1[2] - p2[2]) ** 2)
+
 
 def get_iou(bb1, bb2):
     """
@@ -1755,16 +1847,16 @@ def get_iou(bb1, bb2):
     float
         in [0, 1]
     """
-    assert bb1['x1'] < bb1['x2']
-    assert bb1['y1'] < bb1['y2']
-    assert bb2['x1'] < bb2['x2']
-    assert bb2['y1'] < bb2['y2']
+    assert bb1["x1"] < bb1["x2"]
+    assert bb1["y1"] < bb1["y2"]
+    assert bb2["x1"] < bb2["x2"]
+    assert bb2["y1"] < bb2["y2"]
 
     # determine the coordinates of the intersection rectangle
-    x_left = max(bb1['x1'], bb2['x1'])
-    y_top = max(bb1['y1'], bb2['y1'])
-    x_right = min(bb1['x2'], bb2['x2'])
-    y_bottom = min(bb1['y2'], bb2['y2'])
+    x_left = max(bb1["x1"], bb2["x1"])
+    y_top = max(bb1["y1"], bb2["y1"])
+    x_right = min(bb1["x2"], bb2["x2"])
+    y_bottom = min(bb1["y2"], bb2["y2"])
 
     if x_right < x_left or y_bottom < y_top:
         return 0.0
@@ -1774,8 +1866,8 @@ def get_iou(bb1, bb2):
     intersection_area = (x_right - x_left) * (y_bottom - y_top)
 
     # compute the area of both AABBs
-    bb1_area = (bb1['x2'] - bb1['x1']) * (bb1['y2'] - bb1['y1'])
-    bb2_area = (bb2['x2'] - bb2['x1']) * (bb2['y2'] - bb2['y1'])
+    bb1_area = (bb1["x2"] - bb1["x1"]) * (bb1["y2"] - bb1["y1"])
+    bb2_area = (bb2["x2"] - bb2["x1"]) * (bb2["y2"] - bb2["y1"])
 
     # compute the intersection over union by taking the intersection
     # area and dividing it by the sum of prediction + ground-truth
@@ -1785,28 +1877,45 @@ def get_iou(bb1, bb2):
     assert iou <= 1.0
     return iou
 
+
 def get_iou_1d(bb1, bb2):
-    assert(bb1['z1'] < bb1['z2'])
-    assert(bb2['z1'] < bb2['z2'])
-    z_left = max(bb1['z1'], bb2['z1'])
-    z_right = min(bb1['z2'], bb2['z2'])
+    assert bb1["z1"] < bb1["z2"]
+    assert bb2["z1"] < bb2["z2"]
+    z_left = max(bb1["z1"], bb2["z1"])
+    z_right = min(bb1["z2"], bb2["z2"])
     if z_right < z_left:
         return 0.0
     intersection = z_right - z_left
-    bb1_area = bb1['z2'] - bb1['z1']
-    bb2_area = bb2['z2'] - bb2['z1']
+    bb1_area = bb1["z2"] - bb1["z1"]
+    bb2_area = bb2["z2"] - bb2["z1"]
     union = bb1_area + bb2_area - intersection
     return intersection / union
 
+
 def get_pos(x_radius, y_radius, z_radius):
-    x = np.random.randint(-x_radius , x_radius)
+    x = np.random.randint(-x_radius, x_radius)
     y = np.random.randint(-y_radius, y_radius)
     z = np.random.randint(-z_radius, z_radius)
     return (x, y, z)
 
-def sample_positions(terminal, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,  
-                     n_components, fwhm_xs, fwhm_ys, fwhm_zs,
-                     xy_radius, z_radius, sep_xy, sep_z):
+
+def sample_positions(
+    terminal,
+    pos_x,
+    pos_y,
+    pos_z,
+    fwhm_x,
+    fwhm_y,
+    fwhm_z,
+    n_components,
+    fwhm_xs,
+    fwhm_ys,
+    fwhm_zs,
+    xy_radius,
+    z_radius,
+    sep_xy,
+    sep_z,
+):
     sample = []
     i = 0
     n = 0
@@ -1814,24 +1923,30 @@ def sample_positions(terminal, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
         new_p = get_pos(xy_radius, xy_radius, z_radius)
         new_p = int(new_p[0] + pos_x), int(new_p[1] + pos_y), int(new_p[2] + pos_z)
         if len(sample) == 0:
-            spatial_dist = distance_2d((new_p[0],new_p[1]), (pos_x, pos_y))
+            spatial_dist = distance_2d((new_p[0], new_p[1]), (pos_x, pos_y))
             freq_dist = distance_1d(new_p[2], pos_z)
-            if  spatial_dist < sep_xy or freq_dist < sep_z:
+            if spatial_dist < sep_xy or freq_dist < sep_z:
                 n += 1
                 continue
             else:
                 spatial_iou = get_iou(
-                        {'x1': new_p[0] - fwhm_xs[i], 
-                         'x2': new_p[0] + fwhm_xs[i], 
-                         'y1': new_p[1] - fwhm_ys[i], 
-                         'y2': new_p[1] + fwhm_ys[i]},
-                        {'x1': pos_x - fwhm_x, 
-                         'x2': pos_x + fwhm_x, 
-                         'y1': pos_y - fwhm_y, 
-                         'y2': pos_y + fwhm_y})
+                    {
+                        "x1": new_p[0] - fwhm_xs[i],
+                        "x2": new_p[0] + fwhm_xs[i],
+                        "y1": new_p[1] - fwhm_ys[i],
+                        "y2": new_p[1] + fwhm_ys[i],
+                    },
+                    {
+                        "x1": pos_x - fwhm_x,
+                        "x2": pos_x + fwhm_x,
+                        "y1": pos_y - fwhm_y,
+                        "y2": pos_y + fwhm_y,
+                    },
+                )
                 freq_iou = get_iou_1d(
-                        {'z1': new_p[2] - fwhm_zs[i], 'z2': new_p[2] + fwhm_zs[i]}, 
-                        {'z1': pos_z - fwhm_z, 'z2': pos_z + fwhm_z})
+                    {"z1": new_p[2] - fwhm_zs[i], "z2": new_p[2] + fwhm_zs[i]},
+                    {"z1": pos_z - fwhm_z, "z2": pos_z + fwhm_z},
+                )
                 if spatial_iou > 0.1 or freq_iou > 0.1:
                     n += 1
                     continue
@@ -1839,28 +1954,48 @@ def sample_positions(terminal, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
                     sample.append(new_p)
                     i += 1
                     n = 0
-                    terminal.add_log('Found {}st component'.format(len(sample)))
+                    terminal.add_log("Found {}st component".format(len(sample)))
         else:
-            spatial_distances = [distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample]
+            spatial_distances = [
+                distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample
+            ]
             freq_distances = [distance_1d(new_p[2], p[2]) for p in sample]
-            checks = [spatial_dist < sep_xy or freq_dist < sep_z for spatial_dist, freq_dist in zip(spatial_distances, freq_distances)]
+            checks = [
+                spatial_dist < sep_xy or freq_dist < sep_z
+                for spatial_dist, freq_dist in zip(spatial_distances, freq_distances)
+            ]
             if any(checks) is True:
                 n += 1
                 continue
             else:
-                spatial_iou = [get_iou(
-                        {'x1': new_p[0] - fwhm_xs[i], 
-                         'x2': new_p[0] + fwhm_xs[i], 
-                         'y1': new_p[1] - fwhm_ys[i], 
-                         'y2': new_p[1] + fwhm_ys[i]},
-                        {'x1': p[0] - fwhm_xs[j], 
-                         'x2': p[0] + fwhm_xs[j], 
-                         'y1': p[1] - fwhm_ys[j], 
-                         'y2': p[1] + fwhm_ys[j]}) for j, p in enumerate(sample)]
-                freq_iou = [get_iou_1d(
-                        {'z1': new_p[2] - fwhm_zs[i], 'z2': new_p[2] + fwhm_zs[i]}, 
-                        {'z1': p[2] - fwhm_zs[j], 'z2': p[2] + fwhm_zs[j]}) for j, p in enumerate(sample)]
-                checks = [spatial_iou > 0.1 or freq_iou > 0.1 for spatial_iou, freq_iou in zip(spatial_iou, freq_iou)]
+                spatial_iou = [
+                    get_iou(
+                        {
+                            "x1": new_p[0] - fwhm_xs[i],
+                            "x2": new_p[0] + fwhm_xs[i],
+                            "y1": new_p[1] - fwhm_ys[i],
+                            "y2": new_p[1] + fwhm_ys[i],
+                        },
+                        {
+                            "x1": p[0] - fwhm_xs[j],
+                            "x2": p[0] + fwhm_xs[j],
+                            "y1": p[1] - fwhm_ys[j],
+                            "y2": p[1] + fwhm_ys[j],
+                        },
+                    )
+                    for j, p in enumerate(sample)
+                ]
+                freq_iou = [
+                    get_iou_1d(
+                        {"z1": new_p[2] - fwhm_zs[i], "z2": new_p[2] + fwhm_zs[i]},
+                        {"z1": p[2] - fwhm_zs[j], "z2": p[2] + fwhm_zs[j]},
+                    )
+                    for j, p in enumerate(sample)
+                ]
+                checks = [
+                    spatial_iou > 0.1 or freq_iou > 0.1
+                    for spatial_iou, freq_iou in zip(spatial_iou, freq_iou)
+                ]
                 if any(checks) is True:
                     n += 1
                     continue
@@ -1868,12 +2003,29 @@ def sample_positions(terminal, pos_x, pos_y, pos_z, fwhm_x, fwhm_y, fwhm_z,
                     i += 1
                     n = 0
                     sample.append(new_p)
-                    terminal.add_log('Found {}st component'.format(len(sample)))
-          
+                    terminal.add_log("Found {}st component".format(len(sample)))
+
     return sample
 
-def insert_serendipitous(terminal, update_progress, datacube, continum, cont_sens, line_fluxes, line_names, 
-    line_frequencies, freq_sup, pos_zs, fwhm_x, fwhm_y, fwhm_zs, n_px, n_chan, sim_params_path):
+
+def insert_serendipitous(
+    terminal,
+    update_progress,
+    datacube,
+    continum,
+    cont_sens,
+    line_fluxes,
+    line_names,
+    line_frequencies,
+    freq_sup,
+    pos_zs,
+    fwhm_x,
+    fwhm_y,
+    fwhm_zs,
+    n_px,
+    n_chan,
+    sim_params_path,
+):
     wcs = datacube.wcs
     xy_radius = n_px / 4
     z_radius = n_chan / 2
@@ -1889,7 +2041,9 @@ def insert_serendipitous(terminal, update_progress, datacube, continum, cont_sen
     # generate the width of the first line based on the first line of the central source
     s_fwhm_zs = np.random.randint(2, fwhm_zs[0], n_sources)
     # get posx and poy of the centtral source
-    pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(datacube.ra, datacube.dec, datacube.velocity_centre, 0)
+    pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(
+        datacube.ra, datacube.dec, datacube.velocity_centre, 0
+    )
     # get a mininum separation based on spatial dimensions
     sep_x, sep_z = np.random.randint(0, xy_radius), np.random.randint(0, z_radius)
     # get the position of the first line of the central source
@@ -1899,45 +2053,86 @@ def insert_serendipitous(terminal, update_progress, datacube, continum, cont_sen
     # get serendipitous continum maximum
     serendipitous_norms = np.random.uniform(cont_sens, cont_peak, n_sources)
     # normalize continum to each serendipitous continum maximum
-    serendipitous_conts = np.array([continum * serendipitous_norm / cont_peak for serendipitous_norm in serendipitous_norms])
+    serendipitous_conts = np.array(
+        [
+            continum * serendipitous_norm / cont_peak
+            for serendipitous_norm in serendipitous_norms
+        ]
+    )
     # sample coordinates of the first line
-    sample_coords = sample_positions(terminal, pos_x, pos_y, pos_z, 
-                                     fwhm_x, fwhm_y, fwhm_zs[0],
-                                     n_sources, fwhm_xs, fwhm_ys, s_fwhm_zs,
-                                     xy_radius, z_radius, sep_x, sep_z)
+    sample_coords = sample_positions(
+        terminal,
+        pos_x,
+        pos_y,
+        pos_z,
+        fwhm_x,
+        fwhm_y,
+        fwhm_zs[0],
+        n_sources,
+        fwhm_xs,
+        fwhm_ys,
+        s_fwhm_zs,
+        xy_radius,
+        z_radius,
+        sep_x,
+        sep_z,
+    )
     # get the rotation angles
     pas = np.random.randint(0, 360, n_sources)
-    with open(sim_params_path, 'w') as f:
-        f.write('\n Injected {} serendipitous sources\n'.format(n_sources))
+    with open(sim_params_path, "w") as f:
+        f.write("\n Injected {} serendipitous sources\n".format(n_sources))
         f.close()
     for c_id, choords in enumerate(sample_coords):
-        with open(sim_params_path, 'w') as f:
+        with open(sim_params_path, "w") as f:
             n_line = n_lines[c_id]
-            terminal.add_log('Simulating serendipitous source {} with {} lines'.format(c_id + 1, n_line))
+            terminal.add_log(
+                "Simulating serendipitous source {} with {} lines".format(
+                    c_id + 1, n_line
+                )
+            )
             s_line_fluxes = np.random.uniform(cont_sens, np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
             for s_name, s_flux in zip(s_line_names, s_line_fluxes):
-                terminal.add_log('Line {} Flux: {}'.format(s_name, s_flux))
+                terminal.add_log("Line {} Flux: {}".format(s_name, s_flux))
             pos_x, pos_y, pos_z = choords
             delta = pos_z - pos_zs[0]
             pos_z = np.array([pos + delta for pos in pos_zs])[:n_line]
             s_ra, s_dec, _ = wcs.sub(3).wcs_pix2world(pos_x, pos_y, 0, 0)
-            s_freq = np.array([line_freq + delta * freq_sup for line_freq in line_frequencies])[:n_line]
+            s_freq = np.array(
+                [line_freq + delta * freq_sup for line_freq in line_frequencies]
+            )[:n_line]
             fwhmsz = [s_fwhm_zs[0]]
             for _ in range(n_line - 1):
-                fwhmsz.append(np.random.randint(2, np.random.choice(fwhm_zs, 1))[0]) 
+                fwhmsz.append(np.random.randint(2, np.random.choice(fwhm_zs, 1))[0])
             s_continum = serendipitous_conts[c_id]
-            f.write('RA: {}\n'.format(s_ra))
-            f.write('DEC: {}\n'.format(s_dec))
-            f.write('FWHM_x (pixels): {}\n'.format(fwhm_xs[c_id]))
-            f.write('FWHM_y (pixels): {}\n'.format(fwhm_ys[c_id]))
-            f.write('Projection Angle: {}\n'.format(pas[c_id]))
+            f.write("RA: {}\n".format(s_ra))
+            f.write("DEC: {}\n".format(s_dec))
+            f.write("FWHM_x (pixels): {}\n".format(fwhm_xs[c_id]))
+            f.write("FWHM_y (pixels): {}\n".format(fwhm_ys[c_id]))
+            f.write("Projection Angle: {}\n".format(pas[c_id]))
             for i in range(len(s_freq)):
-                f.write('Line: {} - Frequency: {} GHz - Flux: {} Jy - Width (Channels): {}\n'.format(s_line_names[i], s_freq[i], line_fluxes[i], fwhmsz[i]))
-            datacube = insert_gaussian(update_progress, datacube, s_continum, s_line_fluxes, pos_x, pos_y, pos_z, fwhm_xs[c_id], fwhm_ys[c_id], fwhmsz, 
-                    pas[c_id], n_px, n_chan)
+                f.write(
+                    f"Line: {s_line_names[i]} - Frequency: {s_freq[i]} GHz "
+                    f"- Flux: {line_fluxes[i]} Jy - Width (Channels): {fwhmsz[i]}\n"
+                )
+            datacube = insert_gaussian(
+                update_progress,
+                datacube,
+                s_continum,
+                s_line_fluxes,
+                pos_x,
+                pos_y,
+                pos_z,
+                fwhm_xs[c_id],
+                fwhm_ys[c_id],
+                fwhmsz,
+                pas[c_id],
+                n_px,
+                n_chan,
+            )
             f.close()
     return datacube
+
 
 def get_datacube_header(datacube, obs_date):
     datacube.drop_pad()
@@ -1974,123 +2169,117 @@ def get_datacube_header(datacube, obs_date):
     header.append(("SPECSYS", wcs_header["SPECSYS"]))
     return header
 
+
 def write_datacube_to_fits(
     datacube,
     filename,
     obs_date,
     channels="frequency",
     overwrite=True,
-    ):
-        """
-        Output the DataCube to a FITS-format file.
+):
+    """
+    Output the DataCube to a FITS-format file.
 
-        Parameters
-        ----------
-        filename : string
-            Name of the file to write. '.fits' will be appended if not already
-            present.
+    Parameters
+    ----------
+    filename : string
+        Name of the file to write. '.fits' will be appended if not already
+        present.
 
-        channels : {'frequency', 'velocity'}, optional
-            Type of units used along the spectral axis in output file.
-            (Default: 'frequency'.)
+    channels : {'frequency', 'velocity'}, optional
+        Type of units used along the spectral axis in output file.
+        (Default: 'frequency'.)
 
-        overwrite: bool, optional
-            Whether to allow overwriting existing files. (Default: True.)
-        """
+    overwrite: bool, optional
+        Whether to allow overwriting existing files. (Default: True.)
+    """
 
-        datacube.drop_pad()
-        if channels == "frequency":
-            datacube.freq_channels()
-        elif channels == "velocity":
-            datacube.velocity_channels()
-        else:
-            raise ValueError(
-                "Unknown 'channels' value "
-                "(use 'frequency' or 'velocity'."
-            )
+    datacube.drop_pad()
+    if channels == "frequency":
+        datacube.freq_channels()
+    elif channels == "velocity":
+        datacube.velocity_channels()
+    else:
+        raise ValueError("Unknown 'channels' value " "(use 'frequency' or 'velocity'.")
 
-        filename = filename if filename[-5:] == ".fits" else filename + ".fits"
+    filename = filename if filename[-5:] == ".fits" else filename + ".fits"
 
-        wcs_header = datacube.wcs.to_header()
-        wcs_header.rename_keyword("WCSAXES", "NAXIS")
-        header = fits.Header()
-        if len(datacube._array.shape) == 3: 
-            header.append(("SIMPLE", "T"))
-            header.append(("BITPIX", 16))
-            header.append(("NAXIS", wcs_header["NAXIS"]))
-            header.append(("NAXIS1", datacube.n_px_x))
-            header.append(("NAXIS2", datacube.n_px_y))
-            header.append(("NAXIS3", datacube.n_channels))
-            header.append(("EXTEND", "T"))
-            header.append(("CDELT1", wcs_header["CDELT1"]))
-            header.append(("CRPIX1", wcs_header["CRPIX1"]))
-            header.append(("CRVAL1", wcs_header["CRVAL1"]))
-            header.append(("CTYPE1", wcs_header["CTYPE1"]))
-            header.append(("CUNIT1", wcs_header["CUNIT1"]))
-            header.append(("CDELT2", wcs_header["CDELT2"]))
-            header.append(("CRPIX2", wcs_header["CRPIX2"]))
-            header.append(("CRVAL2", wcs_header["CRVAL2"]))
-            header.append(("CTYPE2", wcs_header["CTYPE2"]))
-            header.append(("CUNIT2", wcs_header["CUNIT2"]))
-            header.append(("CDELT3", wcs_header["CDELT3"]))
-            header.append(("CRPIX3", wcs_header["CRPIX3"]))
-            header.append(("CRVAL3", wcs_header["CRVAL3"]))
-            header.append(("CTYPE3", wcs_header["CTYPE3"]))
-            header.append(("CUNIT3", wcs_header["CUNIT3"]))
-        else:
-            header.append(("SIMPLE", "T"))
-            header.append(("BITPIX", 16))
-            header.append(("NAXIS", wcs_header["NAXIS"]))
-            header.append(("NAXIS1", datacube.n_px_x))
-            header.append(("NAXIS2", datacube.n_px_y))
-            header.append(("NAXIS3", datacube.n_channels))
-            header.append(("NAXIS4", 1))
-            header.append(("EXTEND", "T"))
-            header.append(("CDELT1", wcs_header["CDELT1"]))
-            header.append(("CRPIX1", wcs_header["CRPIX1"]))
-            header.append(("CRVAL1", wcs_header["CRVAL1"]))
-            header.append(("CTYPE1", wcs_header["CTYPE1"]))
-            header.append(("CUNIT1", wcs_header["CUNIT1"]))
-            header.append(("CDELT2", wcs_header["CDELT2"]))
-            header.append(("CRPIX2", wcs_header["CRPIX2"]))
-            header.append(("CRVAL2", wcs_header["CRVAL2"]))
-            header.append(("CTYPE2", wcs_header["CTYPE2"]))
-            header.append(("CUNIT2", wcs_header["CUNIT2"]))
-            header.append(("CDELT3", wcs_header["CDELT3"]))
-            header.append(("CRPIX3", wcs_header["CRPIX3"]))
-            header.append(("CRVAL3", wcs_header["CRVAL3"]))
-            header.append(("CTYPE3", wcs_header["CTYPE3"]))
-            header.append(("CUNIT3", wcs_header["CUNIT3"]))
-            header.append(("CDELT4", wcs_header["CDELT4"]))
-            header.append(("CRPIX4", wcs_header["CRPIX4"]))
-            header.append(("CRVAL4", wcs_header["CRVAL4"]))
-            header.append(("CTYPE4", wcs_header["CTYPE4"]))
-            header.append(("CUNIT4", "PAR"))
-        header.append(("EPOCH", 2000.))
-        # header.append(('BLANK', -32768)) #only for integer data
-        header.append(("BSCALE", 1.0))
-        header.append(("BZERO", 0.0))
-        datacube_array_units = datacube._array.unit
-        header.append(
-            ("DATAMAX", np.max(datacube._array.to_value(datacube_array_units)))
-        )
-        header.append(
-            ("DATAMIN", np.min(datacube._array.to_value(datacube_array_units)))
-        )
-        
-        # long names break fits format, don't let the user set this
-        header.append(("OBJECT", "MOCK"))
-        header.append(("BUNIT", datacube_array_units.to_string("fits")))
-        header.append(("MJD-OBS", obs_date))
-        header.append(("BTYPE", "Intensity"))
-        header.append(("SPECSYS", wcs_header["SPECSYS"]))
+    wcs_header = datacube.wcs.to_header()
+    wcs_header.rename_keyword("WCSAXES", "NAXIS")
+    header = fits.Header()
+    if len(datacube._array.shape) == 3:
+        header.append(("SIMPLE", "T"))
+        header.append(("BITPIX", 16))
+        header.append(("NAXIS", wcs_header["NAXIS"]))
+        header.append(("NAXIS1", datacube.n_px_x))
+        header.append(("NAXIS2", datacube.n_px_y))
+        header.append(("NAXIS3", datacube.n_channels))
+        header.append(("EXTEND", "T"))
+        header.append(("CDELT1", wcs_header["CDELT1"]))
+        header.append(("CRPIX1", wcs_header["CRPIX1"]))
+        header.append(("CRVAL1", wcs_header["CRVAL1"]))
+        header.append(("CTYPE1", wcs_header["CTYPE1"]))
+        header.append(("CUNIT1", wcs_header["CUNIT1"]))
+        header.append(("CDELT2", wcs_header["CDELT2"]))
+        header.append(("CRPIX2", wcs_header["CRPIX2"]))
+        header.append(("CRVAL2", wcs_header["CRVAL2"]))
+        header.append(("CTYPE2", wcs_header["CTYPE2"]))
+        header.append(("CUNIT2", wcs_header["CUNIT2"]))
+        header.append(("CDELT3", wcs_header["CDELT3"]))
+        header.append(("CRPIX3", wcs_header["CRPIX3"]))
+        header.append(("CRVAL3", wcs_header["CRVAL3"]))
+        header.append(("CTYPE3", wcs_header["CTYPE3"]))
+        header.append(("CUNIT3", wcs_header["CUNIT3"]))
+    else:
+        header.append(("SIMPLE", "T"))
+        header.append(("BITPIX", 16))
+        header.append(("NAXIS", wcs_header["NAXIS"]))
+        header.append(("NAXIS1", datacube.n_px_x))
+        header.append(("NAXIS2", datacube.n_px_y))
+        header.append(("NAXIS3", datacube.n_channels))
+        header.append(("NAXIS4", 1))
+        header.append(("EXTEND", "T"))
+        header.append(("CDELT1", wcs_header["CDELT1"]))
+        header.append(("CRPIX1", wcs_header["CRPIX1"]))
+        header.append(("CRVAL1", wcs_header["CRVAL1"]))
+        header.append(("CTYPE1", wcs_header["CTYPE1"]))
+        header.append(("CUNIT1", wcs_header["CUNIT1"]))
+        header.append(("CDELT2", wcs_header["CDELT2"]))
+        header.append(("CRPIX2", wcs_header["CRPIX2"]))
+        header.append(("CRVAL2", wcs_header["CRVAL2"]))
+        header.append(("CTYPE2", wcs_header["CTYPE2"]))
+        header.append(("CUNIT2", wcs_header["CUNIT2"]))
+        header.append(("CDELT3", wcs_header["CDELT3"]))
+        header.append(("CRPIX3", wcs_header["CRPIX3"]))
+        header.append(("CRVAL3", wcs_header["CRVAL3"]))
+        header.append(("CTYPE3", wcs_header["CTYPE3"]))
+        header.append(("CUNIT3", wcs_header["CUNIT3"]))
+        header.append(("CDELT4", wcs_header["CDELT4"]))
+        header.append(("CRPIX4", wcs_header["CRPIX4"]))
+        header.append(("CRVAL4", wcs_header["CRVAL4"]))
+        header.append(("CTYPE4", wcs_header["CTYPE4"]))
+        header.append(("CUNIT4", "PAR"))
+    header.append(("EPOCH", 2000.0))
+    # header.append(('BLANK', -32768)) #only for integer data
+    header.append(("BSCALE", 1.0))
+    header.append(("BZERO", 0.0))
+    datacube_array_units = datacube._array.unit
+    header.append(("DATAMAX", np.max(datacube._array.to_value(datacube_array_units))))
+    header.append(("DATAMIN", np.min(datacube._array.to_value(datacube_array_units))))
 
-        # flip axes to write
-        hdu = fits.PrimaryHDU(
-            header=header, data=datacube._array.to_value(datacube_array_units).T
-        )
-        hdu.writeto(filename, overwrite=overwrite)
+    # long names break fits format, don't let the user set this
+    header.append(("OBJECT", "MOCK"))
+    header.append(("BUNIT", datacube_array_units.to_string("fits")))
+    header.append(("MJD-OBS", obs_date))
+    header.append(("BTYPE", "Intensity"))
+    header.append(("SPECSYS", wcs_header["SPECSYS"]))
 
-        if channels == "frequency":
-            datacube.velocity_channels()
-        return
+    # flip axes to write
+    hdu = fits.PrimaryHDU(
+        header=header, data=datacube._array.to_value(datacube_array_units).T
+    )
+    hdu.writeto(filename, overwrite=overwrite)
+
+    if channels == "frequency":
+        datacube.velocity_channels()
+    return

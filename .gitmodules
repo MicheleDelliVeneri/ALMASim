@@ -1,3 +1,3 @@
-[submodule "submodules"]
-	path = submodules
+[submodule "illustris_python"]
+	path = illustris_python
 	url = https://github.com/illustristng/illustris_python.git
