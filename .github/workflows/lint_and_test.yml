@@ -103,6 +103,13 @@ jobs:
         cd ..
     - name: Set up Headless Environment
       run: export QT_QPA_PLATFORM=offscreen
+    - name: Create kaggle.json from secret
+      env:
+        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
+      run: |
+        mkdir -p /home/runner/.kaggle
+        echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
+        chmod 600 /home/runner/.kaggle/kaggle.json
     - name: Test with pytest
       run: |
         /usr/bin/xvfb-run --auto-servernum \
@@ -145,11 +152,17 @@ jobs:
         pip install pyqtgraph
         cd ..
     - name: Set up Headless Environment
-      run: export QT_QPA_PLATFORM=offscreen                         
+      run: export QT_QPA_PLATFORM=offscreen    
+    - name: Create kaggle.json from secret
+      env:
+        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
+      run: |
+        mkdir -p /home/runner/.kaggle
+        echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
+        chmod 600 /home/runner/.kaggle/kaggle.json                     
     - name: Test with pytest including coverage report
       run: |
-        chmod +x /usr/bin/xvfb-run  
-        sudo -u runner xvfb-run --auto-servernum \ 
+         /usr/bin/xvfb-run --auto-servernum \
                        --server-num=1 \
                        --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
                        /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
