@@ -90,9 +90,9 @@ Installing from GitHub
 Getting started
 ---------------
 
-To run the simulation, just navigate to the ALMASim folder and execute:
+To run the simulation, just run:
 
-``python run.py``
+``python -c "from almasim import run; run()"``
 
 Notes
 -----
