@@ -1,27 +1,12 @@
 name: Publish to PyPI
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
-
+  push:
+    branches:
+      - main
 jobs:
-  bump-version:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Bump version and push tag
-        uses: jaumann/github-bumpversion-action@v0.0.7
-        env:
-          GITHUB_TOKEN: ${{ secrets.SEMANTIC_TOKEN }}
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.SEMANTIC_TOKEN }}
-          tags: true
 
   pypi-publish:
-    needs: bump-version
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -54,5 +39,3 @@ jobs:
         run: pyproject-build
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
