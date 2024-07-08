@@ -6,50 +6,38 @@
 # separate terms of service, privacy policy, and support
 # documentation.
 
-name: Upload Python Package
+name: Publish to PyPI
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
+  push:
+    branches:
+      - main  # Or your release branch
 
 jobs:
-  pypi-publish:
-    name: Upload release to PyPI
+  build-and-publish:
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/almasim
-    permissions:
-      id-token: write
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install -e .
-        git submodule update --init    
-        cd illustris_python
-        pip install . 
-        cd ..
-    - name: Create kaggle.json from secret
-      env:
-        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
-      run: |
-        mkdir -p /home/runner/.kaggle
-        echo "$KAGGLE_JSON_B64" | base64 --decode > /home/runner/.kaggle/kaggle.json
-        chmod 600 /home/runner/.kaggle/kaggle.json
-    - name: Install Build dependencies
-      run: pip install build
-    - name: Build
-      run: pyproject-build
-    - name: Publish package distributions to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive   # Check out the submodule
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install Poetry
+        run: pipx install poetry
+      - name: Install dependencies
+        run: poetry install
+      - name: Create kaggle.json from secret
+        env:
+          KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
+        run: |
+          mkdir -p /home/runner/.kaggle
+          echo "$KAGGLE_JSON_B64" | base64 --decode > /home/runner/.kaggle/kaggle.json
+          chmod 600 /home/runner/.kaggle/kaggle.json
+      - name: Build and Publish
+        env:
+          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          poetry config pypi-token.pypi $POETRY_PYPI_TOKEN_PYPI
+          poetry publish --build 

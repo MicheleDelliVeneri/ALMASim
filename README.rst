@@ -21,19 +21,17 @@
 Overview
 --------
 
-ALMASim is a package to generate mock observations of HI line galaxies
+ALMASim is a package to generate mock observations of radio sources
 as observed by the Atacama Large Millimetre/Submillimetre Array (ALMA).
 ALMASim primary goal is to allow users to generate simulated datasets on
 which to test deconvolution and source detection models. ALMASim is
-intended to leverage MPI parallel computing on modern HPC clusters to
+intended to leverage MPI parallel computing (Dask, Slurm, PBS) on modern HPC clusters to
 generate thousands of ALMA data cubes, but can also work on laptopts.
 ALMA database or a prepared catalogue is queried to sample observational
 metadata such as band, bandwidth, integration time, antenna
 configurations and so on. ALMASim employs the MARTINI Package
 (https://github.com/kyleaoman/martini), and the Illustris Python Package
-(https://github.com/illustristng/illustris_python) to be able to
-generate observations of extendend sources in all possible ALMA
-configurations. For every observed target ALMASim generates:
+(https://github.com/illustristng/illustris_python).
 
 Citing ALMASim
 --------------
@@ -98,6 +96,5 @@ Notes
 -----
 
 Cube size will dictate simulation speed and RAM usage. To gauge what you
-can affor to run, we advice to start with a single simulation of a 256 x
-256 x 256 cube. 1.85 GHZ is the descriminator between line and continuum
-spectral window.
+can affort to run, we advice to start with a single simulation of a 256 x
+256 x 256 cube.

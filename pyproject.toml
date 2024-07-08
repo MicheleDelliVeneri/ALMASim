@@ -1,51 +1,41 @@
-[build-system]
-requires = ["setuptools>=70.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "almasim"
-version = "2.0.1"
-authors = [
-    { name="Michele Delli Veneri", email="micheledelliveneri@gmail.com" },
-]
-description="An ALMA Simulation package for a more civilized era."
+version = "2.0.2"
+description = "An ALMA Simulation package for a more civilized era."
+authors = ["Michele Delli Veneri <micheledelliveneri@gmail.com>"]
 readme = "README.rst"
-requires-python = ">=3.12.4"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-    "Operating System :: OS Independent",
-]
-dependencies = [
-    "astropy",
-    "pyvo",
-    "numpy",
-    "pandas",
-    "matplotlib",
-    "seaborn",
-    "pyQt6",
-    "tqdm",
-    "scipy",
-    "h5py",
-    "kaggle",
-    "dask",
-    "dask-expr",
-    "dask_jobqueue",
-    "distributed",
-    "astromartini",
-    "Hdecompose",
-    "paramiko",
-    "pysftp",
-    "setuptools",
-    "tenacity",
-    "nifty8",
-]
+repository = "https://https://github.com/MicheleDelliVeneri/ALMASim"
+homepage = "https://https://github.com/MicheleDelliVeneri/ALMASim"
+documentation = "https://almasim.readthedocs.io/en/latest"
 
-[tool.setuptools]
-packages = ["almasim"]
+[tool.poetry.dependencies]
+python = ">=3.12.4"
+astropy = "*"
+pyvo = "*"
+numpy = "*"
+pandas = "*"
+matplotlib = "*"
+seaborn = "*"
+pyqt6 = "*"
+tqdm = "*"
+scipy = "*"
+h5py = "*"
+kaggle = "*"
+dask = "*"
+dask-expr = "*"
+dask-jobqueue = "*"
+distributed = "*"
+astromartini = "*"
+Hdecompose = "*"
+paramiko = "*"
+pysftp = "*"
+tenacity = "*"
+nifty8 = "*"
+illustris_python = { git = "https://github.com/illustristng/illustris_python.git" }
 
-[project.urls]
-"Homepage" = "https://https://github.com/MicheleDelliVeneri/ALMASim"
-"Bug Tracker" = "https://https://github.com/MicheleDelliVeneri/ALMASim/issues"
-"Documentation" = "https://almasim.readthedocs.io/en/latest"
-
+[tool.poetry.group.dev.dependencies]  # Optional: Development dependencies
+pytest = "*"
+pytest-qt = "*"
+flake8 = "*"
+mypy = "*"
+black = "*"
