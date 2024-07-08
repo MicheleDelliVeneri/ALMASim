@@ -807,26 +807,6 @@ files = [
 ]
 
 [[package]]
-name = "illustris_python"
-version = "1.0.0"
-description = ""
-optional = false
-python-versions = "*"
-files = []
-develop = false
-
-[package.dependencies]
-h5py = "*"
-numpy = "*"
-six = "*"
-
-[package.source]
-type = "git"
-url = "https://github.com/illustristng/illustris_python.git"
-reference = "HEAD"
-resolved_reference = "fcdeda8821620df495826780f3342955671103b3"
-
-[[package]]
 name = "iniconfig"
 version = "2.0.0"
 description = "brain-dead simple config-ini parsing"
@@ -2306,4 +2286,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12.4"
-content-hash = "1c34d6f516a07bb554721e55dca04f9d3ad60d2caa87837ca2efae5ae49e36a2"
+content-hash = "4cfa355ef3252c1614020fc70561f381a9b6524f32a2c344ae3448db904aa1a3"
