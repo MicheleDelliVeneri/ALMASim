@@ -327,7 +327,7 @@ class ALMASimulator(QMainWindow):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
 
         # --- Create Widgets ---
-        self.main_path = os.path.join(
+        self.main_path = os.path.sep + os.path.join(
             *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
                 os.path.sep
             )[:-1]
@@ -2578,7 +2578,7 @@ class ALMASimulator(QMainWindow):
             self.download_galaxy_zoo_on_remote()
 
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
-        self.main_path = os.path.join(
+        self.main_path = os.path.sep + os.path.join(
             *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
                 os.path.sep
             )[:-1]
