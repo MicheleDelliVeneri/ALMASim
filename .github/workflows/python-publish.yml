@@ -14,12 +14,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint-and-test:
-    uses: ./.github/workflows/lint_and_test.yml
-
   pypi-publish:
     name: Upload release to PyPI
-    needs: [lint-and-test]
     runs-on: ubuntu-latest
     environment:
       name: pypi
