@@ -31,7 +31,6 @@ paramiko = "*"
 pysftp = "*"
 tenacity = "*"
 nifty8 = "*"
-illustris_python = { git = "https://github.com/illustristng/illustris_python.git" }
 
 [tool.poetry.group.dev.dependencies]  # Optional: Development dependencies
 pytest = "*"
