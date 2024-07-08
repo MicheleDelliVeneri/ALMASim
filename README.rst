@@ -1,5 +1,7 @@
 .. image:: https://github.com/MicheleDelliVeneri/ALMASim/blob/main/pictures/ALMASimBanner.jpeg
+
 |Python version| |PyPI| |Repostatus| |Zenodo| |Tests| |Documentation Status| |CodeCov|
+
 .. |Tests| image:: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml/badge.svg?branch=main
    :target: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml
 .. |PyPI| image:: https://img.shields.io/pypi/v/ALMASim?color=green&label=PyPI
@@ -99,6 +101,3 @@ Cube size will dictate simulation speed and RAM usage. To gauge what you
 can affor to run, we advice to start with a single simulation of a 256 x
 256 x 256 cube. 1.85 GHZ is the descriminator between line and continuum
 spectral window.
-
-.. |Alt text| image:: pictures/ALMASimBanner.jpeg
-
