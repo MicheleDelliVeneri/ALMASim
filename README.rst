@@ -1,8 +1,20 @@
-|Alt text| \| Status \| \| \| :—- \| :—————————————- \| \| Tests \| |Run
-tests| \| \| PyPi \| |PyPI| \| \| Documentation Status \| |Documentation
-Status| \| \| Python Version \| |Python Version| \| \| Publish \|
-|Upload Python Package| \| Zenodo\| |DOI| \|Repostatus\| |image1| \| \|
-CodeCov \| |codecov| \| \|
+.. image:: https://github.com/MicheleDelliVeneri/ALMASim/blob/main/pictures/ALMASimBanner.jpeg
+|Python version| |PyPI| |Repostatus| |Zenodo| |Tests| |Documentation Status| |CodeCov|
+.. |Tests| image:: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml/badge.svg?branch=main
+   :target: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml
+.. |PyPI| image:: https://img.shields.io/pypi/v/ALMASim?color=green&label=PyPI
+   :target: https://pypi.org/project/ALMASim/
+.. |Documentation Status| image:: https://readthedocs.org/projects/almasim/badge/?version=latest
+   :target: https://almasim.readthedocs.io
+.. |Python Version| image:: https://img.shields.io/pypi/pyversions/ALMASim?color=green&label=Python%20Version
+   :target: https://pypi.org/project/ALMASim/
+.. |Upload Python Package| image:: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml/badge.svg
+   :target: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml
+.. |Zenodo| image:: https://zenodo.org/badge/501944702.svg
+   :target: https://zenodo.org/doi/10.5281/zenodo.12684237
+.. |Repostatus| image:: https://www.repostatus.org/badges/latest/active.svg
+.. |CodeCov| image:: https://codecov.io/github/MicheleDelliVeneri/ALMASim/graph/badge.svg?token=9SZVW78DR2
+   :target: https://codecov.io/github/MicheleDelliVeneri/ALMASim
 
 Overview
 --------
@@ -54,6 +66,13 @@ activate it. Then install the required packages with ``pip``:
 -  Activate it: ``source astro-env/bin/activate`` (in case of your shell
    is Bash, otherwise check the other activations scripts within the bin
    folders)
+
+Installing with pip
+-------------------
+- pip install ALMASim
+
+Installing from GitHub 
+----------------------
 -  Clone the ALMASim Repository:
    ``git clone https://github.com/MicheleDelliVeneri/ALMASim.git``
 -  Install packages from the requirements file:
@@ -71,7 +90,7 @@ Getting started
 
 To run the simulation, just navigate to the ALMASim folder and execute:
 
-``python ui.py``
+``python run.py``
 
 Notes
 -----
@@ -82,18 +101,4 @@ can affor to run, we advice to start with a single simulation of a 256 x
 spectral window.
 
 .. |Alt text| image:: pictures/ALMASimBanner.jpeg
-.. |Run tests| image:: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml/badge.svg?branch=main
-   :target: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml
-.. |PyPI| image:: https://img.shields.io/pypi/v/ALMASim?color=green&label=PyPI
-   :target: https://pypi.org/project/ALMASim/
-.. |Documentation Status| image:: https://readthedocs.org/projects/almasim/badge/?version=latest
-   :target: https://almasim.readthedocs.io
-.. |Python Version| image:: https://img.shields.io/pypi/pyversions/ALMASim?color=green&label=Python%20Version
-   :target: https://pypi.org/project/ALMASim/
-.. |Upload Python Package| image:: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml/badge.svg
-   :target: https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml
-.. |DOI| image:: https://zenodo.org/badge/501944702.svg
-   :target: https://zenodo.org/doi/10.5281/zenodo.12684237
-.. |image1| image:: https://www.repostatus.org/badges/latest/active.svg
-.. |codecov| image:: https://codecov.io/github/MicheleDelliVeneri/ALMASim/graph/badge.svg?token=9SZVW78DR2
-   :target: https://codecov.io/github/MicheleDelliVeneri/ALMASim
+
