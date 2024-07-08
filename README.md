@@ -6,7 +6,7 @@
 | Documentation Status | [![Documentation Status](https://readthedocs.org/projects/almasim/badge/?version=latest)](https://almasim.readthedocs.io) |
 | Python Version | [![Python Version](https://img.shields.io/pypi/pyversions/ALMASim?color=green&label=Python%20Version)](https://pypi.org/project/ALMASim/) |
 | Publish | [![Upload Python Package](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml/badge.svg)](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml)
-|Repostatus| image:: https://www.repostatus.org/badges/latest/active.svg |
+|Repostatus|  ![Alt text](https://www.repostatus.org/badges/latest/active.svg) |
 | CodeCov | [![codecov](https://codecov.io/github/MicheleDelliVeneri/ALMASim/graph/badge.svg?token=9SZVW78DR2)](https://codecov.io/github/MicheleDelliVeneri/ALMASim) |
 |
 
