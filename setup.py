@@ -2,21 +2,37 @@ import setuptools
 import subprocess
 import sys
 import os
-from setuptools.command.install import install as _install
 
 
-class InstallWithSubmodule(_install):
+class CustomInstallCommand(setuptools.Command):
+    description = (
+        "Custom install command that clones and installs the illustris_python package."
+    )
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
     def run(self):
-        # Initialize and update the submodule
-        subprocess.check_call(["git", "submodule", "update", "--init"])
+        # Clone the illustris_python repository
+        subprocess.check_call(
+            ["git", "clone", "https://github.com/illustristng/illustris_python.git"]
+        )
 
-        # Change directory to the submodule and install it
+        # Change to the cloned directory
         os.chdir("illustris_python")
+
+        # Install the cloned package
         subprocess.check_call([sys.executable, "-m", "pip", "install", "."])
+
+        # Change back to the original directory
         os.chdir("..")
 
-        # Continue with the normal installation
-        _install.run(self)
+        # Run the standard install command
+        setuptools.Command.run(self)
 
 
 setuptools.setup(
@@ -58,8 +74,9 @@ setuptools.setup(
         "setuptools",
         "tenacity",
         "nifty8",
+        "setuptools",
     ],
     cmdclass={
-        "install": InstallWithSubmodule,
+        "install": CustomInstallCommand,
     },
 )
