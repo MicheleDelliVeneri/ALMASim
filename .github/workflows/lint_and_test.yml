@@ -105,8 +105,7 @@ jobs:
       run: export QT_QPA_PLATFORM=offscreen
     - name: Test with pytest
       run: |
-        chmod +x /usr/bin/xvfb-run  
-        sudo -u runner xvfb-run --auto-servernum \
+        /usr/bin/xvfb-run --auto-servernum \
               --server-num=1 \
               --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
               /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --rootdir ${{ github.workspace }}
