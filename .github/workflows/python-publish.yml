@@ -26,6 +26,10 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
+      - name: Install Poetry
+        run: pipx install poetry
+      - name: Install dependencies
+        run: poetry install
       - name: Create kaggle.json from secret
         env:
           KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
@@ -33,9 +37,9 @@ jobs:
           mkdir -p /home/runner/.kaggle
           echo "$KAGGLE_JSON_B64" | base64 --decode > /home/runner/.kaggle/kaggle.json
           chmod 600 /home/runner/.kaggle/kaggle.json
-      - name: Install Build dependencies
-        run: pip install build
-      - name: Build
-        run: pyproject-build
-      - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Build and Publish
+        env:
+          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          poetry config pypi-token.pypi $POETRY_PYPI_TOKEN_PYPI
+          poetry publish --build 
