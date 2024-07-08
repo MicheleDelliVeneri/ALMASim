@@ -10,17 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Bump version
-        run: bump2version ${{ env.BUMP_LEVEL }}  # Use environment variable for flexibility
+      - name: Bump version and push tag
+        uses: jaumann/github-bumpversion-action@v0.0.7
         env:
-          BUMP_LEVEL: patch  # Default to patch, can be overridden in workflow_dispatch
-
-      - name: Commit and Push Changes
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git commit -am "Bump version"
-          git push
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_TOKEN }}
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.SEMANTIC_TOKEN }}
+          tags: true
 
   pypi-publish:
     needs: bump-version
