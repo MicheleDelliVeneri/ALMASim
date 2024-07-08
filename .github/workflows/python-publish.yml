@@ -46,6 +46,8 @@ jobs:
         mkdir -p /home/runner/.kaggle
         echo "$KAGGLE_JSON_B64" | base64 --decode > /home/runner/.kaggle/kaggle.json
         chmod 600 /home/runner/.kaggle/kaggle.json
+    - name: Install Build dependencies
+      run: pip install build
     - name: Build
       run: pyproject-build
     - name: Publish package distributions to PyPI
