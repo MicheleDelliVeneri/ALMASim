@@ -1,5 +1,4 @@
 import h5py
-import illustris_python as il
 from random import choices
 import os
 import numpy as np
@@ -723,7 +722,7 @@ def get_particles_num(basePath, outputPath, snapNum, subhaloID, tng_api_key):
     #    basePath, snapNum, partType, subset=subset, api_key=tng_api_key
     # )
     os.chdir(basePath)
-    gas = il.snapshot.loadSubhalo(basePath, snapNum, subhaloID, partType)
+    gas = loadSubhalo(basePath, snapNum, subhaloID, partType)
     if "Coordinates" in gas.keys():
         gas_num = len(gas["Coordinates"])
     else:

@@ -2,7 +2,7 @@ import numpy as np
 import math
 import astropy.units as U
 from Hdecompose.atomic_frac import atomic_frac
-from illustris_python.snapshot import loadSubset
+from .astro import loadSubset
 from martini.sources.sph_source import SPHSource
 from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import (

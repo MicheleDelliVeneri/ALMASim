@@ -20,3 +20,4 @@ pysftp
 setuptools
 tenacity
 nifty8
+setuptools

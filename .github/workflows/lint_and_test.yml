@@ -40,10 +40,6 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
-          git submodule update --init    
-          cd illustris_python
-          pip install . 
-          cd ..
       - name: Create kaggle.json from secret
         env:
           KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
@@ -93,10 +89,6 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f optional_requirements.txt ]; then pip install -r optional_requirements.txt; fi
         pip install -e .
-        git submodule update --init    
-        cd illustris_python
-        pip install . 
-        cd ..
         sudo apt install python3-qtpy
         pip install PyQt6 --upgrade
         pip install pyqtgraph
@@ -143,10 +135,6 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f optional_requirements.txt ]; then pip install -r optional_requirements.txt; fi
         pip install -e .
-        git submodule update --init
-        cd illustris_python
-        pip install .
-        cd ..
         sudo apt install python3-qtpy
         pip install PyQt6 --upgrade
         pip install pyqtgraph

@@ -22,10 +22,6 @@ jobs:
           pip install poetry semantic-release
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
-          git submodule update --init    
-          cd illustris_python
-          pip install . 
-          cd ..
       - name: Create kaggle.json from secret
         env:
           KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
@@ -59,10 +55,6 @@ jobs:
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install -e .
-        git submodule update --init    
-        cd illustris_python
-        pip install . 
-        cd ..
     - name: Install Build dependencies
       run: pip install build
     - name: Build
