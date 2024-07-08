@@ -1,19 +1,22 @@
+import os
 import subprocess
 import setuptools
 from setuptools.command.install import install as _install
 
-
 class InstallWithSubmodule(_install):
     def run(self):
-        # Initialize and update submodule
-        subprocess.check_call(["git", "submodule", "update", "--init", "--recursive"])
-
-        # Install the submodule
-        subprocess.check_call(["pip", "install", "./illustris_python"])
-
+        # Check if we are in a git repository
+        if os.path.isdir('.git'):
+            # Initialize and update submodule
+            subprocess.check_call(['git', 'submodule', 'update', '--init', '--recursive'])
+            
+            # Install the submodule
+            subprocess.check_call(['pip', 'install', './illustris_python'])
+        else:
+            print("Skipping submodule installation: not in a git repository")
+        
         # Continue with the normal installation
         _install.run(self)
-
 
 setuptools.setup(
     name="almasim",
@@ -30,7 +33,7 @@ setuptools.setup(
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.12.4",
+    python_requires='>=3.12.4',
     install_requires=[
         "astropy",
         "pyvo",
@@ -56,6 +59,6 @@ setuptools.setup(
         "nifty8",
     ],
     cmdclass={
-        "install": InstallWithSubmodule,
+        'install': InstallWithSubmodule,
     },
 )
