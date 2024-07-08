@@ -33,11 +33,12 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install setuptools wheel build
-        pip install -r requirements.txt
-        pip install .
-        git submodule update --init --recursive      
-        pip install submodules/illustris_python/.
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install -e .
+        git submodule update --init    
+        cd illustris_python
+        pip install . 
+        cd ..
     - name: Create kaggle.json from secret
       env:
         KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
