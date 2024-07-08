@@ -62,10 +62,10 @@ import pyvo
 import re
 import seaborn as sns
 import subprocess
-import importlib.resources
+from pathlib import Path
+import inspect
 
 matplotlib.use("Agg")
-
 
 class MemoryLimitPlugin(WorkerPlugin):
     def __init__(self, memory_limit):
@@ -326,6 +326,7 @@ class ALMASimulator(QMainWindow):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
 
         # --- Create Widgets ---
+        self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve()
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
         self.metadata_path_button = QPushButton("Browse")
@@ -1354,7 +1355,7 @@ class ALMASimulator(QMainWindow):
         file, _ = QFileDialog.getOpenFileName(
             self,
             "Select Metadata File",
-            os.path.join(os.getcwd(), "almasim", "metadata"),
+            os.path.join(self.main_path "metadata"),
             "CSV Files (*.csv)",
         )
         if file:
@@ -1375,7 +1376,7 @@ class ALMASimulator(QMainWindow):
     def browse_slurm_config(self):
         file_dialog = QFileDialog()
         slurm_config_file, _ = file_dialog.getOpenFileName(
-            self, "Select Slurm Config File", os.getcwd(), "Slurm Config Files (*.json)"
+            self, "Select Slurm Config File", self.main_path, "Slurm Config Files (*.json)"
         )
         if slurm_config_file:
             self.remote_config_entry.setText(slurm_config_file)
@@ -1384,7 +1385,7 @@ class ALMASimulator(QMainWindow):
         file, _ = QFileDialog.getSaveFileName(
             self,
             "Select Metadata File",
-            os.path.join(os.getcwd(), "almasim", "metadata"),
+            os.path.join(self.main_path, "metadata"),
             "CSV Files (*.csv)",
         )
         if file:
@@ -1400,7 +1401,7 @@ class ALMASimulator(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Target List",
-            os.path.join(os.getcwd(), "almasim", "metadata"),
+            os.path.join(self.main_path, "metadata"),
             "CSV Files (*.csv)",
         )
         if file_path:
@@ -1871,14 +1872,10 @@ class ALMASimulator(QMainWindow):
         Return:
         pd.DataFrame : Dataframe with line names and rest frequencies.
         """
-
-        # path_line_emission_csv = os.path.join(
-        #    os.getcwd(), "almasim", "brightnes", "calibrated_lines.csv"
-        # )
-        with importlib.resources.path(
-            "almasim.brightnes", "calibrated_lines.csv"
-        ) as file_path:
-            path_line_emission_csv = file_path
+        
+        path_line_emission_csv = os.path.join(
+            self.main_path, "brightnes", "calibrated_lines.csv"
+        )
         db_line = uas.read_line_emission_csv(
             path_line_emission_csv, sep=","
         ).sort_values(by="Line")
@@ -2573,7 +2570,7 @@ class ALMASimulator(QMainWindow):
             self.download_galaxy_zoo_on_remote()
 
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
-        self.main_path = os.getcwd()
+        self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve()
         if self.local_mode_combo.currentText() == "local":
             main_paths = np.array([os.getcwd()] * n_sims)
         else:
@@ -2593,7 +2590,7 @@ class ALMASimulator(QMainWindow):
         if self.line_mode_checkbox.isChecked():
             line_indices = [int(i) for i in self.line_index_entry.text().split()]
             rest_freq, line_names = uas.get_line_info(
-                os.path.join(os.getcwd(), "almasim"), line_indices
+                self.main_path, line_indices
             )
             if len(rest_freq) == 1:
                 rest_freq = rest_freq[0]
@@ -2611,7 +2608,7 @@ class ALMASimulator(QMainWindow):
                 z0, z1 = float(redshifts[0]), float(redshifts[1])
                 redshifts = np.random.uniform(z0, z1, n_sims)
             n_lines = np.array([int(self.num_lines_entry.text())] * n_sims)
-            rest_freq, _ = uas.get_line_info(os.path.join(os.getcwd(), "almasim"))
+            rest_freq, _ = uas.get_line_info(self.main_path)
             rest_freqs = np.array([None] * n_sims)
             line_names = np.array([None] * n_sims)
 
