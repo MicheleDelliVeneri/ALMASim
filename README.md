@@ -1,7 +1,13 @@
 ![Alt text](pictures/ALMASimBanner.jpeg)
 | Status |                                        |
 | :---- | :---------------------------------------- |
+| Tests | [![Run tests](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml/badge.svg?branch=main)](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml) |
+| PyPi  | [![PyPI](https://img.shields.io/pypi/v/ALMASim?color=green&label=PyPI)](https://pypi.org/project/ALMASim/)  |
+| Python Version | [![Python Version](https://img.shields.io/pypi/pyversions/ALMASim?color=green&label=Python%20Version)](https://pypi.org/project/ALMASim/) |
+| Publish | [![Upload Python Package](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml/badge.svg)](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/python-publish.yml)
+|Repostatus| image:: https://www.repostatus.org/badges/latest/active.svg |
 | CodeCov | [![codecov](https://codecov.io/github/MicheleDelliVeneri/ALMASim/graph/badge.svg?token=9SZVW78DR2)](https://codecov.io/github/MicheleDelliVeneri/ALMASim) |
+|
 
 ## Overview
 
