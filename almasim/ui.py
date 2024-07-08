@@ -327,7 +327,11 @@ class ALMASimulator(QMainWindow):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
 
         # --- Create Widgets ---
-        self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve()
+        self.main_path = os.path.join(
+            *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
+                os.path.sep
+            )[:-1]
+        )
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
         self.metadata_path_button = QPushButton("Browse")
@@ -2574,7 +2578,11 @@ class ALMASimulator(QMainWindow):
             self.download_galaxy_zoo_on_remote()
 
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
-        self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve()
+        self.main_path = os.path.join(
+            *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
+                os.path.sep
+            )[:-1]
+        )
         if self.local_mode_combo.currentText() == "local":
             main_paths = np.array([os.getcwd()] * n_sims)
         else:
