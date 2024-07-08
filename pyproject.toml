@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "almasim"
-version = "2.0.2"
+version = "2.0.3"
 description = "An ALMA Simulation package for a more civilized era."
 authors = ["Michele Delli Veneri <micheledelliveneri@gmail.com>"]
 readme = "README.rst"
@@ -31,6 +31,7 @@ paramiko = "*"
 pysftp = "*"
 tenacity = "*"
 nifty8 = "*"
+setuptools = "*"
 
 [tool.poetry.group.dev.dependencies]  # Optional: Development dependencies
 pytest = "*"
