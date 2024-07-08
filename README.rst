@@ -71,7 +71,7 @@ activate it. Then install the required packages with ``pip``:
 
 Installing with pip
 -------------------
-- pip install ALMASim
+- pip install almasim
 
 Installing from GitHub 
 ----------------------
