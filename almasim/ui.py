@@ -62,6 +62,7 @@ import pyvo
 import re
 import seaborn as sns
 import subprocess
+import importlib.resources
 
 matplotlib.use("Agg")
 
@@ -1871,9 +1872,13 @@ class ALMASimulator(QMainWindow):
         pd.DataFrame : Dataframe with line names and rest frequencies.
         """
 
-        path_line_emission_csv = os.path.join(
-            os.getcwd(), "almasim", "brightnes", "calibrated_lines.csv"
-        )
+        # path_line_emission_csv = os.path.join(
+        #    os.getcwd(), "almasim", "brightnes", "calibrated_lines.csv"
+        # )
+        with importlib.resources.path(
+            "almasim.brightnes", "calibrated_lines.csv"
+        ) as file_path:
+            path_line_emission_csv = file_path
         db_line = uas.read_line_emission_csv(
             path_line_emission_csv, sep=","
         ).sort_values(by="Line")
