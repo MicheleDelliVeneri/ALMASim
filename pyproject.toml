@@ -39,7 +39,6 @@ dependencies = [
     "setuptools",
     "tenacity",
     "nifty8",
-    "illustris_python"
 ]
 
 [tool.setuptools]
