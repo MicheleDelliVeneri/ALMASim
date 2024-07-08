@@ -76,14 +76,13 @@ Installing from GitHub
 -  Clone the ALMASim Repository:
    ``git clone https://github.com/MicheleDelliVeneri/ALMASim.git``
 -  Install packages from the requirements file:
-   ``pip install -r ALMASim/requirements.txt``
--  Clone Illustris TNG Folder:
-   ``git clone https://github.com/illustristng/illustris_python.git``
--  Move to the Folder: ``cd illustris_python``
--  Install the packages: ``pip install .``
+   ``pip install -e .``
+
+Adding Kaggle API
+-----------------
 -  Login into Kaggle and go to: ``https://www.kaggle.com/settings``
 -  Click on ``create new token``, this will produce a kaggle.json file
-   which must be saved in your home folder
+   which must be saved in your home folder: ``~/.kaggle/kaggle.json``
 
 Getting started
 ---------------

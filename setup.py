@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="almasim",
-    version="2.0.9",
+    version="2.1.0",
     author="Michele Delli Veneri",
     author_email="micheledelliveneri@gmail.com",
     description="An ALMA Simulation package for a more civilized era.",
