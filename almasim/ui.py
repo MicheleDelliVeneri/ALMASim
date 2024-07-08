@@ -67,6 +67,7 @@ import inspect
 
 matplotlib.use("Agg")
 
+
 class MemoryLimitPlugin(WorkerPlugin):
     def __init__(self, memory_limit):
         self.memory_limit = memory_limit
@@ -1355,7 +1356,7 @@ class ALMASimulator(QMainWindow):
         file, _ = QFileDialog.getOpenFileName(
             self,
             "Select Metadata File",
-            os.path.join(self.main_path "metadata"),
+            os.path.join(self.main_path, "metadata"),
             "CSV Files (*.csv)",
         )
         if file:
@@ -1376,7 +1377,10 @@ class ALMASimulator(QMainWindow):
     def browse_slurm_config(self):
         file_dialog = QFileDialog()
         slurm_config_file, _ = file_dialog.getOpenFileName(
-            self, "Select Slurm Config File", self.main_path, "Slurm Config Files (*.json)"
+            self,
+            "Select Slurm Config File",
+            self.main_path,
+            "Slurm Config Files (*.json)",
         )
         if slurm_config_file:
             self.remote_config_entry.setText(slurm_config_file)
@@ -1872,7 +1876,7 @@ class ALMASimulator(QMainWindow):
         Return:
         pd.DataFrame : Dataframe with line names and rest frequencies.
         """
-        
+
         path_line_emission_csv = os.path.join(
             self.main_path, "brightnes", "calibrated_lines.csv"
         )
@@ -2589,9 +2593,7 @@ class ALMASimulator(QMainWindow):
         # Checking Line Mode
         if self.line_mode_checkbox.isChecked():
             line_indices = [int(i) for i in self.line_index_entry.text().split()]
-            rest_freq, line_names = uas.get_line_info(
-                self.main_path, line_indices
-            )
+            rest_freq, line_names = uas.get_line_info(self.main_path, line_indices)
             if len(rest_freq) == 1:
                 rest_freq = rest_freq[0]
             rest_freqs = np.array([rest_freq] * n_sims)
