@@ -18,7 +18,7 @@ def test_query():
     )
     science_keywods, _ = alma.get_science_types()
     science_keyword = science_keywods[0]
-    results = alma.query_by_science_type(science_keyword, band=6)
+    results = alma.query_by_science_type(science_keyword, band=[6])
     target_list = pd.read_csv(
         os.path.join(main_path, "almasim", "metadata", "targets_qso.csv")
     ).values.tolist()
@@ -52,7 +52,16 @@ def test_alma_functions():
         central_freq, max_baseline, return_value=False
     )
     assert beam_size > 0
+    beam_size = alma.estimate_alma_beam_size(
+        central_freq, max_baseline, return_value=True
+    )
+    assert beam_size > 0
     os.remove(os.path.join(main_path, "antenna.cfg"))
+
+    fov = astro.get_fov_from_band(6, return_value=False)
+    assert fov > 0
+    fov = astro.get_fov_from_band(6, return_value=True)
+    assert fov > 0
 
 
 if __name__ == "__main__":
