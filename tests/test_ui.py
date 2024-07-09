@@ -1,8 +1,6 @@
 import pytest
 from pytestqt.qtbot import QtBot
-from PyQt6.QtWidgets import QApplication
 import almasim.ui as ui
-import sys
 import faulthandler
 
 faulthandler.enable()
