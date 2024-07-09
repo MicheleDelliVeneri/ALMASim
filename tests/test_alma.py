@@ -58,9 +58,9 @@ def test_alma_functions():
     assert beam_size > 0
     os.remove(os.path.join(main_path, "antenna.cfg"))
 
-    fov = astro.get_fov_from_band(6, return_value=False)
+    fov = alma.get_fov_from_band(6, return_value=False)
     assert fov > 0
-    fov = astro.get_fov_from_band(6, return_value=True)
+    fov = alma.get_fov_from_band(6, return_value=True)
     assert fov > 0
 
 
