@@ -1,4 +1,4 @@
-.. image:: https://github.com/MicheleDelliVeneri/ALMASim/blob/main/pictures/ALMASimBanner.jpeg
+.. image:: https://github.com/MicheleDelliVeneri/ALMASim/raw/main/pictures/ALMASimBanner.jpeg
 
 |Python version| |PyPI| |Repostatus| |Zenodo| |Tests| |Documentation Status| |CodeCov|
 

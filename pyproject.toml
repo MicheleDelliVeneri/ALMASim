@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "almasim"
-version = "2.1.0"
+version = "2.1.1"
 description = "An ALMA Simulation package for a more civilized era."
 authors = ["Michele Delli Veneri <micheledelliveneri@gmail.com>"]
 readme = "README.rst"
-repository = "https://https://github.com/MicheleDelliVeneri/ALMASim"
-homepage = "https://https://github.com/MicheleDelliVeneri/ALMASim"
+repository = "https://github.com/MicheleDelliVeneri/ALMASim"
+homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
 documentation = "https://almasim.readthedocs.io/en/latest"
 
 [tool.poetry.dependencies]
