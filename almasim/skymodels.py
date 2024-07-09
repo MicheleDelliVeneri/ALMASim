@@ -1573,7 +1573,8 @@ def insert_pointlike(
     gs = np.zeros(n_chan)
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
-        update_progress.emit(i / len(line_fluxes) * 100)
+        if update_progress is not None:
+            update_progress.emit(i / len(line_fluxes) * 100)
     datacube._array[
         pos_x,
         pos_y,
@@ -1622,7 +1623,8 @@ def insert_gaussian(
         line = gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
         slice_ = cont + line
         datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
-        update_progress.emit(z / n_chan * 100)
+        if update_progress is not None:
+            update_progress.emit(z / n_chan * 100)
     return datacube
 
 
@@ -1660,7 +1662,8 @@ def insert_galaxy_zoo(
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
         cube[:, :, z] += avimg * (continum[z] + gs[z])
-        update_progress.emit(z / n_chan * 100)
+        if update_progress is not None:
+            update_progress.emit(z / n_chan * 100)
     datacube._array[:, :, :] = cube * U.Jy / U.pix**2
     return datacube
 
@@ -1811,7 +1814,8 @@ def insert_diffuse(
     for z in range(0, n_chan):
         cube[:, :, z] *= continum[z] + gs[z]
     datacube._array[:, :, :] += cube * U.Jy * U.pix**-2
-    update_progress.emit(z / n_chan * 100)
+    if update_progress is not None:
+        update_progress.emit(z / n_chan * 100)
     return datacube
 
 
