@@ -449,7 +449,8 @@ def get_max_baseline_from_antenna_config(update_progress, antenna_config):
             dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
             if dist > max_baseline:
                 max_baseline = dist
-        update_progress.emit((i / len(positions) * 100))
+        if update_progress is not None:
+            update_progress.emit((i / len(positions) * 100))
 
     return max_baseline
 

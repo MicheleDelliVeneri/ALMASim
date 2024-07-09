@@ -1,11 +1,9 @@
 name: Publish to PyPI
 
 on:
-  push:
-    branches:
-      - main
+  release:
 jobs:
-
+  
   pypi-publish:
     runs-on: ubuntu-latest
     environment:
