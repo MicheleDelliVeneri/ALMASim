@@ -8,14 +8,6 @@ import faulthandler
 faulthandler.enable()
 
 
-@pytest.fixture(scope="session")
-def app():
-    """Fixture for setting up the QApplication instance."""
-    app = QApplication(sys.argv)
-    yield app
-    app.quit()
-
-
 @pytest.fixture
 def main_window(qtbot: QtBot):
     """Fixture for setting up the main window."""

@@ -475,6 +475,8 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
 
 
 # -------------- OLD -------------------------------- #
+
+"""
 def get_band_range(band):
     if band == 1:
         return (31, 45)
@@ -499,9 +501,6 @@ def get_band_range(band):
 
 
 def get_band_central_freq(band):
-    """
-    Takes as input the band number and returns its central frequency in GHz
-    """
     if band == 1:
         return 38
     elif band == 2:
@@ -544,3 +543,4 @@ def get_antennas_distances_from_reference(antenna_config):
         zzref = zz[i] - zz[nref]
         zztot.append(np.sqrt(zxref**2 + zyref**2 + zzref**2))
     return zztot, frefant
+"""
