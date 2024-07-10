@@ -301,6 +301,18 @@ class DownloadGalaxyZooRunnable(QRunnable):
         self.alma_simulator.download_galaxy_zoo()
 
 
+class DownloadTNGStructureRunnable(QRunnable):
+    """Runnable for downloading TNG Folders in a separate thread."""
+
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = (
+            alma_simulator_instance  # Store a reference to the main UI class
+        )
+    def run(self):
+        self.alma_simulator.check_tng_dirs()
+
+
 class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
@@ -1998,7 +2010,8 @@ class ALMASimulator(QMainWindow):
         ):
             os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets"))
         if not isfile(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
-            self.terminal.add_log("Downloading simulation file")
+            if self.terminal is not None:
+                self.terminal.add_log("Downloading simulation file")
             url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
             cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
                 self.tng_api_key_entry.text(),
@@ -2006,7 +2019,8 @@ class ALMASimulator(QMainWindow):
                 url,
             )
             subprocess.check_call(cmd, shell=True)
-            self.terminal.add_log("Done.")
+            if self.terminal is not None:
+                self.terminal.add_log("Done.")
 
     def create_remote_environment(self):
         self.terminal.add_log("Checking ALMASim environment")
@@ -2427,24 +2441,43 @@ class ALMASimulator(QMainWindow):
 
     def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
         pd.options.mode.chained_assignment = None
-        if isinstance(rest_frequency, np.ndarray):
-            rest_frequency = np.sort(np.array(rest_frequency))[0]
-        self.terminal.add_log(
-            f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}"
-        )
-        self.terminal.add_log(
-            f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}"
-        )
-        self.terminal.add_log("Filtering metadata based on line catalogue...")
-        metadata = metadata[metadata["Freq"] <= rest_frequency]
-        self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
+        if isinstance(rest_frequency, np.ndarray) or isisntance(rest_frequency, list):
+            rest_frequency = np.sort(np.array(rest_frequency))
+        else:
+            rest_frequency = np.array([rest_frequency])
+
+        if self.terminal is not None:
+            self.terminal.add_log(
+                f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}"
+            )
+            self.terminal.add_log(
+                f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}"
+            )
+            self.terminal.add_log("Filtering metadata based on line catalogue...")
+        if self.terminal is not None:
+            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
         freqs = metadata["Freq"].values
+        closest_rest_frequencies = []
+        for freq in freqs:
+            # Calculate the absolute difference between the freq and all rest_frequencies
+            differences = rest_frequency - freq
+            # if the difference is negative, set it to a large number
+            differences[differences < 0] = 1e10
+            # Find the index of the minimum difference
+            index_min = np.argmin(differences)
+            # Append the closest rest frequency to the list
+            closest_rest_frequencies.append(rest_frequency[index_min])
+        rest_frequencies = np.array(closest_rest_frequencies)
+
         redshifts = [
             uas.compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz)
-            for source_freq in freqs
+            for source_freq, rest_frequency in zip(freqs, rest_frequencies)
         ]
         metadata.loc[:, "redshift"] = redshifts
-
+        snapshots = [
+            uas.redshift_to_snapshot(redshift)
+            for redshift in metadata["redshift"].values
+        ]
         n_metadata = 0
         z_save = zmax
         self.terminal.add_log("Computing redshifts")
@@ -2466,11 +2499,13 @@ class ALMASimulator(QMainWindow):
         else:
             metadata = metadata[metadata["redshift"] >= 0]
         if z_save != zmax:
-            self.terminal.add_log(
-                f"Max redshift has been adjusted fit metadata,\
-                     new max redshift: {round(zmax, 3)}"
-            )
-        self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
+            if self.terminal is not None:
+                self.terminal.add_log(
+                    f"Max redshift has been adjusted fit metadata,\
+                         new max redshift: {round(zmax, 3)}"
+                )
+        if self.terminal is not None:
+            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
         snapshots = [
             uas.redshift_to_snapshot(redshift)
             for redshift in metadata["redshift"].values
@@ -2481,7 +2516,6 @@ class ALMASimulator(QMainWindow):
             metadata = metadata[
                 (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
             ]
-
         sample = metadata.sample(n, replace=True)
         return sample
 
@@ -2585,7 +2619,7 @@ class ALMASimulator(QMainWindow):
             )[:-1]
         )
         if self.local_mode_combo.currentText() == "local":
-            main_paths = np.array([os.getcwd()] * n_sims)
+            main_paths = np.array([self.main_path] * n_sims)
         else:
             main_paths = np.array(
                 [
@@ -2611,17 +2645,24 @@ class ALMASimulator(QMainWindow):
             line_names = np.array([line_names] * n_sims)
             z1 = None
         else:
-            redshifts = [float(z) for z in self.redshift_entry.text().split()]
-            if len(redshifts) == 1:
-                redshifts = np.array([redshifts[0]] * n_sims)
-                z0, z1 = float(redshifts[0]), float(redshifts[0])
+            if self.redshift_entry.text() != "":
+                redshifts = [float(z) for z in self.redshift_entry.text().split()]
+                if len(redshifts) == 1:
+                    redshifts = np.array([redshifts[0]] * n_sims)
+                    z0, z1 = float(redshifts[0]), float(redshifts[0])
+                else:
+                    z0, z1 = float(redshifts[0]), float(redshifts[1])
+                    redshifts = np.random.uniform(z0, z1, n_sims)
+                n_lines = np.array([int(self.num_lines_entry.text())] * n_sims)
+                rest_freq, _ = uas.get_line_info(self.main_path)
+                rest_freqs = np.array([None] * n_sims)
+                line_names = np.array([None] * n_sims)
             else:
-                z0, z1 = float(redshifts[0]), float(redshifts[1])
-                redshifts = np.random.uniform(z0, z1, n_sims)
-            n_lines = np.array([int(self.num_lines_entry.text())] * n_sims)
-            rest_freq, _ = uas.get_line_info(self.main_path)
-            rest_freqs = np.array([None] * n_sims)
-            line_names = np.array([None] * n_sims)
+                if self.terminal is not None:
+                    self.terminal.add_log(
+                        'Please fill the redshift and n lines fields or check "Line Mode"'
+                    )
+                return
 
         # Checking Infrared Luminosity
         if self.ir_luminosity_checkbox.isChecked():
@@ -2658,7 +2699,10 @@ class ALMASimulator(QMainWindow):
             n_channels = np.array([None] * n_sims)
         if self.model_combo.currentText() == "Extended":
             if self.local_mode_combo.currentText() == "local":
-                self.check_tng_dirs()
+                self.terminal.add_log('Checking TNG Directories')
+                pool = QThreadPool.globalInstance()
+                runnable = DownloadTNGStructureRunnable(self)
+                pool.start(runnable)
             else:
                 self.remote_check_tng_dirs()
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
@@ -3099,7 +3143,7 @@ class ALMASimulator(QMainWindow):
         # Example data: Placeholder for cont and lines from SED processing
         sed, flux_infrared, lum_infrared = self.sed_reading(
             type_,
-            os.path.join(master_path, "almasim", "brightnes"),
+            os.path.join(master_path, "brightnes"),
             cont_sens,
             freq_min,
             freq_max,
@@ -3109,7 +3153,7 @@ class ALMASimulator(QMainWindow):
         # Placeholder for line data: line_name, observed_frequency (GHz),
         # line_ratio, line_error
         db_line = uas.read_line_emission_csv(
-            os.path.join(master_path, "almasim", "brightnes", "calibrated_lines.csv"),
+            os.path.join(master_path, "brightnes", "calibrated_lines.csv"),
             sep=",",
         )
         # Shift the cont and line frequencies by (1 + redshift)
@@ -3396,7 +3440,7 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log("DEC: {}".format(dec))
             self.terminal.add_log("Integration Time: {}".format(int_time))
         ual.generate_antenna_config_file_from_antenna_array(
-            antenna_array, os.path.join(main_dir, "almasim"), sim_output_dir
+            antenna_array, main_dir, sim_output_dir
         )
         antennalist = os.path.join(sim_output_dir, "antenna.cfg")
         self.progress_bar_entry.setText("Computing Max baseline")
@@ -3444,7 +3488,7 @@ class ALMASimulator(QMainWindow):
         else:
             rest_frequency = (
                 uas.compute_rest_frequency_from_redshift(
-                    os.path.join(main_dir, "almasim"), source_freq.value, redshift
+                    main_dir, source_freq.value, redshift
                 )
                 * U.GHz
             )
@@ -3515,9 +3559,8 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log("Infrared Luminosity: {:.2e}".format(lum_infrared))
         if source_type == "extended":
             snapshot = uas.redshift_to_snapshot(redshift)
-            tng_subhaloid = uas.get_subhaloids_from_db(
-                1, os.path.join(main_dir, "almasim"), snapshot
-            )
+            tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+            """
             outpath = os.path.join(
                 tng_dir, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
             )
@@ -3537,10 +3580,10 @@ class ALMASimulator(QMainWindow):
                     print("No particles found. Checking another subhalo.")
                 else:
                     self.terminal.add_log(
-                        "No particles found. Checking another subhalo."
+                       "No particles found. Checking another subhalo."
                     )
                 tng_subhaloid = uas.get_subhaloids_from_db(
-                    1, os.path.join(main_dir, "almasim"), snapshot
+                    1, main_dir, snapshot
                 )
                 outpath = os.path.join(
                     tng_dir, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
@@ -3552,6 +3595,7 @@ class ALMASimulator(QMainWindow):
                     print("Number of particles: {}".format(part_num))
                 else:
                     self.terminal.add_log("Number of particles: {}".format(part_num))
+            """
         else:
             snapshot = None
             tng_subhaloid = None

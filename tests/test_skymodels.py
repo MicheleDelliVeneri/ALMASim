@@ -196,17 +196,93 @@ def test_skymodels(qtbot: QtBot):
     model = datacube._array.to_value(datacube._array.unit).T
     assert model.shape[0] > 0
 
-    # snapshot = astro.redshift_to_snapshot(redshift)
-    # tng_subhaloid = astro.get_subhaloids_from_db(
-    #            1, line_path, snapshot
-    #        )
-    # tng_api_key = "8f578b92e700fae3266931f4d785f82c"
-    # outpath = os.path.join(
-    #    main_path, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
-    #        )
-    # part_num = uas.get_particles_num(
-    #            main_path, outpath, snapshot, int(tng_subhaloid), tng_api_key
-    #        )
+    almasim.tng_entry.setText(os.path.join(os.path.expanduser("~"), "TNGData"))
+    almasim.check_tng_dirs()
+    metadata_path = os.path.join(main_path, "almasim", "metadata", "qso_metadata.csv")
+    metadata = pd.read_csv(metadata_path)
+    rest_frequency, line_names = astro.get_line_info(line_path)
+    metadata = almasim.sample_given_redshift(metadata, 1, rest_frequency, True, None)
+    metadata = metadata.iloc[0]
+    ra = metadata["RA"]
+    dec = metadata["Dec"]
+    fov = metadata["FOV"]
+    ang_res = metadata["Ang.res."]
+    vel_res = metadata["Vel.res."]
+    int_time = metadata["Int.Time"]
+    freq = metadata["Freq"]
+    freq_support = metadata["Freq.sup."]
+    cont_sens = metadata["Cont_sens_mJybeam"]
+    alma.generate_antenna_config_file_from_antenna_array(
+        antenna_array, os.path.join(main_path, "almasim"), main_path
+    )
+    antennalist = os.path.join(main_path, "antenna.cfg")
+    ra = ra * U.deg
+    dec = dec * U.deg
+    fov = fov * 3600 * U.arcsec
+    ang_res = ang_res * U.arcsec
+    vel_res = vel_res * U.km / U.s
+    int_time = int_time * U.s
+    source_freq = freq * U.GHz
+
+    band_range, central_freq, t_channels, delta_freq = almasim.freq_supp_extractor(
+        freq_support, source_freq
+    )
+    max_baseline = alma.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    beam_size = alma.estimate_alma_beam_size(
+        central_freq, max_baseline, return_value=False
+    )
+    beam_solid_angle = np.pi * (beam_size / 2) ** 2
+    cont_sens = cont_sens * U.mJy / (U.arcsec**2)
+    cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
+    cont_sens = cont_sens_jy
+    cell_size = beam_size / 5
+    n_pix = 256
+    n_channels = 256
+
+    if isinstance(rest_frequency, np.ndarray):
+        rest_frequency = np.sort(np.array(rest_frequency))[0]
+        rest_frequency = rest_frequency * U.GHz
+        redshift = astro.compute_redshift(rest_frequency, source_freq)
+    else:
+        rest_frequency = (
+            astro.compute_rest_frequency_from_redshift(
+                os.path.join(main_path, "almasim"), source_freq.value, redshift
+            )
+            * U.GHz
+        )
+    lum_infrared = 1e10
+    snapshot = astro.redshift_to_snapshot(redshift)
+    tng_subhaloid = astro.get_subhaloids_from_db(1, line_path, snapshot)
+    tng_api_key = "8f578b92e700fae3266931f4d785f82c"
+
+    outpath = os.path.join(
+        main_path, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
+    )
+    part_num = uas.get_particles_num(
+        main_path, outpath, snapshot, int(tng_subhaloid), tng_api_key
+    )
+    while part_num == 0:
+        tng_subhaloid = astro.get_subhaloids_from_db(1, line_path, snapshot)
+        outpath = os.path.join(
+            main_path, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
+        )
+        part_num = uas.get_particles_num(
+            main_path, outpath, snapshot, int(tng_subhaloid), tng_api_key
+        )
+    datacube = usm.insert_extended(
+        self.terminal,
+        datacube,
+        tng_dir,
+        snapshot,
+        int(tng_subhaloid),
+        redshift,
+        ra,
+        dec,
+        tng_api_key,
+        ncpu,
+    )
+    model = datacube._array.to_value(datacube._array.unit).T
+    assert model.shape[0] > 0
     os.remove(os.path.join(main_path, "antenna.cfg"))
 
 

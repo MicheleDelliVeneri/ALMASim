@@ -232,7 +232,8 @@ def gcPath(basePath, snapNum, chunkNum=0):
     gcPath = basePath + "/groups_%03d/" % snapNum
     filePath1 = gcPath + "groups_%03d.%d.hdf5" % (snapNum, chunkNum)
     filePath2 = gcPath + "fof_subhalo_tab_%03d.%d.hdf5" % (snapNum, chunkNum)
-
+    if not os.path.exists(gcPath):
+        os.mkdir(gcPath)
     if isfile(expanduser(filePath1)):
         return filePath1
     return filePath2
@@ -459,14 +460,26 @@ def loadSubset(
         os.makedirs(os.path.join(basePath, "snapdir_0{}".format(str(snapNum))))
     if not isfile(snapPath(basePath, snapNum)):
         print("Downloading Snapshot {}...".format(snapNum))
-        url = f"http://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}"
-        wget_options = "-q --progress=bar --content-disposition"
-        api_key_header = f'--header="API-Key:{api_key}"'
-        filename = f"{url}.{0}.hdf5"
-        output_file = f"-O {snapPath2(basePath, snapNum)}"
-        cmd = f"{wget_options} {api_key_header} {filename} {output_file}"
-        subprocess.check_call(cmd, shell=True)
-    with h5py.File(snapPath(basePath, snapNum), "r") as f:
+        url = f"https://www.tng-project.org/api/TNG100-1/files/snapshot-{str(snapNum)}.0.hdf5"
+        cmd = (
+            f"wget --progress=bar --content-disposition "
+            f'--header="API-Key:{api_key}" '
+            f"{url} "
+            f"-O {snapPath(basePath, snapNum)}"
+        )
+        print(cmd)
+        subprocess.run(cmd, shell=True)
+        # Check if file exists and is not empty
+    if not os.path.exists(snapPath(basePath, snapNum)):
+        raise FileNotFoundError(
+            f"Snapshot file not found: {snapPath(basePath, snapNum)}"
+        )
+    elif os.path.getsize(snapPath(basePath, snapNum)) == 0:
+        raise EOFError(
+            f"Downloaded snapshot file is empty: {snapPath(basePath, snapNum)}"
+        )
+    print(snapPath(basePath, snapNum))
+    with h5py.File(snapPath(basePath, snapNum), "r+") as f:
 
         header = dict(f["Header"].attrs.items())
         nPart = getNumPart(header)
@@ -509,7 +522,7 @@ def loadSubset(
                 print(f"Downloading snapshot {i} ...")
                 if outPath is not None:
                     os.chdir(outPath)
-                subprocess.check_call(cmd, shell=True)
+                subprocess.run(cmd, shell=True)
                 print("Done.")
                 f = h5py.File(snapPath(basePath, snapNum, i), "r")
             i += 1
@@ -570,7 +583,7 @@ def loadSubset(
             if outPath is not None:
                 os.chdir(outPath)
             print(f"Downloading Snapshot {fileNum} in {savePath}...")
-            subprocess.check_call(cmd, shell=True)
+            subprocess.run(cmd, shell=True)
             print("Done.")
         print("Checking File {}...".format(fileNum))
         f = h5py.File(snapPath(basePath, snapNum, fileNum), "r")
@@ -635,7 +648,7 @@ def download_groupcat(basePath, snapNum, fileNum, api_key):
         f"{url} "
         f"-O {gcPath(basePath, snapNum, fileNum)}"
     )
-    subprocess.check_call(cmd, shell=True)
+    subprocess.run(cmd, shell=True)
     print("Done.")
 
 
@@ -659,10 +672,11 @@ def getSnapOffsets(basePath, snapNum, id, type, api_key):
                 f"{url} "
                 f"-O {offsetPath(basePath, snapNum)}"
             )
-            subprocess.check_call(cmd, shell=True)
+            subprocess.run(cmd, shell=True)
             print("Done.")
         if not isfile(gcPath(basePath, snapNum, 0)):
             download_groupcat(basePath, snapNum, 0, api_key)
+        print(offsetPath(basePath, snapNum))
         with h5py.File(offsetPath(basePath, snapNum), "r") as f:
             groupFileOffsets = f["FileOffsets/" + type][()]
             r["snapOffsets"] = np.transpose(
@@ -722,7 +736,7 @@ def get_particles_num(basePath, outputPath, snapNum, subhaloID, tng_api_key):
     #    basePath, snapNum, partType, subset=subset, api_key=tng_api_key
     # )
     os.chdir(basePath)
-    gas = loadSubhalo(basePath, snapNum, subhaloID, partType)
+    gas = loadSubhalo(basePath, snapNum, subhaloID, partType, tng_api_key)
     if "Coordinates" in gas.keys():
         gas_num = len(gas["Coordinates"])
     else:
@@ -734,7 +748,7 @@ def loadSubhalo(basePath, snapNum, id, partType, tng_api_key, fields=None):
     """Load all particles/cells of one type for a specific subhalo
     (optionally restricted to a subset fields)."""
     # load subhalo length, compute offset, call loadSubset
-    subset = getSnapOffsets(basePath, snapNum, id, "Subhalo")
+    subset = getSnapOffsets(basePath, snapNum, id, "Subhalo", tng_api_key)
     return loadSubset(
         basePath, snapNum, partType, fields, subset=subset, api_key=tng_api_key
     )
