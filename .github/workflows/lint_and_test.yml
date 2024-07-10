@@ -208,6 +208,8 @@ jobs:
     #                   --server-num=1 \
     #                   --server-args="-screen 1 1920x1200x24 -ac +extension GLX" \
     #                   /opt/hostedtoolcache/Python/3.12.4/x64/bin/pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
+    - name: Install pytest-cov (if needed)
+      run: poetry add pytest-cov 
     - name: Test with pytest including coverage report
       uses: aganders3/headless-gui@v1
       with:
