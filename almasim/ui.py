@@ -66,6 +66,7 @@ from pathlib import Path
 import inspect
 
 matplotlib.use("Agg")
+os.environ["LC_ALL"] = "C"
 
 
 class MemoryLimitPlugin(WorkerPlugin):
