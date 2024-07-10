@@ -120,6 +120,7 @@ def test_skymodels(qtbot: QtBot):
         ra=ra,
         dec=dec,
     )
+    assert len(datacube) > 0
     wcs = datacube.wcs
     fwhm_x, fwhm_y, angle = None, None, None
     if n_channels_nw != n_channels:
@@ -141,6 +142,7 @@ def test_skymodels(qtbot: QtBot):
         fwhm_z,
         n_channels,
     )
+    assert len(datacube) > 0
     pos_z = [int(index) for index in source_channel_index]
     fwhm_x = np.random.randint(3, 10)
     fwhm_y = np.random.randint(3, 10)
@@ -170,6 +172,7 @@ def test_skymodels(qtbot: QtBot):
         n_pix,
         n_channels,
     )
+    assert len(datacube) > 0
     galaxy_zoo_path = os.path.join(os.path.expanduser("~"), "GalaxyZoo")
     almasim.galaxy_zoo_entry.setText(galaxy_zoo_path)
     if not os.path.exists(galaxy_zoo_path):
@@ -187,6 +190,7 @@ def test_skymodels(qtbot: QtBot):
         n_channels,
         galaxy_path,
     )
+    assert len(datacube) > 0
 
     # snapshot = astro.redshift_to_snapshot(redshift)
     # tng_subhaloid = astro.get_subhaloids_from_db(
@@ -199,6 +203,7 @@ def test_skymodels(qtbot: QtBot):
     # part_num = uas.get_particles_num(
     #            main_path, outpath, snapshot, int(tng_subhaloid), tng_api_key
     #        )
+    os.remove(os.path.join(main_path, "antenna.cfg"))
 
 
 def test(test_skymodels):
