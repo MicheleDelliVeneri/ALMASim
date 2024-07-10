@@ -121,13 +121,22 @@ jobs:
     - name: Set up Headless Environment
       if: matrix.os != 'windows-latest'
       run: export QT_QPA_PLATFORM=offscreen
-    - name: Create kaggle.json from secret
+    - name: Create kaggle.json from secret (Linux/MacOS)
+      if: matrix.os != 'windows-latest'
       env:
         KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
       run: |
-        mkdir -p /home/runner/.kaggle
-        echo $KAGGLE_JSON_B64 | base64 --decode > /home/runner/.kaggle/kaggle.json
-        chmod 600 /home/runner/.kaggle/kaggle.json
+        mkdir -p $HOME/.kaggle
+        echo $KAGGLE_JSON_B64 | base64 --decode > $HOME/.kaggle/kaggle.json
+        chmod 600 $HOME/.kaggle/kaggle.json
+    - name: Create kaggle.json from secret (Windows)
+      if: matrix.os == 'windows-latest'
+      env:
+        KAGGLE_JSON_B64: ${{ secrets.KAGGLE_JSON_B64 }}
+      run: |
+        mkdir -p $env:USERPROFILE\.kaggle
+        echo $env:KAGGLE_JSON_B64 | base64 --decode > $env:USERPROFILE\.kaggle\kaggle.json
+        chmod 600 $env:USERPROFILE\.kaggle\kaggle.json
     - name: Install poetry dependencies (Linux/MacOS)
       if: matrix.os != 'windows-latest'
       run: |
@@ -203,7 +212,7 @@ jobs:
       uses: aganders3/headless-gui@v1
       with:
         run: |
-          coverage run -m pytest --ignore=illustris_python --rootdir ${{ github.workspace }}
+          poetry run python -m pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
