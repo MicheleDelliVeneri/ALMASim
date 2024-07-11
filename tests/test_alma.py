@@ -62,6 +62,9 @@ def test_alma_functions():
     assert fov > 0
     fov = alma.get_fov_from_band(6, return_value=True)
     assert fov > 0
+    for band in range(1, 11):
+        fov = alma.get_fov_from_band(band)
+        assert fov > 0
 
 
 if __name__ == "__main__":

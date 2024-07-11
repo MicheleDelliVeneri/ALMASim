@@ -162,7 +162,7 @@ class MartiniMod(Martini):
                 .sum((0, 1))
                 .squeeze()
                 .to_value(U.Jy)
-                * np.abs(np.diff(self._datacube.frequency_channel_edges)).to_value(
+                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(
                     U.km / U.s
                 )
             )

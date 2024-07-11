@@ -71,9 +71,10 @@ class Interferometer(QObject):
         self.lfac = 1.0e6
         self.header = header
         self._get_nH()
-        self.terminal.add_log(
-            f"Performing {self.nH} scans with a scan time of {self.scan_time} seconds"
-        )
+        if self.terminal is not None:
+            self.terminal.add_log(
+                f"Performing {self.nH} scans with a scan time of {self.scan_time} seconds"
+            )
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
@@ -108,7 +109,10 @@ class Interferometer(QObject):
         # Get the observing wavelengths for each channel
         self._get_wavelengths()
         self._prepare_cubes()
-        self.terminal.add_log(f"Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}")
+        if self.terminal is not None:
+            self.terminal.add_log(
+                f"Hour Angle Coverage {self.Hcov[0]} - {self.Hcov[1]}"
+            )
 
     def run_interferometric_sim(self):
         for channel in range(self.Nchan):
@@ -1180,12 +1184,13 @@ class Interferometer(QObject):
             )
             del real_part
             del imag_part
-        self.terminal.add_log(
-            f"Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)} Jy"
-        )
-        self.terminal.add_log(
-            f"Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)} Jy"
-        )
+        if self.terminal is not None:
+            self.terminal.add_log(
+                f"Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)}Jy"
+            )
+            self.terminal.add_log(
+                f"Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)}Jy"
+            )
 
     def _free_space(self):
         del self.modelCube
