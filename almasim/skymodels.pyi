@@ -1,98 +1,20 @@
 from _typeshed import Incomplete
 from martini.sources.sph_source import SPHSource
 
-class myTNGSource(SPHSource):
-    def __init__(
-        self,
-        snapNum,
-        subID,
-        basePath: Incomplete | None = None,
-        distance=...,
-        vpeculiar=...,
-        rotation=...,
-        ra=...,
-        dec=...,
-        api_key: Incomplete | None = None,
-    ) -> None: ...
-
-class DataCube:
-    HIfreq: Incomplete
-    stokes_axis: Incomplete
-    px_size: Incomplete
-    arcsec2_to_pix: Incomplete
-    velocity_centre: Incomplete
-    channel_width: Incomplete
-    ra: Incomplete
-    dec: Incomplete
-    padx: int
-    pady: int
-    def __init__(
-        self,
-        n_px_x: int = 256,
-        n_px_y: int = 256,
-        n_channels: int = 64,
-        px_size=...,
-        channel_width=...,
-        velocity_centre=...,
-        ra=...,
-        dec=...,
-        stokes_axis: bool = False,
-    ) -> None: ...
-    def spatial_slices(self): ...
-    def spectra(self): ...
-    def freq_channels(self) -> None: ...
-    def velocity_channels(self) -> None: ...
-    def add_pad(self, pad) -> None: ...
-    def drop_pad(self) -> None: ...
-    def copy(self): ...
-    def save_state(self, filename, overwrite: bool = False) -> None: ...
-    @classmethod
-    def load_state(cls, filename): ...
-
-class Martini:
-    quiet: Incomplete
-    find_distance: Incomplete
-    source: Incomplete
-    datacube: Incomplete
-    beam: Incomplete
-    noise: Incomplete
-    sph_kernel: Incomplete
-    spectral_model: Incomplete
-    inserted_mass: int
-    def __init__(
-        self,
-        source: Incomplete | None = None,
-        datacube: Incomplete | None = None,
-        beam: Incomplete | None = None,
-        noise: Incomplete | None = None,
-        sph_kernel: Incomplete | None = None,
-        spectral_model: Incomplete | None = None,
-        quiet: bool = False,
-        find_distance: bool = False,
-    ) -> None: ...
-    def convolve_beam(self) -> None: ...
-    def add_noise(self) -> None: ...
-    def insert_source_in_cube(
-        self,
-        skip_validation: bool = False,
-        progressbar: Incomplete | None = None,
-        ncpu: int = 1,
+class MartiniMod:
+    memory_limit: Incomplete
+    def _evaluate_pixel_spectrum(
+        self, ranks_and_ij_pxs, update_progress, progressbar=True
     ): ...
-    def write_fits(
-        self, filename, channels: str = "frequency", overwrite: bool = True
-    ) -> None: ...
-    def write_beam_fits(
-        self, filename, channels: str = "frequency", overwrite: bool = True
-    ) -> None: ...
-    def write_hdf5(
+    def _insert_source_in_cube(
         self,
-        filename,
-        channels: str = "frequency",
-        overwrite: bool = True,
-        memmap: bool = False,
-        compact: bool = False,
+        update_progress=None,
+        terminal=None,
+        skip_validation=False,
+        progressbar=None,
+        ncpu=1,
+        quiet=None,
     ): ...
-    def reset(self) -> None: ...
 
 def gaussian(x, amp, cen, fwhm): ...
 def gaussian2d(x, y, amp, cen_x, cen_y, fwhm_x, fwhm_y, angle): ...
@@ -135,6 +57,8 @@ def insert_galaxy_zoo(
     data_path,
 ): ...
 def insert_tng(
+    update_progress,
+    terminal,
     n_px,
     n_channels,
     freq_sup,
@@ -150,7 +74,17 @@ def insert_tng(
     ncpu,
 ): ...
 def insert_extended(
-    terminal, datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, api_key, ncpu
+    update_progress,
+    terminal,
+    datacube,
+    tngpath,
+    snapshot,
+    subhalo_id,
+    redshift,
+    ra,
+    dec,
+    api_key,
+    ncpu,
 ): ...
 def diffuse_signal(n_px): ...
 def insert_diffuse(

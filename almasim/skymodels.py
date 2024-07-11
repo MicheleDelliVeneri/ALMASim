@@ -1,33 +1,188 @@
 import numpy as np
 import math
 import astropy.units as U
-from Hdecompose.atomic_frac import atomic_frac
-from .astro import loadSubset
-from martini.sources.sph_source import SPHSource
-from martini.spectral_models import GaussianSpectrum
-from martini.sph_kernels import (
-    CubicSplineKernel,
-    find_fwhm,
-    WendlandC2Kernel,
-)
 from martini.sources import TNGSource
 from martini import DataCube, Martini
+from martini.spectral_models import GaussianSpectrum
+from martini.sph_kernels import WendlandC2Kernel
 import astropy.cosmology.units as cu
 from astropy.cosmology import WMAP9
-from astropy import wcs
 import os
 from astropy.io import fits
-import almasim.astro as uas
-import astropy.constants as C
 from itertools import product
 from tqdm import tqdm
-from astropy.time import Time
 import matplotlib.image as plimg
 from scipy.ndimage import zoom
-from scipy.signal import fftconvolve
 import nifty8 as ift
 import random
 
+
+# ------------------ Martini Modification Class -------------------- #
+
+
+class MartiniMod(Martini):
+
+    def _evaluate_pixel_spectrum(
+        self, ranks_and_ij_pxs, update_progress, progressbar=True
+    ):
+        """
+        Add up contributions of particles to the spectrum in a pixel.
+        This is the core loop of MARTINI. It is embarrassingly parallel. To support
+        parallel excecution we accept storing up to a copy of the entire (future) datacube
+        in one-pixel pieces. This avoids the need for concurrent access to the datacube
+        by parallel processes, which would in the simplest case duplicate a copy of the
+        datacube array per parallel process! In realistic use cases the memory overhead
+        from a the equivalent of a second datacube array should be minimal - memory-
+        limited applications should be limited by the memory consumed by particle data,
+        which is not duplicated in parallel execution.
+        The arguments that differ between parallel ranks must be bundled into one for
+        compatibility with `multiprocess`.
+        Parameters
+        ----------
+        rank_and_ij_pxs : tuple
+            A 2-tuple containing an integer (cpu "rank" in the case of parallel execution)
+            and a list of 2-tuples specifying the indices (i, j) of pixels in the grid.
+        Returns
+        -------
+        out : list
+            A list containing 2-tuples. Each 2-tuple contains and "insertion slice" that
+            is an index into the datacube._array instance held by this martini instance
+            where the pixel spectrum is to be placed, and a 1D array containing the
+            spectrum, whose length must match the length of the spectral axis of the
+            datacube.
+        """
+        result = list()
+        rank, ij_pxs = ranks_and_ij_pxs
+        if progressbar:
+            ij_pxs = tqdm(ij_pxs, position=rank)
+        for i, ij_px in enumerate(ij_pxs):
+            ij = np.array(ij_px)[..., np.newaxis] * U.pix
+            mask = (
+                np.abs(ij - self.source.pixcoords[:2]) <= self.sph_kernel.sm_ranges
+            ).all(axis=0)
+            weights = self.sph_kernel._px_weight(
+                self.source.pixcoords[:2, mask] - ij, mask=mask
+            )
+            insertion_slice = (
+                np.s_[ij_px[0], ij_px[1], :, 0]
+                if self.datacube.stokes_axis
+                else np.s_[ij_px[0], ij_px[1], :]
+            )
+            result.append(
+                (
+                    insertion_slice,
+                    (self.spectral_model.spectra[mask] * weights[..., np.newaxis]).sum(
+                        axis=-2
+                    ),
+                )
+            )
+            if update_progress is not None:
+                update_progress.emit(i / len(ij_pxs) * 100)
+        return result
+
+    def _insert_source_in_cube(
+        self,
+        update_progress=None,
+        terminal=None,
+        skip_validation=False,
+        progressbar=None,
+        ncpu=1,
+        quiet=None,
+    ):
+        """
+        Populates the :class:`~martini.datacube.DataCube` with flux from the
+        particles in the source.
+
+        Parameters
+        ----------
+        skip_validation : bool, optional
+            SPH kernel interpolation onto the DataCube is approximated for
+            increased speed. For some combinations of pixel size, distance
+            and SPH smoothing length, the approximation may break down. The
+            kernel class will check whether this will occur and raise a
+            RuntimeError if so. This validation can be skipped (at the cost
+            of accuracy!) by setting this parameter True. (Default: ``False``)
+
+        progressbar : bool, optional
+            A progress bar is shown by default. Progress bars work, with perhaps
+            some visual glitches, in parallel. If martini was initialised with
+            `quiet` set to `True`, progress bars are switched off unless explicitly
+            turned on. (Default: ``None``)
+
+        ncpu : int
+            Number of processes to use in main source insertion loop. Using more than
+            one cpu requires the `multiprocess` module (n.b. not the same as
+            `multiprocessing`). (Default: ``1``)
+
+        quiet : bool, optional
+            If ``True``, suppress output to stdout. If specified, takes precedence over
+            quiet parameter of class. (Default: ``None``)
+        """
+
+        assert self.spectral_model.spectra is not None
+
+        if progressbar is None:
+            progressbar = not self.quiet
+
+        self.sph_kernel._confirm_validation(noraise=skip_validation, quiet=self.quiet)
+
+        ij_pxs = list(
+            product(
+                np.arange(self._datacube._array.shape[0]),
+                np.arange(self._datacube._array.shape[1]),
+            )
+        )
+
+        for insertion_slice, insertion_data in self._evaluate_pixel_spectrum(
+            (0, ij_pxs), update_progress, progressbar=progressbar
+        ):
+            self._insert_pixel(insertion_slice, insertion_data)
+
+        self._datacube._array = self._datacube._array.to(
+            U.Jy / U.arcsec**2, equivalencies=[self._datacube.arcsec2_to_pix]
+        )
+        pad_mask = (
+            np.s_[
+                self._datacube.padx : -self._datacube.padx,
+                self._datacube.pady : -self._datacube.pady,
+                ...,
+            ]
+            if self._datacube.padx > 0 and self._datacube.pady > 0
+            else np.s_[...]
+        )
+        inserted_flux_density = np.sum(
+            self._datacube._array[pad_mask] * self._datacube.px_size**2
+        ).to(U.Jy)
+        inserted_mass = (
+            2.36e5
+            * U.Msun
+            * self.source.distance.to_value(U.Mpc) ** 2
+            * np.sum(
+                (self._datacube._array[pad_mask] * self._datacube.px_size**2)
+                .sum((0, 1))
+                .squeeze()
+                .to_value(U.Jy)
+                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(
+                    U.km / U.s
+                )
+            )
+        )
+        self.inserted_mass = inserted_mass
+        if (quiet is None and not self.quiet) or (quiet is not None and not quiet):
+            if terminal is not None:
+                terminal.add_log(
+                    "Source inserted.\n"
+                    f"  Flux density in cube: {inserted_flux_density:.2e}\n"
+                    f"  Mass in cube (assuming distance {self.source.distance:.2f} and a"
+                    f" spatially resolved source):"
+                    f" {inserted_mass:.2e}"
+                    f"    [{inserted_mass / self.source.input_mass * 100:.0f}%"
+                    f" of initial source mass]\n"
+                    f"  Maximum pixel: {self._datacube._array.max():.2e}\n"
+                    "  Median non-zero pixel:"
+                    f" {np.median(self._datacube._array[self._datacube._array > 0]):.2e}\n"
+                )
+        return
 
 
 # ------------------ SkyModels ------------------------------------- #
@@ -203,6 +358,8 @@ def insert_galaxy_zoo(
 
 
 def insert_tng(
+    update_progress,
+    terminal,
     n_px,
     n_channels,
     freq_sup,
@@ -218,7 +375,7 @@ def insert_tng(
     ncpu,
 ):
     source = TNGSource(
-        simulation='TNG100-1',
+        simulation="TNG100-1",
         snapNum=snapshot,
         subID=subhalo_id,
         cutout_dir=tngpath,
@@ -241,19 +398,31 @@ def insert_tng(
     )
     spectral_model = GaussianSpectrum(sigma="thermal")
     sph_kernel = WendlandC2Kernel()
-    M = Martini(
+    M = MartiniMod(
         source=source,
         datacube=datacube,
         sph_kernel=sph_kernel,
         spectral_model=spectral_model,
         quiet=False,
     )
-    M.insert_source_in_cube(skip_validation=True, progressbar=True, ncpu=ncpu)
+    M._insert_source_in_cube(
+        update_progress, terminal, skip_validation=True, progressbar=True, ncpu=ncpu
+    )
     return M
 
 
 def insert_extended(
-    terminal, datacube, tngpath, snapshot, subhalo_id, redshift, ra, dec, api_key, ncpu
+    update_progress,
+    terminal,
+    datacube,
+    tngpath,
+    snapshot,
+    subhalo_id,
+    redshift,
+    ra,
+    dec,
+    api_key,
+    ncpu,
 ):
     x_rot = np.random.randint(0, 360) * U.deg
     y_rot = np.random.randint(0, 360) * U.deg
@@ -266,6 +435,8 @@ def insert_extended(
         )
     distance = 50
     M = insert_tng(
+        update_progress,
+        terminal,
         datacube.n_px_x,
         datacube.n_channels,
         datacube.channel_width,
@@ -296,6 +467,8 @@ def insert_extended(
         if terminal is not None:
             terminal.add_log("Injecting source at distance {}".format(distance))
         M = insert_tng(
+            update_progress,
+            terminal,
             datacube.n_px_x,
             datacube.n_channels,
             datacube.channel_width,

@@ -274,9 +274,7 @@ class Interferometer(QObject):
 
     def _read_antennas(self):
         antenna_coordinates = pd.read_csv(
-            os.path.join(
-                self.main_dir, "almasim", "antenna_config", "antenna_coordinates.csv"
-            )
+            os.path.join(self.main_dir, "antenna_config", "antenna_coordinates.csv")
         )
         obs_antennas = self.antenna_array.split(" ")
         obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]

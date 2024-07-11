@@ -309,6 +309,7 @@ class DownloadTNGStructureRunnable(QRunnable):
         self.alma_simulator = (
             alma_simulator_instance  # Store a reference to the main UI class
         )
+
     def run(self):
         self.alma_simulator.check_tng_dirs()
 
@@ -2441,7 +2442,7 @@ class ALMASimulator(QMainWindow):
 
     def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
         pd.options.mode.chained_assignment = None
-        if isinstance(rest_frequency, np.ndarray) or isisntance(rest_frequency, list):
+        if isinstance(rest_frequency, np.ndarray) or isinstance(rest_frequency, list):
             rest_frequency = np.sort(np.array(rest_frequency))
         else:
             rest_frequency = np.array([rest_frequency])
@@ -2478,6 +2479,7 @@ class ALMASimulator(QMainWindow):
             uas.redshift_to_snapshot(redshift)
             for redshift in metadata["redshift"].values
         ]
+        metadata["rest_frequency"] = rest_frequencies
         n_metadata = 0
         z_save = zmax
         self.terminal.add_log("Computing redshifts")
@@ -2699,7 +2701,7 @@ class ALMASimulator(QMainWindow):
             n_channels = np.array([None] * n_sims)
         if self.model_combo.currentText() == "Extended":
             if self.local_mode_combo.currentText() == "local":
-                self.terminal.add_log('Checking TNG Directories')
+                self.terminal.add_log("Checking TNG Directories")
                 pool = QThreadPool.globalInstance()
                 runnable = DownloadTNGStructureRunnable(self)
                 pool.start(runnable)
@@ -3560,42 +3562,6 @@ class ALMASimulator(QMainWindow):
         if source_type == "extended":
             snapshot = uas.redshift_to_snapshot(redshift)
             tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
-            """
-            outpath = os.path.join(
-                tng_dir, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
-            )
-            part_num = uas.get_particles_num(
-                tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key
-            )
-            if remote is True:
-                print("Snapshot: {}".format(snapshot))
-                print("Subhaloid ID: {}".format(tng_subhaloid))
-                print("Number of particles: {}".format(part_num))
-            else:
-                self.terminal.add_log("Snapshot: {}".format(snapshot))
-                self.terminal.add_log("Subhaloid ID: {}".format(tng_subhaloid))
-                self.terminal.add_log("Number of particles: {}".format(part_num))
-            while part_num == 0:
-                if remote is True:
-                    print("No particles found. Checking another subhalo.")
-                else:
-                    self.terminal.add_log(
-                       "No particles found. Checking another subhalo."
-                    )
-                tng_subhaloid = uas.get_subhaloids_from_db(
-                    1, main_dir, snapshot
-                )
-                outpath = os.path.join(
-                    tng_dir, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
-                )
-                part_num = uas.get_particles_num(
-                    tng_dir, outpath, snapshot, int(tng_subhaloid), tng_api_key
-                )
-                if remote is True:
-                    print("Number of particles: {}".format(part_num))
-                else:
-                    self.terminal.add_log("Number of particles: {}".format(part_num))
-            """
         else:
             snapshot = None
             tng_subhaloid = None
@@ -3686,7 +3652,9 @@ class ALMASimulator(QMainWindow):
                 n_channels,
             )
         elif source_type == "extended":
+            self.progress_bar_entry.setText("Inserting Extended Source Model")
             datacube = usm.insert_extended(
+                self.update_progress,
                 self.terminal,
                 datacube,
                 tng_dir,

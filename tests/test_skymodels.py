@@ -69,18 +69,8 @@ def test_skymodels(qtbot: QtBot):
     n_pix = 256
     n_channels = 256
 
-    if isinstance(rest_frequency, np.ndarray):
-        rest_frequency = np.sort(np.array(rest_frequency))[0]
-        rest_frequency = rest_frequency * U.GHz
-        redshift = astro.compute_redshift(rest_frequency, source_freq)
-    else:
-        rest_frequency = (
-            astro.compute_rest_frequency_from_redshift(
-                os.path.join(main_path, "almasim"), source_freq.value, redshift
-            )
-            * U.GHz
-        )
-
+    rest_frequency = metadata["rest_frequency"]
+    redshift = metadata["redshift"]
     lum_infrared = 1e10
     source_type = "point"
     (
@@ -98,7 +88,7 @@ def test_skymodels(qtbot: QtBot):
         lum_infrared,
     ) = almasim.process_spectral_data(
         source_type,
-        main_path,
+        os.path.join(main_path, "almasim"),
         redshift,
         central_freq.value,
         band_range.value,
@@ -195,8 +185,8 @@ def test_skymodels(qtbot: QtBot):
     )
     model = datacube._array.to_value(datacube._array.unit).T
     assert model.shape[0] > 0
-
-    almasim.tng_entry.setText(os.path.join(os.path.expanduser("~"), "TNGData"))
+    tng_dir = os.path.join(os.path.expanduser("~"), "TNGData")
+    almasim.tng_entry.setText(tng_dir)
     almasim.check_tng_dirs()
     metadata_path = os.path.join(main_path, "almasim", "metadata", "qso_metadata.csv")
     metadata = pd.read_csv(metadata_path)
@@ -239,38 +229,16 @@ def test_skymodels(qtbot: QtBot):
     n_pix = 256
     n_channels = 256
 
-    if isinstance(rest_frequency, np.ndarray):
-        rest_frequency = np.sort(np.array(rest_frequency))[0]
-        rest_frequency = rest_frequency * U.GHz
-        redshift = astro.compute_redshift(rest_frequency, source_freq)
-    else:
-        rest_frequency = (
-            astro.compute_rest_frequency_from_redshift(
-                os.path.join(main_path, "almasim"), source_freq.value, redshift
-            )
-            * U.GHz
-        )
+    rest_frequency = metadata["rest_frequency"]
+    redshift = metadata["redshift"]
     lum_infrared = 1e10
     snapshot = astro.redshift_to_snapshot(redshift)
     tng_subhaloid = astro.get_subhaloids_from_db(1, line_path, snapshot)
     tng_api_key = "8f578b92e700fae3266931f4d785f82c"
-
-    outpath = os.path.join(
-        main_path, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
-    )
-    part_num = uas.get_particles_num(
-        main_path, outpath, snapshot, int(tng_subhaloid), tng_api_key
-    )
-    while part_num == 0:
-        tng_subhaloid = astro.get_subhaloids_from_db(1, line_path, snapshot)
-        outpath = os.path.join(
-            main_path, "TNG100-1", "output", "snapdir_0{}".format(snapshot)
-        )
-        part_num = uas.get_particles_num(
-            main_path, outpath, snapshot, int(tng_subhaloid), tng_api_key
-        )
-    datacube = usm.insert_extended(
-        self.terminal,
+    ncpu = 10
+    datacube = skymodels.insert_extended(
+        None,
+        None,
         datacube,
         tng_dir,
         snapshot,
@@ -284,6 +252,39 @@ def test_skymodels(qtbot: QtBot):
     model = datacube._array.to_value(datacube._array.unit).T
     assert model.shape[0] > 0
     os.remove(os.path.join(main_path, "antenna.cfg"))
+    del datacube
+    band = 6
+    astro.write_sim_parameters(
+        os.path.join(main_path, "sim_params.txt"),
+        ra,
+        dec,
+        ang_res,
+        vel_res,
+        int_time,
+        band,
+        band_range,
+        central_freq,
+        redshift,
+        line_fluxes,
+        line_names,
+        line_frequency,
+        continum,
+        fov,
+        beam_size,
+        cell_size,
+        n_pix,
+        n_channels,
+        snapshot,
+        tng_subhaloid,
+        lum_infrared,
+        fwhm_z,
+        source_type,
+        fwhm_x,
+        fwhm_y,
+        angle,
+    )
+    assert os.path.exists(os.path.join(main_path, "sim_params.txt"))
+    os.remove(os.path.join(main_path, "sim_params.txt"))
 
 
 def test(test_skymodels):

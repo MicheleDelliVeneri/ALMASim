@@ -98,8 +98,8 @@ class DownloadGalaxyZooRunnable(QRunnable, metaclass=_PyQtWrapperType):
     def __init__(self, alma_simulator_instance) -> None: ...  # Corrected annotation
     def run(self) -> None: ...
 
-class  DownloadTNGStuctureRunnable(QRunnable, metaclass=_PyQtWrapperType):
-     """Runnable for downloading TNG Folders in a separate thread."""
+class DownloadTNGStructureRunnable(QRunnable, metaclass=_PyQtWrapperType):
+    """Runnable for downloading TNG Folders in a separate thread."""
 
     alma_simulator: Incomplete  # Note: This should be "ALMASimulator"
     def __init__(self, alma_simulator_instance) -> None: ...  # Corrected annotation
