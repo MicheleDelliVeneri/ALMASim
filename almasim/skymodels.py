@@ -162,7 +162,7 @@ class MartiniMod(Martini):
                 .sum((0, 1))
                 .squeeze()
                 .to_value(U.Jy)
-                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(
+                * np.abs(np.diff(self._datacube.frequency_channel_edges)).to_value(
                     U.km / U.s
                 )
             )
@@ -392,7 +392,7 @@ def insert_tng(
         n_channels=n_channels,
         px_size=10 * U.arcsec,
         channel_width=freq_sup,
-        velocity_centre=source.vsys,
+        spectral_centre=source.vsys,
         ra=source.ra,
         dec=source.dec,
     )
@@ -670,7 +670,8 @@ def sample_positions(
                     sample.append(new_p)
                     i += 1
                     n = 0
-                    terminal.add_log("Found {}st component".format(len(sample)))
+                    if terminal is not None:
+                        terminal.add_log("Found {}st component".format(len(sample)))
         else:
             spatial_distances = [
                 distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample
@@ -719,7 +720,8 @@ def sample_positions(
                     i += 1
                     n = 0
                     sample.append(new_p)
-                    terminal.add_log("Found {}st component".format(len(sample)))
+                    if terminal is not None:
+                        terminal.add_log("Found {}st component".format(len(sample)))
 
     return sample
 
@@ -758,7 +760,7 @@ def insert_serendipitous(
     s_fwhm_zs = np.random.randint(2, fwhm_zs[0], n_sources)
     # get posx and poy of the centtral source
     pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(
-        datacube.ra, datacube.dec, datacube.velocity_centre, 0
+        datacube.ra, datacube.dec, datacube.spectral_centre, 0
     )
     # get a mininum separation based on spatial dimensions
     sep_x, sep_z = np.random.randint(0, xy_radius), np.random.randint(0, z_radius)
@@ -801,15 +803,17 @@ def insert_serendipitous(
     for c_id, choords in enumerate(sample_coords):
         with open(sim_params_path, "w") as f:
             n_line = n_lines[c_id]
-            terminal.add_log(
-                "Simulating serendipitous source {} with {} lines".format(
-                    c_id + 1, n_line
+            if terminal is not None:
+                terminal.add_log(
+                    "Simulating serendipitous source {} with {} lines".format(
+                        c_id + 1, n_line
+                    )
                 )
-            )
             s_line_fluxes = np.random.uniform(cont_sens, np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
-            for s_name, s_flux in zip(s_line_names, s_line_fluxes):
-                terminal.add_log("Line {} Flux: {}".format(s_name, s_flux))
+            if terminal is not None:
+                for s_name, s_flux in zip(s_line_names, s_line_fluxes):
+                    terminal.add_log("Line {} Flux: {}".format(s_name, s_flux))
             pos_x, pos_y, pos_z = choords
             delta = pos_z - pos_zs[0]
             pos_z = np.array([pos + delta for pos in pos_zs])[:n_line]
@@ -884,118 +888,3 @@ def get_datacube_header(datacube, obs_date):
     header.append(("BTYPE", "Intensity"))
     header.append(("SPECSYS", wcs_header["SPECSYS"]))
     return header
-
-
-def write_datacube_to_fits(
-    datacube,
-    filename,
-    obs_date,
-    channels="frequency",
-    overwrite=True,
-):
-    """
-    Output the DataCube to a FITS-format file.
-
-    Parameters
-    ----------
-    filename : string
-        Name of the file to write. '.fits' will be appended if not already
-        present.
-
-    channels : {'frequency', 'velocity'}, optional
-        Type of units used along the spectral axis in output file.
-        (Default: 'frequency'.)
-
-    overwrite: bool, optional
-        Whether to allow overwriting existing files. (Default: True.)
-    """
-
-    datacube.drop_pad()
-    if channels == "frequency":
-        datacube.freq_channels()
-    elif channels == "velocity":
-        datacube.velocity_channels()
-    else:
-        raise ValueError("Unknown 'channels' value " "(use 'frequency' or 'velocity'.")
-
-    filename = filename if filename[-5:] == ".fits" else filename + ".fits"
-
-    wcs_header = datacube.wcs.to_header()
-    wcs_header.rename_keyword("WCSAXES", "NAXIS")
-    header = fits.Header()
-    if len(datacube._array.shape) == 3:
-        header.append(("SIMPLE", "T"))
-        header.append(("BITPIX", 16))
-        header.append(("NAXIS", wcs_header["NAXIS"]))
-        header.append(("NAXIS1", datacube.n_px_x))
-        header.append(("NAXIS2", datacube.n_px_y))
-        header.append(("NAXIS3", datacube.n_channels))
-        header.append(("EXTEND", "T"))
-        header.append(("CDELT1", wcs_header["CDELT1"]))
-        header.append(("CRPIX1", wcs_header["CRPIX1"]))
-        header.append(("CRVAL1", wcs_header["CRVAL1"]))
-        header.append(("CTYPE1", wcs_header["CTYPE1"]))
-        header.append(("CUNIT1", wcs_header["CUNIT1"]))
-        header.append(("CDELT2", wcs_header["CDELT2"]))
-        header.append(("CRPIX2", wcs_header["CRPIX2"]))
-        header.append(("CRVAL2", wcs_header["CRVAL2"]))
-        header.append(("CTYPE2", wcs_header["CTYPE2"]))
-        header.append(("CUNIT2", wcs_header["CUNIT2"]))
-        header.append(("CDELT3", wcs_header["CDELT3"]))
-        header.append(("CRPIX3", wcs_header["CRPIX3"]))
-        header.append(("CRVAL3", wcs_header["CRVAL3"]))
-        header.append(("CTYPE3", wcs_header["CTYPE3"]))
-        header.append(("CUNIT3", wcs_header["CUNIT3"]))
-    else:
-        header.append(("SIMPLE", "T"))
-        header.append(("BITPIX", 16))
-        header.append(("NAXIS", wcs_header["NAXIS"]))
-        header.append(("NAXIS1", datacube.n_px_x))
-        header.append(("NAXIS2", datacube.n_px_y))
-        header.append(("NAXIS3", datacube.n_channels))
-        header.append(("NAXIS4", 1))
-        header.append(("EXTEND", "T"))
-        header.append(("CDELT1", wcs_header["CDELT1"]))
-        header.append(("CRPIX1", wcs_header["CRPIX1"]))
-        header.append(("CRVAL1", wcs_header["CRVAL1"]))
-        header.append(("CTYPE1", wcs_header["CTYPE1"]))
-        header.append(("CUNIT1", wcs_header["CUNIT1"]))
-        header.append(("CDELT2", wcs_header["CDELT2"]))
-        header.append(("CRPIX2", wcs_header["CRPIX2"]))
-        header.append(("CRVAL2", wcs_header["CRVAL2"]))
-        header.append(("CTYPE2", wcs_header["CTYPE2"]))
-        header.append(("CUNIT2", wcs_header["CUNIT2"]))
-        header.append(("CDELT3", wcs_header["CDELT3"]))
-        header.append(("CRPIX3", wcs_header["CRPIX3"]))
-        header.append(("CRVAL3", wcs_header["CRVAL3"]))
-        header.append(("CTYPE3", wcs_header["CTYPE3"]))
-        header.append(("CUNIT3", wcs_header["CUNIT3"]))
-        header.append(("CDELT4", wcs_header["CDELT4"]))
-        header.append(("CRPIX4", wcs_header["CRPIX4"]))
-        header.append(("CRVAL4", wcs_header["CRVAL4"]))
-        header.append(("CTYPE4", wcs_header["CTYPE4"]))
-        header.append(("CUNIT4", "PAR"))
-    header.append(("EPOCH", 2000.0))
-    # header.append(('BLANK', -32768)) #only for integer data
-    header.append(("BSCALE", 1.0))
-    header.append(("BZERO", 0.0))
-    datacube_array_units = datacube._array.unit
-    header.append(("DATAMAX", np.max(datacube._array.to_value(datacube_array_units))))
-    header.append(("DATAMIN", np.min(datacube._array.to_value(datacube_array_units))))
-
-    # long names break fits format, don't let the user set this
-    header.append(("OBJECT", "MOCK"))
-    header.append(("BUNIT", datacube_array_units.to_string("fits")))
-    header.append(("MJD-OBS", obs_date))
-    header.append(("BTYPE", "Intensity"))
-    header.append(("SPECSYS", wcs_header["SPECSYS"]))
-
-    # flip axes to write
-    hdu = fits.PrimaryHDU(
-        header=header, data=datacube._array.to_value(datacube_array_units).T
-    )
-    hdu.writeto(filename, overwrite=overwrite)
-
-    if channels == "frequency":
-        datacube.velocity_channels()
-    return

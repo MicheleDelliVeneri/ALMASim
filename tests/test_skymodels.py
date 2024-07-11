@@ -106,7 +106,7 @@ def test_skymodels(qtbot: QtBot):
         n_channels=n_channels,
         px_size=cell_size,
         channel_width=delta_freq,
-        velocity_centre=central_freq,
+        spectral_centre=central_freq,
         ra=ra,
         dec=dec,
     )
@@ -118,7 +118,16 @@ def test_skymodels(qtbot: QtBot):
         freq_sup = freq_sup_nw * U.MHz
         n_channels = n_channels_nw
         band_range = n_channels * freq_sup
-
+    datacube = skymodels.DataCube(
+        n_px_x=n_pix,
+        n_px_y=n_pix,
+        n_channels=n_channels,
+        px_size=cell_size,
+        channel_width=delta_freq,
+        spectral_centre=central_freq,
+        ra=ra,
+        dec=dec,
+    )
     # testing point model
     pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
     pos_z = [int(index) for index in source_channel_index]
@@ -134,7 +143,71 @@ def test_skymodels(qtbot: QtBot):
         n_channels,
     )
     model = datacube._array.to_value(datacube._array.unit).T
+    band = 6
+    snapshot = None
+    tng_subhaloid = None
+    astro.write_sim_parameters(
+        os.path.join(main_path, "sim_params.txt"),
+        ra,
+        dec,
+        ang_res,
+        vel_res,
+        int_time,
+        band,
+        band_range,
+        central_freq,
+        redshift,
+        line_fluxes,
+        line_names,
+        line_frequency,
+        continum,
+        fov,
+        beam_size,
+        cell_size,
+        n_pix,
+        n_channels,
+        snapshot,
+        tng_subhaloid,
+        lum_infrared,
+        fwhm_z,
+        source_type,
+        fwhm_x,
+        fwhm_y,
+        angle,
+    )
+    assert os.path.exists(os.path.join(main_path, "sim_params.txt"))
+    os.remove(os.path.join(main_path, "sim_params.txt"))
+    fwhm_x = np.random.randint(3, 10)
+    fwhm_y = np.random.randint(3, 10)
+    datacube = skymodels.insert_serendipitous(
+        None,
+        None,
+        datacube,
+        continum,
+        cont_sens.value,
+        line_fluxes,
+        line_names,
+        line_frequency,
+        delta_freq.value,
+        pos_z,
+        fwhm_x,
+        fwhm_y,
+        fwhm_z,
+        n_pix,
+        n_channels,
+        os.path.join(main_path, "sim_params.txt"),
+    )
     assert model.shape[0] > 0
+    datacube = skymodels.DataCube(
+        n_px_x=n_pix,
+        n_px_y=n_pix,
+        n_channels=n_channels,
+        px_size=cell_size,
+        channel_width=delta_freq,
+        spectral_centre=central_freq,
+        ra=ra,
+        dec=dec,
+    )
     pos_z = [int(index) for index in source_channel_index]
     fwhm_x = np.random.randint(3, 10)
     fwhm_y = np.random.randint(3, 10)
@@ -154,6 +227,16 @@ def test_skymodels(qtbot: QtBot):
         n_pix,
         n_channels,
     )
+    datacube = skymodels.DataCube(
+        n_px_x=n_pix,
+        n_px_y=n_pix,
+        n_channels=n_channels,
+        px_size=cell_size,
+        channel_width=delta_freq,
+        spectral_centre=central_freq,
+        ra=ra,
+        dec=dec,
+    )
     datacube = skymodels.insert_diffuse(
         None,
         datacube,
@@ -166,6 +249,16 @@ def test_skymodels(qtbot: QtBot):
     )
     model = datacube._array.to_value(datacube._array.unit).T
     assert model.shape[0] > 0
+    datacube = skymodels.DataCube(
+        n_px_x=n_pix,
+        n_px_y=n_pix,
+        n_channels=n_channels,
+        px_size=cell_size,
+        channel_width=delta_freq,
+        spectral_centre=central_freq,
+        ra=ra,
+        dec=dec,
+    )
     galaxy_zoo_path = os.path.join(os.path.expanduser("~"), "GalaxyZoo")
     almasim.galaxy_zoo_entry.setText(galaxy_zoo_path)
     if not os.path.exists(galaxy_zoo_path):
@@ -184,6 +277,9 @@ def test_skymodels(qtbot: QtBot):
         galaxy_path,
     )
     model = datacube._array.to_value(datacube._array.unit).T
+    obs_date = metadata["Obs.date"]
+    header = skymodels.get_datacube_header(datacube, obs_date)
+    assert header is not None
     assert model.shape[0] > 0
     tng_dir = os.path.join(os.path.expanduser("~"), "TNGData")
     almasim.tng_entry.setText(tng_dir)
@@ -236,6 +332,16 @@ def test_skymodels(qtbot: QtBot):
     tng_subhaloid = astro.get_subhaloids_from_db(1, line_path, snapshot)
     tng_api_key = "8f578b92e700fae3266931f4d785f82c"
     ncpu = 10
+    datacube = skymodels.DataCube(
+        n_px_x=n_pix,
+        n_px_y=n_pix,
+        n_channels=n_channels,
+        px_size=cell_size,
+        channel_width=delta_freq,
+        spectral_centre=central_freq,
+        ra=ra,
+        dec=dec,
+    )
     datacube = skymodels.insert_extended(
         None,
         None,
@@ -251,40 +357,10 @@ def test_skymodels(qtbot: QtBot):
     )
     model = datacube._array.to_value(datacube._array.unit).T
     assert model.shape[0] > 0
-    os.remove(os.path.join(main_path, "antenna.cfg"))
     del datacube
-    band = 6
-    astro.write_sim_parameters(
-        os.path.join(main_path, "sim_params.txt"),
-        ra,
-        dec,
-        ang_res,
-        vel_res,
-        int_time,
-        band,
-        band_range,
-        central_freq,
-        redshift,
-        line_fluxes,
-        line_names,
-        line_frequency,
-        continum,
-        fov,
-        beam_size,
-        cell_size,
-        n_pix,
-        n_channels,
-        snapshot,
-        tng_subhaloid,
-        lum_infrared,
-        fwhm_z,
-        source_type,
-        fwhm_x,
-        fwhm_y,
-        angle,
-    )
-    assert os.path.exists(os.path.join(main_path, "sim_params.txt"))
+    del model
     os.remove(os.path.join(main_path, "sim_params.txt"))
+    os.remove(os.path.join(main_path, "antenna.cfg"))
 
 
 def test(test_skymodels):

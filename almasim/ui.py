@@ -3746,9 +3746,6 @@ class ALMASimulator(QMainWindow):
                 n_channels,
                 os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
             )
-        # filename = os.path.join(sim_output_dir, 'skymodel_{}.fits'.format(inx))
-        # self.terminal.add_log('\nWriting datacube to {}'.format(filename))
-        # usm.write_datacube_to_fits(datacube, filename, obs_date)
         header = usm.get_datacube_header(datacube, obs_date)
         model = datacube._array.to_value(datacube._array.unit).T
         totflux = np.sum(model)
