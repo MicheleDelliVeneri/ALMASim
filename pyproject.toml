@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "almasim"
-version = "2.1.5"
+version = "2.1.6"
 description = "An ALMA Simulation package for a more civilized era."
 authors = ["Michele Delli Veneri <micheledelliveneri@gmail.com>"]
 readme = "README.rst"
