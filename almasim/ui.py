@@ -2019,7 +2019,7 @@ class ALMASimulator(QMainWindow):
                 os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
                 url,
             )
-            subprocess.check_call(cmd, shell=True)
+            subprocess.run(cmd, shell=True)
             if self.terminal is not None:
                 self.terminal.add_log("Done.")
 
