@@ -180,7 +180,7 @@ class MartiniMod(Martini):
                     f" of initial source mass]\n"
                     f"  Maximum pixel: {self._datacube._array.max():.2e}\n"
                     "  Median non-zero pixel:"
-                    f" {np.median(self._datacube._array[self._datacube._array > 0]):.2e}\n"
+                    f" {np.median(self._datacube._array[self._datacube._array > 0]):.2e}"
                 )
         return
 
