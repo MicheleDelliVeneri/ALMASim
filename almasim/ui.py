@@ -3608,7 +3608,7 @@ class ALMASimulator(QMainWindow):
             n_channels=n_channels,
             px_size=cell_size,
             channel_width=delta_freq,
-            velocity_centre=central_freq,
+            spectral_centre=central_freq,
             ra=ra,
             dec=dec,
         )
