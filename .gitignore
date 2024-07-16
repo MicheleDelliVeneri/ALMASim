@@ -133,3 +133,6 @@ metadata/test.csv
 
 # VSCode
 .vscode/
+
+# MACOS
+.DS_Store

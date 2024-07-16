@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QComboBox,
     QProgressBar,
+    QSlider,
 )
 from PyQt6.QtCore import (
     QSettings,
@@ -395,6 +396,7 @@ class ALMASimulator(QMainWindow):
         self.line_displayed = False
         self.add_folder_widgets()
         self.add_line_widgets()
+        self.add_width_slider()
         self.add_dim_widgets()
         self.add_model_widgets()
         self.add_meta_widgets()
@@ -708,6 +710,24 @@ class ALMASimulator(QMainWindow):
             self.show_hide_widgets(self.non_line_mode_row1, show=True)
             self.show_hide_widgets(self.non_line_mode_row2, show=True)
 
+    def add_width_slider(self):
+        self.line_width_label = QLabel("Line Width in Km/s:")
+        self.line_width_slider = QSlider(Qt.Orientation.Horizontal)
+        self.line_width_value_label = QLabel(f"{self.line_width_slider.value()} km/s")
+        self.line_width_slider.setRange(50, 600)
+        self.line_width_slider.setTickInterval(25)
+        self.line_width_slider.setSingleStep(5)
+        self.line_width_slider.setValue(300)
+        self.line_width_slider.valueChanged.connect(self.update_line_width_label)
+        self.line_width_row = QHBoxLayout()
+        self.line_width_row.addWidget(self.line_width_label)
+        self.line_width_row.addWidget(self.line_width_slider)
+        self.line_width_row.addWidget(self.line_width_value_label)
+        self.left_layout.insertLayout(15, self.line_width_row)
+
+    def update_line_width_label(self, value):
+        self.line_width_value_label.setText(f"{value} km/s")
+
     def add_dim_widgets(self):
         # --- Set SNR ---
         self.snr_checkbox = QCheckBox("Set SNR")
@@ -755,7 +775,7 @@ class ALMASimulator(QMainWindow):
         checkbox_row.addWidget(self.fix_spectral_checkbox)
         checkbox_row.addWidget(self.n_channels_entry)
         checkbox_row.addWidget(self.serendipitous_checkbox)
-        self.left_layout.insertLayout(15, checkbox_row)
+        self.left_layout.insertLayout(16, checkbox_row)
 
     def add_model_widgets(self):
         self.model_label = QLabel("Select Model:")
@@ -774,7 +794,7 @@ class ALMASimulator(QMainWindow):
         self.model_row = QHBoxLayout()
         self.model_row.addWidget(self.model_label)
         self.model_row.addWidget(self.model_combo)
-        self.left_layout.insertLayout(16, self.model_row)
+        self.left_layout.insertLayout(17, self.model_row)
         self.tng_api_key_label = QLabel("TNG API Key:")
         self.tng_api_key_entry = QLineEdit()
         self.tng_api_key_row = QHBoxLayout()
@@ -785,7 +805,7 @@ class ALMASimulator(QMainWindow):
         self.show_hide_widgets(self.tng_api_key_row, show=False)
 
         self.left_layout.insertLayout(
-            17, self.tng_api_key_row
+            18, self.tng_api_key_row
         )  # Insert after model_row
         # Connect the model_combo's signal to update visibility
         self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
@@ -809,7 +829,7 @@ class ALMASimulator(QMainWindow):
         self.metadata_mode_row = QHBoxLayout()
         self.metadata_mode_row.addWidget(self.metadata_mode_label)
         self.metadata_mode_row.addWidget(self.metadata_mode_combo)
-        self.left_layout.insertLayout(18, self.metadata_mode_row)
+        self.left_layout.insertLayout(19, self.metadata_mode_row)
 
     def add_metadata_widgets(self):
         self.metadata_path_label = QLabel("Metadata Path:")
@@ -820,7 +840,7 @@ class ALMASimulator(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(19, self.metadata_path_row)
+        self.left_layout.insertLayout(20, self.metadata_path_row)
         self.left_layout.update()
 
     def add_query_widgets(self):
@@ -858,12 +878,12 @@ class ALMASimulator(QMainWindow):
         self.show_hide_widgets(self.target_list_row, show=False)
 
         # Insert layouts at the correct positions
-        self.left_layout.insertLayout(19, self.query_type_row)
+        self.left_layout.insertLayout(20, self.query_type_row)
         self.left_layout.insertLayout(
-            20, self.target_list_row
+            21, self.target_list_row
         )  # Insert target list row
-        self.left_layout.insertLayout(21, self.query_save_row)
-        self.left_layout.insertWidget(22, self.query_execute_button)
+        self.left_layout.insertLayout(22, self.query_save_row)
+        self.left_layout.insertWidget(23, self.query_execute_button)
         self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
 
     def remove_metadata_query_widgets(self):
@@ -1000,6 +1020,7 @@ class ALMASimulator(QMainWindow):
         self.redshift_entry.clear()
         self.num_lines_entry.clear()
         self.snr_checkbox.setChecked(False)
+        self.line_width_slider.setValue(300)
         self.snr_entry.clear()
         self.fix_spatial_checkbox.setChecked(False)
         self.n_pix_entry.clear()
@@ -1094,6 +1115,7 @@ class ALMASimulator(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
+        self.line_width_slider.setValue(self.settings.value("line_width", 300))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(
@@ -1161,6 +1183,7 @@ class ALMASimulator(QMainWindow):
             # Save non-line mode values
             self.settings.setValue("redshifts", self.redshift_entry.text())
             self.settings.setValue("num_lines", self.num_lines_entry.text())
+        self.settings.setValue("line_width", self.line_width_slider.value())
         self.settings.setValue("set_snr", self.snr_checkbox.isChecked())
         self.settings.setValue("snr", self.snr_entry.text())
         self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
@@ -1867,7 +1890,7 @@ class ALMASimulator(QMainWindow):
         self.metadata = database
         self.terminal.add_log(f"Metadata saved to {save_to_input}")
 
-    # ----- Auxiliary Functions -----------------
+    # ----- Auxiliary Functions ----------------
 
     def load_metadata(self, metadata_path):
         try:
@@ -3169,7 +3192,8 @@ class ALMASimulator(QMainWindow):
                 n = 1
         else:
             n = len(line_names)
-        delta_v = 300 * U.km / U.s
+        # delta_v = 300 * U.km / U.s
+        delta_v = self.line_width_slider.value() * U.km / U.s
         c_km_s = c.to(U.km / U.s)
         fwhms = (
             0.084
@@ -3264,7 +3288,7 @@ class ALMASimulator(QMainWindow):
         line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
         line_frequencies = filtered_lines["shifted_freq(GHz)"].values
         # line_rest_frequencies = filtered_lines["freq(GHz)"].values * U.GHz
-        fwhms_GHz = (0.84 * (line_frequencies * (delta_v / c_km_s) * 1e9) * U.Hz).to(
+        fwhms_GHz = (0.084 * (line_frequencies * (delta_v / c_km_s) * 1e9) * U.Hz).to(
             U.GHz
         )
         new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
