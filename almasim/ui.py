@@ -711,22 +711,54 @@ class ALMASimulator(QMainWindow):
             self.show_hide_widgets(self.non_line_mode_row2, show=True)
 
     def add_width_slider(self):
-        self.line_width_label = QLabel("Line Width in Km/s:")
-        self.line_width_slider = QSlider(Qt.Orientation.Horizontal)
-        self.line_width_value_label = QLabel(f"{self.line_width_slider.value()} km/s")
-        self.line_width_slider.setRange(50, 600)
-        self.line_width_slider.setTickInterval(25)
-        self.line_width_slider.setSingleStep(5)
-        self.line_width_slider.setValue(300)
-        self.line_width_slider.valueChanged.connect(self.update_line_width_label)
+        self.line_width_label = QLabel("Min/Max Line Widths in Km/s:")
+        self.max_line_width_slider = QSlider(Qt.Orientation.Horizontal)
+        self.max_line_width_value_label = QLabel(
+            f"{self.max_line_width_slider.value()} km/s"
+        )
+        self.max_line_width_slider.setRange(50, 600)
+        self.max_line_width_slider.setTickInterval(25)
+        self.max_line_width_slider.setSingleStep(5)
+        self.max_line_width_slider.setValue(400)
+        self.max_line_width_slider.valueChanged.connect(
+            self.update_max_line_width_label
+        )
+        self.min_line_width_slider = QSlider(Qt.Orientation.Horizontal)
+        self.min_line_width_value_label = QLabel(
+            f"{self.min_line_width_slider.value()} km/s"
+        )
+        self.min_line_width_slider.setRange(50, 600)
+        self.min_line_width_slider.setTickInterval(25)
+        self.min_line_width_slider.setSingleStep(5)
+        self.min_line_width_slider.setValue(200)
+        self.min_line_width_slider.valueChanged.connect(
+            self.update_min_line_width_label
+        )
+        self.min_line_width_slider.valueChanged.connect(self.sync_line_width_sliders)
+        self.max_line_width_slider.valueChanged.connect(self.sync_line_width_sliders)
         self.line_width_row = QHBoxLayout()
         self.line_width_row.addWidget(self.line_width_label)
-        self.line_width_row.addWidget(self.line_width_slider)
-        self.line_width_row.addWidget(self.line_width_value_label)
+        self.line_width_row.addWidget(self.min_line_width_slider)
+        self.line_width_row.addWidget(self.min_line_width_value_label)
+        self.line_width_row.addWidget(self.max_line_width_slider)
+        self.line_width_row.addWidget(self.max_line_width_value_label)
         self.left_layout.insertLayout(15, self.line_width_row)
 
-    def update_line_width_label(self, value):
-        self.line_width_value_label.setText(f"{value} km/s")
+    def update_max_line_width_label(self, value):
+        self.max_line_width_value_label.setText(f"{value} km/s")
+
+    def update_min_line_width_label(self, value):
+        self.min_line_width_value_label.setText(f"{value} km/s")
+
+    def sync_line_width_sliders(self):
+        min_value = self.min_line_width_slider.value()
+        max_value = self.max_line_width_slider.value()
+        if min_value > max_value:
+            self.min_line_width_slider.setValue(max_value)
+            self.min_line_width_value_label.setText(f"{max_value} km/s")
+        elif max_value < min_value:
+            self.max_line_width_slider.setValue(min_value)
+            self.max_line_width_value_label.setText(f"{min_value} km/s")
 
     def add_dim_widgets(self):
         # --- Set SNR ---
@@ -1020,7 +1052,8 @@ class ALMASimulator(QMainWindow):
         self.redshift_entry.clear()
         self.num_lines_entry.clear()
         self.snr_checkbox.setChecked(False)
-        self.line_width_slider.setValue(300)
+        self.min_line_width_slider.setValue(200)
+        self.max_line_width_slider.setValue(400)
         self.snr_entry.clear()
         self.fix_spatial_checkbox.setChecked(False)
         self.n_pix_entry.clear()
@@ -1115,7 +1148,8 @@ class ALMASimulator(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
-        self.line_width_slider.setValue(self.settings.value("line_width", 300))
+        self.min_line_width_slider.setValue(self.settings.value("line_width", 200))
+        self.min_line_width_slider.setValue(self.settings.value("line_width", 400))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(
@@ -1183,7 +1217,8 @@ class ALMASimulator(QMainWindow):
             # Save non-line mode values
             self.settings.setValue("redshifts", self.redshift_entry.text())
             self.settings.setValue("num_lines", self.num_lines_entry.text())
-        self.settings.setValue("line_width", self.line_width_slider.value())
+        self.settings.setValue("min_line_width", self.min_line_width_slider.value())
+        self.settings.setValue("max_line_width", self.max_line_width_slider.value())
         self.settings.setValue("set_snr", self.snr_checkbox.isChecked())
         self.settings.setValue("snr", self.snr_entry.text())
         self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
@@ -3193,7 +3228,10 @@ class ALMASimulator(QMainWindow):
         else:
             n = len(line_names)
         # delta_v = 300 * U.km / U.s
-        delta_v = self.line_width_slider.value() * U.km / U.s
+        min_delta_v = self.min_line_width_slider.value()
+        max_delta_v = self.max_line_width_slider.value()
+        delta_v = np.random.uniform(min_delta_v, max_delta_v) * U.km / U.s
+        self.terminal.add_log(f"Line Width: {round(delta_v, 2)}")
         c_km_s = c.to(U.km / U.s)
         fwhms = (
             0.084
