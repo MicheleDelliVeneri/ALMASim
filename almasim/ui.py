@@ -3231,7 +3231,7 @@ class ALMASimulator(QMainWindow):
         min_delta_v = self.min_line_width_slider.value()
         max_delta_v = self.max_line_width_slider.value()
         delta_v = np.random.uniform(min_delta_v, max_delta_v) * U.km / U.s
-        self.terminal.add_log(f"Line Width: {round(delta_v, 2)}")
+        self.terminal.add_log(f"Line Width: {round(delta_v.value, 2)} Km/s")
         c_km_s = c.to(U.km / U.s)
         fwhms = (
             0.084
