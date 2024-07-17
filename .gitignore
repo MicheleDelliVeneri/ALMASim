@@ -119,6 +119,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
+/docs/build/
 
 # mypy
 .mypy_cache/
@@ -129,3 +130,9 @@ dmypy.json
 .pyre/
 devops/all_alma_data.csv
 metadata/test.csv
+
+# VSCode
+.vscode/
+
+# MACOS
+.DS_Store
