@@ -282,18 +282,17 @@ def test_skymodels(qtbot: QtBot):
     assert header is not None
     assert model.shape[0] > 0
     datacube = skymodels.insert_molecular_cloud(
-                None,
-                datacube,
-                continum,
-                line_fluxes,
-                pos_z,
-                fwhm_z,
-                n_pix,
-                n_channels,
-            )
+        None,
+        datacube,
+        continum,
+        line_fluxes,
+        pos_z,
+        fwhm_z,
+        n_pix,
+        n_channels,
+    )
     model = datacube._array.to_value(datacube._array.unit).T
     assert model.shape[0] > 0
-
 
     tng_dir = os.path.join(os.path.expanduser("~"), "TNGData")
     almasim.tng_entry.setText(tng_dir)
