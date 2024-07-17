@@ -1149,7 +1149,7 @@ class ALMASimulator(QMainWindow):
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
         self.min_line_width_slider.setValue(self.settings.value("line_width", 200))
-        self.min_line_width_slider.setValue(self.settings.value("line_width", 400))
+        self.max_line_width_slider.setValue(self.settings.value("line_width", 400))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(
@@ -3227,6 +3227,8 @@ class ALMASimulator(QMainWindow):
                 n = 1
         else:
             n = len(line_names)
+        if line_names is not None:
+            db_line = db_line[db_line["Line"].isin(line_names)]
         # delta_v = 300 * U.km / U.s
         min_delta_v = self.min_line_width_slider.value()
         max_delta_v = self.max_line_width_slider.value()
@@ -3294,7 +3296,6 @@ class ALMASimulator(QMainWindow):
             print("Injecting {} lines".format(len(filtered_lines)))
         else:
             self.terminal.add_log("Injecting {} lines".format(len(filtered_lines)))
-
         filtered_lines["distance"] = np.abs(
             filtered_lines["shifted_freq(GHz)"].astype(float) - source_frequency
         )
@@ -3350,7 +3351,13 @@ class ALMASimulator(QMainWindow):
         line_fluxes = 10 ** (np.log10(flux_infrared) + line_ratios) / freq_steps
         bandwidth = freq_max - freq_min
         freq_support = bandwidth / n_channels
-        fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
+        fwhms = []
+        for fwhm in fwhms_GHz.value / freq_support:
+            if fwhm >= 1:
+                fwhms.append(fwhm)
+            else:
+                fwhms.append(1)
+        # fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
         return (
             int_cont_fluxes,
             line_fluxes,
