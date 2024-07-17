@@ -320,6 +320,7 @@ class ALMASimulator(QMainWindow):
     ncpu_entry = None
     terminal = None
     update_progress = pyqtSignal(int)
+    nextSimulation = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -1148,8 +1149,8 @@ class ALMASimulator(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
-        self.min_line_width_slider.setValue(self.settings.value("line_width", 200))
-        self.max_line_width_slider.setValue(self.settings.value("line_width", 400))
+        self.min_line_width_slider.setValue(self.settings.value("min_line_width", 200))
+        self.max_line_width_slider.setValue(self.settings.value("max_line_width", 400))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(
@@ -2903,14 +2904,30 @@ class ALMASimulator(QMainWindow):
         os.chdir(self.main_path)
 
     def run_simulator_sequentially(self):
+        self.current_sim_index = 0
+        self.nextSimulation.connect(self.run_next_simulation)
+        self.run_next_simulation()
+
+    def run_next_simulation(self):
+        if self.current_sim_index >= int(self.n_sims_entry.text()):
+            self.progress_bar_entry.setText("Simluation Finished")
+            return
         pool = QThreadPool.globalInstance()
-        for i in range(int(self.n_sims_entry.text())):
-            runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
-            self.update_progress.connect(self.update_progress_bar)
-            runnable.signals.simulationFinished.connect(
-                self.plot_simulation_results
-            )  # Connect the signal
-            pool.start(runnable)
+        runnable = SimulatorRunnable(
+            self, *self.input_params.iloc[self.current_sim_index]
+        )
+        self.update_progress.connect(self.update_progress_bar)
+        runnable.signals.simulationFinished.connect(self.plot_simulation_results)
+        runnable.signals.simulationFinished.connect(self.nextSimulation.emit)
+        pool.start(runnable)
+        self.current_sim_index += 1
+        # for i in range(int(self.n_sims_entry.text())):
+        #    runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
+        #    self.update_progress.connect(self.update_progress_bar)
+        #    runnable.signals.simulationFinished.connect(
+        #        self.plot_simulation_results
+        #    )  # Connect the signal
+        #    pool.start(runnable)
 
     def run_simulator_parallel_remote(self, input_params):
         # Access instance attributes here using `self`
@@ -3123,7 +3140,12 @@ class ALMASimulator(QMainWindow):
         redshift=None,
     ):
         cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
-        if type_ == "extended" or type_ == "diffuse" or type_ == "galaxy-zoo":
+        if (
+            type_ == "extended"
+            or type_ == "diffuse"
+            or type_ == "molecular"
+            or type_ == "galaxy-zoo"
+        ):
             file_path = os.path.join(path, "SED_low_z_warm_star_forming_galaxy.dat")
             if redshift is None:
                 redshift = 10 ** (-4)
@@ -3761,7 +3783,19 @@ class ALMASimulator(QMainWindow):
                 n_channels,
                 galaxy_path,
             )
-
+        elif source_type == "molecular":
+            self.progress_bar_entry.setText("Inserting Molecular Cloud Source Model")
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_molecular_cloud(
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                pos_z,
+                fwhm_z,
+                n_pix,
+                n_channels,
+            )
         uas.write_sim_parameters(
             os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
             ra,

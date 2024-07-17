@@ -32,6 +32,9 @@ pysftp = "*"
 tenacity = "*"
 nifty8 = "*"
 setuptools = "*"
+multiprocess = "*"
+turbustat = "*"
+
 
 [tool.poetry.group.dev.dependencies]  # Optional: Development dependencies
 pytest = "*"
