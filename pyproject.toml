@@ -33,6 +33,9 @@ tenacity = "*"
 nifty8 = "*"
 setuptools = "*"
 multiprocess = "*"
+scikit-image = "*"
+imagecodecs = "*"
+
 
 
 [tool.poetry.group.dev.dependencies]  # Optional: Development dependencies
