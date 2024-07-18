@@ -281,7 +281,7 @@ def test_skymodels(qtbot: QtBot):
     header = skymodels.get_datacube_header(datacube, obs_date)
     assert header is not None
     assert model.shape[0] > 0
-    hubble_path = os.path.join(os.path.expanduser("~") + "HubbleData")
+    hubble_path = os.path.join(os.path.expanduser("~"), "HubbleData")
     almasim.hubble_entry.setText(hubble_path)
     if not os.path.exists(hubble_path):
         os.mkdir(hubble_path)
