@@ -16,6 +16,7 @@ from scipy.ndimage import zoom
 import nifty8 as ift
 import random
 from astropy.utils import NumpyRNGContext
+from skimage import io
 
 
 # ------------------ Martini Modification Class -------------------- #
@@ -320,8 +321,9 @@ def insert_gaussian(
 
 def interpolate_array(arr, n_px):
     """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
-    zoom_factor = n_px / arr.shape[0]
-    return zoom(arr, zoom_factor)
+    x_zoom_factor = n_px / arr.shape[0]
+    y_zoom_factor = n_px / arr.shape[1]
+    return zoom(arr, [x_zoom_factor, y_zoom_factor])
 
 
 def insert_galaxy_zoo(
@@ -695,6 +697,40 @@ def insert_molecular_cloud(
         if update_progress is not None:
             update_progress.emit(z / n_chan * 100)
     datacube._array[:, :, :] += cube * U.Jy * U.pix**-2
+    return datacube
+
+
+def insert_hubble(
+    update_progress,
+    datacube,
+    continum,
+    line_fluxes,
+    pos_z,
+    fwhm_z,
+    n_px,
+    n_chan,
+    data_path,
+):
+    files = np.array([file for file in os.listdir(data_path) if not file.startswith('.')])
+    imfile = os.path.join(data_path, np.random.choice(files))
+    img = io.imread(imfile).astype(np.float32)
+    dims = np.shape(img)
+    d3 = min(2, dims[2])
+    avimg = np.average(img[:, :, :d3], axis=2)
+    avimg -= np.min(avimg)
+    avimg *= 1 / np.max(avimg)
+    avimg = interpolate_array(avimg, n_px)
+    avimg /= np.sum(avimg)
+    z_idxs = np.arange(0, n_chan)
+    gs = np.zeros(n_chan)
+    cube = np.zeros((n_px, n_px, n_chan))
+    for i in range(len(line_fluxes)):
+        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
+    for z in range(0, n_chan):
+        cube[:, :, z] += avimg * (continum[z] + gs[z])
+        if update_progress is not None:
+            update_progress.emit(z / n_chan * 100)
+    datacube._array[:, :, :] = cube * U.Jy / U.pix**2
     return datacube
 
 

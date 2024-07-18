@@ -22,3 +22,5 @@ tenacity
 nifty8
 setuptools
 multiprocess
+scikit-image
+imagecodecs

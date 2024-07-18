@@ -281,6 +281,25 @@ def test_skymodels(qtbot: QtBot):
     header = skymodels.get_datacube_header(datacube, obs_date)
     assert header is not None
     assert model.shape[0] > 0
+    hubble_path = os.path.join(os.path.expanduser("~") + "HubbleData")
+    almasim.hubble_entry.setText(hubble_path)
+    if not os.path.exists(hubble_path):
+        os.mkdir(hubble_path)
+        almasim.download_hubble()
+    hubble_path = os.path.join(hubble_path, "top100")
+    datacube = skymodels.insert_hubble(
+        None,
+        datacube,
+        continum,
+        line_fluxes,
+        pos_z,
+        fwhm_z,
+        n_pix,
+        n_channels,
+        hubble_path,
+    )
+    model = datacube._array.to_value(datacube._array.unit).T
+    assert model.shape[0] > 0
     datacube = skymodels.insert_molecular_cloud(
         None,
         datacube,

@@ -40,5 +40,7 @@ setuptools.setup(
         "tenacity",
         "nifty8",
         "setuptools",
+        "scikit-image",
+        "imagecodecs"
     ],
 )
