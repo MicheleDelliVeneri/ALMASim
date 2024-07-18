@@ -2161,7 +2161,7 @@ class ALMASimulator(QMainWindow):
                 if chunk:
                     f.write(chunk)
         with zipfile.ZipFile(zipfilename) as zf:
-            zf.extractall(self.hubble_entry)
+            zf.extractall(self.hubble_entry.text())
         os.remove(zipfilename)
 
     def download_hubble_on_remote(self):
