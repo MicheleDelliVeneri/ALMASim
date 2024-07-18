@@ -711,7 +711,9 @@ def insert_hubble(
     n_chan,
     data_path,
 ):
-    files = np.array([file for file in os.listdir(data_path) if not file.startswith('.')])
+    files = np.array(
+        [file for file in os.listdir(data_path) if not file.startswith(".")]
+    )
     imfile = os.path.join(data_path, np.random.choice(files))
     img = io.imread(imfile).astype(np.float32)
     dims = np.shape(img)

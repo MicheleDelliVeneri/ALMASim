@@ -41,6 +41,6 @@ setuptools.setup(
         "nifty8",
         "setuptools",
         "scikit-image",
-        "imagecodecs"
+        "imagecodecs",
     ],
 )
