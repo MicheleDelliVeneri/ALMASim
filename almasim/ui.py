@@ -235,8 +235,15 @@ class SimulatorRunnable(QRunnable, QObject):
     @pyqtSlot()
     def run(self):
         try:
-            results = self.alma_simulator.simulator(*self.args, **self.kwargs)
-            self.signals.simulationFinished.emit(results)  # Emit the results when done
+            self.finish_flag = False
+            results = None
+            while not self.alma_simulator.stop_simulation_flag:
+                if not self.finish_flag:
+                    results = self.alma_simulator.simulator(*self.args, **self.kwargs)
+                    self.finish_flag = True
+                    self.signals.simulationFinished.emit(
+                        results
+                    )  # Emit the results when done
 
         except Exception as e:
             logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
@@ -352,6 +359,7 @@ class ALMASimulator(QMainWindow):
 
         self.settings_path = self.settings.fileName()
         self.initialize_ui()
+        self.stop_simulation_flag = False
         self.terminal.add_log("Setting file path is {}".format(self.settings_path))
 
     # -------- Widgets and UI -------------------------
@@ -379,6 +387,9 @@ class ALMASimulator(QMainWindow):
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self.reset_fields)
 
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.clicked.connect(self.stop_simulation)
+
         self.term = QTextEdit(self)
         self.term.setReadOnly(True)
         self.terminal = TerminalLogger(self.term)
@@ -398,6 +409,7 @@ class ALMASimulator(QMainWindow):
         button_row.addStretch()
         button_row.addWidget(self.reset_button)
         button_row.addWidget(self.start_button)
+        button_row.addWidget(self.stop_button)
         self.left_layout.addStretch(1)
         self.left_layout.addLayout(button_row)
 
@@ -1290,6 +1302,7 @@ class ALMASimulator(QMainWindow):
             "set_ir_luminosity", self.ir_luminosity_checkbox.isChecked()
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
+        self.stop_simulation_flag = True
         super().closeEvent(event)
 
     def show_hide_widgets(self, layout, show=True):
@@ -2618,10 +2631,12 @@ class ALMASimulator(QMainWindow):
 
         if self.terminal is not None:
             self.terminal.add_log(
-                f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}"
+                f"Max frequency recorded in metadata: {
+                    np.max(metadata['Freq'].values)} GHz"
             )
             self.terminal.add_log(
-                f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}"
+                f"Min frequency recorded in metadata: {
+                    np.min(metadata['Freq'].values)} GHz"
             )
             self.terminal.add_log("Filtering metadata based on line catalogue...")
         if self.terminal is not None:
@@ -2817,6 +2832,11 @@ class ALMASimulator(QMainWindow):
         if self.line_mode_checkbox.isChecked():
             line_indices = [int(i) for i in self.line_index_entry.text().split()]
             rest_freq, line_names = uas.get_line_info(self.main_path, line_indices)
+            self.terminal.add_log("# ------------------------------------- #\n")
+            self.terminal.add_log("The following lines have been selected\n")
+            for line_name, r_freq in zip(line_names, rest_freq):
+                self.terminal.add_log(f"Line: {line_name}: {r_freq} GHz")
+            self.terminal.add_log("# ------------------------------------- #\n")
             if len(rest_freq) == 1:
                 rest_freq = rest_freq[0]
             rest_freqs = np.array([rest_freq] * n_sims)
@@ -3024,7 +3044,15 @@ class ALMASimulator(QMainWindow):
                 self.comp_mode_combo.setCurrentText("parallel")
         os.chdir(self.main_path)
 
+    def stop_simulation(self):
+        # Implement the logic to stop the simulation
+        self.stop_simulation_flag = True
+        self.progress_bar_entry.setText("Simulation Stopped")
+        self.update_progress_bar(0)
+        self.terminal.add_log("# ------------------------------------- #\n")
+
     def run_simulator_sequentially(self):
+        self.stop_simulation_flag = False
         self.current_sim_index = 0
         self.nextSimulation.connect(self.run_next_simulation)
         self.run_next_simulation()
@@ -3241,12 +3269,14 @@ class ALMASimulator(QMainWindow):
                         lum_infrared
                     )
                 )
+                print("# ------------------------------------- #\n")
             else:
                 self.terminal.add_log(
                     "To match the desired SNR, luminosity has been set to {:.2e}".format(
                         lum_infrared
                     )
                 )
+                self.terminal.add_log("# ------------------------------------- #\n")
         return sed, lum_infrared_erg_s, lum_infrared
 
     def sed_reading(
@@ -3356,14 +3386,6 @@ class ALMASimulator(QMainWindow):
         )
         # Placeholder for line data: line_name, observed_frequency (GHz),
         # line_ratio, line_error
-        db_line = uas.read_line_emission_csv(
-            os.path.join(master_path, "brightnes", "calibrated_lines.csv"),
-            sep=",",
-        )
-        # Shift the cont and line frequencies by (1 + redshift)
-        sed["GHz"] = sed["GHz"] / (1 + redshift)
-        filtered_lines = db_line.copy()
-        filtered_lines.drop(filtered_lines.index, inplace=True)
         if line_names is None:
             if n_lines is not None:
                 n = n_lines
@@ -3371,6 +3393,22 @@ class ALMASimulator(QMainWindow):
                 n = 1
         else:
             n = len(line_names)
+        db_line = uas.read_line_emission_csv(
+            os.path.join(master_path, "brightnes", "calibrated_lines.csv"),
+            sep=",",
+        )
+        db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + redshift)
+        n_avail = len(db_line[db_line["shifted_freq(GHz)"] >= freq_min])
+        while n_avail < n and redshift > 0:
+            redshift -= 0.01
+            db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + redshift)
+            n_avail = len(db_line[db_line["shifted_freq(GHz)"] >= freq_min])
+
+        # Shift the cont and line frequencies by (1 + redshift)
+        sed["GHz"] = sed["GHz"] / (1 + redshift)
+        filtered_lines = db_line.copy()
+        filtered_lines.drop(filtered_lines.index, inplace=True)
+
         if line_names is not None:
             db_line = db_line[db_line["Line"].isin(line_names)]
         # delta_v = 300 * U.km / U.s
@@ -3387,13 +3425,14 @@ class ALMASimulator(QMainWindow):
         fwhms_GHz = fwhms.to(U.GHz).value
         for i, fwhm in enumerate(fwhms_GHz):
             if fwhm > delta_freq:
-                if remote is True:
-                    print("Warning: Line width exceeds the bandwidth")
-                else:
-                    self.terminal.add_log("Warning: Line width exceeds the bandwidth")
-                fwhms_GHz[i] = delta_freq
-        self.terminal.add_log(f"Searching {n} compatible lines")
-        while len(filtered_lines) < n:
+                fwhms_GHz[i] = 0.5 * delta_freq
+        self.terminal.add_log(
+            f"Searching {n} compatible lines in spw: {freq_min} - {freq_max}"
+        )
+        self.progress_bar_entry.setText("Searching for lines")
+        previous_redshift = int(redshift)
+        self.terminal.add_log(f"Initial redshift: {previous_redshift}")
+        while len(filtered_lines) < n and not self.stop_simulation_flag:
             r_len = len(filtered_lines)
             filtered_lines = db_line.copy()
             filtered_lines.drop(filtered_lines.index, inplace=True)
@@ -3404,10 +3443,16 @@ class ALMASimulator(QMainWindow):
             filtered_lines = db_line[line_mask]
             if len(filtered_lines) < n:
                 redshift += 0.01
+                if int(redshift) > previous_redshift:
+                    self.terminal.add_log(f"redshift increased to {redshift}")
+                    previous_redshift = int(redshift)
+                if redshift >= 20:
+                    self.stop_simulation_flag = True
+                    self.terminal.add_log("Selected line is not compatible with spw")
             if len(filtered_lines) > r_len:
                 recorded_length = len(filtered_lines)
                 self.update_progress.emit((recorded_length / n) * 100)
-
+        self.terminal.add_log("# ------------------------------------- #\n")
         if redshift != start_redshift:
             if remote is True:
                 print("Redshift increased to match the desired number of lines.")
@@ -3419,15 +3464,19 @@ class ALMASimulator(QMainWindow):
             user_lines = filtered_lines[np.isin(filtered_lines["Line"], line_names)]
             if len(user_lines) != len(line_names):
                 if remote is True:
+                    print("# ------------------------------------- #\n")
                     print(
                         "Warning: Selected lines do not fall in the provided band, \
                             automaticaly computing most probable lines."
                     )
+                    print("# ------------------------------------- #\n")
                 else:
+                    self.terminal.add_log("# ------------------------------------- #\n")
                     self.terminal.add_log(
                         "Warning: Selected lines do not fall in the provided band, \
                             automaticaly computing most probable lines."
                     )
+                    self.terminal.add_log("# ------------------------------------- #\n")
                 # Find rows in filtered_lines that are not already in user_lines
                 additional_lines = filtered_lines[
                     ~filtered_lines.index.isin(user_lines.index)
@@ -3637,7 +3686,7 @@ class ALMASimulator(QMainWindow):
             )  # Or .split() if single space delimited
             # Convert to NumPy array
             line_names = np.array([name.strip("' ") for name in line_names])
-
+        remote = bool(remote)
         start = time.time()
         second2hour = 1 / 3600
         ra = ra * U.deg
@@ -3716,6 +3765,7 @@ class ALMASimulator(QMainWindow):
                 )
                 * U.GHz
             )
+            self.progress_bar_entry.setText("Computing spectral lines and properties")
         (
             continum,
             line_fluxes,
@@ -3971,8 +4021,7 @@ class ALMASimulator(QMainWindow):
             fwhm_y,
             angle,
         )
-
-        if inject_serendipitous is True:
+        if bool(inject_serendipitous) is True and not self.stop_simulation_flag:
             self.progress_bar_entry.setText("Inserting Serendipitous Sources")
             if source_type != "gaussian":
                 fwhm_x = np.random.randint(3, 10)
@@ -4028,6 +4077,7 @@ class ALMASimulator(QMainWindow):
             header,
             save_mode,
             self.terminal,
+            self.stop_simulation_flag,
         )
         interferometer.progress_signal.connect(self.handle_progress)
         self.progress_bar_entry.setText("Observing with ALMA")
@@ -4049,9 +4099,11 @@ class ALMASimulator(QMainWindow):
                     strftime("%H:%M:%S", gmtime(stop - start))
                 )
             )
+            self.progress_bar_entry.setText("Simulation Finished")
         shutil.rmtree(sim_output_dir)
         return simulation_results
 
+    # ------- Progress Bar ---------------------------------
     @pyqtSlot(int)
     def handle_progress(self, value):
         self.update_progress.emit(value)
@@ -4060,40 +4112,42 @@ class ALMASimulator(QMainWindow):
     def update_progress_bar(self, value):
         self.progress_bar.setValue(value)
 
+    # -------- Plotting Functions ---------------------------
     @pyqtSlot(object)
     def plot_simulation_results(self, simulation_results):
-        # Extract data from the simulation_results dictionary
-        self.modelCube = simulation_results["modelCube"]
-        self.dirtyCube = simulation_results["dirtyCube"]
-        self.visCube = simulation_results["visCube"]
-        self.dirtyvisCube = simulation_results["dirtyvisCube"]
-        self.Npix = simulation_results["Npix"]
-        self.Np4 = simulation_results["Np4"]
-        self.Nchan = simulation_results["Nchan"]
-        self.gamma = simulation_results["gamma"]
-        self.currcmap = simulation_results["currcmap"]
-        self.Xaxmax = simulation_results["Xaxmax"]
-        self.lfac = simulation_results["lfac"]
-        self.u = simulation_results["u"]
-        self.v = simulation_results["v"]
-        self.UVpixsize = simulation_results["UVpixsize"]
-        self.w_min = simulation_results["w_min"]
-        self.w_max = simulation_results["w_max"]
-        self.plot_dir = simulation_results["plot_dir"]
-        self.idx = simulation_results["idx"]
-        self.wavelength = simulation_results["wavelength"]
-        self.totsampling = simulation_results["totsampling"]
-        self.beam = simulation_results["beam"]
-        self.fmtB = simulation_results["fmtB"]
-        self.curzoom = simulation_results["curzoom"]
-        self.Nphf = simulation_results["Nphf"]
-        self.Xmax = simulation_results["Xmax"]
-        self.antPos = simulation_results["antPos"]
-        self.Nant = simulation_results["Nant"]
-        self._plot_beam()
-        self._plot_uv_coverage()
-        self._plot_antennas()
-        self._plot_sim()
+        if simulation_results is not None:
+            # Extract data from the simulation_results dictionary
+            self.modelCube = simulation_results["modelCube"]
+            self.dirtyCube = simulation_results["dirtyCube"]
+            self.visCube = simulation_results["visCube"]
+            self.dirtyvisCube = simulation_results["dirtyvisCube"]
+            self.Npix = simulation_results["Npix"]
+            self.Np4 = simulation_results["Np4"]
+            self.Nchan = simulation_results["Nchan"]
+            self.gamma = simulation_results["gamma"]
+            self.currcmap = simulation_results["currcmap"]
+            self.Xaxmax = simulation_results["Xaxmax"]
+            self.lfac = simulation_results["lfac"]
+            self.u = simulation_results["u"]
+            self.v = simulation_results["v"]
+            self.UVpixsize = simulation_results["UVpixsize"]
+            self.w_min = simulation_results["w_min"]
+            self.w_max = simulation_results["w_max"]
+            self.plot_dir = simulation_results["plot_dir"]
+            self.idx = simulation_results["idx"]
+            self.wavelength = simulation_results["wavelength"]
+            self.totsampling = simulation_results["totsampling"]
+            self.beam = simulation_results["beam"]
+            self.fmtB = simulation_results["fmtB"]
+            self.curzoom = simulation_results["curzoom"]
+            self.Nphf = simulation_results["Nphf"]
+            self.Xmax = simulation_results["Xmax"]
+            self.antPos = simulation_results["antPos"]
+            self.Nant = simulation_results["Nant"]
+            self._plot_beam()
+            self._plot_uv_coverage()
+            self._plot_antennas()
+            self._plot_sim()
 
     def _plot_antennas(self):
         plt.figure(figsize=(8, 8))

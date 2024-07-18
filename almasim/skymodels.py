@@ -962,6 +962,8 @@ def insert_serendipitous(
     else:
         n_lines = np.random.randint(1, 3, n_sources)
     # generate the width of the first line based on the first line of the central source
+    if fwhm_zs[0] < 2:
+        fwhm_zs[0] = 2
     s_fwhm_zs = np.random.randint(2, fwhm_zs[0], n_sources)
     # get posx and poy of the centtral source
     pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(
@@ -1092,7 +1094,7 @@ def get_datacube_header(datacube, obs_date):
     header.append(("MJD-OBS", obs_date))
     header.append(("BTYPE", "Intensity"))
     header.append(("SPECSYS", wcs_header["SPECSYS"]))
-    keywords_to_remove = ['BMAJ', 'BMIN', 'BPA']
+    keywords_to_remove = ["BMAJ", "BMIN", "BPA"]
     # Iterate over the keywords in the header
     for key in keywords_to_remove:
         while key in header:
