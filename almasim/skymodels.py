@@ -1092,4 +1092,11 @@ def get_datacube_header(datacube, obs_date):
     header.append(("MJD-OBS", obs_date))
     header.append(("BTYPE", "Intensity"))
     header.append(("SPECSYS", wcs_header["SPECSYS"]))
+    keywords_to_remove = ['BMAJ', 'BMIN', 'BPA']
+    # Iterate over the keywords in the header
+    for key in keywords_to_remove:
+        while key in header:
+            del header[key]
+    header.append(("BMIN", abs(wcs_header["CDELT1"]) * 5))
+    header.append(("BMAJ", abs(wcs_header["CDELT2"]) * 5))
     return header
