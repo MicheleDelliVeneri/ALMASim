@@ -65,6 +65,8 @@ import seaborn as sns
 import subprocess
 from pathlib import Path
 import inspect
+import requests
+import zipfile
 
 matplotlib.use("Agg")
 os.environ["LC_ALL"] = "C"
@@ -233,8 +235,15 @@ class SimulatorRunnable(QRunnable, QObject):
     @pyqtSlot()
     def run(self):
         try:
-            results = self.alma_simulator.simulator(*self.args, **self.kwargs)
-            self.signals.simulationFinished.emit(results)  # Emit the results when done
+            self.finish_flag = False
+            results = None
+            while not self.alma_simulator.stop_simulation_flag:
+                if not self.finish_flag:
+                    results = self.alma_simulator.simulator(*self.args, **self.kwargs)
+                    self.finish_flag = True
+                    self.signals.simulationFinished.emit(
+                        results
+                    )  # Emit the results when done
 
         except Exception as e:
             logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
@@ -315,11 +324,26 @@ class DownloadTNGStructureRunnable(QRunnable):
         self.alma_simulator.check_tng_dirs()
 
 
+class DownloadHubbleRunnable(QRunnable):
+    """Runnable for downloading Hubble 100 data in a separate thread."""
+
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = (
+            alma_simulator_instance  # Store a reference to the main UI class
+        )
+
+    def run(self):
+        """Downloads Galaxy Zoo data."""
+        self.alma_simulator.download_hubble()
+
+
 class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
     terminal = None
     update_progress = pyqtSignal(int)
+    nextSimulation = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -335,6 +359,7 @@ class ALMASimulator(QMainWindow):
 
         self.settings_path = self.settings.fileName()
         self.initialize_ui()
+        self.stop_simulation_flag = False
         self.terminal.add_log("Setting file path is {}".format(self.settings_path))
 
     # -------- Widgets and UI -------------------------
@@ -362,6 +387,9 @@ class ALMASimulator(QMainWindow):
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self.reset_fields)
 
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.clicked.connect(self.stop_simulation)
+
         self.term = QTextEdit(self)
         self.term.setReadOnly(True)
         self.terminal = TerminalLogger(self.term)
@@ -381,6 +409,7 @@ class ALMASimulator(QMainWindow):
         button_row.addStretch()
         button_row.addWidget(self.reset_button)
         button_row.addWidget(self.start_button)
+        button_row.addWidget(self.stop_button)
         self.left_layout.addStretch(1)
         self.left_layout.addLayout(button_row)
 
@@ -458,29 +487,33 @@ class ALMASimulator(QMainWindow):
         self.galaxy_zoo_button = QPushButton("Browse")
         self.galaxy_zoo_button.clicked.connect(self.browse_galaxy_zoo_directory)
         # 4
+        self.hubble_label = QLabel("Hubble Top 100 Directory:")
+        self.hubble_entry = QLineEdit()
+        self.hubble_button = QPushButton("Browse")
+        self.hubble_button.clicked.connect(self.browse_hubble_directory)
+        # 5
         self.project_name_label = QLabel("Project Name:")
         self.project_name_entry = QLineEdit()
-        # 5
+        # 6
         self.n_sims_label = QLabel("Number of Simulations:")
         self.n_sims_entry = QLineEdit()
-        # 6
+        # 7
         self.ncpu_label = QLabel("N. CPUs / Processes:")
         self.ncpu_entry = QLineEdit()
-        # 7
+        # 8
         self.save_format_label = QLabel("Save Format:")
         self.save_format_combo = QComboBox()
         self.save_format_combo.addItems(["npz", "fits", "h5"])
-        # 8
+        # 9
         self.comp_mode_label = QLabel("Computation Mode:")
         self.comp_mode_combo = QComboBox()
         self.comp_mode_combo.addItems(["sequential", "parallel"])
-
-        # 9
+        # 10
         self.local_mode_label = QLabel("Local or Remote:")
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", "remote"])
         self.local_mode_combo.currentTextChanged.connect(self.toggle_comp_mode)
-
+        # 11
         self.remote_mode_label = QLabel("Mode:")
         self.remote_mode_combo = QComboBox()
         self.remote_mode_combo.addItems(["MPI", "SLURM", "PBS"])
@@ -530,35 +563,42 @@ class ALMASimulator(QMainWindow):
         galaxy_row.addWidget(self.galaxy_zoo_button)
         self.left_layout.insertLayout(3, galaxy_row)
 
+        # Hubble Directory Row
+        hubble_row = QHBoxLayout()
+        hubble_row.addWidget(self.hubble_label)
+        hubble_row.addWidget(self.hubble_entry)
+        hubble_row.addWidget(self.hubble_button)
+        self.left_layout.insertLayout(4, hubble_row)
+
         # Project Name Row
         project_name_row = QHBoxLayout()
         project_name_row.addWidget(self.project_name_label)
         project_name_row.addWidget(self.project_name_entry)
-        self.left_layout.insertLayout(4, project_name_row)
+        self.left_layout.insertLayout(5, project_name_row)
 
         # Number of Simulations Row
         n_sims_row = QHBoxLayout()
         n_sims_row.addWidget(self.n_sims_label)
         n_sims_row.addWidget(self.n_sims_entry)
-        self.left_layout.insertLayout(5, n_sims_row)
+        self.left_layout.insertLayout(6, n_sims_row)
 
         # Number of CPUs Row
         ncpu_row = QHBoxLayout()
         ncpu_row.addWidget(self.ncpu_label)
         ncpu_row.addWidget(self.ncpu_entry)
-        self.left_layout.insertLayout(6, ncpu_row)
+        self.left_layout.insertLayout(7, ncpu_row)
 
         # Save format Row
         save_format_row = QHBoxLayout()
         save_format_row.addWidget(self.save_format_label)
         save_format_row.addWidget(self.save_format_combo)
-        self.left_layout.insertLayout(7, save_format_row)
+        self.left_layout.insertLayout(8, save_format_row)
 
         # Computation Mode Row
         comp_mode_row = QHBoxLayout()
         comp_mode_row.addWidget(self.comp_mode_label)
         comp_mode_row.addWidget(self.comp_mode_combo)
-        self.left_layout.insertLayout(8, comp_mode_row)
+        self.left_layout.insertLayout(9, comp_mode_row)
 
         # Local Mode Row
         local_mode_row = QHBoxLayout()
@@ -568,7 +608,7 @@ class ALMASimulator(QMainWindow):
         local_mode_row.addWidget(self.remote_mode_combo)
         local_mode_row.addWidget(self.remote_folder_checkbox)
         local_mode_row.addWidget(self.remote_dir_line)
-        self.left_layout.insertLayout(9, local_mode_row)
+        self.left_layout.insertLayout(10, local_mode_row)
         self.remote_mode_label.hide()
         self.remote_mode_combo.hide()
         self.remote_folder_checkbox.hide()
@@ -581,7 +621,7 @@ class ALMASimulator(QMainWindow):
         self.remote_address_row.addWidget(self.remote_config_label)
         self.remote_address_row.addWidget(self.remote_config_entry)
         self.remote_address_row.addWidget(self.remote_config_button)
-        self.left_layout.insertLayout(10, self.remote_address_row)
+        self.left_layout.insertLayout(11, self.remote_address_row)
         self.show_hide_widgets(self.remote_address_row, show=False)
 
         self.remote_info_row = QHBoxLayout()
@@ -592,7 +632,7 @@ class ALMASimulator(QMainWindow):
         self.remote_info_row.addWidget(self.key_button)
         self.remote_info_row.addWidget(self.remote_key_pass_label)
         self.remote_info_row.addWidget(self.remote_key_pass_entry)
-        self.left_layout.insertLayout(11, self.remote_info_row)
+        self.left_layout.insertLayout(12, self.remote_info_row)
         self.show_hide_widgets(self.remote_info_row, show=False)
         self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
@@ -669,7 +709,7 @@ class ALMASimulator(QMainWindow):
         self.line_index_entry = QLineEdit()
         self.line_mode_row = QHBoxLayout()
         self.line_mode_row.addWidget(self.line_mode_checkbox)
-        self.left_layout.insertLayout(12, self.line_mode_row)  # Insert at the end
+        self.left_layout.insertLayout(13, self.line_mode_row)  # Insert at the end
         # Widgets for Non-Line Mode
         redshift_label = QLabel("Redshifts (space-separated):")
         self.redshift_entry = QLineEdit()
@@ -681,8 +721,8 @@ class ALMASimulator(QMainWindow):
         self.non_line_mode_row2 = QHBoxLayout()
         self.non_line_mode_row2.addWidget(num_lines_label)
         self.non_line_mode_row2.addWidget(self.num_lines_entry)
-        self.left_layout.insertLayout(13, self.non_line_mode_row1)  # Insert at the end
-        self.left_layout.insertLayout(14, self.non_line_mode_row2)  # Insert at the end
+        self.left_layout.insertLayout(14, self.non_line_mode_row1)  # Insert at the end
+        self.left_layout.insertLayout(15, self.non_line_mode_row2)  # Insert at the end
         self.show_hide_widgets(self.non_line_mode_row1, show=False)
         self.show_hide_widgets(self.non_line_mode_row2, show=False)
 
@@ -742,7 +782,7 @@ class ALMASimulator(QMainWindow):
         self.line_width_row.addWidget(self.min_line_width_value_label)
         self.line_width_row.addWidget(self.max_line_width_slider)
         self.line_width_row.addWidget(self.max_line_width_value_label)
-        self.left_layout.insertLayout(15, self.line_width_row)
+        self.left_layout.insertLayout(16, self.line_width_row)
 
     def update_max_line_width_label(self, value):
         self.max_line_width_value_label.setText(f"{value} km/s")
@@ -807,7 +847,7 @@ class ALMASimulator(QMainWindow):
         checkbox_row.addWidget(self.fix_spectral_checkbox)
         checkbox_row.addWidget(self.n_channels_entry)
         checkbox_row.addWidget(self.serendipitous_checkbox)
-        self.left_layout.insertLayout(16, checkbox_row)
+        self.left_layout.insertLayout(17, checkbox_row)
 
     def add_model_widgets(self):
         self.model_label = QLabel("Select Model:")
@@ -826,7 +866,7 @@ class ALMASimulator(QMainWindow):
         self.model_row = QHBoxLayout()
         self.model_row.addWidget(self.model_label)
         self.model_row.addWidget(self.model_combo)
-        self.left_layout.insertLayout(17, self.model_row)
+        self.left_layout.insertLayout(18, self.model_row)
         self.tng_api_key_label = QLabel("TNG API Key:")
         self.tng_api_key_entry = QLineEdit()
         self.tng_api_key_row = QHBoxLayout()
@@ -837,7 +877,7 @@ class ALMASimulator(QMainWindow):
         self.show_hide_widgets(self.tng_api_key_row, show=False)
 
         self.left_layout.insertLayout(
-            18, self.tng_api_key_row
+            19, self.tng_api_key_row
         )  # Insert after model_row
         # Connect the model_combo's signal to update visibility
         self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
@@ -861,7 +901,7 @@ class ALMASimulator(QMainWindow):
         self.metadata_mode_row = QHBoxLayout()
         self.metadata_mode_row.addWidget(self.metadata_mode_label)
         self.metadata_mode_row.addWidget(self.metadata_mode_combo)
-        self.left_layout.insertLayout(19, self.metadata_mode_row)
+        self.left_layout.insertLayout(20, self.metadata_mode_row)
 
     def add_metadata_widgets(self):
         self.metadata_path_label = QLabel("Metadata Path:")
@@ -872,7 +912,7 @@ class ALMASimulator(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(20, self.metadata_path_row)
+        self.left_layout.insertLayout(21, self.metadata_path_row)
         self.left_layout.update()
 
     def add_query_widgets(self):
@@ -910,12 +950,12 @@ class ALMASimulator(QMainWindow):
         self.show_hide_widgets(self.target_list_row, show=False)
 
         # Insert layouts at the correct positions
-        self.left_layout.insertLayout(20, self.query_type_row)
+        self.left_layout.insertLayout(21, self.query_type_row)
         self.left_layout.insertLayout(
-            21, self.target_list_row
+            22, self.target_list_row
         )  # Insert target list row
-        self.left_layout.insertLayout(22, self.query_save_row)
-        self.left_layout.insertWidget(23, self.query_execute_button)
+        self.left_layout.insertLayout(23, self.query_save_row)
+        self.left_layout.insertWidget(24, self.query_execute_button)
         self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
 
     def remove_metadata_query_widgets(self):
@@ -1030,6 +1070,7 @@ class ALMASimulator(QMainWindow):
         self.output_entry.clear()
         self.tng_entry.clear()
         self.galaxy_zoo_entry.clear()
+        self.hubble_entry.clear()
         self.ncpu_entry.clear()
         self.n_sims_entry.clear()
         self.metadata_path_entry.clear()
@@ -1070,6 +1111,7 @@ class ALMASimulator(QMainWindow):
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
         self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
+        self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
         self.n_sims_entry.setText(self.settings.value("n_sims", ""))
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
         self.metadata_mode_combo.setCurrentText(
@@ -1139,6 +1181,30 @@ class ALMASimulator(QMainWindow):
                         self.terminal.add_log(
                             error_message
                         )  # Add the error to your ALMASimulator terminal
+        if self.hubble_entry.text() != "":
+            if self.local_mode_combo.currentText() == "local":
+                if not os.path.exists(os.path.join(self.hubble_entry.text(), "top100")):
+                    pool = QThreadPool.globalInstance()
+                    runnable = DownloadHubbleRunnable(self)
+                    pool.start(runnable)
+            else:
+                if (
+                    self.remote_address_entry.text() != ""
+                    and self.remote_user_entry.text() != ""
+                    and self.remote_key_entry.text() != ""
+                ):
+                    try:
+                        self.download_hubble_on_remote()
+                    except (
+                        Exception
+                    ) as e:  # Catch any exception that occurs during download
+                        error_message = (
+                            f"Error downloading Galaxy Zoo data on remote machine: {e}"
+                        )
+                        print(error_message)  # Print the error to the console
+                        self.terminal.add_log(
+                            error_message
+                        )  # Add the error to your ALMASimulator terminal
         line_mode = self.settings.value("line_mode", False, type=bool)
         self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
         self.line_mode_checkbox.setChecked(line_mode)
@@ -1148,8 +1214,8 @@ class ALMASimulator(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
-        self.min_line_width_slider.setValue(self.settings.value("line_width", 200))
-        self.max_line_width_slider.setValue(self.settings.value("line_width", 400))
+        self.min_line_width_slider.setValue(self.settings.value("min_line_width", 200))
+        self.max_line_width_slider.setValue(self.settings.value("max_line_width", 400))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(
@@ -1175,6 +1241,7 @@ class ALMASimulator(QMainWindow):
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
         self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
+        self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
         self.n_sims_entry.setText(self.settings.value("n_sims", ""))
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
         self.metadata_path_entry.setText("")
@@ -1191,6 +1258,7 @@ class ALMASimulator(QMainWindow):
         self.settings.setValue("output_directory", self.output_entry.text())
         self.settings.setValue("tng_directory", self.tng_entry.text())
         self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
+        self.settings.setValue("hubble_directory", self.hubble_entry.text())
         self.settings.setValue("n_sims", self.n_sims_entry.text())
         self.settings.setValue("ncpu", self.ncpu_entry.text())
         self.settings.setValue("project_name", self.project_name_entry.text())
@@ -1234,6 +1302,7 @@ class ALMASimulator(QMainWindow):
             "set_ir_luminosity", self.ir_luminosity_checkbox.isChecked()
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
+        self.stop_simulation_flag = True
         super().closeEvent(event)
 
     def show_hide_widgets(self, layout, show=True):
@@ -1427,6 +1496,40 @@ class ALMASimulator(QMainWindow):
         else:
             if directory:
                 self.galaxy_zoo_entry.setText(directory)
+
+    def browse_hubble_directory(self):
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Hubble Top 100 Directory"
+        )
+        if (
+            self.local_mode_combo.currentText() == "remote"
+            and self.remote_address_entry.text() != ""
+            and self.remote_key_entry.text() != ""
+            and self.remote_user_entry != ""
+        ):
+            if directory:
+                remote_dir = self.map_to_remote_directory(directory)
+                if self.remote_key_pass_entry.text() != "":
+                    with pysftp.Connection(
+                        self.remote_address_entry.text(),
+                        username=self.remote_user_entry.text(),
+                        private_key=self.remote_key_entry.text(),
+                        private_key_pass=self.remote_key_pass_entry.text(),
+                    ) as sftp:
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
+                else:
+                    with pysftp.Connection(
+                        self.remote_address_entry.text(),
+                        username=self.remote_user_entry.text(),
+                        private_key=self.remote_key_entry.text(),
+                    ) as sftp:
+                        if not sftp.exists(remote_dir):
+                            sftp.mkdir(remote_dir)
+                self.hubble_entry.setText(remote_dir)
+        else:
+            if directory:
+                self.hubble_entry.setText(directory)
 
     def browse_metadata_path(self):
         file, _ = QFileDialog.getOpenFileName(
@@ -2056,6 +2159,27 @@ class ALMASimulator(QMainWindow):
                 self.terminal.add_log(stdout.read().decode())
                 self.terminal.add_log(stderr.read().decode())
 
+    def download_hubble(self):
+        """
+        Download 10GB of iconic Hubble images to hubble_image_path/top100.
+        These are large in size which allows random cropping and
+        scaling for data-augmentation.
+        """
+        baseurl = "https://esahubble.org/static/images/zip/top100/top100-original.zip"
+        self.terminal.add_log("Hubble images not found on disk, downloading ...")
+        zipfilename = os.path.basename(baseurl)
+        response = requests.Session().get(baseurl, stream=True)
+        with open(zipfilename, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+        with zipfile.ZipFile(zipfilename) as zf:
+            zf.extractall(self.hubble_entry.text())
+        os.remove(zipfilename)
+
+    def download_hubble_on_remote(self):
+        self.terminal.add_log("Not yet implemented")
+
     def check_tng_dirs(self):
         tng_dir = self.tng_entry.text()
         if not os.path.exists(os.path.join(tng_dir, "TNG100-1")):
@@ -2507,10 +2631,12 @@ class ALMASimulator(QMainWindow):
 
         if self.terminal is not None:
             self.terminal.add_log(
-                f"Max frequency recorded in metadata: {np.max(metadata['Freq'].values)}"
+                f"Max frequency recorded in metadata: {
+                    np.max(metadata['Freq'].values)} GHz"
             )
             self.terminal.add_log(
-                f"Min frequency recorded in metadata: {np.min(metadata['Freq'].values)}"
+                f"Min frequency recorded in metadata: {
+                    np.min(metadata['Freq'].values)} GHz"
             )
             self.terminal.add_log("Filtering metadata based on line catalogue...")
         if self.terminal is not None:
@@ -2668,11 +2794,20 @@ class ALMASimulator(QMainWindow):
                 pool = QThreadPool.globalInstance()
                 runnable = DownloadGalaxyZooRunnable(self)
                 pool.start(runnable)
+            if self.hubble_entry.text() and not os.path.exists(
+                os.path.join(self.hubble_entry.text(), "top100")
+            ):
+                self.terminal.add_log("Downloading Hubble Images")
+                pool = QThreadPool.globalInstance()
+                runnable = DownloadHubbleRunnable(self)
+                pool.start(runnable)
         else:
             self.create_remote_environment()
             self.download_galaxy_zoo_on_remote()
+            self.download_hubble_on_remote()
 
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
+        hubble_paths = np.array([self.hubble_entry.text()] * n_sims)
         self.main_path = os.path.sep + os.path.join(
             *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
                 os.path.sep
@@ -2697,6 +2832,11 @@ class ALMASimulator(QMainWindow):
         if self.line_mode_checkbox.isChecked():
             line_indices = [int(i) for i in self.line_index_entry.text().split()]
             rest_freq, line_names = uas.get_line_info(self.main_path, line_indices)
+            self.terminal.add_log("# ------------------------------------- #\n")
+            self.terminal.add_log("The following lines have been selected\n")
+            for line_name, r_freq in zip(line_names, rest_freq):
+                self.terminal.add_log(f"Line: {line_name}: {r_freq} GHz")
+            self.terminal.add_log("# ------------------------------------- #\n")
             if len(rest_freq) == 1:
                 rest_freq = rest_freq[0]
             rest_freqs = np.array([rest_freq] * n_sims)
@@ -2806,6 +2946,7 @@ class ALMASimulator(QMainWindow):
                 output_paths,
                 tng_paths,
                 galaxy_zoo_paths,
+                hubble_paths,
                 project_names,
                 ras,
                 decs,
@@ -2843,6 +2984,7 @@ class ALMASimulator(QMainWindow):
                 "output_dir",
                 "tng_dir",
                 "galaxy_zoo_dir",
+                "hubble_dir",
                 "project_name",
                 "ra",
                 "dec",
@@ -2902,15 +3044,39 @@ class ALMASimulator(QMainWindow):
                 self.comp_mode_combo.setCurrentText("parallel")
         os.chdir(self.main_path)
 
+    def stop_simulation(self):
+        # Implement the logic to stop the simulation
+        self.stop_simulation_flag = True
+        self.progress_bar_entry.setText("Simulation Stopped")
+        self.update_progress_bar(0)
+        self.terminal.add_log("# ------------------------------------- #\n")
+
     def run_simulator_sequentially(self):
+        self.stop_simulation_flag = False
+        self.current_sim_index = 0
+        self.nextSimulation.connect(self.run_next_simulation)
+        self.run_next_simulation()
+
+    def run_next_simulation(self):
+        if self.current_sim_index >= int(self.n_sims_entry.text()):
+            self.progress_bar_entry.setText("Simluation Finished")
+            return
         pool = QThreadPool.globalInstance()
-        for i in range(int(self.n_sims_entry.text())):
-            runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
-            self.update_progress.connect(self.update_progress_bar)
-            runnable.signals.simulationFinished.connect(
-                self.plot_simulation_results
-            )  # Connect the signal
-            pool.start(runnable)
+        runnable = SimulatorRunnable(
+            self, *self.input_params.iloc[self.current_sim_index]
+        )
+        self.update_progress.connect(self.update_progress_bar)
+        runnable.signals.simulationFinished.connect(self.plot_simulation_results)
+        runnable.signals.simulationFinished.connect(self.nextSimulation.emit)
+        pool.start(runnable)
+        self.current_sim_index += 1
+        # for i in range(int(self.n_sims_entry.text())):
+        #    runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
+        #    self.update_progress.connect(self.update_progress_bar)
+        #    runnable.signals.simulationFinished.connect(
+        #        self.plot_simulation_results
+        #    )  # Connect the signal
+        #    pool.start(runnable)
 
     def run_simulator_parallel_remote(self, input_params):
         # Access instance attributes here using `self`
@@ -3103,12 +3269,14 @@ class ALMASimulator(QMainWindow):
                         lum_infrared
                     )
                 )
+                print("# ------------------------------------- #\n")
             else:
                 self.terminal.add_log(
                     "To match the desired SNR, luminosity has been set to {:.2e}".format(
                         lum_infrared
                     )
                 )
+                self.terminal.add_log("# ------------------------------------- #\n")
         return sed, lum_infrared_erg_s, lum_infrared
 
     def sed_reading(
@@ -3123,7 +3291,13 @@ class ALMASimulator(QMainWindow):
         redshift=None,
     ):
         cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
-        if type_ == "extended" or type_ == "diffuse" or type_ == "galaxy-zoo":
+        if (
+            type_ == "extended"
+            or type_ == "diffuse"
+            or type_ == "molecular"
+            or type_ == "galaxy-zoo"
+            or type_ == "hubble-100"
+        ):
             file_path = os.path.join(path, "SED_low_z_warm_star_forming_galaxy.dat")
             if redshift is None:
                 redshift = 10 ** (-4)
@@ -3212,14 +3386,6 @@ class ALMASimulator(QMainWindow):
         )
         # Placeholder for line data: line_name, observed_frequency (GHz),
         # line_ratio, line_error
-        db_line = uas.read_line_emission_csv(
-            os.path.join(master_path, "brightnes", "calibrated_lines.csv"),
-            sep=",",
-        )
-        # Shift the cont and line frequencies by (1 + redshift)
-        sed["GHz"] = sed["GHz"] / (1 + redshift)
-        filtered_lines = db_line.copy()
-        filtered_lines.drop(filtered_lines.index, inplace=True)
         if line_names is None:
             if n_lines is not None:
                 n = n_lines
@@ -3227,6 +3393,22 @@ class ALMASimulator(QMainWindow):
                 n = 1
         else:
             n = len(line_names)
+        db_line = uas.read_line_emission_csv(
+            os.path.join(master_path, "brightnes", "calibrated_lines.csv"),
+            sep=",",
+        )
+        db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + redshift)
+        n_avail = len(db_line[db_line["shifted_freq(GHz)"] >= freq_min])
+        while n_avail < n and redshift > 0:
+            redshift -= 0.01
+            db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + redshift)
+            n_avail = len(db_line[db_line["shifted_freq(GHz)"] >= freq_min])
+
+        # Shift the cont and line frequencies by (1 + redshift)
+        sed["GHz"] = sed["GHz"] / (1 + redshift)
+        filtered_lines = db_line.copy()
+        filtered_lines.drop(filtered_lines.index, inplace=True)
+
         if line_names is not None:
             db_line = db_line[db_line["Line"].isin(line_names)]
         # delta_v = 300 * U.km / U.s
@@ -3241,8 +3423,16 @@ class ALMASimulator(QMainWindow):
             * U.Hz
         )
         fwhms_GHz = fwhms.to(U.GHz).value
-        self.terminal.add_log(f"Searching {n} compatible lines")
-        while len(filtered_lines) < n:
+        for i, fwhm in enumerate(fwhms_GHz):
+            if fwhm > delta_freq:
+                fwhms_GHz[i] = 0.5 * delta_freq
+        self.terminal.add_log(
+            f"Searching {n} compatible lines in spw: {freq_min} - {freq_max}"
+        )
+        self.progress_bar_entry.setText("Searching for lines")
+        previous_redshift = int(redshift)
+        self.terminal.add_log(f"Initial redshift: {previous_redshift}")
+        while len(filtered_lines) < n and not self.stop_simulation_flag:
             r_len = len(filtered_lines)
             filtered_lines = db_line.copy()
             filtered_lines.drop(filtered_lines.index, inplace=True)
@@ -3253,10 +3443,16 @@ class ALMASimulator(QMainWindow):
             filtered_lines = db_line[line_mask]
             if len(filtered_lines) < n:
                 redshift += 0.01
+                if int(redshift) > previous_redshift:
+                    self.terminal.add_log(f"redshift increased to {redshift}")
+                    previous_redshift = int(redshift)
+                if redshift >= 20:
+                    self.stop_simulation_flag = True
+                    self.terminal.add_log("Selected line is not compatible with spw")
             if len(filtered_lines) > r_len:
                 recorded_length = len(filtered_lines)
                 self.update_progress.emit((recorded_length / n) * 100)
-
+        self.terminal.add_log("# ------------------------------------- #\n")
         if redshift != start_redshift:
             if remote is True:
                 print("Redshift increased to match the desired number of lines.")
@@ -3268,15 +3464,19 @@ class ALMASimulator(QMainWindow):
             user_lines = filtered_lines[np.isin(filtered_lines["Line"], line_names)]
             if len(user_lines) != len(line_names):
                 if remote is True:
+                    print("# ------------------------------------- #\n")
                     print(
                         "Warning: Selected lines do not fall in the provided band, \
                             automaticaly computing most probable lines."
                     )
+                    print("# ------------------------------------- #\n")
                 else:
+                    self.terminal.add_log("# ------------------------------------- #\n")
                     self.terminal.add_log(
                         "Warning: Selected lines do not fall in the provided band, \
                             automaticaly computing most probable lines."
                     )
+                    self.terminal.add_log("# ------------------------------------- #\n")
                 # Find rows in filtered_lines that are not already in user_lines
                 additional_lines = filtered_lines[
                     ~filtered_lines.index.isin(user_lines.index)
@@ -3383,6 +3583,7 @@ class ALMASimulator(QMainWindow):
         output_dir (str): Path to the output directory.
         tng_dir (str): Path to the TNG directory.
         galaxy_zoo_dir (str): Path to the Galaxy Zoo directory.
+        hubble_dir (str): Path to the Hubble Top 100 directory.
         project_name (str): Name of the project.
         ra (float): Right ascension.
         dec (float): Declination.
@@ -3422,6 +3623,7 @@ class ALMASimulator(QMainWindow):
             output_dir,
             tng_dir,
             galaxy_zoo_dir,
+            hubble_dir,
             project_name,
             ra,
             dec,
@@ -3484,7 +3686,7 @@ class ALMASimulator(QMainWindow):
             )  # Or .split() if single space delimited
             # Convert to NumPy array
             line_names = np.array([name.strip("' ") for name in line_names])
-
+        remote = bool(remote)
         start = time.time()
         second2hour = 1 / 3600
         ra = ra * U.deg
@@ -3563,6 +3765,7 @@ class ALMASimulator(QMainWindow):
                 )
                 * U.GHz
             )
+            self.progress_bar_entry.setText("Computing spectral lines and properties")
         (
             continum,
             line_fluxes,
@@ -3747,7 +3950,7 @@ class ALMASimulator(QMainWindow):
                 n_channels,
             )
         elif source_type == "galaxy-zoo":
-            self.progress_bar_entry.setText("Inserting Galaxy Zoo Source Mode")
+            self.progress_bar_entry.setText("Inserting Galaxy Zoo Source Model")
             galaxy_path = os.path.join(galaxy_zoo_dir, "images_gz2", "images")
             pos_z = [int(index) for index in source_channel_index]
             datacube = usm.insert_galaxy_zoo(
@@ -3761,7 +3964,34 @@ class ALMASimulator(QMainWindow):
                 n_channels,
                 galaxy_path,
             )
-
+        elif source_type == "molecular":
+            self.progress_bar_entry.setText("Inserting Molecular Cloud Source Model")
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_molecular_cloud(
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                pos_z,
+                fwhm_z,
+                n_pix,
+                n_channels,
+            )
+        elif source_type == "hubble-100":
+            self.progress_bar_entry.setText("Insert Hubble Top 100 Source Model")
+            hubble_path = os.path.join(hubble_dir, "top100")
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_hubble(
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                pos_z,
+                fwhm_z,
+                n_pix,
+                n_channels,
+                hubble_path,
+            )
         uas.write_sim_parameters(
             os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
             ra,
@@ -3791,8 +4021,7 @@ class ALMASimulator(QMainWindow):
             fwhm_y,
             angle,
         )
-
-        if inject_serendipitous is True:
+        if bool(inject_serendipitous) is True and not self.stop_simulation_flag:
             self.progress_bar_entry.setText("Inserting Serendipitous Sources")
             if source_type != "gaussian":
                 fwhm_x = np.random.randint(3, 10)
@@ -3848,6 +4077,7 @@ class ALMASimulator(QMainWindow):
             header,
             save_mode,
             self.terminal,
+            self.stop_simulation_flag,
         )
         interferometer.progress_signal.connect(self.handle_progress)
         self.progress_bar_entry.setText("Observing with ALMA")
@@ -3869,9 +4099,11 @@ class ALMASimulator(QMainWindow):
                     strftime("%H:%M:%S", gmtime(stop - start))
                 )
             )
+            self.progress_bar_entry.setText("Simulation Finished")
         shutil.rmtree(sim_output_dir)
         return simulation_results
 
+    # ------- Progress Bar ---------------------------------
     @pyqtSlot(int)
     def handle_progress(self, value):
         self.update_progress.emit(value)
@@ -3880,40 +4112,42 @@ class ALMASimulator(QMainWindow):
     def update_progress_bar(self, value):
         self.progress_bar.setValue(value)
 
+    # -------- Plotting Functions ---------------------------
     @pyqtSlot(object)
     def plot_simulation_results(self, simulation_results):
-        # Extract data from the simulation_results dictionary
-        self.modelCube = simulation_results["modelCube"]
-        self.dirtyCube = simulation_results["dirtyCube"]
-        self.visCube = simulation_results["visCube"]
-        self.dirtyvisCube = simulation_results["dirtyvisCube"]
-        self.Npix = simulation_results["Npix"]
-        self.Np4 = simulation_results["Np4"]
-        self.Nchan = simulation_results["Nchan"]
-        self.gamma = simulation_results["gamma"]
-        self.currcmap = simulation_results["currcmap"]
-        self.Xaxmax = simulation_results["Xaxmax"]
-        self.lfac = simulation_results["lfac"]
-        self.u = simulation_results["u"]
-        self.v = simulation_results["v"]
-        self.UVpixsize = simulation_results["UVpixsize"]
-        self.w_min = simulation_results["w_min"]
-        self.w_max = simulation_results["w_max"]
-        self.plot_dir = simulation_results["plot_dir"]
-        self.idx = simulation_results["idx"]
-        self.wavelength = simulation_results["wavelength"]
-        self.totsampling = simulation_results["totsampling"]
-        self.beam = simulation_results["beam"]
-        self.fmtB = simulation_results["fmtB"]
-        self.curzoom = simulation_results["curzoom"]
-        self.Nphf = simulation_results["Nphf"]
-        self.Xmax = simulation_results["Xmax"]
-        self.antPos = simulation_results["antPos"]
-        self.Nant = simulation_results["Nant"]
-        self._plot_beam()
-        self._plot_uv_coverage()
-        self._plot_antennas()
-        self._plot_sim()
+        if simulation_results is not None:
+            # Extract data from the simulation_results dictionary
+            self.modelCube = simulation_results["modelCube"]
+            self.dirtyCube = simulation_results["dirtyCube"]
+            self.visCube = simulation_results["visCube"]
+            self.dirtyvisCube = simulation_results["dirtyvisCube"]
+            self.Npix = simulation_results["Npix"]
+            self.Np4 = simulation_results["Np4"]
+            self.Nchan = simulation_results["Nchan"]
+            self.gamma = simulation_results["gamma"]
+            self.currcmap = simulation_results["currcmap"]
+            self.Xaxmax = simulation_results["Xaxmax"]
+            self.lfac = simulation_results["lfac"]
+            self.u = simulation_results["u"]
+            self.v = simulation_results["v"]
+            self.UVpixsize = simulation_results["UVpixsize"]
+            self.w_min = simulation_results["w_min"]
+            self.w_max = simulation_results["w_max"]
+            self.plot_dir = simulation_results["plot_dir"]
+            self.idx = simulation_results["idx"]
+            self.wavelength = simulation_results["wavelength"]
+            self.totsampling = simulation_results["totsampling"]
+            self.beam = simulation_results["beam"]
+            self.fmtB = simulation_results["fmtB"]
+            self.curzoom = simulation_results["curzoom"]
+            self.Nphf = simulation_results["Nphf"]
+            self.Xmax = simulation_results["Xmax"]
+            self.antPos = simulation_results["antPos"]
+            self.Nant = simulation_results["Nant"]
+            self._plot_beam()
+            self._plot_uv_coverage()
+            self._plot_antennas()
+            self._plot_sim()
 
     def _plot_antennas(self):
         plt.figure(figsize=(8, 8))

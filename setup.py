@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="almasim",
-    version="2.1.8",
+    version="2.1.9",
     author="Michele Delli Veneri",
     author_email="micheledelliveneri@gmail.com",
     description="An ALMA Simulation package for a more civilized era.",
@@ -40,5 +40,7 @@ setuptools.setup(
         "tenacity",
         "nifty8",
         "setuptools",
+        "scikit-image",
+        "imagecodecs",
     ],
 )

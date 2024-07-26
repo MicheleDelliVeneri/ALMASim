@@ -41,11 +41,13 @@ class Interferometer(QObject):
         header,
         save_mode,
         terminal,
+        stop_simulation_flag,
         robust=0.5,
     ):
         super().__init__()
         self.idx = idx
         self.terminal = terminal
+        self.stop_simulation_flag = stop_simulation_flag
         self.skymodel = skymodel
         self.antenna_array = antenna_array
         self.noise = noise
@@ -116,8 +118,14 @@ class Interferometer(QObject):
 
     def run_interferometric_sim(self):
         for channel in range(self.Nchan):
-            self._image_channel(channel, self.skymodel)
-            self.progress_signal.emit((channel + 1) * 100 // self.Nchan)
+            if not self.stop_simulation_flag:
+                self._image_channel(channel, self.skymodel)
+                self.progress_signal.emit((channel + 1) * 100 // self.Nchan)
+            else:
+                break
+        if self.stop_simulation_flag:
+            self._free_space()
+            return None
         self._savez_compressed_cubes()
         simulation_results = {
             "modelCube": self.modelCube,

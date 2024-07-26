@@ -70,6 +70,7 @@ class Interferometer(QObject):
         header,
         save_mode,
         terminal,
+        stop_simulation_flag,
         robust: float = 0.5,
     ) -> None: ...
     def run_interferometric_sim(self): ...
