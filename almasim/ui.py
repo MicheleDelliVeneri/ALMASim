@@ -3062,6 +3062,7 @@ class ALMASimulator(QMainWindow):
             self.progress_bar_entry.setText("Simluation Finished")
             return
         pool = QThreadPool.globalInstance()
+        pool.setMaxThreadCount(int(self.ncpu_entry.text()))
         runnable = SimulatorRunnable(
             self, *self.input_params.iloc[self.current_sim_index]
         )
@@ -3197,6 +3198,7 @@ class ALMASimulator(QMainWindow):
 
     def initiate_parallel_simulation(self):
         pool = QThreadPool.globalInstance()
+        pool.setMaxThreadCount(int(self.ncpu_entry.text()))
         runnable = ParallelSimulatorRunnable(self)
         pool.start(runnable)
 
@@ -3418,18 +3420,19 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(f"Line Width: {round(delta_v.value, 2)} Km/s")
         c_km_s = c.to(U.km / U.s)
         fwhms = (
-            0.084
-            * (db_line["freq(GHz)"].values * (1 + redshift) * (delta_v / c_km_s) * 1e9)
+            0.84
+            * (db_line["shifted_freq(GHz)"] * (delta_v / c_km_s) * 1e9)
             * U.Hz
         )
         fwhms_GHz = fwhms.to(U.GHz).value
         for i, fwhm in enumerate(fwhms_GHz):
-            if fwhm > delta_freq:
-                fwhms_GHz[i] = 0.5 * delta_freq
+            if fwhm >= delta_freq:
+                fwhms_GHz[i] = 0.98 * delta_freq
         self.terminal.add_log(
             f"Searching {n} compatible lines in spw: {freq_min} - {freq_max}"
         )
         self.progress_bar_entry.setText("Searching for lines")
+        # LUCA AND ALVI NUMBER OF LINES CHECK BASED ON DISTANCE AND WIDTH 
         previous_redshift = int(redshift)
         self.terminal.add_log(f"Initial redshift: {previous_redshift}")
         while len(filtered_lines) < n and not self.stop_simulation_flag:
@@ -3527,7 +3530,7 @@ class ALMASimulator(QMainWindow):
         line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
         line_frequencies = filtered_lines["shifted_freq(GHz)"].values
         # line_rest_frequencies = filtered_lines["freq(GHz)"].values * U.GHz
-        fwhms_GHz = (0.084 * (line_frequencies * (delta_v / c_km_s) * 1e9) * U.Hz).to(
+        fwhms_GHz = (0.84 * (line_frequencies * (delta_v / c_km_s) * 1e9) * U.Hz).to(
             U.GHz
         )
         new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
