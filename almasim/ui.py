@@ -3421,7 +3421,7 @@ class ALMASimulator(QMainWindow):
         c_km_s = c.to(U.km / U.s)
         fwhms = (
             0.84
-            * (db_line["shifted_freq(GHz)"] * (delta_v / c_km_s) * 1e9)
+            * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9)
             * U.Hz
         )
         fwhms_GHz = fwhms.to(U.GHz).value
