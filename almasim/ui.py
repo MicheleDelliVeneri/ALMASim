@@ -2167,7 +2167,8 @@ class ALMASimulator(QMainWindow):
         """
         baseurl = "https://esahubble.org/static/images/zip/top100/top100-original.zip"
         self.terminal.add_log("Hubble images not found on disk, downloading ...")
-        zipfilename = os.path.basename(baseurl)
+        zipfilename = os.path.join(self.hubble_entry.text(), os.path.basename(baseurl))
+
         response = requests.Session().get(baseurl, stream=True)
         with open(zipfilename, "wb") as f:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
@@ -2823,7 +2824,7 @@ class ALMASimulator(QMainWindow):
         )
         # parameter for c generations for artificial lines
         self.line_cs_mean = np.mean(self.db_line["c"].values)
-        self.line_cs_std = np.std(self.db_line["c".values])
+        self.line_cs_std = np.std(self.db_line["c"].values)
         # Checking Line Mode
         if self.line_mode_checkbox.isChecked():
             line_indices = [int(i) for i in self.line_index_entry.text().split()]
@@ -3594,7 +3595,7 @@ class ALMASimulator(QMainWindow):
         freq_steps = (
             np.array(
                 [
-                    new_cont_freq[line_index] + fwhm.value - new_cont_freq[line_index]
+                    new_cont_freq[line_index] + fwhm - new_cont_freq[line_index]
                     for fwhm, line_index in zip(fwhms_GHz, line_indexes)
                 ]
             )
@@ -3605,7 +3606,7 @@ class ALMASimulator(QMainWindow):
         bandwidth = freq_max - freq_min
         freq_support = bandwidth / n_channels
         fwhms = []
-        for fwhm in fwhms_GHz.value / freq_support:
+        for fwhm in fwhms_GHz / freq_support:
             if fwhm >= 1:
                 fwhms.append(fwhm)
             else:
