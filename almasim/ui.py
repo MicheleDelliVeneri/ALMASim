@@ -2208,21 +2208,16 @@ class ALMASimulator(QMainWindow):
     def create_remote_environment(self):
         self.terminal.add_log("Checking ALMASim environment")
         repo_url = "https://github.com/MicheleDelliVeneri/ALMASim.git"
-        illustris_url = "https://github.com/illustristng/illustris_python.git"
         if self.remote_dir_line.text() != "":
             work_dir = self.remote_dir_line.text()
             repo_dir = os.path.join(work_dir, "ALMASim")
             venv_dir = os.path.join(work_dir, "almasim_env")
-            illustris_dir = os.path.join(work_dir, "illustris_python")
         else:
             venv_dir = os.path.join(
                 "/home/{}".format(self.remote_user_entry.text()), "almasim_env"
             )
             repo_dir = os.path.join(
                 "/home/{}".format(self.remote_user_entry.text()), "ALMASim"
-            )
-            illustris_dir = os.path.join(
-                "/home/{}/".format(self.remote_user_entry.text()), "illustris_python"
             )
         self.remote_main_dir = repo_dir
         self.remote_venv_dir = venv_dir
@@ -2273,13 +2268,7 @@ class ALMASimulator(QMainWindow):
                 /usr/bin/python3.12 -m venv {venv_dir}
                 source {venv_dir}/bin/activate
                 pip install --upgrade pip
-                pip install -r requirements.txt
-            fi
-            if [ ! -d {illustris_dir} ]; then
-                git clone {illustris_url} {illustris_dir}
-                source {venv_dir}/bin/activate
-                cd {illustris_dir}
-                pip install .
+                pip install -e .
             fi
             """
 
@@ -2313,6 +2302,7 @@ class ALMASimulator(QMainWindow):
             self.output_entry.text(), self.project_name_entry.text()
         )
         plot_path = os.path.join(output_path, "plots")
+        print(output_path)
         if not sftp.exists(output_path):
             sftp.mkdir(output_path)
         if not sftp.exists(plot_path):
@@ -2827,7 +2817,13 @@ class ALMASimulator(QMainWindow):
         ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
         project_names = np.array([self.project_name_entry.text()] * n_sims)
         save_mode = np.array([self.save_format_combo.currentText()] * n_sims)
-
+        self.db_line = uas.read_line_emission_csv(
+            os.path.join(self.main_path, "brightnes", "calibrated_lines.csv"),
+            sep=",",
+        )
+        # parameter for c generations for artificial lines
+        self.line_cs_mean = np.mean(self.db_line["c"].values)
+        self.line_cs_std = np.std(self.db_line["c".values])
         # Checking Line Mode
         if self.line_mode_checkbox.isChecked():
             line_indices = [int(i) for i in self.line_index_entry.text().split()]
@@ -3338,6 +3334,175 @@ class ALMASimulator(QMainWindow):
         sed = sed.sort_values(by="GHz", ascending=True)
         return sed, flux_infrared, lum_infrared
 
+    def find_compatible_lines(
+        self,
+        db_line,
+        source_freq,
+        redshift,
+        n,
+        line_names,
+        freq_min,
+        freq_max,
+        band_range,
+    ):
+        """
+        Found the lines at given configuration, if real lines are not possibile, it will
+        generate fakes lines to reach the desidered number of lines.
+
+        Parameter:
+        db_line (pandas.Dataframe): It is the database of lines from which the user can
+            choose real ones.
+        redshift (float) : Redshift value of the source
+        n (int): Number of lines that want to simulate
+        line_names (str):
+        freq_min, freq_max (float) : Minimum frequency and Maximum frequency of the source
+        band_range : The band range around the central frequency
+
+        Return:
+        compatible_lines (pandas.Dataframe) : Dataframe with n lines that will be
+        simulated.
+        """
+        c_km_s = c.to(U.km / U.s)
+        min_delta_v = float(self.min_line_width_slider.value())
+        max_delta_v = float(self.max_line_width_slider.value())
+        db_line = db_line.copy()
+        db_line["redshift"] = (db_line["freq(GHz)"].values - source_freq) / source_freq
+        db_line = db_line.loc[~((db_line["redshift"] < 0) | (db_line["redshift"] > 20))]
+        delta_v = np.random.uniform(min_delta_v, max_delta_v, len(db_line)) * U.km / U.s
+        db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + db_line["redshift"])
+        fwhms = (
+            0.84
+            * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9)
+            * U.Hz
+        )
+        fwhms_GHz = fwhms.to(U.GHz).value
+        db_line["fwhm_GHz"] = fwhms_GHz
+        found_lines = 0
+        i = 0
+        lines_fitted, lines_fitted_redshifts = [], []
+        if redshift is not None:
+            db_line["redshift_distance"] = np.abs(db_line["redshift"] - redshift)
+            db_line = db_line.sort_values(by="redshift_distance")
+        for i in range(len(db_line)):
+            db = db_line.copy()
+            first_line = db.iloc[i]
+            db["shifted_freq(GHz)"] = db["freq(GHz)"] / (1 + first_line["redshift"])
+            db["distance(GHz)"] = abs(
+                db["shifted_freq(GHz)"] - first_line["shifted_freq(GHz)"]
+            )
+            compatible_lines = db.loc[db["distance(GHz)"] < band_range]
+            compatible_lines.loc[:, "redshift"] = (
+                np.ones(len(compatible_lines)) * first_line["redshift"]
+            )
+            found_lines = len(compatible_lines)
+            lines_fitted.append(found_lines)
+            lines_fitted_redshifts.append(first_line["redshift"])
+            i += 1
+        if redshift is None:
+            found_lines = np.max(lines_fitted)
+        else:
+            found_lines = np.argmin(np.abs(np.array(lines_fitted_redshifts) - redshift))
+
+        if found_lines < n:
+            if redshift is None:
+                i = np.argmax(lines_fitted)
+            else:
+                i = np.argmin(np.abs(np.array(lines_fitted_redshifts) - redshift))
+            first_line = db_line.iloc[i]
+            db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (
+                1 + first_line["redshift"]
+            )
+            db_line["distance(GHz)"] = abs(
+                db_line["shifted_freq(GHz)"] - first_line["shifted_freq(GHz)"]
+            )
+            compatible_lines = db_line.loc[db_line["distance(GHz)"] < band_range]
+            compatible_lines.loc[:, "redshift"] = first_line["redshift"]
+            found_lines = len(compatible_lines)
+            if found_lines > 1:
+                mean, std = np.mean(compatible_lines["freq(GHz)"]), np.std(
+                    compatible_lines["freq(GHz)"]
+                )
+            else:
+                mean = np.mean(compatible_lines["freq(GHz)"])
+                std = np.random.uniform(0.1, 0.3) * band_range
+            freqs = np.array(list(np.random.normal(mean, std, n - found_lines)))
+            if found_lines > 1:
+                mean, std = np.mean(compatible_lines["c"]), np.std(
+                    compatible_lines["c"]
+                )
+            else:
+                mean = self.line_cs_mean
+                std = self.line_cs_std
+            cs = np.array(list(np.random.normal(mean, std, n - found_lines)))
+            mean, std = np.mean(compatible_lines["err_c"]), np.std(
+                compatible_lines["err_c"]
+            )
+            err_cs = np.array(list(np.random.normal(mean, std, n - found_lines)))
+            line_names = np.array([f"fake_line {i}" for i in range(n - found_lines)])
+            redshifts = np.array(list(np.ones(len(freqs)) * first_line["redshift"]))
+            shifted_freqs = np.array(freqs / (1 + first_line["redshift"]))
+            distances = np.array(abs(shifted_freqs - first_line["shifted_freq(GHz)"]))
+            fwhms = np.array(
+                list(np.ones(len(line_names)) * first_line["fwhm_GHz"].astype(float))
+            )
+            if redshift is None:
+                data = np.column_stack(
+                    (
+                        line_names,
+                        np.round(freqs, 2).astype(float),
+                        np.round(cs, 2).astype(float),
+                        np.round(err_cs, 2).astype(float),
+                        np.round(redshifts, 6).astype(float),
+                        np.round(shifted_freqs, 6).astype(float),
+                        np.round(fwhms, 6).astype(float),
+                        np.round(distances, 6).astype(float),
+                    )
+                )
+            else:
+                redshift_distance = np.array(
+                    list(
+                        np.ones(len(line_names))
+                        * first_line["redshift_distance"].astype(float)
+                    )
+                )
+                data = np.column_stack(
+                    (
+                        line_names,
+                        np.round(freqs, 2).astype(float),
+                        np.round(cs, 2).astype(float),
+                        np.round(err_cs, 2).astype(float),
+                        np.round(redshifts, 6).astype(float),
+                        np.round(shifted_freqs, 6).astype(float),
+                        np.round(fwhms, 6).astype(float),
+                        redshift_distance,
+                        np.round(distances, 6).astype(float),
+                    )
+                )
+            fake_db = pd.DataFrame(data=data, columns=db_line.columns)
+            for col in fake_db.columns[1:]:
+                fake_db[col] = pd.to_numeric(fake_db[col])
+            compatible_lines = pd.concat(
+                (compatible_lines, fake_db),
+                ignore_index=True,
+            )
+        compatible_lines = compatible_lines.reset_index(drop=True)
+        for index, row in compatible_lines.iterrows():
+            lower_bound, upper_bound = (
+                row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2,
+                row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2,
+            )
+            while lower_bound < freq_min and upper_bound > freq_max:
+                row["fwhm_GHz"] -= 0.1
+                lower_bound = (
+                    row["shifted_freq(GHz)"] - row["fwhm_GHz"].astype(float) / 2
+                )
+                upper_bound = (
+                    row["shifted_freq(GHz)"] + row["fwhm_GHz"].astype(float) / 2
+                )
+            if row["fwhm_GHz"] != compatible_lines["fwhm_GHz"].iloc[index]:
+                compatible_lines["fwhm_GHz"].iloc[i] = row["fwhm_GHz"]
+        return compatible_lines
+
     def process_spectral_data(
         self,
         type_,
@@ -3373,10 +3538,6 @@ class ALMASimulator(QMainWindow):
         # Define the frequency range based on central frequency and bandwidth
         freq_min = central_frequency - delta_freq / 2
         freq_max = central_frequency + delta_freq / 2
-        # save_freq_min = freq_min
-        # save_freq_max = freq_max
-        start_redshift = redshift
-        # Example data: Placeholder for cont and lines from SED processing
         sed, flux_infrared, lum_infrared = self.sed_reading(
             type_,
             os.path.join(master_path, "brightnes"),
@@ -3386,7 +3547,7 @@ class ALMASimulator(QMainWindow):
             remote,
             lum_infrared,
         )
-        # Placeholder for line data: line_name, observed_frequency (GHz),
+
         # line_ratio, line_error
         if line_names is None:
             if n_lines is not None:
@@ -3395,114 +3556,17 @@ class ALMASimulator(QMainWindow):
                 n = 1
         else:
             n = len(line_names)
-        db_line = uas.read_line_emission_csv(
-            os.path.join(master_path, "brightnes", "calibrated_lines.csv"),
-            sep=",",
+        filtered_lines = self.find_compatible_lines(
+            self.db_line,
+            source_frequency,
+            redshift,
+            n,
+            line_names,
+            freq_min,
+            freq_max,
+            delta_freq,
         )
-        db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + redshift)
-        n_avail = len(db_line[db_line["shifted_freq(GHz)"] >= freq_min])
-        while n_avail < n and redshift > 0:
-            redshift -= 0.01
-            db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + redshift)
-            n_avail = len(db_line[db_line["shifted_freq(GHz)"] >= freq_min])
 
-        # Shift the cont and line frequencies by (1 + redshift)
-        sed["GHz"] = sed["GHz"] / (1 + redshift)
-        filtered_lines = db_line.copy()
-        filtered_lines.drop(filtered_lines.index, inplace=True)
-
-        if line_names is not None:
-            db_line = db_line[db_line["Line"].isin(line_names)]
-        # delta_v = 300 * U.km / U.s
-        min_delta_v = self.min_line_width_slider.value()
-        max_delta_v = self.max_line_width_slider.value()
-        delta_v = np.random.uniform(min_delta_v, max_delta_v) * U.km / U.s
-        self.terminal.add_log(f"Line Width: {round(delta_v.value, 2)} Km/s")
-        c_km_s = c.to(U.km / U.s)
-        fwhms = (
-            0.84
-            * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9)
-            * U.Hz
-        )
-        fwhms_GHz = fwhms.to(U.GHz).value
-        for i, fwhm in enumerate(fwhms_GHz):
-            if fwhm >= delta_freq:
-                fwhms_GHz[i] = 0.98 * delta_freq
-        self.terminal.add_log(
-            f"Searching {n} compatible lines in spw: {freq_min} - {freq_max}"
-        )
-        self.progress_bar_entry.setText("Searching for lines")
-        # LUCA AND ALVI NUMBER OF LINES CHECK BASED ON DISTANCE AND WIDTH 
-        previous_redshift = int(redshift)
-        self.terminal.add_log(f"Initial redshift: {previous_redshift}")
-        while len(filtered_lines) < n and not self.stop_simulation_flag:
-            r_len = len(filtered_lines)
-            filtered_lines = db_line.copy()
-            filtered_lines.drop(filtered_lines.index, inplace=True)
-            db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + redshift)
-            line_starts = db_line["shifted_freq(GHz)"].astype(float) - fwhms_GHz / 2
-            line_ends = db_line["shifted_freq(GHz)"].astype(float) + fwhms_GHz / 2
-            line_mask = (line_starts >= freq_min) & (line_ends <= freq_max)
-            filtered_lines = db_line[line_mask]
-            if len(filtered_lines) < n:
-                redshift += 0.01
-                if int(redshift) > previous_redshift:
-                    self.terminal.add_log(f"redshift increased to {redshift}")
-                    previous_redshift = int(redshift)
-                if redshift >= 20:
-                    self.stop_simulation_flag = True
-                    self.terminal.add_log("Selected line is not compatible with spw")
-            if len(filtered_lines) > r_len:
-                recorded_length = len(filtered_lines)
-                self.update_progress.emit((recorded_length / n) * 100)
-        self.terminal.add_log("# ------------------------------------- #\n")
-        if redshift != start_redshift:
-            if remote is True:
-                print("Redshift increased to match the desired number of lines.")
-            else:
-                self.terminal.add_log(
-                    "Redshift increased to match the desired number of lines."
-                )
-        if isinstance(line_names, list) or isinstance(line_names, np.ndarray):
-            user_lines = filtered_lines[np.isin(filtered_lines["Line"], line_names)]
-            if len(user_lines) != len(line_names):
-                if remote is True:
-                    print("# ------------------------------------- #\n")
-                    print(
-                        "Warning: Selected lines do not fall in the provided band, \
-                            automaticaly computing most probable lines."
-                    )
-                    print("# ------------------------------------- #\n")
-                else:
-                    self.terminal.add_log("# ------------------------------------- #\n")
-                    self.terminal.add_log(
-                        "Warning: Selected lines do not fall in the provided band, \
-                            automaticaly computing most probable lines."
-                    )
-                    self.terminal.add_log("# ------------------------------------- #\n")
-                # Find rows in filtered_lines that are not already in user_lines
-                additional_lines = filtered_lines[
-                    ~filtered_lines.index.isin(user_lines.index)
-                ]
-                # Add rows from filtered_lines to user_lines until the length matches
-                # len(line_names)
-                num_additional_rows = len(line_names) - len(user_lines)
-                additional_lines = additional_lines.iloc[
-                    :num_additional_rows
-                ]  # Ensure we only select the required number of rows
-                # Add additional_lines to user_lines
-                user_lines = pd.concat([user_lines, additional_lines])
-                filtered_lines = user_lines
-            else:
-                filtered_lines = user_lines
-        if remote is True:
-            print("Injecting {} lines".format(len(filtered_lines)))
-        else:
-            self.terminal.add_log("Injecting {} lines".format(len(filtered_lines)))
-        filtered_lines["distance"] = np.abs(
-            filtered_lines["shifted_freq(GHz)"].astype(float) - source_frequency
-        )
-        filtered_lines.sort_values(by="distance", inplace=True)
         cont_mask = (sed["GHz"] >= freq_min) & (sed["GHz"] <= freq_max)
         if sum(cont_mask) > 0:
             cont_fluxes = sed["Jy"].values[cont_mask]
@@ -3512,27 +3576,12 @@ class ALMASimulator(QMainWindow):
             cont_fluxes = [sed["Jy"].values[freq_point]]
             cont_frequencies = [sed["GHz"].values[freq_point]]
 
-        if n_lines is not None:
-            if n_lines > len(filtered_lines):
-                if remote is True:
-                    print(
-                        f"Warn: Cant insert {n_lines}, injecting {len(filtered_lines)}."
-                    )
-                else:
-                    self.terminal.add_log(
-                        f"Warn: Cant insert {n_lines}, injecting {len(filtered_lines)}."
-                    )
-            else:
-                filtered_lines = filtered_lines.head(n_lines)
         line_names = filtered_lines["Line"].values
         cs = filtered_lines["c"].values
         cdeltas = filtered_lines["err_c"].values
         line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
         line_frequencies = filtered_lines["shifted_freq(GHz)"].values
         # line_rest_frequencies = filtered_lines["freq(GHz)"].values * U.GHz
-        fwhms_GHz = (0.84 * (line_frequencies * (delta_v / c_km_s) * 1e9) * U.Hz).to(
-            U.GHz
-        )
         new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
         if len(cont_fluxes) > 1:
             int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
@@ -3541,6 +3590,7 @@ class ALMASimulator(QMainWindow):
         line_indexes = filtered_lines["shifted_freq(GHz)"].apply(
             lambda x: self.cont_finder(new_cont_freq, float(x))
         )
+        fwhms_GHz = filtered_lines["fwhm_GHz"].values
         freq_steps = (
             np.array(
                 [
