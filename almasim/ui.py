@@ -1183,6 +1183,8 @@ class ALMASimulator(QMainWindow):
                         )  # Add the error to your ALMASimulator terminal
         if self.hubble_entry.text() != "":
             if self.local_mode_combo.currentText() == "local":
+                if not os.path.exists(self.hubble_entry.text()):
+                    os.mkdir(self.hubble_entry.text())
                 if not os.path.exists(os.path.join(self.hubble_entry.text(), "top100")):
                     pool = QThreadPool.globalInstance()
                     runnable = DownloadHubbleRunnable(self)
