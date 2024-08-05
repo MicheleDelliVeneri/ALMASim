@@ -365,7 +365,7 @@ class ALMASimulator(QMainWindow):
     # -------- Widgets and UI -------------------------
     def initialize_ui(self):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
-
+        self.thread_pool = QThreadPool.globalInstance()
         # --- Create Widgets ---
         self.main_path = os.path.sep + os.path.join(
             *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
@@ -1154,14 +1154,18 @@ class ALMASimulator(QMainWindow):
                     shutil.copyfile(
                         os.path.join(os.getcwd(), "kaggle.json"), kaggle_file
                     )
-                if os.path.exists(self.galaxy_zoo_entry.text()):
-                    if not os.path.exists(
-                        os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
-                    ):
-                        self.terminal.add_log("Downloading Galaxy Zoo")
-                        pool = QThreadPool.globalInstance()
-                        runnable = DownloadGalaxyZooRunnable(self)
-                        pool.start(runnable)
+                try:
+                    if os.path.exists(self.galaxy_zoo_entry.text()):
+                        if not os.path.exists(
+                            os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
+                        ):
+                            self.terminal.add_log("Downloading Galaxy Zoo")
+                            #pool = QThreadPool.globalInstance()
+                            runnable = DownloadGalaxyZooRunnable(self)
+                            self.thread_pool.start(runnable)
+                except Exception as e: 
+                    self.terminal.add_log(
+                        f"Cannot dowload Galaxy Zoo: {e}")
 
             else:
                 if (
@@ -1183,12 +1187,18 @@ class ALMASimulator(QMainWindow):
                         )  # Add the error to your ALMASimulator terminal
         if self.hubble_entry.text() != "":
             if self.local_mode_combo.currentText() == "local":
-                if not os.path.exists(self.hubble_entry.text()):
-                    os.mkdir(self.hubble_entry.text())
-                if not os.path.exists(os.path.join(self.hubble_entry.text(), "top100")):
-                    pool = QThreadPool.globalInstance()
-                    runnable = DownloadHubbleRunnable(self)
-                    pool.start(runnable)
+                try:
+                    if not os.path.exists(self.hubble_entry.text()):
+                        os.mkdir(self.hubble_entry.text())
+                    if not os.path.exists(
+                        os.path.join(self.hubble_entry.text(), "top100")):
+                        #pool = QThreadPool.globalInstance()
+                        runnable = DownloadHubbleRunnable(self)
+                        self.thread_pool.start(runnable)
+                except Exception as e:
+                    self.terminal.add_log(
+                        f"Cannot dowload Hubble 100: {e}")
+
             else:
                 if (
                     self.remote_address_entry.text() != ""
@@ -1305,6 +1315,7 @@ class ALMASimulator(QMainWindow):
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
         self.stop_simulation_flag = True
+        self.thread_pool.waitForDone()
         super().closeEvent(event)
 
     def show_hide_widgets(self, layout, show=True):
@@ -2089,6 +2100,11 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(
             f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}"
         )
+        os.remove(
+            os.path.join(
+                self.galaxy_zoo_entry.text(), 
+                'galaxy-zoo-2-images.zip'
+            ))
 
     def download_galaxy_zoo_on_remote(self):
         """
@@ -2179,6 +2195,8 @@ class ALMASimulator(QMainWindow):
         with zipfile.ZipFile(zipfilename) as zf:
             zf.extractall(self.hubble_entry.text())
         os.remove(zipfilename)
+        message = f"Hubble 100 Images downloaded to {self.hubble_entry.text()}"
+        self.terminal.add_log(message)
 
     def download_hubble_on_remote(self):
         self.terminal.add_log("Not yet implemented")
@@ -2784,16 +2802,16 @@ class ALMASimulator(QMainWindow):
                 os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
             ):
                 self.terminal.add_log("Downloading Galaxy Zoo")
-                pool = QThreadPool.globalInstance()
+                #pool = QThreadPool.globalInstance()
                 runnable = DownloadGalaxyZooRunnable(self)
-                pool.start(runnable)
+                self.thread_pool.start(runnable)
             if self.hubble_entry.text() and not os.path.exists(
                 os.path.join(self.hubble_entry.text(), "top100")
             ):
                 self.terminal.add_log("Downloading Hubble Images")
-                pool = QThreadPool.globalInstance()
+                #pool = QThreadPool.globalInstance()
                 runnable = DownloadHubbleRunnable(self)
-                pool.start(runnable)
+                self.thread_pool.start(runnable)
         else:
             self.create_remote_environment()
             self.download_galaxy_zoo_on_remote()
@@ -2899,9 +2917,9 @@ class ALMASimulator(QMainWindow):
         if self.model_combo.currentText() == "Extended":
             if self.local_mode_combo.currentText() == "local":
                 self.terminal.add_log("Checking TNG Directories")
-                pool = QThreadPool.globalInstance()
+                #pool = QThreadPool.globalInstance()
                 runnable = DownloadTNGStructureRunnable(self)
-                pool.start(runnable)
+                self.thread_pool.start(runnable)
             else:
                 self.remote_check_tng_dirs()
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
@@ -3060,15 +3078,15 @@ class ALMASimulator(QMainWindow):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
             self.progress_bar_entry.setText("Simluation Finished")
             return
-        pool = QThreadPool.globalInstance()
-        pool.setMaxThreadCount(int(self.ncpu_entry.text()))
+        #pool = QThreadPool.globalInstance()
+        self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
         runnable = SimulatorRunnable(
             self, *self.input_params.iloc[self.current_sim_index]
         )
         self.update_progress.connect(self.update_progress_bar)
         runnable.signals.simulationFinished.connect(self.plot_simulation_results)
         runnable.signals.simulationFinished.connect(self.nextSimulation.emit)
-        pool.start(runnable)
+        self.thread_pool.start(runnable)
         self.current_sim_index += 1
         # for i in range(int(self.n_sims_entry.text())):
         #    runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
@@ -3196,10 +3214,10 @@ class ALMASimulator(QMainWindow):
                 future.result()  # This blocks until the worker is done
 
     def initiate_parallel_simulation(self):
-        pool = QThreadPool.globalInstance()
-        pool.setMaxThreadCount(int(self.ncpu_entry.text()))
+        #pool = QThreadPool.globalInstance()
+        self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
         runnable = ParallelSimulatorRunnable(self)
-        pool.start(runnable)
+        self.thread_pool.start(runnable)
 
     @classmethod
     def initiate_parallel_simulation_remote(cls, window_instance):
@@ -3488,6 +3506,8 @@ class ALMASimulator(QMainWindow):
                 (compatible_lines, fake_db),
                 ignore_index=True,
             )
+        elif found_lines > n:
+            compatible_lines = compatible_lines.iloc[:n]
         compatible_lines = compatible_lines.reset_index(drop=True)
         for index, row in compatible_lines.iterrows():
             lower_bound, upper_bound = (
@@ -3559,6 +3579,7 @@ class ALMASimulator(QMainWindow):
                 n = 1
         else:
             n = len(line_names)
+            self.db_line = self.db_line[self.db_line["Line"].isin(line_names)]
         filtered_lines = self.find_compatible_lines(
             self.db_line,
             source_frequency,
@@ -4128,6 +4149,7 @@ class ALMASimulator(QMainWindow):
             fov,
             antenna_array,
             cont_sens.value,
+            snr,
             int_time.value * second2hour,
             obs_date,
             header,

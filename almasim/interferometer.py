@@ -36,6 +36,7 @@ class Interferometer(QObject):
         fov,
         antenna_array,
         noise,
+        snr, 
         int_time,
         obs_date,
         header,
@@ -51,6 +52,7 @@ class Interferometer(QObject):
         self.skymodel = skymodel
         self.antenna_array = antenna_array
         self.noise = noise
+        self.snr = snr
         self.int_time = int_time
         self.obs_date = obs_date
         # Constants
@@ -374,6 +376,7 @@ class Interferometer(QObject):
             # self._plot_uv_coverage()
         self.img = skymodel[channel]
         self._prepare_model()
+        self._add_thermal_noise()
         self._set_primary_beam()
         self._observe()
         self._update_cubes()
@@ -726,6 +729,11 @@ class Interferometer(QObject):
             # added to introduce Atmospheric Errors
             phase_nb = np.angle(self.Gains[nb, goodpix])
             self.baseline_phases[nb] = phase_nb
+            phase_rms = np.std(
+                self.baseline_phases[nb]
+            )  # Standard deviation is RMS for phases
+            random_phase_error = np.random.normal(scale=phase_rms)
+            self.Gains[nb] *= np.exp(1j * random_phase_error)
             # Calculate positive and negative pixel indices
             # (accounting for the shift in the FFT).
             # Isolates positives and negative pixels
@@ -902,26 +910,6 @@ class Interferometer(QObject):
 
         self.modelimTrue[self.modelimTrue < 0.0] = 0.0
 
-    # def _set_elliptical_beam(self):
-    #    cov_matrix = np.cov(self.u, self.v)
-    #    # Eigen decomposition of the covariance matrix
-    #    eigvals, eigvecs = np.linalg.eigh(cov_matrix)
-    #    # Eigenvector corresponding to the largest eigenvalue gives the major axis
-    #    # direction
-    #    major_axis_vector = eigvecs[:, np.argmax(eigvals)]
-    #    BPA_rad = self.rad2deg(np.arctan2(major_axis_vector[1], major_axis_vector[0]))
-    #    scale_factor = (
-    #        1220 * self.deg2arcsec * self.wavelength[2] / self.Diameters[0] / 2.3548
-    #    )
-    #    # Rotate the coordinates
-    #    x_rot = x * np.cos(BPA_rad) + y * np.sin(BPA_rad)
-    #    y_rot = -x * np.sin(BPA_rad) + y * np.cos(BPA_rad)
-    #    # Eigenvalues correspond to the variances along the major and minor axes
-    #    sigma_major = np.sqrt(np.max(eigvals)) * scale_factor
-    #    sigma_minor = np.sqrt(np.min(eigvals)) * scale_factor
-    #    PB = (x_rot / sigma_major) ** 2 + (y_rot / sigma_minor) ** 2
-    #    self.beamImg = np.exp(self.distmat / PB)
-
     def _set_primary_beam(self):
         """
         Calculates and applies the primary beam of the telescope to the model image.
@@ -1064,18 +1052,9 @@ class Interferometer(QObject):
 
     # ------------ Noise Functions ------------------------
 
-    def _add_atmospheric_noise(self):
-        for nb in self.bas2change:
-            phase_rms = np.std(
-                self.baseline_phases[nb]
-            )  # Standard deviation is RMS for phases
-            random_phase_error = np.random.normal(scale=phase_rms)
-            self.Gains[nb] *= np.exp(1j * random_phase_error)
-
     def _add_thermal_noise(self):
         mean_val = np.mean(self.img)
-        # self.img += np.random.normal(scale=mean_val / self.snr)
-        return mean_val
+        self.img += np.random.normal(scale=mean_val / self.snr)
 
     # ------------------- IO Functions
     def _savez_compressed_cubes(self):

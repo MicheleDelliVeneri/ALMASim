@@ -65,6 +65,7 @@ class Interferometer(QObject):
         fov,
         antenna_array,
         noise,
+        snr,
         int_time,
         obs_date,
         header,
