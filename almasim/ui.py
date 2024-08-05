@@ -3517,13 +3517,13 @@ class ALMASimulator(QMainWindow):
             while lower_bound < freq_min and upper_bound > freq_max:
                 row["fwhm_GHz"] -= 0.1
                 lower_bound = (
-                    row["shifted_freq(GHz)"] - row["fwhm_GHz"].astype(float) / 2
+                    row["shifted_freq(GHz)"] - row["fwhm_GHz"]/ 2
                 )
                 upper_bound = (
-                    row["shifted_freq(GHz)"] + row["fwhm_GHz"].astype(float) / 2
+                    row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2
                 )
             if row["fwhm_GHz"] != compatible_lines["fwhm_GHz"].iloc[index]:
-                compatible_lines["fwhm_GHz"].iloc[i] = row["fwhm_GHz"]
+                compatible_lines.loc[i, "fwhm_GHz"] = row["fwhm_GHz"]
         return compatible_lines
 
     def process_spectral_data(
@@ -4148,7 +4148,7 @@ class ALMASimulator(QMainWindow):
             band_range,
             fov,
             antenna_array,
-            cont_sens.value,
+            np.min(line_fluxes) / snr,
             snr,
             int_time.value * second2hour,
             obs_date,
