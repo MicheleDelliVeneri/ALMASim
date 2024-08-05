@@ -3807,6 +3807,7 @@ class ALMASimulator(QMainWindow):
         beam_size = ual.estimate_alma_beam_size(
             central_freq, max_baseline, return_value=False
         )
+        beam_area = 1.1331 * beam_size ** 2
         beam_solid_angle = np.pi * (beam_size / 2) ** 2
         cont_sens = cont_sens * U.mJy / (U.arcsec**2)
         cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
@@ -4123,6 +4124,7 @@ class ALMASimulator(QMainWindow):
             )
         header = usm.get_datacube_header(datacube, obs_date)
         model = datacube._array.to_value(datacube._array.unit).T
+        model = model / beam_area.value
         totflux = np.sum(model)
         if remote is True:
             print("Total Flux injected in model cube: {:.3f} Jy".format(totflux))
@@ -4149,7 +4151,7 @@ class ALMASimulator(QMainWindow):
             band_range,
             fov,
             antenna_array,
-            min_line_flux / snr,
+            (min_line_flux / beam_area) / snr,
             snr,
             int_time.value * second2hour,
             obs_date,
@@ -4357,7 +4359,7 @@ class ALMASimulator(QMainWindow):
         totflux = np.sum(
             sim_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
         )
-        ax[0, 0].set_title("MODEL IMAGE: %.2e Jy" % totflux)
+        ax[0, 0].set_title("MODEL IMAGE: %.2e Jy/beam" % totflux)
         simPlotPlot.norm.vmin = np.min(sim_img)
         simPlotPlot.norm.vmax = np.max(sim_img)
         dirty_img = np.sum(self.dirtyCube, axis=0)
@@ -4380,7 +4382,7 @@ class ALMASimulator(QMainWindow):
         totflux = np.sum(
             dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
         )
-        ax[0, 1].set_title("DIRTY IMAGE: %.2e Jy" % totflux)
+        ax[0, 1].set_title("DIRTY IMAGE: %.2e Jy/beam" % totflux)
         dirtyPlotPlot.norm.vmin = np.min(dirty_img)
         dirtyPlotPlot.norm.vmax = np.max(dirty_img)
         self.UVmax = self.Npix / 2.0 / self.lfac * self.UVpixsize
@@ -4432,11 +4434,11 @@ class ALMASimulator(QMainWindow):
         wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
         specPlot, ax = plt.subplots(1, 2, figsize=(12, 6))
         ax[0].plot(wavelenghts, sim_spectrum)
-        ax[0].set_ylabel("Jy/$pix^{2}$")
+        ax[0].set_ylabel("Jy/beam")
         ax[0].set_xlabel("$\\lambda$ [mm]")
         ax[0].set_title("MODEL SPECTRUM")
         ax[1].plot(wavelenghts, dirty_spectrum)
-        ax[1].set_ylabel("Jy/$pix^{2}$")
+        ax[1].set_ylabel("Jy/beam")
         ax[1].set_xlabel("$\\lambda$ [mm]")
         ax[1].set_title("DIRTY SPECTRUM")
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))

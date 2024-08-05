@@ -1090,7 +1090,7 @@ def get_datacube_header(datacube, obs_date):
     header.append(("CTYPE3", wcs_header["CTYPE3"]))
     header.append(("CUNIT3", wcs_header["CUNIT3"]))
     header.append(("OBJECT", "MOCK"))
-    header.append(("BUNIT", datacube._array.unit.to_string("fits")))
+    header.append(("BUNIT", 'Jy/beam'))
     header.append(("MJD-OBS", obs_date))
     header.append(("BTYPE", "Intensity"))
     header.append(("SPECSYS", wcs_header["SPECSYS"]))
