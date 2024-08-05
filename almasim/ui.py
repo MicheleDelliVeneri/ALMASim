@@ -2641,13 +2641,13 @@ class ALMASimulator(QMainWindow):
             rest_frequency = np.array([rest_frequency])
 
         if self.terminal is not None:
+            max_freq = np.max(metadata['Freq'].values)
             self.terminal.add_log(
-                f"Max frequency recorded in metadata: {
-                    np.max(metadata['Freq'].values)} GHz"
+                f"Max frequency recorded in metadata: {max_freq} GHz"
             )
+            min_freq = np.min(metadata['Freq'].values)
             self.terminal.add_log(
-                f"Min frequency recorded in metadata: {
-                    np.min(metadata['Freq'].values)} GHz"
+                f"Min frequency recorded in metadata: {min_freq} GHz"
             )
             self.terminal.add_log("Filtering metadata based on line catalogue...")
         if self.terminal is not None:
