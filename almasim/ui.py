@@ -367,11 +367,12 @@ class ALMASimulator(QMainWindow):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
         self.thread_pool = QThreadPool.globalInstance()
         # --- Create Widgets ---
-        self.main_path = os.path.sep + os.path.join(
-            *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
-                os.path.sep
-            )[:-1]
-        )
+        #self.main_path = os.path.sep + os.path.join(
+        #    *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
+        #        os.path.sep
+        #    )[:-1]
+        #)
+        self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
         self.metadata_path_button = QPushButton("Browse")
@@ -4151,7 +4152,7 @@ class ALMASimulator(QMainWindow):
             band_range,
             fov,
             antenna_array,
-            (min_line_flux / beam_area) / snr,
+            (min_line_flux / beam_area.value) / snr,
             snr,
             int_time.value * second2hour,
             obs_date,
