@@ -29,7 +29,7 @@ def compute_redshift(rest_frequency, observed_frequency):
         raise ValueError("Observed frequency must be lower than the rest frequency.")
 
     # Compute redshift
-    redshift = (rest_frequency.value - observed_frequency.value) / rest_frequency.value
+    redshift = (rest_frequency.value - observed_frequency.value) / observed_frequency.value
     return redshift
 
 
@@ -307,12 +307,3 @@ def write_sim_parameters(
             f.write("TNG Snapshot ID: {}\n".format(snapshot))
             f.write("TNG Subhalo ID: {}\n".format(subhalo))
         f.close()
-
-
-# def get_image_from_ssd(ra, dec, fov):
-#    DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/sdss_dr9"
-#    svc_sdss_dr9 = sia.SIAService(DEF_ACCESS_URL)
-#    ac.whoAmI()
-#    imgTable = svc_sdss_dr9.search(
-#        (ra, dec), (fov / np.cos(dec * np.pi / 180), fov), verbosity=2
-#    ).to_table()

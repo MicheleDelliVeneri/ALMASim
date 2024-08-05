@@ -4137,6 +4137,7 @@ class ALMASimulator(QMainWindow):
             print("Observing with ALMA")
         else:
             self.terminal.add_log("Observing with ALMA")
+        min_line_flux = np.min(line_fluxes)
         interferometer = uin.Interferometer(
             inx,
             model,
@@ -4148,7 +4149,7 @@ class ALMASimulator(QMainWindow):
             band_range,
             fov,
             antenna_array,
-            np.min(line_fluxes) / snr,
+            min_line_flux / snr,
             snr,
             int_time.value * second2hour,
             obs_date,
