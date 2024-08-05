@@ -2273,9 +2273,14 @@ class ALMASimulator(QMainWindow):
                     self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
                 ),
             )
+        sftp.chmod(
+                        "/home/{}/.config/{}".format(
+                            self.remote_user_entry.text(),
+                            self.settings_path.split(os.sep)[-1]
+                        ),
+                        600,
+                    )
         commands = f"""
-            chmod 600 /home/{self.remote_user_entry.text()}/.config/\
-                {self.settings_path.split(os.sep)[-1]}
             if [ ! -d {repo_dir} ]; then
                 git clone {repo_url} {repo_dir}
             fi
@@ -2477,14 +2482,14 @@ class ALMASimulator(QMainWindow):
         """
         # Separate the Python command for readability and maintainability
         _QApplication = QApplication
-        python_command = [
-            'python -c "import sys; import os; import almasim.ui as ui; ',
-            f"app = ui.{_QApplication}(sys.argv); ",
-            f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
-            "window=ui.ALMASimulator(); ",
-            "ui.ALMASimulator.initiate_parallel_simulation_remote(window); ",
-            'sys.exit(app.exec())"',
-        ]
+        python_command = (
+            'python -c "import sys; import os; import almasim.ui as ui; '
+            f'app = ui.QApplication(sys.argv); '
+            f'ui.ALMASimulator.settings_file = \'{settings_path}\'; '
+            'window=ui.ALMASimulator(); '
+            'ui.ALMASimulator.initiate_parallel_simulation_remote(window); '
+            'sys.exit(app.exec())"'
+        )
         # Join the list elements into a single string
         python_command_str = "".join(python_command)
         # Add it as a new line to dask_commands, and add a newline character
