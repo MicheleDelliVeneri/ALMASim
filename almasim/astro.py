@@ -29,7 +29,9 @@ def compute_redshift(rest_frequency, observed_frequency):
         raise ValueError("Observed frequency must be lower than the rest frequency.")
 
     # Compute redshift
-    redshift = (rest_frequency.value - observed_frequency.value) / observed_frequency.value
+    redshift = (
+        rest_frequency.value - observed_frequency.value
+    ) / observed_frequency.value
     return redshift
 
 

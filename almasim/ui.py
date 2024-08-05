@@ -367,11 +367,11 @@ class ALMASimulator(QMainWindow):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
         self.thread_pool = QThreadPool.globalInstance()
         # --- Create Widgets ---
-        #self.main_path = os.path.sep + os.path.join(
+        # self.main_path = os.path.sep + os.path.join(
         #    *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
         #        os.path.sep
         #    )[:-1]
-        #)
+        # )
         self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
@@ -1161,12 +1161,11 @@ class ALMASimulator(QMainWindow):
                             os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
                         ):
                             self.terminal.add_log("Downloading Galaxy Zoo")
-                            #pool = QThreadPool.globalInstance()
+                            # pool = QThreadPool.globalInstance()
                             runnable = DownloadGalaxyZooRunnable(self)
                             self.thread_pool.start(runnable)
-                except Exception as e: 
-                    self.terminal.add_log(
-                        f"Cannot dowload Galaxy Zoo: {e}")
+                except Exception as e:
+                    self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
             else:
                 if (
@@ -1192,13 +1191,13 @@ class ALMASimulator(QMainWindow):
                     if not os.path.exists(self.hubble_entry.text()):
                         os.mkdir(self.hubble_entry.text())
                     if not os.path.exists(
-                        os.path.join(self.hubble_entry.text(), "top100")):
-                        #pool = QThreadPool.globalInstance()
+                        os.path.join(self.hubble_entry.text(), "top100")
+                    ):
+                        # pool = QThreadPool.globalInstance()
                         runnable = DownloadHubbleRunnable(self)
                         self.thread_pool.start(runnable)
                 except Exception as e:
-                    self.terminal.add_log(
-                        f"Cannot dowload Hubble 100: {e}")
+                    self.terminal.add_log(f"Cannot dowload Hubble 100: {e}")
 
             else:
                 if (
@@ -2101,11 +2100,7 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(
             f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}"
         )
-        os.remove(
-            os.path.join(
-                self.galaxy_zoo_entry.text(), 
-                'galaxy-zoo-2-images.zip'
-            ))
+        os.remove(os.path.join(self.galaxy_zoo_entry.text(), "galaxy-zoo-2-images.zip"))
 
     def download_galaxy_zoo_on_remote(self):
         """
@@ -2803,14 +2798,14 @@ class ALMASimulator(QMainWindow):
                 os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
             ):
                 self.terminal.add_log("Downloading Galaxy Zoo")
-                #pool = QThreadPool.globalInstance()
+                # pool = QThreadPool.globalInstance()
                 runnable = DownloadGalaxyZooRunnable(self)
                 self.thread_pool.start(runnable)
             if self.hubble_entry.text() and not os.path.exists(
                 os.path.join(self.hubble_entry.text(), "top100")
             ):
                 self.terminal.add_log("Downloading Hubble Images")
-                #pool = QThreadPool.globalInstance()
+                # pool = QThreadPool.globalInstance()
                 runnable = DownloadHubbleRunnable(self)
                 self.thread_pool.start(runnable)
         else:
@@ -2820,11 +2815,6 @@ class ALMASimulator(QMainWindow):
 
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
         hubble_paths = np.array([self.hubble_entry.text()] * n_sims)
-        self.main_path = os.path.sep + os.path.join(
-            *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
-                os.path.sep
-            )[:-1]
-        )
         if self.local_mode_combo.currentText() == "local":
             main_paths = np.array([self.main_path] * n_sims)
         else:
@@ -2918,7 +2908,7 @@ class ALMASimulator(QMainWindow):
         if self.model_combo.currentText() == "Extended":
             if self.local_mode_combo.currentText() == "local":
                 self.terminal.add_log("Checking TNG Directories")
-                #pool = QThreadPool.globalInstance()
+                # pool = QThreadPool.globalInstance()
                 runnable = DownloadTNGStructureRunnable(self)
                 self.thread_pool.start(runnable)
             else:
@@ -3079,7 +3069,7 @@ class ALMASimulator(QMainWindow):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
             self.progress_bar_entry.setText("Simluation Finished")
             return
-        #pool = QThreadPool.globalInstance()
+        # pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
         runnable = SimulatorRunnable(
             self, *self.input_params.iloc[self.current_sim_index]
@@ -3215,7 +3205,7 @@ class ALMASimulator(QMainWindow):
                 future.result()  # This blocks until the worker is done
 
     def initiate_parallel_simulation(self):
-        #pool = QThreadPool.globalInstance()
+        # pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
         runnable = ParallelSimulatorRunnable(self)
         self.thread_pool.start(runnable)
@@ -3517,12 +3507,8 @@ class ALMASimulator(QMainWindow):
             )
             while lower_bound < freq_min and upper_bound > freq_max:
                 row["fwhm_GHz"] -= 0.1
-                lower_bound = (
-                    row["shifted_freq(GHz)"] - row["fwhm_GHz"]/ 2
-                )
-                upper_bound = (
-                    row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2
-                )
+                lower_bound = row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2
+                upper_bound = row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2
             if row["fwhm_GHz"] != compatible_lines["fwhm_GHz"].iloc[index]:
                 compatible_lines.loc[i, "fwhm_GHz"] = row["fwhm_GHz"]
         return compatible_lines
@@ -3808,7 +3794,7 @@ class ALMASimulator(QMainWindow):
         beam_size = ual.estimate_alma_beam_size(
             central_freq, max_baseline, return_value=False
         )
-        beam_area = 1.1331 * beam_size ** 2
+        beam_area = 1.1331 * beam_size**2
         beam_solid_angle = np.pi * (beam_size / 2) ** 2
         cont_sens = cont_sens * U.mJy / (U.arcsec**2)
         cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
