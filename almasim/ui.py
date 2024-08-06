@@ -344,7 +344,7 @@ class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
     terminal = None
-    db_line = None
+    thread_pool = None
     update_progress = pyqtSignal(int)
     nextSimulation = pyqtSignal(int)
 
@@ -352,6 +352,7 @@ class ALMASimulator(QMainWindow):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
         self.tray_icon = None
+        self.thread_pool = QThreadPool.globalInstance()
         self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         path = os.path.dirname(self.main_path)
         icon_path = os.path.join(path, 'pictures', 'almasim-icon.png')
@@ -375,7 +376,6 @@ class ALMASimulator(QMainWindow):
     # -------- Widgets and UI -------------------------
     def initialize_ui(self):
         self.setWindowTitle("ALMASim: set up your simulation parameters")
-        self.thread_pool = QThreadPool.globalInstance()
         # --- Create Widgets ---
         # self.main_path = os.path.sep + os.path.join(
         #    *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
@@ -440,7 +440,10 @@ class ALMASimulator(QMainWindow):
         self.add_model_widgets()
         self.add_meta_widgets()
         self.add_query_widgets()
-        ALMASimulator.populate_class_variables(self.terminal, self.ncpu_entry)
+        ALMASimulator.populate_class_variables(
+            self.terminal, 
+            self.ncpu_entry, 
+            self.thread_pool)
         # Load saved settings
         if self.on_remote is True:
             self.load_settings_on_remote()
@@ -457,7 +460,10 @@ class ALMASimulator(QMainWindow):
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
         self.set_window_size()
-        ALMASimulator.populate_class_variables(self.terminal, self.ncpu_entry)
+        ALMASimulator.populate_class_variables(
+            self.terminal, 
+            self.ncpu_entry, 
+            self.thread_pool)
 
     def set_window_size(self):
         screen = QGuiApplication.primaryScreen().geometry()
@@ -1268,9 +1274,10 @@ class ALMASimulator(QMainWindow):
         self.metadata_path_entry.setText("")
 
     @classmethod
-    def populate_class_variables(cls, terminal, ncpu_entry):
+    def populate_class_variables(cls, terminal, ncpu_entry, thread_pool):
         cls.terminal = terminal
         cls.ncpu_entry = ncpu_entry
+        cls.thread_pool = thread_pool
 
     def closeEvent(self, event):
         if self.thread_pool.activeThreadCount() > 0:
@@ -3252,9 +3259,9 @@ class ALMASimulator(QMainWindow):
     @classmethod
     def initiate_parallel_simulation_remote(cls, window_instance):
         input_params = pd.read_csv("input_params.csv")
-        pool = QThreadPool.globalInstance()
+        #pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
-        pool.start(runnable)
+        window_istance.thread_pool.start(runnable)
 
     @classmethod
     def initialize_slurm_simulation_remote(cls, window_instance):
