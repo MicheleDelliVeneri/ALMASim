@@ -3571,7 +3571,8 @@ class ALMASimulator(QMainWindow):
             os.path.join(self.main_path, "brightnes", "calibrated_lines.csv"),
             sep=",",
         )
-
+        self.line_cs_mean = np.mean(self.db_line["c"].values)
+        self.line_cs_std = np.std(self.db_line["c"].values)
         # line_ratio, line_error
         if line_names is None:
             if n_lines is not None:
