@@ -3131,51 +3131,50 @@ class ALMASimulator(QMainWindow):
         )
         with open("slurm_config.json", "r") as f:
             config = json.load(f)
-        with (
+        with
             SLURMCluster(
                 queue=config["queue"],
                 account=config["account"],
                 cores=config["cores"],
                 memory=config["memory"],
-                job_extra_directives=config["job_extra"],
-            ) as cluster,
-            Client(cluster) as client,
-        ):
-            self.terminal.add_log("Dashboard Link: {}".format(client.dashboard_link))
-            self.terminal.add_log(
-                "Workers: {}".format(len(client.scheduler_info()["workers"]))
-            )
-            self.terminal.add_log(
-                "Total threads: {}".format(
-                    sum(
-                        w["nthreads"]
-                        for w in client.scheduler_info()["workers"].values()
+                job_extra_directives=config["job_extra"]) as cluster:
+            with Client(cluster) as client:
+        
+                self.terminal.add_log("Dashboard Link: {}".format(client.dashboard_link))
+                self.terminal.add_log(
+                    "Workers: {}".format(len(client.scheduler_info()["workers"]))
+                )
+                self.terminal.add_log(
+                    "Total threads: {}".format(
+                        sum(
+                            w["nthreads"]
+                            for w in client.scheduler_info()["workers"].values()
+                        )
                     )
                 )
-            )
-            self.terminal.add_log(
-                "Total memory: {}".format(
-                    sum(
-                        w["memory_limit"]
-                        for w in client.scheduler_info()["workers"].values()
+                self.terminal.add_log(
+                    "Total memory: {}".format(
+                        sum(
+                            w["memory_limit"]
+                            for w in client.scheduler_info()["workers"].values()
+                        )
                     )
                 )
-            )
-            cluster.scale(jobs=int(int(self.ncpu_entry.text()) // 4))
-            ddf = dd.from_pandas(input_params, npartitions=cluster.n_workers)
-            futures = []
-            with ThreadPoolExecutor(max_workers=cluster.n_workers) as executor:
-                for df in ddf.partitions:
-                    worker = SimulatorWorker(self, df)
-                    self.update_progress.connect(self.update_progress_bar)
-                    worker.signals.simulationFinished.connect(
-                        self.plot_simulation_results
-                    )
-                    futures.append(executor.submit(worker.run))
+                cluster.scale(jobs=int(int(self.ncpu_entry.text()) // 4))
+                ddf = dd.from_pandas(input_params, npartitions=cluster.n_workers)
+                futures = []
+                with ThreadPoolExecutor(max_workers=cluster.n_workers) as executor:
+                    for df in ddf.partitions:
+                        worker = SimulatorWorker(self, df)
+                        self.update_progress.connect(self.update_progress_bar)
+                        worker.signals.simulationFinished.connect(
+                            self.plot_simulation_results
+                        )
+                        futures.append(executor.submit(worker.run))
 
-            for future in futures:
-                future.result()
-        client.close()
+                for future in futures:
+                    future.result()
+            client.close()
         cluster.close()
 
     def run_simulator_parallel(self):
