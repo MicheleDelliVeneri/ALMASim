@@ -1280,7 +1280,7 @@ class ALMASimulator(QMainWindow):
         cls.thread_pool = thread_pool
 
     def closeEvent(self, event):
-        if self.local_mode_combo.currentText() == "local:
+        if self.local_mode_combo.currentText() == "local":
             if self.thread_pool.activeThreadCount() > 0:
                 event.ignore()
                 self.hide()
