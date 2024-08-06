@@ -342,6 +342,7 @@ class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
     terminal = None
+    db_line = None
     update_progress = pyqtSignal(int)
     nextSimulation = pyqtSignal(int)
 
@@ -2846,6 +2847,7 @@ class ALMASimulator(QMainWindow):
             os.path.join(self.main_path, "brightnes", "calibrated_lines.csv"),
             sep=",",
         )
+        cls.db_line = self.db_line
         # parameter for c generations for artificial lines
         self.line_cs_mean = np.mean(self.db_line["c"].values)
         self.line_cs_std = np.std(self.db_line["c"].values)
