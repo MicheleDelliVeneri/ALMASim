@@ -2280,6 +2280,13 @@ class ALMASimulator(QMainWindow):
             600,
         )
         # Get the path to the Python executable
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(
+            self.remote_address_entry.text(),
+            username=self.remote_user_entry.text(),
+            pkey=key,
+        )
         stdin, stdout, stderr = paramiko_client.exec_command("which python3.12")
         python_path = stdout.read().decode().strip()
         if not python_path:
@@ -2301,13 +2308,7 @@ class ALMASimulator(QMainWindow):
             fi
             """
 
-        paramiko_client = paramiko.SSHClient()
-        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        paramiko_client.connect(
-            self.remote_address_entry.text(),
-            username=self.remote_user_entry.text(),
-            pkey=key,
-        )
+        
         stdin, stdout, stderr = paramiko_client.exec_command(commands)
         self.terminal.add_log(stdout.read().decode())
         self.terminal.add_log(stderr.read().decode())
