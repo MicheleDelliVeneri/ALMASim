@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QSlider,
     QSystemTrayIcon,
-    QMenu
+    QMenu,
 )
 from PyQt6.QtCore import (
     QSettings,
@@ -69,9 +69,10 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
+
 # import yagmail
 matplotlib.use("Agg")
-os.environ["LC_ALL"] = "C"
+# os.environ["LC_ALL"] = "C"
 
 
 class MemoryLimitPlugin(WorkerPlugin):
@@ -355,7 +356,7 @@ class ALMASimulator(QMainWindow):
         self.thread_pool = QThreadPool.globalInstance()
         self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         path = os.path.dirname(self.main_path)
-        icon_path = os.path.join(path, 'pictures', 'almasim-icon.png')
+        icon_path = os.path.join(path, "pictures", "almasim-icon.png")
         icon = QIcon(icon_path)
         self.setWindowIcon(icon)
 
@@ -442,9 +443,8 @@ class ALMASimulator(QMainWindow):
         self.add_meta_widgets()
         self.add_query_widgets()
         ALMASimulator.populate_class_variables(
-            self.terminal, 
-            self.ncpu_entry, 
-            self.thread_pool)
+            self.terminal, self.ncpu_entry, self.thread_pool
+        )
         # Load saved settings
         if self.on_remote is True:
             self.load_settings_on_remote()
@@ -462,9 +462,8 @@ class ALMASimulator(QMainWindow):
         self.toggle_metadata_browse(current_mode)  # Call here
         self.set_window_size()
         ALMASimulator.populate_class_variables(
-            self.terminal, 
-            self.ncpu_entry, 
-            self.thread_pool)
+            self.terminal, self.ncpu_entry, self.thread_pool
+        )
 
     def set_window_size(self):
         screen = QGuiApplication.primaryScreen().geometry()
@@ -1301,11 +1300,11 @@ class ALMASimulator(QMainWindow):
                 self.stop_simulation_flag = True
                 self.thread_pool.waitForDone()
                 super().closeEvent(event)
-    
+
     def show_background_notification(self):
         if self.tray_icon is None:
             path = os.path.dirname(self.main_path)
-            icon_path = os.path.join(path, 'pictures', 'almasim-icon.png')
+            icon_path = os.path.join(path, "pictures", "almasim-icon.png")
             icon = QIcon(icon_path)
             self.tray_icon = QSystemTrayIcon(icon, self)
             menu = QMenu()
@@ -1315,9 +1314,14 @@ class ALMASimulator(QMainWindow):
             exit_action.triggered.connect(QApplication.instance().quit)
             self.tray_icon.setContextMenu(menu)
             self.tray_icon.setIcon(icon)
-        self.tray_icon.showMessage("ALMA Simulator", "Simulations running in the background.", QSystemTrayIcon.MessageIcon.Information, 5000)
-        self.tray_icon.show()  
-        
+        self.tray_icon.showMessage(
+            "ALMA Simulator",
+            "Simulations running in the background.",
+            QSystemTrayIcon.MessageIcon.Information,
+            5000,
+        )
+        self.tray_icon.show()
+
     def save_settings(self):
         self.settings.setValue("output_directory", self.output_entry.text())
         self.settings.setValue("tng_directory", self.tng_entry.text())
@@ -2342,7 +2346,7 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log("Python 3.12 not found on remote machine.")
             paramiko_client.close()
             return
-        
+
         commands = f"""
             if [ ! -d {repo_dir} ]; then
                 git clone {repo_url} {repo_dir}
@@ -2357,7 +2361,6 @@ class ALMASimulator(QMainWindow):
             fi
             """
 
-        
         stdin, stdout, stderr = paramiko_client.exec_command(commands)
         self.terminal.add_log(stdout.read().decode())
         self.terminal.add_log(stderr.read().decode())
@@ -2698,14 +2701,10 @@ class ALMASimulator(QMainWindow):
             rest_frequency = np.array([rest_frequency])
 
         if self.terminal is not None:
-            max_freq = np.max(metadata['Freq'].values)
-            self.terminal.add_log(
-                f"Max frequency recorded in metadata: {max_freq} GHz"
-            )
-            min_freq = np.min(metadata['Freq'].values)
-            self.terminal.add_log(
-                f"Min frequency recorded in metadata: {min_freq} GHz"
-            )
+            max_freq = np.max(metadata["Freq"].values)
+            self.terminal.add_log(f"Max frequency recorded in metadata: {max_freq} GHz")
+            min_freq = np.min(metadata["Freq"].values)
+            self.terminal.add_log(f"Min frequency recorded in metadata: {min_freq} GHz")
             self.terminal.add_log("Filtering metadata based on line catalogue...")
         if self.terminal is not None:
             self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
@@ -2884,7 +2883,7 @@ class ALMASimulator(QMainWindow):
                 [
                     os.path.join(
                         "/home/{}/".format(self.remote_user_entry.text()),
-                        "ALMASim/almasim/"
+                        "ALMASim/almasim/",
                     )
                 ]
                 * n_sims
@@ -3162,9 +3161,8 @@ class ALMASimulator(QMainWindow):
 
         ddf = dd.from_pandas(input_params, npartitions=num_workers)
         with LocalCluster(
-                n_workers=num_workers, 
-                threads_per_worker=4, 
-                dashboard_address=None) as cluster:
+            n_workers=num_workers, threads_per_worker=4, dashboard_address=None
+        ) as cluster:
             with Client(cluster) as client:
                 client.register_plugin(MemoryLimitPlugin(memory_limit))
                 futures = []
@@ -3192,14 +3190,17 @@ class ALMASimulator(QMainWindow):
         with open("slurm_config.json", "r") as f:
             config = json.load(f)
         with SLURMCluster(
-                queue=config["queue"],
-                account=config["account"],
-                cores=config["cores"],
-                memory=config["memory"],
-                job_extra_directives=config["job_extra"]) as cluster:
+            queue=config["queue"],
+            account=config["account"],
+            cores=config["cores"],
+            memory=config["memory"],
+            job_extra_directives=config["job_extra"],
+        ) as cluster:
             with Client(cluster) as client:
-        
-                self.terminal.add_log("Dashboard Link: {}".format(client.dashboard_link))
+
+                self.terminal.add_log(
+                    "Dashboard Link: {}".format(client.dashboard_link)
+                )
                 self.terminal.add_log(
                     "Workers: {}".format(len(client.scheduler_info()["workers"]))
                 )
@@ -3244,10 +3245,8 @@ class ALMASimulator(QMainWindow):
 
         ddf = dd.from_pandas(self.input_params, npartitions=num_workers)
         with LocalCluster(
-                n_workers=num_workers, 
-                threads_per_worker=4,
-                dashboard_address=None
-            ) as cluster:
+            n_workers=num_workers, threads_per_worker=4, dashboard_address=None
+        ) as cluster:
             with Client(cluster) as client:
                 client.register_plugin(MemoryLimitPlugin(memory_limit))
                 futures = []
@@ -3273,7 +3272,7 @@ class ALMASimulator(QMainWindow):
     @classmethod
     def initiate_parallel_simulation_remote(cls, window_instance):
         input_params = pd.read_csv("input_params.csv")
-        #pool = QThreadPool.globalInstance()
+        # pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
         window_instance.thread_pool.start(runnable)
 
