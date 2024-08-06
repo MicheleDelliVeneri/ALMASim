@@ -1264,10 +1264,6 @@ class ALMASimulator(QMainWindow):
         cls.terminal = terminal
         cls.ncpu_entry = ncpu_entry
 
-    @classmethod
-    def save_line_db(cls, db_line):
-        cls.db_line = db_line
-
     def closeEvent(self, event):
         if hasattr(self, "pool") and self.pool:
             self.pool.close()  # Signal to the pool to stop accepting new tasks
@@ -2851,7 +2847,6 @@ class ALMASimulator(QMainWindow):
             os.path.join(self.main_path, "brightnes", "calibrated_lines.csv"),
             sep=",",
         )
-        ALMASimulator.save_line_db(self.db_line)
         # parameter for c generations for artificial lines
         self.line_cs_mean = np.mean(self.db_line["c"].values)
         self.line_cs_std = np.std(self.db_line["c"].values)
@@ -3571,6 +3566,10 @@ class ALMASimulator(QMainWindow):
             freq_max,
             remote,
             lum_infrared,
+        )
+        self.db_line = uas.read_line_emission_csv(
+            os.path.join(self.main_path, "brightnes", "calibrated_lines.csv"),
+            sep=",",
         )
 
         # line_ratio, line_error
