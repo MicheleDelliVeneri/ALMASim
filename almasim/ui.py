@@ -3878,17 +3878,17 @@ class ALMASimulator(QMainWindow):
             n_channels = n_channels_nw
             band_range = n_channels * freq_sup
         if remote is True:
-            print("Beam size: {} arcsec".format(round(beam_size.value, 4)))
-            print("Central Frequency: {}".format(central_freq))
-            print("Spectral Window: {}".format(band_range))
-            print("Freq Support: {}".format(delta_freq))
-            print("Cube Dimensions: {} x {} x {}".format(n_pix, n_pix, n_channels))
-            print("Redshift: {}".format(round(redshift, 3)))
-            print("Source frequency: {} GHz".format(round(source_freq.value, 2)))
-            print("Band: {}".format(band))
-            print("Velocity resolution: {} Km/s".format(round(vel_res.value, 2)))
-            print("Angular resolution: {} arcsec".format(round(ang_res.value, 3)))
-            print("Infrared Luminosity: {:.2e}".format(lum_infrared))
+            print("Beam size: {} arcsec\n".format(round(beam_size.value, 4)))
+            print("Central Frequency: {}\n".format(central_freq))
+            print("Spectral Window: {}\n".format(band_range))
+            print("Freq Support: {}\n".format(delta_freq))
+            print("Cube Dimensions: {} x {} x {}\n".format(n_pix, n_pix, n_channels))
+            print("Redshift: {}\n".format(round(redshift, 3)))
+            print("Source frequency: {} GHz\n".format(round(source_freq.value, 2)))
+            print("Band: {}\n".format(band))
+            print("Velocity resolution: {} Km/s\n".format(round(vel_res.value, 2)))
+            print("Angular resolution: {} arcsec\n".format(round(ang_res.value, 3)))
+            print("Infrared Luminosity: {:.2e}\n".format(lum_infrared))
         else:
             self.terminal.add_log("Central Frequency: {}".format(central_freq))
             self.terminal.add_log(
@@ -3947,7 +3947,7 @@ class ALMASimulator(QMainWindow):
         if remote is True:
             print("Simulating Continum Flux: {:.2e}".format(np.mean(continum)))
             print("Continuum Sensitity: {:.2e}".format(cont_sens))
-            print("Generating skymodel cube ...")
+            print("Generating skymodel cube ...\n")
         else:
             self.terminal.add_log(
                 "Simulating Continum Flux: {:.2e}".format(np.mean(continum))
@@ -4129,8 +4129,8 @@ class ALMASimulator(QMainWindow):
         model = model / beam_area.value
         totflux = np.sum(model)
         if remote is True:
-            print("Total Flux injected in model cube: {:.3f} Jy".format(totflux))
-            print("Done")
+            print("Total Flux injected in model cube: {:.3f} Jy\n".format(totflux))
+            print("Done\n")
         else:
             self.terminal.add_log(
                 f"Total Flux injected in model cube: {round(totflux, 3)} Jy"
@@ -4138,7 +4138,7 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log("Done")
         del datacube
         if remote is True:
-            print("Observing with ALMA")
+            print("Observing with ALMA\n")
         else:
             self.terminal.add_log("Observing with ALMA")
         min_line_flux = np.min(line_fluxes)
