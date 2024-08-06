@@ -2833,7 +2833,8 @@ class ALMASimulator(QMainWindow):
             main_paths = np.array(
                 [
                     os.path.join(
-                        "/home/{}/".format(self.remote_user_entry.text()), "ALMASim"
+                        "/home/{}/".format(self.remote_user_entry.text()),
+                        "ALMASim/almasim/"
                     )
                 ]
                 * n_sims
