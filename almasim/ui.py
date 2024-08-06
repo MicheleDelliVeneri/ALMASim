@@ -3131,8 +3131,7 @@ class ALMASimulator(QMainWindow):
         )
         with open("slurm_config.json", "r") as f:
             config = json.load(f)
-        with
-            SLURMCluster(
+        with SLURMCluster(
                 queue=config["queue"],
                 account=config["account"],
                 cores=config["cores"],
