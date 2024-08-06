@@ -124,7 +124,10 @@ class Interferometer(QObject):
         for channel in range(self.Nchan):
             if not self.stop_simulation_flag:
                 self._image_channel(channel, self.skymodel)
-                self.progress_signal.emit((channel + 1) * 100 // self.Nchan)
+                if self.terminal is not None:
+                    self.progress_signal.emit((channel + 1) * 100 // self.Nchan)
+                else:
+                    print(f"Progress: {(channel + 1) * 100 // self.Nchan}%")
             else:
                 break
         if self.stop_simulation_flag:
