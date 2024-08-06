@@ -371,7 +371,7 @@ class ALMASimulator(QMainWindow):
         self.settings_path = self.settings.fileName()
         self.initialize_ui()
         self.stop_simulation_flag = False
-        self.remote_simulation_finished = False
+        self.remote_simulation_finished = True
         self.terminal.add_log("Setting file path is {}".format(self.settings_path))
 
     # -------- Widgets and UI -------------------------
