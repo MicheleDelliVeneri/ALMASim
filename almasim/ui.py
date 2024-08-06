@@ -2279,6 +2279,14 @@ class ALMASimulator(QMainWindow):
             ),
             600,
         )
+        # Get the path to the Python executable
+        stdin, stdout, stderr = paramiko_client.exec_command("which python3.12")
+        python_path = stdout.read().decode().strip()
+        if not python_path:
+            self.terminal.add_log("Python 3.12 not found on remote machine.")
+            paramiko_client.close()
+            return
+        
         commands = f"""
             if [ ! -d {repo_dir} ]; then
                 git clone {repo_url} {repo_dir}
@@ -2286,7 +2294,7 @@ class ALMASimulator(QMainWindow):
             cd {repo_dir}
             git pull
             if [ ! -d {venv_dir} ]; then
-                /usr/bin/python3.12 -m venv {venv_dir}
+                {python_path} -m venv {venv_dir}
                 source {venv_dir}/bin/activate
                 pip install --upgrade pip
                 pip install -e .
@@ -2323,7 +2331,6 @@ class ALMASimulator(QMainWindow):
             self.output_entry.text(), self.project_name_entry.text()
         )
         plot_path = os.path.join(output_path, "plots")
-        print(output_path)
         if not sftp.exists(output_path):
             sftp.mkdir(output_path)
         if not sftp.exists(plot_path):
