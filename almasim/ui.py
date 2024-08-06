@@ -3183,27 +3183,26 @@ class ALMASimulator(QMainWindow):
         memory_limit = int(0.9 * total_memory / num_workers)
 
         ddf = dd.from_pandas(self.input_params, npartitions=num_workers)
-        with (
-            LocalCluster(
-                n_workers=num_workers, threads_per_worker=4, dashboard_address=None
-            ) as cluster,
-            Client(cluster) as client,
-        ):
-            client.register_plugin(MemoryLimitPlugin(memory_limit))
-            futures = []
+        with LocalCluster(
+                n_workers=num_workers, 
+                threads_per_worker=4, d
+                ashboard_address=None
+            ) as cluster:
+            with Client(cluster) as client:
+                client.register_plugin(MemoryLimitPlugin(memory_limit))
+                futures = []
+                with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                    for df in ddf.partitions:
+                        worker = SimulatorWorker(self, df)
+                        self.update_progress.connect(self.update_progress_bar)
+                        worker.signals.simulationFinished.connect(
+                            self.plot_simulation_results
+                        )
+                        futures.append(executor.submit(worker.run))
 
-            with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                for df in ddf.partitions:
-                    worker = SimulatorWorker(self, df)
-                    self.update_progress.connect(self.update_progress_bar)
-                    worker.signals.simulationFinished.connect(
-                        self.plot_simulation_results
-                    )
-                    futures.append(executor.submit(worker.run))
-
-            # Optionally wait for all workers to complete before proceeding
-            for future in futures:
-                future.result()  # This blocks until the worker is done
+                # Optionally wait for all workers to complete before proceeding
+                for future in futures:
+                    future.result()  # This blocks until the worker is done
 
     def initiate_parallel_simulation(self):
         # pool = QThreadPool.globalInstance()
