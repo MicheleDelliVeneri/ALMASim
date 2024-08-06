@@ -3261,7 +3261,7 @@ class ALMASimulator(QMainWindow):
         input_params = pd.read_csv("input_params.csv")
         #pool = QThreadPool.globalInstance()
         runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
-        window_istance.thread_pool.start(runnable)
+        window_instance.thread_pool.start(runnable)
 
     @classmethod
     def initialize_slurm_simulation_remote(cls, window_instance):
