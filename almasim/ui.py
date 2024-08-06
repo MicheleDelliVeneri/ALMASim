@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QProgressBar,
     QSlider,
+    QSystemTrayIcon,
+    QMenu
 )
 from PyQt6.QtCore import (
     QSettings,
@@ -29,7 +31,7 @@ from PyQt6.QtCore import (
     QThreadPool,
     pyqtSlot,
 )
-from PyQt6.QtGui import QPixmap, QGuiApplication
+from PyQt6.QtGui import QPixmap, QGuiApplication, QIcon
 from kaggle import api
 from os.path import isfile
 import dask
@@ -67,6 +69,7 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
+import yagmail
 
 matplotlib.use("Agg")
 os.environ["LC_ALL"] = "C"
@@ -349,6 +352,13 @@ class ALMASimulator(QMainWindow):
     def __init__(self):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
+        self.tray_icon = None
+        self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
+        path = os.path.dirname(self.main_path)
+        icon_path = os.path.join(path, 'pictures', 'almasim-icon.png')
+        icon = QIcon(icon_path)
+        self.setWindowIcon(icon)
+
         if ALMASimulator.settings_file is not None:
             with open(ALMASimulator.settings_file, "rb") as f:
                 settings_data = plistlib.load(f)
@@ -373,7 +383,6 @@ class ALMASimulator(QMainWindow):
         #        os.path.sep
         #    )[:-1]
         # )
-        self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
         self.metadata_path_button = QPushButton("Browse")
@@ -1265,9 +1274,33 @@ class ALMASimulator(QMainWindow):
         cls.ncpu_entry = ncpu_entry
 
     def closeEvent(self, event):
-        if hasattr(self, "pool") and self.pool:
-            self.pool.close()  # Signal to the pool to stop accepting new tasks
-            self.pool.join()  # Wait for all tasks to complete
+        if self.thread_pool.activeThreadCount() > 0:
+            event.ignore()
+            self.hide()
+            self.show_background_notification()
+        else:
+            self.save_settings()
+            self.stop_simulation_flag = True
+            self.thread_pool.waitForDone()
+            super().closeEvent(event)
+    
+    def show_background_notification(self):
+        if self.tray_icon is None:
+            path = os.path.dirname(self.main_path)
+            icon_path = os.path.join(path, 'pictures', 'almasim-icon.png')
+            icon = QIcon(icon_path)
+            self.tray_icon = QSystemTrayIcon(icon, self)
+            menu = QMenu()
+            restore_action = menu.addAction("Restore")
+            restore_action.triggered.connect(self.showNormal)  # Restore the window
+            exit_action = menu.addAction("Exit")
+            exit_action.triggered.connect(QApplication.instance().quit)
+            self.tray_icon.setContextMenu(menu)
+            self.tray_icon.setIcon(icon)
+        self.tray_icon.showMessage("ALMA Simulator", "Simulations running in the background.", QSystemTrayIcon.MessageIcon.Information, 5000)
+        self.tray_icon.show()  
+        
+    def save_settings(self):
         self.settings.setValue("output_directory", self.output_entry.text())
         self.settings.setValue("tng_directory", self.tng_entry.text())
         self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
@@ -1315,9 +1348,6 @@ class ALMASimulator(QMainWindow):
             "set_ir_luminosity", self.ir_luminosity_checkbox.isChecked()
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
-        self.stop_simulation_flag = True
-        self.thread_pool.waitForDone()
-        super().closeEvent(event)
 
     def show_hide_widgets(self, layout, show=True):
         for i in range(layout.count()):
