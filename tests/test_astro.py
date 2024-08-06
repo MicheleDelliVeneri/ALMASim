@@ -8,7 +8,7 @@ import pandas as pd
 import astropy.units as U
 
 faulthandler.enable()
-
+os.environ["LC_ALL"] = "C"
 
 def test_luminosity_functions():
     main_path = os.path.sep + os.path.join(
