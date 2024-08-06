@@ -69,8 +69,7 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
-import yagmail
-
+# import yagmail
 matplotlib.use("Agg")
 os.environ["LC_ALL"] = "C"
 
