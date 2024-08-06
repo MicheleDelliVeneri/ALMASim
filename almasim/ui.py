@@ -1280,15 +1280,26 @@ class ALMASimulator(QMainWindow):
         cls.thread_pool = thread_pool
 
     def closeEvent(self, event):
-        if self.thread_pool.activeThreadCount() > 0:
-            event.ignore()
-            self.hide()
-            self.show_background_notification()
+        if self.local_mode_combo.currentText() == "local:
+            if self.thread_pool.activeThreadCount() > 0:
+                event.ignore()
+                self.hide()
+                self.show_background_notification()
+            else:
+                self.save_settings()
+                self.stop_simulation_flag = True
+                self.thread_pool.waitForDone()
+                super().closeEvent(event)
         else:
-            self.save_settings()
-            self.stop_simulation_flag = True
-            self.thread_pool.waitForDone()
-            super().closeEvent(event)
+            if self.remote_simulation_finished == False:
+                event.ignore()
+                self.hide()
+                self.show_background_notification()
+            else:
+                self.save_settings()
+                self.stop_simulation_flag = True
+                self.thread_pool.waitForDone()
+                super().closeEvent(event)
     
     def show_background_notification(self):
         if self.tray_icon is None:
@@ -2821,6 +2832,7 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log(
                 f"Starting simulation on {self.remote_address_entry.text()}"
             )
+            self.remote_simulation_finished = False
         n_sims = int(self.n_sims_entry.text())
         sim_idxs = np.arange(n_sims)
         self.transform_source_type_label()
@@ -3170,6 +3182,7 @@ class ALMASimulator(QMainWindow):
                     future.result()
             client.close()
         cluster.close()
+        self.remote_simulation_finished = True
 
     def run_simulator_slurm_remote(self, input_params):
         self.output_path = os.path.join(
