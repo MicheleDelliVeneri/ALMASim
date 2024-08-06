@@ -69,6 +69,7 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
+import yagmail
 
 # import yagmail
 matplotlib.use("Agg")
@@ -442,6 +443,7 @@ class ALMASimulator(QMainWindow):
         self.add_model_widgets()
         self.add_meta_widgets()
         self.add_query_widgets()
+        self.add_mail_widget()
         ALMASimulator.populate_class_variables(
             self.terminal, self.ncpu_entry, self.thread_pool
         )
@@ -974,6 +976,14 @@ class ALMASimulator(QMainWindow):
         self.left_layout.insertWidget(24, self.query_execute_button)
         self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
 
+    def add_mail_widget(self):
+        self.mail_label = QLabel('Email:')
+        self.mail_entry = QLineEdit()
+        self.mail_row = QHBoxLayout()
+        self.mail_row.addWidget(self.mail_label)
+        self.mail_row.addWidget(self.mail_entry)
+        #self.left_layout.insertLayout(29, self.mail_row)
+    
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
         # all the rows and widgets added in add_metadata_query_widgets.
@@ -3130,6 +3140,7 @@ class ALMASimulator(QMainWindow):
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
             self.progress_bar_entry.setText("Simluation Finished")
+            self.send_email()
             return
         # pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
@@ -3182,6 +3193,7 @@ class ALMASimulator(QMainWindow):
             client.close()
         cluster.close()
         self.remote_simulation_finished = True
+        self.send_email()
 
     def run_simulator_slurm_remote(self, input_params):
         self.output_path = os.path.join(
@@ -3262,6 +3274,7 @@ class ALMASimulator(QMainWindow):
                 # Optionally wait for all workers to complete before proceeding
                 for future in futures:
                     future.result()  # This blocks until the worker is done
+        self.send_email()
 
     def initiate_parallel_simulation(self):
         # pool = QThreadPool.globalInstance()
@@ -4493,3 +4506,28 @@ class ALMASimulator(QMainWindow):
         ax[1].set_xlabel("$\\lambda$ [mm]")
         ax[1].set_title("DIRTY SPECTRUM")
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
+
+    # -------- Utility Functions ---------------------------
+    def send_email(self):
+        """
+        Sends an email to the user with the simulation results.
+        """
+        yag = yagmail.SMTP(
+            user="almasimulator@gmail.com",
+            password='VG;KpCCIuZZcV}[{Z0d<8L#u."5mrl-',
+        )
+        subject = f"Simulation {self.project_name_entry.text()} Finished"
+        body1 = "The simulations have finished\n"
+        location = self.output_path
+        if self.local_mode_combo.currentText() == "local":
+            body2 = f"You can find your results on your local machine in {location}"
+        else:
+            address = self.remote_address_entry.text()
+            body2 = f"You can find your results on {address} in {location}"
+        body = body1 + body2
+        to_email = self.mail_entry.text()
+        yag.send(
+            to=to_email,
+            body=body,
+            subject=subject
+        )
