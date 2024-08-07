@@ -3179,7 +3179,7 @@ class ALMASimulator(QMainWindow):
             n_workers=num_workers, threads_per_worker=4, dashboard_address=None
         ) as cluster:
             with Client(cluster) as client:
-                client.register_plugin(MemoryLimitPlugin(memory_limit))
+                #client.register_plugin(MemoryLimitPlugin(memory_limit))
                 futures = []
 
                 with ThreadPoolExecutor(max_workers=num_workers) as executor:
