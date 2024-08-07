@@ -69,7 +69,7 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
-import yagmail
+#import yagmail
 
 # import yagmail
 matplotlib.use("Agg")
@@ -443,7 +443,6 @@ class ALMASimulator(QMainWindow):
         self.add_model_widgets()
         self.add_meta_widgets()
         self.add_query_widgets()
-        self.add_mail_widget()
         ALMASimulator.populate_class_variables(
             self.terminal, self.ncpu_entry, self.thread_pool
         )
@@ -510,28 +509,31 @@ class ALMASimulator(QMainWindow):
         self.hubble_button = QPushButton("Browse")
         self.hubble_button.clicked.connect(self.browse_hubble_directory)
         # 5
+        self.mail_label = QLabel('Email:')
+        self.mail_entry = QLineEdit()
+        # 6
         self.project_name_label = QLabel("Project Name:")
         self.project_name_entry = QLineEdit()
-        # 6
+        # 7
         self.n_sims_label = QLabel("Number of Simulations:")
         self.n_sims_entry = QLineEdit()
-        # 7
+        # 8
         self.ncpu_label = QLabel("N. CPUs / Processes:")
         self.ncpu_entry = QLineEdit()
-        # 8
+        # 9
         self.save_format_label = QLabel("Save Format:")
         self.save_format_combo = QComboBox()
         self.save_format_combo.addItems(["npz", "fits", "h5"])
-        # 9
+        # 10
         self.comp_mode_label = QLabel("Computation Mode:")
         self.comp_mode_combo = QComboBox()
         self.comp_mode_combo.addItems(["sequential", "parallel"])
-        # 10
+        # 11
         self.local_mode_label = QLabel("Local or Remote:")
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", "remote"])
         self.local_mode_combo.currentTextChanged.connect(self.toggle_comp_mode)
-        # 11
+        # 12
         self.remote_mode_label = QLabel("Mode:")
         self.remote_mode_combo = QComboBox()
         self.remote_mode_combo.addItems(["MPI", "SLURM", "PBS"])
@@ -588,35 +590,41 @@ class ALMASimulator(QMainWindow):
         hubble_row.addWidget(self.hubble_button)
         self.left_layout.insertLayout(4, hubble_row)
 
+        # User Email Row
+        mail_row = QHBoxLayout()
+        mail_row.addWidget(self.mail_label)
+        mail_row.addWidget(self.mail_entry)
+        self.left_layout.insertLayout(5, mail_row)
+
         # Project Name Row
         project_name_row = QHBoxLayout()
         project_name_row.addWidget(self.project_name_label)
         project_name_row.addWidget(self.project_name_entry)
-        self.left_layout.insertLayout(5, project_name_row)
+        self.left_layout.insertLayout(6, project_name_row)
 
         # Number of Simulations Row
         n_sims_row = QHBoxLayout()
         n_sims_row.addWidget(self.n_sims_label)
         n_sims_row.addWidget(self.n_sims_entry)
-        self.left_layout.insertLayout(6, n_sims_row)
+        self.left_layout.insertLayout(7, n_sims_row)
 
         # Number of CPUs Row
         ncpu_row = QHBoxLayout()
         ncpu_row.addWidget(self.ncpu_label)
         ncpu_row.addWidget(self.ncpu_entry)
-        self.left_layout.insertLayout(7, ncpu_row)
+        self.left_layout.insertLayout(8, ncpu_row)
 
         # Save format Row
         save_format_row = QHBoxLayout()
         save_format_row.addWidget(self.save_format_label)
         save_format_row.addWidget(self.save_format_combo)
-        self.left_layout.insertLayout(8, save_format_row)
+        self.left_layout.insertLayout(9, save_format_row)
 
         # Computation Mode Row
         comp_mode_row = QHBoxLayout()
         comp_mode_row.addWidget(self.comp_mode_label)
         comp_mode_row.addWidget(self.comp_mode_combo)
-        self.left_layout.insertLayout(9, comp_mode_row)
+        self.left_layout.insertLayout(10, comp_mode_row)
 
         # Local Mode Row
         local_mode_row = QHBoxLayout()
@@ -626,7 +634,7 @@ class ALMASimulator(QMainWindow):
         local_mode_row.addWidget(self.remote_mode_combo)
         local_mode_row.addWidget(self.remote_folder_checkbox)
         local_mode_row.addWidget(self.remote_dir_line)
-        self.left_layout.insertLayout(10, local_mode_row)
+        self.left_layout.insertLayout(11, local_mode_row)
         self.remote_mode_label.hide()
         self.remote_mode_combo.hide()
         self.remote_folder_checkbox.hide()
@@ -639,7 +647,7 @@ class ALMASimulator(QMainWindow):
         self.remote_address_row.addWidget(self.remote_config_label)
         self.remote_address_row.addWidget(self.remote_config_entry)
         self.remote_address_row.addWidget(self.remote_config_button)
-        self.left_layout.insertLayout(11, self.remote_address_row)
+        self.left_layout.insertLayout(12, self.remote_address_row)
         self.show_hide_widgets(self.remote_address_row, show=False)
 
         self.remote_info_row = QHBoxLayout()
@@ -650,7 +658,7 @@ class ALMASimulator(QMainWindow):
         self.remote_info_row.addWidget(self.key_button)
         self.remote_info_row.addWidget(self.remote_key_pass_label)
         self.remote_info_row.addWidget(self.remote_key_pass_entry)
-        self.left_layout.insertLayout(12, self.remote_info_row)
+        self.left_layout.insertLayout(13, self.remote_info_row)
         self.show_hide_widgets(self.remote_info_row, show=False)
         self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
@@ -727,7 +735,7 @@ class ALMASimulator(QMainWindow):
         self.line_index_entry = QLineEdit()
         self.line_mode_row = QHBoxLayout()
         self.line_mode_row.addWidget(self.line_mode_checkbox)
-        self.left_layout.insertLayout(13, self.line_mode_row)  # Insert at the end
+        self.left_layout.insertLayout(14, self.line_mode_row)  # Insert at the end
         # Widgets for Non-Line Mode
         redshift_label = QLabel("Redshifts (space-separated):")
         self.redshift_entry = QLineEdit()
@@ -739,8 +747,8 @@ class ALMASimulator(QMainWindow):
         self.non_line_mode_row2 = QHBoxLayout()
         self.non_line_mode_row2.addWidget(num_lines_label)
         self.non_line_mode_row2.addWidget(self.num_lines_entry)
-        self.left_layout.insertLayout(14, self.non_line_mode_row1)  # Insert at the end
-        self.left_layout.insertLayout(15, self.non_line_mode_row2)  # Insert at the end
+        self.left_layout.insertLayout(15, self.non_line_mode_row1)  # Insert at the end
+        self.left_layout.insertLayout(16, self.non_line_mode_row2)  # Insert at the end
         self.show_hide_widgets(self.non_line_mode_row1, show=False)
         self.show_hide_widgets(self.non_line_mode_row2, show=False)
 
@@ -800,7 +808,7 @@ class ALMASimulator(QMainWindow):
         self.line_width_row.addWidget(self.min_line_width_value_label)
         self.line_width_row.addWidget(self.max_line_width_slider)
         self.line_width_row.addWidget(self.max_line_width_value_label)
-        self.left_layout.insertLayout(16, self.line_width_row)
+        self.left_layout.insertLayout(17, self.line_width_row)
 
     def update_max_line_width_label(self, value):
         self.max_line_width_value_label.setText(f"{value} km/s")
@@ -865,7 +873,7 @@ class ALMASimulator(QMainWindow):
         checkbox_row.addWidget(self.fix_spectral_checkbox)
         checkbox_row.addWidget(self.n_channels_entry)
         checkbox_row.addWidget(self.serendipitous_checkbox)
-        self.left_layout.insertLayout(17, checkbox_row)
+        self.left_layout.insertLayout(18, checkbox_row)
 
     def add_model_widgets(self):
         self.model_label = QLabel("Select Model:")
@@ -884,7 +892,7 @@ class ALMASimulator(QMainWindow):
         self.model_row = QHBoxLayout()
         self.model_row.addWidget(self.model_label)
         self.model_row.addWidget(self.model_combo)
-        self.left_layout.insertLayout(18, self.model_row)
+        self.left_layout.insertLayout(19, self.model_row)
         self.tng_api_key_label = QLabel("TNG API Key:")
         self.tng_api_key_entry = QLineEdit()
         self.tng_api_key_row = QHBoxLayout()
@@ -895,7 +903,7 @@ class ALMASimulator(QMainWindow):
         self.show_hide_widgets(self.tng_api_key_row, show=False)
 
         self.left_layout.insertLayout(
-            19, self.tng_api_key_row
+            20, self.tng_api_key_row
         )  # Insert after model_row
         # Connect the model_combo's signal to update visibility
         self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
@@ -919,7 +927,7 @@ class ALMASimulator(QMainWindow):
         self.metadata_mode_row = QHBoxLayout()
         self.metadata_mode_row.addWidget(self.metadata_mode_label)
         self.metadata_mode_row.addWidget(self.metadata_mode_combo)
-        self.left_layout.insertLayout(20, self.metadata_mode_row)
+        self.left_layout.insertLayout(21, self.metadata_mode_row)
 
     def add_metadata_widgets(self):
         self.metadata_path_label = QLabel("Metadata Path:")
@@ -930,7 +938,7 @@ class ALMASimulator(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(21, self.metadata_path_row)
+        self.left_layout.insertLayout(22, self.metadata_path_row)
         self.left_layout.update()
 
     def add_query_widgets(self):
@@ -968,21 +976,13 @@ class ALMASimulator(QMainWindow):
         self.show_hide_widgets(self.target_list_row, show=False)
 
         # Insert layouts at the correct positions
-        self.left_layout.insertLayout(21, self.query_type_row)
+        self.left_layout.insertLayout(22, self.query_type_row)
         self.left_layout.insertLayout(
-            22, self.target_list_row
+            23, self.target_list_row
         )  # Insert target list row
-        self.left_layout.insertLayout(23, self.query_save_row)
-        self.left_layout.insertWidget(24, self.query_execute_button)
+        self.left_layout.insertLayout(24, self.query_save_row)
+        self.left_layout.insertWidget(25, self.query_execute_button)
         self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
-
-    def add_mail_widget(self):
-        self.mail_label = QLabel('Email:')
-        self.mail_entry = QLineEdit()
-        self.mail_row = QHBoxLayout()
-        self.mail_row.addWidget(self.mail_label)
-        self.mail_row.addWidget(self.mail_entry)
-        #self.left_layout.insertLayout(29, self.mail_row)
     
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
@@ -1098,6 +1098,7 @@ class ALMASimulator(QMainWindow):
         self.galaxy_zoo_entry.clear()
         self.hubble_entry.clear()
         self.ncpu_entry.clear()
+        self.mail_entry.clear()
         self.n_sims_entry.clear()
         self.metadata_path_entry.clear()
         self.comp_mode_combo.setCurrentText("sequential")
@@ -1138,6 +1139,7 @@ class ALMASimulator(QMainWindow):
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
         self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
         self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
+        self.mail_entry.setText(self.settings.value('email', ""))
         self.n_sims_entry.setText(self.settings.value("n_sims", ""))
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
         self.metadata_mode_combo.setCurrentText(
@@ -1281,6 +1283,7 @@ class ALMASimulator(QMainWindow):
         self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
         self.n_sims_entry.setText(self.settings.value("n_sims", ""))
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
+        self.mail_entry.setText(self.settings.value("email", ""))
         self.metadata_path_entry.setText("")
 
     @classmethod
@@ -1339,6 +1342,7 @@ class ALMASimulator(QMainWindow):
         self.settings.setValue("hubble_directory", self.hubble_entry.text())
         self.settings.setValue("n_sims", self.n_sims_entry.text())
         self.settings.setValue("ncpu", self.ncpu_entry.text())
+        self.settings.setValue("email", self.mail_entry.text())
         self.settings.setValue("project_name", self.project_name_entry.text())
         if self.metadata_mode_combo.currentText() == "get":
             self.settings.setValue("metadata_path", self.metadata_path_entry.text())
@@ -3140,7 +3144,7 @@ class ALMASimulator(QMainWindow):
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
             self.progress_bar_entry.setText("Simluation Finished")
-            self.send_email()
+            #self.send_email()
             return
         # pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
@@ -3166,9 +3170,9 @@ class ALMASimulator(QMainWindow):
             self.output_entry.text(), self.project_name_entry.text()
         )
         dask.config.set({"temporary_directory": self.output_path})
-        total_memory = psutil.virtual_memory().total
+        #total_memory = psutil.virtual_memory().total
         num_workers = int(self.ncpu_entry.text()) // 4
-        memory_limit = int(0.9 * total_memory / num_workers)
+        #memory_limit = int(0.9 * total_memory / num_workers)
 
         ddf = dd.from_pandas(input_params, npartitions=num_workers)
         with LocalCluster(
@@ -3193,7 +3197,7 @@ class ALMASimulator(QMainWindow):
             client.close()
         cluster.close()
         self.remote_simulation_finished = True
-        self.send_email()
+        #self.send_email()
 
     def run_simulator_slurm_remote(self, input_params):
         self.output_path = os.path.join(
@@ -3274,7 +3278,7 @@ class ALMASimulator(QMainWindow):
                 # Optionally wait for all workers to complete before proceeding
                 for future in futures:
                     future.result()  # This blocks until the worker is done
-        self.send_email()
+        #self.send_email()
 
     def initiate_parallel_simulation(self):
         # pool = QThreadPool.globalInstance()
@@ -4512,9 +4516,11 @@ class ALMASimulator(QMainWindow):
         """
         Sends an email to the user with the simulation results.
         """
+        path = os.path.dirname(self.main_path)
+        print(path)
         yag = yagmail.SMTP(
             user="almasimulator@gmail.com",
-            password='VG;KpCCIuZZcV}[{Z0d<8L#u."5mrl-',
+            oauth2_file=os.path.join(path, 'email_client.json'),
         )
         subject = f"Simulation {self.project_name_entry.text()} Finished"
         body1 = "The simulations have finished\n"
@@ -4528,6 +4534,6 @@ class ALMASimulator(QMainWindow):
         to_email = self.mail_entry.text()
         yag.send(
             to=to_email,
-            body=body,
+            contents=body,
             subject=subject
         )
