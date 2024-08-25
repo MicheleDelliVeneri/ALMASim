@@ -4035,17 +4035,17 @@ class ALMASimulator(QMainWindow):
         mean_shift = 22
         std_shift = 44
         shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift_))
-            shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift_))
-            if abs(shift_x) > 0.8 * n_pix / 2:
-                if shift_y > 0:
-                    shift_x = int(0.8 * n_pix / 2):
-                else:
-                    shift_x = - int(0.8 * n_pix / 2):
-            if abs(shift_y) > 0.8 * n_pix / 2:
-                if shift_y > 0:
-                    shift_y = int(0.8 * n_pix / 2):
-                else:
-                    shift_y = - int(0.8 * n_pix / 2):
+        shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift_))
+        if abs(shift_x) > 0.8 * n_pix / 2:
+            if shift_y > 0:
+                shift_x = int(0.8 * n_pix / 2):
+            else:
+                shift_x = - int(0.8 * n_pix / 2):
+        if abs(shift_y) > 0.8 * n_pix / 2:
+            if shift_y > 0:
+                shift_y = int(0.8 * n_pix / 2):
+            else:
+                shift_y = - int(0.8 * n_pix / 2):
         if source_type == "point":
             pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
             pos_x = pos_x + shift_x
