@@ -4032,10 +4032,10 @@ class ALMASimulator(QMainWindow):
         )
         wcs = datacube.wcs
         fwhm_x, fwhm_y, angle = None, None, None
-        mean_shift = 22
-        std_shift = 44
-        shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift_))
-        shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift_))
+        mean_shift = (np.sqrt(2)/2) * 22
+        std_shift = (np.sqrt(2)/2) * 44
+        shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift))
+        shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift))
         if abs(shift_x) > 0.8 * n_pix / 2:
             if shift_y > 0:
                 shift_x = int(0.8 * n_pix / 2)
