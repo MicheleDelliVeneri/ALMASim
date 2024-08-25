@@ -1180,6 +1180,13 @@ class Interferometer(QObject):
             self.terminal.add_log(
                 f"Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)}Jy"
             )
+        else:
+            print(
+                f"Total Flux detected in model cube: {round(np.sum(self.modelCube), 2)}Jy"
+            )
+            print(
+                f"Total Flux detected in dirty cube: {round(np.sum(self.dirtyCube), 2)}Jy"
+            )
 
     def _free_space(self):
         del self.modelCube
