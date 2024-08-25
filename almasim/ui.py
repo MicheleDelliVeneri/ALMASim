@@ -73,7 +73,7 @@ import zipfile
 
 # import yagmail
 matplotlib.use("Agg")
-# os.environ["LC_ALL"] = "C"
+os.environ["LC_ALL"] = "C"
 
 
 class MemoryLimitPlugin(WorkerPlugin):
@@ -3170,16 +3170,16 @@ class ALMASimulator(QMainWindow):
             self.output_entry.text(), self.project_name_entry.text()
         )
         dask.config.set({"temporary_directory": self.output_path})
-        #total_memory = psutil.virtual_memory().total
+        total_memory = psutil.virtual_memory().total
         num_workers = int(self.ncpu_entry.text()) // 4
-        #memory_limit = int(0.9 * total_memory / num_workers)
+        memory_limit = int(0.9 * total_memory / num_workers)
 
         ddf = dd.from_pandas(input_params, npartitions=num_workers)
         with LocalCluster(
             n_workers=num_workers, threads_per_worker=4, dashboard_address=None
         ) as cluster:
             with Client(cluster) as client:
-                #client.register_plugin(MemoryLimitPlugin(memory_limit))
+                client.register_plugin(MemoryLimitPlugin(memory_limit))
                 futures = []
 
                 with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -4032,8 +4032,24 @@ class ALMASimulator(QMainWindow):
         )
         wcs = datacube.wcs
         fwhm_x, fwhm_y, angle = None, None, None
+        mean_shift = 22
+        std_shift = 44
+        shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift_))
+        shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift_))
+        if abs(shift_x) > 0.8 * n_pix / 2:
+            if shift_y > 0:
+                shift_x = int(0.8 * n_pix / 2)
+            else:
+                shift_x = - int(0.8 * n_pix / 2)
+        if abs(shift_y) > 0.8 * n_pix / 2:
+            if shift_y > 0:
+                shift_y = int(0.8 * n_pix / 2)
+            else:
+                shift_y = - int(0.8 * n_pix / 2)
         if source_type == "point":
             pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+            pos_x = pos_x + shift_x
+            pos_y = pos_x + shift_y
             pos_z = [int(index) for index in source_channel_index]
             self.progress_bar_entry.setText("Inserting Point Source Model")
             datacube = usm.insert_pointlike(
@@ -4050,6 +4066,8 @@ class ALMASimulator(QMainWindow):
         elif source_type == "gaussian":
             self.progress_bar_entry.setText("Inserting Gaussian Source Model")
             pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+            pos_x = pos_x + shift_x
+            pos_y = pos_x + shift_y
             pos_z = [int(index) for index in source_channel_index]
             fwhm_x = np.random.randint(3, 10)
             fwhm_y = np.random.randint(3, 10)
