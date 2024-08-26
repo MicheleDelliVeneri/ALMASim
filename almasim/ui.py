@@ -341,6 +341,18 @@ class DownloadHubbleRunnable(QRunnable):
         self.alma_simulator.download_hubble()
 
 
+class PlotResultsRunnable(QRunnable):
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = (
+            alma_simulator_instance  # Store a reference to the main UI class
+        )
+
+    def run(self, simulation_results):
+        """Downloads Galaxy Zoo data."""
+        self.alma_simulator.plot_simulation_results(simulation_results)
+
+
 class ALMASimulator(QMainWindow):
     settings_file = None
     ncpu_entry = None
