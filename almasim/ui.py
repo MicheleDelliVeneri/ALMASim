@@ -69,9 +69,8 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
-#import yagmail
-
 # import yagmail
+
 matplotlib.use("Agg")
 os.environ["LC_ALL"] = "C"
 
@@ -983,7 +982,7 @@ class ALMASimulator(QMainWindow):
         self.left_layout.insertLayout(24, self.query_save_row)
         self.left_layout.insertWidget(25, self.query_execute_button)
         self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
-    
+
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
         # all the rows and widgets added in add_metadata_query_widgets.
@@ -1304,7 +1303,7 @@ class ALMASimulator(QMainWindow):
                 self.thread_pool.waitForDone()
                 super().closeEvent(event)
         else:
-            if self.remote_simulation_finished == False:
+            if self.remote_simulation_finished is False:
                 event.ignore()
                 self.hide()
                 self.show_background_notification()
@@ -2554,7 +2553,6 @@ class ALMASimulator(QMainWindow):
             export QT_QPA_PLATFORM=offscreen
         """
         # Separate the Python command for readability and maintainability
-        _QApplication = QApplication
         python_command = (
             'python -c "import sys; import os; import almasim.ui as ui; '
             f"app = ui.QApplication(sys.argv); "
@@ -3144,7 +3142,7 @@ class ALMASimulator(QMainWindow):
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
             self.progress_bar_entry.setText("Simluation Finished")
-            #self.send_email()
+            # self.send_email()
             return
         # pool = QThreadPool.globalInstance()
         self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
@@ -3197,7 +3195,7 @@ class ALMASimulator(QMainWindow):
             client.close()
         cluster.close()
         self.remote_simulation_finished = True
-        #self.send_email()
+        # self.send_email()
 
     def run_simulator_slurm_remote(self, input_params):
         self.output_path = os.path.join(
@@ -3278,7 +3276,7 @@ class ALMASimulator(QMainWindow):
                 # Optionally wait for all workers to complete before proceeding
                 for future in futures:
                     future.result()  # This blocks until the worker is done
-        #self.send_email()
+        # self.send_email()
 
     def initiate_parallel_simulation(self):
         # pool = QThreadPool.globalInstance()
@@ -4032,10 +4030,10 @@ class ALMASimulator(QMainWindow):
         )
         wcs = datacube.wcs
         fwhm_x, fwhm_y, angle = None, None, None
-        mean_shift = 22
-        std_shift = 44
-        shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift_))
-        shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift_))
+        mean_shift = (np.sqrt(2)/2) * 22
+        std_shift = (np.sqrt(2)/2) * 44
+        shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift))
+        shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift))
         if abs(shift_x) > 0.8 * n_pix / 2:
             if shift_y > 0:
                 shift_x = int(0.8 * n_pix / 2)
@@ -4530,28 +4528,28 @@ class ALMASimulator(QMainWindow):
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
 
     # -------- Utility Functions ---------------------------
-    def send_email(self):
-        """
-        Sends an email to the user with the simulation results.
-        """
-        path = os.path.dirname(self.main_path)
-        print(path)
-        yag = yagmail.SMTP(
-            user="almasimulator@gmail.com",
-            oauth2_file=os.path.join(path, 'email_client.json'),
-        )
-        subject = f"Simulation {self.project_name_entry.text()} Finished"
-        body1 = "The simulations have finished\n"
-        location = self.output_path
-        if self.local_mode_combo.currentText() == "local":
-            body2 = f"You can find your results on your local machine in {location}"
-        else:
-            address = self.remote_address_entry.text()
-            body2 = f"You can find your results on {address} in {location}"
-        body = body1 + body2
-        to_email = self.mail_entry.text()
-        yag.send(
-            to=to_email,
-            contents=body,
-            subject=subject
-        )
+    # def send_email(self):
+    #    """
+    #    Sends an email to the user with the simulation results.
+    #    """
+    #    path = os.path.dirname(self.main_path)
+    #    print(path)
+    #    yag = yagmail.SMTP(
+    #        user="almasimulator@gmail.com",
+    #        oauth2_file=os.path.join(path, 'email_client.json'),
+    #    )
+    #    subject = f"Simulation {self.project_name_entry.text()} Finished"
+    #    body1 = "The simulations have finished\n"
+    #    location = self.output_path
+    #    if self.local_mode_combo.currentText() == "local":
+    #        body2 = f"You can find your results on your local machine in {location}"
+    #    else:
+    #        address = self.remote_address_entry.text()
+    #        body2 = f"You can find your results on {address} in {location}"
+    #    body = body1 + body2
+    #    to_email = self.mail_entry.text()
+    #    yag.send(
+    #        to=to_email,
+    #        contents=body,
+    #        subject=subject
+    #    )
