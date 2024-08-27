@@ -3345,30 +3345,32 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log("Minimum continum flux: {:.2e}".format(min_))
             self.terminal.add_log("Continum sensitivity: {:.2e}".format(cont_sens))
         lum_save = lum_infrared
-        while min_ > cont_sens:
-            lum_infrared -= 0.1 * lum_infrared
-            lum_infrared_erg_s = so_to_erg_s * lum_infrared
-            sed["Jy"] = lum_infrared_erg_s * sed["erg/s/Hz"] * 1e23 / solid_angle
-            cont_mask = (sed["GHz"] >= freq_min) & (sed["GHz"] <= freq_max)
-            if sum(cont_mask) > 0:
-                cont_fluxes = sed["Jy"].values[cont_mask]
-                min_ = np.min(cont_fluxes)
-            else:
-                freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
-                cont_fluxes = sed["Jy"].values[freq_point]
-                min_ = cont_fluxes
+
+        if min_ < cont_sens:
+            while min_ < cont_sens:
+                lum_infrared += 0.1 * lum_infrared
+                lum_infrared_erg_s = so_to_erg_s * lum_infrared
+                sed["Jy"] = lum_infrared_erg_s * sed["erg/s/Hz"] * 1e23 / solid_angle
+                cont_mask = (sed["GHz"] >= freq_min) & (sed["GHz"] <= freq_max)
+                if sum(cont_mask) > 0:
+                    cont_fluxes = sed["Jy"].values[cont_mask]
+                    min_ = np.min(cont_fluxes)
+                else:
+                    freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
+                    cont_fluxes = sed["Jy"].values[freq_point]
+                    min_ = cont_fluxes
 
         if lum_save != lum_infrared:
             if remote is True:
                 print(
-                    "To match the desired SNR, luminosity has been set to {:.2e}".format(
+                    "To observe the source, luminosity has been set to {:.2e}".format(
                         lum_infrared
                     )
                 )
                 print("# ------------------------------------- #\n")
             else:
                 self.terminal.add_log(
-                    "To match the desired SNR, luminosity has been set to {:.2e}".format(
+                    "To observe the source, luminosity has been set to {:.2e}".format(
                         lum_infrared
                     )
                 )
@@ -3889,7 +3891,7 @@ class ALMASimulator(QMainWindow):
         beam_solid_angle = np.pi * (beam_size / 2) ** 2
         cont_sens = cont_sens * U.mJy / (U.arcsec**2)
         cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
-        cont_sens = cont_sens_jy * snr
+        # cont_sens = cont_sens_jy * snr
         if remote is True:
             print("Minimum detectable continum: {}".format(cont_sens_jy))
         else:
@@ -3944,7 +3946,7 @@ class ALMASimulator(QMainWindow):
             source_freq.value,
             n_channels,
             lum_infrared,
-            cont_sens.value,
+            cont_sens_jy.value,
             line_names,
             n_lines,
             remote,

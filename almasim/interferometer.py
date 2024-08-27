@@ -1056,7 +1056,7 @@ class Interferometer(QObject):
 
     def _add_thermal_noise(self):
         # mean_val = np.mean(self.img)
-        self.img += np.random.normal(scale=self.noise)
+        self.img += np.random.normal(scale=self.noise, shape=self.img.shape)
 
     # ------------------- IO Functions
     def _savez_compressed_cubes(self):
