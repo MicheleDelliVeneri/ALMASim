@@ -1004,11 +1004,11 @@ def insert_serendipitous(
     )
     # get the rotation angles
     pas = np.random.randint(0, 360, n_sources)
-    with open(sim_params_path, "w") as f:
+    with open(sim_params_path, "a") as f:
         f.write("\n Injected {} serendipitous sources\n".format(n_sources))
         f.close()
     for c_id, choords in enumerate(sample_coords):
-        with open(sim_params_path, "w") as f:
+        with open(sim_params_path, "a") as f:
             n_line = n_lines[c_id]
             if terminal is not None:
                 terminal.add_log(
