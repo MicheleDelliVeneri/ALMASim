@@ -3009,6 +3009,7 @@ class ALMASimulator(QMainWindow):
                 self.metadata, n_sims, rest_freq, False, z1
             )
         source_names = self.metadata["ALMA_source_name"].values
+        member_ouids = self.metadata['member_ous_uid'].values
         ras = self.metadata["RA"].values
         decs = self.metadata["Dec"].values
         bands = self.metadata["Band"].values
@@ -3036,6 +3037,7 @@ class ALMASimulator(QMainWindow):
             zip(
                 sim_idxs,
                 source_names,
+                member_ouids,
                 main_paths,
                 output_paths,
                 tng_paths,
@@ -3074,6 +3076,7 @@ class ALMASimulator(QMainWindow):
             columns=[
                 "idx",
                 "source_name",
+                "member_ouid",
                 "main_path",
                 "output_dir",
                 "tng_dir",
@@ -3736,6 +3739,8 @@ class ALMASimulator(QMainWindow):
 
         Parameters:
         idx (int): Index of the simulation.
+        source_name (str): Name of the metadata source.
+        member_ouid (str): Member OUID of the metadata source.
         main_path (str): Path to the directory where the file.csv is stored.
         output_dir (str): Path to the output directory.
         tng_dir (str): Path to the TNG directory.
@@ -3776,6 +3781,7 @@ class ALMASimulator(QMainWindow):
         (
             inx,
             source_name,
+            member_ouid,
             main_dir,
             output_dir,
             tng_dir,
@@ -4170,6 +4176,8 @@ class ALMASimulator(QMainWindow):
             )
         uas.write_sim_parameters(
             os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
+            source_name,
+            member_ouid,
             ra,
             dec,
             ang_res,

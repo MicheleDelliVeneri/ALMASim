@@ -251,6 +251,8 @@ def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
 
 def write_sim_parameters(
     path,
+    source_name,
+    member_ouid,
     ra,
     dec,
     ang_res,
@@ -280,6 +282,8 @@ def write_sim_parameters(
 ):
     with open(path, "w") as f:
         f.write("Simulation Parameters:\n")
+        f.write("Source Name: {}\n".format(source_name))
+        f.write('Member OUID: "{}"\n'.format(member_ouid))
         f.write("RA: {}\n".format(ra))
         f.write("DEC: {}\n".format(dec))
         f.write("Band: {}\n".format(band))
