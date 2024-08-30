@@ -1055,7 +1055,6 @@ def insert_serendipitous(
                 n_px,
                 n_chan,
             )
-            f.close()
     return datacube
 
 
