@@ -97,3 +97,34 @@ Notes
 Cube size will dictate simulation speed and RAM usage. To gauge what you
 can affort to run, we advice to start with a single simulation of a 256 x
 256 x 256 cube.
+
+
+Parameters and Configuration
+----------------------------
+
+- The robustness parameter, often referred to as the Briggs robustness parameter or robfac in some implementations, is typically taken within a specific range that allows for a meaningful balance between sensitivity and resolution. The common range for this parameter is:
+
+	-	robust = -2 to robust = +2
+
+Interpretation of Values
+
+	-	robust = -2:
+	-	This setting heavily favors natural weighting.
+	-	It emphasizes sensitivity, meaning that the weighting scheme gives more emphasis to areas of the UV plane that are more densely sampled.
+	-	The resulting image will generally have lower noise but may have lower resolution and broader synthesized beams.
+	-	robust = 0:
+	-	This is a balanced setting that attempts to compromise between natural and uniform weighting.
+	-	It offers a good balance between resolution and sensitivity.
+	-	This is often considered a default or starting point in many imaging processes.
+	-	robust = +2:
+	-	This setting favors uniform weighting.
+	-	It prioritizes higher resolution by giving more uniform weight across the UV plane, even in less densely sampled areas.
+	-	The resulting image will typically have a higher resolution and a narrower synthesized beam, but with increased noise.
+
+Usage in Practice
+
+	-	Default Values: Depending on the imaging task, astronomers often start with robust = 0 as a default and then adjust based on the specific needs (e.g., higher resolution or lower noise).
+	-	Adjustment: The choice of robust is influenced by the science goals. For example:
+	-	If detecting faint structures is the priority, a lower robust value (towards -2) might be chosen.
+	-	If resolving fine details in an image is more critical, a higher robust value (towards +2) might be preferred.
+	-	Exploration: It’s common to generate images using several different robust values to see how the balance of resolution and noise affects the final image.

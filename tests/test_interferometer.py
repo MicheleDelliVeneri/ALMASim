@@ -164,6 +164,8 @@ def test_interferometer(qtbot: QtBot):
         header,
         save_mode,
         None,
+        False,
+        0,
     )
     simulation_results = inter.run_interferometric_sim()
     assert simulation_results is not None

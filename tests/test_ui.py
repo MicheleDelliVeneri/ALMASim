@@ -2,9 +2,11 @@ import pytest
 from pytestqt.qtbot import QtBot
 import almasim.ui as ui
 import faulthandler
+import os
 
 faulthandler.enable()
 os.environ["LC_ALL"] = "C"
+
 
 @pytest.fixture
 def main_window(qtbot: QtBot):

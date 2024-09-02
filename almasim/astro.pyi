@@ -9,6 +9,8 @@ def get_line_info(main_path, idxs: Incomplete | None = None): ...
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift): ...
 def write_sim_parameters(
     path,
+    source_name,
+    member_ouid,
     ra,
     dec,
     ang_res,
