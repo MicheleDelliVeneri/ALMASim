@@ -159,7 +159,7 @@ def test_interferometer(qtbot: QtBot):
         fov,
         antenna_array,
         cont_sens.value,
-        int_time.value * second2hour,
+        float(int_time.value * second2hour),
         obs_date,
         header,
         save_mode,
