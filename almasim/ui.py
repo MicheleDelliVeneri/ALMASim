@@ -4596,7 +4596,7 @@ class ALMASimulator(QMainWindow):
 
         phaseplot = np.sum(np.angle(self.visCube), axis=0)
         PhasePlotFFTPlot = ax[0, 2].imshow(
-            phaseplot, cmap='twilight', vmin=-np.pi, vmax=np.pi, picker=5
+            phaseplot, cmap="twilight", vmin=-np.pi, vmax=np.pi, picker=5
         )
         plt.setp(
             PhasePlotFFTPlot,
@@ -4613,7 +4613,7 @@ class ALMASimulator(QMainWindow):
 
         phaseplot = np.sum(np.angle(self.dirtyvisCube), axis=0)
         PhasePlotFFTPlot = ax[1, 2].imshow(
-            phaseplot, cmap='twilight', vmin=-np.pi, vmax=np.pi, picker=5
+            phaseplot, cmap="twilight", vmin=-np.pi, vmax=np.pi, picker=5
         )
         plt.setp(
             PhasePlotFFTPlot,
