@@ -382,6 +382,7 @@ class ALMASimulator(QMainWindow):
             self.on_remote = False
 
         self.settings_path = self.settings.fileName()
+        print(self.settings_path)
         self.initialize_ui()
         self.stop_simulation_flag = False
         self.remote_simulation_finished = True
@@ -1264,8 +1265,8 @@ class ALMASimulator(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
-        self.min_line_width_slider.setValue(self.settings.value("min_line_width", 200))
-        self.max_line_width_slider.setValue(self.settings.value("max_line_width", 400))
+        self.min_line_width_slider.setValue(int(self.settings.value("min_line_width", 200)))
+        self.max_line_width_slider.setValue(int(self.settings.value("max_line_width", 400)))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(
