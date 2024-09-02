@@ -4496,7 +4496,7 @@ class ALMASimulator(QMainWindow):
         plt.close()
 
     def _plot_sim(self):
-        simPlot, ax = plt.subplots(2, 2, figsize=(12, 12))
+        simPlot, ax = plt.subplots(2, 3, figsize=(18, 12))
         sim_img = np.sum(self.modelCube, axis=0)
         simPlotPlot = ax[0, 0].imshow(
             np.power(
@@ -4529,7 +4529,7 @@ class ALMASimulator(QMainWindow):
         simPlotPlot.norm.vmin = np.min(sim_img)
         simPlotPlot.norm.vmax = np.max(sim_img)
         dirty_img = np.sum(self.dirtyCube, axis=0)
-        dirtyPlotPlot = ax[0, 1].imshow(
+        dirtyPlotPlot = ax[1, 0].imshow(
             dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
             picker=True,
             interpolation="nearest",
@@ -4543,12 +4543,12 @@ class ALMASimulator(QMainWindow):
                 self.Xaxmax / 2.0,
             ),
         )
-        ax[0, 1].set_ylabel("Dec offset (as)")
-        ax[0, 1].set_xlabel("RA offset (as)")
+        ax[1, 0].set_ylabel("Dec offset (as)")
+        ax[1, 0].set_xlabel("RA offset (as)")
         totflux = np.sum(
             dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
         )
-        ax[0, 1].set_title("DIRTY IMAGE: %.2e Jy/beam" % totflux)
+        ax[1, 0].set_title("DIRTY IMAGE: %.2e Jy/beam" % totflux)
         dirtyPlotPlot.norm.vmin = np.min(dirty_img)
         dirtyPlotPlot.norm.vmax = np.max(dirty_img)
         self.UVmax = self.Npix / 2.0 / self.lfac * self.UVpixsize
@@ -4557,7 +4557,7 @@ class ALMASimulator(QMainWindow):
         mval = np.min(toplot)
         Mval = np.max(toplot)
         dval = (Mval - mval) / 2.0
-        UVPlotFFTPlot = ax[1, 0].imshow(
+        UVPlotFFTPlot = ax[0, 1].imshow(
             toplot, cmap=self.currcmap, vmin=0.0, vmax=Mval + dval, picker=5
         )
         plt.setp(
@@ -4570,9 +4570,9 @@ class ALMASimulator(QMainWindow):
             ),
         )
 
-        ax[1, 0].set_ylabel("V (k$\\lambda$)")
-        ax[1, 0].set_xlabel("U (k$\\lambda$)")
-        ax[1, 0].set_title("MODEL VISIBILITY")
+        ax[0, 1].set_ylabel("V (k$\\lambda$)")
+        ax[0, 1].set_xlabel("U (k$\\lambda$)")
+        ax[0, 1].set_title("MODEL VISIBILITY")
 
         toplot = np.sum(np.abs(self.dirtyvisCube), axis=0)
         mval = np.min(toplot)
@@ -4593,8 +4593,43 @@ class ALMASimulator(QMainWindow):
         ax[1, 1].set_ylabel("V (k$\\lambda$)")
         ax[1, 1].set_xlabel("U (k$\\lambda$)")
         ax[1, 1].set_title("DIRTY VISIBILITY")
+
+        phaseplot = np.sum(np.angle(self.visCube), axis=0)
+        PhasePlotFFTPlot = ax[0, 2].imshow(
+            phaseplot, cmap='twilight', vmin=-np.pi, vmax=np.pi, picker=5
+        )
+        plt.setp(
+            PhasePlotFFTPlot,
+            extent=(
+                -self.UVmax + self.UVSh,
+                self.UVmax + self.UVSh,
+                -self.UVmax - self.UVSh,
+                self.UVmax - self.UVSh,
+            ),
+        )
+        ax[0, 2].set_ylabel("V (k$\\lambda$)")
+        ax[0, 2].set_xlabel("U (k$\\lambda$)")
+        ax[0, 2].set_title("MODEL VISIBILITY PHASE")
+
+        phaseplot = np.sum(np.angle(self.dirtyvisCube), axis=0)
+        PhasePlotFFTPlot = ax[1, 2].imshow(
+            phaseplot, cmap='twilight', vmin=-np.pi, vmax=np.pi, picker=5
+        )
+        plt.setp(
+            PhasePlotFFTPlot,
+            extent=(
+                -self.UVmax + self.UVSh,
+                self.UVmax + self.UVSh,
+                -self.UVmax - self.UVSh,
+                self.UVmax - self.UVSh,
+            ),
+        )
+        ax[1, 2].set_ylabel("V (k$\\lambda$)")
+        ax[1, 2].set_xlabel("U (k$\\lambda$)")
+        ax[1, 2].set_title("DIRTY VISIBILITY PHASE")
         plt.savefig(os.path.join(self.plot_dir, "sim_{}.png".format(str(self.idx))))
         plt.close()
+
         sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
         dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))
         wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
@@ -4608,6 +4643,7 @@ class ALMASimulator(QMainWindow):
         ax[1].set_xlabel("$\\lambda$ [mm]")
         ax[1].set_title("DIRTY SPECTRUM")
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
+        plt.close()
 
     # -------- Utility Functions ---------------------------
     # def send_email(self):
