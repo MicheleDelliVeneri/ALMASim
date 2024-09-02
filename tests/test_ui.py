@@ -6,6 +6,7 @@ import faulthandler
 faulthandler.enable()
 os.environ["LC_ALL"] = "C"
 
+
 @pytest.fixture
 def main_window(qtbot: QtBot):
     """Fixture for setting up the main window."""

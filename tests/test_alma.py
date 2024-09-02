@@ -10,6 +10,7 @@ import astropy.units as U
 faulthandler.enable()
 os.environ["LC_ALL"] = "C"
 
+
 def test_query():
     main_path = os.path.sep + os.path.join(
         *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(

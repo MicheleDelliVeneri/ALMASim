@@ -69,6 +69,7 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
+
 # import yagmail
 
 matplotlib.use("Agg")
@@ -342,15 +343,16 @@ class DownloadHubbleRunnable(QRunnable):
 
 
 class PlotResultsRunnable(QRunnable):
-    def __init__(self, alma_simulator_instance):
+    def __init__(self, alma_simulator_instance, simulation_results):
         super().__init__()
         self.alma_simulator = (
             alma_simulator_instance  # Store a reference to the main UI class
         )
+        self.simulation_results = simulation_results
 
-    def run(self, simulation_results):
+    def run(self):
         """Downloads Galaxy Zoo data."""
-        self.alma_simulator.plot_simulation_results(simulation_results)
+        self.alma_simulator.plot_simulation_results(self.simulation_results)
 
 
 class ALMASimulator(QMainWindow):
@@ -521,7 +523,7 @@ class ALMASimulator(QMainWindow):
         self.hubble_button = QPushButton("Browse")
         self.hubble_button.clicked.connect(self.browse_hubble_directory)
         # 5
-        self.mail_label = QLabel('Email:')
+        self.mail_label = QLabel("Email:")
         self.mail_entry = QLineEdit()
         # 6
         self.project_name_label = QLabel("Project Name:")
@@ -590,16 +592,20 @@ class ALMASimulator(QMainWindow):
 
         # Galaxy Zoo Directory Row
         galaxy_row = QHBoxLayout()
+        self.galaxy_zoo_checkbox = QCheckBox("Get Galaxy Zoo Data")
         galaxy_row.addWidget(self.galaxy_zoo_label)
         galaxy_row.addWidget(self.galaxy_zoo_entry)
         galaxy_row.addWidget(self.galaxy_zoo_button)
+        galaxy_row.addWidget(self.galaxy_zoo_checkbox)
         self.left_layout.insertLayout(3, galaxy_row)
 
         # Hubble Directory Row
         hubble_row = QHBoxLayout()
+        self.hubble_checkbox = QCheckBox("Get Hubble 100 Data")
         hubble_row.addWidget(self.hubble_label)
         hubble_row.addWidget(self.hubble_entry)
         hubble_row.addWidget(self.hubble_button)
+        hubble_row.addWidget(self.hubble_checkbox)
         self.left_layout.insertLayout(4, hubble_row)
 
         # User Email Row
@@ -1108,7 +1114,9 @@ class ALMASimulator(QMainWindow):
         self.output_entry.clear()
         self.tng_entry.clear()
         self.galaxy_zoo_entry.clear()
+        self.galaxy_zoo_checkbox.setChecked(False)
         self.hubble_entry.clear()
+        self.hubble_checkbox.setChecked(False)
         self.ncpu_entry.clear()
         self.mail_entry.clear()
         self.n_sims_entry.clear()
@@ -1150,8 +1158,14 @@ class ALMASimulator(QMainWindow):
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
         self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
+        self.galaxy_zoo_checkbox.setChecked(
+            self.settings.value("get_galaxy_zoo", False, type=bool)
+        )
         self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
-        self.mail_entry.setText(self.settings.value('email', ""))
+        self.hubble_checkbox.setChecked(
+            self.settings.value("get_hubble_100", False, type=bool)
+        )
+        self.mail_entry.setText(self.settings.value("email", ""))
         self.n_sims_entry.setText(self.settings.value("n_sims", ""))
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
         self.metadata_mode_combo.setCurrentText(
@@ -1196,13 +1210,13 @@ class ALMASimulator(QMainWindow):
                     )
                 try:
                     if os.path.exists(self.galaxy_zoo_entry.text()):
-                        if not os.path.exists(
-                            os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
-                        ):
-                            self.terminal.add_log("Downloading Galaxy Zoo")
-                            # pool = QThreadPool.globalInstance()
-                            runnable = DownloadGalaxyZooRunnable(self)
-                            self.thread_pool.start(runnable)
+                        if self.galaxy_zoo_checkbox.isChecked():
+                            if not os.path.exists(
+                                os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
+                            ):
+                                self.terminal.add_log("Downloading Galaxy Zoo")
+                                runnable = DownloadGalaxyZooRunnable(self)
+                                self.thread_pool.start(runnable)
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
@@ -1229,12 +1243,13 @@ class ALMASimulator(QMainWindow):
                 try:
                     if not os.path.exists(self.hubble_entry.text()):
                         os.mkdir(self.hubble_entry.text())
-                    if not os.path.exists(
-                        os.path.join(self.hubble_entry.text(), "top100")
-                    ):
-                        # pool = QThreadPool.globalInstance()
-                        runnable = DownloadHubbleRunnable(self)
-                        self.thread_pool.start(runnable)
+                    if self.hubble_checkbox.isChecked():
+                        if not os.path.exists(
+                            os.path.join(self.hubble_entry.text(), "top100")
+                        ):
+                            # pool = QThreadPool.globalInstance()
+                            runnable = DownloadHubbleRunnable(self)
+                            self.thread_pool.start(runnable)
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Hubble 100: {e}")
 
@@ -1265,8 +1280,12 @@ class ALMASimulator(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
-        self.min_line_width_slider.setValue(int(self.settings.value("min_line_width", 200)))
-        self.max_line_width_slider.setValue(int(self.settings.value("max_line_width", 400)))
+        self.min_line_width_slider.setValue(
+            int(self.settings.value("min_line_width", 200))
+        )
+        self.max_line_width_slider.setValue(
+            int(self.settings.value("max_line_width", 400))
+        )
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
         self.fix_spatial_checkbox.setChecked(
@@ -2880,20 +2899,23 @@ class ALMASimulator(QMainWindow):
 
         # Galaxy Zoo Directory
         if self.local_mode_combo.currentText() == "local":
-            if self.galaxy_zoo_entry.text() and not os.path.exists(
-                os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
-            ):
-                self.terminal.add_log("Downloading Galaxy Zoo")
-                # pool = QThreadPool.globalInstance()
-                runnable = DownloadGalaxyZooRunnable(self)
-                self.thread_pool.start(runnable)
-            if self.hubble_entry.text() and not os.path.exists(
-                os.path.join(self.hubble_entry.text(), "top100")
-            ):
-                self.terminal.add_log("Downloading Hubble Images")
-                # pool = QThreadPool.globalInstance()
-                runnable = DownloadHubbleRunnable(self)
-                self.thread_pool.start(runnable)
+            if self.model_combo.currentText() == "Galaxy Zoo":
+                if self.galaxy_zoo_entry.text() and not os.path.exists(
+                    os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
+                ):
+                    self.terminal.add_log("Downloading Galaxy Zoo")
+                    # pool = QThreadPool.globalInstance()
+                    runnable = DownloadGalaxyZooRunnable(self)
+                    self.thread_pool.start(runnable)
+            if self.model_combo.currentText() == "Hubble 100":
+                if self.hubble_entry.text() and not os.path.exists(
+                    os.path.join(self.hubble_entry.text(), "top100")
+                ):
+
+                    self.terminal.add_log("Downloading Hubble Images")
+                    # pool = QThreadPool.globalInstance()
+                    runnable = DownloadHubbleRunnable(self)
+                    self.thread_pool.start(runnable)
         else:
             self.create_remote_environment()
             self.download_galaxy_zoo_on_remote()
@@ -3010,7 +3032,7 @@ class ALMASimulator(QMainWindow):
                 self.metadata, n_sims, rest_freq, False, z1
             )
         source_names = self.metadata["ALMA_source_name"].values
-        member_ouids = self.metadata['member_ous_uid'].values
+        member_ouids = self.metadata["member_ous_uid"].values
         ras = self.metadata["RA"].values
         decs = self.metadata["Dec"].values
         bands = self.metadata["Band"].values
@@ -3166,7 +3188,8 @@ class ALMASimulator(QMainWindow):
             self, *self.input_params.iloc[self.current_sim_index]
         )
         self.update_progress.connect(self.update_progress_bar)
-        runnable.signals.simulationFinished.connect(self.plot_simulation_results)
+        # runnable.signals.simulationFinished.connect(self.plot_simulation_results)
+        runnable.signals.simulationFinished.connect(self.start_plot_runnable)
         runnable.signals.simulationFinished.connect(self.nextSimulation.emit)
         self.thread_pool.start(runnable)
         self.current_sim_index += 1
@@ -4051,20 +4074,20 @@ class ALMASimulator(QMainWindow):
         )
         wcs = datacube.wcs
         fwhm_x, fwhm_y, angle = None, None, None
-        mean_shift = (np.sqrt(2)/2) * 22
-        std_shift = (np.sqrt(2)/2) * 44
+        mean_shift = (np.sqrt(2) / 2) * 22
+        std_shift = (np.sqrt(2) / 2) * 44
         shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift))
         shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift))
         if abs(shift_x) > 0.8 * n_pix / 2:
             if shift_y > 0:
                 shift_x = int(0.8 * n_pix / 2)
             else:
-                shift_x = - int(0.8 * n_pix / 2)
+                shift_x = -int(0.8 * n_pix / 2)
         if abs(shift_y) > 0.8 * n_pix / 2:
             if shift_y > 0:
                 shift_y = int(0.8 * n_pix / 2)
             else:
-                shift_y = - int(0.8 * n_pix / 2)
+                shift_y = -int(0.8 * n_pix / 2)
         if source_type == "point":
             pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
             pos_x = pos_x + shift_x
@@ -4304,6 +4327,7 @@ class ALMASimulator(QMainWindow):
     @pyqtSlot(object)
     def plot_simulation_results(self, simulation_results):
         if simulation_results is not None:
+            self.progress_bar_entry.setText("Generating Plots")
             # Extract data from the simulation_results dictionary
             self.modelCube = simulation_results["modelCube"]
             self.dirtyCube = simulation_results["dirtyCube"]
@@ -4336,6 +4360,13 @@ class ALMASimulator(QMainWindow):
             self._plot_uv_coverage()
             self._plot_antennas()
             self._plot_sim()
+            self.progress_bar_entry.setText("Done")
+            self.terminal.add_log("Plotting Finished")
+
+    @pyqtSlot(object)
+    def start_plot_runnable(self, simulation_results):
+        runnable = PlotResultsRunnable(self, simulation_results)
+        self.thread_pool.start(runnable)
 
     def _plot_antennas(self):
         plt.figure(figsize=(8, 8))
