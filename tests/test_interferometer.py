@@ -43,6 +43,8 @@ def test_interferometer(qtbot: QtBot):
     freq = metadata["Freq"]
     freq_support = metadata["Freq.sup."]
     cont_sens = metadata["Cont_sens_mJybeam"]
+    source_name = metadata["ALMA_source_name"]
+    member_ouid = metadata["member_ous_uid"]
     alma.generate_antenna_config_file_from_antenna_array(
         antenna_array, os.path.join(main_path, "almasim"), main_path
     )
@@ -164,6 +166,8 @@ def test_interferometer(qtbot: QtBot):
         header,
         save_mode,
         None,
+        False, 
+        0,
     )
     simulation_results = inter.run_interferometric_sim()
     assert simulation_results is not None
