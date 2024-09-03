@@ -1,6 +1,7 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from astropy.io import fits
 from astropy.time import Time
+
 # from scipy.integrate import odeint
 import pandas as pd
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
