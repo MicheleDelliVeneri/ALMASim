@@ -6,7 +6,7 @@ import pandas as pd
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
 import astropy.units as U
 from astropy.constants import c
-import scipy.ndimage.interpolation as spndint
+from scipy.ndimage import zoom
 import matplotlib.cm as cm
 import numpy as np
 import os
@@ -899,7 +899,7 @@ class Interferometer(QObject):
                 sh1 + self.Np4 : sh1 + self.Np4 + dims[1],
             ] += self.zoomimg
         else:
-            zoomimg = spndint.zoom(self.img, float(self.Nphf) / d1)
+            zoomimg = zoom(self.img, float(self.Nphf) / d1)
             zdims = np.shape(zoomimg)
             zd0 = min(zdims[0], self.Nphf)
             zd1 = min(zdims[1], self.Nphf)

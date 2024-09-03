@@ -289,6 +289,7 @@ def test_skymodels(qtbot: QtBot):
     almasim.hubble_entry.setText(hubble_path)
     if not os.path.exists(hubble_path):
         os.mkdir(hubble_path)
+    if not os.path.exists(os.path.join(hubble_path, "top100")):
         almasim.download_hubble()
     hubble_path = os.path.join(hubble_path, "top100")
     datacube = skymodels.insert_hubble(
