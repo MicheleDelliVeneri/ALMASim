@@ -2220,7 +2220,7 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(
             f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}"
         )
-        os.remove(os.path.join(self.galaxy_zoo_entry.text(), "galaxy-zoo-2-images.zip"))
+        # os.remove(os.path.join(self.galaxy_zoo_entry.text(), "galaxy-zoo-2-images.zip"))
 
     def download_galaxy_zoo_on_remote(self):
         """

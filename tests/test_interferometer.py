@@ -175,6 +175,56 @@ def test_interferometer(qtbot: QtBot):
     )
     simulation_results = inter.run_interferometric_sim()
     assert simulation_results is not None
+    # testing fits save mode
+    save_mode = "fits"
+    inter = interferometer.Interferometer(
+        0,
+        model,
+        os.path.join(main_path, "almasim"),
+        main_path,
+        ra,
+        dec,
+        central_freq,
+        band_range,
+        fov,
+        antenna_array,
+        (min_line_flux / beam_area.value) / snr,
+        snr,
+        int_time.value * second2hour,
+        obs_date,
+        header,
+        save_mode,
+        None,
+        False,
+        0,
+    )
+    simulation_results = inter.run_interferometric_sim()
+    assert simulation_results is not None
+    # testing h5 save mode
+    save_mode = "h5"
+    inter = interferometer.Interferometer(
+        0,
+        model,
+        os.path.join(main_path, "almasim"),
+        main_path,
+        ra,
+        dec,
+        central_freq,
+        band_range,
+        fov,
+        antenna_array,
+        (min_line_flux / beam_area.value) / snr,
+        snr,
+        int_time.value * second2hour,
+        obs_date,
+        header,
+        save_mode,
+        None,
+        False,
+        0,
+    )
+    simulation_results = inter.run_interferometric_sim()
+    assert simulation_results is not None
     os.remove(os.path.join(main_path, "antenna.cfg"))
     almasim.plot_simulation_results(simulation_results)
 

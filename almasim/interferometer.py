@@ -197,79 +197,79 @@ class Interferometer(QObject):
         self.az = sky_coords.az
         self.el = sky_coords.alt
 
-    def _get_initial_and_final_H(self):
-
-        def differential_equations(y, t, phi, A, E, forward=True):
-            """
-            Defines the system of differential equations.
-            Args:
-                y: Current state vector (A, E).
-                t: Independent variable (time).
-                tau: Time constant.
-                phi: Angle (radians).
-                A0: Initial value of A.
-                E0: Initial value of E.
-
-            Returns:
-                The derivatives of A and E (dA/dt, dE/dt).
-            """
-
-            def dtau_dt(t):
-                """
-                PLACEHOLDER TO BE SUBSTITUTED WITH REAL
-                """
-                return 1
-
-            def dtau_dt_reversed(t):
-                return -dtau_dt(t)
-
-            A, E = y
-            if forward is True:
-                dA_dt = dtau_dt(t) * (
-                    (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
-                    / np.cos(E)
-                )
-                dE_dt = dtau_dt(t) * (np.cos(phi) * np.sin(A))
-            else:
-                dA_dt = dtau_dt_reversed(t) * (
-                    (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
-                    / np.cos(E)
-                )
-                dE_dt = dtau_dt_reversed(t) * (np.cos(phi) * np.sin(A))
-            return [dA_dt, dE_dt]
-
-        self._get_az_el()
-        y0 = [self.az, self.el]
-        t_final_solve = np.linspace(self.middle_time, self.end_time, self.nH)
-        sol_final = odeint(
-            differential_equations, y0, t_final_solve, args=(self.lat, self.az, self.el)
-        )
-        az_final = sol_final[-1, 0]
-        el_final = sol_final[-1, 1]
-        t_initial_solve = np.linspace(self.middle_time, self.start_time, self.nH)[::-1]
-        sol_initial = odeint(
-            differential_equations,
-            y0,
-            t_initial_solve,
-            args=(self.lat, self.az, self.el, False),
-        )
-        az_initial = sol_initial[-1, 0]
-        el_initial = sol_initial[-1, 1]
-        aa_initial = AltAz(
-            az=az_initial,
-            alt=el_initial,
-            location=self.observing_location,
-            obstime=self.start_time,
-        )
-        aa_final = AltAz(
-            az=az_final,
-            alt=el_final,
-            location=self.observing_location,
-            obstime=self.end_time,
-        )
-        self.initial_H = -aa_initial.alt.to(U.hourangle).value
-        self.final_H = -aa_final.alt.to(U.hourangle).value
-        print(self.initial_H, self.final_H)
+    # def _get_initial_and_final_H(self):
+    #
+    #    def differential_equations(y, t, phi, A, E, forward=True):
+    #        """
+    #        Defines the system of differential equations.
+    #        Args:
+    #            y: Current state vector (A, E).
+    #            t: Independent variable (time).
+    #            tau: Time constant.
+    #            phi: Angle (radians).
+    #            A0: Initial value of A.
+    #            E0: Initial value of E.
+    #
+    #        Returns:
+    #            The derivatives of A and E (dA/dt, dE/dt).
+    #        """
+    #
+    #        def dtau_dt(t):
+    #            """
+    #            PLACEHOLDER TO BE SUBSTITUTED WITH REAL
+    #            """
+    #            return 1
+    #
+    #        def dtau_dt_reversed(t):
+    #            return -dtau_dt(t)
+    #
+    #        A, E = y
+    #        if forward is True:
+    #            dA_dt = dtau_dt(t) * (
+    #                (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
+    #                / np.cos(E)
+    #            )
+    #            dE_dt = dtau_dt(t) * (np.cos(phi) * np.sin(A))
+    #        else:
+    #            dA_dt = dtau_dt_reversed(t) * (
+    #                (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
+    #                / np.cos(E)
+    #            )
+    #            dE_dt = dtau_dt_reversed(t) * (np.cos(phi) * np.sin(A))
+    #        return [dA_dt, dE_dt]
+    #
+    #    self._get_az_el()
+    #    y0 = [self.az, self.el]
+    #    t_final_solve = np.linspace(self.middle_time, self.end_time, self.nH)
+    #    sol_final = odeint(
+    #        differential_equations, y0, t_final_solve, args=(self.lat, self.az, self.el)
+    #    )
+    #    az_final = sol_final[-1, 0]
+    #    el_final = sol_final[-1, 1]
+    #    t_initial_solve = np.linspace(self.middle_time, self.start_time, self.nH)[::-1]
+    #    sol_initial = odeint(
+    #        differential_equations,
+    #        y0,
+    #        t_initial_solve,
+    #        args=(self.lat, self.az, self.el, False),
+    #    )
+    #    az_initial = sol_initial[-1, 0]
+    #    el_initial = sol_initial[-1, 1]
+    #    aa_initial = AltAz(
+    #        az=az_initial,
+    #        alt=el_initial,
+    #        location=self.observing_location,
+    #        obstime=self.start_time,
+    #    )
+    #    aa_final = AltAz(
+    #        az=az_final,
+    #        alt=el_final,
+    #        location=self.observing_location,
+    #        obstime=self.end_time,
+    #    )
+    #    self.initial_H = -aa_initial.alt.to(U.hourangle).value
+    #    self.final_H = -aa_final.alt.to(U.hourangle).value
+    #    print(self.initial_H, self.final_H)
 
     def _get_nH(self):
         self.scan_time = 6
