@@ -4334,7 +4334,7 @@ class ALMASimulator(QMainWindow):
             )
         else:
             self.terminal.add_log(
-                "Soimulation took {} seconds, creating plots".format(
+                "Simulation took {} seconds, creating plots".format(
                     strftime("%H:%M:%S", gmtime(stop - start))
                 )
             )
