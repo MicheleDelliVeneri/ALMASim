@@ -62,10 +62,8 @@ def test_interferometer(qtbot: QtBot):
     beam_size = alma.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=False
     )
-    beam_solid_angle = np.pi * (beam_size / 2) ** 2
+    beam_area = 1.1331 * beam_size**2
     cont_sens = cont_sens * U.mJy / (U.arcsec**2)
-    cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
-    cont_sens = cont_sens_jy
     cell_size = beam_size / 5
     n_pix = 256
     n_channels = 256
@@ -101,19 +99,6 @@ def test_interferometer(qtbot: QtBot):
         None,
         False,
     )
-    datacube = skymodels.DataCube(
-        n_px_x=n_pix,
-        n_px_y=n_pix,
-        n_channels=n_channels,
-        px_size=cell_size,
-        channel_width=delta_freq,
-        spectral_centre=central_freq,
-        ra=ra,
-        dec=dec,
-    )
-    model = datacube._array.to_value(datacube._array.unit).T
-    assert model.shape[0] > 0
-    wcs = datacube.wcs
     if n_channels_nw != n_channels:
         freq_sup = freq_sup_nw * U.MHz
         n_channels = n_channels_nw
@@ -128,8 +113,25 @@ def test_interferometer(qtbot: QtBot):
         ra=ra,
         dec=dec,
     )
+    wcs = datacube.wcs
+    mean_shift = (np.sqrt(2) / 2) * 22
+    std_shift = (np.sqrt(2) / 2) * 44
+    shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift))
+    shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift))
+    if abs(shift_x) > 0.8 * n_pix / 2:
+        if shift_y > 0:
+            shift_x = int(0.8 * n_pix / 2)
+        else:
+            shift_x = -int(0.8 * n_pix / 2)
+    if abs(shift_y) > 0.8 * n_pix / 2:
+        if shift_y > 0:
+            shift_y = int(0.8 * n_pix / 2)
+        else:
+            shift_y = -int(0.8 * n_pix / 2)
     # testing point model
     pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+    pos_x = pos_x + shift_x
+    pos_y = pos_x + shift_y
     pos_z = [int(index) for index in source_channel_index]
     datacube = skymodels.insert_pointlike(
         None,
@@ -143,10 +145,13 @@ def test_interferometer(qtbot: QtBot):
         n_channels,
     )
     model = datacube._array.to_value(datacube._array.unit).T
+    model = model / beam_area.value
+    min_line_flux = np.min(line_fluxes)
     obs_date = metadata["Obs.date"]
     header = skymodels.get_datacube_header(datacube, obs_date)
     second2hour = 1 / 3600
     save_mode = "npz"
+    snr = 1.3
     inter = interferometer.Interferometer(
         0,
         model,
@@ -158,8 +163,59 @@ def test_interferometer(qtbot: QtBot):
         band_range,
         fov,
         antenna_array,
-        cont_sens.value,
-        float(int_time.value * second2hour),
+        (min_line_flux / beam_area.value) / snr,
+        snr,
+        int_time.value * second2hour,
+        obs_date,
+        header,
+        save_mode,
+        None,
+        False,
+        0,
+    )
+    simulation_results = inter.run_interferometric_sim()
+    assert simulation_results is not None
+    # testing fits save mode
+    save_mode = "fits"
+    inter = interferometer.Interferometer(
+        0,
+        model,
+        os.path.join(main_path, "almasim"),
+        main_path,
+        ra,
+        dec,
+        central_freq,
+        band_range,
+        fov,
+        antenna_array,
+        (min_line_flux / beam_area.value) / snr,
+        snr,
+        int_time.value * second2hour,
+        obs_date,
+        header,
+        save_mode,
+        None,
+        False,
+        0,
+    )
+    simulation_results = inter.run_interferometric_sim()
+    assert simulation_results is not None
+    # testing h5 save mode
+    save_mode = "h5"
+    inter = interferometer.Interferometer(
+        0,
+        model,
+        os.path.join(main_path, "almasim"),
+        main_path,
+        ra,
+        dec,
+        central_freq,
+        band_range,
+        fov,
+        antenna_array,
+        (min_line_flux / beam_area.value) / snr,
+        snr,
+        int_time.value * second2hour,
         obs_date,
         header,
         save_mode,
@@ -170,6 +226,7 @@ def test_interferometer(qtbot: QtBot):
     simulation_results = inter.run_interferometric_sim()
     assert simulation_results is not None
     os.remove(os.path.join(main_path, "antenna.cfg"))
+    almasim.plot_simulation_results(simulation_results)
 
 
 def test(test_interferometer):

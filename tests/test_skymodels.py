@@ -267,7 +267,8 @@ def test_skymodels(qtbot: QtBot):
     almasim.galaxy_zoo_entry.setText(galaxy_zoo_path)
     if not os.path.exists(galaxy_zoo_path):
         os.mkdir(galaxy_zoo_path)
-        almasim.download_galaxy_zoo()
+        if not os.path.exists(os.path.join(galaxy_zoo_path, "images_gz2")):
+            almasim.download_galaxy_zoo()
     galaxy_path = os.path.join(galaxy_zoo_path, "images_gz2", "images")
     datacube = skymodels.insert_galaxy_zoo(
         None,
@@ -289,6 +290,7 @@ def test_skymodels(qtbot: QtBot):
     almasim.hubble_entry.setText(hubble_path)
     if not os.path.exists(hubble_path):
         os.mkdir(hubble_path)
+    if not os.path.exists(os.path.join(hubble_path, "top100")):
         almasim.download_hubble()
     hubble_path = os.path.join(hubble_path, "top100")
     datacube = skymodels.insert_hubble(

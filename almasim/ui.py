@@ -2220,7 +2220,7 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(
             f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}"
         )
-        os.remove(os.path.join(self.galaxy_zoo_entry.text(), "galaxy-zoo-2-images.zip"))
+        # os.remove(os.path.join(self.galaxy_zoo_entry.text(), "galaxy-zoo-2-images.zip"))
 
     def download_galaxy_zoo_on_remote(self):
         """
@@ -2302,12 +2302,12 @@ class ALMASimulator(QMainWindow):
         baseurl = "https://esahubble.org/static/images/zip/top100/top100-original.zip"
         self.terminal.add_log("Hubble images not found on disk, downloading ...")
         zipfilename = os.path.join(self.hubble_entry.text(), os.path.basename(baseurl))
-
-        response = requests.Session().get(baseurl, stream=True)
-        with open(zipfilename, "wb") as f:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    f.write(chunk)
+        if not os.path.exists(zipfilename):
+            response = requests.Session().get(baseurl, stream=True)
+            with open(zipfilename, "wb") as f:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
         with zipfile.ZipFile(zipfilename) as zf:
             zf.extractall(self.hubble_entry.text())
         os.remove(zipfilename)

@@ -1,12 +1,13 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from astropy.io import fits
 from astropy.time import Time
-from scipy.integrate import odeint
+
+# from scipy.integrate import odeint
 import pandas as pd
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
 import astropy.units as U
 from astropy.constants import c
-import scipy.ndimage.interpolation as spndint
+from scipy.ndimage import zoom
 import matplotlib.cm as cm
 import numpy as np
 import os
@@ -197,79 +198,79 @@ class Interferometer(QObject):
         self.az = sky_coords.az
         self.el = sky_coords.alt
 
-    def _get_initial_and_final_H(self):
-
-        def differential_equations(y, t, phi, A, E, forward=True):
-            """
-            Defines the system of differential equations.
-            Args:
-                y: Current state vector (A, E).
-                t: Independent variable (time).
-                tau: Time constant.
-                phi: Angle (radians).
-                A0: Initial value of A.
-                E0: Initial value of E.
-
-            Returns:
-                The derivatives of A and E (dA/dt, dE/dt).
-            """
-
-            def dtau_dt(t):
-                """
-                PLACEHOLDER TO BE SUBSTITUTED WITH REAL
-                """
-                return 1
-
-            def dtau_dt_reversed(t):
-                return -dtau_dt(t)
-
-            A, E = y
-            if forward is True:
-                dA_dt = dtau_dt(t) * (
-                    (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
-                    / np.cos(E)
-                )
-                dE_dt = dtau_dt(t) * (np.cos(phi) * np.sin(A))
-            else:
-                dA_dt = dtau_dt_reversed(t) * (
-                    (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
-                    / np.cos(E)
-                )
-                dE_dt = dtau_dt_reversed(t) * (np.cos(phi) * np.sin(A))
-            return [dA_dt, dE_dt]
-
-        self._get_az_el()
-        y0 = [self.az, self.el]
-        t_final_solve = np.linspace(self.middle_time, self.end_time, self.nH)
-        sol_final = odeint(
-            differential_equations, y0, t_final_solve, args=(self.lat, self.az, self.el)
-        )
-        az_final = sol_final[-1, 0]
-        el_final = sol_final[-1, 1]
-        t_initial_solve = np.linspace(self.middle_time, self.start_time, self.nH)[::-1]
-        sol_initial = odeint(
-            differential_equations,
-            y0,
-            t_initial_solve,
-            args=(self.lat, self.az, self.el, False),
-        )
-        az_initial = sol_initial[-1, 0]
-        el_initial = sol_initial[-1, 1]
-        aa_initial = AltAz(
-            az=az_initial,
-            alt=el_initial,
-            location=self.observing_location,
-            obstime=self.start_time,
-        )
-        aa_final = AltAz(
-            az=az_final,
-            alt=el_final,
-            location=self.observing_location,
-            obstime=self.end_time,
-        )
-        self.initial_H = -aa_initial.alt.to(U.hourangle).value
-        self.final_H = -aa_final.alt.to(U.hourangle).value
-        print(self.initial_H, self.final_H)
+    # def _get_initial_and_final_H(self):
+    #
+    #    def differential_equations(y, t, phi, A, E, forward=True):
+    #        """
+    #        Defines the system of differential equations.
+    #        Args:
+    #            y: Current state vector (A, E).
+    #            t: Independent variable (time).
+    #            tau: Time constant.
+    #            phi: Angle (radians).
+    #            A0: Initial value of A.
+    #            E0: Initial value of E.
+    #
+    #        Returns:
+    #            The derivatives of A and E (dA/dt, dE/dt).
+    #        """
+    #
+    #        def dtau_dt(t):
+    #            """
+    #            PLACEHOLDER TO BE SUBSTITUTED WITH REAL
+    #            """
+    #            return 1
+    #
+    #        def dtau_dt_reversed(t):
+    #            return -dtau_dt(t)
+    #
+    #        A, E = y
+    #        if forward is True:
+    #            dA_dt = dtau_dt(t) * (
+    #                (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
+    #                / np.cos(E)
+    #            )
+    #            dE_dt = dtau_dt(t) * (np.cos(phi) * np.sin(A))
+    #        else:
+    #            dA_dt = dtau_dt_reversed(t) * (
+    #                (np.sin(phi) * np.cos(E) - np.cos(phi) * np.sin(E) * np.cos(A))
+    #                / np.cos(E)
+    #            )
+    #            dE_dt = dtau_dt_reversed(t) * (np.cos(phi) * np.sin(A))
+    #        return [dA_dt, dE_dt]
+    #
+    #    self._get_az_el()
+    #    y0 = [self.az, self.el]
+    #    t_final_solve = np.linspace(self.middle_time, self.end_time, self.nH)
+    #    sol_final = odeint(
+    #        differential_equations, y0, t_final_solve, args=(self.lat, self.az, self.el)
+    #    )
+    #    az_final = sol_final[-1, 0]
+    #    el_final = sol_final[-1, 1]
+    #    t_initial_solve = np.linspace(self.middle_time, self.start_time, self.nH)[::-1]
+    #    sol_initial = odeint(
+    #        differential_equations,
+    #        y0,
+    #        t_initial_solve,
+    #        args=(self.lat, self.az, self.el, False),
+    #    )
+    #    az_initial = sol_initial[-1, 0]
+    #    el_initial = sol_initial[-1, 1]
+    #    aa_initial = AltAz(
+    #        az=az_initial,
+    #        alt=el_initial,
+    #        location=self.observing_location,
+    #        obstime=self.start_time,
+    #    )
+    #    aa_final = AltAz(
+    #        az=az_final,
+    #        alt=el_final,
+    #        location=self.observing_location,
+    #        obstime=self.end_time,
+    #    )
+    #    self.initial_H = -aa_initial.alt.to(U.hourangle).value
+    #    self.final_H = -aa_final.alt.to(U.hourangle).value
+    #    print(self.initial_H, self.final_H)
 
     def _get_nH(self):
         self.scan_time = 6
@@ -899,7 +900,7 @@ class Interferometer(QObject):
                 sh1 + self.Np4 : sh1 + self.Np4 + dims[1],
             ] += self.zoomimg
         else:
-            zoomimg = spndint.zoom(self.img, float(self.Nphf) / d1)
+            zoomimg = zoom(self.img, float(self.Nphf) / d1)
             zdims = np.shape(zoomimg)
             zd0 = min(zdims[0], self.Nphf)
             zd1 = min(zdims[1], self.Nphf)
