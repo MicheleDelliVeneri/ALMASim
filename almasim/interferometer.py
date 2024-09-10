@@ -1024,15 +1024,15 @@ class Interferometer(QObject):
 
         # 3. Correct Negative Values in Dirty Map (Optional):
         #   - Find the minimum value in the dirty map.
-        min_dirty = np.min(self.dirtymap)
+        #min_dirty = np.min(self.dirtymap)
         #   - If there are negative values, shift the whole dirty map
         #        upwards to make all values non-negative.
         #   - This step might be necessary to avoid issues with certain
         #            image display or processing algorithms.
-        if min_dirty < 0.0:
-            self.dirtymap += np.abs(min_dirty)
-        else:
-            self.dirtymap -= min_dirty
+        #if min_dirty < 0.0:
+            #self.dirtymap += np.abs(min_dirty)
+        #else:
+            #self.dirtymap -= min_dirty
 
         # 4. Calculate Model and Dirty Visibilities:
         #   - modelvis: Shift the zero-frequency component of the
@@ -1061,13 +1061,13 @@ class Interferometer(QObject):
 
     # ------------------- IO Functions
     def _savez_compressed_cubes(self):
-        min_dirty = np.min(self.dirtyCube)
-        if min_dirty < 0:
-            self.dirtyCube += min_dirty
-        max_dirty = np.sum(self.dirtyCube)
-        max_clean = np.sum(self.modelCube)
-        self.dirtyCube = self.dirtyCube / max_dirty
-        self.dirtyCube = self.dirtyCube * max_clean
+        #min_dirty = np.min(self.dirtyCube)
+        #if min_dirty < 0:
+            #self.dirtyCube += min_dirty
+        #max_dirty = np.sum(self.dirtyCube)
+        #max_clean = np.sum(self.modelCube)
+        #self.dirtyCube = self.dirtyCube / max_dirty
+        #self.dirtyCube = self.dirtyCube * max_clean
         if self.save_mode == "npz":
             np.savez_compressed(
                 os.path.join(

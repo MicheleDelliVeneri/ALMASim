@@ -801,7 +801,7 @@ class ALMASimulator(QMainWindow):
         self.max_line_width_value_label = QLabel(
             f"{self.max_line_width_slider.value()} km/s"
         )
-        self.max_line_width_slider.setRange(50, 600)
+        self.max_line_width_slider.setRange(50, 1700)
         self.max_line_width_slider.setTickInterval(25)
         self.max_line_width_slider.setSingleStep(5)
         self.max_line_width_slider.setValue(400)
@@ -812,7 +812,7 @@ class ALMASimulator(QMainWindow):
         self.min_line_width_value_label = QLabel(
             f"{self.min_line_width_slider.value()} km/s"
         )
-        self.min_line_width_slider.setRange(50, 600)
+        self.min_line_width_slider.setRange(50, 1700)
         self.min_line_width_slider.setTickInterval(25)
         self.min_line_width_slider.setSingleStep(5)
         self.min_line_width_slider.setValue(200)
@@ -3642,12 +3642,14 @@ class ALMASimulator(QMainWindow):
                 row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2,
                 row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2,
             )
+            #print(f'lower check : {lower_bound- freq_min}, upper check : {upper_bound-freq_max}')
             while lower_bound < freq_min and upper_bound > freq_max:
                 row["fwhm_GHz"] -= 0.1
                 lower_bound = row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2
                 upper_bound = row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2
             if row["fwhm_GHz"] != compatible_lines["fwhm_GHz"].iloc[index]:
                 compatible_lines.loc[i, "fwhm_GHz"] = row["fwhm_GHz"]
+        #print(f'lower check : {lower_bound- freq_min}, upper check : {upper_bound-freq_max}')
         return compatible_lines
 
     def process_spectral_data(
