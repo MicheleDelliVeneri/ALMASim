@@ -801,7 +801,7 @@ class ALMASimulator(QMainWindow):
         self.max_line_width_value_label = QLabel(
             f"{self.max_line_width_slider.value()} km/s"
         )
-        self.max_line_width_slider.setRange(50, 600)
+        self.max_line_width_slider.setRange(50, 1700)
         self.max_line_width_slider.setTickInterval(25)
         self.max_line_width_slider.setSingleStep(5)
         self.max_line_width_slider.setValue(400)
@@ -812,7 +812,7 @@ class ALMASimulator(QMainWindow):
         self.min_line_width_value_label = QLabel(
             f"{self.min_line_width_slider.value()} km/s"
         )
-        self.min_line_width_slider.setRange(50, 600)
+        self.min_line_width_slider.setRange(50, 1700)
         self.min_line_width_slider.setTickInterval(25)
         self.min_line_width_slider.setSingleStep(5)
         self.min_line_width_slider.setValue(200)
@@ -3315,12 +3315,20 @@ class ALMASimulator(QMainWindow):
     def run_simulator_parallel(self):
         dask.config.set({"temporary_directory": self.output_path})
         total_memory = psutil.virtual_memory().total
-        num_workers = int(self.ncpu_entry.text()) // 4
+        num_cpus = os.cpu_count()
+        # Ensure the number of CPUs does not exceed available CPUs
+        self.ncpu = min(int(self.ncpu_entry.text()), num_cpus)
+        n_sims = int(self.n_sims_entry.text())
+        if n_sims > 1:
+            self.n_threads = 4
+            num_workers = int(self.ncpu_entry.text()) // self.n_threads
+        else:
+            num_workers = 1
         memory_limit = int(0.9 * total_memory / num_workers)
-
+        self.n_threads = self.ncpu
         ddf = dd.from_pandas(self.input_params, npartitions=num_workers)
         with LocalCluster(
-            n_workers=num_workers, threads_per_worker=4, dashboard_address=None
+            n_workers=num_workers, threads_per_worker=self.n_threads, dashboard_address=None
         ) as cluster:
             with Client(cluster) as client:
                 client.register_plugin(MemoryLimitPlugin(memory_limit))
@@ -4309,6 +4317,7 @@ class ALMASimulator(QMainWindow):
             obs_date,
             header,
             save_mode,
+            self.n_threads,
             self.terminal,
             self.stop_simulation_flag,
             float(self.robust_slider.value()) / 10,
