@@ -3532,6 +3532,7 @@ class ALMASimulator(QMainWindow):
             * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9)
             * U.Hz
         )
+        db_line['delta_v'] = delta_v.value
         fwhms_GHz = fwhms.to(U.GHz).value
         db_line["fwhm_GHz"] = fwhms_GHz
         found_lines = 0
@@ -3599,6 +3600,8 @@ class ALMASimulator(QMainWindow):
             redshifts = np.array(list(np.ones(len(freqs)) * first_line["redshift"]))
             shifted_freqs = np.array(freqs / (1 + first_line["redshift"]))
             distances = np.array(abs(shifted_freqs - first_line["shifted_freq(GHz)"]))
+            delta_vs = np.array(list(np.random.uniform(min_delta_v, max_delta_v, 
+                                n - found_lines)))
             fwhms = np.array(
                 list(np.ones(len(line_names)) * first_line["fwhm_GHz"].astype(float))
             )
@@ -3611,6 +3614,7 @@ class ALMASimulator(QMainWindow):
                         np.round(err_cs, 2).astype(float),
                         np.round(redshifts, 6).astype(float),
                         np.round(shifted_freqs, 6).astype(float),
+                        np.round(delta_vs, 6).astype(float),
                         np.round(fwhms, 6).astype(float),
                         np.round(distances, 6).astype(float),
                     )
@@ -3630,6 +3634,7 @@ class ALMASimulator(QMainWindow):
                         np.round(err_cs, 2).astype(float),
                         np.round(redshifts, 6).astype(float),
                         np.round(shifted_freqs, 6).astype(float),
+                        np.round(delta_vs, 6).astype(float),
                         np.round(fwhms, 6).astype(float),
                         redshift_distance,
                         np.round(distances, 6).astype(float),
@@ -3763,6 +3768,8 @@ class ALMASimulator(QMainWindow):
             )
             * U.GHz
         )
+        self.terminal.add_log('Line Velocities: {} Km/s'.format(
+            filtered_lines['delta_v'].values))
         freq_steps = freq_steps.to(U.Hz).value
         line_fluxes = 10 ** (np.log10(flux_infrared) + line_ratios) / freq_steps
         bandwidth = freq_max - freq_min
@@ -4106,25 +4113,18 @@ class ALMASimulator(QMainWindow):
         )
         wcs = datacube.wcs
         fwhm_x, fwhm_y, angle = None, None, None
-        mean_shift = (np.sqrt(2) / 2) * 22
-        std_shift = (np.sqrt(2) / 2) * 44
-        shift_x = int(np.random.normal(loc=mean_shift, scale=std_shift))
-        shift_y = int(np.random.normal(loc=mean_shift, scale=std_shift))
-        if abs(shift_x) > 0.8 * n_pix / 2:
-            if shift_y > 0:
-                shift_x = int(0.8 * n_pix / 2)
-            else:
-                shift_x = -int(0.8 * n_pix / 2)
-        if abs(shift_y) > 0.8 * n_pix / 2:
-            if shift_y > 0:
-                shift_y = int(0.8 * n_pix / 2)
-            else:
-                shift_y = -int(0.8 * n_pix / 2)
+        pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+        shift_x = np.random.randint(0.1 * fov.value / cell_size.value, 
+                                    fov.value / cell_size.value - pos_x)
+        shift_y = np.random.randint(0.1 * fov.value / cell_size.value,
+                                    fov.value / cell_size.value - pos_y)
+        pos_x = pos_x + shift_x
+        pos_y = pos_x + shift_y
+        pos_x = min(pos_x, n_pix - 1)
+        pos_y = min(pos_y, n_pix - 1)
+        pos_z = [int(index) for index in source_channel_index]
+        self.terminal.add_log('Source Position (x, y): ({}, {})'.format(pos_x, pos_y))                       
         if source_type == "point":
-            pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-            pos_x = pos_x + shift_x
-            pos_y = pos_x + shift_y
-            pos_z = [int(index) for index in source_channel_index]
             self.progress_bar_entry.setText("Inserting Point Source Model")
             datacube = usm.insert_pointlike(
                 self.update_progress,
@@ -4138,11 +4138,7 @@ class ALMASimulator(QMainWindow):
                 n_channels,
             )
         elif source_type == "gaussian":
-            self.progress_bar_entry.setText("Inserting Gaussian Source Model")
-            pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-            pos_x = pos_x + shift_x
-            pos_y = pos_x + shift_y
-            pos_z = [int(index) for index in source_channel_index]
+            self.progress_bar_entry.setText("Inserting Gaussian Source Model")        
             fwhm_x = np.random.randint(3, 10)
             fwhm_y = np.random.randint(3, 10)
             angle = np.random.randint(0, 180)
