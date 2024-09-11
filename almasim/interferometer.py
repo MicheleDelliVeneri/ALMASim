@@ -122,9 +122,7 @@ class Interferometer(QObject):
             self.terminal.add_log(msg)
         else:
             print(msg)
-
-    from dask import delayed, compute
-    import dask
+            
     def run_interferometric_sim(self):
         for channel in range(self.Nchan):
             if not self.stop_simulation_flag:
