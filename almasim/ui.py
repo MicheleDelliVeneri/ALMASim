@@ -301,18 +301,22 @@ class SimulatorWorker(QRunnable, QObject):
             self.signals.simulationFinished.emit(results)
 
 
-class DownloadGalaxyZooRunnable(QRunnable):
+class DownloadGalaxyZooRunnable(QRunnable, QObject):
     """Runnable for downloading Galaxy Zoo data in a separate thread."""
+    
+    finished = pyqtSignal()  # Signal to emit when the task is finished
 
     def __init__(self, alma_simulator_instance):
-        super().__init__()
-        self.alma_simulator = (
-            alma_simulator_instance  # Store a reference to the main UI class
-        )
+        QRunnable.__init__(self)
+        QObject.__init__(self)  # QObject for signals
+        self.alma_simulator = alma_simulator_instance  # Store a reference to the main UI class
 
     def run(self):
         """Downloads Galaxy Zoo data."""
-        self.alma_simulator.download_galaxy_zoo()
+        try:
+            self.alma_simulator.download_galaxy_zoo()  # Your download logic here
+        finally:
+            self.finished.emit()  # Emit the signal when done
 
 
 class DownloadTNGStructureRunnable(QRunnable):
@@ -1174,6 +1178,9 @@ class ALMASimulator(QMainWindow):
         self.line_mode_checkbox.setChecked(False)
         self.serendipitous_checkbox.setChecked(False)
 
+    def on_download_finished(self):
+        self.terminal.add_log("Download finished!")
+
     def load_settings(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
@@ -1236,7 +1243,9 @@ class ALMASimulator(QMainWindow):
                             ):
                                 self.terminal.add_log("Downloading Galaxy Zoo")
                                 runnable = DownloadGalaxyZooRunnable(self)
+                                runnable.finished.connect(self.on_download_finished)  # Connect signal
                                 self.thread_pool.start(runnable)
+                                self.terminal.add_log("Waiting for download to finish...")
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
@@ -2926,9 +2935,10 @@ class ALMASimulator(QMainWindow):
                     os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
                 ):
                     self.terminal.add_log("Downloading Galaxy Zoo")
-                    # pool = QThreadPool.globalInstance()
                     runnable = DownloadGalaxyZooRunnable(self)
+                    runnable.finished.connect(self.on_download_finished)  # Connect signal
                     self.thread_pool.start(runnable)
+                    self.terminal.add_log("Waiting for download to finish...")
             if self.model_combo.currentText() == "Hubble 100":
                 if self.hubble_entry.text() and not os.path.exists(
                     os.path.join(self.hubble_entry.text(), "top100")
@@ -4284,6 +4294,11 @@ class ALMASimulator(QMainWindow):
         model = datacube._array.to_value(datacube._array.unit).T
         model = model / beam_area.value
         totflux = np.sum(model)
+        plt.figure(figsize=(8, 8))
+        plt.imshow(np.sum(model, axis=0), origin="lower", cmap="inferno")
+        plt.colorbar()
+        plt.savefig(os.path.join(sim_output_dir, "model_image_{}.png".format(inx)))
+
         if remote is True:
             print("Total Flux injected in model cube: {:.3f} Jy\n".format(totflux))
             print("Done\n")
@@ -4506,18 +4521,13 @@ class ALMASimulator(QMainWindow):
         simPlot, ax = plt.subplots(2, 3, figsize=(18, 12))
         sim_img = np.sum(self.modelCube, axis=0)
         simPlotPlot = ax[0, 0].imshow(
-            np.power(
                 sim_img[
                     self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4
                 ],
-                self.gamma,
-            ),
-            picker=True,
-            interpolation="nearest",
-            vmin=0.0,
-            vmax=np.max(sim_img) ** self.gamma,
-            cmap=self.currcmap,
-        )
+                interpolation="nearest",
+                vmin=0.0,
+                vmax=np.max(sim_img),
+                cmap=self.currcmap)
         plt.setp(
             simPlotPlot,
             extent=(
