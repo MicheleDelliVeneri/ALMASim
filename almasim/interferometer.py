@@ -47,7 +47,6 @@ class Interferometer(QObject):
         stop_simulation_flag,
         robust=0.5,
     ):
-        super().__init__()
         self.idx = idx
         self.terminal = terminal
         self.stop_simulation_flag = stop_simulation_flag

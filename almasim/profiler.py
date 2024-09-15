@@ -13,7 +13,10 @@ import numpy as np
 import os
 import matplotlib
 import h5py
-
+import time
+from memory_profiler import memory_usage
+from dask import delayed, compute
+from distributed import Client
 
 class Interferometer():
     def __init__(
@@ -36,7 +39,7 @@ class Interferometer():
         save_mode,
         robust,
         ):
-    
+        super().__init__()
         self.idx = idx
         self.skymodel = skymodel
         self.main_dir = main_dir
@@ -55,6 +58,9 @@ class Interferometer():
         self.save_mode = save_mode
         self.robust = robust
 
+        # Measure execution time and memory usage for each function
+        start_time = time.time()
+        mem_before = memory_usage()[0]
         # Initialize variables
         self._init_variables()
         # Get the observing location
@@ -65,13 +71,10 @@ class Interferometer():
         # Get the observing wavelengths for each channel
         self._get_wavelengths()
         self._prepare_cubes()
-        self._set_noise()
+        exec_time_init = time.time() - start_time
+        mem_after_init = memory_usage()[0] - mem_before
+        print(f"_init - Time: {exec_time_init:.4f} seconds, Memory: {mem_after_init:.2f} MiB")
 
-
-    def _closest_power_of_2(self, x):
-        op = math.floor if bin(x)[3] != "1" else math.ceil
-        return 2 ** op(math.log(x, 2))
-    
     def _hz_to_m(self, freq):
         return self.c_ms / freq
 
@@ -85,41 +88,57 @@ class Interferometer():
         self.curzoom = [0, 0, 0, 0]
         self.deltaAng = 1.0 * self.deg2rad
         self.gamma = 0.5
+        self.lfac = 1.0e6
+        self.header = header
+        self._get_nH()
+        self.Hmax = np.pi
+        self.lat = -23.028 * self.deg2rad
+        self.trlat = [np.sin(self.lat), np.cos(self.lat)]
+        self.Diameters = [12.0, 0]
         self.ra = self.ra.value * self.deg2rad
         self.dec = self.dec.value * self.deg2rad
         self.trdec = [np.sin(self.dec), np.cos(self.dec)]
         self.central_freq = self.central_freq.to(U.Hz).value
         self.bandwidth = self.bandwidth.to(U.Hz).value
-        self.imsize = 2 * self._closest_power_of_2(1.5 * self.fov)
+        self.imsize = 3 * self.fov
         self.Npix = self.skymodel.shape[1]
         self.Nchan = self.skymodel.shape[0]
         self.Np4 = self.Npix // 4
         self.Nphf = self.Npix // 2
         self.pixsize = self.imsize / self.Npix
         self.Xaxmax = self.imsize / 2
+        self.c_ms = c.to(U.m / U.s).value
         self.xx = np.linspace(-self.Xaxmax, self.Xaxmax, self.Npix)
         self.yy = np.ones(self.Npix, dtype=np.float32)
         self.distmat = (
             -np.outer(self.xx**2.0, self.yy) - np.outer(self.yy, self.xx**2.0)
             ) * self.pixsize**2.0
-        self.robfac - 0.0
+        self.robfac = 0.0
         self.currcmap = cm.jet
         self.zooming = 0
+        print("Number of Epochs", self.nH)
 
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site("ALMA")
 
     def _get_Hcov(self):
-        self.int_time = self.int_time * U.s
-        start_time = Time(self.obs_date + "T00:00:00", format="isot", scale="utc")
-        middle_time = start_time + self.int_time / 2
-        end_time = start_time + self.int_time
+        self.integration_time = self.integration_time * U.s
+        start_time = Time(self.observation_date + "T00:00:00", format="isot", scale="utc")
+        middle_time = start_time + self.integration_time / 2
+        end_time = start_time + self.integration_time
         ha_start = self._get_hour_angle(start_time)
         ha_middle = self._get_hour_angle(middle_time)
         ha_end = self._get_hour_angle(end_time)
         start = ha_start - ha_middle
         end = ha_end - ha_middle
         self.Hcov = [start, end]
+    
+    def _get_hour_angle(self, time):
+        lst = time.sidereal_time("apparent", longitude=self.observing_location.lon)
+        ha = lst.deg - self.ra
+        if ha < 0:
+            ha += 360
+        return ha
 
     def _get_az_el(self):
         self._get_observing_location()
@@ -134,19 +153,23 @@ class Interferometer():
 
     def _get_nH(self):
         self.scan_time = 6
-        self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+        self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
         if self.nH > 200:
-            # Try increasing the divisor to 8.064 to lower nH
-            self.scan_time = 8.064
-            self.nH = int(self.int_time / (self.scan_time * self.second2hour))
-            if self.nH > 200:
-                # Further increase the divisor to 18.144
-                self.scan_time = 18.144
-                self.nH = int(self.int_time / (self.scan_time * self.second2hour))
-                if self.nH > 200:
-                    self.scan_time = 30.24
-                    # Final attempt with the largest divisor (30.24)
-                    self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+            while self.nH > 200:
+                self.scan_time *= 1.5
+                self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+        #if self.nH > 200:
+        #    # Try increasing the divisor to 8.064 to lower nH
+        #    self.scan_time = 8.064
+        #    self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+        #    if self.nH > 200:
+        #        # Further increase the divisor to 18.144
+        #        self.scan_time = 18.144
+        ##        self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+        #        if self.nH > 200:
+        #            self.scan_time = 30.24
+        #            # Final attempt with the largest divisor (30.24)
+        #            self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
         self.header.append(("EPOCH", self.nH))
     
     def _read_antennas(self):
@@ -213,6 +236,8 @@ class Interferometer():
             (self.Nchan, self.Npix, self.Npix), dtype=np.complex64
         )
 
+    # Imaging Cycle Functions
+    # 1 
     def _get_channel_wavelength(self):
         """
         This method calculates the range of wavelengths for a given channel and formats
@@ -249,6 +274,7 @@ class Interferometer():
             + r"$\Delta\alpha = $ % 4.2f / $\Delta\delta = $ % 4.2f "
         )
 
+    # 2
     def _prepare_2d_arrays(self):
         """
         This method initializes several 2D arrays with zeros, each of size (Npix x Npix).
@@ -276,6 +302,7 @@ class Interferometer():
         self.Grobustsamp = np.zeros((self.Npix, self.Npix), dtype=np.complex64)
         self.GrobustNoise = np.zeros((self.Npix, self.Npix), dtype=np.complex64)
 
+    # 3
     def _prepare_baselines(self):
         """
         This method prepares the baselines for an interferometer array.
@@ -361,67 +388,7 @@ class Interferometer():
         self.v = np.zeros((NBmax, self.nH))
         self.ravelDims = (NBmax, self.nH)
 
-    def _set_beam(self):
-        """
-        This method calculates the "dirty beam" of the interferometer, which is the
-         Fourier transform of the weighted sampling distribution in the UV plane.
-         It first calculates a denominator for robust weighting,
-        which is used to balance data points with varying noise and sampling density.
-        The denominator is calculated as 1 plus the product of a robustness factor and
-         the total sampling.
-        Then the method applies robust weighting to the total sampling, gains,
-        and noise by dividing each of
-        these quantities by the calculated denominator.
-        The results are stored in the instance variables `robustsamp`,
-         `Grobustsamp`, and `GrobustNoise`, respectively.
-        The method then calculates the dirty beam by performing a
-         2D inverse Fourier transform
-        on the weighted sampling distribution. The zero-frequency component of the
-         weighted sampling is shifted to the center before the Fourier transform and
-          shifted back to the original corner after the Fourier transform.
-           The real part of the result is extracted and normalized by a factor
-            determined by `W2W1`. The result is stored in the instance variable `beam`.
-        Finally, the method scales and normalizes the beam by dividing it by
-         its maximum value within a central region.
-        The maximum value is found and stored in the instance variable `beamScale`,
-        and the beam is then divided by this value.
-        The function modifies the following instance variables:
-        - self.robustsamp: The weighted sampling distribution in the UV plane.
-        - self.Grobustsamp: The weighted gains in the UV plane.
-        - self.GrobustNoise: The weighted noise in the UV plane.
-        - self.beam: The dirty beam of the interferometer.
-        - self.beamScale: The maximum value of the beam within a central region.
-        """
-        # 1. Robust Weighting Calculation:
-        #   - denom: Denominator used for robust weighting to balance data
-        #      points with varying noise and sampling density.
-        denom = 1.0 + self.robfac * self.totsampling
-        # 2. Apply Robust Weighting to Sampling, Gains, and Noise:
-        #   - robustsamp: Weighted sampling distribution in the UV plane.
-        self.robustsamp[:] = self.totsampling / denom
-        self.Grobustsamp[:] = self.Gsampling / denom
-        self.GrobustNoise[:] = self.noisemap / denom
-        # 3. Dirty Beam Calculation:
-        #   - np.fft.fftshift(self.robustsamp): Shift the zero-frequency component
-        #       of the weighted sampling to the center for FFT.
-        #   - np.fft.ifft2(...): Perform the 2D inverse Fourier Transform to
-        #       get the dirty beam in the image domain.
-        #   - np.fft.ifftshift(...): Shift the zero-frequency component back
-        #       to the original corner.
-        #   - .real: Extract the real part of the complex result, as the beam
-        #       is a real-valued function.
-        #   -  / (1. + self.W2W1): Normalize the beam by a factor determined by `W2W1`.
-        self.beam[:] = np.fft.ifftshift(
-            np.fft.ifft2(np.fft.fftshift(self.robustsamp))
-        ).real
-        # 4. Beam Scaling and Normalization:
-        #   - Find the maximum value of the beam within a central region
-        #       (likely to avoid edge effects).
-        self.beamScale = np.max(
-            self.beam[self.Nphf : self.Nphf + 1, self.Nphf : self.Nphf + 1]
-        )
-        self.beam[:] /= self.beamScale
-
+    # 4
     def _set_noise(self):
         """
         This method sets the noise level for the interferometer array.
@@ -459,6 +426,89 @@ class Interferometer():
                 loc=0.0, scale=self.noise, size=np.shape(self.Noise)
             )
 
+    # 5
+    def _set_baselines(self, antidx=-1):
+        """
+
+        This method is responsible for calculating the baseline vectors
+         (in wavelengths) and the
+        corresponding u and v coordinates (spatial frequencies) in the
+         UV plane for each baseline
+        in the interferometer array.
+        The method first determines which baselines to update based on
+         the provided antenna index (`antidx`).
+        If `antidx` is -1, all baselines are updated. If `antidx` is a
+         valid antenna index, only baselines
+        involving that antenna are updated. If `antidx` is invalid,
+         no baselines are updated.
+
+        The method then iterates over the baselines that need updating. For each baseline,
+         it calculates the
+        baseline vector components (B_x, B_y, B_z) in wavelengths, and the u and v
+         coordinates in the UV plane.
+
+        Parameters:
+            antidx (int, optional): The index of the antenna for which to update
+             baselines. If -1, all baselines are updated. Defaults to -1.
+
+        Attributes Set:
+            self.B (np.array): The baseline vectors for each baseline in
+                               the interferometer array.
+            self.u (np.array): The u coordinates (spatial frequencies)
+                               for each baseline in the UV plane.
+            self.v (np.array): The v coordinates (spatial frequencies)
+                               for each baseline in the UV plane.
+
+        """
+        # Determine which baselines to update:
+        if antidx == -1:
+            # Update all baselines if no specific antenna index is provided.
+            bas2change = range(self.Nbas)
+        elif antidx < self.Nant:
+            # Update only baselines involving the specified antenna.
+            bas2change = self.basnum[
+                antidx
+            ].flatten()  # Get baselines associated with antidx
+        else:
+            # If the provided antidx is invalid, update no baselines.
+            bas2change = []
+        # Iterate over the baselines that need updating
+        for currBas in bas2change:
+            # Get the antenna indices that form the current baseline
+            n1, n2 = self.antnum[currBas]
+            # Calculate the baseline vector components (B_x, B_y, B_z) in wavelengths:
+            # B_x: Projection of baseline onto the plane perpendicular to Earth's
+            # rotation axis.
+            self.B[currBas, 0] = (
+                -(self.antPos[n2][1] - self.antPos[n1][1])
+                * self.trlat[0]
+                / self.wavelength[2]
+            )
+            # B_y: Projection of baseline onto the East-West direction.
+            self.B[currBas, 1] = (
+                self.antPos[n2][0] - self.antPos[n1][0]
+            ) / self.wavelength[2]
+            # B_z: Projection of baseline onto the North-South direction.
+            self.B[currBas, 2] = (
+                (self.antPos[n2][1] - self.antPos[n1][1])
+                * self.trlat[1]
+                / self.wavelength[2]
+            )
+            # Calculate u and v coordinates (spatial frequencies) in wavelengths:
+            # u: Projection of the baseline vector onto the UV plane (East-West
+            # component).
+            self.u[currBas, :] = -(
+                self.B[currBas, 0] * self.H[0] + self.B[currBas, 1] * self.H[1]
+            )
+            # v: Projection of the baseline vector onto the UV plane (North-South
+            # component).
+            self.v[currBas, :] = (
+                -self.B[currBas, 0] * self.trdec[0] * self.H[1]
+                + self.B[currBas, 1] * self.trdec[0] * self.H[0]
+                + self.trdec[1] * self.B[currBas, 2]
+            )
+
+    # 6 
     def _grid_uv(self, antidx=-1):
         """
         The main purpose of this method is to take the continuous visibility measurements
@@ -598,6 +648,7 @@ class Interferometer():
             / np.sum(self.totsampling**2.0)
         )
 
+    # 7
     def _set_beam(self):
         """
         This method calculates the "dirty beam" of the interferometer, which is the
@@ -650,7 +701,7 @@ class Interferometer():
         #   -  / (1. + self.W2W1): Normalize the beam by a factor determined by `W2W1`.
         self.beam[:] = np.fft.ifftshift(
             np.fft.ifft2(np.fft.fftshift(self.robustsamp))
-        ).real 
+        ).real
         # 4. Beam Scaling and Normalization:
         #   - Find the maximum value of the beam within a central region
         #       (likely to avoid edge effects).
@@ -658,7 +709,8 @@ class Interferometer():
             self.beam[self.Nphf : self.Nphf + 1, self.Nphf : self.Nphf + 1]
         )
         self.beam[:] /= self.beamScale
-    
+
+    # 8
     def _check_lfac(self):
         """
         This method checks and adjusts the scale factor (`lfac`)
@@ -694,6 +746,7 @@ class Interferometer():
             self.ulab = r"U (M$\lambda$)"
             self.vlab = r"V (M$\lambda$)"
 
+    # 9 
     def _prepare_model(self):
         self.modelim = [
             np.zeros((self.Npix, self.Npix), dtype=np.float32) for i in [0, 1]
@@ -721,7 +774,13 @@ class Interferometer():
             ] += zoomimg[:zd0, :zd1]
 
         self.modelimTrue[self.modelimTrue < 0.0] = 0.0
-
+    
+    # 10
+    def _add_thermal_noise(self):
+        # mean_val = np.mean(self.img)
+        self.img += np.random.normal(scale=self.noise, size=self.img.shape)
+    
+    # 11 
     def _set_primary_beam(self):
         """
         Calculates and applies the primary beam of the telescope to the model image.
@@ -789,6 +848,7 @@ class Interferometer():
         #  center of the array before the FFT, as required for correct FFT interpretation.
         self.modelfft = np.fft.fft2(np.fft.fftshift(self.modelim[0]))
 
+    # 12
     def _observe(self):
         """
         Simulates the observation process of the interferometer,
@@ -822,7 +882,7 @@ class Interferometer():
                     + self.modelfft * np.fft.ifftshift(self.Grobustsamp)
                 )
             )
-        ).real / (1.0 + self.W2W1)
+        ).real 
 
         # 2. Normalize Dirty Map:
         #   - Divide the dirty map by the beam scale factor (`self.beamScale`)
@@ -856,18 +916,72 @@ class Interferometer():
             + self.modelfft * np.fft.ifftshift(self.Grobustsamp)
         )
 
+    # 13
     def _update_cubes(self):
         self.modelCube[self.channel] = self.modelim[0]
         self.dirtyCube[self.channel] = self.dirtymap
         self.visCube[self.channel] = self.modelvis
         self.dirtyvisCube[self.channel] = self.dirtyvis
 
-    # ------------ Noise Functions ------------------------
+    # Imaging Function
+    @delayed
+    def _image_channel(self, channel):
+        self.channel = channel
+        self._get_channel_wavelength()  # gets the wavelength
+        self._prepare_2d_arrays()
+        self._prepare_baselines()  # get the baseline numbers
+        self._set_noise()
+        self._set_baselines()  # compute baseline vectors and the u-v components
+        self._grid_uv()
+        self._set_beam()
+        self._check_lfac()
+        self.img = skymodel[channel]
+        self._prepare_model()
+        self._add_thermal_noise()
+        self._set_primary_beam()
+        self._observe()
+        self._update_cubes()
 
-    def _add_thermal_noise(self):
-        # mean_val = np.mean(self.img)
-        self.img += np.random.normal(scale=self.noise, size=self.img.shape)
+        del self.beam 
+        del self.totsampling
+        del self.dirtymap
+        del self.noisemap 
+        del self.robustsamp
+        del self.Gsampling 
+        del self.Grobustsamp
+        del self.GrobustNoise
+        del self.u
+        del self.v
+        del self.H
+        del self.Noise
+        del self.Horig
+        del self.ravelDims
+        del self.modelim
+        del self.modelimTrue
+        
+    def run_interferometric_sim(self):
+        client = Client(timeout=60, heartbeat_interval=10)
+        print(f"Dask dashboard link: {client.dashboard_link}")
 
+        # Create list of delayed tasks
+        tasks = [self._image_channel(channel) for channel in range(self.Nchan)]
+
+        # Compute tasks
+        try:
+            t1 = time.time()
+            compute(*tasks)
+            t2 = time.time()
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        finally:
+            # Optional: Keep client open to view dashboard info
+            print("time taken in minutesL", (t2-t1)/60)
+            print("Tasks completed. The Dask client remains open for dashboard monitoring.")
+            input("Press Enter to close the Dask client...")
+
+
+            # Close the Dask client when ready
+            client.close()
     # ------------------- IO Functions
     def _savez_compressed_cubes(self):
         #min_dirty = np.min(self.dirtyCube)
@@ -1006,18 +1120,43 @@ class Interferometer():
 
     # def _get_initial_and_final_H(self):
     
-    def _image_channel(self, channel):
-        self.channel = channel
-        self._get_channel_wavelength() # gets the wavelenght 
-        self._prepare_2d_arrays()
-        self._prepare_baselines()  # get the baseline numbers
-        self._set_baselines()  # compute baseline vectors and the u-v components
-        self._grid_uv()
-        self._set_beam()
-        self._check_lfac()
-        self.img = skymodel[channel]
-        self._prepare_model()
-        self._add_thermal_noise()
-        self._set_primary_beam()
-        self._observe()
-        self._update_cubes()
+        # Create an instance of the Interferometer class
+if __name__ == '__main__':
+    skymodel = np.ones((128, 128, 128))
+    ra = 120
+    dec = 30
+    central_freq = 142
+    band_range = 1
+    fov = 12
+    idx = 0
+    noise = 0.2
+    snr = 3
+    int_time = 10
+    obs_date = "2022-01-01"
+    header = fits.header.Header()
+    save_mode = "npz"
+    robust = 0.5
+    antenna_array = "A001:DA59 A002:DA49 A003:DV23 A004:DA41 A005:DA54 A006:DA61 A008:DV08 A009:DV18 A010:DV25 A011:DV09 A013:DA48 A014:DV22 A015:DV04 A017:DV12 A018:DA52 A019:DA64 A020:DV03 A021:DA58 A023:DA51 A025:DA57 A027:DV07 A029:DV10 A030:DA65 A031:DV17 A035:DA62 A036:DV16 A037:DV19 A038:DA50 A042:DV01 A046:DA53 A047:DA55 A048:DV15 A049:DV11 A050:DV24 A052:DA47 A060:DA60 A062:DA56 A063:DA44 A064:DV13 A065:DV06 A067:DA42 A068:DA45 A069:DV14 A070:DV21 A071:DA43 T701:PM03 T702:PM02 T703:PM04"
+    interferometer = Interferometer(
+            idx=idx,
+            skymodel=skymodel,
+            main_dir=os.curdir,
+            output_dir=os.curdir,
+            ra=ra * U.deg,
+            dec=dec * U.deg,
+            central_freq=central_freq * U.MHz,
+            bandwidth=band_range * U.MHz,
+            fov=fov,
+            antenna_array=antenna_array,
+            noise=noise,
+            snr=snr,
+            integration_time=int_time,
+            observation_date=obs_date,
+            header=header,
+            save_mode=save_mode,
+            robust=robust,
+)
+    t1 = time.time()
+    interferometer.run_interferometric_sim()
+    t2 = time.time()
+    print(f"Time taken: {t2-t1}")
