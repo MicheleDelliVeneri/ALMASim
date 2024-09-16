@@ -121,7 +121,7 @@ class Interferometer(QObject):
             self.terminal.add_log(msg)
         else:
             print(msg)
-            
+
     def run_interferometric_sim(self):
         for channel in range(self.Nchan):
             if not self.stop_simulation_flag:
@@ -951,14 +951,14 @@ class Interferometer(QObject):
 
         # 3. Correct Negative Values in Dirty Map (Optional):
         #   - Find the minimum value in the dirty map.
-        #min_dirty = np.min(self.dirtymap)
+        # min_dirty = np.min(self.dirtymap)
         #   - If there are negative values, shift the whole dirty map
         #        upwards to make all values non-negative.
         #   - This step might be necessary to avoid issues with certain
         #            image display or processing algorithms.
-        #if min_dirty < 0.0:
+        # if min_dirty < 0.0:
         #    self.dirtymap += np.abs(min_dirty)
-        #else:
+        # else:
         #    self.dirtymap -= min_dirty
 
         # 4. Calculate Model and Dirty Visibilities:
@@ -988,13 +988,13 @@ class Interferometer(QObject):
 
     # ------------------- IO Functions
     def _savez_compressed_cubes(self):
-        #min_dirty = np.min(self.dirtyCube)
-        #if min_dirty < 0:
+        # min_dirty = np.min(self.dirtyCube)
+        # if min_dirty < 0:
         #    self.dirtyCube += min_dirty
-        #max_dirty = np.sum(self.dirtyCube)
-        #max_clean = np.sum(self.modelCube)
-        #self.dirtyCube = self.dirtyCube / max_dirty
-        #self.dirtyCube = self.dirtyCube * max_clean
+        # max_dirty = np.sum(self.dirtyCube)
+        # max_clean = np.sum(self.modelCube)
+        # self.dirtyCube = self.dirtyCube / max_dirty
+        # self.dirtyCube = self.dirtyCube * max_clean
         if self.save_mode == "npz":
             np.savez_compressed(
                 os.path.join(
