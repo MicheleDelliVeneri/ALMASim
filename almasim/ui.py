@@ -303,13 +303,15 @@ class SimulatorWorker(QRunnable, QObject):
 
 class DownloadGalaxyZooRunnable(QRunnable, QObject):
     """Runnable for downloading Galaxy Zoo data in a separate thread."""
-    
+
     finished = pyqtSignal()  # Signal to emit when the task is finished
 
     def __init__(self, alma_simulator_instance):
         QRunnable.__init__(self)
         QObject.__init__(self)  # QObject for signals
-        self.alma_simulator = alma_simulator_instance  # Store a reference to the main UI class
+        self.alma_simulator = (
+            alma_simulator_instance  # Store a reference to the main UI class
+        )
 
     def run(self):
         """Downloads Galaxy Zoo data."""
@@ -1243,9 +1245,13 @@ class ALMASimulator(QMainWindow):
                             ):
                                 self.terminal.add_log("Downloading Galaxy Zoo")
                                 runnable = DownloadGalaxyZooRunnable(self)
-                                runnable.finished.connect(self.on_download_finished)  # Connect signal
+                                runnable.finished.connect(
+                                    self.on_download_finished
+                                )  # Connect signal
                                 self.thread_pool.start(runnable)
-                                self.terminal.add_log("Waiting for download to finish...")
+                                self.terminal.add_log(
+                                    "Waiting for download to finish..."
+                                )
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
@@ -2936,7 +2942,9 @@ class ALMASimulator(QMainWindow):
                 ):
                     self.terminal.add_log("Downloading Galaxy Zoo")
                     runnable = DownloadGalaxyZooRunnable(self)
-                    runnable.finished.connect(self.on_download_finished)  # Connect signal
+                    runnable.finished.connect(
+                        self.on_download_finished
+                    )  # Connect signal
                     self.thread_pool.start(runnable)
                     self.terminal.add_log("Waiting for download to finish...")
             if self.model_combo.currentText() == "Hubble 100":
@@ -3338,7 +3346,9 @@ class ALMASimulator(QMainWindow):
         self.n_threads = self.ncpu
         ddf = dd.from_pandas(self.input_params, npartitions=num_workers)
         with LocalCluster(
-            n_workers=num_workers, threads_per_worker=self.n_threads, dashboard_address=None
+            n_workers=num_workers,
+            threads_per_worker=self.n_threads,
+            dashboard_address=None,
         ) as cluster:
             with Client(cluster) as client:
                 client.register_plugin(MemoryLimitPlugin(memory_limit))
@@ -3542,7 +3552,7 @@ class ALMASimulator(QMainWindow):
             * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9)
             * U.Hz
         )
-        db_line['delta_v'] = delta_v.value
+        db_line["delta_v"] = delta_v.value
         fwhms_GHz = fwhms.to(U.GHz).value
         db_line["fwhm_GHz"] = fwhms_GHz
         found_lines = 0
@@ -3610,8 +3620,9 @@ class ALMASimulator(QMainWindow):
             redshifts = np.array(list(np.ones(len(freqs)) * first_line["redshift"]))
             shifted_freqs = np.array(freqs / (1 + first_line["redshift"]))
             distances = np.array(abs(shifted_freqs - first_line["shifted_freq(GHz)"]))
-            delta_vs = np.array(list(np.random.uniform(min_delta_v, max_delta_v, 
-                                n - found_lines)))
+            delta_vs = np.array(
+                list(np.random.uniform(min_delta_v, max_delta_v, n - found_lines))
+            )
             fwhms = np.array(
                 list(np.ones(len(line_names)) * first_line["fwhm_GHz"].astype(float))
             )
@@ -3778,8 +3789,9 @@ class ALMASimulator(QMainWindow):
             )
             * U.GHz
         )
-        self.terminal.add_log('Line Velocities: {} Km/s'.format(
-            filtered_lines['delta_v'].values))
+        self.terminal.add_log(
+            "Line Velocities: {} Km/s".format(filtered_lines["delta_v"].values)
+        )
         freq_steps = freq_steps.to(U.Hz).value
         line_fluxes = 10 ** (np.log10(flux_infrared) + line_ratios) / freq_steps
         bandwidth = freq_max - freq_min
@@ -4124,16 +4136,18 @@ class ALMASimulator(QMainWindow):
         wcs = datacube.wcs
         fwhm_x, fwhm_y, angle = None, None, None
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-        shift_x = np.random.randint(0.1 * fov.value / cell_size.value, 
-                                    fov.value / cell_size.value - pos_x)
-        shift_y = np.random.randint(0.1 * fov.value / cell_size.value,
-                                    fov.value / cell_size.value - pos_y)
+        shift_x = np.random.randint(
+            0.1 * fov.value / cell_size.value, fov.value / cell_size.value - pos_x
+        )
+        shift_y = np.random.randint(
+            0.1 * fov.value / cell_size.value, fov.value / cell_size.value - pos_y
+        )
         pos_x = pos_x + shift_x
         pos_y = pos_x + shift_y
         pos_x = min(pos_x, n_pix - 1)
         pos_y = min(pos_y, n_pix - 1)
         pos_z = [int(index) for index in source_channel_index]
-        self.terminal.add_log('Source Position (x, y): ({}, {})'.format(pos_x, pos_y))                       
+        self.terminal.add_log("Source Position (x, y): ({}, {})".format(pos_x, pos_y))
         if source_type == "point":
             self.progress_bar_entry.setText("Inserting Point Source Model")
             datacube = usm.insert_pointlike(
@@ -4148,7 +4162,7 @@ class ALMASimulator(QMainWindow):
                 n_channels,
             )
         elif source_type == "gaussian":
-            self.progress_bar_entry.setText("Inserting Gaussian Source Model")        
+            self.progress_bar_entry.setText("Inserting Gaussian Source Model")
             fwhm_x = np.random.randint(3, 10)
             fwhm_y = np.random.randint(3, 10)
             angle = np.random.randint(0, 180)
@@ -4521,13 +4535,12 @@ class ALMASimulator(QMainWindow):
         simPlot, ax = plt.subplots(2, 3, figsize=(18, 12))
         sim_img = np.sum(self.modelCube, axis=0)
         simPlotPlot = ax[0, 0].imshow(
-                sim_img[
-                    self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4
-                ],
-                interpolation="nearest",
-                vmin=0.0,
-                vmax=np.max(sim_img),
-                cmap=self.currcmap)
+            sim_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            interpolation="nearest",
+            vmin=0.0,
+            vmax=np.max(sim_img),
+            cmap=self.currcmap,
+        )
         plt.setp(
             simPlotPlot,
             extent=(
