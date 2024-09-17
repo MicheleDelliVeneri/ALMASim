@@ -262,8 +262,6 @@ def insert_pointlike(
     """
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
-    print(datacube._array.shape)
-    print(len(z_idxs))
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
         if update_progress is not None:
