@@ -727,7 +727,7 @@ class ALMASimulator(QMainWindow):
 
     # Add Widget Functions
     def add_folder_widgets(self):
-        line_edit_max_width = 400  # Example width (you can adjust this)
+        line_edit_max_width = 700  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
         border_radius = 10 
@@ -1473,6 +1473,7 @@ class ALMASimulator(QMainWindow):
         self.footer_layout.addWidget(self.start_button)
         self.footer_layout.addWidget(self.stop_button)
         self.footer_layout.addWidget(self.reset_button)
+        self.footer_layout.addStretch()
 
         # Add the footer layout to the bottom of the left_content_layout
         self.left_content_layout.addLayout(self.footer_layout)
