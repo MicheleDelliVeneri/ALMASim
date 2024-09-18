@@ -262,6 +262,45 @@ class QueryByScience(QRunnable):
         except Exception as e:
             logging.error(f"Error in Query: {e}")
 
+class DownloadGalaxyZoo(QRunnable):
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+    
+    @pyqtSlot()
+    def run(self):
+        try:
+            galaxy_zoo_path = self.alma_simulator.galaxy_zoo_entry.text()
+            if galaxy_zoo_path == "":
+                galaxy_zoo_path = os.path.join(self.alma_simulator.main_path, "galaxy_zoo")
+            if not os.path.exists(galaxy_zoo_path):
+                os.makedirs(galaxy_zoo_path)
+            api.authernticate()
+            api.dataset_download_files("zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True)
+            self.signals.queryFinished.emit(galaxy_zoo_path)
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+class DownloadHubble(QRunnable):
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+    
+    @pyqtSlot()
+    def run(self):
+        try:
+            hubble_path = self.alma_simulator.hubble_entry.text()
+            if hubble_path == "":
+                hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
+            if not os.path.exists(hubble_path):
+                os.makedirs(hubble_path)
+            api.authernticate()
+            api.dataset_download_files("redwankarimsony/top-100-hubble-telescope-images", path=hubble_path, unzip=True)
+            self.signals.queryFinished.emit(hubble_path)
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
 
 class ALMASimulator(QMainWindow):
     settings_file = None
@@ -381,7 +420,7 @@ class ALMASimulator(QMainWindow):
         # Add footer buttons at the bottom
         self.add_footer_buttons()
         
-    # -------- Window Browsing Functions -------------------------
+# -------- Window Browsing Functions -------------------------
     def map_to_remote_directory(self, directory):
         directory_name = directory.split(os.path.sep)[-1]
         if self.remote_folder_line.text() != "":
@@ -580,7 +619,7 @@ class ALMASimulator(QMainWindow):
         if file_path:
             self.target_list_entry.setText(file_path)
             
-    # -------- UI Widgets Functions -------------------------
+# -------- UI Widgets Functions -------------------------
     # Utility Functions
     def find_label_width(self):
         labels = [
@@ -1646,7 +1685,7 @@ class ALMASimulator(QMainWindow):
             self.remove_query_widgets()
         self.left_layout.update()
     
-    # -------- Metadata Query Functions ---------------------
+# -------- Metadata Query Functions ---------------------
     @pyqtSlot(object)
     def print_keywords(self, keywords):
         self.terminal.add_log("Available science keywords:")
@@ -1783,7 +1822,7 @@ class ALMASimulator(QMainWindow):
         runnable.signals.queryFinished.connect(self.get_metadata)
         self.thread_pool.start(runnable)
 
-    # -------- Simulation Functions -------------------------
+# -------- Simulation Functions -------------------------
     def start_simulation(self):
         return
     
@@ -1793,50 +1832,8 @@ class ALMASimulator(QMainWindow):
         self.progress_bar_entry.setText("Simulation Stopped")
         self.update_progress_bar(0)
         self.terminal.add_log("# ------------------------------------- #\n")
-
-
-    def reset_fields(self):
-        self.output_entry.clear()
-        self.tng_entry.clear()
-        self.galaxy_zoo_entry.clear()
-        self.galaxy_zoo_checkbox.setChecked(False)
-        self.hubble_entry.clear()
-        self.hubble_checkbox.setChecked(False)
-        self.ncpu_entry.clear()
-        self.n_sims_entry.clear()
-        self.metadata_path_entry.clear()
-        if self.local_mode_combo.currentText() == "remote":
-            self.remote_address_entry.clear()
-            self.remote_user_entry.clear()
-            self.remote_key_entry.clear()
-            self.remote_key_pass_entry.clear()
-            self.remote_config_entry.clear()
-            self.remote_mode_combo.setCurrentText("MPI")
-            self.remote_folder_line.clear()
-            self.remote_folder_checkbox.setChecked(False)
-        if self.metadata_mode_combo.currentText() == "query":
-            self.query_save_entry.clear()
-        self.metadata_mode_combo.setCurrentText("get")
-        self.project_name_entry.clear()
-        self.save_format_combo.setCurrentText("npz")
-        self.redshift_entry.clear()
-        self.num_lines_entry.clear()
-        self.snr_checkbox.setChecked(False)
-        #self.line_width_slider.setValue(200)
-        self.robust_slider.setValue(0)
-        self.robust_value_label.setText("0")
-        self.snr_entry.clear()
-        self.fix_spatial_checkbox.setChecked(False)
-        self.n_pix_entry.clear()
-        self.fix_spectral_checkbox.setChecked(False)
-        self.n_channels_entry.clear()
-        self.ir_luminosity_checkbox.setChecked(False)
-        self.ir_luminosity_entry.clear()
-        self.model_combo.setCurrentText("Point")  # Reset to default model
-        self.tng_api_key_entry.clear()
-        self.line_mode_checkbox.setChecked(False)
-        self.serendipitous_checkbox.setChecked(False)
-    # -------- Load and Save functions -----------------------
+    
+# -------- UI Save / Load Settings functions -----------------------
     def load_settings(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
@@ -1896,14 +1893,11 @@ class ALMASimulator(QMainWindow):
                                 os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
                             ):
                                 self.terminal.add_log("Downloading Galaxy Zoo")
-                                runnable = DownloadGalaxyZooRunnable(self)
+                                runnable = DownloadGalaxyZoo(self)
                                 runnable.finished.connect(
                                     self.on_download_finished
                                 )  # Connect signal
                                 self.thread_pool.start(runnable)
-                                self.terminal.add_log(
-                                    "Waiting for download to finish..."
-                                )
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
@@ -1936,7 +1930,9 @@ class ALMASimulator(QMainWindow):
                         ):
                             # pool = QThreadPool.globalInstance()
                             runnable = DownloadHubbleRunnable(self)
+                            runnable.finished.connect(self.on_download_finished)
                             self.thread_pool.start(runnable)
+
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Hubble 100: {e}")
 
@@ -1967,6 +1963,9 @@ class ALMASimulator(QMainWindow):
             # Load non-line mode values
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
+        self.line_width_slider.setValue(
+            (int(self.settings.value("min_line_width", 100)), 
+            int(self.settings.value("max_line_width", 500))))
         self.robust_slider.setValue(int(self.settings.value("robust", 0)))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
@@ -1999,8 +1998,146 @@ class ALMASimulator(QMainWindow):
         self.mail_entry.setText(self.settings.value("email", ""))
         self.metadata_path_entry.setText("")
     
+    def reset_fields(self):
+        self.output_entry.clear()
+        self.tng_entry.clear()
+        self.galaxy_zoo_entry.clear()
+        self.galaxy_zoo_checkbox.setChecked(False)
+        self.hubble_entry.clear()
+        self.hubble_checkbox.setChecked(False)
+        self.ncpu_entry.clear()
+        self.n_sims_entry.clear()
+        self.metadata_path_entry.clear()
+        if self.local_mode_combo.currentText() == "remote":
+            self.remote_address_entry.clear()
+            self.remote_user_entry.clear()
+            self.remote_key_entry.clear()
+            self.remote_key_pass_entry.clear()
+            self.remote_config_entry.clear()
+            self.remote_mode_combo.setCurrentText("MPI")
+            self.remote_folder_line.clear()
+            self.remote_folder_checkbox.setChecked(False)
+        if self.metadata_mode_combo.currentText() == "query":
+            self.query_save_entry.clear()
+        self.metadata_mode_combo.setCurrentText("get")
+        self.project_name_entry.clear()
+        self.save_format_combo.setCurrentText("npz")
+        self.redshift_entry.clear()
+        self.num_lines_entry.clear()
+        self.snr_checkbox.setChecked(False)
+        #self.line_width_slider.setValue(200)
+        self.robust_slider.setValue(0)
+        self.robust_value_label.setText("0")
+        self.snr_entry.clear()
+        self.fix_spatial_checkbox.setChecked(False)
+        self.n_pix_entry.clear()
+        self.fix_spectral_checkbox.setChecked(False)
+        self.n_channels_entry.clear()
+        self.ir_luminosity_checkbox.setChecked(False)
+        self.ir_luminosity_entry.clear()
+        self.model_combo.setCurrentText("Point")  # Reset to default model
+        self.tng_api_key_entry.clear()
+        self.line_mode_checkbox.setChecked(False)
+        self.serendipitous_checkbox.setChecked(False)
     
+    def closeEvent(self, event):
+        if self.local_mode_combo.currentText() == "local":
+            if self.thread_pool.activeThreadCount() > 0:
+                event.ignore()
+                self.hide()
+                self.show_background_notification()
+            else:
+                self.save_settings()
+                self.stop_simulation_flag = True
+                self.thread_pool.waitForDone()
+                super().closeEvent(event)
+        else:
+            if self.remote_simulation_finished is False:
+                event.ignore()
+                self.hide()
+                self.show_background_notification()
+            else:
+                self.save_settings()
+                self.stop_simulation_flag = True
+                self.thread_pool.waitForDone()
+                super().closeEvent(event)
     
+    def show_background_notification(self):
+        if self.tray_icon is None:
+            path = os.path.dirname(self.main_path)
+            icon_path = os.path.join(path, "pictures", "almasim-icon.png")
+            icon = QIcon(icon_path)
+            self.tray_icon = QSystemTrayIcon(icon, self)
+            menu = QMenu()
+            restore_action = menu.addAction("Restore")
+            restore_action.triggered.connect(self.showNormal)  # Restore the window
+            exit_action = menu.addAction("Exit")
+            exit_action.triggered.connect(QApplication.instance().quit())
+            self.tray_icon.setContextMenu(menu)
+            self.tray_icon.setIcon(icon)
+        self.tray_icon.showMessage(
+            "ALMA Simulator",
+            "Simulations running in the background.",
+            QSystemTrayIcon.MessageIcon.Information,
+            5000,
+        )
+        self.tray_icon.show()
+
+    def save_settings(self):
+        self.settings.setValue("output_directory", self.output_entry.text())
+        self.settings.setValue("tng_directory", self.tng_entry.text())
+        self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
+        self.settings.setValue("hubble_directory", self.hubble_entry.text())
+        self.settings.setValue("n_sims", self.n_sims_entry.text())
+        self.settings.setValue("ncpu", self.ncpu_entry.text())
+        self.settings.setValue("project_name", self.project_name_entry.text())
+        if self.metadata_mode_combo.currentText() == "get":
+            self.settings.setValue("metadata_path", self.metadata_path_entry.text())
+        elif self.metadata_mode_combo.currentText() == "query":
+            self.settings.setValue("query_save_entry", self.query_save_entry.text())
+        self.settings.setValue("metadata_mode", self.metadata_mode_combo.currentText())
+        self.settings.setValue("local_mode", self.local_mode_combo.currentText())
+        if self.local_mode_combo.currentText() == "remote":
+            self.settings.setValue("remote_address", self.remote_address_entry.text())
+            self.settings.setValue("remote_user", self.remote_user_entry.text())
+            self.settings.setValue("remote_key", self.remote_key_entry.text())
+            self.settings.setValue("remote_key_pass", self.remote_key_pass_entry.text())
+            self.settings.setValue("remote_config", self.remote_config_entry.text())
+            self.settings.setValue("remote_mode", self.remote_mode_combo.currentText())
+            self.settings.setValue("remote_folder", self.remote_dir_line.text())
+        self.settings.setValue("save_format", self.save_format_combo.currentText())
+        self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
+        if self.line_mode_checkbox.isChecked():
+            self.settings.setValue("line_indices", self.line_index_entry.text())
+        else:
+            # Save non-line mode values
+            self.settings.setValue("redshifts", self.redshift_entry.text())
+            self.settings.setValue("num_lines", self.num_lines_entry.text())
+        self.settings.setValue("min_line_width", self.line_width_slider.value()[0])
+        self.settings.setValue("max_line_width", self.line_width_slider.value()[1])
+        self.settings.setValue("robust", self.robust_slider.value())
+        self.settings.setValue("set_snr", self.snr_checkbox.isChecked())
+        self.settings.setValue("snr", self.snr_entry.text())
+        self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
+        self.settings.setValue("n_pix", self.n_pix_entry.text())
+        self.settings.setValue("fix_spectral", self.fix_spectral_checkbox.isChecked())
+        self.settings.setValue("n_channels", self.n_channels_entry.text())
+        self.settings.setValue(
+            "inject_serendipitous", self.serendipitous_checkbox.isChecked()
+        )
+        self.settings.setValue("model", self.model_combo.currentText())
+        self.settings.setValue("tng_api_key", self.tng_api_key_entry.text())
+        self.settings.setValue(
+            "set_ir_luminosity", self.ir_luminosity_checkbox.isChecked()
+        )
+        self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
+
+# -------- Download Data Functions -------------------------
+    def on_download_finished(self):
+        self.terminal.add_log("Download Finished")
+        self.terminal.add_log("# ------------------------------------- #\n")
+        
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ALMASimulator()
