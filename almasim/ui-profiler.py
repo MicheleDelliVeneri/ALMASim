@@ -99,27 +99,169 @@ class SignalEmitter(QObject):
     progress = pyqtSignal(int)
 
 
-
-class QueryKeyword(QRunnable, QObject):
-    finished = pyqtSignal()
+class QueryKeyword(QRunnable):
     def __init__(self, alma_simulator_instance):
-        QRunnable.__init__(self)
-        QObject.__init__(self)  # QObject for signals
-        self.alma_simulator = (
-            alma_simulator_instance  # Store a reference to the main UI class
-        )
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance  # Store reference to main UI
+        self.signals = SignalEmitter()  # Instantiate the separate signal emitter object
 
+    @pyqtSlot()
     def run(self):
         try:
-            self.alma_simulator_instance.terminal.add_log(("Querying metadata by science type..."))
+            # Fetch science keywords and scientific categories
             science_keywords, scientific_categories = ual.get_science_types()
-        finally: 
-            self.finished.emit()
-            for i, keyword in enumerate(science_keywords):
-                self.alma_simulator_instance.terminal.add_log(f"{i}: {keyword}")
-            self.alma_simulator_instance.terminal.add_log("\nAvailable scientific categories:")
-            for i, category in enumerate(scientific_categories):
-                self.alma_simulator_instance.terminal.add_log(f"{i}: {category}")
+            results = {
+                "science_keywords": science_keywords,
+                "scientific_categories": scientific_categories,
+            }
+            self.signals.queryFinished.emit(results)  # Emit results through SignalEmitter
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+class QueryByTarget(QRunnable):
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+    
+    @pyqtSlot()
+    def run(self):
+        try:
+            df = ual.query_all_targets(self.alma_simulator.target_list)
+            df = df.drop_duplicates(subset="member_ous_uid")
+            save_to_input = self.alma_simulator.query_save_entry.text()
+            # Define a dictionary to map existing column names to new names with unit initials
+            rename_columns = {
+                "target_name": "ALMA_source_name",
+                "pwv": "PWV",
+                "schedblock_name": "SB_name",
+                "velocity_resolution": "Vel.res.",
+                "spatial_resolution": "Ang.res.",
+                "s_ra": "RA",
+                "s_dec": "Dec",
+                "s_fov": "FOV",
+                "t_resolution": "Int.Time",
+                "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
+                "sensitivity_10kms": "Line_sens_10kms_mJybeam",
+                "obs_release_date": "Obs.date",
+                "band_list": "Band",
+                "bandwidth": "Bandwidth",
+                "frequency": "Freq",
+                "frequency_support": "Freq.sup.",
+            }
+            df.rename(columns=rename_columns, inplace=True)
+            database = df[
+                [
+                    "ALMA_source_name",
+                    "Band",
+                    "PWV",
+                    "SB_name",
+                    "Vel.res.",
+                    "Ang.res.",
+                    "RA",
+                    "Dec",
+                    "FOV",
+                    "Int.Time",
+                    "Cont_sens_mJybeam",
+                    "Line_sens_10kms_mJybeam",
+                    "Obs.date",
+                    "Bandwidth",
+                    "Freq",
+                    "Freq.sup.",
+                    "antenna_arrays",
+                    "proposal_id",
+                    "member_ous_uid",
+                    "group_ous_uid",
+                ]
+            ]
+            database.loc[:, "Obs.date"] = database["Obs.date"].apply(
+                lambda x: x.split("T")[0]
+            )
+            database.to_csv(save_to_input, index=False)
+            self.signals.queryFinished.emit(database) 
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+class QueryByScience(QRunnable):
+    def __init__(self, alma_simulator_instance, sql_fields):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+        self.sql_fields = sql_fields
+    
+    @pyqtSlot()
+    def run(self):
+        try:
+            science_keyword = self.sql_fields["science_keyword"]
+            scientific_category = self.sql_fields["scientific_category"]
+            bands = self.sql_fields["bands"]
+            fov_range = self.sql_fields["fov_range"]
+            time_resolution_range = self.sql_fields["time_resolution_range"]
+            frequency_range = self.sql_fields["frequency_range"]
+            save_to_input = self.sql_fields["save_to"]
+            df = ual.query_by_science_type(
+                science_keyword,
+                scientific_category,
+                bands,
+                fov_range,
+                time_resolution_range,
+                frequency_range,
+            )
+            df = df.drop_duplicates(subset="member_ous_uid").drop(
+                df[df["science_keyword"] == ""].index
+            )
+            # Rename columns and select relevant data
+            rename_columns = {
+                "target_name": "ALMA_source_name",
+                "pwv": "PWV",
+                "schedblock_name": "SB_name",
+                "velocity_resolution": "Vel.res.",
+                "spatial_resolution": "Ang.res.",
+                "s_ra": "RA",
+                "s_dec": "Dec",
+                "s_fov": "FOV",
+                "t_resolution": "Int.Time",
+                "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
+                "sensitivity_10kms": "Line_sens_10kms_mJybeam",
+                "obs_release_date": "Obs.date",
+                "band_list": "Band",
+                "bandwidth": "Bandwidth",
+                "frequency": "Freq",
+                "frequency_support": "Freq.sup.",
+            }
+            df.rename(columns=rename_columns, inplace=True)
+            database = df[
+                [
+                    "ALMA_source_name",
+                    "Band",
+                    "PWV",
+                    "SB_name",
+                    "Vel.res.",
+                    "Ang.res.",
+                    "RA",
+                    "Dec",
+                    "FOV",
+                    "Int.Time",
+                    "Cont_sens_mJybeam",
+                    "Line_sens_10kms_mJybeam",
+                    "Obs.date",
+                    "Bandwidth",
+                    "Freq",
+                    "Freq.sup.",
+                    "antenna_arrays",
+                    "proposal_id",
+                    "member_ous_uid",
+                    "group_ous_uid",
+                ]
+            ]
+            database.loc[:, "Obs.date"] = database["Obs.date"].apply(
+                lambda x: x.split("T")[0]
+            )
+            database.to_csv(save_to_input, index=False)
+            self.signals.queryFinished.emit(database) 
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
 
 class ALMASimulator(QMainWindow):
     settings_file = None
@@ -179,10 +321,10 @@ class ALMASimulator(QMainWindow):
         ALMASimulator.populate_class_variables(
             self.terminal, self.ncpu_entry, self.thread_pool
         )
-        #if self.on_remote is True:
-        #    self.load_settings_on_remote()
-        #else:
-        #    self.load_settings()
+        if self.on_remote is True:
+            self.load_settings_on_remote()
+        else:
+            self.load_settings()
         self.toggle_line_mode_widgets()
         self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
         if self.metadata_path_entry.text() != "" and isfile(
@@ -439,7 +581,6 @@ class ALMASimulator(QMainWindow):
             self.target_list_entry.setText(file_path)
             
     # -------- UI Widgets Functions -------------------------
-
     # Utility Functions
     def find_label_width(self):
         labels = [
@@ -1077,34 +1218,55 @@ class ALMASimulator(QMainWindow):
                 background-color: #3498DB;
             }}
         """
+        labels = [
+            QLabel(
+            "Select Science Keyword by number (space-separated):"
+            ),
+            QLabel(
+            "Select Scientific Category by number (space-separated):"
+            ),
+            QLabel("Select observing bands (space-separated):"),
+            QLabel("Select FOV range (min max) or max only (space-separated):"),
+            QLabel("Select integration time  range (min max) or max only (space-separated):"),
+            QLabel("Select source frequency range (min max) or max only (space-separated):"),
+        ]
+        # Find the maximum width of the labels
+        max_label_width = max(label.sizeHint().width() for label in labels)
+
         science_keyword_label = QLabel(
             "Select Science Keyword by number (space-separated):"
         )
+        science_keyword_label.setFixedWidth(max_label_width)
         self.science_keyword_entry = QLineEdit()  # Use QLineEdit instead of input
         self.science_keyword_entry.setMaximumWidth(line_edit_max_width)
         scientific_category_label = QLabel(
             "Select Scientific Category by number (space-separated):"
         )
+        scientific_category_label.setFixedWidth(max_label_width)
         self.scientific_category_entry = QLineEdit()
         self.scientific_category_entry.setMaximumWidth(line_edit_max_width)
 
         band_label = QLabel("Select observing bands (space-separated):")
+        band_label.setFixedWidth(max_label_width)
         self.band_entry = QLineEdit()
         self.band_entry.setMaximumWidth(line_edit_max_width)
 
         fov_label = QLabel("Select FOV range (min max) or max only (space-separated):")
+        fov_label.setFixedWidth(max_label_width)
         self.fov_entry = QLineEdit()
         self.fov_entry.setMaximumWidth(line_edit_max_width)
 
         time_resolution_label = QLabel(
             "Select integration time  range (min max) or max only (space-separated):"
         )
+        time_resolution_label.setFixedWidth(max_label_width)
         self.time_resolution_entry = QLineEdit()
         self.time_resolution_entry.setMaximumWidth(line_edit_max_width)
 
         frequency_label = QLabel(
             "Select source frequency range (min max) or max only (space-separated):"
         )
+        frequency_label.setFixedWidth(max_label_width)
         self.frequency_entry = QLineEdit()
         self.frequency_entry.setMaximumWidth(line_edit_max_width)
 
@@ -1484,10 +1646,23 @@ class ALMASimulator(QMainWindow):
             self.remove_query_widgets()
         self.left_layout.update()
     
-    
     # -------- Metadata Query Functions ---------------------
-    def on_query_finished(self):
-        self.terminal.add_log("Query finished!")
+    @pyqtSlot(object)
+    def print_keywords(self, keywords):
+        self.terminal.add_log("Available science keywords:")
+        self.science_keywords = keywords['science_keywords']
+        self.scientific_categories = keywords['scientific_categories']
+
+        for i, keyword in enumerate(self.science_keywords):
+            self.terminal.add_log(f"{i}: {keyword}")
+
+        self.terminal.add_log("\nAvailable scientific categories:")
+        for i, category in enumerate(self.scientific_categories):
+            self.terminal.add_log(f"{i}: {category}")
+
+        # Add metadata query widgets after displaying results
+        self.add_metadata_query_widgets()
+        self.metadata_query_widgets_added = True
 
     def execute_query(self):
         self.terminal.add_log("Executing query...")
@@ -1498,16 +1673,12 @@ class ALMASimulator(QMainWindow):
                     not hasattr(self, "metadata_query_widgets_added")
                     or not self.metadata_query_widgets_added
                 ):
-                    runnable = QueryKeyword(self)
-                    runnable.finished.connect(self.on_query_finished)
-                    self.thread_pool.start(runnable)
-                    self.add_metadata_query_widgets()
-                    self.metadata_query_widgets_added = True
+                    runnable = QueryKeyword(self)  # Pass the current instance
+                    runnable.signals.queryFinished.connect(self.print_keywords)  # Connect the signal to the slot
+                    self.thread_pool.start(runnable)                  
                    
                 else:
-                    self.metadata = self.query_for_metadata_by_science_type()
-                    self.remove_metadata_query_widgets()
-                    self.query_execute_button.show()
+                    self.query_for_metadata_by_science_type()
             elif query_type == "target":
                 if self.target_list_entry.text():
                     self.terminal.add_log(
@@ -1515,7 +1686,7 @@ class ALMASimulator(QMainWindow):
                     )
                     target_list = pd.read_csv(self.target_list_entry.text())
                     self.target_list = target_list.values.tolist()
-                    self.metadata = self.query_for_metadata_by_targets()
+                    self.query_for_metadata_by_targets()
             else:
                 # Handle invalid query type (optional)
                 pass
@@ -1534,6 +1705,14 @@ class ALMASimulator(QMainWindow):
             import traceback
 
             traceback.print_exc()
+
+    @pyqtSlot(object)
+    def get_metadata(self, database):
+        self.metadata = database
+        del database
+        self.terminal.add_log(f"Metadata saved to {self.query_save_entry.text()}")
+        self.remove_metadata_query_widgets()
+        self.query_execute_button.show()
 
     def query_for_metadata_by_science_type(self):
         self.terminal.add_log("Querying by Science Keyword")
@@ -1572,68 +1751,18 @@ class ALMASimulator(QMainWindow):
         fov_range = to_range(fov_input)
         time_resolution_range = to_range(time_resolution_input)
         frequency_range = to_range(frequency_input)
-        df = ual.query_by_science_type(
-            science_keyword,
-            scientific_category,
-            bands,
-            fov_range,
-            time_resolution_range,
-            frequency_range,
-        )
-        df = df.drop_duplicates(subset="member_ous_uid").drop(
-            df[df["science_keyword"] == ""].index
-        )
-        # Rename columns and select relevant data
-        rename_columns = {
-            "target_name": "ALMA_source_name",
-            "pwv": "PWV",
-            "schedblock_name": "SB_name",
-            "velocity_resolution": "Vel.res.",
-            "spatial_resolution": "Ang.res.",
-            "s_ra": "RA",
-            "s_dec": "Dec",
-            "s_fov": "FOV",
-            "t_resolution": "Int.Time",
-            "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
-            "sensitivity_10kms": "Line_sens_10kms_mJybeam",
-            "obs_release_date": "Obs.date",
-            "band_list": "Band",
-            "bandwidth": "Bandwidth",
-            "frequency": "Freq",
-            "frequency_support": "Freq.sup.",
+        sql_fields = {
+            "science_keyword": science_keyword,
+            "scientific_category": scientific_category,
+            "bands": bands,
+            "fov_range": fov_range,
+            "time_resolution_range": time_resolution_range,
+            "frequency_range": frequency_range,
+            "save_to": save_to_input,
         }
-        df.rename(columns=rename_columns, inplace=True)
-        database = df[
-            [
-                "ALMA_source_name",
-                "Band",
-                "PWV",
-                "SB_name",
-                "Vel.res.",
-                "Ang.res.",
-                "RA",
-                "Dec",
-                "FOV",
-                "Int.Time",
-                "Cont_sens_mJybeam",
-                "Line_sens_10kms_mJybeam",
-                "Obs.date",
-                "Bandwidth",
-                "Freq",
-                "Freq.sup.",
-                "antenna_arrays",
-                "proposal_id",
-                "member_ous_uid",
-                "group_ous_uid",
-            ]
-        ]
-        database.loc[:, "Obs.date"] = database["Obs.date"].apply(
-            lambda x: x.split("T")[0]
-        )
-        database.to_csv(save_to_input, index=False)
-        self.metadata = database
-        self.terminal.add_log(f"Metadata saved to {save_to_input}")
-        del database
+        runnable = QueryByScience(self, sql_fields)
+        runnable.signals.queryFinished.connect(self.get_metadata)
+        self.thread_pool.start(runnable)
 
     def query_for_metadata_by_targets(self):
         """Query for metadata for all predefined targets and compile the results
@@ -1650,60 +1779,9 @@ class ALMASimulator(QMainWindow):
         """
         # Query all targets and compile the results
         self.terminal.add_log("Querying metadata from target list...")
-        df = ual.query_all_targets(self.target_list)
-        df = df.drop_duplicates(subset="member_ous_uid")
-        save_to_input = self.query_save_entry.text()
-        # Define a dictionary to map existing column names to new names with unit initials
-        rename_columns = {
-            "target_name": "ALMA_source_name",
-            "pwv": "PWV",
-            "schedblock_name": "SB_name",
-            "velocity_resolution": "Vel.res.",
-            "spatial_resolution": "Ang.res.",
-            "s_ra": "RA",
-            "s_dec": "Dec",
-            "s_fov": "FOV",
-            "t_resolution": "Int.Time",
-            "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
-            "sensitivity_10kms": "Line_sens_10kms_mJybeam",
-            "obs_release_date": "Obs.date",
-            "band_list": "Band",
-            "bandwidth": "Bandwidth",
-            "frequency": "Freq",
-            "frequency_support": "Freq.sup.",
-        }
-        df.rename(columns=rename_columns, inplace=True)
-        database = df[
-            [
-                "ALMA_source_name",
-                "Band",
-                "PWV",
-                "SB_name",
-                "Vel.res.",
-                "Ang.res.",
-                "RA",
-                "Dec",
-                "FOV",
-                "Int.Time",
-                "Cont_sens_mJybeam",
-                "Line_sens_10kms_mJybeam",
-                "Obs.date",
-                "Bandwidth",
-                "Freq",
-                "Freq.sup.",
-                "antenna_arrays",
-                "proposal_id",
-                "member_ous_uid",
-                "group_ous_uid",
-            ]
-        ]
-        database.loc[:, "Obs.date"] = database["Obs.date"].apply(
-            lambda x: x.split("T")[0]
-        )
-        database.to_csv(save_to_input, index=False)
-        self.metadata = database
-        self.terminal.add_log(f"Metadata saved to {save_to_input}")
-
+        runnable = QueryByTarget(self)
+        runnable.signals.queryFinished.connect(self.get_metadata)
+        self.thread_pool.start(runnable)
 
     # -------- Simulation Functions -------------------------
     def start_simulation(self):
