@@ -585,6 +585,7 @@ class ALMASimulator(QMainWindow):
             self.on_remote = False
 
         self.settings_path = self.settings.fileName()
+        print(self.settings_path)
         self.initialize_ui()
         self.stop_simulation_flag = False
         self.remote_simulation_finished = True
@@ -594,6 +595,35 @@ class ALMASimulator(QMainWindow):
     def initialize_ui(self):
         
         self.setWindowTitle("ALMASim: Set up your simulation parameters")
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10 
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        self.metadata_path_label = QLabel("Metadata Path:")
+        self.metadata_path_entry = QLineEdit()
+        self.metadata_path_entry.setMaximumWidth(line_edit_max_width)
+        self.metadata_path_button = QPushButton("Browse")
+        self.metadata_path_button.setFixedHeight(button_height)
+        self.metadata_path_button.setFixedWidth(button_width)
+        self.metadata_path_button.setStyleSheet(button_style)
+        self.metadata_path_button.clicked.connect(self.browse_metadata_path)
+        self.metadata_path_row = QHBoxLayout()
+        self.metadata_path_row.addWidget(self.metadata_path_label)
+        self.metadata_path_row.addWidget(self.metadata_path_entry)
+        self.metadata_path_row.addWidget(self.metadata_path_button)
+        self.metadata_path_row.addStretch()
+        self.line_displayed = False
         #self.setMinimumSize(800, 600)  # Set minimum size for laptop usage
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
@@ -604,15 +634,6 @@ class ALMASimulator(QMainWindow):
         main_layout.addLayout(self.right_layout)
         main_layout.setStretch(0, 2)  # Stretch factor for the left side
         main_layout.setStretch(1, 1)  # Stretch factor for the right side
-        self.metadata_path_label = QLabel("Metadata Path:")
-        self.metadata_path_entry = QLineEdit()
-        self.metadata_path_button = QPushButton("Browse")
-        self.metadata_path_button.clicked.connect(self.browse_metadata_path)
-        self.metadata_path_row = QHBoxLayout()
-        self.metadata_path_row.addWidget(self.metadata_path_label)
-        self.metadata_path_row.addWidget(self.metadata_path_entry)
-        self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.line_displayed = False
         ALMASimulator.populate_class_variables(
             self.terminal, self.ncpu_entry, self.thread_pool
         )
@@ -622,10 +643,10 @@ class ALMASimulator(QMainWindow):
             self.load_settings()
         self.toggle_line_mode_widgets()
         self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
-        if self.metadata_path_entry.text() != "" and isfile(
-            self.metadata_path_entry.text()
-        ):
-            self.load_metadata(self.metadata_path_entry.text())
+        #if self.metadata_path_entry.text() != "" and isfile(
+        #    self.metadata_path_entry.text()
+        #):
+        #    self.load_metadata(self.metadata_path_entry.text())
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
         ALMASimulator.populate_class_variables(
@@ -1454,6 +1475,7 @@ class ALMASimulator(QMainWindow):
          # Metadata 
         self.metadata_mode_label = QLabel("Metadata Mode:")
         self.metadata_mode_label.setFixedWidth(self.max_label_width)
+        self.metadata_mode_entry = QLineEdit()
         self.metadata_mode_combo = QComboBox()
         self.metadata_mode_combo.addItems(["get", "query"])
         self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
@@ -1479,23 +1501,23 @@ class ALMASimulator(QMainWindow):
                 background-color: #3498DB;
             }}
         """
-        self.metadata_path_label = QLabel("Metadata Path:")
-        self.metadata_path_label.setFixedWidth(self.max_label_width)
-        self.metadata_path_entry = QLineEdit()
-        self.metadata_path_entry.setMaximumWidth(line_edit_max_width)
-        self.metadata_path_button = QPushButton("Browse")
-        self.metadata_path_button.setFixedHeight(button_height)
-        self.metadata_path_button.setFixedWidth(button_width)
-        self.metadata_path_button.setStyleSheet(button_style)
+        #self.metadata_path_label = QLabel("Metadata Path:")
+        #self.metadata_path_label.setFixedWidth(self.max_label_width)
+        #self.metadata_path_entry = QLineEdit()
+        #self.metadata_path_entry.setMaximumWidth(line_edit_max_width)
+        #self.metadata_path_button = QPushButton("Browse")
+        #self.metadata_path_button.setFixedHeight(button_height)
+        #self.metadata_path_button.setFixedWidth(button_width)
+        #self.metadata_path_button.setStyleSheet(button_style)
         
-        self.metadata_path_button.clicked.connect(self.browse_metadata_path)
-        self.metadata_path_row = QHBoxLayout()
-        self.metadata_path_row.addWidget(self.metadata_path_label)
-        self.metadata_path_row.addWidget(self.metadata_path_entry)
-        self.metadata_path_row.addWidget(self.metadata_path_button)
+        #self.metadata_path_button.clicked.connect(self.browse_metadata_path)
+        #self.metadata_path_row = QHBoxLayout()
+        #self.metadata_path_row.addWidget(self.metadata_path_label)
+        #self.metadata_path_row.addWidget(self.metadata_path_entry)
+        #self.metadata_path_row.addWidget(self.metadata_path_button)
         self.metadata_path_row.addStretch()
         self.left_layout.addRow(self.metadata_path_row)
-        self.left_layout.update()
+        #self.left_layout.update()
 
     def add_metadata_query_widgets(self):
         line_edit_max_width = 400  # Example width (you can adjust this)
@@ -1940,8 +1962,6 @@ class ALMASimulator(QMainWindow):
         else:
             self.remove_metadata_browse()
             self.remove_query_widgets()
-        self.left_layout.update()
-    
     # ------- Progress Bar ---------------------------------
     @pyqtSlot(int)
     def handle_progress(self, value):
@@ -3536,6 +3556,7 @@ class ALMASimulator(QMainWindow):
 
 # -------- UI Save / Load Settings functions -----------------------
     def load_settings(self):
+        print(self.settings.value('metadata_path', ""))
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
         self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
@@ -3567,9 +3588,9 @@ class ALMASimulator(QMainWindow):
             self.remote_folder_checkbox.setChecked(remote_folder)
             if remote_folder:
                 self.remote_folder_line.setText(self.settings.value("remote_dir", ""))
-        self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
+        self.metadata_path_entry.setText(self.settings.value("metadata_path", "")) 
         if (
             self.metadata_mode_combo.currentText() == "get"
             and self.metadata_path_entry.text() != ""
@@ -3693,7 +3714,8 @@ class ALMASimulator(QMainWindow):
             self.settings.value("set_ir_luminosity", False, type=bool)
         )
         self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
-
+        self.left_layout.update()
+    
     def load_settings_on_remote(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
@@ -3756,6 +3778,7 @@ class ALMASimulator(QMainWindow):
                 self.save_settings()
                 self.stop_simulation_flag = True
                 self.thread_pool.waitForDone()
+                self.thread_pool.clear()
                 super().closeEvent(event)
         else:
             if self.remote_simulation_finished is False:
@@ -3766,6 +3789,7 @@ class ALMASimulator(QMainWindow):
                 self.save_settings()
                 self.stop_simulation_flag = True
                 self.thread_pool.waitForDone()
+                self.thread_pool.clear()
                 super().closeEvent(event)
     
     def show_background_notification(self):
@@ -3837,7 +3861,7 @@ class ALMASimulator(QMainWindow):
             "set_ir_luminosity", self.ir_luminosity_checkbox.isChecked()
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
-
+        self.settings.sync()
 # -------- Download Data Functions -------------------------
     def on_download_finished(self):
         self.terminal.add_log("Download Finished")
