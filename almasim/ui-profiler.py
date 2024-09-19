@@ -59,8 +59,8 @@ import plistlib
 import psutil
 import almasim.alma as ual
 import almasim.astro as uas
-import almasim.skymodels as usm
-import almasim.interferometer as uin
+import almasim.nskymodels as usm
+import almasim.ninterferometer as uin
 import threading
 import matplotlib
 import matplotlib.pyplot as plt
@@ -74,6 +74,10 @@ import inspect
 import requests
 import zipfile
 import sys
+
+def closest_power_of_2(x):
+        op = math.floor if bin(x)[3] != "1" else math.ceil
+        return 2 ** op(math.log(x, 2))
 
 class TerminalLogger(QObject):
     log_signal = pyqtSignal(str)
@@ -98,7 +102,6 @@ class SignalEmitter(QObject):
     queryFinished = pyqtSignal(object)
     downloadFinished = pyqtSignal(object)
     progress = pyqtSignal(int)
-
 
 class QueryKeyword(QRunnable):
     def __init__(self, alma_simulator_instance):
@@ -520,7 +523,38 @@ class DownloadTNGStructure(QRunnable):
                         self.signals.downloadFinished.emit(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"))
         except Exception as e:
             logging.error(f"Error TNG Structure creation: {e}")
-            
+
+class Simulator(QRunnable):
+    def __init__(self, alma_simulator_instance, *args, **kwargs):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+        self.args = args
+        self.kwargs = kwargs
+    @pyqtSlot()
+    def run(self):
+        try: 
+            self.finish_flag = False
+            results = None
+            if not self.finish_flag:
+                results = self.alma_simulator.simulator(*self.args, **self.kwargs) 
+                self.finish_flag = True
+                self.signals.simulationFinished.emit(results)
+        except Exception as e:
+            logging.error(f"Error in Simulator: {e}")          
+
+class PlotResults(QRunnable):
+    def __init__(self, alma_simulator_instance, simulation_results):
+        super().__init__()
+        self.alma_simulator = (
+            alma_simulator_instance  # Store a reference to the main UI class
+        )
+        self.simulation_results = simulation_results
+
+    def run(self):
+        """Downloads Galaxy Zoo data."""
+        self.alma_simulator.plot_simulation_results(self.simulation_results)
+
 
 class ALMASimulator(QMainWindow):
     settings_file = None
@@ -642,7 +676,7 @@ class ALMASimulator(QMainWindow):
         # Add footer buttons at the bottom
         self.add_footer_buttons()
         
-# -------- Window Browsing Functions -------------------------
+    # -------- Window Browsing Functions -------------------------
     def map_to_remote_directory(self, directory):
         directory_name = directory.split(os.path.sep)[-1]
         if self.remote_folder_line.text() != "":
@@ -841,7 +875,7 @@ class ALMASimulator(QMainWindow):
         if file_path:
             self.target_list_entry.setText(file_path)
             
-# -------- UI Widgets Functions -------------------------
+    # -------- UI Widgets Functions -------------------------
     # Utility Functions
     def find_label_width(self):
         labels = [
@@ -1916,7 +1950,7 @@ class ALMASimulator(QMainWindow):
     @pyqtSlot(int)
     def update_progress_bar(self, value):
         self.progress_bar.setValue(value)
-        
+
 # -------- Metadata Query Functions ---------------------
     @pyqtSlot(object)
     def print_keywords(self, keywords):
@@ -2353,20 +2387,27 @@ class ALMASimulator(QMainWindow):
 
     def run_simulator_locally(self):
         self.stop_simulation_flag = False 
-        self.current_sim_index = 0 
-        self.nextSimulation.connect(self.run_next_simulation)
+        self.current_sim_index = 0
         cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()))
         client = Client(cluster, timeout=60, heartbeat_interval=10)
         self.client = client
-
+        self.terminal.add_log(f'Dashboard hosted at {self.client.dashboard_link}')
+        self.nextSimulation.connect(self.run_next_simulation)
+        self.run_next_simulation()
+        
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
             self.progress_bar_entry.setText("Simluation Finished")
             # self.send_email()
             return
-        runnable = Simulator(self,  *self.input_params.iloc[self.current_sim_index])
+        self.progress_bar_entry.setText(f"Running Simulation {self.current_sim_index + 1}")
+        runnable = Simulator(self, *self.input_params.iloc[self.current_sim_index])
         self.update_progress.connect(self.update_progress_bar)
-    
+        runnable.signals.simulationFinished.connect(self.start_plot_runnable)
+        runnable.signals.simulationFinished.connect(self.nextSimulation.emit)
+        self.thread_pool.start(runnable)
+        self.current_sim_index += 1
+
     def stop_simulation(self):
         # Implement the logic to stop the simulation
         self.stop_simulation_flag = True
@@ -2376,6 +2417,18 @@ class ALMASimulator(QMainWindow):
     
 
 # -------- Astro Functions -------------------------
+    def remove_non_numeric(self, text):
+        """Removes non-numeric characters from a string.
+        Args:
+            text: The string to process.
+
+        Returns:
+            A new string containing only numeric characters and the decimal point (.).
+        """
+        numbers = "0123456789."
+        return "".join(char for char in text if char in numbers)
+
+    
     def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
         pd.options.mode.chained_assignment = None
         if isinstance(rest_frequency, np.ndarray) or isinstance(rest_frequency, list):
@@ -2455,7 +2508,1031 @@ class ALMASimulator(QMainWindow):
         sample = metadata.sample(n, replace=True)
         return sample
 
+    def freq_supp_extractor(self, freq_sup, obs_freq):
+        freq_band, n_channels, freq_mins, freq_maxs, freq_ds = [], [], [], [], []
+        freq_sup = freq_sup.split("U")
+        for i in range(len(freq_sup)):
+            sup = freq_sup[i][1:-1].split(",")
+            sup = [su.split("..") for su in sup][:2]
+            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(
+                self.remove_non_numeric(sup[0][1])
+            )
+            freq_d = float(self.remove_non_numeric(sup[1][0]))
+            freq_min = freq_min * U.GHz
+            freq_max = freq_max * U.GHz
+            freq_d = freq_d * U.kHz
+            freq_d = freq_d.to(U.GHz)
+            freq_b = freq_max - freq_min
+            n_chan = int(freq_b / freq_d)
+            freq_band.append(freq_b)
+            n_channels.append(n_chan)
+            freq_mins.append(freq_min)
+            freq_maxs.append(freq_max)
+            freq_ds.append(freq_d)
+        freq_ranges = np.array(
+            [[freq_mins[i].value, freq_maxs[i].value] for i in range(len(freq_mins))]
+        )
+        idx_ = np.argwhere(
+            (obs_freq.value >= freq_ranges[:, 0])
+            & (obs_freq.value <= freq_ranges[:, 1])
+        )[0][0]
+        freq_range = freq_ranges[idx_]
+        band_range = freq_range[1] - freq_range[0]
+        n_channels = n_channels[idx_]
+        central_freq = freq_range[0] + band_range / 2
+        freq_d = freq_ds[idx_]
+        return band_range * U.GHz, central_freq * U.GHz, n_channels, freq_d
 
+    
+    def cont_finder(self, cont_frequencies, line_frequency):
+        # cont_frequencies=sed['GHz'].values
+        distances = np.abs(
+            cont_frequencies - np.ones(len(cont_frequencies)) * line_frequency
+        )
+        return np.argmin(distances)
+
+    def normalize_sed(
+        self,
+        sed,
+        lum_infrared,
+        solid_angle,
+        cont_sens,
+        freq_min,
+        freq_max,
+        remote=False,
+    ):
+        so_to_erg_s = 3.846e33  # Solar luminosity to erg/s -XX
+        lum_infrared_erg_s = lum_infrared * so_to_erg_s  # luminosity in erg/s -XX
+        sed["Jy"] = lum_infrared_erg_s * sed["erg/s/Hz"] * 1e23 / solid_angle
+        cont_mask = (sed["GHz"].values >= freq_min) & (sed["GHz"].values <= freq_max)
+        if sum(cont_mask) > 0:
+            cont_fluxes = sed["Jy"].values[cont_mask]
+            min_ = np.min(cont_fluxes)
+        else:
+            freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
+            cont_fluxes = sed["Jy"].values[freq_point]
+            min_ = cont_fluxes
+        if remote is True:
+            print("Minimum continum flux: {:.2e}".format(min_))
+            print("Continum sensitivity: {:.2e}".format(cont_sens))
+        else:
+            self.terminal.add_log("Minimum continum flux: {:.2e}".format(min_))
+            self.terminal.add_log("Continum sensitivity: {:.2e}".format(cont_sens))
+        lum_save = lum_infrared
+
+        if min_ < cont_sens:
+            while min_ < cont_sens:
+                lum_infrared += 0.1 * lum_infrared
+                lum_infrared_erg_s = so_to_erg_s * lum_infrared
+                sed["Jy"] = lum_infrared_erg_s * sed["erg/s/Hz"] * 1e23 / solid_angle
+                cont_mask = (sed["GHz"] >= freq_min) & (sed["GHz"] <= freq_max)
+                if sum(cont_mask) > 0:
+                    cont_fluxes = sed["Jy"].values[cont_mask]
+                    min_ = np.min(cont_fluxes)
+                else:
+                    freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
+                    cont_fluxes = sed["Jy"].values[freq_point]
+                    min_ = cont_fluxes
+
+        if lum_save != lum_infrared:
+            if remote is True:
+                print(
+                    "To observe the source, luminosity has been set to {:.2e}".format(
+                        lum_infrared
+                    )
+                )
+                print("# ------------------------------------- #\n")
+            else:
+                self.terminal.add_log(
+                    "To observe the source, luminosity has been set to {:.2e}".format(
+                        lum_infrared
+                    )
+                )
+                self.terminal.add_log("# ------------------------------------- #\n")
+        return sed, lum_infrared_erg_s, lum_infrared
+
+    def sed_reading(
+        self,
+        type_,
+        path,
+        cont_sens,
+        freq_min,
+        freq_max,
+        remote,
+        lum_infrared=None,
+        redshift=None,
+    ):
+        cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
+        if (
+            type_ == "extended"
+            or type_ == "diffuse"
+            or type_ == "molecular"
+            or type_ == "galaxy-zoo"
+            or type_ == "hubble-100"
+        ):
+            file_path = os.path.join(path, "SED_low_z_warm_star_forming_galaxy.dat")
+            if redshift is None:
+                redshift = 10 ** (-4)
+            if lum_infrared is None:
+                lum_infrared = 1e12  # luminosity in solar luminosities
+        elif type_ == "point" or type_ == "gaussian":
+            file_path = os.path.join(path, "SED_low_z_type2_AGN.dat")
+            if redshift is None:
+                redshift = 0.05
+            if lum_infrared is None:
+                lum_infrared = 1e12  # luminosity in solar luminosities
+        else:
+            return "Not valid type"
+        # L (erg/s/Hz) = 4 pi d^2(cm) * 10^-23 Flux (Jy)
+        #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
+        # To normalize we multiply by lum_infrared_jy
+        distance_Mpc = cosmo.luminosity_distance(redshift).value  # distance in Mpc
+        Mpc_to_cm = 3.086e24  # Mpc to cm
+        distance_cm = distance_Mpc * Mpc_to_cm  # distance in cm  -XX
+        solid_angle = 4 * pi * distance_cm**2  # solid angle in cm^2 -XX
+        # Load the SED
+        sed = pd.read_csv(file_path, sep=r"\s+")
+        # Convert to GHz
+        sed["GHz"] = sed["um"].apply(
+            lambda x: (x * U.um).to(U.GHz, equivalencies=U.spectral()).value
+        )
+        # Re normalize the SED and convert to Jy from erg/s/Hz
+        sed, lum_infrared_erg_s, lum_infrared = self.normalize_sed(
+            sed, lum_infrared, solid_angle, cont_sens, freq_min, freq_max, remote
+        )
+        #  Flux (Jy) =L (erg/s/Hz) * 10^23 /  * 4 pi d^2(cm)
+        flux_infrared = lum_infrared_erg_s * 1e23 / solid_angle  # Jy * Hz
+        # flux_infrared_jy = flux_infrared  / (sed['GHz'].values *
+        # U.GHz).to(U.Hz).value  # Jy
+        sed.drop(columns=["um", "erg/s/Hz"], inplace=True)
+        sed = sed.sort_values(by="GHz", ascending=True)
+        return sed, flux_infrared, lum_infrared
+
+    def find_compatible_lines(
+        self,
+        db_line,
+        source_freq,
+        redshift,
+        n,
+        line_names,
+        freq_min,
+        freq_max,
+        band_range,
+    ):
+        """
+        Found the lines at given configuration, if real lines are not possibile, it will
+        generate fakes lines to reach the desidered number of lines.
+
+        Parameter:
+        db_line (pandas.Dataframe): It is the database of lines from which the user can
+            choose real ones.
+        redshift (float) : Redshift value of the source
+        n (int): Number of lines that want to simulate
+        line_names (str):
+        freq_min, freq_max (float) : Minimum frequency and Maximum frequency of the source
+        band_range : The band range around the central frequency
+
+        Return:
+        compatible_lines (pandas.Dataframe) : Dataframe with n lines that will be
+        simulated.
+        """
+        c_km_s = c.to(U.km / U.s)
+        min_delta_v = float(self.line_width_slider.value()[0])
+        max_delta_v = float(self.line_width_slider.value()[1])
+        db_line = db_line.copy()
+        db_line["redshift"] = (db_line["freq(GHz)"].values - source_freq) / source_freq
+        db_line = db_line.loc[~((db_line["redshift"] < 0) | (db_line["redshift"] > 20))]
+        delta_v = np.random.uniform(min_delta_v, max_delta_v, len(db_line)) * U.km / U.s
+        db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + db_line["redshift"])
+        fwhms = (
+            0.84
+            * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9)
+            * U.Hz
+        )
+        db_line["delta_v"] = delta_v.value
+        fwhms_GHz = fwhms.to(U.GHz).value
+        db_line["fwhm_GHz"] = fwhms_GHz
+        found_lines = 0
+        i = 0
+        lines_fitted, lines_fitted_redshifts = [], []
+        if redshift is not None:
+            db_line["redshift_distance"] = np.abs(db_line["redshift"] - redshift)
+            db_line = db_line.sort_values(by="redshift_distance")
+        for i in range(len(db_line)):
+            db = db_line.copy()
+            first_line = db.iloc[i]
+            db["shifted_freq(GHz)"] = db["freq(GHz)"] / (1 + first_line["redshift"])
+            db["distance(GHz)"] = abs(
+                db["shifted_freq(GHz)"] - first_line["shifted_freq(GHz)"]
+            )
+            compatible_lines = db.loc[db["distance(GHz)"] < band_range]
+            compatible_lines.loc[:, "redshift"] = (
+                np.ones(len(compatible_lines)) * first_line["redshift"]
+            )
+            found_lines = len(compatible_lines)
+            lines_fitted.append(found_lines)
+            lines_fitted_redshifts.append(first_line["redshift"])
+            i += 1
+        if redshift is None:
+            found_lines = np.max(lines_fitted)
+        else:
+            found_lines = np.argmin(np.abs(np.array(lines_fitted_redshifts) - redshift))
+
+        if found_lines < n:
+            if redshift is None:
+                i = np.argmax(lines_fitted)
+            else:
+                i = np.argmin(np.abs(np.array(lines_fitted_redshifts) - redshift))
+            first_line = db_line.iloc[i]
+            db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (
+                1 + first_line["redshift"]
+            )
+            db_line["distance(GHz)"] = abs(
+                db_line["shifted_freq(GHz)"] - first_line["shifted_freq(GHz)"]
+            )
+            compatible_lines = db_line.loc[db_line["distance(GHz)"] < band_range]
+            compatible_lines.loc[:, "redshift"] = first_line["redshift"]
+            found_lines = len(compatible_lines)
+            if found_lines > 1:
+                mean, std = np.mean(compatible_lines["freq(GHz)"]), np.std(
+                    compatible_lines["freq(GHz)"]
+                )
+            else:
+                mean = np.mean(compatible_lines["freq(GHz)"])
+                std = np.random.uniform(0.1, 0.3) * band_range
+            freqs = np.array(list(np.random.normal(mean, std, n - found_lines)))
+            if found_lines > 1:
+                mean, std = np.mean(compatible_lines["c"]), np.std(
+                    compatible_lines["c"]
+                )
+            else:
+                mean = self.line_cs_mean
+                std = self.line_cs_std
+            cs = np.array(list(np.random.normal(mean, std, n - found_lines)))
+            mean, std = np.mean(compatible_lines["err_c"]), np.std(
+                compatible_lines["err_c"]
+            )
+            err_cs = np.array(list(np.random.normal(mean, std, n - found_lines)))
+            line_names = np.array([f"fake_line {i}" for i in range(n - found_lines)])
+            redshifts = np.array(list(np.ones(len(freqs)) * first_line["redshift"]))
+            shifted_freqs = np.array(freqs / (1 + first_line["redshift"]))
+            distances = np.array(abs(shifted_freqs - first_line["shifted_freq(GHz)"]))
+            delta_vs = np.array(
+                list(np.random.uniform(min_delta_v, max_delta_v, n - found_lines))
+            )
+            fwhms = np.array(
+                list(np.ones(len(line_names)) * first_line["fwhm_GHz"].astype(float))
+            )
+            if redshift is None:
+                data = np.column_stack(
+                    (
+                        line_names,
+                        np.round(freqs, 2).astype(float),
+                        np.round(cs, 2).astype(float),
+                        np.round(err_cs, 2).astype(float),
+                        np.round(redshifts, 6).astype(float),
+                        np.round(shifted_freqs, 6).astype(float),
+                        np.round(delta_vs, 6).astype(float),
+                        np.round(fwhms, 6).astype(float),
+                        np.round(distances, 6).astype(float),
+                    )
+                )
+            else:
+                redshift_distance = np.array(
+                    list(
+                        np.ones(len(line_names))
+                        * first_line["redshift_distance"].astype(float)
+                    )
+                )
+                data = np.column_stack(
+                    (
+                        line_names,
+                        np.round(freqs, 2).astype(float),
+                        np.round(cs, 2).astype(float),
+                        np.round(err_cs, 2).astype(float),
+                        np.round(redshifts, 6).astype(float),
+                        np.round(shifted_freqs, 6).astype(float),
+                        np.round(delta_vs, 6).astype(float),
+                        np.round(fwhms, 6).astype(float),
+                        redshift_distance,
+                        np.round(distances, 6).astype(float),
+                    )
+                )
+            fake_db = pd.DataFrame(data=data, columns=db_line.columns)
+            for col in fake_db.columns[1:]:
+                fake_db[col] = pd.to_numeric(fake_db[col])
+            compatible_lines = pd.concat(
+                (compatible_lines, fake_db),
+                ignore_index=True,
+            )
+        elif found_lines > n:
+            compatible_lines = compatible_lines.iloc[:n]
+        compatible_lines = compatible_lines.reset_index(drop=True)
+        for index, row in compatible_lines.iterrows():
+            lower_bound, upper_bound = (
+                row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2,
+                row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2,
+            )
+            while lower_bound < freq_min and upper_bound > freq_max:
+                row["fwhm_GHz"] -= 0.1
+                lower_bound = row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2
+                upper_bound = row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2
+            if row["fwhm_GHz"] != compatible_lines["fwhm_GHz"].iloc[index]:
+                compatible_lines.loc[i, "fwhm_GHz"] = row["fwhm_GHz"]
+        return compatible_lines
+
+    def process_spectral_data(
+        self,
+        type_,
+        master_path,
+        redshift,
+        central_frequency,
+        delta_freq,
+        source_frequency,
+        n_channels,
+        lum_infrared,
+        cont_sens,
+        line_names=None,
+        n_lines=None,
+        remote=False,
+    ):
+        """
+        Process spectral data based on the type of source, wavelength conversion,
+        line ratios, and given frequency bands.
+
+        Prameters:
+
+        redshift: Redshift value to adjust the spectral lines and cont.
+        central_frequency: Central frequency of the observation band (GHz).
+        delta_freq: Bandwidth around the central frequency (GHz).
+        source_frequency: Frequency of the source obtained from metadata (GHz).
+        lines: Optional list of line names provided by the user.
+        n_lines: Number of additional lines to consider if lines is None.
+
+        Output:
+
+
+        """
+        # Define the frequency range based on central frequency and bandwidth
+        freq_min = central_frequency - delta_freq / 2
+        freq_max = central_frequency + delta_freq / 2
+        sed, flux_infrared, lum_infrared = self.sed_reading(
+            type_,
+            os.path.join(master_path, "brightnes"),
+            cont_sens,
+            freq_min,
+            freq_max,
+            remote,
+            lum_infrared,
+        )
+        self.db_line = uas.read_line_emission_csv(
+            os.path.join(self.main_path, "brightnes", "calibrated_lines.csv"),
+            sep=",",
+        )
+        self.line_cs_mean = np.mean(self.db_line["c"].values)
+        self.line_cs_std = np.std(self.db_line["c"].values)
+        # line_ratio, line_error
+        if line_names is None:
+            if n_lines is not None:
+                n = n_lines
+            else:
+                n = 1
+        else:
+            n = len(line_names)
+            self.db_line = self.db_line[self.db_line["Line"].isin(line_names)]
+        filtered_lines = self.find_compatible_lines(
+            self.db_line,
+            source_frequency,
+            redshift,
+            n,
+            line_names,
+            freq_min,
+            freq_max,
+            delta_freq,
+        )
+
+        cont_mask = (sed["GHz"] >= freq_min) & (sed["GHz"] <= freq_max)
+        if sum(cont_mask) > 0:
+            cont_fluxes = sed["Jy"].values[cont_mask]
+            cont_frequencies = sed["GHz"].values[cont_mask]
+        else:
+            freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
+            cont_fluxes = [sed["Jy"].values[freq_point]]
+            cont_frequencies = [sed["GHz"].values[freq_point]]
+
+        line_names = filtered_lines["Line"].values
+        cs = filtered_lines["c"].values
+        cdeltas = filtered_lines["err_c"].values
+        line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
+        line_frequencies = filtered_lines["shifted_freq(GHz)"].values
+        # line_rest_frequencies = filtered_lines["freq(GHz)"].values * U.GHz
+        new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
+        if len(cont_fluxes) > 1:
+            int_cont_fluxes = np.interp(new_cont_freq, cont_frequencies, cont_fluxes)
+        else:
+            int_cont_fluxes = np.ones(n_channels) * cont_fluxes[0]
+        line_indexes = filtered_lines["shifted_freq(GHz)"].apply(
+            lambda x: self.cont_finder(new_cont_freq, float(x))
+        )
+        fwhms_GHz = filtered_lines["fwhm_GHz"].values
+        freq_steps = (
+            np.array(
+                [
+                    new_cont_freq[line_index] + fwhm - new_cont_freq[line_index]
+                    for fwhm, line_index in zip(fwhms_GHz, line_indexes)
+                ]
+            )
+            * U.GHz
+        )
+        self.terminal.add_log(
+            "Line Velocities: {} Km/s".format(filtered_lines["delta_v"].values)
+        )
+        freq_steps = freq_steps.to(U.Hz).value
+        line_fluxes = 10 ** (np.log10(flux_infrared) + line_ratios) / freq_steps
+        bandwidth = freq_max - freq_min
+        freq_support = bandwidth / n_channels
+        fwhms = []
+        for fwhm in fwhms_GHz / freq_support:
+            if fwhm >= 1:
+                fwhms.append(fwhm)
+            else:
+                fwhms.append(1)
+        # fwhms = [int(fwhm) for fwhm in fwhms_GHz.value / freq_support]
+        return (
+            int_cont_fluxes,
+            line_fluxes,
+            line_names,
+            redshift,
+            line_frequencies,
+            line_indexes,
+            n_channels,
+            bandwidth,
+            freq_support,
+            new_cont_freq,
+            fwhms,
+            lum_infrared,
+        )
+
+    def simulator(self, *args, **kwargs):
+        """
+        Simulates the ALMA observations for the given input parameters.
+
+        Parameters:
+        idx (int): Index of the simulation.
+        source_name (str): Name of the metadata source.
+        member_ouid (str): Member OUID of the metadata source.
+        main_path (str): Path to the directory where the file.csv is stored.
+        output_dir (str): Path to the output directory.
+        tng_dir (str): Path to the TNG directory.
+        galaxy_zoo_dir (str): Path to the Galaxy Zoo directory.
+        hubble_dir (str): Path to the Hubble Top 100 directory.
+        project_name (str): Name of the project.
+        ra (float): Right ascension.
+        dec (float): Declination.
+        band (str): Observing band.
+        ang_res (float): Angular resolution.
+        vel_res (float): Velocity resolution.
+        fov (float): Field of view.
+        obs_date (str): Observation date.
+        pwv (float): Precipitable water vapor.
+        int_time (float): Integration time.
+        bandwidth (float): Bandwidth.
+        freq (float): Frequency.
+        freq_support (float): Frequency support.
+        cont_sens (float): Continuum sensitivity.
+        antenna_array (str): Antenna array.
+        n_pix (int): Number of pixels.
+        n_channels (int): Number of channels.
+        source_type (str): Type of source.
+        tng_api_key (str): TNG API key.
+        ncpu (int): Number of CPUs.
+        rest_frequency (float): Rest frequency.
+        redshift (float): Redshift.
+        lum_infrared (float): Infrared luminosity.
+        snr (float): Signal-to-noise ratio.
+        n_lines (int): Number of lines.
+        line_names (str): Names of the lines.
+        save_mode (str): Save mode.
+        inject_serendipitous (bool): Inject serendipitous sources.
+
+        Returns:
+        str: Path to the output file.
+        """
+        (
+            inx,
+            source_name,
+            member_ouid,
+            main_dir,
+            output_dir,
+            tng_dir,
+            galaxy_zoo_dir,
+            hubble_dir,
+            project_name,
+            ra,
+            dec,
+            band,
+            ang_res,
+            vel_res,
+            fov,
+            obs_date,
+            pwv,
+            int_time,
+            bandwidth,
+            freq,
+            freq_support,
+            cont_sens,
+            antenna_array,
+            n_pix,
+            n_channels,
+            source_type,
+            tng_api_key,
+            ncpu,
+            rest_frequency,
+            redshift,
+            lum_infrared,
+            snr,
+            n_lines,
+            line_names,
+            save_mode,
+            inject_serendipitous,
+            remote,
+        ) = args
+        if remote is True:
+            print("\nRunning simulation {}".format(inx))
+            print("Source Name: {}".format(source_name))
+            if pd.isna(n_pix):
+                n_pix = None
+            if pd.isna(n_channels):
+                n_channels = None
+            if pd.isna(tng_api_key):
+                tng_api_key = None
+            if pd.isna(rest_frequency):
+                rest_frequency = None
+            if pd.isna(redshift):
+                redshift = None
+            if pd.isna(lum_infrared):
+                lum_infrared = None
+            if pd.isna(snr):
+                snr = None
+            if pd.isna(n_lines):
+                n_lines = None
+            if pd.isna(line_names):
+                line_names = None
+        else:
+            self.terminal.add_log("\nRunning simulation {}".format(inx))
+            self.terminal.add_log("Source Name: {}".format(source_name))
+
+        if isinstance(line_names, str):
+            # Remove brackets and split into elements
+            line_names = line_names.strip("[]").split(
+                ","
+            )  # Or .split() if single space delimited
+            # Convert to NumPy array
+            line_names = np.array([name.strip("' ") for name in line_names])
+        remote = bool(remote)
+        start = time.time()
+        second2hour = 1 / 3600
+        ra = ra * U.deg
+        dec = dec * U.deg
+        fov = fov * 3600 * U.arcsec
+        ang_res = ang_res * U.arcsec
+        vel_res = vel_res * U.km / U.s
+        int_time = int_time * U.s
+        source_freq = freq * U.GHz
+        band_range, central_freq, t_channels, delta_freq = self.freq_supp_extractor(
+            freq_support, source_freq
+        )
+        sim_output_dir = os.path.join(output_dir, project_name + "_{}".format(inx))
+        if not os.path.exists(sim_output_dir):
+            os.makedirs(sim_output_dir)
+        os.chdir(output_dir)
+
+        if remote is True:
+            print("RA: {}".format(ra))
+            print("DEC: {}".format(dec))
+            print("Integration Time: {}".format(int_time))
+        else:
+            self.terminal.add_log("RA: {}".format(ra))
+            self.terminal.add_log("DEC: {}".format(dec))
+            self.terminal.add_log("Integration Time: {}".format(int_time))
+        ual.generate_antenna_config_file_from_antenna_array(
+            antenna_array, main_dir, sim_output_dir
+        )
+        antennalist = os.path.join(sim_output_dir, "antenna.cfg")
+        self.progress_bar_entry.setText("Computing Max baseline")
+        max_baseline = (
+            ual.get_max_baseline_from_antenna_config(self.update_progress, antennalist)
+            * U.km
+        )
+        if remote is True:
+            print("Field of view: {} arcsec".format(round(fov.value, 3)))
+        else:
+            self.terminal.add_log(
+                "Field of view: {} arcsec".format(round(fov.value, 3))
+            )
+        beam_size = ual.estimate_alma_beam_size(
+            central_freq, max_baseline, return_value=False
+        )
+        beam_area = 1.1331 * beam_size**2
+        beam_solid_angle = np.pi * (beam_size / 2) ** 2
+        cont_sens = cont_sens * U.mJy / (U.arcsec**2)
+        cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
+        # cont_sens = cont_sens_jy * snr
+        if remote is True:
+            print("Minimum detectable continum: {}".format(cont_sens_jy))
+        else:
+            self.terminal.add_log(
+                "Minimum detectable continum: {}".format(cont_sens_jy)
+            )
+        cell_size = beam_size / 5
+        if n_pix is None:
+            # cell_size = beam_size / 5
+            n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
+        else:
+            n_pix = closest_power_of_2(n_pix)
+            cell_size = fov / n_pix
+            # just added
+            # beam_size = cell_size * 5
+        if n_channels is None:
+            n_channels = t_channels
+        else:
+            band_range = n_channels * delta_freq
+        if redshift is None:
+            if isinstance(rest_frequency, np.ndarray):
+                rest_frequency = np.sort(np.array(rest_frequency))[0]
+            rest_frequency = rest_frequency * U.GHz
+            redshift = uas.compute_redshift(rest_frequency, source_freq)
+        else:
+            rest_frequency = (
+                uas.compute_rest_frequency_from_redshift(
+                    main_dir, source_freq.value, redshift
+                )
+                * U.GHz
+            )
+            self.progress_bar_entry.setText("Computing spectral lines and properties")
+        (
+            continum,
+            line_fluxes,
+            line_names,
+            redshift,
+            line_frequency,
+            source_channel_index,
+            n_channels_nw,
+            bandwidth,
+            freq_sup_nw,
+            cont_frequencies,
+            fwhm_z,
+            lum_infrared,
+        ) = self.process_spectral_data(
+            source_type,
+            main_dir,
+            redshift,
+            central_freq.value,
+            band_range.value,
+            source_freq.value,
+            n_channels,
+            lum_infrared,
+            cont_sens_jy.value,
+            line_names,
+            n_lines,
+            remote,
+        )
+        if n_channels_nw != n_channels:
+            freq_sup = freq_sup_nw * U.MHz
+            n_channels = n_channels_nw
+            band_range = n_channels * freq_sup
+        if remote is True:
+            print("Beam size: {} arcsec\n".format(round(beam_size.value, 4)))
+            print("Central Frequency: {}\n".format(central_freq))
+            print("Spectral Window: {}\n".format(band_range))
+            print("Freq Support: {}\n".format(delta_freq))
+            print("Cube Dimensions: {} x {} x {}\n".format(n_pix, n_pix, n_channels))
+            print("Redshift: {}\n".format(round(redshift, 3)))
+            print("Source frequency: {} GHz\n".format(round(source_freq.value, 2)))
+            print("Band: {}\n".format(band))
+            print("Velocity resolution: {} Km/s\n".format(round(vel_res.value, 2)))
+            print("Angular resolution: {} arcsec\n".format(round(ang_res.value, 3)))
+            print("Infrared Luminosity: {:.2e}\n".format(lum_infrared))
+        else:
+            self.terminal.add_log("Central Frequency: {}".format(central_freq))
+            self.terminal.add_log(
+                "Beam size: {} arcsec".format(round(beam_size.value, 4))
+            )
+            self.terminal.add_log("Spectral Window: {}".format(band_range))
+            self.terminal.add_log("Freq Support: {}".format(delta_freq))
+            self.terminal.add_log(
+                "Cube Dimensions: {} x {} x {}".format(n_pix, n_pix, n_channels)
+            )
+            self.terminal.add_log("Redshift: {}".format(round(redshift, 3)))
+            self.terminal.add_log(
+                "Source frequency: {} GHz".format(round(source_freq.value, 2))
+            )
+            self.terminal.add_log("Band: {}".format(band))
+            self.terminal.add_log(
+                "Velocity resolution: {} Km/s".format(round(vel_res.value, 2))
+            )
+            self.terminal.add_log(
+                "Angular resolution: {} arcsec".format(round(ang_res.value, 3))
+            )
+            self.terminal.add_log("Infrared Luminosity: {:.2e}".format(lum_infrared))
+        if source_type == "extended":
+            snapshot = uas.redshift_to_snapshot(redshift)
+            tng_subhaloid = uas.get_subhaloids_from_db(1, main_dir, snapshot)
+        else:
+            snapshot = None
+            tng_subhaloid = None
+        if isinstance(line_names, list) or isinstance(line_names, np.ndarray):
+            for line_name, line_flux in zip(line_names, line_fluxes):
+                if remote is True:
+                    print(
+                        "Simulating Line {} Flux: {:.3e} at z {}".format(
+                            line_name, line_flux, redshift
+                        )
+                    )
+                else:
+                    self.terminal.add_log(
+                        "Simulating Line {} Flux: {:.3e} at z {}".format(
+                            line_name, line_flux, redshift
+                        )
+                    )
+        else:
+            if remote is True:
+                print(
+                    "Simulating Line {} Flux: {} at z {}".format(
+                        line_names[0], line_fluxes[0], redshift
+                    )
+                )
+            else:
+                self.terminal.add_log(
+                    "Simulating Line {} Flux: {} at z {}".format(
+                        line_names[0], line_fluxes[0], redshift
+                    )
+                )
+        if remote is True:
+            print("Simulating Continum Flux: {:.2e}".format(np.mean(continum)))
+            print("Continuum Sensitity: {:.2e}".format(cont_sens))
+            print("Generating skymodel cube ...\n")
+        else:
+            self.terminal.add_log(
+                "Simulating Continum Flux: {:.2e}".format(np.mean(continum))
+            )
+            self.terminal.add_log("Continuum Sensitity: {:.2e}".format(cont_sens))
+            self.terminal.add_log("Generating skymodel cube ...")
+        datacube = usm.DataCube(
+            n_px_x=n_pix,
+            n_px_y=n_pix,
+            n_channels=n_channels,
+            px_size=cell_size,
+            channel_width=delta_freq,
+            spectral_centre=central_freq,
+            ra=ra,
+            dec=dec,
+        )
+        wcs = datacube.wcs
+        fwhm_x, fwhm_y, angle = None, None, None
+        pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+        shift_x = np.random.randint(
+            0.1 * fov.value / cell_size.value, fov.value / cell_size.value - pos_x
+        )
+        shift_y = np.random.randint(
+            0.1 * fov.value / cell_size.value, fov.value / cell_size.value - pos_y
+        )
+        pos_x = pos_x + shift_x
+        pos_y = pos_x + shift_y
+        pos_x = min(pos_x, n_pix - 1)
+        pos_y = min(pos_y, n_pix - 1)
+        pos_z = [int(index) for index in source_channel_index]
+        self.terminal.add_log("Source Position (x, y): ({}, {})".format(pos_x, pos_y))
+        if source_type == "point":
+            self.progress_bar_entry.setText("Inserting Point Source Model")
+            datacube = usm.insert_pointlike(
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                int(pos_x),
+                int(pos_y),
+                pos_z,
+                fwhm_z,
+                n_channels,
+            )
+        elif source_type == "gaussian":
+            self.progress_bar_entry.setText("Inserting Gaussian Source Model")
+            fwhm_x = np.random.randint(3, 10)
+            fwhm_y = np.random.randint(3, 10)
+            angle = np.random.randint(0, 180)
+            datacube = usm.insert_gaussian(
+                self.client,
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                int(pos_x),
+                int(pos_y),
+                pos_z,
+                fwhm_x,
+                fwhm_y,
+                fwhm_z,
+                angle,
+                n_pix,
+                n_channels,
+            )
+        elif source_type == "extended":
+            self.progress_bar_entry.setText("Inserting Extended Source Model")
+            datacube = usm.insert_extended(
+                self.client,
+                self.update_progress,
+                self.terminal,
+                datacube,
+                tng_dir,
+                snapshot,
+                int(tng_subhaloid),
+                redshift,
+                ra,
+                dec,
+                tng_api_key,
+                ncpu,
+            )
+        elif source_type == "diffuse":
+            datacube = usm.insert_diffuse(
+                self.client,
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                pos_z,
+                fwhm_z,
+                n_pix,
+                n_channels,
+            )
+        elif source_type == "galaxy-zoo":
+            self.progress_bar_entry.setText("Inserting Galaxy Zoo Source Model")
+            galaxy_path = os.path.join(galaxy_zoo_dir, "images_gz2", "images")
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_galaxy_zoo(
+                self.client,
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                pos_z,
+                fwhm_z,
+                n_pix,
+                n_channels,
+                galaxy_path,
+            )
+        elif source_type == "molecular":
+            self.progress_bar_entry.setText("Inserting Molecular Cloud Source Model")
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_molecular_cloud(
+                self.client,
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                pos_z,
+                fwhm_z,
+                n_pix,
+                n_channels,
+            )
+        elif source_type == "hubble-100":
+            self.progress_bar_entry.setText("Insert Hubble Top 100 Source Model")
+            hubble_path = os.path.join(hubble_dir, "top100")
+            pos_z = [int(index) for index in source_channel_index]
+            datacube = usm.insert_hubble(
+                self.client,
+                self.update_progress,
+                datacube,
+                continum,
+                line_fluxes,
+                pos_z,
+                fwhm_z,
+                n_pix,
+                n_channels,
+                hubble_path,
+            )
+        uas.write_sim_parameters(
+            os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
+            source_name,
+            member_ouid,
+            ra,
+            dec,
+            ang_res,
+            vel_res,
+            int_time,
+            band,
+            band_range,
+            central_freq,
+            redshift,
+            line_fluxes,
+            line_names,
+            line_frequency,
+            continum,
+            fov,
+            beam_size,
+            cell_size,
+            n_pix,
+            n_channels,
+            snapshot,
+            tng_subhaloid,
+            lum_infrared,
+            fwhm_z,
+            source_type,
+            fwhm_x,
+            fwhm_y,
+            angle,
+        )
+        if bool(inject_serendipitous) is True and not self.stop_simulation_flag:
+            self.progress_bar_entry.setText("Inserting Serendipitous Sources")
+            if source_type != "gaussian":
+                fwhm_x = np.random.randint(3, 10)
+                fwhm_y = np.random.randint(3, 10)
+            datacube = usm.insert_serendipitous(
+                self.terminal,
+                self.client,
+                self.update_progress,
+                datacube,
+                continum,
+                cont_sens.value,
+                line_fluxes,
+                line_names,
+                line_frequency,
+                delta_freq.value,
+                pos_z,
+                fwhm_x,
+                fwhm_y,
+                fwhm_z,
+                n_pix,
+                n_channels,
+                os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
+            )
+        header = usm.get_datacube_header(datacube, obs_date)
+        model = datacube._array.to_value(datacube._array.unit).T
+        model = model / beam_area.value
+        totflux = np.sum(model)
+        if remote is True:
+            print("Total Flux injected in model cube: {:.3f} Jy\n".format(totflux))
+            print("Done\n")
+        else:
+            self.terminal.add_log(
+                f"Total Flux injected in model cube: {round(totflux, 3)} Jy"
+            )
+            self.terminal.add_log("Done")
+        del datacube
+        if remote is True:
+            print("Observing with ALMA\n")
+        else:
+            self.terminal.add_log("Observing with ALMA")
+        min_line_flux = np.min(line_fluxes)
+        interferometer = uin.Interferometer(
+            idx=inx,
+            client=self.client,
+            skymodel=model,
+            main_dir=main_dir,
+            output_dir=sim_output_dir,
+            ra=ra,
+            dec=dec,
+            central_freq=central_freq,
+            bandwidth=band_range,
+            fov=fov,
+            antenna_array=antenna_array,
+            noise=(min_line_flux / beam_area.value) / snr,
+            snr=snr,
+            integration_time=int_time.value * second2hour,
+            observation_date=obs_date,
+            header=header,
+            save_mode=save_mode,
+            robust=float(self.robust_slider.value()) / 10,
+            terminal=self.terminal,
+        )
+        interferometer.progress_signal.connect(self.handle_progress)
+        self.terminal.add_log(
+            "Setting Brigg's robust parameter to {}".format(
+                float(self.robust_slider.value()) / 10
+            )
+        )
+        self.progress_bar_entry.setText("Observing with ALMA")
+        simulation_results = interferometer.run_interferometric_sim()
+        if remote is True:
+            print("Finished")
+        else:
+            self.terminal.add_log("Finished")
+        stop = time.time()
+        if remote is True:
+            print(
+                "Execution took {} seconds".format(
+                    strftime("%H:%M:%S", gmtime(stop - start))
+                )
+            )
+        else:
+            self.terminal.add_log(
+                "Simulation took {} seconds, creating plots".format(
+                    strftime("%H:%M:%S", gmtime(stop - start))
+                )
+            )
+            self.progress_bar_entry.setText("Simulation Finished")
+        shutil.rmtree(sim_output_dir)
+        return simulation_results
 
 # -------- UI Save / Load Settings functions -----------------------
     def load_settings(self):
@@ -2881,7 +3958,295 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(stdout.read().decode())
         self.terminal.add_log(stderr.read().decode())
 
+# ------- Plotting Functions -------------------------
+    @pyqtSlot(object)
+    def plot_simulation_results(self, simulation_results):
+        if simulation_results is not None:
+            self.progress_bar_entry.setText("Generating Plots")
+            # Extract data from the simulation_results dictionary
+            self.modelCube = simulation_results["modelCube"]
+            self.dirtyCube = simulation_results["dirtyCube"]
+            self.visCube = simulation_results["visCube"]
+            self.dirtyvisCube = simulation_results["dirtyvisCube"]
+            self.Npix = simulation_results["Npix"]
+            self.Np4 = simulation_results["Np4"]
+            self.Nchan = simulation_results["Nchan"]
+            self.gamma = simulation_results["gamma"]
+            self.currcmap = simulation_results["currcmap"]
+            self.Xaxmax = simulation_results["Xaxmax"]
+            self.lfac = simulation_results["lfac"]
+            self.u = simulation_results["u"]
+            self.v = simulation_results["v"]
+            self.UVpixsize = simulation_results["UVpixsize"]
+            self.w_min = simulation_results["w_min"]
+            self.w_max = simulation_results["w_max"]
+            self.plot_dir = simulation_results["plot_dir"]
+            self.idx = simulation_results["idx"]
+            self.wavelength = simulation_results["wavelength"]
+            self.totsampling = simulation_results["totsampling"]
+            self.beam = simulation_results["beam"]
+            self.fmtB = simulation_results["fmtB"]
+            self.curzoom = simulation_results["curzoom"]
+            self.Nphf = simulation_results["Nphf"]
+            self.Xmax = simulation_results["Xmax"]
+            self.antPos = simulation_results["antPos"]
+            self.Nant = simulation_results["Nant"]
+            self._plot_beam()
+            self._plot_uv_coverage()
+            self._plot_antennas()
+            self._plot_sim()
+            self.progress_bar_entry.setText("Done")
+            self.terminal.add_log("Plotting Finished")
 
+    @pyqtSlot(object)
+    def start_plot_runnable(self, simulation_results):
+        runnable = PlotResults(self, simulation_results)
+        self.thread_pool.start(runnable)
+    
+    def _plot_antennas(self):
+        plt.figure(figsize=(8, 8))
+        toplot = np.array(self.antPos[: self.Nant])
+        plt.plot([0], [0], "-b")[0]
+        plt.plot(toplot[:, 0], toplot[:, 1], "o", color="lime", picker=5)[0]
+        plt.xlim(-self.Xmax, self.Xmax)
+        plt.ylim(-self.Xmax, self.Xmax)
+        plt.xlabel("East-West offset (Km)")
+        plt.ylabel("North-South offset (Km)")
+        plt.title("Antenna Configuration")
+        plt.savefig(
+            os.path.join(self.plot_dir, "antenna_config_{}.png".format(str(self.idx)))
+        )
+        plt.close()
+
+    def _plot_uv_coverage(self):
+        self.ulab = r"U (k$\lambda$)"
+        self.vlab = r"V (k$\lambda$)"
+        plt.figure(figsize=(8, 8))
+        UVPlotPlot = []
+        toplotu = self.u.flatten() / self.lfac
+        toplotv = self.v.flatten() / self.lfac
+        UVPlotPlot.append(
+            plt.plot(toplotu, toplotv, ".", color="lime", markersize=1, picker=2)[0]
+        )
+        UVPlotPlot.append(
+            plt.plot(-toplotu, -toplotv, ".", color="lime", markersize=1, picker=2)[0]
+        )
+        plt.xlim(
+            (
+                2.0 * self.Xmax / self.wavelength[2] / self.lfac,
+                -2.0 * self.Xmax / self.wavelength[2] / self.lfac,
+            )
+        )
+        plt.ylim(
+            (
+                2.0 * self.Xmax / self.wavelength[2] / self.lfac,
+                -2.0 * self.Xmax / self.wavelength[2] / self.lfac,
+            )
+        )
+        plt.xlabel(self.ulab)
+        plt.ylabel(self.vlab)
+        plt.title("UV Coverage")
+        plt.savefig(
+            os.path.join(self.plot_dir, "uv_coverage_{}.png".format(str(self.idx)))
+        )
+        plt.close()
+
+    def _plot_beam(self):
+        plt.figure(figsize=(8, 8))
+        beamPlotPlot = plt.imshow(
+            self.beam[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            picker=True,
+            interpolation="nearest",
+            cmap=self.currcmap,
+        )
+        beamText = plt.text(
+            0.80,
+            0.80,
+            self.fmtB % (1.0, 0.0, 0.0),
+            bbox=dict(facecolor="white", alpha=0.7),
+        )
+        plt.ylabel("Dec offset (as)")
+        plt.xlabel("RA offset (as)")
+        plt.setp(
+            beamPlotPlot,
+            extent=(
+                self.Xaxmax / 2.0,
+                -self.Xaxmax / 2.0,
+                -self.Xaxmax / 2.0,
+                self.Xaxmax / 2.0,
+            ),
+        )
+        self.curzoom[0] = (
+            self.Xaxmax / 2.0,
+            -self.Xaxmax / 2.0,
+            -self.Xaxmax / 2.0,
+            self.Xaxmax / 2.0,
+        )
+        plt.title("DIRTY BEAM")
+        plt.colorbar()
+        nptot = np.sum(self.totsampling[:])
+        beamPlotPlot.norm.vmin = np.min(self.beam)
+        beamPlotPlot.norm.vmax = 1.0
+        if (
+            np.sum(
+                self.totsampling[
+                    self.Nphf - 4 : self.Nphf + 4, self.Nphf - 4 : self.Nphf + 4
+                ]
+            )
+            == nptot
+        ):
+            warn = "WARNING!\nToo short baselines for such a small image\nPLEASE, \
+                INCREASE THE IMAGE SIZE!\nAND/OR DECREASE THE WAVELENGTH"
+            beamText.set_text(warn)
+
+        plt.savefig(os.path.join(self.plot_dir, "beam_{}.png".format(str(self.idx))))
+        plt.close()
+
+    def _plot_sim(self):
+        simPlot, ax = plt.subplots(2, 3, figsize=(18, 12))
+        sim_img = np.sum(self.modelCube, axis=0)
+        simPlotPlot = ax[0, 0].imshow(
+            sim_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            interpolation="nearest",
+            vmin=0.0,
+            vmax=np.max(sim_img),
+            cmap=self.currcmap,
+        )
+        plt.setp(
+            simPlotPlot,
+            extent=(
+                self.Xaxmax / 2.0,
+                -self.Xaxmax / 2.0,
+                -self.Xaxmax / 2.0,
+                self.Xaxmax / 2.0,
+            ),
+        )
+        ax[0, 0].set_ylabel("Dec offset (as)")
+        ax[0, 0].set_xlabel("RA offset (as)")
+        totflux = np.sum(
+            sim_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
+        )
+        ax[0, 0].set_title("MODEL IMAGE: %.2e Jy/beam" % totflux)
+        simPlotPlot.norm.vmin = np.min(sim_img)
+        simPlotPlot.norm.vmax = np.max(sim_img)
+        dirty_img = np.sum(self.dirtyCube, axis=0)
+        dirtyPlotPlot = ax[1, 0].imshow(
+            dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4],
+            picker=True,
+            interpolation="nearest",
+        )
+        plt.setp(
+            dirtyPlotPlot,
+            extent=(
+                self.Xaxmax / 2.0,
+                -self.Xaxmax / 2.0,
+                -self.Xaxmax / 2.0,
+                self.Xaxmax / 2.0,
+            ),
+        )
+        ax[1, 0].set_ylabel("Dec offset (as)")
+        ax[1, 0].set_xlabel("RA offset (as)")
+        totflux = np.sum(
+            dirty_img[self.Np4 : self.Npix - self.Np4, self.Np4 : self.Npix - self.Np4]
+        )
+        ax[1, 0].set_title("DIRTY IMAGE: %.2e Jy/beam" % totflux)
+        dirtyPlotPlot.norm.vmin = np.min(dirty_img)
+        dirtyPlotPlot.norm.vmax = np.max(dirty_img)
+        self.UVmax = self.Npix / 2.0 / self.lfac * self.UVpixsize
+        self.UVSh = -self.UVmax / self.Npix
+        toplot = np.sum(np.abs(self.visCube), axis=0)
+        mval = np.min(toplot)
+        Mval = np.max(toplot)
+        dval = (Mval - mval) / 2.0
+        UVPlotFFTPlot = ax[0, 1].imshow(
+            toplot, cmap=self.currcmap, vmin=0.0, vmax=Mval + dval, picker=5
+        )
+        plt.setp(
+            UVPlotFFTPlot,
+            extent=(
+                -self.UVmax + self.UVSh,
+                self.UVmax + self.UVSh,
+                -self.UVmax - self.UVSh,
+                self.UVmax - self.UVSh,
+            ),
+        )
+
+        ax[0, 1].set_ylabel("V (k$\\lambda$)")
+        ax[0, 1].set_xlabel("U (k$\\lambda$)")
+        ax[0, 1].set_title("MODEL VISIBILITY")
+
+        toplot = np.sum(np.abs(self.dirtyvisCube), axis=0)
+        mval = np.min(toplot)
+        Mval = np.max(toplot)
+        dval = (Mval - mval) / 2.0
+        UVPlotDirtyFFTPlot = ax[1, 1].imshow(
+            toplot, cmap=self.currcmap, vmin=0.0, vmax=Mval + dval, picker=5
+        )
+        plt.setp(
+            UVPlotDirtyFFTPlot,
+            extent=(
+                -self.UVmax + self.UVSh,
+                self.UVmax + self.UVSh,
+                -self.UVmax - self.UVSh,
+                self.UVmax - self.UVSh,
+            ),
+        )
+        ax[1, 1].set_ylabel("V (k$\\lambda$)")
+        ax[1, 1].set_xlabel("U (k$\\lambda$)")
+        ax[1, 1].set_title("DIRTY VISIBILITY")
+
+        phaseplot = np.sum(np.angle(self.visCube), axis=0)
+        PhasePlotFFTPlot = ax[0, 2].imshow(
+            phaseplot, cmap="twilight", vmin=-np.pi, vmax=np.pi, picker=5
+        )
+        plt.setp(
+            PhasePlotFFTPlot,
+            extent=(
+                -self.UVmax + self.UVSh,
+                self.UVmax + self.UVSh,
+                -self.UVmax - self.UVSh,
+                self.UVmax - self.UVSh,
+            ),
+        )
+        ax[0, 2].set_ylabel("V (k$\\lambda$)")
+        ax[0, 2].set_xlabel("U (k$\\lambda$)")
+        ax[0, 2].set_title("MODEL VISIBILITY PHASE")
+
+        phaseplot = np.sum(np.angle(self.dirtyvisCube), axis=0)
+        PhasePlotFFTPlot = ax[1, 2].imshow(
+            phaseplot, cmap="twilight", vmin=-np.pi, vmax=np.pi, picker=5
+        )
+        plt.setp(
+            PhasePlotFFTPlot,
+            extent=(
+                -self.UVmax + self.UVSh,
+                self.UVmax + self.UVSh,
+                -self.UVmax - self.UVSh,
+                self.UVmax - self.UVSh,
+            ),
+        )
+        ax[1, 2].set_ylabel("V (k$\\lambda$)")
+        ax[1, 2].set_xlabel("U (k$\\lambda$)")
+        ax[1, 2].set_title("DIRTY VISIBILITY PHASE")
+        plt.savefig(os.path.join(self.plot_dir, "sim_{}.png".format(str(self.idx))))
+        plt.close()
+
+        sim_spectrum = np.sum(self.modelCube, axis=(1, 2))
+        dirty_spectrum = np.sum(self.dirtyCube, axis=(1, 2))
+        wavelenghts = np.linspace(self.w_min, self.w_max, self.Nchan)
+        specPlot, ax = plt.subplots(1, 2, figsize=(12, 6))
+        ax[0].plot(wavelenghts, sim_spectrum)
+        ax[0].set_ylabel("Jy/beam")
+        ax[0].set_xlabel("$\\lambda$ [mm]")
+        ax[0].set_title("MODEL SPECTRUM")
+        ax[1].plot(wavelenghts, dirty_spectrum)
+        ax[1].set_ylabel("Jy/beam")
+        ax[1].set_xlabel("$\\lambda$ [mm]")
+        ax[1].set_title("DIRTY SPECTRUM")
+        plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
+        plt.close()
+
+    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

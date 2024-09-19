@@ -482,6 +482,7 @@ def image_channel(
     Nphf,
     Np4,
     zooming,
+    header,
 ):
     (
         beam,
@@ -573,6 +574,7 @@ class Interferometer(QObject):
         terminal,
     ):
         super(Interferometer, self).__init__()
+        print('Hello')
         self.idx = idx
         self.skymodel = skymodel
         self.client = client
@@ -592,7 +594,7 @@ class Interferometer(QObject):
         self.header = header
         self.save_mode = save_mode
         self.robust = robust
-
+        self.terminal = terminal
         # Initialize variables
         self._init_variables()
         # Get the observing location
@@ -603,7 +605,7 @@ class Interferometer(QObject):
         # Get the observing wavelengths for each channel
         self._get_wavelengths()
         msg = f"Performing {self.nH} scans with a scan time of {self.scan_time} seconds"
-        self.terminal = terminal
+        print('Hello2')
         if self.terminal is not None:
             self.terminal.add_log(msg)
         else:
@@ -623,7 +625,6 @@ class Interferometer(QObject):
         self.deltaAng = 1.0 * self.deg2rad
         self.gamma = 0.5
         self.lfac = 1.0e6
-        self.header = header
         self._get_nH()
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
@@ -651,7 +652,7 @@ class Interferometer(QObject):
         self.robfac = 0.0
         self.currcmap = cm.jet
         self.zooming = 0
-        print("Number of Epochs", self.nH)
+        self.terminal.add_log("Number of Epochs", self.nH)
 
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site("ALMA")
@@ -805,6 +806,7 @@ class Interferometer(QObject):
                 self.Nphf,
                 self.Np4,
                 self.zooming,
+                self.header,
             )
             modelcube.append(delayed_result[0])
             modelvis.append(delayed_result[1])
@@ -1004,7 +1006,7 @@ class Interferometer(QObject):
             print(f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)}Jy")
             print(f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)}Jy")
 
-
+"""
 if __name__ == "__main__":
     cluster = LocalCluster()
     client = Client(cluster, timeout=60, heartbeat_interval=10)
@@ -1048,3 +1050,4 @@ if __name__ == "__main__":
     simulation_results = interferometer.run_interferometric_sim()
     t2 = time.time()
     print(f"Time taken: {t2-t1}")
+"""
