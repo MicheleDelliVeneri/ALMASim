@@ -297,53 +297,53 @@ class DownloadGalaxyZoo(QRunnable):
                         username=self.alma_simulator.remote_user_entry.text(),
                         private_key=self.alma_simulator.remote_key_entry.text(),
                     )
-                 if sftp.exists(self.galaxy_zoo_entry.text()):
-                if not sftp.listdir(self.galaxy_zoo_entry.text()):
-                    if not sftp.exists(
-                        "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
-                    ):
-                        sftp.mkdir("/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text()))
-                    if not sftp.exists(
-                        "/home/{}/.kaggle/kaggle.json".format(self.alma_simulator.remote_user_entry.text())
-                    ):
-                        sftp.put(
-                            os.path.join(os.path.expanduser("~"), ".kaggle", "kaggle.json"),
-                            "/home/{}/.kaggle/kaggle.json".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            ),
+                if sftp.exists(self.galaxy_zoo_entry.text()):
+                    if not sftp.listdir(self.galaxy_zoo_entry.text()):
+                        if not sftp.exists(
+                            "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
+                        ):
+                            sftp.mkdir("/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text()))
+                        if not sftp.exists(
+                            "/home/{}/.kaggle/kaggle.json".format(self.alma_simulator.remote_user_entry.text())
+                        ):
+                            sftp.put(
+                                os.path.join(os.path.expanduser("~"), ".kaggle", "kaggle.json"),
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                            )
+                            sftp.chmod(
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                                600,
+                            )
+                        if self.alma_simulator.remote_key_pass_entry.text() != "":
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text(),
+                                password=self.alma_simulator.remote_key_pass_entry.text(),
+                            )
+                        else:
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text()
+                            )
+                        venv_dir = os.path.join(
+                            "/home/{}/".format(self.alma_simulator.remote_user_entry.text()), "almasim_env"
                         )
-                        sftp.chmod(
-                            "/home/{}/.kaggle/kaggle.json".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            ),
-                            600,
+                        commands = f"""
+                        source {venv_dir}/bin/activate
+                        python -c "from kaggle import api; \
+                            api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
+                                path='{self.alma_simulator.galaxy_zoo_entry.text()}', unzip=True)"
+                        """
+                        paramiko_client = paramiko.SSHClient()
+                        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        paramiko_client.connect(
+                            self.alma_simulator.remote_address_entry.text(),
+                            username=self.alma_simulator.remote_user_entry.text(),
+                            pkey=key,
                         )
-                    if self.alma_simulator.remote_key_pass_entry.text() != "":
-                        key = paramiko.RSAKey.from_private_key_file(
-                            self.alma_simulator.remote_key_entry.text(),
-                            password=self.alma_simulator.remote_key_pass_entry.text(),
-                        )
-                    else:
-                        key = paramiko.RSAKey.from_private_key_file(
-                            self.alma_simulator.remote_key_entry.text()
-                        )
-                    venv_dir = os.path.join(
-                        "/home/{}/".format(self.alma_simulator.remote_user_entry.text()), "almasim_env"
-                    )
-                    commands = f"""
-                    source {venv_dir}/bin/activate
-                    python -c "from kaggle import api; \
-                        api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
-                            path='{self.alma_simulator.galaxy_zoo_entry.text()}', unzip=True)"
-                    """
-                    paramiko_client = paramiko.SSHClient()
-                    paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                    paramiko_client.connect(
-                        self.alma_simulator.remote_address_entry.text(),
-                        username=self.alma_simulator.remote_user_entry.text(),
-                        pkey=key,
-                    )
-                    stdin, stdout, stderr = paramiko_client.exec_command(commands)
+                        stdin, stdout, stderr = paramiko_client.exec_command(commands)
                     self.signals.queryFinished.emit(galaxy_zoo_path)
 
         except Exception as e:
@@ -528,6 +528,7 @@ class ALMASimulator(QMainWindow):
     terminal = None
     thread_pool = None
     update_progress = pyqtSignal(int)
+    nextSimulation = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -552,6 +553,7 @@ class ALMASimulator(QMainWindow):
         self.settings_path = self.settings.fileName()
         self.initialize_ui()
         self.stop_simulation_flag = False
+        self.remote_simulation_finished = True
         self.terminal.add_log(f"Setting file path is {self.settings_path}")
 
     # -------- Widgets and UI -------------------------
@@ -947,7 +949,7 @@ class ALMASimulator(QMainWindow):
 
     # Add Widget Functions
     def add_folder_widgets(self):
-        line_edit_max_width = 700  # Example width (you can adjust this)
+        line_edit_max_width = 360  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
         border_radius = 10 
@@ -976,7 +978,7 @@ class ALMASimulator(QMainWindow):
         self.output_row.addWidget(self.output_label)
         self.output_row.addWidget(self.output_entry)
         self.output_row.addWidget(self.output_button)
-        self.output_row.addStretch()
+        #self.output_row.addStretch()
         self.left_layout.addRow(self.output_row)
 
         # TNG Directory
@@ -993,7 +995,7 @@ class ALMASimulator(QMainWindow):
         self.tng_row.addWidget(self.tng_label)
         self.tng_row.addWidget(self.tng_entry)
         self.tng_row.addWidget(self.tng_button)
-        self.tng_row.addStretch()
+        #self.tng_row.addStretch()
         self.left_layout.addRow(self.tng_row)
 
         # Galaxy Zoo Directory
@@ -1013,7 +1015,7 @@ class ALMASimulator(QMainWindow):
         self.galaxy_row.addWidget(self.galaxy_zoo_button)
         self.galaxy_chechbox_row = QHBoxLayout()
         self.galaxy_chechbox_row.addWidget(self.galaxy_zoo_checkbox)
-        self.galaxy_row.addStretch()
+        #self.galaxy_row.addStretch()
         self.galaxy_chechbox_row.addStretch()
         self.left_layout.addRow(self.galaxy_row)
         self.left_layout.addRow(self.galaxy_chechbox_row)
@@ -1035,7 +1037,7 @@ class ALMASimulator(QMainWindow):
         self.hubble_row.addWidget(self.hubble_button)
         self.hubble_chechbox_row = QHBoxLayout()
         self.hubble_chechbox_row.addWidget(self.hubble_checkbox)
-        self.hubble_row.addStretch()
+        #self.hubble_row.addStretch()
         self.hubble_chechbox_row.addStretch()
         self.left_layout.addRow(self.hubble_row)
         self.left_layout.addRow(self.hubble_chechbox_row)
@@ -1906,6 +1908,15 @@ class ALMASimulator(QMainWindow):
             self.remove_query_widgets()
         self.left_layout.update()
     
+    # ------- Progress Bar ---------------------------------
+    @pyqtSlot(int)
+    def handle_progress(self, value):
+        self.update_progress.emit(value)
+
+    @pyqtSlot(int)
+    def update_progress_bar(self, value):
+        self.progress_bar.setValue(value)
+        
 # -------- Metadata Query Functions ---------------------
     @pyqtSlot(object)
     def print_keywords(self, keywords):
@@ -2334,8 +2345,27 @@ class ALMASimulator(QMainWindow):
                 "remote",
             ],
         )
+        if self.local_mode_combo.currentText() == "local":
+            self.run_simulator_locally()
+        
         
         return
+
+    def run_simulator_locally(self):
+        self.stop_simulation_flag = False 
+        self.current_sim_index = 0 
+        self.nextSimulation.connect(self.run_next_simulation)
+        cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()))
+        client = Client(cluster, timeout=60, heartbeat_interval=10)
+        self.client = client
+
+    def run_next_simulation(self):
+        if self.current_sim_index >= int(self.n_sims_entry.text()):
+            self.progress_bar_entry.setText("Simluation Finished")
+            # self.send_email()
+            return
+        runnable = Simulator(self,  *self.input_params.iloc[self.current_sim_index])
+        self.update_progress.connect(self.update_progress_bar)
     
     def stop_simulation(self):
         # Implement the logic to stop the simulation
