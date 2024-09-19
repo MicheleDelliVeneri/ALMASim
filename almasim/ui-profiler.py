@@ -96,6 +96,7 @@ class TerminalLogger(QObject):
 class SignalEmitter(QObject):
     simulationFinished = pyqtSignal(object)
     queryFinished = pyqtSignal(object)
+    downloadFinished = pyqtSignal(object)
     progress = pyqtSignal(int)
 
 
@@ -263,44 +264,263 @@ class QueryByScience(QRunnable):
             logging.error(f"Error in Query: {e}")
 
 class DownloadGalaxyZoo(QRunnable):
-    def __init__(self, alma_simulator_instance):
+    def __init__(self, alma_simulator_instance, remote):
         super().__init__()
         self.alma_simulator = alma_simulator_instance
         self.signals = SignalEmitter()
+        self.remote = remote
     
     @pyqtSlot()
     def run(self):
         try:
-            galaxy_zoo_path = self.alma_simulator.galaxy_zoo_entry.text()
-            if galaxy_zoo_path == "":
-                galaxy_zoo_path = os.path.join(self.alma_simulator.main_path, "galaxy_zoo")
-            if not os.path.exists(galaxy_zoo_path):
-                os.makedirs(galaxy_zoo_path)
-            api.authernticate()
-            api.dataset_download_files("zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True)
-            self.signals.queryFinished.emit(galaxy_zoo_path)
+            if self.remote is False:
+                galaxy_zoo_path = self.alma_simulator.galaxy_zoo_entry.text()
+                if galaxy_zoo_path == "":
+                    galaxy_zoo_path = os.path.join(self.alma_simulator.main_path, "galaxy_zoo")
+                if not os.path.exists(galaxy_zoo_path):
+                    os.makedirs(galaxy_zoo_path)
+                api.authernticate()
+                api.dataset_download_files("zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True)
+                self.signals.queryFinished.emit(galaxy_zoo_path)
+            else:
+                if self.alma_simulator.remote_key_pass_entry.text() != "":
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+                    )
+
+                else:
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                    )
+                 if sftp.exists(self.galaxy_zoo_entry.text()):
+                if not sftp.listdir(self.galaxy_zoo_entry.text()):
+                    if not sftp.exists(
+                        "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
+                    ):
+                        sftp.mkdir("/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text()))
+                    if not sftp.exists(
+                        "/home/{}/.kaggle/kaggle.json".format(self.alma_simulator.remote_user_entry.text())
+                    ):
+                        sftp.put(
+                            os.path.join(os.path.expanduser("~"), ".kaggle", "kaggle.json"),
+                            "/home/{}/.kaggle/kaggle.json".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            ),
+                        )
+                        sftp.chmod(
+                            "/home/{}/.kaggle/kaggle.json".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            ),
+                            600,
+                        )
+                    if self.alma_simulator.remote_key_pass_entry.text() != "":
+                        key = paramiko.RSAKey.from_private_key_file(
+                            self.alma_simulator.remote_key_entry.text(),
+                            password=self.alma_simulator.remote_key_pass_entry.text(),
+                        )
+                    else:
+                        key = paramiko.RSAKey.from_private_key_file(
+                            self.alma_simulator.remote_key_entry.text()
+                        )
+                    venv_dir = os.path.join(
+                        "/home/{}/".format(self.alma_simulator.remote_user_entry.text()), "almasim_env"
+                    )
+                    commands = f"""
+                    source {venv_dir}/bin/activate
+                    python -c "from kaggle import api; \
+                        api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
+                            path='{self.alma_simulator.galaxy_zoo_entry.text()}', unzip=True)"
+                    """
+                    paramiko_client = paramiko.SSHClient()
+                    paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    paramiko_client.connect(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        pkey=key,
+                    )
+                    stdin, stdout, stderr = paramiko_client.exec_command(commands)
+                    self.signals.queryFinished.emit(galaxy_zoo_path)
+
         except Exception as e:
             logging.error(f"Error in Query: {e}")
 
 class DownloadHubble(QRunnable):
-    def __init__(self, alma_simulator_instance):
+    def __init__(self, alma_simulator_instance, remote):
         super().__init__()
         self.alma_simulator = alma_simulator_instance
         self.signals = SignalEmitter()
+        self.remote = remote
     
     @pyqtSlot()
     def run(self):
         try:
-            hubble_path = self.alma_simulator.hubble_entry.text()
-            if hubble_path == "":
-                hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
-            if not os.path.exists(hubble_path):
-                os.makedirs(hubble_path)
-            api.authernticate()
-            api.dataset_download_files("redwankarimsony/top-100-hubble-telescope-images", path=hubble_path, unzip=True)
-            self.signals.queryFinished.emit(hubble_path)
+            if self.remote is False:
+                hubble_path = self.alma_simulator.hubble_entry.text()
+                if hubble_path == "":
+                    hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
+                if not os.path.exists(hubble_path):
+                    os.makedirs(hubble_path)
+                api.authernticate()
+                api.dataset_download_files("redwankarimsony/top-100-hubble-telescope-images", path=hubble_path, unzip=True)
+                self.signals.downloadFinished.emit(hubble_path)
+            else:
+                if self.alma_simulator.remote_key_pass_entry.text() != "":
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+                    )
+
+                else:
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                    )
+                if not sftp.exists(self.alma_simulator.hubble_entry.text()):
+                    if not sftp.listdir(self.alma_simulator.hubble_entry.text()):
+                        if not sftp.exists(
+                            "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
+                        ):
+                            sftp.mkdir(
+                                "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
+                            )
+                        if not sftp.exists(
+                            "/home/{}/.kaggle/kaggle.json".format(self.alma_simulator.remote_user_entry.text())
+                        ):
+                            sftp.put(
+                                os.path.join(os.path.expanduser("~"), ".kaggle", "kaggle.json"),
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                            )
+                            sftp.chmod(
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                                600,
+                            )
+                        if self.alma_simulator.remote_key_pass_entry.text() != "":
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text(),
+                                password=self.alma_simulator.remote_key_pass_entry.text(),
+                            )
+                        else:
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text()
+                            )
+                        venv_dir = os.path.join(
+                            "/home/{}/".format(self.alma_simulator.remote_user_entry.text()), "almasim_env"
+                        )
+                        commands = f"""
+                        source {venv_dir}/bin/activate
+                        python -c "from kaggle import api; \
+                            api.dataset_download_files('redwankarimsony/top-100-hubble-telescope-images', \
+                                path='{self.alma_simulator.hubble_entry.text()}', unzip=True)"
+                        """
+                        paramiko_client = paramiko.SSHClient()
+                        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        paramiko_client.connect(
+                            self.alma_simulator.remote_address_entry.text(),
+                            username=self.alma_simulator.remote_user_entry.text(),
+                            pkey=key,
+                        )
+                        stdin, stdout, stderr = paramiko_client.exec_command(commands)
+                        self.signals.downloadFinished.emit(hubble_path)
         except Exception as e:
             logging.error(f"Error in Query: {e}")
+
+class DownloadTNGStructure(QRunnable):
+    def __init__(self, alma_simulator_instance, remote):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+        self.remote = remote
+    
+    @pyqtSlot()
+    def run(self):
+        try:
+            if self.remote is False:
+                tng_dir = self.alma_simulator.tng_entry.text()
+                if not os.path.exists(os.path.join(tng_dir, "TNG100-1")):
+                    os.makedirs(os.path.join(tng_dir, "TNG100-1"))
+                if not os.path.exists(os.path.join(tng_dir, "TNG100-1", "output")):
+                    os.makedirs(os.path.join(tng_dir, "TNG100-1", "output"))
+                if not os.path.exists(os.path.join(tng_dir, "TNG100-1", "postprocessing")):
+                    os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
+                if not os.path.exists(
+                    os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
+                ):
+                    os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets"))
+                if not isfile(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
+                    url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+                    cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
+                    self.alma_simulator.tng_api_key_entry.text(),
+                    os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
+                    url,
+                    )
+                    subprocess.run(cmd, shell=True)
+                    self.signals.downloadFinished.emit(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"))
+            else:
+                if self.remote_key_pass_entry.text() != "":
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+                    )
+
+                else:
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                    )
+                    tng_dir = self.alma_simulator.tng_entry.text()
+                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1")):
+                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1"))
+                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "output")):
+                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "output"))
+                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "postprocessing")):
+                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
+                    if not sftp.exists(
+                        os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
+                    ):
+                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets"))
+                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
+                        url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+                        cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
+                            self.alma_simulator.tng_api_key_entry.text(),
+                            os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
+                            url,
+                        )
+                        if self.alma_simulator.remote_key_pass_entry.text() != "":
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text(),
+                                password=self.alma_simulator.remote_key_pass_entry.text(),
+                            )
+                        else:
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text()
+                            )
+                        paramiko_client = paramiko.SSHClient()
+                        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        paramiko_client.connect(
+                            self.alma_simulator.remote_address_entry.text(),
+                            username=self.alma_simulator.remote_user_entry.text(),
+                            pkey=key,
+                        )
+                        stdin, stdout, stderr = paramiko_client.exec_command(cmd)
+                        self.signals.downloadFinished.emit(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"))
+        except Exception as e:
+            logging.error(f"Error TNG Structure creation: {e}")
+            
 
 class ALMASimulator(QMainWindow):
     settings_file = None
@@ -1824,7 +2044,297 @@ class ALMASimulator(QMainWindow):
         self.thread_pool.start(runnable)
 
 # -------- Simulation Functions -------------------------
+    def transform_source_type_label(self):
+        if self.model_combo.currentText() == "Galaxy Zoo":
+            self.source_type = "galaxy-zoo"
+        elif self.model_combo.currentText() == "Hubble 100":
+            self.source_type = "hubble-100"
+        elif self.model_combo.currentText() == "Molecular":
+            self.source_type = "molecular"
+        elif self.model_combo.currentText() == "Diffuse":
+            self.source_type = "diffuse"
+        elif self.model_combo.currentText() == "Gaussian":
+            self.source_type = "gaussian"
+        elif self.model_combo.currentText() == "Point":
+            self.source_type = "point"
+        elif self.model_combo.currentText() == "Extended":
+            self.source_type = "extended"
+
     def start_simulation(self):
+        if self.local_mode_combo.currentText() == "local":
+            self.terminal.add_log("Starting simulation on your local machine")
+        else:
+            self.terminal.add_log(
+                f"Starting simulation on {self.remote_address_entry.text()}"
+            )
+            self.remote_simulation_finished = False
+        n_sims = int(self.n_sims_entry.text())
+        sim_idxs = np.arange(n_sims)
+        self.transform_source_type_label()
+        source_types = np.array([self.source_type] * n_sims)
+        self.output_path = os.path.join(
+            self.output_entry.text(), self.project_name_entry.text()
+        )
+        plot_path = os.path.join(self.output_path, "plots")
+        # Output Directory
+        if self.local_mode_combo.currentText() == "local":
+            if not os.path.exists(self.output_path):
+                os.makedirs(self.output_path)
+            if not os.path.exists(plot_path):
+                os.makedirs(plot_path)
+        else:
+            self.create_remote_output_dir()
+        output_paths = np.array([self.output_path] * n_sims)
+        tng_paths = np.array([self.tng_entry.text()] * n_sims)
+        if self.local_mode_combo.currentText() == "local":
+            if self.model_combo.currentText() == "Galaxy Zoo":
+                if self.galaxy_zoo_entry.text() and not os.path.exists(
+                    os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
+                ):
+                    self.terminal.add_log("Downloading Galaxy Zoo")
+                    runnable = DownloadGalaxyZoo(self, remote=False)
+                    runnable.finished.connect(self.on_download_finished)
+                    self.thread_pool.start(runnable)
+            elif self.model_combo.currentText() == "Hubble 100":
+                if self.hubble_entry.text() and not os.path.exists(
+                    os.path.join(self.hubble_entry.text(), "top100")
+                ):
+                    self.terminal.add_log("Downloading Hubble 100")
+                    runnable = DownloadHubble(self, remote=False)
+                    runnable.finished.connect(self.on_download_finished)
+                    self.thread_pool.start(runnable)
+        else:
+            self.create_remote_environment()
+            if self.model_combo.currentText() == "Galaxy Zoo":
+                if self.galaxy_zoo_entry.text():
+                    self.terminal.add_log("Downloading Galaxy Zoo on remote")
+                    runnable = DownloadGalaxyZoo(self, remote=True)
+                    runnable.finished.connect(self.on_download_finished)
+                    self.thread_pool.start(runnable)
+            elif self.model_combo.currentText() == "Hubble 100":
+                if self.hubble_entry.text():
+                    self.terminal.add_log("Downloading Hubble 100 on remote")
+                    runnable = DownloadHubble(self, remote=True)
+                    runnable.finished.connect(self.on_download_finished)
+                    self.thread_pool.start(runnable)
+        galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
+        hubble_paths = np.array([self.hubble_entry.text()] * n_sims)
+        if self.local_mode_combo.currentText() == "local":
+            main_paths = np.array([self.main_path] * n_sims)
+        else:
+            main_paths = np.array(
+                [
+                    os.path.join(
+                        "/home/{}/".format(self.remote_user_entry.text()),
+                        "ALMASim/almasim/",
+                    )
+                ]
+                * n_sims
+            )
+        ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
+        project_names = np.array([self.project_name_entry.text()] * n_sims)
+        save_mode = np.array([self.save_format_combo.currentText()] * n_sims)
+        self.db_line = uas.read_line_emission_csv(
+            os.path.join(self.main_path, "brightnes", "calibrated_lines.csv"),
+            sep=",",
+        )
+        # parameter for c generations for artificial lines
+        self.line_cs_mean = np.mean(self.db_line["c"].values)
+        self.line_cs_std = np.std(self.db_line["c"].values)
+        # Checking Line Mode
+        if self.line_mode_checkbox.isChecked():
+            line_indices = [int(i) for i in self.line_index_entry.text().split()]
+            rest_freq, line_names = uas.get_line_info(self.main_path, line_indices)
+            self.terminal.add_log("# ------------------------------------- #\n")
+            self.terminal.add_log("The following lines have been selected\n")
+            for line_name, r_freq in zip(line_names, rest_freq):
+                self.terminal.add_log(f"Line: {line_name}: {r_freq} GHz")
+            self.terminal.add_log("# ------------------------------------- #\n")
+            if len(rest_freq) == 1:
+                rest_freq = rest_freq[0]
+            rest_freqs = np.array([rest_freq] * n_sims)
+            redshifts = np.array([None] * n_sims)
+            n_lines = np.array([None] * n_sims)
+            line_names = np.array([line_names] * n_sims)
+            z1 = None
+        else:
+            if self.redshift_entry.text() != "":
+                redshifts = [float(z) for z in self.redshift_entry.text().split()]
+                if len(redshifts) == 1:
+                    redshifts = np.array([redshifts[0]] * n_sims)
+                    z0, z1 = float(redshifts[0]), float(redshifts[0])
+                else:
+                    z0, z1 = float(redshifts[0]), float(redshifts[1])
+                    redshifts = np.random.uniform(z0, z1, n_sims)
+                n_lines = np.array([int(self.num_lines_entry.text())] * n_sims)
+                rest_freq, _ = uas.get_line_info(self.main_path)
+                rest_freqs = np.array([None] * n_sims)
+                line_names = np.array([None] * n_sims)
+            else:
+                if self.terminal is not None:
+                    self.terminal.add_log(
+                        'Please fill the redshift and n lines fields or check "Line Mode"'
+                    )
+                return
+
+        # Checking Infrared Luminosity
+        if self.ir_luminosity_checkbox.isChecked():
+            lum_infrared = [
+                float(lum) for lum in self.ir_luminosity_entry.text().split()
+            ]
+            if len(lum_infrared) == 1:
+                lum_ir = np.array([lum_infrared[0]] * n_sims)
+            else:
+                lum_ir = np.random.uniform(lum_infrared[0], lum_infrared[1], n_sims)
+        else:
+            lum_ir = np.array([None] * n_sims)
+
+        # Checking SNR
+        if self.snr_checkbox.isChecked():
+            snr = [float(snr) for snr in self.snr_entry.text().split()]
+            if len(snr) == 1:
+                snr = np.array([snr[0]] * n_sims)
+            else:
+                snr = np.random.uniform(snr[0], snr[1], n_sims)
+        else:
+            snr = np.ones(n_sims)
+
+        # Checking Number of Pixesl
+        if self.fix_spatial_checkbox.isChecked():
+            n_pixs = np.array([int(self.n_pix_entry.text())] * n_sims)
+        else:
+            n_pixs = np.array([None] * n_sims)
+        # Checking Number of Channels
+        if self.fix_spectral_checkbox.isChecked():
+            n_channels = np.array([int(self.n_channels_entry.text())] * n_sims)
+        else:
+            n_channels = np.array([None] * n_sims)
+        if self.model_combo.currentText() == "Extended":
+            self.terminal.add_log("Checking TNG Directories")
+            if self.local_mode_combo.currentText() == "local":
+                runnable = DownloadTNGStructure(self, remote=False)
+                
+            else:
+                runnable = DownloadTNGStructure(self, remote=True)
+            runnable.finished.connect(self.on_download_finished)
+            self.thread_pool.start(runnable)
+
+        
+            tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
+            self.metadata = self.sample_given_redshift(
+                self.metadata, n_sims, rest_freq, True, z1
+            )
+        else:
+            tng_apis = np.array([None] * n_sims)
+            self.metadata = self.sample_given_redshift(
+                self.metadata, n_sims, rest_freq, False, z1
+            )
+        source_names = self.metadata["ALMA_source_name"].values
+        member_ouids = self.metadata["member_ous_uid"].values
+        ras = self.metadata["RA"].values
+        decs = self.metadata["Dec"].values
+        bands = self.metadata["Band"].values
+        ang_ress = self.metadata["Ang.res."].values
+        vel_ress = self.metadata["Vel.res."].values
+        fovs = self.metadata["FOV"].values
+        obs_dates = self.metadata["Obs.date"].values
+        pwvs = self.metadata["PWV"].values
+        int_times = self.metadata["Int.Time"].values
+        bandwidths = self.metadata["Bandwidth"].values
+        freqs = self.metadata["Freq"].values
+        freq_supports = self.metadata["Freq.sup."].values
+        antenna_arrays = self.metadata["antenna_arrays"].values
+        cont_sens = self.metadata["Cont_sens_mJybeam"].values
+        self.terminal.add_log("Metadata retrived successfully\n")
+        if self.serendipitous_checkbox.isChecked():
+            inject_serendipitous = np.array([True] * n_sims)
+        else:
+            inject_serendipitous = np.array([False] * n_sims)
+        if self.local_mode_combo.currentText() == "local":
+            remote = np.array([False] * n_sims)
+        else:
+            remote = np.array([True] * n_sims)
+        self.input_params = pd.DataFrame(
+            zip(
+                sim_idxs,
+                source_names,
+                member_ouids,
+                main_paths,
+                output_paths,
+                tng_paths,
+                galaxy_zoo_paths,
+                hubble_paths,
+                project_names,
+                ras,
+                decs,
+                bands,
+                ang_ress,
+                vel_ress,
+                fovs,
+                obs_dates,
+                pwvs,
+                int_times,
+                bandwidths,
+                freqs,
+                freq_supports,
+                cont_sens,
+                antenna_arrays,
+                n_pixs,
+                n_channels,
+                source_types,
+                tng_apis,
+                ncpus,
+                rest_freqs,
+                redshifts,
+                lum_ir,
+                snr,
+                n_lines,
+                line_names,
+                save_mode,
+                inject_serendipitous,
+                remote,
+            ),
+            columns=[
+                "idx",
+                "source_name",
+                "member_ouid",
+                "main_path",
+                "output_dir",
+                "tng_dir",
+                "galaxy_zoo_dir",
+                "hubble_dir",
+                "project_name",
+                "ra",
+                "dec",
+                "band",
+                "ang_res",
+                "vel_res",
+                "fov",
+                "obs_date",
+                "pwv",
+                "int_time",
+                "bandwidth",
+                "freq",
+                "freq_support",
+                "cont_sens",
+                "antenna_array",
+                "n_pix",
+                "n_channels",
+                "source_type",
+                "tng_api_key",
+                "ncpu",
+                "rest_frequency",
+                "redshift",
+                "lum_infrared",
+                "snr",
+                "n_lines",
+                "line_names",
+                "save_mode",
+                "inject_serendipitous",
+                "remote",
+            ],
+        )
+        
         return
     
     def stop_simulation(self):
@@ -1834,6 +2344,89 @@ class ALMASimulator(QMainWindow):
         self.update_progress_bar(0)
         self.terminal.add_log("# ------------------------------------- #\n")
     
+
+# -------- Astro Functions -------------------------
+    def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
+        pd.options.mode.chained_assignment = None
+        if isinstance(rest_frequency, np.ndarray) or isinstance(rest_frequency, list):
+            rest_frequency = np.sort(np.array(rest_frequency))
+        else:
+            rest_frequency = np.array([rest_frequency])
+
+        if self.terminal is not None:
+            max_freq = np.max(metadata["Freq"].values)
+            self.terminal.add_log(f"Max frequency recorded in metadata: {max_freq} GHz")
+            min_freq = np.min(metadata["Freq"].values)
+            self.terminal.add_log(f"Min frequency recorded in metadata: {min_freq} GHz")
+            self.terminal.add_log("Filtering metadata based on line catalogue...")
+        if self.terminal is not None:
+            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
+        freqs = metadata["Freq"].values
+        closest_rest_frequencies = []
+        for freq in freqs:
+            # Calculate the absolute difference between the freq and all rest_frequencies
+            differences = rest_frequency - freq
+            # if the difference is negative, set it to a large number
+            differences[differences < 0] = 1e10
+            # Find the index of the minimum difference
+            index_min = np.argmin(differences)
+            # Append the closest rest frequency to the list
+            closest_rest_frequencies.append(rest_frequency[index_min])
+        rest_frequencies = np.array(closest_rest_frequencies)
+
+        redshifts = [
+            uas.compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz)
+            for source_freq, rest_frequency in zip(freqs, rest_frequencies)
+        ]
+        metadata.loc[:, "redshift"] = redshifts
+        snapshots = [
+            uas.redshift_to_snapshot(redshift)
+            for redshift in metadata["redshift"].values
+        ]
+        metadata["rest_frequency"] = rest_frequencies
+        n_metadata = 0
+        z_save = zmax
+        self.terminal.add_log("Computing redshifts")
+        while n_metadata < ceil(n / 10):
+            s_metadata = n_metadata
+            if zmax is not None:
+                f_metadata = metadata[
+                    (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
+                ]
+            else:
+                f_metadata = metadata[metadata["redshift"] >= 0]
+            n_metadata = len(f_metadata)
+            if n_metadata == s_metadata:
+                zmax += 0.1
+        if zmax is not None:
+            metadata = metadata[
+                (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
+            ]
+        else:
+            metadata = metadata[metadata["redshift"] >= 0]
+        if z_save != zmax:
+            if self.terminal is not None:
+                self.terminal.add_log(
+                    f"Max redshift has been adjusted fit metadata,\
+                         new max redshift: {round(zmax, 3)}"
+                )
+        if self.terminal is not None:
+            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
+        snapshots = [
+            uas.redshift_to_snapshot(redshift)
+            for redshift in metadata["redshift"].values
+        ]
+        metadata["snapshot"] = snapshots
+        if extended is True:
+            # metatada = metadata[metadata['redshift'] < 0.05]
+            metadata = metadata[
+                (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
+            ]
+        sample = metadata.sample(n, replace=True)
+        return sample
+
+
+
 # -------- UI Save / Load Settings functions -----------------------
     def load_settings(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
@@ -1894,7 +2487,7 @@ class ALMASimulator(QMainWindow):
                                 os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
                             ):
                                 self.terminal.add_log("Downloading Galaxy Zoo")
-                                runnable = DownloadGalaxyZoo(self)
+                                runnable = DownloadGalaxyZoo(self, remote=False)
                                 runnable.finished.connect(
                                     self.on_download_finished
                                 )  # Connect signal
@@ -1909,7 +2502,12 @@ class ALMASimulator(QMainWindow):
                     and self.remote_key_entry.text() != ""
                 ):
                     try:
-                        self.download_galaxy_zoo_on_remote()
+                        self.terminal.add_log("Downloading Galaxy Zoo on remote")
+                        runnable = DownloadGalaxyZoo(self, remote=True)
+                        runnable.finished.connect(
+                            self.on_download_finished
+                        )  # Connect signal
+                        self.thread_pool.start(runnable)
                     except (
                         Exception
                     ) as e:  # Catch any exception that occurs during download
@@ -1930,7 +2528,7 @@ class ALMASimulator(QMainWindow):
                             os.path.join(self.hubble_entry.text(), "top100")
                         ):
                             # pool = QThreadPool.globalInstance()
-                            runnable = DownloadHubbleRunnable(self)
+                            runnable = DownloadHubble(self, remote=False)
                             runnable.finished.connect(self.on_download_finished)
                             self.thread_pool.start(runnable)
 
@@ -2138,6 +2736,122 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log("Download Finished")
         self.terminal.add_log("# ------------------------------------- #\n")
         
+# -------- IO Functions -------------------------
+    def create_remote_output_dir(self):
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+                private_key_pass=self.remote_key_pass_entry.text(),
+            )
+
+        else:
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+            )
+        output_path = os.path.join(
+            self.output_entry.text(), self.project_name_entry.text()
+        )
+        plot_path = os.path.join(output_path, "plots")
+        if not sftp.exists(output_path):
+            sftp.mkdir(output_path)
+        if not sftp.exists(plot_path):
+            sftp.mkdir(plot_path)
+
+    def create_remote_environment(self):
+        self.terminal.add_log("Checking ALMASim environment")
+        repo_url = "https://github.com/MicheleDelliVeneri/ALMASim.git"
+        if self.remote_dir_line.text() != "":
+            work_dir = self.remote_dir_line.text()
+            repo_dir = os.path.join(work_dir, "ALMASim")
+            venv_dir = os.path.join(work_dir, "almasim_env")
+        else:
+            venv_dir = os.path.join(
+                "/home/{}".format(self.remote_user_entry.text()), "almasim_env"
+            )
+            repo_dir = os.path.join(
+                "/home/{}".format(self.remote_user_entry.text()), "ALMASim"
+            )
+        self.remote_main_dir = repo_dir
+        self.remote_venv_dir = venv_dir
+        if self.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(
+                self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
+            )
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+                private_key_pass=self.remote_key_pass_entry.text(),
+            )
+
+        else:
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+            )
+        if not sftp.exists("/home/{}/.config".format(self.remote_user_entry.text())):
+            sftp.mkdir("/home/{}/.config".format(self.remote_user_entry.text()))
+
+        if not sftp.exists(
+            "/home/.config/{}/{}".format(
+                self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
+            )
+        ):
+            sftp.put(
+                self.settings_path,
+                "/home/{}/.config/{}".format(
+                    self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
+                ),
+            )
+        sftp.chmod(
+            "/home/{}/.config/{}".format(
+                self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
+            ),
+            600,
+        )
+        # Get the path to the Python executable
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(
+            self.remote_address_entry.text(),
+            username=self.remote_user_entry.text(),
+            pkey=key,
+        )
+        stdin, stdout, stderr = paramiko_client.exec_command("which python3.12")
+        python_path = stdout.read().decode().strip()
+        if not python_path:
+            self.terminal.add_log("Python 3.12 not found on remote machine.")
+            paramiko_client.close()
+            return
+
+        commands = f"""
+            if [ ! -d {repo_dir} ]; then
+                git clone {repo_url} {repo_dir}
+            fi
+            cd {repo_dir}
+            git pull
+            if [ ! -d {venv_dir} ]; then
+                {python_path} -m venv {venv_dir}
+                source {venv_dir}/bin/activate
+                pip install --upgrade pip
+                pip install -e .
+            fi
+            """
+
+        stdin, stdout, stderr = paramiko_client.exec_command(commands)
+        self.terminal.add_log(stdout.read().decode())
+        self.terminal.add_log(stderr.read().decode())
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
