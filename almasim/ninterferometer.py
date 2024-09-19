@@ -890,7 +890,7 @@ class Interferometer(QObject):
     def track_progress(self, futures):
         total_tasks = len(futures)
         completed_tasks = 0
-        print(total_tasks, complete_tasks)
+        print(total_tasks, completed_tasks)
         while completed_tasks < total_tasks:
             completed_tasks = sum(f.done() for f in futures)
             progress_value = int((completed_tasks / total_tasks) * 100)
