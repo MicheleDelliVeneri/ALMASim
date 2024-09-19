@@ -330,12 +330,11 @@ def check_lfac(Xmax, wavelength, lfac):
     mw = 2.0 * Xmax / wavelength[2] / lfac
     if mw < 0.1 and lfac == 1.0e6:
         lfac = 1.0e3
-        ulab = r"U (k$\lambda$)"
-        vlab = r"V (k$\lambda$)"
+        
     elif mw >= 100.0 and lfac == 1.0e3:
         lfac = 1.0e6
-        ulab = r"U (M$\lambda$)"
-        vlab = r"V (M$\lambda$)"
+    ulab = r"U (k$\lambda$)"
+    vlab = r"V (k$\lambda$)"
     return lfac, ulab, vlab
 
 
@@ -366,7 +365,7 @@ def _prepare_model(Npix, img, Nphf, Np4, zooming):
     return modelim, modelimTrue
 
 
-def add_therman_noise(img, noise):
+def add_thermal_noise(img, noise):
     return img + np.random.normal(loc=0.0, scale=noise, size=np.shape(img))
 
 
@@ -483,6 +482,7 @@ def image_channel(
     Np4,
     zooming,
     header,
+    robust,
 ):
     (
         beam,
@@ -534,7 +534,7 @@ def image_channel(
         Nphf,
     )
     lfac, ulab, vlab = check_lfac(Xmax, wavelength, lfac)
-    img = add_therman_noise(img, noise)
+    #img = add_thermal_noise(img, noise)
     modelim, modelimTrue = _prepare_model(Npix, img, Nphf, Np4, zooming)
     modelfft, modelim = set_primary_beam(
         header, distmat, wavelength, Diameters, modelim, modelimTrue
@@ -574,7 +574,6 @@ class Interferometer(QObject):
         terminal,
     ):
         super(Interferometer, self).__init__()
-        print('Hello')
         self.idx = idx
         self.skymodel = skymodel
         self.client = client
@@ -605,11 +604,10 @@ class Interferometer(QObject):
         # Get the observing wavelengths for each channel
         self._get_wavelengths()
         msg = f"Performing {self.nH} scans with a scan time of {self.scan_time} seconds"
-        print('Hello2')
-        if self.terminal is not None:
-            self.terminal.add_log(msg)
-        else:
-            print(msg)
+        #if self.terminal is not None:
+        #s    self.terminal.add_log(msg)
+        #else:
+        #    print(msg)
 
     def _hz_to_m(self, freq):
         return self.c_ms / freq
@@ -652,7 +650,7 @@ class Interferometer(QObject):
         self.robfac = 0.0
         self.currcmap = cm.jet
         self.zooming = 0
-        self.terminal.add_log("Number of Epochs", self.nH)
+        self.terminal.add_log(f"Number of Epochs: {self.nH}")
 
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site("ALMA")
@@ -771,7 +769,6 @@ class Interferometer(QObject):
 
     def run_interferometric_sim(self):
 
-        print(f"Dask dashboard link: {client.dashboard_link}")
         # Scatter input data to workers
         scattered_channels = [
             self.client.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
@@ -807,6 +804,7 @@ class Interferometer(QObject):
                 self.Np4,
                 self.zooming,
                 self.header,
+                self.robust,
             )
             modelcube.append(delayed_result[0])
             modelvis.append(delayed_result[1])
@@ -839,7 +837,7 @@ class Interferometer(QObject):
         )
         self.track_progress(futures)  # Start tracking progress
         # Final result gathering after completion
-        modelCube, visCube, dirtyCube, dirtyvisCube, u, v, beam, totsampling = (
+        modelCube, dirtyCube, visCube, dirtyvisCube, u, v, beam, totsampling = (
             self.client.gather(futures)
         )
         # self._savez_compressed_cubes(modelCube, visCube,

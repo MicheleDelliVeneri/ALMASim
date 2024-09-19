@@ -3467,8 +3467,8 @@ class ALMASimulator(QMainWindow):
                 os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
             )
         header = usm.get_datacube_header(datacube, obs_date)
-        model = datacube._array.to_value(datacube._array.unit).T
-        model = model / beam_area.value
+        model = datacube._array.to_value(datacube._array.unit)
+        model = model[0] / beam_area.value
         totflux = np.sum(model)
         if remote is True:
             print("Total Flux injected in model cube: {:.3f} Jy\n".format(totflux))
@@ -3489,14 +3489,14 @@ class ALMASimulator(QMainWindow):
             client=self.client,
             skymodel=model,
             main_dir=main_dir,
-            output_dir=sim_output_dir,
+            output_dir=output_dir,
             ra=ra,
             dec=dec,
             central_freq=central_freq,
             bandwidth=band_range,
-            fov=fov,
+            fov=fov.value,
             antenna_array=antenna_array,
-            noise=(min_line_flux / beam_area.value) / snr,
+            noise= 0.1 * (min_line_flux / beam_area.value) / snr,
             snr=snr,
             integration_time=int_time.value * second2hour,
             observation_date=obs_date,
@@ -3566,7 +3566,7 @@ class ALMASimulator(QMainWindow):
             remote_folder = self.settings.value("remote_folder", False, type=bool)
             self.remote_folder_checkbox.setChecked(remote_folder)
             if remote_folder:
-                self.remote_dir_line.setText(self.settings.value("remote_dir", ""))
+                self.remote_folder_line.setText(self.settings.value("remote_dir", ""))
         self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
@@ -3810,7 +3810,7 @@ class ALMASimulator(QMainWindow):
             self.settings.setValue("remote_key_pass", self.remote_key_pass_entry.text())
             self.settings.setValue("remote_config", self.remote_config_entry.text())
             self.settings.setValue("remote_mode", self.remote_mode_combo.currentText())
-            self.settings.setValue("remote_folder", self.remote_dir_line.text())
+            self.settings.setValue("remote_folder", self.remote_folder_line.text())
         self.settings.setValue("save_format", self.save_format_combo.currentText())
         self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
         if self.line_mode_checkbox.isChecked():
@@ -3871,8 +3871,8 @@ class ALMASimulator(QMainWindow):
     def create_remote_environment(self):
         self.terminal.add_log("Checking ALMASim environment")
         repo_url = "https://github.com/MicheleDelliVeneri/ALMASim.git"
-        if self.remote_dir_line.text() != "":
-            work_dir = self.remote_dir_line.text()
+        if self.remote_folder_line.text() != "":
+            work_dir = self.remote_folder_line.text()
             repo_dir = os.path.join(work_dir, "ALMASim")
             venv_dir = os.path.join(work_dir, "almasim_env")
         else:
@@ -3964,10 +3964,10 @@ class ALMASimulator(QMainWindow):
         if simulation_results is not None:
             self.progress_bar_entry.setText("Generating Plots")
             # Extract data from the simulation_results dictionary
-            self.modelCube = simulation_results["modelCube"]
-            self.dirtyCube = simulation_results["dirtyCube"]
-            self.visCube = simulation_results["visCube"]
-            self.dirtyvisCube = simulation_results["dirtyvisCube"]
+            self.modelCube = simulation_results["model_cube"]
+            self.dirtyCube = simulation_results["dirty_cube"]
+            self.visCube = simulation_results["model_vis"]
+            self.dirtyvisCube = simulation_results["dirty_vis"]
             self.Npix = simulation_results["Npix"]
             self.Np4 = simulation_results["Np4"]
             self.Nchan = simulation_results["Nchan"]
