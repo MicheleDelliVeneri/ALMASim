@@ -1245,7 +1245,7 @@ class ALMASimulator(QMainWindow):
         self.line_mode_row.addStretch()
         self.left_layout.addRow(self.line_mode_row)
         self.line_index_label = QLabel("Select Line Indices (space-separated):")
-        self.line_index_label.setFixedWidth(self.max_label_width)
+        #self.line_index_label.setFixedWidth(self.max_label_width)
         self.line_index_entry = QLineEdit()
         self.redshift_label = QLabel("Redshift (space-separated):")
         self.redshift_label.setFixedWidth(self.max_label_width)
@@ -1971,7 +1971,7 @@ class ALMASimulator(QMainWindow):
     def update_progress_bar(self, value):
         self.progress_bar.setValue(value)
 
-# -------- Metadata Query Functions ---------------------
+    # -------- Metadata Query Functions ---------------------
     @pyqtSlot(object)
     def print_keywords(self, keywords):
         self.terminal.add_log("Available science keywords:")
@@ -2108,7 +2108,7 @@ class ALMASimulator(QMainWindow):
         runnable.signals.queryFinished.connect(self.get_metadata)
         self.thread_pool.start(runnable)
 
-# -------- Simulation Functions -------------------------
+    # -------- Simulation Functions -------------------------
     def transform_source_type_label(self):
         if self.model_combo.currentText() == "Galaxy Zoo":
             self.source_type = "galaxy-zoo"
@@ -2436,7 +2436,7 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log("# ------------------------------------- #\n")
     
 
-# -------- Astro Functions -------------------------
+    # -------- Astro Functions -------------------------
     def remove_non_numeric(self, text):
         """Removes non-numeric characters from a string.
         Args:
@@ -3554,9 +3554,8 @@ class ALMASimulator(QMainWindow):
         shutil.rmtree(sim_output_dir)
         return simulation_results
 
-# -------- UI Save / Load Settings functions -----------------------
+    # -------- UI Save / Load Settings functions -----------------------
     def load_settings(self):
-        print(self.settings.value('metadata_path', ""))
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
         self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
@@ -3862,12 +3861,12 @@ class ALMASimulator(QMainWindow):
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
         self.settings.sync()
-# -------- Download Data Functions -------------------------
+    # -------- Download Data Functions -------------------------
     def on_download_finished(self):
         self.terminal.add_log("Download Finished")
         self.terminal.add_log("# ------------------------------------- #\n")
         
-# -------- IO Functions -------------------------
+    # -------- IO Functions -------------------------
     def create_remote_output_dir(self):
         if self.remote_key_pass_entry.text() != "":
             sftp = pysftp.Connection(
@@ -3982,7 +3981,7 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(stdout.read().decode())
         self.terminal.add_log(stderr.read().decode())
 
-# ------- Plotting Functions -------------------------
+    # ------- Plotting Functions -------------------------
     @pyqtSlot(object)
     def plot_simulation_results(self, simulation_results):
         if simulation_results is not None:

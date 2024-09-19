@@ -690,12 +690,24 @@ class Interferometer(QObject):
     def _get_nH(self):
         self.scan_time = 6
         self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+        #if self.nH > 200:
+        #    while self.nH > 200:
+        #        self.scan_time *= 1.5
+        #        self.nH = int(
+        #            self.integration_time / (self.scan_time * self.second2hour)
+        #        )
         if self.nH > 200:
-            while self.nH > 200:
-                self.scan_time *= 1.5
-                self.nH = int(
-                    self.integration_time / (self.scan_time * self.second2hour)
-                )
+            # Try increasing the divisor to 8.064 to lower nH
+            self.scan_time = 8.064
+            self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+            if self.nH > 200:
+                # Further increase the divisor to 18.144
+                self.scan_time = 18.144
+                self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+                if self.nH > 200:
+                    self.scan_time = 30.24
+                    # Final attempt with the largest divisor (30.24)
+                    self.nH = int(self.int_time / (self.scan_time * self.second2hour))
         self.header.append(("EPOCH", self.nH))
 
     def _read_antennas(self):
@@ -878,7 +890,7 @@ class Interferometer(QObject):
     def track_progress(self, futures):
         total_tasks = len(futures)
         completed_tasks = 0
-        # Track progress
+        print(total_tasks, complete_tasks)
         while completed_tasks < total_tasks:
             completed_tasks = sum(f.done() for f in futures)
             progress_value = int((completed_tasks / total_tasks) * 100)
