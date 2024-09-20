@@ -330,7 +330,7 @@ def check_lfac(Xmax, wavelength, lfac):
     mw = 2.0 * Xmax / wavelength[2] / lfac
     if mw < 0.1 and lfac == 1.0e6:
         lfac = 1.0e3
-        
+
     elif mw >= 100.0 and lfac == 1.0e3:
         lfac = 1.0e6
     ulab = r"U (k$\lambda$)"
@@ -534,7 +534,7 @@ def image_channel(
         Nphf,
     )
     lfac, ulab, vlab = check_lfac(Xmax, wavelength, lfac)
-    #img = add_thermal_noise(img, noise)
+    # img = add_thermal_noise(img, noise)
     modelim, modelimTrue = _prepare_model(Npix, img, Nphf, Np4, zooming)
     modelfft, modelim = set_primary_beam(
         header, distmat, wavelength, Diameters, modelim, modelimTrue
@@ -604,9 +604,9 @@ class Interferometer(QObject):
         # Get the observing wavelengths for each channel
         self._get_wavelengths()
         msg = f"Performing {self.nH} scans with a scan time of {self.scan_time} seconds"
-        #if self.terminal is not None:
-        #s    self.terminal.add_log(msg)
-        #else:
+        # if self.terminal is not None:
+        # s    self.terminal.add_log(msg)
+        # else:
         #    print(msg)
 
     def _hz_to_m(self, freq):
@@ -690,7 +690,7 @@ class Interferometer(QObject):
     def _get_nH(self):
         self.scan_time = 6
         self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
-        #if self.nH > 200:
+        # if self.nH > 200:
         #    while self.nH > 200:
         #        self.scan_time *= 1.5
         #        self.nH = int(
@@ -780,19 +780,12 @@ class Interferometer(QObject):
         return wavelength, fmtB
 
     def run_interferometric_sim(self):
-
         # Scatter input data to workers
         scattered_channels = [
             self.client.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
         ]
-        modelcube = []
-        modelvis = []
-        dirtycube = []
-        dirtyvis = []
-        u = []
-        v = []
-        beam = []
-        totsampling = []
+
+        delayed_results = []
         for i in range(self.Nchan):
             wavelength, _ = self.get_channel_wavelength(i)
             delayed_result = image_channel(
@@ -818,48 +811,49 @@ class Interferometer(QObject):
                 self.header,
                 self.robust,
             )
-            modelcube.append(delayed_result[0])
-            modelvis.append(delayed_result[1])
-            dirtycube.append(delayed_result[2])
-            dirtyvis.append(delayed_result[3])
-            u.append(delayed_result[4])
-            v.append(delayed_result[5])
-            beam.append(delayed_result[6])
-            totsampling.append(delayed_result[7])
-        # Stack the results for each array back into 3D arrays
-        delayed_model = delayed(np.stack)(modelcube, axis=0)
-        delayed_modelvis = delayed(np.stack)(modelvis, axis=0)
-        delayed_dirty = delayed(np.stack)(dirtycube, axis=0)
-        delayed_dirtyvis = delayed(np.stack)(dirtyvis, axis=0)
-        delayed_u = delayed(np.stack)(u, axis=0)
-        delayed_v = delayed(np.stack)(v, axis=0)
-        delayed_beam = delayed(np.stack)(beam, axis=0)
-        delayed_totsampling = delayed(np.stack)(totsampling, axis=0)
-        futures = self.client.compute(
-            [
-                delayed_model,
-                delayed_modelvis,
-                delayed_dirty,
-                delayed_dirtyvis,
-                delayed_u,
-                delayed_v,
-                delayed_beam,
-                delayed_totsampling,
-            ]
-        )
-        self.track_progress(futures)  # Start tracking progress
-        # Final result gathering after completion
-        modelCube, dirtyCube, visCube, dirtyvisCube, u, v, beam, totsampling = (
-            self.client.gather(futures)
-        )
-        # self._savez_compressed_cubes(modelCube, visCube,
-        #                            dirtyCube, dirtyvisCube)
+            delayed_results.append(delayed_result)
+
+        # Compute per-channel futures
+        futures_per_channel = [self.client.compute(dr) for dr in delayed_results]
+
+        # Start tracking progress of the per-channel computations
+        self.track_progress(futures_per_channel)
+
+        # Gather the results after completion
+        results_per_channel = self.client.gather(futures_per_channel)
+
+        # Extract and stack the outputs
+        modelcube = [res[0] for res in results_per_channel]
+        dirtycube = [res[1] for res in results_per_channel]
+        modelvis = [res[2] for res in results_per_channel]
+        dirtyvis = [res[3] for res in results_per_channel]
+        u = [res[4] for res in results_per_channel]
+        v = [res[5] for res in results_per_channel]
+        beam = [res[6] for res in results_per_channel]
+        totsampling = [res[7] for res in results_per_channel]
+
+        # Stack the results into 3D arrays
+        modelCube = np.stack(modelcube, axis=0)
+        modelVis = np.stack(modelvis, axis=0)
+        dirtyCube = np.stack(dirtycube, axis=0)
+        dirtyVis = np.stack(dirtyvis, axis=0)
+        u = np.stack(u, axis=0)
+        v = np.stack(v, axis=0)
+        beam = np.stack(beam, axis=0)
+        totsampling = np.stack(totsampling, axis=0)
+
+        # Save the results
+        self._savez_compressed_cubes(modelCube, modelVis, dirtyCube, dirtyVis)
+
+        # Get wavelength and format for middle channel
         self.s_wavelength, self.s_fmtB = self.get_channel_wavelength(self.Nchan // 2)
+
+        # Prepare the simulation results dictionary
         simulation_results = {
             "model_cube": modelCube,
-            "model_vis": visCube,
+            "model_vis": modelVis,
             "dirty_cube": dirtyCube,
-            "dirty_vis": dirtyvisCube,
+            "dirty_vis": dirtyVis,
             "beam": beam[self.Nchan // 2],
             "totsampling": totsampling[self.Nchan // 2],
             "u": u[self.Nchan // 2],
@@ -884,13 +878,28 @@ class Interferometer(QObject):
             "antPos": self.antPos,
             "Nant": self.Nant,
         }
-        del modelCube, visCube, dirtyCube, dirtyvisCube, u, v, beam, totsampling
+
+        # Clean up variables to free memory
+        del (
+            modelCube,
+            modelVis,
+            dirtyCube,
+            dirtyVis,
+            u,
+            v,
+            beam,
+            totsampling,
+            modelcube,
+            modelvis,
+            dirtycube,
+            dirtyvis,
+        )
+
         return simulation_results
 
     def track_progress(self, futures):
         total_tasks = len(futures)
         completed_tasks = 0
-        print(total_tasks, completed_tasks)
         while completed_tasks < total_tasks:
             completed_tasks = sum(f.done() for f in futures)
             progress_value = int((completed_tasks / total_tasks) * 100)
@@ -1016,7 +1025,116 @@ class Interferometer(QObject):
             print(f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)}Jy")
             print(f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)}Jy")
 
+
 """
+
+def run_interferometric_sim(self):
+
+        # Scatter input data to workers
+        scattered_channels = [
+            self.client.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
+        ]
+        modelcube = []
+        modelvis = []
+        dirtycube = []
+        dirtyvis = []
+        u = []
+        v = []
+        beam = []
+        totsampling = []
+        for i in range(self.Nchan):
+            wavelength, _ = self.get_channel_wavelength(i)
+            delayed_result = image_channel(
+                scattered_channels[i],
+                wavelength,
+                self.Npix,
+                self.Nant,
+                self.Hcov,
+                self.nH,
+                self.noise,
+                self.antPos,
+                self.robfac,
+                self.trlat,
+                self.trdec,
+                self.Diameters,
+                self.imsize,
+                self.Xmax,
+                self.lfac,
+                self.distmat,
+                self.Nphf,
+                self.Np4,
+                self.zooming,
+                self.header,
+                self.robust,
+            )
+            modelcube.append(delayed_result[0])
+            modelvis.append(delayed_result[1])
+            dirtycube.append(delayed_result[2])
+            dirtyvis.append(delayed_result[3])
+            u.append(delayed_result[4])
+            v.append(delayed_result[5])
+            beam.append(delayed_result[6])
+            totsampling.append(delayed_result[7])
+        # Stack the results for each array back into 3D arrays
+        delayed_model = delayed(np.stack)(modelcube, axis=0)
+        delayed_modelvis = delayed(np.stack)(modelvis, axis=0)
+        delayed_dirty = delayed(np.stack)(dirtycube, axis=0)
+        delayed_dirtyvis = delayed(np.stack)(dirtyvis, axis=0)
+        delayed_u = delayed(np.stack)(u, axis=0)
+        delayed_v = delayed(np.stack)(v, axis=0)
+        delayed_beam = delayed(np.stack)(beam, axis=0)
+        delayed_totsampling = delayed(np.stack)(totsampling, axis=0)
+        futures = self.client.compute(
+            [
+                delayed_model,
+                delayed_modelvis,
+                delayed_dirty,
+                delayed_dirtyvis,
+                delayed_u,
+                delayed_v,
+                delayed_beam,
+                delayed_totsampling,
+            ]
+        )
+        self.track_progress(futures)  # Start tracking progress
+        # Final result gathering after completion
+        modelCube, dirtyCube, visCube, dirtyvisCube, u, v, beam, totsampling = (
+            self.client.gather(futures)
+        )
+        self._savez_compressed_cubes(modelCube, visCube,
+                                    dirtyCube, dirtyvisCube)
+        self.s_wavelength, self.s_fmtB = self.get_channel_wavelength(self.Nchan // 2)
+        simulation_results = {
+            "model_cube": modelCube,
+            "model_vis": visCube,
+            "dirty_cube": dirtyCube,
+            "dirty_vis": dirtyvisCube,
+            "beam": beam[self.Nchan // 2],
+            "totsampling": totsampling[self.Nchan // 2],
+            "u": u[self.Nchan // 2],
+            "v": v[self.Nchan // 2],
+            "Npix": self.Npix,
+            "Np4": self.Np4,
+            "Nchan": self.Nchan,
+            "gamma": self.gamma,
+            "currcmap": self.currcmap,
+            "Xaxmax": self.Xaxmax,
+            "lfac": self.lfac,
+            "UVpixsize": self.UVpixsize,
+            "w_min": self.w_min,
+            "w_max": self.w_max,
+            "plot_dir": self.plot_dir,
+            "idx": self.idx,
+            "fmtB": self.s_fmtB,
+            "wavelength": self.s_wavelength,
+            "curzoom": self.curzoom,
+            "Nphf": self.Nphf,
+            "Xmax": self.Xmax,
+            "antPos": self.antPos,
+            "Nant": self.Nant,
+        }
+        del modelCube, visCube, dirtyCube, dirtyvisCube, u, v, beam, totsampling
+        return simulation_results
 if __name__ == "__main__":
     cluster = LocalCluster()
     client = Client(cluster, timeout=60, heartbeat_interval=10)

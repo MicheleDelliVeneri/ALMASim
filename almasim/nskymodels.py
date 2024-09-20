@@ -784,12 +784,14 @@ def insert_extended(
 
 # ----------------------- SERENDIPITOUS SOURCES -------------------------
 
+
 def distance_1d(p1, p2):
     return math.sqrt((p1 - p2) ** 2)
 
 
 def distance_2d(p1, p2):
     return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
 
 def get_iou(bb1, bb2):
     """
@@ -841,6 +843,7 @@ def get_iou(bb1, bb2):
     assert iou <= 1.0
     return iou
 
+
 def get_iou_1d(bb1, bb2):
     assert bb1["z1"] < bb1["z2"]
     assert bb2["z1"] < bb2["z2"]
@@ -854,11 +857,13 @@ def get_iou_1d(bb1, bb2):
     union = bb1_area + bb2_area - intersection
     return intersection / union
 
+
 def get_pos(x_radius, y_radius, z_radius):
     x = np.random.randint(-x_radius, x_radius)
     y = np.random.randint(-y_radius, y_radius)
     z = np.random.randint(-z_radius, z_radius)
     return (x, y, z)
+
 
 def sample_positions(
     terminal,
@@ -969,6 +974,7 @@ def sample_positions(
                         terminal.add_log("Found {}st component".format(len(sample)))
 
     return sample
+
 
 def insert_serendipitous(
     terminal,
@@ -1097,6 +1103,7 @@ def insert_serendipitous(
                 n_chan,
             )
     return datacube
+
 
 def get_datacube_header(datacube, obs_date):
     datacube.drop_pad()

@@ -4673,5 +4673,3 @@ class ALMASimulator(QMainWindow):
         ax[1].set_title("DIRTY SPECTRUM")
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
         plt.close()
-
-    
