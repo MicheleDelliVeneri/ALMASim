@@ -41,7 +41,7 @@ from os.path import isfile
 import dask
 import dask.config
 import dask.dataframe as dd
-from distributed import Client, LocalCluster, WorkerPlugin
+from distributed import Client, LocalCluster, WorkerPlugin, SSHCluster
 from dask_jobqueue import SLURMCluster
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -860,7 +860,7 @@ class ALMASimulator(QMainWindow):
         slurm_config_file, _ = file_dialog.getOpenFileName(
             self,
             "Select Slurm Config File",
-            self.main_path,
+            str(self.main_path),
             "Slurm Config Files (*.json)",
         )
         if slurm_config_file:
@@ -2148,7 +2148,11 @@ class ALMASimulator(QMainWindow):
         # Output Directory
         if self.local_mode_combo.currentText() == "local":
             if not os.path.exists(self.output_path):
-                os.makedirs(self.output_path)
+                try:
+                    os.makedirs(self.output_path)
+                except Exception as e:
+                    self.terminal.add_log(f'Cannot create output directory: {e}')
+                    return
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
         else:
@@ -2160,32 +2164,52 @@ class ALMASimulator(QMainWindow):
                 if self.galaxy_zoo_entry.text() and not os.path.exists(
                     os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
                 ):
-                    self.terminal.add_log("Downloading Galaxy Zoo")
-                    runnable = DownloadGalaxyZoo(self, remote=False)
-                    runnable.finished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
+                    try:
+                        self.terminal.add_log("Downloading Galaxy Zoo")
+                        runnable = DownloadGalaxyZoo(self, remote=False)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+                        return
             elif self.model_combo.currentText() == "Hubble 100":
                 if self.hubble_entry.text() and not os.path.exists(
                     os.path.join(self.hubble_entry.text(), "top100")
                 ):
-                    self.terminal.add_log("Downloading Hubble 100")
-                    runnable = DownloadHubble(self, remote=False)
-                    runnable.finished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
+                    try:
+                        self.terminal.add_log("Downloading Hubble 100")
+                        runnable = DownloadHubble(self, remote=False)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+                        return
         else:
-            self.create_remote_environment()
+            try:
+                self.create_remote_environment()
+            except Exception as e:
+                self.terminal.add_log(f"Error creating remote environment: {e}")
+                return
             if self.model_combo.currentText() == "Galaxy Zoo":
                 if self.galaxy_zoo_entry.text():
-                    self.terminal.add_log("Downloading Galaxy Zoo on remote")
-                    runnable = DownloadGalaxyZoo(self, remote=True)
-                    runnable.finished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
+                    try:
+                        self.terminal.add_log("Downloading Galaxy Zoo on remote")
+                        runnable = DownloadGalaxyZoo(self, remote=True)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+                        return
             elif self.model_combo.currentText() == "Hubble 100":
                 if self.hubble_entry.text():
-                    self.terminal.add_log("Downloading Hubble 100 on remote")
-                    runnable = DownloadHubble(self, remote=True)
-                    runnable.finished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
+                    try:
+                        self.terminal.add_log("Downloading Hubble 100 on remote")
+                        runnable = DownloadHubble(self, remote=True)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+                        return
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
         hubble_paths = np.array([self.hubble_entry.text()] * n_sims)
         if self.local_mode_combo.currentText() == "local":
@@ -2406,6 +2430,9 @@ class ALMASimulator(QMainWindow):
         if self.local_mode_combo.currentText() == "local":
             self.run_simulator_locally()
         
+        else: 
+            self.run_simulator_remotely()
+        
         
         return
 
@@ -2418,6 +2445,70 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(f'Dashboard hosted at {self.client.dashboard_link}')
         self.nextSimulation.connect(self.run_next_simulation)
         self.run_next_simulation()
+
+    def run_simulator_remotely(self):
+        self.stop_simulation_flag = False 
+        self.current_sim_index = 0
+
+        # Collect input from UI elements
+        remote_host = self.remote_address_entry.text().strip()
+        remote_user = self.remote_user_entry.text().strip()
+        ssh_key_path = self.remote_key_entry.text().strip()
+        ssh_key_password = self.remote_key_pass_entry.text().strip()
+        n_workers_per_host = int(self.ncpu_entry.text())
+
+        # Prepare the list of remote hosts
+        # If multiple hosts are entered, they should be comma-separated
+        remote_hosts = [host.strip() for host in remote_host.split(',') if host.strip()]
+
+        # Prepend the username to each host
+        if remote_user:
+            remote_hosts = [f"{remote_user}@{host}" for host in remote_hosts]
+
+        # Prepare SSH connection options
+        connect_options = {
+            'known_hosts': None,  # Disable known_hosts checking (use with caution)
+        }
+
+        if ssh_key_path:
+            connect_options['client_keys'] = ssh_key_path
+
+        if ssh_key_password:
+            connect_options['passphrase'] = ssh_key_password
+
+        # Create the SSHCluster
+        try:
+            cluster = SSHCluster(
+                hosts=remote_hosts,
+                connect_options=connect_options,
+                worker_options={
+                    'nthreads': n_workers_per_host,
+                    # Add more worker options if needed
+                },
+                scheduler_options={
+                    # 'port': 8786,  # Uncomment to specify scheduler port if necessary
+                },
+            )
+
+            # Connect the Dask client to the cluster
+            client = Client(cluster, timeout=60, heartbeat_interval='5s')
+            self.client = client
+
+            # Inform the user about the dashboard
+            self.terminal.add_log(f'Dashboard hosted at {self.client.dashboard_link}')
+            self.terminal.add_log('To access the dashboard, you may need to set up SSH port forwarding.')
+
+            self.nextSimulation.connect(self.run_next_simulation)
+            self.run_next_simulation()
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "SSH Cluster Error",
+                f"An error occurred while creating the SSH cluster:\n{e}"
+            )
+            return
+        
         
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
