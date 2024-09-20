@@ -852,8 +852,8 @@ class Interferometer(QObject):
         modelCube, dirtyCube, visCube, dirtyvisCube, u, v, beam, totsampling = (
             self.client.gather(futures)
         )
-        # self._savez_compressed_cubes(modelCube, visCube,
-        #                            dirtyCube, dirtyvisCube)
+        self._savez_compressed_cubes(modelCube, visCube,
+                                    dirtyCube, dirtyvisCube)
         self.s_wavelength, self.s_fmtB = self.get_channel_wavelength(self.Nchan // 2)
         simulation_results = {
             "model_cube": modelCube,
