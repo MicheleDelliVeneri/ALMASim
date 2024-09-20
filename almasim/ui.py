@@ -1721,7 +1721,6 @@ class ALMASimulator(QMainWindow):
         )
         if file:
             self.query_save_entry.setText(file)
-            # self.metadata_path_set()
 
     def metadata_path_set(self):
         metadata_path = self.metadata_path_entry.text()
@@ -4675,29 +4674,4 @@ class ALMASimulator(QMainWindow):
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
         plt.close()
 
-    # -------- Utility Functions ---------------------------
-    # def send_email(self):
-    #    """
-    #    Sends an email to the user with the simulation results.
-    #    """
-    #    path = os.path.dirname(self.main_path)
-    #    print(path)
-    #    yag = yagmail.SMTP(
-    #        user="almasimulator@gmail.com",
-    #        oauth2_file=os.path.join(path, 'email_client.json'),
-    #    )
-    #    subject = f"Simulation {self.project_name_entry.text()} Finished"
-    #    body1 = "The simulations have finished\n"
-    #    location = self.output_path
-    #    if self.local_mode_combo.currentText() == "local":
-    #        body2 = f"You can find your results on your local machine in {location}"
-    #    else:
-    #        address = self.remote_address_entry.text()
-    #        body2 = f"You can find your results on {address} in {location}"
-    #    body = body1 + body2
-    #    to_email = self.mail_entry.text()
-    #    yag.send(
-    #        to=to_email,
-    #        contents=body,
-    #        subject=subject
-    #    )
+    

@@ -330,12 +330,11 @@ def check_lfac(Xmax, wavelength, lfac):
     mw = 2.0 * Xmax / wavelength[2] / lfac
     if mw < 0.1 and lfac == 1.0e6:
         lfac = 1.0e3
-        ulab = r"U (k$\lambda$)"
-        vlab = r"V (k$\lambda$)"
+        
     elif mw >= 100.0 and lfac == 1.0e3:
         lfac = 1.0e6
-        ulab = r"U (M$\lambda$)"
-        vlab = r"V (M$\lambda$)"
+    ulab = r"U (k$\lambda$)"
+    vlab = r"V (k$\lambda$)"
     return lfac, ulab, vlab
 
 
@@ -366,7 +365,7 @@ def _prepare_model(Npix, img, Nphf, Np4, zooming):
     return modelim, modelimTrue
 
 
-def add_therman_noise(img, noise):
+def add_thermal_noise(img, noise):
     return img + np.random.normal(loc=0.0, scale=noise, size=np.shape(img))
 
 
@@ -482,6 +481,8 @@ def image_channel(
     Nphf,
     Np4,
     zooming,
+    header,
+    robust,
 ):
     (
         beam,
@@ -533,7 +534,7 @@ def image_channel(
         Nphf,
     )
     lfac, ulab, vlab = check_lfac(Xmax, wavelength, lfac)
-    img = add_therman_noise(img, noise)
+    #img = add_thermal_noise(img, noise)
     modelim, modelimTrue = _prepare_model(Npix, img, Nphf, Np4, zooming)
     modelfft, modelim = set_primary_beam(
         header, distmat, wavelength, Diameters, modelim, modelimTrue
@@ -592,7 +593,7 @@ class Interferometer(QObject):
         self.header = header
         self.save_mode = save_mode
         self.robust = robust
-
+        self.terminal = terminal
         # Initialize variables
         self._init_variables()
         # Get the observing location
@@ -603,11 +604,10 @@ class Interferometer(QObject):
         # Get the observing wavelengths for each channel
         self._get_wavelengths()
         msg = f"Performing {self.nH} scans with a scan time of {self.scan_time} seconds"
-        self.terminal = terminal
-        if self.terminal is not None:
-            self.terminal.add_log(msg)
-        else:
-            print(msg)
+        #if self.terminal is not None:
+        #s    self.terminal.add_log(msg)
+        #else:
+        #    print(msg)
 
     def _hz_to_m(self, freq):
         return self.c_ms / freq
@@ -623,7 +623,6 @@ class Interferometer(QObject):
         self.deltaAng = 1.0 * self.deg2rad
         self.gamma = 0.5
         self.lfac = 1.0e6
-        self.header = header
         self._get_nH()
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
@@ -651,7 +650,7 @@ class Interferometer(QObject):
         self.robfac = 0.0
         self.currcmap = cm.jet
         self.zooming = 0
-        print("Number of Epochs", self.nH)
+        self.terminal.add_log(f"Number of Epochs: {self.nH}")
 
     def _get_observing_location(self):
         self.observing_location = EarthLocation.of_site("ALMA")
@@ -691,12 +690,24 @@ class Interferometer(QObject):
     def _get_nH(self):
         self.scan_time = 6
         self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+        #if self.nH > 200:
+        #    while self.nH > 200:
+        #        self.scan_time *= 1.5
+        #        self.nH = int(
+        #            self.integration_time / (self.scan_time * self.second2hour)
+        #        )
         if self.nH > 200:
-            while self.nH > 200:
-                self.scan_time *= 1.5
-                self.nH = int(
-                    self.integration_time / (self.scan_time * self.second2hour)
-                )
+            # Try increasing the divisor to 8.064 to lower nH
+            self.scan_time = 8.064
+            self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+            if self.nH > 200:
+                # Further increase the divisor to 18.144
+                self.scan_time = 18.144
+                self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+                if self.nH > 200:
+                    self.scan_time = 30.24
+                    # Final attempt with the largest divisor (30.24)
+                    self.nH = int(self.int_time / (self.scan_time * self.second2hour))
         self.header.append(("EPOCH", self.nH))
 
     def _read_antennas(self):
@@ -770,7 +781,6 @@ class Interferometer(QObject):
 
     def run_interferometric_sim(self):
 
-        print(f"Dask dashboard link: {client.dashboard_link}")
         # Scatter input data to workers
         scattered_channels = [
             self.client.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
@@ -805,6 +815,8 @@ class Interferometer(QObject):
                 self.Nphf,
                 self.Np4,
                 self.zooming,
+                self.header,
+                self.robust,
             )
             modelcube.append(delayed_result[0])
             modelvis.append(delayed_result[1])
@@ -837,7 +849,7 @@ class Interferometer(QObject):
         )
         self.track_progress(futures)  # Start tracking progress
         # Final result gathering after completion
-        modelCube, visCube, dirtyCube, dirtyvisCube, u, v, beam, totsampling = (
+        modelCube, dirtyCube, visCube, dirtyvisCube, u, v, beam, totsampling = (
             self.client.gather(futures)
         )
         # self._savez_compressed_cubes(modelCube, visCube,
@@ -878,7 +890,7 @@ class Interferometer(QObject):
     def track_progress(self, futures):
         total_tasks = len(futures)
         completed_tasks = 0
-        # Track progress
+        print(total_tasks, completed_tasks)
         while completed_tasks < total_tasks:
             completed_tasks = sum(f.done() for f in futures)
             progress_value = int((completed_tasks / total_tasks) * 100)
@@ -1004,7 +1016,7 @@ class Interferometer(QObject):
             print(f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)}Jy")
             print(f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)}Jy")
 
-
+"""
 if __name__ == "__main__":
     cluster = LocalCluster()
     client = Client(cluster, timeout=60, heartbeat_interval=10)
@@ -1048,3 +1060,4 @@ if __name__ == "__main__":
     simulation_results = interferometer.run_interferometric_sim()
     t2 = time.time()
     print(f"Time taken: {t2-t1}")
+"""
