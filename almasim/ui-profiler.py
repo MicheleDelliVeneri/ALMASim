@@ -74,6 +74,7 @@ import inspect
 import requests
 import zipfile
 import sys
+import webbrowser
 
 def closest_power_of_2(x):
         op = math.floor if bin(x)[3] != "1" else math.ceil
@@ -568,6 +569,7 @@ class ALMASimulator(QMainWindow):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
         self.tray_icon = None
+        self.client = None
         self.thread_pool = QThreadPool.globalInstance()
         self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         path = os.path.dirname(self.main_path)
@@ -1708,8 +1710,8 @@ class ALMASimulator(QMainWindow):
 
     def add_footer_buttons(self):
         line_edit_max_width = 400  # Example width (you can adjust this)
-        button_width = 80
-        button_height = 20
+        button_width = 70
+        button_height = 30
         border_radius = 10 
         button_style = f"""
             QPushButton {{
@@ -1741,16 +1743,18 @@ class ALMASimulator(QMainWindow):
         self.reset_button.setFixedWidth(2 * button_width)
         self.reset_button.setStyleSheet(button_style)
 
-        self.button_row = QHBoxLayout()
-        self.button_row.addWidget(self.start_button)
-        self.button_row.addWidget(self.stop_button)
-        self.button_row.addWidget(self.reset_button)
-        self.button_row.addStretch()
+        self.dashboard_button = QPushButton("Dashboard")
+        self.dashboard_button.clicked.connect(self.open_dask_dashboard)
+        self.dashboard_button.setFixedHeight(button_height)
+        self.dashboard_button.setFixedWidth(2 * button_width)
+        self.dashboard_button.setStyleSheet(button_style)
+
         # Create a layout for the buttons
         self.footer_layout = QHBoxLayout()
         self.footer_layout.addWidget(self.start_button)
         self.footer_layout.addWidget(self.stop_button)
         self.footer_layout.addWidget(self.reset_button)
+        self.footer_layout.addWidget(self.dashboard_button)
         self.footer_layout.addStretch()
 
         # Add the footer layout to the bottom of the left_content_layout
@@ -2448,7 +2452,6 @@ class ALMASimulator(QMainWindow):
         numbers = "0123456789."
         return "".join(char for char in text if char in numbers)
 
-    
     def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
         pd.options.mode.chained_assignment = None
         if isinstance(rest_frequency, np.ndarray) or isinstance(rest_frequency, list):
@@ -2563,7 +2566,6 @@ class ALMASimulator(QMainWindow):
         freq_d = freq_ds[idx_]
         return band_range * U.GHz, central_freq * U.GHz, n_channels, freq_d
 
-    
     def cont_finder(self, cont_frequencies, line_frequency):
         # cont_frequencies=sed['GHz'].values
         distances = np.abs(
@@ -3224,7 +3226,7 @@ class ALMASimulator(QMainWindow):
         if remote is True:
             print("Beam size: {} arcsec\n".format(round(beam_size.value, 4)))
             print("Central Frequency: {}\n".format(central_freq))
-            print("Spectral Window: {}\n".format(band_range))
+            print("Spectral Window: {} GHz\n".format(round(band_range.value, 3)))
             print("Freq Support: {}\n".format(delta_freq))
             print("Cube Dimensions: {} x {} x {}\n".format(n_pix, n_pix, n_channels))
             print("Redshift: {}\n".format(round(redshift, 3)))
@@ -3792,6 +3794,9 @@ class ALMASimulator(QMainWindow):
                 super().closeEvent(event)
     
     def show_background_notification(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            print('System Tray not available')
+            return
         if self.tray_icon is None:
             path = os.path.dirname(self.main_path)
             icon_path = os.path.join(path, "pictures", "almasim-icon.png")
@@ -3801,7 +3806,7 @@ class ALMASimulator(QMainWindow):
             restore_action = menu.addAction("Restore")
             restore_action.triggered.connect(self.showNormal)  # Restore the window
             exit_action = menu.addAction("Exit")
-            exit_action.triggered.connect(QApplication.instance().quit())
+            exit_action.triggered.connect(QApplication.instance().quit)
             self.tray_icon.setContextMenu(menu)
             self.tray_icon.setIcon(icon)
         self.tray_icon.showMessage(
@@ -3861,6 +3866,13 @@ class ALMASimulator(QMainWindow):
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
         self.settings.sync()
+    
+    def open_dask_dashboard(self):
+        if self.client is not None:
+            webbrowser.open(self.client.dashboard_link)
+        else: 
+            self.terminal.add_log('Please start the simulation to see the dashboard')
+
     # -------- Download Data Functions -------------------------
     def on_download_finished(self):
         self.terminal.add_log("Download Finished")
