@@ -624,6 +624,7 @@ class PlotResults(QRunnable):
 
     def run(self):
         """Downloads Galaxy Zoo data."""
+        self.almas_simulator.progress_bar_entry.setText("Plotting Simulation Results")
         self.alma_simulator.plot_simulation_results(self.simulation_results)
 
 
@@ -2068,6 +2069,7 @@ class ALMASimulator(QMainWindow):
 
     def execute_query(self):
         self.terminal.add_log("Executing query...")
+        self.progress_bar_entr
         if self.metadata_mode_combo.currentText() == "query":
             query_type = self.query_type_combo.currentText()
             if query_type == "science":
