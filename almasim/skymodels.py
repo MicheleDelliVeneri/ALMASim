@@ -17,177 +17,32 @@ import nifty8 as ift
 import random
 from astropy.utils import NumpyRNGContext
 from skimage import io
+from dask import delayed, compute
+from dask.distributed import Client, LocalCluster, progress
+from martini import DataCube, Martini
+import time
 
 
-# ------------------ Martini Modification Class -------------------- #
+# ----------------------- UTILITY --------------------------------
 
 
-class MartiniMod(Martini):
-
-    def _evaluate_pixel_spectrum(
-        self, ranks_and_ij_pxs, update_progress, progressbar=True
-    ):
-        """
-        Add up contributions of particles to the spectrum in a pixel.
-        This is the core loop of MARTINI. It is embarrassingly parallel. To support
-        parallel excecution we accept storing up to a copy of the entire (future) datacube
-        in one-pixel pieces. This avoids the need for concurrent access to the datacube
-        by parallel processes, which would in the simplest case duplicate a copy of the
-        datacube array per parallel process! In realistic use cases the memory overhead
-        from a the equivalent of a second datacube array should be minimal - memory-
-        limited applications should be limited by the memory consumed by particle data,
-        which is not duplicated in parallel execution.
-        The arguments that differ between parallel ranks must be bundled into one for
-        compatibility with `multiprocess`.
-        Parameters
-        ----------
-        rank_and_ij_pxs : tuple
-            A 2-tuple containing an integer (cpu "rank" in the case of parallel execution)
-            and a list of 2-tuples specifying the indices (i, j) of pixels in the grid.
-        Returns
-        -------
-        out : list
-            A list containing 2-tuples. Each 2-tuple contains and "insertion slice" that
-            is an index into the datacube._array instance held by this martini instance
-            where the pixel spectrum is to be placed, and a 1D array containing the
-            spectrum, whose length must match the length of the spectral axis of the
-            datacube.
-        """
-        result = list()
-        rank, ij_pxs = ranks_and_ij_pxs
-        if progressbar:
-            ij_pxs = tqdm(ij_pxs, position=rank)
-        for i, ij_px in enumerate(ij_pxs):
-            ij = np.array(ij_px)[..., np.newaxis] * U.pix
-            mask = (
-                np.abs(ij - self.source.pixcoords[:2]) <= self.sph_kernel.sm_ranges
-            ).all(axis=0)
-            weights = self.sph_kernel._px_weight(
-                self.source.pixcoords[:2, mask] - ij, mask=mask
-            )
-            insertion_slice = (
-                np.s_[ij_px[0], ij_px[1], :, 0]
-                if self.datacube.stokes_axis
-                else np.s_[ij_px[0], ij_px[1], :]
-            )
-            result.append(
-                (
-                    insertion_slice,
-                    (self.spectral_model.spectra[mask] * weights[..., np.newaxis]).sum(
-                        axis=-2
-                    ),
-                )
-            )
-            if update_progress is not None:
-                update_progress.emit(i / len(ij_pxs) * 100)
-        return result
-
-    def _insert_source_in_cube(
-        self,
-        update_progress=None,
-        terminal=None,
-        skip_validation=False,
-        progressbar=None,
-        ncpu=1,
-        quiet=None,
-    ):
-        """
-        Populates the :class:`~martini.datacube.DataCube` with flux from the
-        particles in the source.
-
-        Parameters
-        ----------
-        skip_validation : bool, optional
-            SPH kernel interpolation onto the DataCube is approximated for
-            increased speed. For some combinations of pixel size, distance
-            and SPH smoothing length, the approximation may break down. The
-            kernel class will check whether this will occur and raise a
-            RuntimeError if so. This validation can be skipped (at the cost
-            of accuracy!) by setting this parameter True. (Default: ``False``)
-
-        progressbar : bool, optional
-            A progress bar is shown by default. Progress bars work, with perhaps
-            some visual glitches, in parallel. If martini was initialised with
-            `quiet` set to `True`, progress bars are switched off unless explicitly
-            turned on. (Default: ``None``)
-
-        ncpu : int
-            Number of processes to use in main source insertion loop. Using more than
-            one cpu requires the `multiprocess` module (n.b. not the same as
-            `multiprocessing`). (Default: ``1``)
-
-        quiet : bool, optional
-            If ``True``, suppress output to stdout. If specified, takes precedence over
-            quiet parameter of class. (Default: ``None``)
-        """
-
-        assert self.spectral_model.spectra is not None
-
-        if progressbar is None:
-            progressbar = not self.quiet
-
-        self.sph_kernel._confirm_validation(noraise=skip_validation, quiet=self.quiet)
-
-        ij_pxs = list(
-            product(
-                np.arange(self._datacube._array.shape[0]),
-                np.arange(self._datacube._array.shape[1]),
-            )
-        )
-
-        for insertion_slice, insertion_data in self._evaluate_pixel_spectrum(
-            (0, ij_pxs), update_progress, progressbar=progressbar
-        ):
-            self._insert_pixel(insertion_slice, insertion_data)
-
-        self._datacube._array = self._datacube._array.to(
-            U.Jy / U.arcsec**2, equivalencies=[self._datacube.arcsec2_to_pix]
-        )
-        pad_mask = (
-            np.s_[
-                self._datacube.padx : -self._datacube.padx,
-                self._datacube.pady : -self._datacube.pady,
-                ...,
-            ]
-            if self._datacube.padx > 0 and self._datacube.pady > 0
-            else np.s_[...]
-        )
-        inserted_flux_density = np.sum(
-            self._datacube._array[pad_mask] * self._datacube.px_size**2
-        ).to(U.Jy)
-        inserted_mass = (
-            2.36e5
-            * U.Msun
-            * self.source.distance.to_value(U.Mpc) ** 2
-            * np.sum(
-                (self._datacube._array[pad_mask] * self._datacube.px_size**2)
-                .sum((0, 1))
-                .squeeze()
-                .to_value(U.Jy)
-                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(
-                    U.km / U.s
-                )
-            )
-        )
-        self.inserted_mass = inserted_mass
-        if (quiet is None and not self.quiet) or (quiet is not None and not quiet):
-            if terminal is not None:
-                terminal.add_log(
-                    "Source inserted.\n"
-                    f"  Flux density in cube: {inserted_flux_density:.2e}\n"
-                    f"  Mass in cube (assuming distance {self.source.distance:.2f} and a"
-                    f" spatially resolved source):"
-                    f" {inserted_mass:.2e}"
-                    f"    [{inserted_mass / self.source.input_mass * 100:.0f}%"
-                    f" of initial source mass]\n"
-                    f"  Maximum pixel: {self._datacube._array.max():.2e}\n"
-                    "  Median non-zero pixel:"
-                    f" {np.median(self._datacube._array[self._datacube._array > 0]):.2e}"
-                )
-        return
+def interpolate_array(arr, n_px):
+    """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
+    x_zoom_factor = n_px / arr.shape[0]
+    y_zoom_factor = n_px / arr.shape[1]
+    return zoom(arr, [x_zoom_factor, y_zoom_factor])
 
 
-# ------------------ SkyModels ------------------------------------- #
+def track_progress(update_progress, futures):
+    if update_progress is not None:
+        total_tasks = len(futures)
+        completed_tasks = 0
+        # Track progress
+        while completed_tasks < total_tasks:
+            completed_tasks = sum(f.done() for f in futures)
+            progress_value = int((completed_tasks / total_tasks) * 100)
+            update_progress.emit(progress_value)  # Emit progress signal
+            time.sleep(1)  # Check progress every second
 
 
 def gaussian(x, amp, cen, fwhm):
@@ -210,32 +65,7 @@ def gaussian(x, amp, cen, fwhm):
     return result
 
 
-def gaussian2d(x, y, amp, cen_x, cen_y, fwhm_x, fwhm_y, angle):
-    """
-    Generates a 2D Gaussian given the following input parameters:
-    x, y: positions
-    amp: amplitude
-    cen_x, cen_y: centers
-    fwhm_x, fwhm_y: FWHMs (full width at half maximum) along x and y axes
-    angle: angle of rotation (in degrees)
-    """
-    angle_rad = math.radians(angle)
-
-    # Rotate coordinates
-    xp = (x - cen_x) * np.cos(angle_rad) - (y - cen_y) * np.sin(angle_rad) + cen_x
-    yp = (x - cen_x) * np.sin(angle_rad) + (y - cen_y) * np.cos(angle_rad) + cen_y
-
-    gaussian = np.exp(
-        -(
-            (xp - cen_x) ** 2 / (2 * (fwhm_x / 2.35482) ** 2)
-            + (yp - cen_y) ** 2 / (2 * (fwhm_y / 2.35482) ** 2)
-        )
-    )
-    norm = amp / np.sum(gaussian)
-
-    result = norm * gaussian
-
-    return result
+# ----------------------- POINTLIKE SIMULATIONS --------------------------------
 
 
 def insert_pointlike(
@@ -275,7 +105,39 @@ def insert_pointlike(
     return datacube
 
 
+# ----------------------- GAUSSIAN SIMULATIONS --------------------------------
+
+
+@delayed
+def gaussian2d(amp, x, y, n_px, cen_x, cen_y, fwhm_x, fwhm_y, angle):
+    """
+    Generates a 2D Gaussian given the following input parameters:
+    x, y: positions
+    amp: amplitude
+    cen_x, cen_y: centers
+    fwhm_x, fwhm_y: FWHMs (full width at half maximum) along x and y axes
+    angle: angle of rotation (in degrees)
+    """
+    angle_rad = math.radians(angle)
+    # Rotate coordinates
+    xp = (x - cen_x) * np.cos(angle_rad) - (y - cen_y) * np.sin(angle_rad) + cen_x
+    yp = (x - cen_x) * np.sin(angle_rad) + (y - cen_y) * np.cos(angle_rad) + cen_y
+
+    gaussian = np.exp(
+        -(
+            (xp - cen_x) ** 2 / (2 * (fwhm_x / 2.35482) ** 2)
+            + (yp - cen_y) ** 2 / (2 * (fwhm_y / 2.35482) ** 2)
+        )
+    )
+    norm = amp / np.sum(gaussian)
+
+    result = norm * gaussian
+
+    return result
+
+
 def insert_gaussian(
+    client,
     update_progress,
     datacube,
     continum,
@@ -290,43 +152,37 @@ def insert_gaussian(
     n_px,
     n_chan,
 ):
-    """
-    Inserts a 3D Gaussian into the datacube at the specified position and amplitude.
-    datacube: datacube object
-    amplitude: amplitude of the source
-    pos_x: x position
-    pos_y: y position
-    pos_z: z position
-    fwhm_x: fwhm in x
-    fwhm_y: fwhm in y
-    fwhm_z: fwhm in z
-    angle: angle of rotation
-    n_px: number of pixels in the cube
-    n_chan: number of channels in the cube
-    """
-    X, Y = np.meshgrid(np.arange(n_px), np.arange(n_px))
     z_idxs = np.arange(0, n_chan)
+    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
     gs = np.zeros(n_chan)
+    skymodel = []
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
-        cont = gaussian2d(X, Y, continum[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
-        line = gaussian2d(X, Y, gs[z], pos_x, pos_y, fwhm_x, fwhm_y, angle)
-        slice_ = cont + line
-        datacube._array[:, :, z] += slice_ * U.Jy * U.pix**-2
-        if update_progress is not None:
-            update_progress.emit(z / n_chan * 100)
+        delayed_result = gaussian2d(
+            gs[z] + continum[z], x, y, n_px, pos_x, pos_y, fwhm_x, fwhm_y, angle
+        )
+        skymodel.append(delayed_result)
+    delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
+    futures = client.compute([delayed_skymodel])
+    track_progress(update_progress, futures)
+    skymodel = client.gather(futures)
+    datacube._array = skymodel * U.Jy * U.pix**-2
+    del skymodel
+    del z_idxs, gs, delayed_result, delayed_skymodel
     return datacube
 
 
-def interpolate_array(arr, n_px):
-    """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
-    x_zoom_factor = n_px / arr.shape[0]
-    y_zoom_factor = n_px / arr.shape[1]
-    return zoom(arr, [x_zoom_factor, y_zoom_factor])
+# ----------------------- GALAXY ZOO SIMULATIONS --------------------------------
+
+
+@delayed
+def galaxy_image(avgimg, amp):
+    return avgimg * amp
 
 
 def insert_galaxy_zoo(
+    client,
     update_progress,
     datacube,
     continum,
@@ -349,149 +205,21 @@ def insert_galaxy_zoo(
     avimg /= np.sum(avimg)
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
-    cube = np.zeros((n_px, n_px, n_chan))
+    skymodel = []
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
-        cube[:, :, z] += avimg * (continum[z] + gs[z])
-        if update_progress is not None:
-            update_progress.emit(z / n_chan * 100)
-    datacube._array[:, :, :] = cube * U.Jy / U.pix**2
+        delayed_result = galaxy_image(avimg, gs[z] + continum[z])
+        skymodel.append(delayed_result)
+    delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
+    futures = client.compute([delayed_skymodel])
+    track_progress(update_progress, futures)
+    skymodel = client.gather(futures)
+    datacube._array = skymodel * U.Jy * U.pix**-2
     return datacube
 
 
-def insert_tng(
-    update_progress,
-    terminal,
-    n_px,
-    n_channels,
-    freq_sup,
-    snapshot,
-    subhalo_id,
-    distance,
-    x_rot,
-    y_rot,
-    tngpath,
-    ra,
-    dec,
-    api_key,
-    ncpu,
-):
-    source = TNGSource(
-        simulation="TNG100-1",
-        snapNum=snapshot,
-        subID=subhalo_id,
-        cutout_dir=tngpath,
-        distance=distance * U.Mpc,
-        rotation={"L_coords": (x_rot, y_rot)},
-        ra=ra,
-        dec=dec,
-        api_key=api_key,
-    )
-
-    datacube = DataCube(
-        n_px_x=n_px,
-        n_px_y=n_px,
-        n_channels=n_channels,
-        px_size=10 * U.arcsec,
-        channel_width=freq_sup,
-        spectral_centre=source.vsys,
-        ra=source.ra,
-        dec=source.dec,
-    )
-    spectral_model = GaussianSpectrum(sigma="thermal")
-    sph_kernel = WendlandC2Kernel()
-    M = MartiniMod(
-        source=source,
-        datacube=datacube,
-        sph_kernel=sph_kernel,
-        spectral_model=spectral_model,
-        quiet=False,
-    )
-    M._insert_source_in_cube(
-        update_progress, terminal, skip_validation=True, progressbar=True, ncpu=ncpu
-    )
-    return M
-
-
-def insert_extended(
-    update_progress,
-    terminal,
-    datacube,
-    tngpath,
-    snapshot,
-    subhalo_id,
-    redshift,
-    ra,
-    dec,
-    api_key,
-    ncpu,
-):
-    x_rot = np.random.randint(0, 360) * U.deg
-    y_rot = np.random.randint(0, 360) * U.deg
-    tngpath = os.path.join(tngpath, "TNG100-1", "output")
-    redshift = redshift * cu.redshift
-    distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))
-    if terminal is not None:
-        terminal.add_log(
-            "Computed a distance of {} for redshift {}".format(distance, redshift)
-        )
-    distance = 50
-    M = insert_tng(
-        update_progress,
-        terminal,
-        datacube.n_px_x,
-        datacube.n_channels,
-        datacube.channel_width,
-        snapshot,
-        subhalo_id,
-        distance,
-        x_rot,
-        y_rot,
-        tngpath,
-        ra,
-        dec,
-        api_key,
-        ncpu,
-    )
-    initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
-    if terminal is not None:
-        terminal.add_log("Mass ratio: {}%".format(initial_mass_ratio))
-    mass_ratio = initial_mass_ratio
-    while mass_ratio < 50:
-        if mass_ratio < 10:
-            distance = distance * 8
-        elif mass_ratio < 20:
-            distance = distance * 5
-        elif mass_ratio < 30:
-            distance = distance * 2
-        else:
-            distance = distance * 1.5
-        if terminal is not None:
-            terminal.add_log("Injecting source at distance {}".format(distance))
-        M = insert_tng(
-            update_progress,
-            terminal,
-            datacube.n_px_x,
-            datacube.n_channels,
-            datacube.channel_width,
-            snapshot,
-            subhalo_id,
-            distance,
-            x_rot,
-            y_rot,
-            tngpath,
-            ra,
-            dec,
-            api_key,
-            ncpu,
-        )
-        mass_ratio = M.inserted_mass / M.source.input_mass * 100
-        if terminal is not None:
-            terminal.add_log("Mass ratio: {}%".format(mass_ratio))
-    if terminal is not None:
-        terminal.add_log("Datacube generated, inserting source")
-    return M.datacube
+# ----------------------- DIFFUSE SIMULATIONS --------------------------------
 
 
 def diffuse_signal(n_px):
@@ -515,24 +243,43 @@ def diffuse_signal(n_px):
     return normalized_data
 
 
+@delayed
+def diffuse_image(diffuse_signal, amp):
+    return diffuse_signal * amp
+
+
 def insert_diffuse(
-    update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_px, n_chan
+    client,
+    update_progress,
+    datacube,
+    continum,
+    line_fluxes,
+    pos_z,
+    fwhm_z,
+    n_px,
+    n_chan,
 ):
-    z_idxs = np.arange(0, n_chan)
     ts = diffuse_signal(n_px)
     ts = np.nan_to_num(ts)
     ts - np.min(ts)
     ts *= 1 / np.max(ts)
-    cube = np.zeros((n_px, n_px, n_chan))
+    z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
+    skymodel = []
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
-        cube[:, :, z] += ts * (continum[z] + gs[z])
-        if update_progress is not None:
-            update_progress.emit(z / n_chan * 100)
-    datacube._array[:, :, :] += cube * U.Jy * U.pix**-2
+        delayed_result = diffuse_image(ts, gs[z] + continum[z])
+        skymodel.append(delayed_result)
+    delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
+    futures = client.compute([delayed_skymodel])
+    track_progress(update_progress, futures)
+    skymodel = client.gather(futures)
+    datacube._array = skymodel * U.Jy * U.pix**-2
     return datacube
+
+
+# ----------------------- MOLECOLAR SIMULATIONS --------------------------------
 
 
 def make_extended(
@@ -665,7 +412,7 @@ def make_extended(
     return newmap
 
 
-def molecular_cloud(n_px):
+def molecolar_cloud(n_px):
     powerlaw = random.random() * 3.0 + 1.5
     ellip = random.random() * 0.5 + 0.5
     theta = random.random() * 2 * 3.1415927
@@ -679,41 +426,60 @@ def molecular_cloud(n_px):
     return im
 
 
-def insert_molecular_cloud(
-    update_progress, datacube, continum, line_fluxes, pos_z, fwhm_z, n_pix, n_chan
-):
-    z_idxs = np.arange(0, n_chan)
-    im = molecular_cloud(n_pix)
-    im - np.min(im)
-    im *= 1 / np.max(im)
-    gs = np.zeros(n_chan)
-    for i in range(len(line_fluxes)):
-        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
-    cube = np.zeros((n_pix, n_pix, n_chan))
-    for i in range(len(line_fluxes)):
-        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
-    for z in range(0, n_chan):
-        cube[:, :, z] += im * (continum[z] + gs[z])
-        if update_progress is not None:
-            update_progress.emit(z / n_chan * 100)
-    datacube._array[:, :, :] += cube * U.Jy * U.pix**-2
-    return datacube
+@delayed
+def molecolar_image(molecolar_cld, amp):
+    return molecolar_cld * amp
 
 
-def insert_hubble(
+def insert_molecolar_cloud(
+    client,
     update_progress,
     datacube,
     continum,
     line_fluxes,
     pos_z,
     fwhm_z,
-    n_px,
+    n_pix,
+    n_chan,
+):
+    im = molecular_cloud(n_pix)
+    im - np.min(im)
+    im *= 1 / np.max(im)
+    z_idxs = np.arange(0, n_chan)
+    gs = np.zeros(n_chan)
+    for i in range(len(line_fluxes)):
+        gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
+    for z in range(0, n_chan):
+        delayed_result = molecolar_image(im, gs[z] + continum[z])
+        skymodel.append(delayed_result)
+    delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
+    futures = client.compute([delayed_skymodel])
+    track_progress(update_progress, futures)
+    skymodel = client.gather(futures)
+    datacube._array = skymodel * U.Jy * U.pix**-2
+    return datacube
+
+
+# ----------------------- HUBBLE SIMULATIONS --------------------------------
+
+
+@delayed
+def hubble_image(hubble, amp):
+    return hubble * amp
+
+
+def insert_hubble(
+    client,
+    update_progress,
+    datacube,
+    continum,
+    line_fluxes,
+    pos_z,
+    fwhm_z,
+    n_pix,
     n_chan,
     data_path,
 ):
-    files = np.array(
-        [file for file in os.listdir(data_path) if not file.startswith(".")]
-    )
     imfile = os.path.join(data_path, np.random.choice(files))
     img = io.imread(imfile).astype(np.float32)
     dims = np.shape(img)
@@ -725,15 +491,298 @@ def insert_hubble(
     avimg /= np.sum(avimg)
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
-    cube = np.zeros((n_px, n_px, n_chan))
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
-        cube[:, :, z] += avimg * (continum[z] + gs[z])
-        if update_progress is not None:
-            update_progress.emit(z / n_chan * 100)
-    datacube._array[:, :, :] = cube * U.Jy / U.pix**2
+        delayed_result = hubble_image(avimg, gs[z] + continum[z])
+        skymodel.append(delayed_result)
+    delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
+    futures = client.compute([delayed_skymodel])
+    track_progress(update_progress, futures)
+    skymodel = client.gather(futures)
+    datacube._array = skymodel * U.Jy * U.pix**-2
     return datacube
+
+
+# ----------------------- TNG SIMULATIONS --------------------------------
+
+
+@delayed
+def insert_pixel(self, datacube_array, insertion_slice, insertion_data):
+    """
+    Insert the spectrum for a single pixel into the datacube array.
+    """
+    datacube_array[insertion_slice] = insertion_data
+    return
+
+
+@delayed
+def evaluate_pixel_spectrum(
+    ranks_and_ij_pxs,
+    datacube_array,
+    pixcoords,
+    kernel_sm_ranges,
+    kernel_px_weights,
+    datacube_strokes_axis,
+    spectral_model_spectra,
+):
+    """
+    Add up contributions of particles to the spectrum in a pixel.
+    """
+    result = list()
+    rank, ij_pxs = ranks_and_ij_pxs
+    for i, ij_px in enumerate(ij_pxs):
+        ij = np.array(ij_px)[..., np.newaxis] * U.pix
+        mask = (np.abs(ij - pixcoords[:2]) <= kernel_sm_ranges).all(axis=0)
+        weights = kernel_px_weights(pixcoords[:2, mask] - ij, mask=mask)
+        insertion_slice = (
+            np.s_[ij_px[0], ij_px[1], :, 0]
+            if datacube_stokes_axis
+            else np.s_[ij_px[0], ij_px[1], :]
+        )
+        result.append(
+            (
+                insertion_slice,
+                (self.spectral_model_spectra[mask] * weights[..., np.newaxis]).sum(
+                    axis=-2
+                ),
+            )
+        )
+    return result
+
+
+class MartiniMod(Martini):
+
+    def _insert_source_in_cube(
+        self,
+        client,
+        update_progress=None,
+        terminal=None,
+    ):
+        assert self.spectral_model.spectra is not None
+
+        self.sph_kernel._confirm_validation(noraise=True, quiet=True)
+
+        # Scatter the datacube array across the workers
+        scattered_array = client.scatter(self._datacube._array, broadcast=True)
+
+        ij_pxs = list(
+            product(
+                np.arange(self._datacube._array.shape[0]),
+                np.arange(self._datacube._array.shape[1]),
+            )
+        )
+
+        # Parallel execution with Dask (let Dask decide how to distribute the tasks)
+        delayed_results = []
+        # Split the pixel grid among workers
+        for icpu in range(len(ij_pxs)):
+            # Directly call the delayed method (no need for explicit dask.delayed)
+            delayed_result = evaluate_pixel_spectrum(
+                (icpu, [ij_pxs[icpu]]),
+                scattered_array,
+                self.source.pixels_coords,
+                self.sph_kernel._sm_ranges,
+                self.sph_kernel._px_weight,
+                self._datacube.stokes_axis,
+                self.spectral_model.spectra,
+            )
+            delayed_results.append(delayed_result)
+
+        # Compute all the delayed tasks in parallel
+        futures = dask.compute(*delayed_results)
+        track_progress(update_progress, futures)
+        # Process the results and insert into the scattered datacube array
+        for result in futures:
+            for insertion_slice, insertion_data in result:
+                insert_pixel(scattered_array, insertion_slice, insertion_data)
+
+        # Gather the results back to the local datacube array
+        self._datacube._array = client.gather(scattered_array)
+
+        # Final operations on the datacube
+        self._datacube._array = self._datacube._array.to(
+            U.Jy / U.arcsec**2, equivalencies=[self._datacube.arcsec2_to_pix]
+        )
+        pad_mask = (
+            np.s_[
+                self._datacube.padx : -self._datacube.padx,
+                self._datacube.pady : -self._datacube.pady,
+                ...,
+            ]
+            if self._datacube.padx > 0 and self._datacube.pady > 0
+            else np.s_[...]
+        )
+        inserted_flux_density = np.sum(
+            self._datacube._array[pad_mask] * self._datacube.px_size**2
+        ).to(U.Jy)
+        inserted_mass = (
+            2.36e5
+            * U.Msun
+            * self.source.distance.to_value(U.Mpc) ** 2
+            * np.sum(
+                (self._datacube._array[pad_mask] * self._datacube.px_size**2)
+                .sum((0, 1))
+                .squeeze()
+                .to_value(U.Jy)
+                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(
+                    U.km / U.s
+                )
+            )
+        )
+        self.inserted_mass = inserted_mass
+        if terminal is not None:
+            terminal.add_log(
+                "Source inserted.\n"
+                f"  Flux density in cube: {inserted_flux_density:.2e}\n"
+                f"  Mass in cube (assuming distance {self.source.distance:.2f} and a"
+                f" spatially resolved source):"
+                f" {inserted_mass:.2e}"
+                f"    [{inserted_mass / self.source.input_mass * 100:.0f}%"
+                f" of initial source mass]\n"
+                f"  Maximum pixel: {self._datacube._array.max():.2e}\n"
+                "  Median non-zero pixel:"
+                f" {np.median(self._datacube._array[self._datacube._array > 0]):.2e}"
+            )
+        return
+
+
+def insert_tng(
+    client,
+    update_progress,
+    terminal,
+    n_px,
+    n_channels,
+    freq_sup,
+    snapshot,
+    subhalo_id,
+    distance,
+    x_rot,
+    y_rot,
+    tngpath,
+    ra,
+    dec,
+    api_key,
+):
+    source = TNGSource(
+        simulation="TNG100-1",
+        snapNum=snapshot,
+        subID=subhalo_id,
+        cutout_dir=tngpath,
+        distance=distance * U.Mpc,
+        rotation={"L_coords": (x_rot, y_rot)},
+        ra=ra,
+        dec=dec,
+        api_key=api_key,
+    )
+
+    datacube = DataCube(
+        n_px_x=n_px,
+        n_px_y=n_px,
+        n_channels=n_channels,
+        px_size=10 * U.arcsec,
+        channel_width=freq_sup,
+        spectral_centre=source.vsys,
+        ra=source.ra,
+        dec=source.dec,
+    )
+    spectral_model = GaussianSpectrum(sigma="thermal")
+    sph_kernel = WendlandC2Kernel()
+    M = MartiniMod(
+        source=source,
+        datacube=datacube,
+        sph_kernel=sph_kernel,
+        spectral_model=spectral_model,
+        quiet=False,
+    )
+    M._insert_source_in_cube(
+        client,
+        update_progress,
+        terminal,
+    )
+    return M
+
+
+def insert_extended(
+    client,
+    update_progress,
+    datacube,
+    tngpath,
+    snapshot,
+    subhalo_id,
+    redshift,
+    ra,
+    dec,
+    api_key,
+):
+    x_rot = np.random.randint(0, 360) * U.deg
+    y_rot = np.random.randint(0, 360) * U.deg
+    tngpath = os.path.join(tngpath, "TNG100-1", "output")
+    redshift = redshift * cu.redshift
+    distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))
+    if terminal is not None:
+        terminal.add_log(
+            "Computed a distance of {} for redshift {}".format(distance, redshift)
+        )
+    distance = 50
+    M = insert_tng(
+        client,
+        update_progress,
+        terminal,
+        datacube.n_px_x,
+        datacube.n_channels,
+        datacube.channel_width,
+        snapshot,
+        subhalo_id,
+        distance,
+        x_rot,
+        y_rot,
+        tngpath,
+        ra,
+        dec,
+        api_key,
+    )
+    initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
+    if terminal is not None:
+        terminal.add_log("Mass ratio: {}%".format(initial_mass_ratio))
+    mass_ratio = initial_mass_ratio
+    while mass_ratio < 50:
+        if mass_ratio < 10:
+            distance = distance * 8
+        elif mass_ratio < 20:
+            distance = distance * 5
+        elif mass_ratio < 30:
+            distance = distance * 2
+        else:
+            distance = distance * 1.5
+        if terminal is not None:
+            terminal.add_log("Injecting source at distance {}".format(distance))
+        M = insert_tng(
+            client,
+            update_progress,
+            terminal,
+            datacube.n_px_x,
+            datacube.n_channels,
+            datacube.channel_width,
+            snapshot,
+            subhalo_id,
+            distance,
+            x_rot,
+            y_rot,
+            tngpath,
+            ra,
+            dec,
+            api_key,
+        )
+        mass_ratio = M.inserted_mass / M.source.input_mass * 100
+        if terminal is not None:
+            terminal.add_log("Mass ratio: {}%".format(mass_ratio))
+    if terminal is not None:
+        terminal.add_log("Datacube generated, inserting source")
+    return M.datacube
+
+
+# ----------------------- SERENDIPITOUS SOURCES -------------------------
 
 
 def distance_1d(p1, p2):
@@ -742,10 +791,6 @@ def distance_1d(p1, p2):
 
 def distance_2d(p1, p2):
     return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
-
-
-def distance_3d(p1, p2):
-    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 + (p1[2] - p2[2]) ** 2)
 
 
 def get_iou(bb1, bb2):
@@ -933,6 +978,7 @@ def sample_positions(
 
 def insert_serendipitous(
     terminal,
+    client,
     update_progress,
     datacube,
     continum,
@@ -1041,6 +1087,7 @@ def insert_serendipitous(
                     f"- Flux: {line_fluxes[i]} Jy - Width (Channels): {fwhmsz[i]}\n"
                 )
             datacube = insert_gaussian(
+                client,
                 update_progress,
                 datacube,
                 s_continum,
