@@ -330,7 +330,7 @@ def check_lfac(Xmax, wavelength, lfac):
     mw = 2.0 * Xmax / wavelength[2] / lfac
     if mw < 0.1 and lfac == 1.0e6:
         lfac = 1.0e3
-        
+
     elif mw >= 100.0 and lfac == 1.0e3:
         lfac = 1.0e6
     ulab = r"U (k$\lambda$)"
@@ -534,7 +534,7 @@ def image_channel(
         Nphf,
     )
     lfac, ulab, vlab = check_lfac(Xmax, wavelength, lfac)
-    #img = add_thermal_noise(img, noise)
+    # img = add_thermal_noise(img, noise)
     modelim, modelimTrue = _prepare_model(Npix, img, Nphf, Np4, zooming)
     modelfft, modelim = set_primary_beam(
         header, distmat, wavelength, Diameters, modelim, modelimTrue
@@ -604,9 +604,9 @@ class Interferometer(QObject):
         # Get the observing wavelengths for each channel
         self._get_wavelengths()
         msg = f"Performing {self.nH} scans with a scan time of {self.scan_time} seconds"
-        #if self.terminal is not None:
-        #s    self.terminal.add_log(msg)
-        #else:
+        # if self.terminal is not None:
+        # s    self.terminal.add_log(msg)
+        # else:
         #    print(msg)
 
     def _hz_to_m(self, freq):
@@ -690,7 +690,7 @@ class Interferometer(QObject):
     def _get_nH(self):
         self.scan_time = 6
         self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
-        #if self.nH > 200:
+        # if self.nH > 200:
         #    while self.nH > 200:
         #        self.scan_time *= 1.5
         #        self.nH = int(
@@ -1024,6 +1024,7 @@ class Interferometer(QObject):
         else:
             print(f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)}Jy")
             print(f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)}Jy")
+
 
 """
 

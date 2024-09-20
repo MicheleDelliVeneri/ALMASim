@@ -76,9 +76,11 @@ import zipfile
 import sys
 import webbrowser
 
+
 def closest_power_of_2(x):
-        op = math.floor if bin(x)[3] != "1" else math.ceil
-        return 2 ** op(math.log(x, 2))
+    op = math.floor if bin(x)[3] != "1" else math.ceil
+    return 2 ** op(math.log(x, 2))
+
 
 class TerminalLogger(QObject):
     log_signal = pyqtSignal(str)
@@ -98,11 +100,13 @@ class TerminalLogger(QObject):
         # print(f"Progress: {value}%")
         self.add_log(f"Progress: {value}%")
 
+
 class SignalEmitter(QObject):
     simulationFinished = pyqtSignal(object)
     queryFinished = pyqtSignal(object)
     downloadFinished = pyqtSignal(object)
     progress = pyqtSignal(int)
+
 
 class QueryKeyword(QRunnable):
     def __init__(self, alma_simulator_instance):
@@ -119,16 +123,19 @@ class QueryKeyword(QRunnable):
                 "science_keywords": science_keywords,
                 "scientific_categories": scientific_categories,
             }
-            self.signals.queryFinished.emit(results)  # Emit results through SignalEmitter
+            self.signals.queryFinished.emit(
+                results
+            )  # Emit results through SignalEmitter
         except Exception as e:
             logging.error(f"Error in Query: {e}")
+
 
 class QueryByTarget(QRunnable):
     def __init__(self, alma_simulator_instance):
         super().__init__()
         self.alma_simulator = alma_simulator_instance
         self.signals = SignalEmitter()
-    
+
     @pyqtSlot()
     def run(self):
         try:
@@ -183,9 +190,10 @@ class QueryByTarget(QRunnable):
                 lambda x: x.split("T")[0]
             )
             database.to_csv(save_to_input, index=False)
-            self.signals.queryFinished.emit(database) 
+            self.signals.queryFinished.emit(database)
         except Exception as e:
             logging.error(f"Error in Query: {e}")
+
 
 class QueryByScience(QRunnable):
     def __init__(self, alma_simulator_instance, sql_fields):
@@ -193,7 +201,7 @@ class QueryByScience(QRunnable):
         self.alma_simulator = alma_simulator_instance
         self.signals = SignalEmitter()
         self.sql_fields = sql_fields
-    
+
     @pyqtSlot()
     def run(self):
         try:
@@ -263,9 +271,10 @@ class QueryByScience(QRunnable):
                 lambda x: x.split("T")[0]
             )
             database.to_csv(save_to_input, index=False)
-            self.signals.queryFinished.emit(database) 
+            self.signals.queryFinished.emit(database)
         except Exception as e:
             logging.error(f"Error in Query: {e}")
+
 
 class DownloadGalaxyZoo(QRunnable):
     def __init__(self, alma_simulator_instance, remote):
@@ -273,18 +282,22 @@ class DownloadGalaxyZoo(QRunnable):
         self.alma_simulator = alma_simulator_instance
         self.signals = SignalEmitter()
         self.remote = remote
-    
+
     @pyqtSlot()
     def run(self):
         try:
             if self.remote is False:
                 galaxy_zoo_path = self.alma_simulator.galaxy_zoo_entry.text()
                 if galaxy_zoo_path == "":
-                    galaxy_zoo_path = os.path.join(self.alma_simulator.main_path, "galaxy_zoo")
+                    galaxy_zoo_path = os.path.join(
+                        self.alma_simulator.main_path, "galaxy_zoo"
+                    )
                 if not os.path.exists(galaxy_zoo_path):
                     os.makedirs(galaxy_zoo_path)
                 api.authernticate()
-                api.dataset_download_files("zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True)
+                api.dataset_download_files(
+                    "zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True
+                )
                 self.signals.queryFinished.emit(galaxy_zoo_path)
             else:
                 if self.alma_simulator.remote_key_pass_entry.text() != "":
@@ -304,14 +317,24 @@ class DownloadGalaxyZoo(QRunnable):
                 if sftp.exists(self.galaxy_zoo_entry.text()):
                     if not sftp.listdir(self.galaxy_zoo_entry.text()):
                         if not sftp.exists(
-                            "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
+                            "/home/{}/.kaggle".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
                         ):
-                            sftp.mkdir("/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text()))
+                            sftp.mkdir(
+                                "/home/{}/.kaggle".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                )
+                            )
                         if not sftp.exists(
-                            "/home/{}/.kaggle/kaggle.json".format(self.alma_simulator.remote_user_entry.text())
+                            "/home/{}/.kaggle/kaggle.json".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
                         ):
                             sftp.put(
-                                os.path.join(os.path.expanduser("~"), ".kaggle", "kaggle.json"),
+                                os.path.join(
+                                    os.path.expanduser("~"), ".kaggle", "kaggle.json"
+                                ),
                                 "/home/{}/.kaggle/kaggle.json".format(
                                     self.alma_simulator.remote_user_entry.text()
                                 ),
@@ -332,7 +355,10 @@ class DownloadGalaxyZoo(QRunnable):
                                 self.alma_simulator.remote_key_entry.text()
                             )
                         venv_dir = os.path.join(
-                            "/home/{}/".format(self.alma_simulator.remote_user_entry.text()), "almasim_env"
+                            "/home/{}/".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            ),
+                            "almasim_env",
                         )
                         commands = f"""
                         source {venv_dir}/bin/activate
@@ -341,7 +367,9 @@ class DownloadGalaxyZoo(QRunnable):
                                 path='{self.alma_simulator.galaxy_zoo_entry.text()}', unzip=True)"
                         """
                         paramiko_client = paramiko.SSHClient()
-                        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        paramiko_client.set_missing_host_key_policy(
+                            paramiko.AutoAddPolicy()
+                        )
                         paramiko_client.connect(
                             self.alma_simulator.remote_address_entry.text(),
                             username=self.alma_simulator.remote_user_entry.text(),
@@ -353,13 +381,14 @@ class DownloadGalaxyZoo(QRunnable):
         except Exception as e:
             logging.error(f"Error in Query: {e}")
 
+
 class DownloadHubble(QRunnable):
     def __init__(self, alma_simulator_instance, remote):
         super().__init__()
         self.alma_simulator = alma_simulator_instance
         self.signals = SignalEmitter()
         self.remote = remote
-    
+
     @pyqtSlot()
     def run(self):
         try:
@@ -370,7 +399,11 @@ class DownloadHubble(QRunnable):
                 if not os.path.exists(hubble_path):
                     os.makedirs(hubble_path)
                 api.authernticate()
-                api.dataset_download_files("redwankarimsony/top-100-hubble-telescope-images", path=hubble_path, unzip=True)
+                api.dataset_download_files(
+                    "redwankarimsony/top-100-hubble-telescope-images",
+                    path=hubble_path,
+                    unzip=True,
+                )
                 self.signals.downloadFinished.emit(hubble_path)
             else:
                 if self.alma_simulator.remote_key_pass_entry.text() != "":
@@ -390,16 +423,24 @@ class DownloadHubble(QRunnable):
                 if not sftp.exists(self.alma_simulator.hubble_entry.text()):
                     if not sftp.listdir(self.alma_simulator.hubble_entry.text()):
                         if not sftp.exists(
-                            "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
+                            "/home/{}/.kaggle".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
                         ):
                             sftp.mkdir(
-                                "/home/{}/.kaggle".format(self.alma_simulator.remote_user_entry.text())
+                                "/home/{}/.kaggle".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                )
                             )
                         if not sftp.exists(
-                            "/home/{}/.kaggle/kaggle.json".format(self.alma_simulator.remote_user_entry.text())
+                            "/home/{}/.kaggle/kaggle.json".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
                         ):
                             sftp.put(
-                                os.path.join(os.path.expanduser("~"), ".kaggle", "kaggle.json"),
+                                os.path.join(
+                                    os.path.expanduser("~"), ".kaggle", "kaggle.json"
+                                ),
                                 "/home/{}/.kaggle/kaggle.json".format(
                                     self.alma_simulator.remote_user_entry.text()
                                 ),
@@ -420,7 +461,10 @@ class DownloadHubble(QRunnable):
                                 self.alma_simulator.remote_key_entry.text()
                             )
                         venv_dir = os.path.join(
-                            "/home/{}/".format(self.alma_simulator.remote_user_entry.text()), "almasim_env"
+                            "/home/{}/".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            ),
+                            "almasim_env",
                         )
                         commands = f"""
                         source {venv_dir}/bin/activate
@@ -429,7 +473,9 @@ class DownloadHubble(QRunnable):
                                 path='{self.alma_simulator.hubble_entry.text()}', unzip=True)"
                         """
                         paramiko_client = paramiko.SSHClient()
-                        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        paramiko_client.set_missing_host_key_policy(
+                            paramiko.AutoAddPolicy()
+                        )
                         paramiko_client.connect(
                             self.alma_simulator.remote_address_entry.text(),
                             username=self.alma_simulator.remote_user_entry.text(),
@@ -440,13 +486,14 @@ class DownloadHubble(QRunnable):
         except Exception as e:
             logging.error(f"Error in Query: {e}")
 
+
 class DownloadTNGStructure(QRunnable):
     def __init__(self, alma_simulator_instance, remote):
         super().__init__()
         self.alma_simulator = alma_simulator_instance
         self.signals = SignalEmitter()
         self.remote = remote
-    
+
     @pyqtSlot()
     def run(self):
         try:
@@ -456,21 +503,29 @@ class DownloadTNGStructure(QRunnable):
                     os.makedirs(os.path.join(tng_dir, "TNG100-1"))
                 if not os.path.exists(os.path.join(tng_dir, "TNG100-1", "output")):
                     os.makedirs(os.path.join(tng_dir, "TNG100-1", "output"))
-                if not os.path.exists(os.path.join(tng_dir, "TNG100-1", "postprocessing")):
+                if not os.path.exists(
+                    os.path.join(tng_dir, "TNG100-1", "postprocessing")
+                ):
                     os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
                 if not os.path.exists(
                     os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
                 ):
-                    os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets"))
+                    os.makedirs(
+                        os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
+                    )
                 if not isfile(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
-                    url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+                    url = (
+                        "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+                    )
                     cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
-                    self.alma_simulator.tng_api_key_entry.text(),
-                    os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
-                    url,
+                        self.alma_simulator.tng_api_key_entry.text(),
+                        os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
+                        url,
                     )
                     subprocess.run(cmd, shell=True)
-                    self.signals.downloadFinished.emit(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"))
+                    self.signals.downloadFinished.emit(
+                        os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")
+                    )
             else:
                 if self.remote_key_pass_entry.text() != "":
                     sftp = pysftp.Connection(
@@ -491,13 +546,21 @@ class DownloadTNGStructure(QRunnable):
                         sftp.mkdir(os.path.join(tng_dir, "TNG100-1"))
                     if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "output")):
                         sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "output"))
-                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "postprocessing")):
+                    if not sftp.exists(
+                        os.path.join(tng_dir, "TNG100-1", "postprocessing")
+                    ):
                         sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
                     if not sftp.exists(
                         os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
                     ):
-                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets"))
-                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
+                        sftp.mkdir(
+                            os.path.join(
+                                tng_dir, "TNG100-1", "postprocessing", "offsets"
+                            )
+                        )
+                    if not sftp.exists(
+                        os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")
+                    ):
                         url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
                         cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
                             self.alma_simulator.tng_api_key_entry.text(),
@@ -514,16 +577,21 @@ class DownloadTNGStructure(QRunnable):
                                 self.alma_simulator.remote_key_entry.text()
                             )
                         paramiko_client = paramiko.SSHClient()
-                        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        paramiko_client.set_missing_host_key_policy(
+                            paramiko.AutoAddPolicy()
+                        )
                         paramiko_client.connect(
                             self.alma_simulator.remote_address_entry.text(),
                             username=self.alma_simulator.remote_user_entry.text(),
                             pkey=key,
                         )
                         stdin, stdout, stderr = paramiko_client.exec_command(cmd)
-                        self.signals.downloadFinished.emit(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"))
+                        self.signals.downloadFinished.emit(
+                            os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")
+                        )
         except Exception as e:
             logging.error(f"Error TNG Structure creation: {e}")
+
 
 class Simulator(QRunnable):
     def __init__(self, alma_simulator_instance, *args, **kwargs):
@@ -532,17 +600,19 @@ class Simulator(QRunnable):
         self.signals = SignalEmitter()
         self.args = args
         self.kwargs = kwargs
+
     @pyqtSlot()
     def run(self):
-        try: 
+        try:
             self.finish_flag = False
             results = None
             if not self.finish_flag:
-                results = self.alma_simulator.simulator(*self.args, **self.kwargs) 
+                results = self.alma_simulator.simulator(*self.args, **self.kwargs)
                 self.finish_flag = True
                 self.signals.simulationFinished.emit(results)
         except Exception as e:
-            logging.error(f"Error in Simulator: {e}")          
+            logging.error(f"Error in Simulator: {e}")
+
 
 class PlotResults(QRunnable):
     def __init__(self, alma_simulator_instance, simulation_results):
@@ -595,12 +665,12 @@ class ALMASimulator(QMainWindow):
 
     # -------- Widgets and UI -------------------------
     def initialize_ui(self):
-        
+
         self.setWindowTitle("ALMASim: Set up your simulation parameters")
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -626,7 +696,7 @@ class ALMASimulator(QMainWindow):
         self.metadata_path_row.addWidget(self.metadata_path_button)
         self.metadata_path_row.addStretch()
         self.line_displayed = False
-        #self.setMinimumSize(800, 600)  # Set minimum size for laptop usage
+        # self.setMinimumSize(800, 600)  # Set minimum size for laptop usage
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)  # Horizontal layout for main wind
@@ -645,9 +715,9 @@ class ALMASimulator(QMainWindow):
             self.load_settings()
         self.toggle_line_mode_widgets()
         self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
-        #if self.metadata_path_entry.text() != "" and isfile(
+        # if self.metadata_path_entry.text() != "" and isfile(
         #    self.metadata_path_entry.text()
-        #):
+        # ):
         #    self.load_metadata(self.metadata_path_entry.text())
         current_mode = self.metadata_mode_combo.currentText()
         self.toggle_metadata_browse(current_mode)  # Call here
@@ -683,7 +753,7 @@ class ALMASimulator(QMainWindow):
         self.left_scroll_area.setWidget(self.left_scroll_content)
         self.left_content_layout = QVBoxLayout(self.left_scroll_content)
         self.left_layout = QFormLayout(self.left_scroll_content)
-        self.left_layout.setSpacing(5) 
+        self.left_layout.setSpacing(5)
         self.find_label_width()
         self.add_folder_widgets()
         self.add_line_widgets()
@@ -698,20 +768,22 @@ class ALMASimulator(QMainWindow):
         self.left_content_layout.addStretch()
         # Add footer buttons at the bottom
         self.add_footer_buttons()
-        
+
     # -------- Window Browsing Functions -------------------------
     def map_to_remote_directory(self, directory):
         directory_name = directory.split(os.path.sep)[-1]
         if self.remote_folder_line.text() != "":
             if not self.remote_folder_line.text().startswith("/"):
                 self.remote_folder_line.setText("/" + self.remote_folder_line.text())
-            directory_path = os.path.join(self.remote_folder_line.text(), directory_name)
+            directory_path = os.path.join(
+                self.remote_folder_line.text(), directory_name
+            )
         else:
             directory_path = os.path.join(
                 "/home", self.remote_user_entry.text(), directory_name
             )
         return directory_path
-    
+
     def browse_output_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if (
@@ -743,7 +815,7 @@ class ALMASimulator(QMainWindow):
         else:
             if directory:
                 self.output_entry.setText(directory)
-    
+
     def browse_tng_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select TNG Directory")
         if (
@@ -897,23 +969,23 @@ class ALMASimulator(QMainWindow):
         )
         if file_path:
             self.target_list_entry.setText(file_path)
-            
+
     # -------- UI Widgets Functions -------------------------
     # Utility Functions
     def find_label_width(self):
         labels = [
-        QLabel("Output Directory:"),
-        QLabel("TNG Directory:"),
-        QLabel("Galaxy Zoo Directory:"),
-        QLabel("Hubble Top 100 Directory:"),
-        QLabel("Project Name:"),
-        QLabel("Number of Simulations:"),
-        QLabel("Number of Cores:"),
-        QLabel("Save Format:"),
-        QLabel("Local / Remote Mode:"),
-        QLabel("Line Widths in Km/s:"),
-        QLabel("Briggs Robustness:"),
-        QLabel("Metadata Mode:")
+            QLabel("Output Directory:"),
+            QLabel("TNG Directory:"),
+            QLabel("Galaxy Zoo Directory:"),
+            QLabel("Hubble Top 100 Directory:"),
+            QLabel("Project Name:"),
+            QLabel("Number of Simulations:"),
+            QLabel("Number of Cores:"),
+            QLabel("Save Format:"),
+            QLabel("Local / Remote Mode:"),
+            QLabel("Line Widths in Km/s:"),
+            QLabel("Briggs Robustness:"),
+            QLabel("Metadata Mode:"),
         ]
         # Find the maximum width of the labels
         self.max_label_width = max(label.sizeHint().width() for label in labels)
@@ -947,7 +1019,7 @@ class ALMASimulator(QMainWindow):
             window_width,
             window_height,
         )
-    
+
     def line_display(self):
         """
         Display the line emission's rest frequency.
@@ -977,7 +1049,7 @@ class ALMASimulator(QMainWindow):
     def metadata_path_set(self):
         metadata_path = self.metadata_path_entry.text()
         self.load_metadata(metadata_path)
-    
+
     def update_width_labels(self, tuple_values):
         # Update the labels when the range slider values change
         self.line_width_value_label_min.setText(f"Min: {tuple_values[0]} km/s")
@@ -985,7 +1057,7 @@ class ALMASimulator(QMainWindow):
 
     def update_robust_label(self, value):
         self.robust_value_label.setText(f"{value / 10}")
-    
+
     def update_query_save_label(self, query_type):
         """Shows/hides the target list row and query save row based on query type."""
         if query_type == "science":
@@ -1009,7 +1081,7 @@ class ALMASimulator(QMainWindow):
         line_edit_max_width = 360  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1035,7 +1107,7 @@ class ALMASimulator(QMainWindow):
         self.output_row.addWidget(self.output_label)
         self.output_row.addWidget(self.output_entry)
         self.output_row.addWidget(self.output_button)
-        #self.output_row.addStretch()
+        # self.output_row.addStretch()
         self.left_layout.addRow(self.output_row)
 
         # TNG Directory
@@ -1052,7 +1124,7 @@ class ALMASimulator(QMainWindow):
         self.tng_row.addWidget(self.tng_label)
         self.tng_row.addWidget(self.tng_entry)
         self.tng_row.addWidget(self.tng_button)
-        #self.tng_row.addStretch()
+        # self.tng_row.addStretch()
         self.left_layout.addRow(self.tng_row)
 
         # Galaxy Zoo Directory
@@ -1072,7 +1144,7 @@ class ALMASimulator(QMainWindow):
         self.galaxy_row.addWidget(self.galaxy_zoo_button)
         self.galaxy_chechbox_row = QHBoxLayout()
         self.galaxy_chechbox_row.addWidget(self.galaxy_zoo_checkbox)
-        #self.galaxy_row.addStretch()
+        # self.galaxy_row.addStretch()
         self.galaxy_chechbox_row.addStretch()
         self.left_layout.addRow(self.galaxy_row)
         self.left_layout.addRow(self.galaxy_chechbox_row)
@@ -1094,7 +1166,7 @@ class ALMASimulator(QMainWindow):
         self.hubble_row.addWidget(self.hubble_button)
         self.hubble_chechbox_row = QHBoxLayout()
         self.hubble_chechbox_row.addWidget(self.hubble_checkbox)
-        #self.hubble_row.addStretch()
+        # self.hubble_row.addStretch()
         self.hubble_chechbox_row.addStretch()
         self.left_layout.addRow(self.hubble_row)
         self.left_layout.addRow(self.hubble_chechbox_row)
@@ -1110,7 +1182,7 @@ class ALMASimulator(QMainWindow):
         self.project_name_row.addStretch()
         self.left_layout.addRow(self.project_name_row)
 
-        # Number of Simulaitons 
+        # Number of Simulaitons
         self.n_sims_label = QLabel("Number of Simulations:")
         self.n_sims_label.setFixedWidth(self.max_label_width)
         self.n_sims_entry = QLineEdit()
@@ -1132,8 +1204,7 @@ class ALMASimulator(QMainWindow):
         self.ncpu_row.addStretch()
         self.left_layout.addRow(self.ncpu_row)
 
-
-        # Save Format 
+        # Save Format
         self.save_format_label = QLabel("Save Format:")
         self.save_format_label.setFixedWidth(self.max_label_width)
         self.save_format_combo = QComboBox()
@@ -1143,13 +1214,13 @@ class ALMASimulator(QMainWindow):
         self.save_format_row.addWidget(self.save_format_combo)
         self.save_format_row.addStretch()
         self.left_layout.addRow(self.save_format_row)
-        
+
         # Local / Remote Mode
         self.local_mode_label = QLabel("Local / Remote Mode:")
         self.local_mode_label.setFixedWidth(self.max_label_width)
         self.local_mode_combo = QComboBox()
         self.local_mode_combo.addItems(["local", "remote"])
-        # Remote Compute Mode 
+        # Remote Compute Mode
         self.remote_mode_label = QLabel("Remote Compute Mode:")
         self.remote_mode_label.setFixedWidth(self.max_label_width)
         self.remote_mode_combo = QComboBox()
@@ -1171,10 +1242,9 @@ class ALMASimulator(QMainWindow):
         self.remote_mode_combo.hide()
         self.remote_folder_line.hide()
         self.remote_folder_checkbox.hide()
-        self.remote_mode_combo.currentTextChanged.connect(self.toggle_remote_row)   
+        self.remote_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
 
-
-        # Remote info 
+        # Remote info
         self.remote_address_label = QLabel("Remote Host:")
         self.remote_address_entry = QLineEdit()
         self.remote_address_entry.setMaximumWidth(line_edit_max_width)
@@ -1184,7 +1254,7 @@ class ALMASimulator(QMainWindow):
         self.remote_config_button.setFixedHeight(button_height)
         self.remote_config_button.setFixedWidth(button_width)
         self.remote_config_button.setStyleSheet(button_style)
-        
+
         self.remote_config_button.clicked.connect(self.browse_slurm_config)
         self.remote_user_label = QLabel("User:")
         self.remote_user_entry = QLineEdit()
@@ -1227,7 +1297,7 @@ class ALMASimulator(QMainWindow):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1247,7 +1317,7 @@ class ALMASimulator(QMainWindow):
         self.line_mode_row.addStretch()
         self.left_layout.addRow(self.line_mode_row)
         self.line_index_label = QLabel("Select Line Indices (space-separated):")
-        #self.line_index_label.setFixedWidth(self.max_label_width)
+        # self.line_index_label.setFixedWidth(self.max_label_width)
         self.line_index_entry = QLineEdit()
         self.redshift_label = QLabel("Redshift (space-separated):")
         self.redshift_label.setFixedWidth(self.max_label_width)
@@ -1274,7 +1344,7 @@ class ALMASimulator(QMainWindow):
         line_edit_max_width = 250  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1294,8 +1364,10 @@ class ALMASimulator(QMainWindow):
         self.line_width_value_label_min = QLabel("Min: 50 km/s")
         self.line_width_value_label_max = QLabel("Max: 1700 km/s")
         self.line_width_slider = QRangeSlider(QtCore.Qt.Horizontal)
-        self.line_width_slider.setRange(50, 1700)  # Set min and max range for the slider
-        self.line_width_slider.setValue((100, 500))# Initial values for min/max
+        self.line_width_slider.setRange(
+            50, 1700
+        )  # Set min and max range for the slider
+        self.line_width_slider.setValue((100, 500))  # Initial values for min/max
         self.line_width_slider.setMinimumSize(line_edit_max_width, 20)
         self.line_width_slider.setMaximumWidth(line_edit_max_width + button_width)
         self.line_width_slider.valueChanged.connect(self.update_width_labels)
@@ -1311,7 +1383,7 @@ class ALMASimulator(QMainWindow):
         line_edit_max_width = 300  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1338,12 +1410,12 @@ class ALMASimulator(QMainWindow):
         self.robust_row.addWidget(self.robust_slider)
         self.robust_row.addWidget(self.robust_value_label)
         self.left_layout.addRow(self.robust_row)
-    
+
     def add_dim_widgets(self):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1390,7 +1462,7 @@ class ALMASimulator(QMainWindow):
         self.fix_spectral_checkbox.stateChanged.connect(
             lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry)
         )
-        
+
         # Serendipitous Sources
         self.serendipitous_checkbox = QCheckBox("Serendipitous Sources")
 
@@ -1414,7 +1486,7 @@ class ALMASimulator(QMainWindow):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1462,7 +1534,7 @@ class ALMASimulator(QMainWindow):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1474,7 +1546,7 @@ class ALMASimulator(QMainWindow):
                 background-color: #3498DB;
             }}
         """
-         # Metadata 
+        # Metadata
         self.metadata_mode_label = QLabel("Metadata Mode:")
         self.metadata_mode_label.setFixedWidth(self.max_label_width)
         self.metadata_mode_entry = QLineEdit()
@@ -1491,7 +1563,7 @@ class ALMASimulator(QMainWindow):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1503,29 +1575,29 @@ class ALMASimulator(QMainWindow):
                 background-color: #3498DB;
             }}
         """
-        #self.metadata_path_label = QLabel("Metadata Path:")
-        #self.metadata_path_label.setFixedWidth(self.max_label_width)
-        #self.metadata_path_entry = QLineEdit()
-        #self.metadata_path_entry.setMaximumWidth(line_edit_max_width)
-        #self.metadata_path_button = QPushButton("Browse")
-        #self.metadata_path_button.setFixedHeight(button_height)
-        #self.metadata_path_button.setFixedWidth(button_width)
-        #self.metadata_path_button.setStyleSheet(button_style)
-        
-        #self.metadata_path_button.clicked.connect(self.browse_metadata_path)
-        #self.metadata_path_row = QHBoxLayout()
-        #self.metadata_path_row.addWidget(self.metadata_path_label)
-        #self.metadata_path_row.addWidget(self.metadata_path_entry)
-        #self.metadata_path_row.addWidget(self.metadata_path_button)
+        # self.metadata_path_label = QLabel("Metadata Path:")
+        # self.metadata_path_label.setFixedWidth(self.max_label_width)
+        # self.metadata_path_entry = QLineEdit()
+        # self.metadata_path_entry.setMaximumWidth(line_edit_max_width)
+        # self.metadata_path_button = QPushButton("Browse")
+        # self.metadata_path_button.setFixedHeight(button_height)
+        # self.metadata_path_button.setFixedWidth(button_width)
+        # self.metadata_path_button.setStyleSheet(button_style)
+
+        # self.metadata_path_button.clicked.connect(self.browse_metadata_path)
+        # self.metadata_path_row = QHBoxLayout()
+        # self.metadata_path_row.addWidget(self.metadata_path_label)
+        # self.metadata_path_row.addWidget(self.metadata_path_entry)
+        # self.metadata_path_row.addWidget(self.metadata_path_button)
         self.metadata_path_row.addStretch()
         self.left_layout.addRow(self.metadata_path_row)
-        #self.left_layout.update()
+        # self.left_layout.update()
 
     def add_metadata_query_widgets(self):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1538,16 +1610,16 @@ class ALMASimulator(QMainWindow):
             }}
         """
         labels = [
-            QLabel(
-            "Select Science Keyword by number (space-separated):"
-            ),
-            QLabel(
-            "Select Scientific Category by number (space-separated):"
-            ),
+            QLabel("Select Science Keyword by number (space-separated):"),
+            QLabel("Select Scientific Category by number (space-separated):"),
             QLabel("Select observing bands (space-separated):"),
             QLabel("Select FOV range (min max) or max only (space-separated):"),
-            QLabel("Select integration time  range (min max) or max only (space-separated):"),
-            QLabel("Select source frequency range (min max) or max only (space-separated):"),
+            QLabel(
+                "Select integration time  range (min max) or max only (space-separated):"
+            ),
+            QLabel(
+                "Select source frequency range (min max) or max only (space-separated):"
+            ),
         ]
         # Find the maximum width of the labels
         max_label_width = max(label.sizeHint().width() for label in labels)
@@ -1626,7 +1698,7 @@ class ALMASimulator(QMainWindow):
         self.frequency_row.addWidget(self.frequency_entry)
         self.frequency_row.addStretch()
 
-        #self.continue_query_row = QHBoxLayout()
+        # self.continue_query_row = QHBoxLayout()
         self.query_save_row.addWidget(self.continue_query_button)
 
         # Insert rows into left_layout (adjust index if needed)
@@ -1639,14 +1711,14 @@ class ALMASimulator(QMainWindow):
         self.terminal.add_log(
             "\n\nFill out the fields and click 'Continue Query' to proceed."
         )
-        self.query_execute_button.hide()  # Hide 
+        self.query_execute_button.hide()  # Hide
         self.continue_query_button.show()  # Show
 
     def add_query_widgets(self):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 80
         button_height = 20
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1684,7 +1756,7 @@ class ALMASimulator(QMainWindow):
         self.target_list_row.addStretch()
         self.left_layout.addRow(self.target_list_row)
         self.show_hide_widgets(self.target_list_row, show=False)
-        
+
         self.query_save_label = QLabel("Save Metadata to:")
         self.query_save_entry = QLineEdit()
         self.query_save_entry.setMaximumWidth(line_edit_max_width)
@@ -1706,13 +1778,13 @@ class ALMASimulator(QMainWindow):
         self.query_save_row.addWidget(self.query_execute_button)
         self.query_save_row.addStretch()
         self.left_layout.addRow(self.query_save_row)
-        #self.left_layout.addRow(self.query_execute_button)
+        # self.left_layout.addRow(self.query_execute_button)
 
     def add_footer_buttons(self):
         line_edit_max_width = 400  # Example width (you can adjust this)
         button_width = 70
         button_height = 30
-        border_radius = 10 
+        border_radius = 10
         button_style = f"""
             QPushButton {{
                 background-color: #5DADE2;
@@ -1759,8 +1831,8 @@ class ALMASimulator(QMainWindow):
 
         # Add the footer layout to the bottom of the left_content_layout
         self.left_content_layout.addLayout(self.footer_layout)
-    
-    # Remove Widgets Functions 
+
+    # Remove Widgets Functions
     def remove_metadata_query_widgets(self):
         # Similar to remove_query_widgets from the previous response, but remove
         # all the rows and widgets added in add_metadata_query_widgets.
@@ -1801,8 +1873,8 @@ class ALMASimulator(QMainWindow):
                 self.metadata_path_row
             )  # Remove the row layout from its parent
             self.metadata_path_row.setParent(None)  # Set the parent to None
-            self.metadata = None 
-    
+            self.metadata = None
+
     def remove_query_widgets(self):
         """Removes the query type and save location rows from the layout."""
 
@@ -1913,7 +1985,7 @@ class ALMASimulator(QMainWindow):
                 self.galaxy_zoo_entry.setText(
                     os.path.join(os.path.expanduser("~"), folder)
                 )
-    
+
     def toggle_line_mode_widgets(self):
         """Shows/hides the appropriate input rows based on line mode checkbox state."""
         if self.line_mode_checkbox.isChecked():
@@ -1938,7 +2010,7 @@ class ALMASimulator(QMainWindow):
             # Show the widgets in non_line_mode_row1 and non_line_mode_row2
             self.show_hide_widgets(self.non_line_mode_row1, show=True)
             self.show_hide_widgets(self.non_line_mode_row2, show=True)
-        
+
     def toggle_dim_widgets_visibility(self, widget):
         widget.setVisible(self.sender().isChecked())
 
@@ -1966,6 +2038,7 @@ class ALMASimulator(QMainWindow):
         else:
             self.remove_metadata_browse()
             self.remove_query_widgets()
+
     # ------- Progress Bar ---------------------------------
     @pyqtSlot(int)
     def handle_progress(self, value):
@@ -1979,8 +2052,8 @@ class ALMASimulator(QMainWindow):
     @pyqtSlot(object)
     def print_keywords(self, keywords):
         self.terminal.add_log("Available science keywords:")
-        self.science_keywords = keywords['science_keywords']
-        self.scientific_categories = keywords['scientific_categories']
+        self.science_keywords = keywords["science_keywords"]
+        self.scientific_categories = keywords["scientific_categories"]
 
         for i, keyword in enumerate(self.science_keywords):
             self.terminal.add_log(f"{i}: {keyword}")
@@ -2003,9 +2076,11 @@ class ALMASimulator(QMainWindow):
                     or not self.metadata_query_widgets_added
                 ):
                     runnable = QueryKeyword(self)  # Pass the current instance
-                    runnable.signals.queryFinished.connect(self.print_keywords)  # Connect the signal to the slot
-                    self.thread_pool.start(runnable)                  
-                   
+                    runnable.signals.queryFinished.connect(
+                        self.print_keywords
+                    )  # Connect the signal to the slot
+                    self.thread_pool.start(runnable)
+
                 else:
                     self.query_for_metadata_by_science_type()
             elif query_type == "target":
@@ -2019,7 +2094,7 @@ class ALMASimulator(QMainWindow):
             else:
                 # Handle invalid query type (optional)
                 pass
-    
+
     def load_metadata(self, metadata_path):
         try:
             self.terminal.add_log(f"Loading metadata from {metadata_path}")
@@ -2151,7 +2226,7 @@ class ALMASimulator(QMainWindow):
                 try:
                     os.makedirs(self.output_path)
                 except Exception as e:
-                    self.terminal.add_log(f'Cannot create output directory: {e}')
+                    self.terminal.add_log(f"Cannot create output directory: {e}")
                     return
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
@@ -2306,13 +2381,12 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log("Checking TNG Directories")
             if self.local_mode_combo.currentText() == "local":
                 runnable = DownloadTNGStructure(self, remote=False)
-                
+
             else:
                 runnable = DownloadTNGStructure(self, remote=True)
             runnable.finished.connect(self.on_download_finished)
             self.thread_pool.start(runnable)
 
-        
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
             self.metadata = self.sample_given_redshift(
                 self.metadata, n_sims, rest_freq, True, z1
@@ -2429,25 +2503,24 @@ class ALMASimulator(QMainWindow):
         )
         if self.local_mode_combo.currentText() == "local":
             self.run_simulator_locally()
-        
-        else: 
+
+        else:
             self.run_simulator_remotely()
-        
-        
+
         return
 
     def run_simulator_locally(self):
-        self.stop_simulation_flag = False 
+        self.stop_simulation_flag = False
         self.current_sim_index = 0
         cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()))
         client = Client(cluster, timeout=60, heartbeat_interval=10)
         self.client = client
-        self.terminal.add_log(f'Dashboard hosted at {self.client.dashboard_link}')
+        self.terminal.add_log(f"Dashboard hosted at {self.client.dashboard_link}")
         self.nextSimulation.connect(self.run_next_simulation)
         self.run_next_simulation()
 
     def run_simulator_remotely(self):
-        self.stop_simulation_flag = False 
+        self.stop_simulation_flag = False
         self.current_sim_index = 0
 
         # Collect input from UI elements
@@ -2459,7 +2532,7 @@ class ALMASimulator(QMainWindow):
 
         # Prepare the list of remote hosts
         # If multiple hosts are entered, they should be comma-separated
-        remote_hosts = [host.strip() for host in remote_host.split(',') if host.strip()]
+        remote_hosts = [host.strip() for host in remote_host.split(",") if host.strip()]
 
         # Prepend the username to each host
         if remote_user:
@@ -2467,14 +2540,14 @@ class ALMASimulator(QMainWindow):
 
         # Prepare SSH connection options
         connect_options = {
-            'known_hosts': None,  # Disable known_hosts checking (use with caution)
+            "known_hosts": None,  # Disable known_hosts checking (use with caution)
         }
 
         if ssh_key_path:
-            connect_options['client_keys'] = ssh_key_path
+            connect_options["client_keys"] = ssh_key_path
 
         if ssh_key_password:
-            connect_options['passphrase'] = ssh_key_password
+            connect_options["passphrase"] = ssh_key_password
 
         # Create the SSHCluster
         try:
@@ -2482,7 +2555,7 @@ class ALMASimulator(QMainWindow):
                 hosts=remote_hosts,
                 connect_options=connect_options,
                 worker_options={
-                    'nthreads': n_workers_per_host,
+                    "nthreads": n_workers_per_host,
                     # Add more worker options if needed
                 },
                 scheduler_options={
@@ -2491,12 +2564,14 @@ class ALMASimulator(QMainWindow):
             )
 
             # Connect the Dask client to the cluster
-            client = Client(cluster, timeout=60, heartbeat_interval='5s')
+            client = Client(cluster, timeout=60, heartbeat_interval="5s")
             self.client = client
 
             # Inform the user about the dashboard
-            self.terminal.add_log(f'Dashboard hosted at {self.client.dashboard_link}')
-            self.terminal.add_log('To access the dashboard, you may need to set up SSH port forwarding.')
+            self.terminal.add_log(f"Dashboard hosted at {self.client.dashboard_link}")
+            self.terminal.add_log(
+                "To access the dashboard, you may need to set up SSH port forwarding."
+            )
 
             self.nextSimulation.connect(self.run_next_simulation)
             self.run_next_simulation()
@@ -2505,17 +2580,18 @@ class ALMASimulator(QMainWindow):
             QMessageBox.critical(
                 self,
                 "SSH Cluster Error",
-                f"An error occurred while creating the SSH cluster:\n{e}"
+                f"An error occurred while creating the SSH cluster:\n{e}",
             )
             return
-        
-        
+
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
             self.progress_bar_entry.setText("Simluation Finished")
             # self.send_email()
             return
-        self.progress_bar_entry.setText(f"Running Simulation {self.current_sim_index + 1}")
+        self.progress_bar_entry.setText(
+            f"Running Simulation {self.current_sim_index + 1}"
+        )
         runnable = Simulator(self, *self.input_params.iloc[self.current_sim_index])
         self.update_progress.connect(self.update_progress_bar)
         runnable.signals.simulationFinished.connect(self.start_plot_runnable)
@@ -2529,7 +2605,6 @@ class ALMASimulator(QMainWindow):
         self.progress_bar_entry.setText("Simulation Stopped")
         self.update_progress_bar(0)
         self.terminal.add_log("# ------------------------------------- #\n")
-    
 
     # -------- Astro Functions -------------------------
     def remove_non_numeric(self, text):
@@ -3609,7 +3684,7 @@ class ALMASimulator(QMainWindow):
             bandwidth=band_range,
             fov=fov.value,
             antenna_array=antenna_array,
-            noise= 0.1 * (min_line_flux / beam_area.value) / snr,
+            noise=0.1 * (min_line_flux / beam_area.value) / snr,
             snr=snr,
             integration_time=int_time.value * second2hour,
             observation_date=obs_date,
@@ -3682,7 +3757,7 @@ class ALMASimulator(QMainWindow):
                 self.remote_folder_line.setText(self.settings.value("remote_dir", ""))
         self.project_name_entry.setText(self.settings.value("project_name", ""))
         self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
-        self.metadata_path_entry.setText(self.settings.value("metadata_path", "")) 
+        self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
         if (
             self.metadata_mode_combo.currentText() == "get"
             and self.metadata_path_entry.text() != ""
@@ -3783,8 +3858,11 @@ class ALMASimulator(QMainWindow):
             self.redshift_entry.setText(self.settings.value("redshifts", ""))
             self.num_lines_entry.setText(self.settings.value("num_lines", ""))
         self.line_width_slider.setValue(
-            (int(self.settings.value("min_line_width", 100)), 
-            int(self.settings.value("max_line_width", 500))))
+            (
+                int(self.settings.value("min_line_width", 100)),
+                int(self.settings.value("max_line_width", 500)),
+            )
+        )
         self.robust_slider.setValue(int(self.settings.value("robust", 0)))
         self.snr_entry.setText(self.settings.value("snr", ""))
         self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
@@ -3807,7 +3885,7 @@ class ALMASimulator(QMainWindow):
         )
         self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
         self.left_layout.update()
-    
+
     def load_settings_on_remote(self):
         self.output_entry.setText(self.settings.value("output_directory", ""))
         self.tng_entry.setText(self.settings.value("tng_directory", ""))
@@ -3817,7 +3895,7 @@ class ALMASimulator(QMainWindow):
         self.ncpu_entry.setText(self.settings.value("ncpu", ""))
         self.mail_entry.setText(self.settings.value("email", ""))
         self.metadata_path_entry.setText("")
-    
+
     def reset_fields(self):
         self.output_entry.clear()
         self.tng_entry.clear()
@@ -3845,7 +3923,7 @@ class ALMASimulator(QMainWindow):
         self.redshift_entry.clear()
         self.num_lines_entry.clear()
         self.snr_checkbox.setChecked(False)
-        #self.line_width_slider.setValue(200)
+        # self.line_width_slider.setValue(200)
         self.robust_slider.setValue(0)
         self.robust_value_label.setText("0")
         self.snr_entry.clear()
@@ -3859,7 +3937,7 @@ class ALMASimulator(QMainWindow):
         self.tng_api_key_entry.clear()
         self.line_mode_checkbox.setChecked(False)
         self.serendipitous_checkbox.setChecked(False)
-    
+
     def closeEvent(self, event):
         if self.local_mode_combo.currentText() == "local":
             if self.thread_pool.activeThreadCount() > 0:
@@ -3883,10 +3961,10 @@ class ALMASimulator(QMainWindow):
                 self.thread_pool.waitForDone()
                 self.thread_pool.clear()
                 super().closeEvent(event)
-    
+
     def show_background_notification(self):
         if not QSystemTrayIcon.isSystemTrayAvailable():
-            print('System Tray not available')
+            print("System Tray not available")
             return
         if self.tray_icon is None:
             path = os.path.dirname(self.main_path)
@@ -3957,18 +4035,18 @@ class ALMASimulator(QMainWindow):
         )
         self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
         self.settings.sync()
-    
+
     def open_dask_dashboard(self):
         if self.client is not None:
             webbrowser.open(self.client.dashboard_link)
-        else: 
-            self.terminal.add_log('Please start the simulation to see the dashboard')
+        else:
+            self.terminal.add_log("Please start the simulation to see the dashboard")
 
     # -------- Download Data Functions -------------------------
     def on_download_finished(self):
         self.terminal.add_log("Download Finished")
         self.terminal.add_log("# ------------------------------------- #\n")
-        
+
     # -------- IO Functions -------------------------
     def create_remote_output_dir(self):
         if self.remote_key_pass_entry.text() != "":
@@ -4128,7 +4206,7 @@ class ALMASimulator(QMainWindow):
     def start_plot_runnable(self, simulation_results):
         runnable = PlotResults(self, simulation_results)
         self.thread_pool.start(runnable)
-    
+
     def _plot_antennas(self):
         plt.figure(figsize=(8, 8))
         toplot = np.array(self.antPos[: self.Nant])
@@ -4372,7 +4450,6 @@ class ALMASimulator(QMainWindow):
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
         plt.close()
 
-    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
