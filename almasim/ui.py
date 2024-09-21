@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QFileDialog,
     QComboBox,
@@ -4069,6 +4070,8 @@ class ALMASimulator(QMainWindow):
             self.output_entry.text(), self.project_name_entry.text()
         )
         plot_path = os.path.join(output_path, "plots")
+        if not sftp.exists(self.output_entry.text()):
+            sftp.mkdir(self.output_entry.text())
         if not sftp.exists(output_path):
             sftp.mkdir(output_path)
         if not sftp.exists(plot_path):
