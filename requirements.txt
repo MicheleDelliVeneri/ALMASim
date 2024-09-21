@@ -20,6 +20,7 @@ paramiko
 pysftp
 setuptools
 tenacity
+threading
 nifty8
 setuptools
 multiprocess

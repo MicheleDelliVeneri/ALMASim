@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from PyQt6.QtWidgets import (
     QApplication,
+    QFormLayout,
     QMainWindow,
     QWidget,
     QVBoxLayout,
@@ -31,13 +32,16 @@ from PyQt6.QtCore import (
     QThreadPool,
     pyqtSlot,
 )
+from qtrangeslider import QRangeSlider
+from qtrangeslider.qtcompat import QtCore
+from qtrangeslider.qtcompat import QtWidgets as QtW
 from PyQt6.QtGui import QPixmap, QGuiApplication, QIcon
 from kaggle import api
 from os.path import isfile
 import dask
 import dask.config
 import dask.dataframe as dd
-from distributed import Client, LocalCluster, WorkerPlugin
+from distributed import Client, LocalCluster, WorkerPlugin, SSHCluster
 from dask_jobqueue import SLURMCluster
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -69,27 +73,13 @@ from pathlib import Path
 import inspect
 import requests
 import zipfile
-
-# import yagmail
-
-matplotlib.use("Agg")
-os.environ["LC_ALL"] = "C"
+import sys
+import webbrowser
 
 
-class MemoryLimitPlugin(WorkerPlugin):
-    def __init__(self, memory_limit):
-        self.memory_limit = memory_limit
-
-    def setup(self, worker):
-        pass
-
-    def teardown(self, worker):
-        pass
-
-    def transition(self, key, start, finish, *args, **kwargs):
-        if finish == "memory" and psutil.virtual_memory().percent > self.memory_limit:
-            # If memory usage exceeds the limit, skip the task
-            return "erred"
+def closest_power_of_2(x):
+    op = math.floor if bin(x)[3] != "1" else math.ceil
+    return 2 ** op(math.log(x, 2))
 
 
 class TerminalLogger(QObject):
@@ -111,244 +101,520 @@ class TerminalLogger(QObject):
         self.add_log(f"Progress: {value}%")
 
 
-class PlotWindow(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.layout = QVBoxLayout(self)
-        self.initial_width = 2400  # 20 inches * 60 pixels per inch
-        self.initial_height = 1200  # 20 inches * 60 pixels per inch
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setFixedWidth(self.initial_width)
-        self.scroll_area.setFixedHeight(self.initial_height)
-        self.scroll_area.setWidgetResizable(True)
-        self.layout.addWidget(self.scroll_area)
-        # Create a central widget for the scroll area
-        self.scroll_widget = QWidget()
-        self.scroll_layout = QGridLayout(self.scroll_widget)
-
-        # Set size policies for the layout to expand
-        self.scroll_layout.setRowStretch(0, 1)
-        self.scroll_layout.setRowStretch(1, 1)
-        self.scroll_layout.setColumnStretch(0, 1)
-        self.scroll_layout.setColumnStretch(1, 1)
-
-        self.scroll_area.setWidget(self.scroll_widget)
-        self.resize(self.initial_width, self.initial_height)  # Set initial size
-        self.create_science_keyword_plots()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.update_plot_sizes()
-
-    def update_plot_sizes(self):
-        available_width = self.scroll_widget.width()
-        available_height = self.scroll_widget.height()
-        plot_width = available_width // 2  # Keep integer division for layout
-        plot_height = available_height // 3
-
-        for i in range(self.scroll_layout.count()):
-            item = self.scroll_layout.itemAt(i)
-            if isinstance(item.widget(), QLabel):
-                label = item.widget()
-                pixmap = label.pixmap()
-                # Calculate the aspect ratio of the original pixmap
-                aspect_ratio = pixmap.width() / pixmap.height()
-                # Determine if the available width or height is the limiting factor
-                if plot_width / aspect_ratio <= plot_height:
-                    new_height = int(plot_width / aspect_ratio)  # Convert to integer
-                    new_width = plot_width
-                else:
-                    new_width = int(plot_height * aspect_ratio)  # Convert to integer
-                    new_height = plot_height
-                scaled_pixmap = pixmap.scaled(
-                    new_width, new_height, Qt.AspectRatioMode.KeepAspectRatio
-                )  # Scale with aspect ratio
-                label.setPixmap(scaled_pixmap)
-
-    def create_science_keyword_plots(self):
-        """Creates and displays plots of science keyword distributions in the window."""
-        try:
-            plot_dir = os.path.join(os.getcwd(), "plots")  # Get the directory for plots
-            expected_plots = [
-                "science_vs_bands.png",
-                "science_vs_int_time.png",
-                "science_vs_FoV.png",
-                "science_vs_source_freq.png",
-            ]
-
-            # Check if plots need to be generated
-            if not all(
-                os.path.exists(os.path.join(plot_dir, plot)) for plot in expected_plots
-            ):
-                self.plot_science_keywords_distributions(
-                    os.getcwd()
-                )  # Generate plots if not found
-
-            row, col = 0, 0
-            for plot_file in expected_plots:  # Iterate through the expected plot files
-                plot_path = os.path.join(plot_dir, plot_file)
-
-                pixmap = QPixmap()
-                if not pixmap.load(plot_path):  # Load the image for the plot
-                    self.terminal.add_log(f"Error loading plot: {plot_path}")
-                    continue
-
-                max_width = self.width() // 2
-                max_height = self.height() // 2
-
-                scaled_pixmap = pixmap.scaled(
-                    max_width, max_height, Qt.AspectRatioMode.KeepAspectRatio
-                )  # Scale the image while maintaining aspect ratio
-
-                label = QLabel()
-                label.setPixmap(scaled_pixmap)
-                label.setSizePolicy(
-                    QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored
-                )  # Allow resizing
-                self.scroll_layout.addWidget(label, row, col)
-                self.scroll_layout.setRowStretch(row, 1)
-                self.scroll_layout.setColumnStretch(col, 1)
-
-                col += 1
-                if col == 2:  # 2 columns per row
-                    col = 0
-                    row += 1
-
-            self.adjustSize()
-
-        except Exception as e:  # Catch any potential exceptions
-            self.terminal.add_log(
-                f"Error in create_science_keyword_plots: {e}"
-            )  # Log the error
-
-
 class SignalEmitter(QObject):
     simulationFinished = pyqtSignal(object)
+    queryFinished = pyqtSignal(object)
+    downloadFinished = pyqtSignal(object)
     progress = pyqtSignal(int)
 
 
-class SimulatorRunnable(QRunnable, QObject):
+class QueryKeyword(QRunnable):
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance  # Store reference to main UI
+        self.signals = SignalEmitter()  # Instantiate the separate signal emitter object
+
+    @pyqtSlot()
+    def run(self):
+        try:
+            # Fetch science keywords and scientific categories
+            science_keywords, scientific_categories = ual.get_science_types()
+            results = {
+                "science_keywords": science_keywords,
+                "scientific_categories": scientific_categories,
+            }
+            self.signals.queryFinished.emit(
+                results
+            )  # Emit results through SignalEmitter
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+
+class QueryByTarget(QRunnable):
+    def __init__(self, alma_simulator_instance):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+
+    @pyqtSlot()
+    def run(self):
+        try:
+            df = ual.query_all_targets(self.alma_simulator.target_list)
+            df = df.drop_duplicates(subset="member_ous_uid")
+            save_to_input = self.alma_simulator.query_save_entry.text()
+            # Define a dictionary to map existing column names to new names with unit initials
+            rename_columns = {
+                "target_name": "ALMA_source_name",
+                "pwv": "PWV",
+                "schedblock_name": "SB_name",
+                "velocity_resolution": "Vel.res.",
+                "spatial_resolution": "Ang.res.",
+                "s_ra": "RA",
+                "s_dec": "Dec",
+                "s_fov": "FOV",
+                "t_resolution": "Int.Time",
+                "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
+                "sensitivity_10kms": "Line_sens_10kms_mJybeam",
+                "obs_release_date": "Obs.date",
+                "band_list": "Band",
+                "bandwidth": "Bandwidth",
+                "frequency": "Freq",
+                "frequency_support": "Freq.sup.",
+            }
+            df.rename(columns=rename_columns, inplace=True)
+            database = df[
+                [
+                    "ALMA_source_name",
+                    "Band",
+                    "PWV",
+                    "SB_name",
+                    "Vel.res.",
+                    "Ang.res.",
+                    "RA",
+                    "Dec",
+                    "FOV",
+                    "Int.Time",
+                    "Cont_sens_mJybeam",
+                    "Line_sens_10kms_mJybeam",
+                    "Obs.date",
+                    "Bandwidth",
+                    "Freq",
+                    "Freq.sup.",
+                    "antenna_arrays",
+                    "proposal_id",
+                    "member_ous_uid",
+                    "group_ous_uid",
+                ]
+            ]
+            database.loc[:, "Obs.date"] = database["Obs.date"].apply(
+                lambda x: x.split("T")[0]
+            )
+            database.to_csv(save_to_input, index=False)
+            self.signals.queryFinished.emit(database)
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+
+class QueryByScience(QRunnable):
+    def __init__(self, alma_simulator_instance, sql_fields):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+        self.sql_fields = sql_fields
+
+    @pyqtSlot()
+    def run(self):
+        try:
+            science_keyword = self.sql_fields["science_keyword"]
+            scientific_category = self.sql_fields["scientific_category"]
+            bands = self.sql_fields["bands"]
+            fov_range = self.sql_fields["fov_range"]
+            time_resolution_range = self.sql_fields["time_resolution_range"]
+            frequency_range = self.sql_fields["frequency_range"]
+            save_to_input = self.sql_fields["save_to"]
+            df = ual.query_by_science_type(
+                science_keyword,
+                scientific_category,
+                bands,
+                fov_range,
+                time_resolution_range,
+                frequency_range,
+            )
+            df = df.drop_duplicates(subset="member_ous_uid").drop(
+                df[df["science_keyword"] == ""].index
+            )
+            # Rename columns and select relevant data
+            rename_columns = {
+                "target_name": "ALMA_source_name",
+                "pwv": "PWV",
+                "schedblock_name": "SB_name",
+                "velocity_resolution": "Vel.res.",
+                "spatial_resolution": "Ang.res.",
+                "s_ra": "RA",
+                "s_dec": "Dec",
+                "s_fov": "FOV",
+                "t_resolution": "Int.Time",
+                "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
+                "sensitivity_10kms": "Line_sens_10kms_mJybeam",
+                "obs_release_date": "Obs.date",
+                "band_list": "Band",
+                "bandwidth": "Bandwidth",
+                "frequency": "Freq",
+                "frequency_support": "Freq.sup.",
+            }
+            df.rename(columns=rename_columns, inplace=True)
+            database = df[
+                [
+                    "ALMA_source_name",
+                    "Band",
+                    "PWV",
+                    "SB_name",
+                    "Vel.res.",
+                    "Ang.res.",
+                    "RA",
+                    "Dec",
+                    "FOV",
+                    "Int.Time",
+                    "Cont_sens_mJybeam",
+                    "Line_sens_10kms_mJybeam",
+                    "Obs.date",
+                    "Bandwidth",
+                    "Freq",
+                    "Freq.sup.",
+                    "antenna_arrays",
+                    "proposal_id",
+                    "member_ous_uid",
+                    "group_ous_uid",
+                ]
+            ]
+            database.loc[:, "Obs.date"] = database["Obs.date"].apply(
+                lambda x: x.split("T")[0]
+            )
+            database.to_csv(save_to_input, index=False)
+            self.signals.queryFinished.emit(database)
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+
+class DownloadGalaxyZoo(QRunnable):
+    def __init__(self, alma_simulator_instance, remote):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+        self.remote = remote
+
+    @pyqtSlot()
+    def run(self):
+        try:
+            if self.remote is False:
+                galaxy_zoo_path = self.alma_simulator.galaxy_zoo_entry.text()
+                if galaxy_zoo_path == "":
+                    galaxy_zoo_path = os.path.join(
+                        self.alma_simulator.main_path, "galaxy_zoo"
+                    )
+                if not os.path.exists(galaxy_zoo_path):
+                    os.makedirs(galaxy_zoo_path)
+                api.authernticate()
+                api.dataset_download_files(
+                    "zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True
+                )
+                self.signals.queryFinished.emit(galaxy_zoo_path)
+            else:
+                if self.alma_simulator.remote_key_pass_entry.text() != "":
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+                    )
+
+                else:
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                    )
+                if sftp.exists(self.galaxy_zoo_entry.text()):
+                    if not sftp.listdir(self.galaxy_zoo_entry.text()):
+                        if not sftp.exists(
+                            "/home/{}/.kaggle".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
+                        ):
+                            sftp.mkdir(
+                                "/home/{}/.kaggle".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                )
+                            )
+                        if not sftp.exists(
+                            "/home/{}/.kaggle/kaggle.json".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
+                        ):
+                            sftp.put(
+                                os.path.join(
+                                    os.path.expanduser("~"), ".kaggle", "kaggle.json"
+                                ),
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                            )
+                            sftp.chmod(
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                                600,
+                            )
+                        if self.alma_simulator.remote_key_pass_entry.text() != "":
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text(),
+                                password=self.alma_simulator.remote_key_pass_entry.text(),
+                            )
+                        else:
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text()
+                            )
+                        venv_dir = os.path.join(
+                            "/home/{}/".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            ),
+                            "almasim_env",
+                        )
+                        commands = f"""
+                        source {venv_dir}/bin/activate
+                        python -c "from kaggle import api; \
+                            api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
+                                path='{self.alma_simulator.galaxy_zoo_entry.text()}', unzip=True)"
+                        """
+                        paramiko_client = paramiko.SSHClient()
+                        paramiko_client.set_missing_host_key_policy(
+                            paramiko.AutoAddPolicy()
+                        )
+                        paramiko_client.connect(
+                            self.alma_simulator.remote_address_entry.text(),
+                            username=self.alma_simulator.remote_user_entry.text(),
+                            pkey=key,
+                        )
+                        stdin, stdout, stderr = paramiko_client.exec_command(commands)
+                    self.signals.queryFinished.emit(galaxy_zoo_path)
+
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+
+class DownloadHubble(QRunnable):
+    def __init__(self, alma_simulator_instance, remote):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+        self.remote = remote
+
+    @pyqtSlot()
+    def run(self):
+        try:
+            if self.remote is False:
+                hubble_path = self.alma_simulator.hubble_entry.text()
+                if hubble_path == "":
+                    hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
+                if not os.path.exists(hubble_path):
+                    os.makedirs(hubble_path)
+                api.authernticate()
+                api.dataset_download_files(
+                    "redwankarimsony/top-100-hubble-telescope-images",
+                    path=hubble_path,
+                    unzip=True,
+                )
+                self.signals.downloadFinished.emit(hubble_path)
+            else:
+                if self.alma_simulator.remote_key_pass_entry.text() != "":
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+                    )
+
+                else:
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                    )
+                if not sftp.exists(self.alma_simulator.hubble_entry.text()):
+                    if not sftp.listdir(self.alma_simulator.hubble_entry.text()):
+                        if not sftp.exists(
+                            "/home/{}/.kaggle".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
+                        ):
+                            sftp.mkdir(
+                                "/home/{}/.kaggle".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                )
+                            )
+                        if not sftp.exists(
+                            "/home/{}/.kaggle/kaggle.json".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            )
+                        ):
+                            sftp.put(
+                                os.path.join(
+                                    os.path.expanduser("~"), ".kaggle", "kaggle.json"
+                                ),
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                            )
+                            sftp.chmod(
+                                "/home/{}/.kaggle/kaggle.json".format(
+                                    self.alma_simulator.remote_user_entry.text()
+                                ),
+                                600,
+                            )
+                        if self.alma_simulator.remote_key_pass_entry.text() != "":
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text(),
+                                password=self.alma_simulator.remote_key_pass_entry.text(),
+                            )
+                        else:
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text()
+                            )
+                        venv_dir = os.path.join(
+                            "/home/{}/".format(
+                                self.alma_simulator.remote_user_entry.text()
+                            ),
+                            "almasim_env",
+                        )
+                        commands = f"""
+                        source {venv_dir}/bin/activate
+                        python -c "from kaggle import api; \
+                            api.dataset_download_files('redwankarimsony/top-100-hubble-telescope-images', \
+                                path='{self.alma_simulator.hubble_entry.text()}', unzip=True)"
+                        """
+                        paramiko_client = paramiko.SSHClient()
+                        paramiko_client.set_missing_host_key_policy(
+                            paramiko.AutoAddPolicy()
+                        )
+                        paramiko_client.connect(
+                            self.alma_simulator.remote_address_entry.text(),
+                            username=self.alma_simulator.remote_user_entry.text(),
+                            pkey=key,
+                        )
+                        stdin, stdout, stderr = paramiko_client.exec_command(commands)
+                        self.signals.downloadFinished.emit(hubble_path)
+        except Exception as e:
+            logging.error(f"Error in Query: {e}")
+
+
+class DownloadTNGStructure(QRunnable):
+    def __init__(self, alma_simulator_instance, remote):
+        super().__init__()
+        self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
+        self.remote = remote
+
+    @pyqtSlot()
+    def run(self):
+        try:
+            if self.remote is False:
+                tng_dir = self.alma_simulator.tng_entry.text()
+                if not os.path.exists(os.path.join(tng_dir, "TNG100-1")):
+                    os.makedirs(os.path.join(tng_dir, "TNG100-1"))
+                if not os.path.exists(os.path.join(tng_dir, "TNG100-1", "output")):
+                    os.makedirs(os.path.join(tng_dir, "TNG100-1", "output"))
+                if not os.path.exists(
+                    os.path.join(tng_dir, "TNG100-1", "postprocessing")
+                ):
+                    os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
+                if not os.path.exists(
+                    os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
+                ):
+                    os.makedirs(
+                        os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
+                    )
+                if not isfile(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
+                    url = (
+                        "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+                    )
+                    cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
+                        self.alma_simulator.tng_api_key_entry.text(),
+                        os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
+                        url,
+                    )
+                    subprocess.run(cmd, shell=True)
+                    self.signals.downloadFinished.emit(
+                        os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")
+                    )
+            else:
+                if self.remote_key_pass_entry.text() != "":
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+                    )
+
+                else:
+                    sftp = pysftp.Connection(
+                        self.alma_simulator.remote_address_entry.text(),
+                        username=self.alma_simulator.remote_user_entry.text(),
+                        private_key=self.alma_simulator.remote_key_entry.text(),
+                    )
+                    tng_dir = self.alma_simulator.tng_entry.text()
+                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1")):
+                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1"))
+                    if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "output")):
+                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "output"))
+                    if not sftp.exists(
+                        os.path.join(tng_dir, "TNG100-1", "postprocessing")
+                    ):
+                        sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
+                    if not sftp.exists(
+                        os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
+                    ):
+                        sftp.mkdir(
+                            os.path.join(
+                                tng_dir, "TNG100-1", "postprocessing", "offsets"
+                            )
+                        )
+                    if not sftp.exists(
+                        os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")
+                    ):
+                        url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+                        cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
+                            self.alma_simulator.tng_api_key_entry.text(),
+                            os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
+                            url,
+                        )
+                        if self.alma_simulator.remote_key_pass_entry.text() != "":
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text(),
+                                password=self.alma_simulator.remote_key_pass_entry.text(),
+                            )
+                        else:
+                            key = paramiko.RSAKey.from_private_key_file(
+                                self.alma_simulator.remote_key_entry.text()
+                            )
+                        paramiko_client = paramiko.SSHClient()
+                        paramiko_client.set_missing_host_key_policy(
+                            paramiko.AutoAddPolicy()
+                        )
+                        paramiko_client.connect(
+                            self.alma_simulator.remote_address_entry.text(),
+                            username=self.alma_simulator.remote_user_entry.text(),
+                            pkey=key,
+                        )
+                        stdin, stdout, stderr = paramiko_client.exec_command(cmd)
+                        self.signals.downloadFinished.emit(
+                            os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")
+                        )
+        except Exception as e:
+            logging.error(f"Error TNG Structure creation: {e}")
+
+
+class Simulator(QRunnable):
     def __init__(self, alma_simulator_instance, *args, **kwargs):
         super().__init__()
-        QObject.__init__(self)  # Initialize QObject
         self.alma_simulator = alma_simulator_instance
+        self.signals = SignalEmitter()
         self.args = args
         self.kwargs = kwargs
-        self.signals = SignalEmitter()  # Create an instance of the SignalEmitter
 
     @pyqtSlot()
     def run(self):
         try:
             self.finish_flag = False
             results = None
-            while not self.alma_simulator.stop_simulation_flag:
-                if not self.finish_flag:
-                    results = self.alma_simulator.simulator(*self.args, **self.kwargs)
-                    self.finish_flag = True
-                    self.signals.simulationFinished.emit(
-                        results
-                    )  # Emit the results when done
-
+            if not self.finish_flag:
+                results = self.alma_simulator.simulator(*self.args, **self.kwargs)
+                self.finish_flag = True
+                self.signals.simulationFinished.emit(results)
         except Exception as e:
-            logging.error(f"Error in SimulatorRunnable: {e}", exc_info=True)
+            logging.error(f"Error in Simulator: {e}")
 
 
-class ParallelSimulatorRunnable(QRunnable):
-    def __init__(self, alma_simulator_instance):
-        super().__init__()
-        self.alma_simulator = alma_simulator_instance
-
-    @pyqtSlot()
-    def run(self):
-        self.alma_simulator.run_simulator_parallel()
-
-
-class ParallelSimulatorRunnableRemote(QRunnable):
-    def __init__(self, alma_simulator_instance, input_params):
-        super().__init__()
-        self.alma_simulator_instance = alma_simulator_instance
-        self.input_params = input_params
-
-    @pyqtSlot()
-    def run(self):
-        self.alma_simulator_instance.run_simulator_parallel_remote(self.input_params)
-
-
-class SlurmSimulatorRunnableRemote(QRunnable):
-    def __init__(self, alma_simulator_instance, input_params):
-        super().__init__()
-        self.alma_simulator_instance = alma_simulator_instance
-        self.input_params = input_params
-
-    @pyqtSlot()
-    def run(self):
-        self.alma_simulator_instance.run_simulator_slurm_remote(self.input_params)
-
-
-class SimulatorWorker(QRunnable, QObject):
-    def __init__(self, alma_simulator_instance, df, *args, **kwargs):
-        super().__init__()
-        QObject.__init__(self)
-        self.alma_simulator = alma_simulator_instance
-        self.df = df
-        self.signals = SignalEmitter()
-
-    @pyqtSlot()
-    def run(self):
-        for i, row in self.df.iterrows():
-            row = row.where(~row.isna(), None)
-            results = self.alma_simulator.simulator(*row)
-            self.signals.simulationFinished.emit(results)
-
-
-class DownloadGalaxyZooRunnable(QRunnable, QObject):
-    """Runnable for downloading Galaxy Zoo data in a separate thread."""
-
-    finished = pyqtSignal()  # Signal to emit when the task is finished
-
-    def __init__(self, alma_simulator_instance):
-        QRunnable.__init__(self)
-        QObject.__init__(self)  # QObject for signals
-        self.alma_simulator = (
-            alma_simulator_instance  # Store a reference to the main UI class
-        )
-
-    def run(self):
-        """Downloads Galaxy Zoo data."""
-        try:
-            self.alma_simulator.download_galaxy_zoo()  # Your download logic here
-        finally:
-            self.finished.emit()  # Emit the signal when done
-
-
-class DownloadTNGStructureRunnable(QRunnable):
-    """Runnable for downloading TNG Folders in a separate thread."""
-
-    def __init__(self, alma_simulator_instance):
-        super().__init__()
-        self.alma_simulator = (
-            alma_simulator_instance  # Store a reference to the main UI class
-        )
-
-    def run(self):
-        self.alma_simulator.check_tng_dirs()
-
-
-class DownloadHubbleRunnable(QRunnable):
-    """Runnable for downloading Hubble 100 data in a separate thread."""
-
-    def __init__(self, alma_simulator_instance):
-        super().__init__()
-        self.alma_simulator = (
-            alma_simulator_instance  # Store a reference to the main UI class
-        )
-
-    def run(self):
-        """Downloads Galaxy Zoo data."""
-        self.alma_simulator.download_hubble()
-
-
-class PlotResultsRunnable(QRunnable):
+class PlotResults(QRunnable):
     def __init__(self, alma_simulator_instance, simulation_results):
         super().__init__()
         self.alma_simulator = (
@@ -358,6 +624,7 @@ class PlotResultsRunnable(QRunnable):
 
     def run(self):
         """Downloads Galaxy Zoo data."""
+        self.almas_simulator.progress_bar_entry.setText("Plotting Simulation Results")
         self.alma_simulator.plot_simulation_results(self.simulation_results)
 
 
@@ -373,6 +640,7 @@ class ALMASimulator(QMainWindow):
         super().__init__()
         self.settings = QSettings("INFN Section of Naples", "ALMASim")
         self.tray_icon = None
+        self.client = None
         self.thread_pool = QThreadPool.globalInstance()
         self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         path = os.path.dirname(self.main_path)
@@ -394,68 +662,100 @@ class ALMASimulator(QMainWindow):
         self.initialize_ui()
         self.stop_simulation_flag = False
         self.remote_simulation_finished = True
-        self.terminal.add_log("Setting file path is {}".format(self.settings_path))
+        self.terminal.add_log(f"Setting file path is {self.settings_path}")
 
     # -------- Widgets and UI -------------------------
     def initialize_ui(self):
-        self.setWindowTitle("ALMASim: set up your simulation parameters")
-        # --- Create Widgets ---
-        # self.main_path = os.path.sep + os.path.join(
-        #    *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
-        #        os.path.sep
-        #    )[:-1]
-        # )
+
+        self.setWindowTitle("ALMASim: Set up your simulation parameters")
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
         self.metadata_path_label = QLabel("Metadata Path:")
         self.metadata_path_entry = QLineEdit()
+        self.metadata_path_entry.setMaximumWidth(line_edit_max_width)
         self.metadata_path_button = QPushButton("Browse")
+        self.metadata_path_button.setFixedHeight(button_height)
+        self.metadata_path_button.setFixedWidth(button_width)
+        self.metadata_path_button.setStyleSheet(button_style)
         self.metadata_path_button.clicked.connect(self.browse_metadata_path)
         self.metadata_path_row = QHBoxLayout()
         self.metadata_path_row.addWidget(self.metadata_path_label)
         self.metadata_path_row.addWidget(self.metadata_path_entry)
         self.metadata_path_row.addWidget(self.metadata_path_button)
+        self.metadata_path_row.addStretch()
+        self.line_displayed = False
+        # self.setMinimumSize(800, 600)  # Set minimum size for laptop usage
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)  # Horizontal layout for main wind
+        self.build_left_layout()
+        self.build_right_layout()
+        main_layout.addWidget(self.left_scroll_area)
+        main_layout.addLayout(self.right_layout)
+        main_layout.setStretch(0, 2)  # Stretch factor for the left side
+        main_layout.setStretch(1, 1)  # Stretch factor for the right side
+        ALMASimulator.populate_class_variables(
+            self.terminal, self.ncpu_entry, self.thread_pool
+        )
+        if self.on_remote is True:
+            self.load_settings_on_remote()
+        else:
+            self.load_settings()
+        self.toggle_line_mode_widgets()
+        self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
+        # if self.metadata_path_entry.text() != "" and isfile(
+        #    self.metadata_path_entry.text()
+        # ):
+        #    self.load_metadata(self.metadata_path_entry.text())
+        current_mode = self.metadata_mode_combo.currentText()
+        self.toggle_metadata_browse(current_mode)  # Call here
+        ALMASimulator.populate_class_variables(
+            self.terminal, self.ncpu_entry, self.thread_pool
+        )
+        self.set_window_size()
 
-        self.start_button = QPushButton("Start Simulation")
-        self.start_button.clicked.connect(self.start_simulation)
+    @classmethod
+    def populate_class_variables(cls, terminal, ncpu_entry, thread_pool):
+        cls.terminal = terminal
+        cls.ncpu_entry = ncpu_entry
+        cls.thread_pool = thread_pool
 
-        self.reset_button = QPushButton("Reset")
-        self.reset_button.clicked.connect(self.reset_fields)
-
-        self.stop_button = QPushButton("Stop")
-        self.stop_button.clicked.connect(self.stop_simulation)
-
-        self.term = QTextEdit(self)
+    def build_right_layout(self):
+        self.right_layout = QVBoxLayout()
+        self.term = QTextEdit()
         self.term.setReadOnly(True)
         self.terminal = TerminalLogger(self.term)
-
+        self.right_layout.addWidget(self.term)
         self.progress_bar_entry = QLabel()
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 100)
-        # --- Layout ---
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        self.left_layout = QVBoxLayout()
-        right_layout = QVBoxLayout()
+        self.progress_bar.setValue(0)
+        self.right_layout.addWidget(self.progress_bar_entry)
+        self.right_layout.addWidget(self.progress_bar)
 
-        # Button Row
-        button_row = QHBoxLayout()
-        button_row.addStretch()
-        button_row.addWidget(self.reset_button)
-        button_row.addWidget(self.start_button)
-        button_row.addWidget(self.stop_button)
-        self.left_layout.addStretch(1)
-        self.left_layout.addLayout(button_row)
-
-        right_layout.addWidget(self.term)
-        right_layout.addWidget(self.progress_bar_entry)
-        right_layout.addWidget(self.progress_bar)
-
-        main_layout.addLayout(self.left_layout)
-        main_layout.addLayout(right_layout)
-        main_layout.setStretch(0, 3)  # left_layout stretch factor
-        main_layout.setStretch(1, 2)  # right_layout stretch factor
-
-        self.line_displayed = False
+    def build_left_layout(self):
+        # Create the scrollable left layout
+        self.left_scroll_area = QScrollArea(self)
+        self.left_scroll_area.setWidgetResizable(True)
+        self.left_scroll_content = QWidget()
+        self.left_scroll_area.setWidget(self.left_scroll_content)
+        self.left_content_layout = QVBoxLayout(self.left_scroll_content)
+        self.left_layout = QFormLayout(self.left_scroll_content)
+        self.left_layout.setSpacing(5)
+        self.find_label_width()
         self.add_folder_widgets()
         self.add_line_widgets()
         self.add_width_slider()
@@ -464,1076 +764,26 @@ class ALMASimulator(QMainWindow):
         self.add_model_widgets()
         self.add_meta_widgets()
         self.add_query_widgets()
-        ALMASimulator.populate_class_variables(
-            self.terminal, self.ncpu_entry, self.thread_pool
-        )
-        # Load saved settings
-        if self.on_remote is True:
-            self.load_settings_on_remote()
-        else:
-            self.load_settings()
-        # self.terminal.start_log("")
-        # Check metadata mode on initialization
-        self.toggle_line_mode_widgets()
-        self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
-        if self.metadata_path_entry.text() != "" and isfile(
-            self.metadata_path_entry.text()
-        ):
-            self.load_metadata(self.metadata_path_entry.text())
-        current_mode = self.metadata_mode_combo.currentText()
-        self.toggle_metadata_browse(current_mode)  # Call here
-        self.set_window_size()
-        ALMASimulator.populate_class_variables(
-            self.terminal, self.ncpu_entry, self.thread_pool
-        )
+        self.left_content_layout.addLayout(self.left_layout)
+        # Add a stretch to push the content upwards
+        self.left_content_layout.addStretch()
+        # Add footer buttons at the bottom
+        self.add_footer_buttons()
 
-    def set_window_size(self):
-        screen = QGuiApplication.primaryScreen().geometry()
-        screen_width = screen.width()
-        screen_height = screen.height()
-        window_width = int(screen_width * 0.7)
-        window_height = int(screen_height * 0.5)
-        self.setGeometry(
-            (screen_width - window_width) // 2,
-            (screen_height - window_height) // 2,
-            window_width,
-            window_height,
-        )
-
-    def has_widget(self, layout, widget_type):
-        """Check if the layout contains a widget of a specific type."""
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if isinstance(item.widget(), widget_type):
-                return True
-        return False
-
-    def add_folder_widgets(self):
-        # 1
-        self.output_label = QLabel("Output Directory:")
-        self.output_entry = QLineEdit()
-        self.output_button = QPushButton("Browse")
-        self.output_button.clicked.connect(self.browse_output_directory)
-        # 2
-        self.tng_label = QLabel("TNG Directory:")
-        self.tng_entry = QLineEdit()
-        self.tng_button = QPushButton("Browse")
-        self.tng_button.clicked.connect(self.browse_tng_directory)
-        # 3
-        self.galaxy_zoo_label = QLabel("Galaxy Zoo Directory:")
-        self.galaxy_zoo_entry = QLineEdit()
-        self.galaxy_zoo_button = QPushButton("Browse")
-        self.galaxy_zoo_button.clicked.connect(self.browse_galaxy_zoo_directory)
-        # 4
-        self.hubble_label = QLabel("Hubble Top 100 Directory:")
-        self.hubble_entry = QLineEdit()
-        self.hubble_button = QPushButton("Browse")
-        self.hubble_button.clicked.connect(self.browse_hubble_directory)
-        # 5
-        self.mail_label = QLabel("Email:")
-        self.mail_entry = QLineEdit()
-        # 6
-        self.project_name_label = QLabel("Project Name:")
-        self.project_name_entry = QLineEdit()
-        # 7
-        self.n_sims_label = QLabel("Number of Simulations:")
-        self.n_sims_entry = QLineEdit()
-        # 8
-        self.ncpu_label = QLabel("N. CPUs / Processes:")
-        self.ncpu_entry = QLineEdit()
-        # 9
-        self.save_format_label = QLabel("Save Format:")
-        self.save_format_combo = QComboBox()
-        self.save_format_combo.addItems(["npz", "fits", "h5"])
-        # 10
-        self.comp_mode_label = QLabel("Computation Mode:")
-        self.comp_mode_combo = QComboBox()
-        self.comp_mode_combo.addItems(["sequential", "parallel"])
-        # 11
-        self.local_mode_label = QLabel("Local or Remote:")
-        self.local_mode_combo = QComboBox()
-        self.local_mode_combo.addItems(["local", "remote"])
-        self.local_mode_combo.currentTextChanged.connect(self.toggle_comp_mode)
-        # 12
-        self.remote_mode_label = QLabel("Mode:")
-        self.remote_mode_combo = QComboBox()
-        self.remote_mode_combo.addItems(["MPI", "SLURM", "PBS"])
-        self.remote_folder_checkbox = QCheckBox("Set Work Directory:")
-        self.remote_dir_line = QLineEdit()
-        self.remote_folder_checkbox.stateChanged.connect(self.toggle_remote_dir_line)
-
-        self.remote_address_label = QLabel("Remote Host:")
-        self.remote_address_entry = QLineEdit()
-        self.remote_config_label = QLabel("Slurm Config:")
-        self.remote_config_entry = QLineEdit()
-        self.remote_config_button = QPushButton("Browse", self)
-        self.remote_config_button.clicked.connect(self.browse_slurm_config)
-        self.remote_user_label = QLabel("Username")
-        self.remote_user_entry = QLineEdit()
-        self.remote_key_label = QLabel("SSH Key:")
-        self.remote_key_entry = QLineEdit()
-        self.key_button = QPushButton("Browse", self)
-        self.key_button.clicked.connect(self.browse_ssh_key)
-        self.remote_key_pass_label = QLabel("Key Passwd:")
-        self.remote_key_pass_entry = QLineEdit()
-        self.remote_key_pass_entry.setEchoMode(QLineEdit.EchoMode.Password)
-
-        # 10
-        # self.flux_mode_label = QLabel('Flux Simulation Mode:')
-        # self.flux_mode_combo = QComboBox()
-        # self.flux_mode_combo.addItems(["direct", 'line-ratios'])
-
-        # Output Directory Row
-        output_row = QHBoxLayout()
-        output_row.addWidget(self.output_label)
-        output_row.addWidget(self.output_entry)
-        output_row.addWidget(self.output_button)
-        self.left_layout.insertLayout(1, output_row)
-
-        # TNG Directory Row
-        tng_row = QHBoxLayout()
-        tng_row.addWidget(self.tng_label)
-        tng_row.addWidget(self.tng_entry)
-        tng_row.addWidget(self.tng_button)
-        self.left_layout.insertLayout(2, tng_row)
-
-        # Galaxy Zoo Directory Row
-        galaxy_row = QHBoxLayout()
-        self.galaxy_zoo_checkbox = QCheckBox("Get Galaxy Zoo Data")
-        galaxy_row.addWidget(self.galaxy_zoo_label)
-        galaxy_row.addWidget(self.galaxy_zoo_entry)
-        galaxy_row.addWidget(self.galaxy_zoo_button)
-        galaxy_row.addWidget(self.galaxy_zoo_checkbox)
-        self.left_layout.insertLayout(3, galaxy_row)
-
-        # Hubble Directory Row
-        hubble_row = QHBoxLayout()
-        self.hubble_checkbox = QCheckBox("Get Hubble 100 Data")
-        hubble_row.addWidget(self.hubble_label)
-        hubble_row.addWidget(self.hubble_entry)
-        hubble_row.addWidget(self.hubble_button)
-        hubble_row.addWidget(self.hubble_checkbox)
-        self.left_layout.insertLayout(4, hubble_row)
-
-        # User Email Row
-        mail_row = QHBoxLayout()
-        mail_row.addWidget(self.mail_label)
-        mail_row.addWidget(self.mail_entry)
-        self.left_layout.insertLayout(5, mail_row)
-
-        # Project Name Row
-        project_name_row = QHBoxLayout()
-        project_name_row.addWidget(self.project_name_label)
-        project_name_row.addWidget(self.project_name_entry)
-        self.left_layout.insertLayout(6, project_name_row)
-
-        # Number of Simulations Row
-        n_sims_row = QHBoxLayout()
-        n_sims_row.addWidget(self.n_sims_label)
-        n_sims_row.addWidget(self.n_sims_entry)
-        self.left_layout.insertLayout(7, n_sims_row)
-
-        # Number of CPUs Row
-        ncpu_row = QHBoxLayout()
-        ncpu_row.addWidget(self.ncpu_label)
-        ncpu_row.addWidget(self.ncpu_entry)
-        self.left_layout.insertLayout(8, ncpu_row)
-
-        # Save format Row
-        save_format_row = QHBoxLayout()
-        save_format_row.addWidget(self.save_format_label)
-        save_format_row.addWidget(self.save_format_combo)
-        self.left_layout.insertLayout(9, save_format_row)
-
-        # Computation Mode Row
-        comp_mode_row = QHBoxLayout()
-        comp_mode_row.addWidget(self.comp_mode_label)
-        comp_mode_row.addWidget(self.comp_mode_combo)
-        self.left_layout.insertLayout(10, comp_mode_row)
-
-        # Local Mode Row
-        local_mode_row = QHBoxLayout()
-        local_mode_row.addWidget(self.local_mode_label)
-        local_mode_row.addWidget(self.local_mode_combo)
-        local_mode_row.addWidget(self.remote_mode_label)
-        local_mode_row.addWidget(self.remote_mode_combo)
-        local_mode_row.addWidget(self.remote_folder_checkbox)
-        local_mode_row.addWidget(self.remote_dir_line)
-        self.left_layout.insertLayout(11, local_mode_row)
-        self.remote_mode_label.hide()
-        self.remote_mode_combo.hide()
-        self.remote_folder_checkbox.hide()
-        self.remote_dir_line.hide()
-        self.remote_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
-
-        self.remote_address_row = QHBoxLayout()
-        self.remote_address_row.addWidget(self.remote_address_label)
-        self.remote_address_row.addWidget(self.remote_address_entry)
-        self.remote_address_row.addWidget(self.remote_config_label)
-        self.remote_address_row.addWidget(self.remote_config_entry)
-        self.remote_address_row.addWidget(self.remote_config_button)
-        self.left_layout.insertLayout(12, self.remote_address_row)
-        self.show_hide_widgets(self.remote_address_row, show=False)
-
-        self.remote_info_row = QHBoxLayout()
-        self.remote_info_row.addWidget(self.remote_user_label)
-        self.remote_info_row.addWidget(self.remote_user_entry)
-        self.remote_info_row.addWidget(self.remote_key_label)
-        self.remote_info_row.addWidget(self.remote_key_entry)
-        self.remote_info_row.addWidget(self.key_button)
-        self.remote_info_row.addWidget(self.remote_key_pass_label)
-        self.remote_info_row.addWidget(self.remote_key_pass_entry)
-        self.left_layout.insertLayout(13, self.remote_info_row)
-        self.show_hide_widgets(self.remote_info_row, show=False)
-        self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
-
-    def toggle_config_label(self):
-        if self.remote_mode_combo.currentText() == "SLURM":
-            self.remote_config_label.setText("Slurm Config:")
-        elif self.remote_mode_combo.currentText() == "PBS":
-            self.remote_config_label.setText("PBS Config:")
-        else:
-            self.remote_config_label.setText("MPI Config")
-
-    def toggle_remote_row(self):
-        if self.local_mode_combo.currentText() == "remote":
-            self.show_hide_widgets(self.remote_address_row, show=True)
-            self.show_hide_widgets(self.remote_info_row, show=True)
-            self.toggle_config_label()
-            self.remote_mode_label.show()
-            self.remote_mode_combo.show()
-            self.remote_folder_checkbox.show()
-            if self.output_entry.text() != "" and self.remote_user_entry.text() != "":
-                self.output_entry.setText(
-                    self.map_to_remote_directory(self.output_entry.text())
-                )
-            if self.tng_entry.text() != "" and self.remote_user_entry.text() != "":
-                self.tng_entry.setText(
-                    self.map_to_remote_directory(self.tng_entry.text())
-                )
-            if (
-                self.galaxy_zoo_entry.text() != ""
-                and self.remote_user_entry.text() != ""
-            ):
-                self.galaxy_zoo_entry.setText(
-                    self.map_to_remote_directory(self.galaxy_zoo_entry.text())
-                )
-        else:
-            self.show_hide_widgets(self.remote_address_row, show=False)
-            self.show_hide_widgets(self.remote_info_row, show=False)
-            self.remote_mode_label.hide()
-            self.remote_mode_combo.hide()
-            self.remote_folder_checkbox.hide()
-            self.remote_dir_line.hide()
-            if self.output_entry.text() != "":
-                folder = self.output_entry.text().split(os.path.sep)[-1]
-                self.output_entry.setText(os.path.join(os.path.expanduser("~"), folder))
-            if self.tng_entry.text() != "":
-                folder = self.tng_entry.text().split(os.path.sep)[-1]
-                self.tng_entry.setText(os.path.join(os.path.expanduser("~"), folder))
-            if self.galaxy_zoo_entry.text() != "":
-                folder = self.galaxy_zoo_entry.text().split(os.path.sep)[-1]
-                self.galaxy_zoo_entry.setText(
-                    os.path.join(os.path.expanduser("~"), folder)
-                )
-
-    def toggle_remote_dir_line(self):
-        if self.remote_folder_checkbox.isChecked():
-            self.remote_dir_line.show()
-        else:
-            self.remote_dir_line.hide()
-
-    def toggle_comp_mode(self):
-        if self.local_mode_combo.currentText() == "remote":
-            self.comp_mode_combo.clear()
-            self.comp_mode_combo.addItems(["parallel"])
-        else:
-            self.comp_mode_combo.clear()
-            self.comp_mode_combo.addItems(["sequential", "parallel"])
-
-    def add_line_widgets(self):
-        self.line_mode_checkbox = QCheckBox("Line Mode")
-        self.line_mode_checkbox.stateChanged.connect(self.toggle_line_mode_widgets)
-        # self.left_layout.insertWidget(8, self.line_mode_checkbox)
-        # Widgets for Line Mode
-        self.line_index_label = QLabel("Select Line Indices (space-separated):")
-        self.line_index_entry = QLineEdit()
-        self.line_mode_row = QHBoxLayout()
-        self.line_mode_row.addWidget(self.line_mode_checkbox)
-        self.left_layout.insertLayout(14, self.line_mode_row)  # Insert at the end
-        # Widgets for Non-Line Mode
-        redshift_label = QLabel("Redshifts (space-separated):")
-        self.redshift_entry = QLineEdit()
-        num_lines_label = QLabel("Number of Lines to Simulate:")
-        self.num_lines_entry = QLineEdit()
-        self.non_line_mode_row1 = QHBoxLayout()
-        self.non_line_mode_row1.addWidget(redshift_label)
-        self.non_line_mode_row1.addWidget(self.redshift_entry)
-        self.non_line_mode_row2 = QHBoxLayout()
-        self.non_line_mode_row2.addWidget(num_lines_label)
-        self.non_line_mode_row2.addWidget(self.num_lines_entry)
-        self.left_layout.insertLayout(15, self.non_line_mode_row1)  # Insert at the end
-        self.left_layout.insertLayout(16, self.non_line_mode_row2)  # Insert at the end
-        self.show_hide_widgets(self.non_line_mode_row1, show=False)
-        self.show_hide_widgets(self.non_line_mode_row2, show=False)
-
-    def toggle_line_mode_widgets(self):
-        """Shows/hides the appropriate input rows based on line mode checkbox state."""
-        if self.line_mode_checkbox.isChecked():
-            if not self.has_widget(self.line_mode_row, QLabel):
-                self.line_mode_row.addWidget(self.line_index_label)
-                self.line_mode_row.addWidget(self.line_index_entry)
-            # Show the widgets in line_mode_row
-            self.show_hide_widgets(self.line_mode_row, show=True)
-            # Hide the widgets in non_line_mode_row1 and non_line_mode_row2
-            self.show_hide_widgets(self.non_line_mode_row1, show=False)
-            self.show_hide_widgets(self.non_line_mode_row2, show=False)
-            if self.line_displayed is False:
-                self.line_display()
-        else:
-            # Hide the widgets in line_mode_row
-            self.show_hide_widgets(self.line_mode_row, show=False)
-            if self.has_widget(self.line_mode_row, QLabel):
-                self.line_mode_row.removeWidget(self.line_index_label)
-                self.line_mode_row.removeWidget(self.line_index_entry)
-            self.show_hide_widgets(self.line_mode_row, show=True)
-            # Show the widgets in non_line_mode_row1 and non_line_mode_row2
-            self.show_hide_widgets(self.non_line_mode_row1, show=True)
-            self.show_hide_widgets(self.non_line_mode_row2, show=True)
-
-    def add_width_slider(self):
-        self.line_width_label = QLabel("Min/Max Line Widths in Km/s:")
-        self.max_line_width_slider = QSlider(Qt.Orientation.Horizontal)
-        self.max_line_width_value_label = QLabel(
-            f"{self.max_line_width_slider.value()} km/s"
-        )
-        self.max_line_width_slider.setRange(50, 1700)
-        self.max_line_width_slider.setTickInterval(25)
-        self.max_line_width_slider.setSingleStep(5)
-        self.max_line_width_slider.setValue(400)
-        self.max_line_width_slider.valueChanged.connect(
-            self.update_max_line_width_label
-        )
-        self.min_line_width_slider = QSlider(Qt.Orientation.Horizontal)
-        self.min_line_width_value_label = QLabel(
-            f"{self.min_line_width_slider.value()} km/s"
-        )
-        self.min_line_width_slider.setRange(50, 1700)
-        self.min_line_width_slider.setTickInterval(25)
-        self.min_line_width_slider.setSingleStep(5)
-        self.min_line_width_slider.setValue(200)
-        self.min_line_width_slider.valueChanged.connect(
-            self.update_min_line_width_label
-        )
-        self.min_line_width_slider.valueChanged.connect(self.sync_line_width_sliders)
-        self.max_line_width_slider.valueChanged.connect(self.sync_line_width_sliders)
-        self.line_width_row = QHBoxLayout()
-        self.line_width_row.addWidget(self.line_width_label)
-        self.line_width_row.addWidget(self.min_line_width_slider)
-        self.line_width_row.addWidget(self.min_line_width_value_label)
-        self.line_width_row.addWidget(self.max_line_width_slider)
-        self.line_width_row.addWidget(self.max_line_width_value_label)
-        self.left_layout.insertLayout(17, self.line_width_row)
-
-    def update_max_line_width_label(self, value):
-        self.max_line_width_value_label.setText(f"{value} km/s")
-
-    def update_min_line_width_label(self, value):
-        self.min_line_width_value_label.setText(f"{value} km/s")
-
-    def sync_line_width_sliders(self):
-        min_value = self.min_line_width_slider.value()
-        max_value = self.max_line_width_slider.value()
-        if min_value > max_value:
-            self.min_line_width_slider.setValue(max_value)
-            self.min_line_width_value_label.setText(f"{max_value} km/s")
-        elif max_value < min_value:
-            self.max_line_width_slider.setValue(min_value)
-            self.max_line_width_value_label.setText(f"{min_value} km/s")
-
-    def add_robust_slider(self):
-        self.robust_label = QLabel("Briggs Robustness:")
-        self.robust_slider = QSlider(Qt.Orientation.Horizontal)
-        self.robust_value_label = QLabel(f"{self.robust_slider.value()}")
-        self.robust_slider.setRange(-20, 20)
-        self.robust_slider.setTickInterval(1)
-        self.robust_slider.setSingleStep(1)
-        self.robust_slider.setValue(0)
-        self.robust_slider.valueChanged.connect(self.update_robust_label)
-        self.robust_row = QHBoxLayout()
-        self.robust_row.addWidget(self.robust_label)
-        self.robust_row.addWidget(self.robust_slider)
-        self.robust_row.addWidget(self.robust_value_label)
-        self.left_layout.insertLayout(18, self.robust_row)
-
-    def update_robust_label(self, value):
-        self.robust_value_label.setText(f"{value / 10}")
-
-    def add_dim_widgets(self):
-        # --- Set SNR ---
-        self.snr_checkbox = QCheckBox("Set SNR")
-        self.snr_entry = QLineEdit()
-        self.snr_entry.setVisible(False)
-        self.snr_checkbox.stateChanged.connect(
-            lambda: self.toggle_dim_widgets_visibility(self.snr_entry)
-        )
-
-        # --- Set Infrared Luminosity ---
-        self.ir_luminosity_checkbox = QCheckBox("Set IR Luminosity")
-        self.ir_luminosity_entry = QLineEdit()
-        self.ir_luminosity_entry.setVisible(False)
-        self.ir_luminosity_checkbox.stateChanged.connect(
-            lambda: self.toggle_dim_widgets_visibility(self.ir_luminosity_entry)
-        )
-
-        # --- Fix Spatial Dimension Checkbox and Field ---
-        self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dim")
-        self.n_pix_entry = QLineEdit()
-        self.n_pix_entry.setVisible(False)
-        self.fix_spatial_checkbox.stateChanged.connect(
-            lambda: self.toggle_dim_widgets_visibility(self.n_pix_entry)
-        )
-
-        # --- Fix Spectral Dimension Checkbox and Field ---
-        self.fix_spectral_checkbox = QCheckBox("Fix Spectral Dim")
-        self.n_channels_entry = QLineEdit()
-        self.n_channels_entry.setVisible(False)
-        self.fix_spectral_checkbox.stateChanged.connect(
-            lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry)
-        )
-
-        # --- Inject Serendipitous sources ----
-        self.serendipitous_checkbox = QCheckBox("Inject Serendipitous")
-
-        # --- Layout for Checkboxes and Fields ---
-        checkbox_row = QHBoxLayout()
-        checkbox_row.addWidget(self.snr_checkbox)
-        checkbox_row.addWidget(self.snr_entry)
-        checkbox_row.addWidget(self.ir_luminosity_checkbox)
-        checkbox_row.addWidget(self.ir_luminosity_entry)
-        checkbox_row.addWidget(self.fix_spatial_checkbox)
-        checkbox_row.addWidget(self.n_pix_entry)
-        checkbox_row.addWidget(self.fix_spectral_checkbox)
-        checkbox_row.addWidget(self.n_channels_entry)
-        checkbox_row.addWidget(self.serendipitous_checkbox)
-        self.left_layout.insertLayout(19, checkbox_row)
-
-    def add_model_widgets(self):
-        self.model_label = QLabel("Select Model:")
-        self.model_combo = QComboBox()
-        self.model_combo.addItems(
-            [
-                "Point",
-                "Gaussian",
-                "Extended",
-                "Diffuse",
-                "Galaxy Zoo",
-                "Hubble 100",
-                "Molecular",
-            ]
-        )
-        self.model_row = QHBoxLayout()
-        self.model_row.addWidget(self.model_label)
-        self.model_row.addWidget(self.model_combo)
-        self.left_layout.insertLayout(20, self.model_row)
-        self.tng_api_key_label = QLabel("TNG API Key:")
-        self.tng_api_key_entry = QLineEdit()
-        self.tng_api_key_row = QHBoxLayout()
-        self.tng_api_key_row.addWidget(self.tng_api_key_label)
-        self.tng_api_key_row.addWidget(self.tng_api_key_entry)
-
-        # Initially hide the TNG API key row
-        self.show_hide_widgets(self.tng_api_key_row, show=False)
-
-        self.left_layout.insertLayout(
-            21, self.tng_api_key_row
-        )  # Insert after model_row
-        # Connect the model_combo's signal to update visibility
-        self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
-
-    def toggle_tng_api_key_row(self):
-        """Shows/hides the TNG API key row based on the selected model."""
-        if self.model_combo.currentText() == "Extended":
-            self.show_hide_widgets(self.tng_api_key_row, show=True)
-        else:
-            self.show_hide_widgets(self.tng_api_key_row, show=False)
-
-    def toggle_dim_widgets_visibility(self, widget):
-        widget.setVisible(self.sender().isChecked())
-
-    def add_meta_widgets(self):
-        self.metadata_mode_label = QLabel("Metadata Retrieval Mode:")
-        self.metadata_mode_combo = QComboBox()
-        self.metadata_mode_combo.addItems(["query", "get"])
-        self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
-        # Metadata Retrieval Mode Row
-        self.metadata_mode_row = QHBoxLayout()
-        self.metadata_mode_row.addWidget(self.metadata_mode_label)
-        self.metadata_mode_row.addWidget(self.metadata_mode_combo)
-        self.left_layout.insertLayout(22, self.metadata_mode_row)
-
-    def add_metadata_widgets(self):
-        self.metadata_path_label = QLabel("Metadata Path:")
-        self.metadata_path_entry = QLineEdit()
-        self.metadata_path_button = QPushButton("Browse")
-        self.metadata_path_button.clicked.connect(self.browse_metadata_path)
-        self.metadata_path_row = QHBoxLayout()
-        self.metadata_path_row.addWidget(self.metadata_path_label)
-        self.metadata_path_row.addWidget(self.metadata_path_entry)
-        self.metadata_path_row.addWidget(self.metadata_path_button)
-        self.left_layout.insertLayout(23, self.metadata_path_row)
-        self.left_layout.update()
-
-    def add_query_widgets(self):
-        # Create widgets for querying
-        self.query_type_label = QLabel("Query Type:")
-        self.query_type_combo = QComboBox()
-        self.query_type_combo.addItems(["science", "target"])
-        self.query_type_row = QHBoxLayout()
-        self.query_type_row.addWidget(self.query_type_label)
-        self.query_type_row.addWidget(self.query_type_combo)
-        self.query_save_label = QLabel("Save Metadata to:")
-        # Set the initial label text
-        self.query_save_entry = QLineEdit()
-        self.query_save_button = QPushButton("Browse")
-        # Connect browse button to appropriate method (you'll need to implement this)
-        self.query_save_button.clicked.connect(self.select_metadata_path)
-        self.query_execute_button = QPushButton("Execute Query")
-        self.query_execute_button.clicked.connect(self.execute_query)
-        self.query_save_row = QHBoxLayout()
-        self.query_save_row.addWidget(self.query_save_label)
-        self.query_save_row.addWidget(self.query_save_entry)
-        self.query_save_row.addWidget(self.query_save_button)
-        self.target_list_label = QLabel("Load Target List:")
-        self.target_list_entry = QLineEdit()
-        self.target_list_button = QPushButton("Browse")
-        self.target_list_button.clicked.connect(
-            self.browse_target_list
-        )  # Add function for browsing
-        self.target_list_row = QHBoxLayout()
-        self.target_list_row.addWidget(self.target_list_label)
-        self.target_list_row.addWidget(self.target_list_entry)
-        self.target_list_row.addWidget(self.target_list_button)
-        # self.target_list_row.hide()  # Initially hide the row
-        self.show_hide_widgets(self.target_list_row, show=False)
-
-        # Insert layouts at the correct positions
-        self.left_layout.insertLayout(23, self.query_type_row)
-        self.left_layout.insertLayout(
-            24, self.target_list_row
-        )  # Insert target list row
-        self.left_layout.insertLayout(25, self.query_save_row)
-        self.left_layout.insertWidget(26, self.query_execute_button)
-        self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
-
-    def remove_metadata_query_widgets(self):
-        # Similar to remove_query_widgets from the previous response, but remove
-        # all the rows and widgets added in add_metadata_query_widgets.
-        widgets_to_remove = [
-            self.science_keyword_row,
-            self.scientific_category_row,
-            self.band_row,
-            self.fov_row,
-            self.time_resolution_row,
-            self.frequency_row,
-        ]
-
-        for widget in widgets_to_remove:
-            if widget.parent() is not None:
-                layout = widget.parent()
-                layout.removeItem(widget)
-                widget.setParent(None)
-                for i in reversed(range(widget.count())):
-                    item = widget.takeAt(i)
-                    if item.widget():
-                        item.widget().deleteLater()
-
-        self.metadata_query_widgets_added = False
-        self.query_execute_button.hide()
-        self.continue_query_button.hide()
-
-    def remove_metadata_browse(self):
-        if self.metadata_path_row.parent() is not None:
-            layout = self.metadata_path_row.parent()  # Get the parent layout
-
-            # Remove all items from the layout
-            for i in reversed(range(self.metadata_path_row.count())):
-                item = self.metadata_path_row.takeAt(i)
-                if item.widget():
-                    item.widget().deleteLater()
-
-            layout.removeItem(
-                self.metadata_path_row
-            )  # Remove the row layout from its parent
-            self.metadata_path_row.setParent(None)  # Set the parent to None
-            self.metadata = None  # Clear any loaded metadata
-
-    def toggle_metadata_browse(self, mode):
-        if mode == "get":
-            if self.metadata_path_row.parent() is None:  # Check if already added
-                # self.left_layout.insertLayout(8, self.metadata_path_row)
-                # # Re-insert at correct position
-                # self.left_layout.update()  # Force layout update to show the row
-                self.remove_query_widgets()  # Remove query widgets if present
-                self.add_metadata_widgets()
-                if self.metadata_query_widgets_added:
-                    self.remove_metadata_query_widgets()
-        elif mode == "query":
-            if self.query_type_row.parent() is None:
-                self.remove_metadata_browse()  # Remove browse widgets if present
-                self.add_query_widgets()
-        else:
-            self.remove_metadata_browse()
-            self.remove_query_widgets()
-
-    def remove_query_widgets(self):
-        """Removes the query type and save location rows from the layout."""
-
-        # Remove query type row
-        if self.query_type_row.parent() is not None:  # Check if row is in layout
-            layout = self.query_type_row.parent()
-            layout.removeItem(self.query_type_row)  # Remove the row
-            self.query_type_row.setParent(None)  # Disassociate the row from parent
-
-            # Delete widgets in row
-            for i in reversed(range(self.query_type_row.count())):
-                item = self.query_type_row.takeAt(i)
-                widget = item.widget()
-                if widget is not None:  # Check if it's a widget before deleting
-                    widget.deleteLater()
-
-        # Remove query save row (same logic as above)
-        if self.query_save_row.parent() is not None:
-            layout = self.query_save_row.parent()
-            layout.removeItem(self.query_save_row)
-            self.query_save_row.setParent(None)
-
-            for i in reversed(range(self.query_save_row.count())):
-                item = self.query_save_row.takeAt(i)
-                widget = item.widget()
-                if widget is not None:
-                    widget.deleteLater()
-        # Remove execute query button
-        if self.query_execute_button.parent() is not None:
-            layout = self.left_layout  # Directly access the main vertical layout
-            # Remove the widget from the layout
-            index = layout.indexOf(self.query_execute_button)
-            if index >= 0:
-                item = layout.takeAt(index)
-                if item.widget() is not None:
-                    item.widget().deleteLater()
-        if self.target_list_row.parent() is not None:
-            layout = self.target_list_row.parent()
-            layout.removeItem(self.target_list_row)
-            self.target_list_row.setParent(None)
-            for i in reversed(range(self.target_list_row.count())):
-                item = self.target_list_row.takeAt(i)
-                widget = item.widget()
-                if widget is not None:
-                    widget.deleteLater()
-
-        self.metadata_query_widgets_added = False
-
-    def reset_fields(self):
-        self.output_entry.clear()
-        self.tng_entry.clear()
-        self.galaxy_zoo_entry.clear()
-        self.galaxy_zoo_checkbox.setChecked(False)
-        self.hubble_entry.clear()
-        self.hubble_checkbox.setChecked(False)
-        self.ncpu_entry.clear()
-        self.mail_entry.clear()
-        self.n_sims_entry.clear()
-        self.metadata_path_entry.clear()
-        self.comp_mode_combo.setCurrentText("sequential")
-        if self.local_mode_combo.currentText() == "remote":
-            self.remote_address_entry.clear()
-            self.remote_user_entry.clear()
-            self.remote_key_entry.clear()
-            self.remote_key_pass_entry.clear()
-            self.remote_config_entry.clear()
-            self.remote_mode_combo.setCurrentText("MPI")
-            self.remote_dir_line.clear()
-            self.remote_folder_checkbox.setChecked(False)
-        self.local_mode_combo.setCurrentText("local")
-        if self.metadata_mode_combo.currentText() == "query":
-            self.query_save_entry.clear()
-        self.metadata_mode_combo.setCurrentText("get")
-        self.project_name_entry.clear()
-        self.save_format_combo.setCurrentText("npz")
-        self.redshift_entry.clear()
-        self.num_lines_entry.clear()
-        self.snr_checkbox.setChecked(False)
-        self.min_line_width_slider.setValue(200)
-        self.max_line_width_slider.setValue(400)
-        self.robust_slider.setValue(0)
-        self.robust_value_label.setText("0")
-        self.snr_entry.clear()
-        self.fix_spatial_checkbox.setChecked(False)
-        self.n_pix_entry.clear()
-        self.fix_spectral_checkbox.setChecked(False)
-        self.n_channels_entry.clear()
-        self.ir_luminosity_checkbox.setChecked(False)
-        self.ir_luminosity_entry.clear()
-        self.model_combo.setCurrentText("Point")  # Reset to default model
-        self.tng_api_key_entry.clear()
-        self.line_mode_checkbox.setChecked(False)
-        self.serendipitous_checkbox.setChecked(False)
-
-    def on_download_finished(self):
-        self.terminal.add_log("Download finished!")
-
-    def load_settings(self):
-        self.output_entry.setText(self.settings.value("output_directory", ""))
-        self.tng_entry.setText(self.settings.value("tng_directory", ""))
-        self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
-        self.galaxy_zoo_checkbox.setChecked(
-            self.settings.value("get_galaxy_zoo", False, type=bool)
-        )
-        self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
-        self.hubble_checkbox.setChecked(
-            self.settings.value("get_hubble_100", False, type=bool)
-        )
-        self.mail_entry.setText(self.settings.value("email", ""))
-        self.n_sims_entry.setText(self.settings.value("n_sims", ""))
-        self.ncpu_entry.setText(self.settings.value("ncpu", ""))
-        self.metadata_mode_combo.setCurrentText(
-            self.settings.value("metadata_mode", "")
-        )
-        self.comp_mode_combo.setCurrentText(self.settings.value("comp_mode", ""))
-        self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
-        if self.local_mode_combo.currentText() == "remote":
-            self.remote_address_entry.setText(self.settings.value("remote_address", ""))
-            self.remote_user_entry.setText(self.settings.value("remote_user", ""))
-            self.remote_key_entry.setText(self.settings.value("remote_key", ""))
-            self.remote_key_pass_entry.setText(
-                self.settings.value("remote_key_pass", "")
+    # -------- Window Browsing Functions -------------------------
+    def map_to_remote_directory(self, directory):
+        directory_name = directory.split(os.path.sep)[-1]
+        if self.remote_folder_line.text() != "":
+            if not self.remote_folder_line.text().startswith("/"):
+                self.remote_folder_line.setText("/" + self.remote_folder_line.text())
+            directory_path = os.path.join(
+                self.remote_folder_line.text(), directory_name
             )
-            self.remote_config_entry.setText(self.settings.value("remote_config", ""))
-            self.remote_mode_combo.setCurrentText(
-                self.settings.value("remote_mode", "")
+        else:
+            directory_path = os.path.join(
+                "/home", self.remote_user_entry.text(), directory_name
             )
-            remote_folder = self.settings.value("remote_folder", False, type=bool)
-            self.remote_folder_checkbox.setChecked(remote_folder)
-            if remote_folder:
-                self.remote_dir_line.setText(self.settings.value("remote_dir", ""))
-        self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
-        self.project_name_entry.setText(self.settings.value("project_name", ""))
-        self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
-        if (
-            self.metadata_mode_combo.currentText() == "get"
-            and self.metadata_path_entry.text() != ""
-        ):
-            self.load_metadata(self.metadata_path_entry.text())
-        elif self.metadata_mode_combo.currentText() == "query":
-            self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
-        if self.galaxy_zoo_entry.text() != "":
-            if self.local_mode_combo.currentText() == "local":
-                kaggle_path = os.path.join(os.path.expanduser("~"), ".kaggle")
-                if not os.path.exists(kaggle_path):
-                    os.mkdir(kaggle_path)
-                kaggle_file = os.path.join(kaggle_path, "kaggle.json")
-                if not os.path.exists(kaggle_file):
-                    shutil.copyfile(
-                        os.path.join(os.getcwd(), "kaggle.json"), kaggle_file
-                    )
-                try:
-                    if os.path.exists(self.galaxy_zoo_entry.text()):
-                        if self.galaxy_zoo_checkbox.isChecked():
-                            if not os.path.exists(
-                                os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
-                            ):
-                                self.terminal.add_log("Downloading Galaxy Zoo")
-                                runnable = DownloadGalaxyZooRunnable(self)
-                                runnable.finished.connect(
-                                    self.on_download_finished
-                                )  # Connect signal
-                                self.thread_pool.start(runnable)
-                                self.terminal.add_log(
-                                    "Waiting for download to finish..."
-                                )
-                except Exception as e:
-                    self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
-
-            else:
-                if (
-                    self.remote_address_entry.text() != ""
-                    and self.remote_user_entry.text() != ""
-                    and self.remote_key_entry.text() != ""
-                ):
-                    try:
-                        self.download_galaxy_zoo_on_remote()
-                    except (
-                        Exception
-                    ) as e:  # Catch any exception that occurs during download
-                        error_message = (
-                            f"Error downloading Galaxy Zoo data on remote machine: {e}"
-                        )
-                        print(error_message)  # Print the error to the console
-                        self.terminal.add_log(
-                            error_message
-                        )  # Add the error to your ALMASimulator terminal
-        if self.hubble_entry.text() != "":
-            if self.local_mode_combo.currentText() == "local":
-                try:
-                    if not os.path.exists(self.hubble_entry.text()):
-                        os.mkdir(self.hubble_entry.text())
-                    if self.hubble_checkbox.isChecked():
-                        if not os.path.exists(
-                            os.path.join(self.hubble_entry.text(), "top100")
-                        ):
-                            # pool = QThreadPool.globalInstance()
-                            runnable = DownloadHubbleRunnable(self)
-                            self.thread_pool.start(runnable)
-                except Exception as e:
-                    self.terminal.add_log(f"Cannot dowload Hubble 100: {e}")
-
-            else:
-                if (
-                    self.remote_address_entry.text() != ""
-                    and self.remote_user_entry.text() != ""
-                    and self.remote_key_entry.text() != ""
-                ):
-                    try:
-                        self.download_hubble_on_remote()
-                    except (
-                        Exception
-                    ) as e:  # Catch any exception that occurs during download
-                        error_message = (
-                            f"Error downloading Galaxy Zoo data on remote machine: {e}"
-                        )
-                        print(error_message)  # Print the error to the console
-                        self.terminal.add_log(
-                            error_message
-                        )  # Add the error to your ALMASimulator terminal
-        line_mode = self.settings.value("line_mode", False, type=bool)
-        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
-        self.line_mode_checkbox.setChecked(line_mode)
-        if line_mode:
-            self.line_index_entry.setText(self.settings.value("line_indices", ""))
-        else:
-            # Load non-line mode values
-            self.redshift_entry.setText(self.settings.value("redshifts", ""))
-            self.num_lines_entry.setText(self.settings.value("num_lines", ""))
-        self.min_line_width_slider.setValue(
-            int(self.settings.value("min_line_width", 200))
-        )
-        self.max_line_width_slider.setValue(
-            int(self.settings.value("max_line_width", 400))
-        )
-        self.robust_slider.setValue(int(self.settings.value("robust", 0)))
-        self.snr_entry.setText(self.settings.value("snr", ""))
-        self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
-        self.fix_spatial_checkbox.setChecked(
-            self.settings.value("fix_spatial", False, type=bool)
-        )
-        self.n_pix_entry.setText(self.settings.value("n_pix", ""))
-        self.fix_spectral_checkbox.setChecked(
-            self.settings.value("fix_spectral", False, type=bool)
-        )
-        self.n_channels_entry.setText(self.settings.value("n_channels", ""))
-        self.serendipitous_checkbox.setChecked(
-            self.settings.value("inject_serendipitous", False, type=bool)
-        )
-        self.model_combo.setCurrentText(self.settings.value("model", ""))
-        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
-        self.toggle_tng_api_key_row()
-        self.ir_luminosity_checkbox.setChecked(
-            self.settings.value("set_ir_luminosity", False, type=bool)
-        )
-        self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
-
-    def load_settings_on_remote(self):
-        self.output_entry.setText(self.settings.value("output_directory", ""))
-        self.tng_entry.setText(self.settings.value("tng_directory", ""))
-        self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
-        self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
-        self.n_sims_entry.setText(self.settings.value("n_sims", ""))
-        self.ncpu_entry.setText(self.settings.value("ncpu", ""))
-        self.mail_entry.setText(self.settings.value("email", ""))
-        self.metadata_path_entry.setText("")
-
-    @classmethod
-    def populate_class_variables(cls, terminal, ncpu_entry, thread_pool):
-        cls.terminal = terminal
-        cls.ncpu_entry = ncpu_entry
-        cls.thread_pool = thread_pool
-
-    def closeEvent(self, event):
-        if self.local_mode_combo.currentText() == "local":
-            if self.thread_pool.activeThreadCount() > 0:
-                event.ignore()
-                self.hide()
-                self.show_background_notification()
-            else:
-                self.save_settings()
-                self.stop_simulation_flag = True
-                self.thread_pool.waitForDone()
-                super().closeEvent(event)
-        else:
-            if self.remote_simulation_finished is False:
-                event.ignore()
-                self.hide()
-                self.show_background_notification()
-            else:
-                self.save_settings()
-                self.stop_simulation_flag = True
-                self.thread_pool.waitForDone()
-                super().closeEvent(event)
-
-    def show_background_notification(self):
-        if self.tray_icon is None:
-            path = os.path.dirname(self.main_path)
-            icon_path = os.path.join(path, "pictures", "almasim-icon.png")
-            icon = QIcon(icon_path)
-            self.tray_icon = QSystemTrayIcon(icon, self)
-            menu = QMenu()
-            restore_action = menu.addAction("Restore")
-            restore_action.triggered.connect(self.showNormal)  # Restore the window
-            exit_action = menu.addAction("Exit")
-            exit_action.triggered.connect(QApplication.instance().quit())
-            self.tray_icon.setContextMenu(menu)
-            self.tray_icon.setIcon(icon)
-        self.tray_icon.showMessage(
-            "ALMA Simulator",
-            "Simulations running in the background.",
-            QSystemTrayIcon.MessageIcon.Information,
-            5000,
-        )
-        self.tray_icon.show()
-
-    def save_settings(self):
-        self.settings.setValue("output_directory", self.output_entry.text())
-        self.settings.setValue("tng_directory", self.tng_entry.text())
-        self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
-        self.settings.setValue("hubble_directory", self.hubble_entry.text())
-        self.settings.setValue("n_sims", self.n_sims_entry.text())
-        self.settings.setValue("ncpu", self.ncpu_entry.text())
-        self.settings.setValue("email", self.mail_entry.text())
-        self.settings.setValue("project_name", self.project_name_entry.text())
-        if self.metadata_mode_combo.currentText() == "get":
-            self.settings.setValue("metadata_path", self.metadata_path_entry.text())
-        elif self.metadata_mode_combo.currentText() == "query":
-            self.settings.setValue("query_save_entry", self.query_save_entry.text())
-        self.settings.setValue("metadata_mode", self.metadata_mode_combo.currentText())
-        self.settings.setValue("comp_mode", self.comp_mode_combo.currentText())
-        self.settings.setValue("local_mode", self.local_mode_combo.currentText())
-        if self.local_mode_combo.currentText() == "remote":
-            self.settings.setValue("remote_address", self.remote_address_entry.text())
-            self.settings.setValue("remote_user", self.remote_user_entry.text())
-            self.settings.setValue("remote_key", self.remote_key_entry.text())
-            self.settings.setValue("remote_key_pass", self.remote_key_pass_entry.text())
-            self.settings.setValue("remote_config", self.remote_config_entry.text())
-            self.settings.setValue("remote_mode", self.remote_mode_combo.currentText())
-            self.settings.setValue("remote_folder", self.remote_dir_line.text())
-        self.settings.setValue("save_format", self.save_format_combo.currentText())
-        self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
-        if self.line_mode_checkbox.isChecked():
-            self.settings.setValue("line_indices", self.line_index_entry.text())
-        else:
-            # Save non-line mode values
-            self.settings.setValue("redshifts", self.redshift_entry.text())
-            self.settings.setValue("num_lines", self.num_lines_entry.text())
-        self.settings.setValue("min_line_width", self.min_line_width_slider.value())
-        self.settings.setValue("max_line_width", self.max_line_width_slider.value())
-        self.settings.setValue("robust", self.robust_slider.value())
-        self.settings.setValue("set_snr", self.snr_checkbox.isChecked())
-        self.settings.setValue("snr", self.snr_entry.text())
-        self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
-        self.settings.setValue("n_pix", self.n_pix_entry.text())
-        self.settings.setValue("fix_spectral", self.fix_spectral_checkbox.isChecked())
-        self.settings.setValue("n_channels", self.n_channels_entry.text())
-        self.settings.setValue(
-            "inject_serendipitous", self.serendipitous_checkbox.isChecked()
-        )
-        self.settings.setValue("model", self.model_combo.currentText())
-        self.settings.setValue("tng_api_key", self.tng_api_key_entry.text())
-        self.settings.setValue(
-            "set_ir_luminosity", self.ir_luminosity_checkbox.isChecked()
-        )
-        self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
-
-    def show_hide_widgets(self, layout, show=True):
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if item.widget():
-                if show:
-                    item.widget().show()
-                else:
-                    item.widget().hide()
-
-    # -------- Browse Functions ------------------
-    def add_metadata_query_widgets(self):
-        # Create widgets for querying parameters
-        science_keyword_label = QLabel(
-            "Select Science Keyword by number (space-separated):"
-        )
-        self.science_keyword_entry = QLineEdit()  # Use QLineEdit instead of input
-
-        scientific_category_label = QLabel(
-            "Select Scientific Category by number (space-separated):"
-        )
-        self.scientific_category_entry = QLineEdit()
-
-        band_label = QLabel("Select observing bands (space-separated):")
-        self.band_entry = QLineEdit()
-
-        fov_label = QLabel("Select FOV range (min max) or max only (space-separated):")
-        self.fov_entry = QLineEdit()
-
-        time_resolution_label = QLabel(
-            "Select integration time  range (min max) or max only (space-separated):"
-        )
-        self.time_resolution_entry = QLineEdit()
-
-        frequency_label = QLabel(
-            "Select source frequency range (min max) or max only (space-separated):"
-        )
-        self.frequency_entry = QLineEdit()
-
-        self.continue_query_button = QPushButton("Continue Query")
-        self.continue_query_button.clicked.connect(self.execute_query)
-
-        # Create layouts and add widgets
-        self.science_keyword_row = QHBoxLayout()
-        self.science_keyword_row.addWidget(science_keyword_label)
-        self.science_keyword_row.addWidget(self.science_keyword_entry)
-
-        self.scientific_category_row = QHBoxLayout()
-        self.scientific_category_row.addWidget(scientific_category_label)
-        self.scientific_category_row.addWidget(self.scientific_category_entry)
-
-        self.band_row = QHBoxLayout()
-        self.band_row.addWidget(band_label)
-        self.band_row.addWidget(self.band_entry)
-
-        self.fov_row = QHBoxLayout()
-        self.fov_row.addWidget(fov_label)
-        self.fov_row.addWidget(self.fov_entry)
-
-        self.time_resolution_row = QHBoxLayout()
-        self.time_resolution_row.addWidget(time_resolution_label)
-        self.time_resolution_row.addWidget(self.time_resolution_entry)
-
-        self.frequency_row = QHBoxLayout()
-        self.frequency_row.addWidget(frequency_label)
-        self.frequency_row.addWidget(self.frequency_entry)
-
-        self.continue_query_row = QHBoxLayout()
-        self.continue_query_row.addWidget(self.continue_query_button)
-
-        # Insert rows into left_layout (adjust index if needed)
-        self.left_layout.insertLayout(23, self.science_keyword_row)
-        self.left_layout.insertLayout(24, self.scientific_category_row)
-        self.left_layout.insertLayout(25, self.band_row)
-        self.left_layout.insertLayout(26, self.fov_row)
-        self.left_layout.insertLayout(27, self.time_resolution_row)
-        self.left_layout.insertLayout(28, self.frequency_row)
-        self.left_layout.insertWidget(29, self.continue_query_button)
-        self.terminal.add_log(
-            "\n\nFill out the fields and click 'Continue Query' to proceed."
-        )
-        self.query_execute_button.hide()  # Hide the execute query button
+        return directory_path
 
     def browse_output_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
@@ -1567,18 +817,6 @@ class ALMASimulator(QMainWindow):
             if directory:
                 self.output_entry.setText(directory)
 
-    def map_to_remote_directory(self, directory):
-        directory_name = directory.split(os.path.sep)[-1]
-        if self.remote_dir_line.text() != "":
-            if not self.remote_dir_line.text().startswith("/"):
-                self.remote_dir_line.setText("/" + self.remote_dir_line.text())
-            directory_path = os.path.join(self.remote_dir_line.text(), directory_name)
-        else:
-            directory_path = os.path.join(
-                "/home", self.remote_user_entry.text(), directory_name
-            )
-        return directory_path
-
     def browse_tng_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select TNG Directory")
         if (
@@ -1610,6 +848,17 @@ class ALMASimulator(QMainWindow):
         else:
             if directory:
                 self.tng_entry.setText(directory)
+
+    def browse_metadata_path(self):
+        file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Metadata File",
+            os.path.join(self.main_path, "metadata"),
+            "CSV Files (*.csv)",
+        )
+        if file:
+            self.metadata_path_entry.setText(file)
+            self.metadata_path_set()
 
     def browse_galaxy_zoo_directory(self):
         directory = QFileDialog.getExistingDirectory(
@@ -1679,16 +928,16 @@ class ALMASimulator(QMainWindow):
             if directory:
                 self.hubble_entry.setText(directory)
 
-    def browse_metadata_path(self):
-        file, _ = QFileDialog.getOpenFileName(
+    def browse_slurm_config(self):
+        file_dialog = QFileDialog()
+        slurm_config_file, _ = file_dialog.getOpenFileName(
             self,
-            "Select Metadata File",
-            os.path.join(self.main_path, "metadata"),
-            "CSV Files (*.csv)",
+            "Select Slurm Config File",
+            str(self.main_path),
+            "Slurm Config Files (*.json)",
         )
-        if file:
-            self.metadata_path_entry.setText(file)
-            self.metadata_path_set()
+        if slurm_config_file:
+            self.remote_config_entry.setText(slurm_config_file)
 
     def browse_ssh_key(self):
         file_dialog = QFileDialog()
@@ -1701,17 +950,6 @@ class ALMASimulator(QMainWindow):
         if ssh_key_file:
             self.remote_key_entry.setText(ssh_key_file)
 
-    def browse_slurm_config(self):
-        file_dialog = QFileDialog()
-        slurm_config_file, _ = file_dialog.getOpenFileName(
-            self,
-            "Select Slurm Config File",
-            self.main_path,
-            "Slurm Config Files (*.json)",
-        )
-        if slurm_config_file:
-            self.remote_config_entry.setText(slurm_config_file)
-
     def select_metadata_path(self):
         file, _ = QFileDialog.getSaveFileName(
             self,
@@ -1721,10 +959,6 @@ class ALMASimulator(QMainWindow):
         )
         if file:
             self.query_save_entry.setText(file)
-
-    def metadata_path_set(self):
-        metadata_path = self.metadata_path_entry.text()
-        self.load_metadata(metadata_path)  # Pass only the metadata_path
 
     def browse_target_list(self):
         """Opens a file dialog to select the target list file."""
@@ -1737,214 +971,93 @@ class ALMASimulator(QMainWindow):
         if file_path:
             self.target_list_entry.setText(file_path)
 
-    # -------- Query ALMA Database Functions -------
-    def get_tap_service(self):
-        urls = [
-            "https://almascience.eso.org/tap",
-            "https://almascience.nao.ac.jp/tap",
-            "https://almascience.nrao.edu/tap",
+    # -------- UI Widgets Functions -------------------------
+    # Utility Functions
+    def find_label_width(self):
+        labels = [
+            QLabel("Output Directory:"),
+            QLabel("TNG Directory:"),
+            QLabel("Galaxy Zoo Directory:"),
+            QLabel("Hubble Top 100 Directory:"),
+            QLabel("Project Name:"),
+            QLabel("Number of Simulations:"),
+            QLabel("Number of Cores:"),
+            QLabel("Save Format:"),
+            QLabel("Local / Remote Mode:"),
+            QLabel("Line Widths in Km/s:"),
+            QLabel("Briggs Robustness:"),
+            QLabel("Metadata Mode:"),
         ]
-        while True:  # Infinite loop to keep trying until successful
-            for url in urls:
-                try:
-                    service = pyvo.dal.TAPService(url)
-                    # Test the connection with a simple query to ensure the service is
-                    # working
-                    service.search("SELECT TOP 1 * FROM ivoa.obscore")
-                    self.terminal.add_log(f"Connected successfully to {url}")
-                    return service
-                except Exception as e:
-                    self.terminal.add_log(f"Failed to connect to {url}: {e}")
-                    self.terminal.add_log("Retrying other servers...")
-            self.terminal.add_log("All URLs attempted and failed, retrying...")
+        # Find the maximum width of the labels
+        self.max_label_width = max(label.sizeHint().width() for label in labels)
 
-    def plot_science_keywords_distributions(self, master_path):
-        service = self.get_tap_service()
-        plot_dir = os.path.join(master_path, "plots")
+    def has_widget(self, layout, widget_type):
+        """Check if the layout contains a widget of a specific type."""
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if isinstance(item.widget(), widget_type):
+                return True
+        return False
 
-        # Check if plot directory exists
-        if not os.path.exists(plot_dir):
-            os.makedirs(plot_dir)
-            existing_plots = (
-                []
-            )  # Initialize as empty list if plot directory doesn't exist
-        else:
-            # Check if plot files already exist
-            existing_plots = [f for f in os.listdir(plot_dir) if f.endswith(".png")]
+    def show_hide_widgets(self, layout, show=True):
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget():
+                if show:
+                    item.widget().show()
+                else:
+                    item.widget().hide()
 
-        expected_plots = [
-            "science_vs_bands.png",
-            "science_vs_int_time.png",
-            "science_vs_source_freq.png",
-            "science_vs_FoV.png",
-        ]
+    def set_window_size(self):
+        screen = QGuiApplication.primaryScreen().geometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        window_width = int(screen_width * 0.7)
+        window_height = int(screen_height * 0.5)
+        self.setGeometry(
+            (screen_width - window_width) // 2,
+            (screen_height - window_height) // 2,
+            window_width,
+            window_height,
+        )
 
-        if all(plot_file in existing_plots for plot_file in expected_plots):
-            return
-        else:
+    def line_display(self):
+        """
+        Display the line emission's rest frequency.
+
+        Parameter:
+        main_path (str): Path to the directory where the file.csv is stored.
+
+        Return:
+        pd.DataFrame : Dataframe with line names and rest frequencies.
+        """
+
+        path_line_emission_csv = os.path.join(
+            self.main_path, "brightnes", "calibrated_lines.csv"
+        )
+        db_line = uas.read_line_emission_csv(
+            path_line_emission_csv, sep=","
+        ).sort_values(by="Line")
+        line_names = db_line["Line"].values
+        rest_frequencies = db_line["freq(GHz)"].values
+        self.terminal.add_log("Please choose the lines from the following list\n")
+        for i in range(len(line_names)):
             self.terminal.add_log(
-                f"Generating helping plots to guide you in the scientific query, \
-                    check them in {plot_dir}."
+                f"{i}: {line_names[i]} - {rest_frequencies[i]:.2e} GHz\n"
             )
-            # Identify missing plots
-        missing_plots = [plot for plot in expected_plots if plot not in existing_plots]
+        self.line_displayed = True
 
-        # Query only for variables associated with missing plots
-        query_variables = set()
-        for missing_plot in missing_plots:
-            if missing_plot == "science_vs_bands.png":
-                query_variables.update(["science_keyword", "band_list"])
-            elif missing_plot == "science_vs_int_time.png":
-                query_variables.update(["science_keyword", "t_resolution"])
-            elif missing_plot == "science_vs_source_freq.png":
-                query_variables.update(["science_keyword", "frequency"])
-            elif missing_plot == "science_vs_FoV.png":
-                query_variables.update(["science_keyword", "band_list"])
-        query = f"""
-                SELECT {', '.join(query_variables)}, member_ous_uid
-                FROM ivoa.obscore
-                WHERE science_observation = 'T'
-                AND is_mosaic = 'F'
-                """
+    def metadata_path_set(self):
+        metadata_path = self.metadata_path_entry.text()
+        self.load_metadata(metadata_path)
 
-        custom_palette = sns.color_palette("tab20")
-        sns.set_palette(custom_palette)
-        db = service.search(query).to_table().to_pandas()
-        db = db.drop_duplicates(subset="member_ous_uid")
+    def update_width_labels(self, tuple_values):
+        # Update the labels when the range slider values change
+        self.line_width_value_label_min.setText(f"Min: {tuple_values[0]} km/s")
+        self.line_width_value_label_max.setText(f"Max: {tuple_values[1]} km/s")
 
-        # Splitting the science keywords at commas
-        db["science_keyword"] = db["science_keyword"].str.split(",")
-        db["science_keyword"] = db["science_keyword"].apply(
-            lambda x: [y.strip() for y in x]
-        )
-        db = db.explode("science_keyword")
-        db = db.drop(db[db["science_keyword"] == ""].index)
-        db = db.drop(db[db["science_keyword"] == "Exoplanets"].index)
-        db = db.drop(db[db["science_keyword"] == "Galaxy structure &evolution"].index)
-        db = db.drop(
-            db[
-                db["science_keyword"] == "Evolved stars: Shaping/physical structure"
-            ].index
-        )
-        old_keys = [
-            "Solar system - Trans-Neptunian Objects (TNOs)",
-            "Photon-Dominated Regions (PDR)/X-Ray Dominated Regions (XDR)",
-            "Luminous and Ultra-Luminous Infra-Red Galaxies (LIRG & ULIRG)",
-            "Cosmic Microwave Background (CMB)/Sunyaev-Zel'dovich Effect (SZE)",
-            "Active Galactic Nuclei (AGN)/Quasars (QSO)",
-            "Inter-Stellar Medium (ISM)/Molecular clouds",
-        ]
-        short_keyword = {
-            old_keys[0]: "Solar System - TNOs",
-            old_keys[1]: "Photon/X-Ray Domanited Regions",
-            old_keys[2]: "LIRG & ULIRG",
-            old_keys[3]: "CMB/Sunyaev-Zel'dovich Effect",
-            old_keys[4]: "AGN/QSO",
-            old_keys[5]: "ISM & Molecular Clouds",
-        }
-
-        db["science_keyword"] = db["science_keyword"].replace(short_keyword)
-
-        for missing_plot in missing_plots:
-            if missing_plot == "science_vs_bands.png":
-                db["band_list"] = db["band_list"].str.split(" ")
-                db["band_list"] = db["band_list"].apply(
-                    lambda x: [y.strip() for y in x]
-                )
-                db = db.explode("band_list")
-
-                db_sk_b = (
-                    db.groupby(["science_keyword", "band_list"])
-                    .size()
-                    .unstack(fill_value=0)
-                )
-
-                plt.rcParams["figure.figsize"] = (28, 20)
-                db_sk_b.plot(kind="barh", stacked=True, color=custom_palette)
-                plt.title("Science Keywords vs. ALMA Bands")
-                plt.xlabel("Counts")
-                plt.ylabel("Science Keywords")
-                plt.legend(
-                    bbox_to_anchor=(1.01, 1), loc="upper left", title="ALMA Bands"
-                )
-                plt.savefig(os.path.join(plot_dir, "science_vs_bands.png"))
-                plt.close()
-
-            elif missing_plot == "science_vs_int_time.png":
-                db = db[db["t_resolution"] <= 3e4]
-                time_bins = np.arange(
-                    db["t_resolution"].min(), db["t_resolution"].max(), 1000
-                )  # 1000 second bins
-                db["time_bin"] = pd.cut(db["t_resolution"], bins=time_bins)
-
-                db_sk_t = (
-                    db.groupby(["science_keyword", "time_bin"])
-                    .size()
-                    .unstack(fill_value=0)
-                )
-
-                plt.rcParams["figure.figsize"] = (28, 20)
-                db_sk_t.plot(kind="barh", stacked=True)
-                plt.title("Science Keywords vs. Integration Time")
-                plt.xlabel("Counts")
-                plt.ylabel("Science Keywords")
-                plt.legend(
-                    title="Integration Time", loc="upper left", bbox_to_anchor=(1.01, 1)
-                )
-                plt.savefig(os.path.join(plot_dir, "science_vs_int_time.png"))
-                plt.close()
-
-            elif missing_plot == "science_vs_source_freq.png":
-                frequency_bins = np.arange(
-                    db["frequency"].min(), db["frequency"].max(), 50
-                )  # 50 GHz bins
-                db["frequency_bin"] = pd.cut(db["frequency"], bins=frequency_bins)
-
-                db_sk_f = (
-                    db.groupby(["science_keyword", "frequency_bin"])
-                    .size()
-                    .unstack(fill_value=0)
-                )
-
-                plt.rcParams["figure.figsize"] = (28, 20)
-                db_sk_f.plot(kind="barh", stacked=True, color=custom_palette)
-                plt.title("Science Keywords vs. Source Frequency")
-                plt.xlabel("Counts")
-                plt.ylabel("Science Keywords")
-                plt.legend(
-                    bbox_to_anchor=(1.01, 1), loc="upper left", title="Frequency"
-                )
-                plt.savefig(os.path.join(plot_dir, "science_vs_source_freq.png"))
-                plt.close()
-
-            elif missing_plot == "science_vs_FoV.png":
-                db["band_list"] = db["band_list"].str.split(" ")
-                db["band_list"] = db["band_list"].apply(
-                    lambda x: [y.strip() for y in x]
-                )
-                db = db.explode("band_list")
-                db["fov"] = db["band_list"].apply(
-                    lambda x: ual.get_fov_from_band(int(x))
-                )
-                fov_bins = np.arange(
-                    db["fov"].min(), db["fov"].max(), 10
-                )  # 10 arcsec bins
-                db["fov_bins"] = pd.cut(db["fov"], bins=fov_bins)
-
-                db_sk_fov = (
-                    db.groupby(["science_keyword", "fov_bins"])
-                    .size()
-                    .unstack(fill_value=0)
-                )
-
-                plt.rcParams["figure.figsize"] = (28, 20)
-                db_sk_fov.plot(kind="barh", stacked=True, color=custom_palette)
-                plt.title("Science Keywords vs. FoV")
-                plt.xlabel("Counts")
-                plt.ylabel("Science Keywords")
-                plt.legend(bbox_to_anchor=(1.01, 1), loc="upper left", title="FoV")
-                plt.savefig(os.path.join(plot_dir, "science_vs_FoV.png"))
-                plt.close()
+    def update_robust_label(self, value):
+        self.robust_value_label.setText(f"{value / 10}")
 
     def update_query_save_label(self, query_type):
         """Shows/hides the target list row and query save row based on query type."""
@@ -1964,8 +1077,999 @@ class ALMASimulator(QMainWindow):
                 self.query_save_row, show=True
             )  # Hide query save row
 
+    # Add Widget Functions
+    def add_folder_widgets(self):
+        line_edit_max_width = 360  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # Output Directory
+        self.output_label = QLabel("Output Directory:")
+        self.output_label.setFixedWidth(self.max_label_width)
+        self.output_entry = QLineEdit()
+        self.output_entry.setMaximumWidth(line_edit_max_width)
+        self.output_button = QPushButton("Browse")
+        self.output_button.setFixedHeight(button_height)
+        self.output_button.setFixedWidth(button_width)
+        self.output_button.setStyleSheet(button_style)
+        self.output_button.clicked.connect(self.browse_output_directory)
+        self.output_row = QHBoxLayout()
+        self.output_row.addWidget(self.output_label)
+        self.output_row.addWidget(self.output_entry)
+        self.output_row.addWidget(self.output_button)
+        # self.output_row.addStretch()
+        self.left_layout.addRow(self.output_row)
+
+        # TNG Directory
+        self.tng_label = QLabel("TNG Directory:")
+        self.tng_label.setFixedWidth(self.max_label_width)
+        self.tng_entry = QLineEdit()
+        self.tng_entry.setMaximumWidth(line_edit_max_width)
+        self.tng_button = QPushButton("Browse")
+        self.tng_button.clicked.connect(self.browse_tng_directory)
+        self.tng_button.setFixedHeight(button_height)
+        self.tng_button.setFixedWidth(button_width)
+        self.tng_button.setStyleSheet(button_style)
+        self.tng_row = QHBoxLayout()
+        self.tng_row.addWidget(self.tng_label)
+        self.tng_row.addWidget(self.tng_entry)
+        self.tng_row.addWidget(self.tng_button)
+        # self.tng_row.addStretch()
+        self.left_layout.addRow(self.tng_row)
+
+        # Galaxy Zoo Directory
+        self.galaxy_zoo_label = QLabel("Galaxy Zoo Directory:")
+        self.galaxy_zoo_label.setFixedWidth(self.max_label_width)
+        self.galaxy_zoo_entry = QLineEdit()
+        self.galaxy_zoo_entry.setMaximumWidth(line_edit_max_width)
+        self.galaxy_zoo_button = QPushButton("Browse")
+        self.galaxy_zoo_button.clicked.connect(self.browse_galaxy_zoo_directory)
+        self.galaxy_zoo_button.setFixedHeight(button_height)
+        self.galaxy_zoo_button.setFixedWidth(button_width)
+        self.galaxy_zoo_button.setStyleSheet(button_style)
+        self.galaxy_zoo_checkbox = QCheckBox("Get Galaxy Zoo")
+        self.galaxy_row = QHBoxLayout()
+        self.galaxy_row.addWidget(self.galaxy_zoo_label)
+        self.galaxy_row.addWidget(self.galaxy_zoo_entry)
+        self.galaxy_row.addWidget(self.galaxy_zoo_button)
+        self.galaxy_chechbox_row = QHBoxLayout()
+        self.galaxy_chechbox_row.addWidget(self.galaxy_zoo_checkbox)
+        # self.galaxy_row.addStretch()
+        self.galaxy_chechbox_row.addStretch()
+        self.left_layout.addRow(self.galaxy_row)
+        self.left_layout.addRow(self.galaxy_chechbox_row)
+
+        # Hubble Top 100 Directory
+        self.hubble_label = QLabel("Hubble Top 100 Directory:")
+        self.hubble_label.setFixedWidth(self.max_label_width)
+        self.hubble_entry = QLineEdit()
+        self.hubble_entry.setMaximumWidth(line_edit_max_width)
+        self.hubble_button = QPushButton("Browse")
+        self.hubble_button.clicked.connect(self.browse_hubble_directory)
+        self.hubble_button.setFixedHeight(button_height)
+        self.hubble_button.setFixedWidth(button_width)
+        self.hubble_button.setStyleSheet(button_style)
+        self.hubble_checkbox = QCheckBox("Get Hubble Data")
+        self.hubble_row = QHBoxLayout()
+        self.hubble_row.addWidget(self.hubble_label)
+        self.hubble_row.addWidget(self.hubble_entry)
+        self.hubble_row.addWidget(self.hubble_button)
+        self.hubble_chechbox_row = QHBoxLayout()
+        self.hubble_chechbox_row.addWidget(self.hubble_checkbox)
+        # self.hubble_row.addStretch()
+        self.hubble_chechbox_row.addStretch()
+        self.left_layout.addRow(self.hubble_row)
+        self.left_layout.addRow(self.hubble_chechbox_row)
+
+        # Project Name
+        self.project_name_label = QLabel("Project Name:")
+        self.project_name_label.setFixedWidth(self.max_label_width)
+        self.project_name_entry = QLineEdit()
+        self.project_name_entry.setMaximumWidth(line_edit_max_width)
+        self.project_name_row = QHBoxLayout()
+        self.project_name_row.addWidget(self.project_name_label)
+        self.project_name_row.addWidget(self.project_name_entry)
+        self.project_name_row.addStretch()
+        self.left_layout.addRow(self.project_name_row)
+
+        # Number of Simulaitons
+        self.n_sims_label = QLabel("Number of Simulations:")
+        self.n_sims_label.setFixedWidth(self.max_label_width)
+        self.n_sims_entry = QLineEdit()
+        self.n_sims_entry.setMaximumWidth(line_edit_max_width)
+        self.n_sims_row = QHBoxLayout()
+        self.n_sims_row.addWidget(self.n_sims_label)
+        self.n_sims_row.addWidget(self.n_sims_entry)
+        self.n_sims_row.addStretch()
+        self.left_layout.addRow(self.n_sims_row)
+
+        # Number of Cores
+        self.ncpu_label = QLabel("Number of Cores:")
+        self.ncpu_label.setFixedWidth(self.max_label_width)
+        self.ncpu_entry = QLineEdit()
+        self.ncpu_entry.setMaximumWidth(line_edit_max_width)
+        self.ncpu_row = QHBoxLayout()
+        self.ncpu_row.addWidget(self.ncpu_label)
+        self.ncpu_row.addWidget(self.ncpu_entry)
+        self.ncpu_row.addStretch()
+        self.left_layout.addRow(self.ncpu_row)
+
+        # Save Format
+        self.save_format_label = QLabel("Save Format:")
+        self.save_format_label.setFixedWidth(self.max_label_width)
+        self.save_format_combo = QComboBox()
+        self.save_format_combo.addItems(["npz", "fits", "h5"])
+        self.save_format_row = QHBoxLayout()
+        self.save_format_row.addWidget(self.save_format_label)
+        self.save_format_row.addWidget(self.save_format_combo)
+        self.save_format_row.addStretch()
+        self.left_layout.addRow(self.save_format_row)
+
+        # Local / Remote Mode
+        self.local_mode_label = QLabel("Local / Remote Mode:")
+        self.local_mode_label.setFixedWidth(self.max_label_width)
+        self.local_mode_combo = QComboBox()
+        self.local_mode_combo.addItems(["local", "remote"])
+        # Remote Compute Mode
+        self.remote_mode_label = QLabel("Remote Compute Mode:")
+        self.remote_mode_label.setFixedWidth(self.max_label_width)
+        self.remote_mode_combo = QComboBox()
+        self.remote_mode_combo.addItems(["MPI", "SLURM", "PBS"])
+        self.remote_folder_checkbox = QCheckBox("Set Working Directory")
+        self.remote_folder_checkbox.stateChanged.connect(self.toggle_remote_folder_line)
+        self.remote_folder_line = QLineEdit()
+        self.remote_folder_line.setMaximumWidth(line_edit_max_width)
+        self.local_mode_row = QHBoxLayout()
+        self.local_mode_row.addWidget(self.local_mode_label)
+        self.local_mode_row.addWidget(self.local_mode_combo)
+        self.local_mode_row.addWidget(self.remote_mode_label)
+        self.local_mode_row.addWidget(self.remote_mode_combo)
+        self.local_mode_row.addWidget(self.remote_folder_checkbox)
+        self.local_mode_row.addWidget(self.remote_folder_line)
+        self.local_mode_row.addStretch()
+        self.left_layout.addRow(self.local_mode_row)
+        self.remote_mode_label.hide()
+        self.remote_mode_combo.hide()
+        self.remote_folder_line.hide()
+        self.remote_folder_checkbox.hide()
+        self.remote_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
+
+        # Remote info
+        self.remote_address_label = QLabel("Remote Host:")
+        self.remote_address_entry = QLineEdit()
+        self.remote_address_entry.setMaximumWidth(line_edit_max_width)
+        self.remote_config_label = QLabel("SLURM Config:")
+        self.remote_config_entry = QLineEdit()
+        self.remote_config_button = QPushButton("Browse", self)
+        self.remote_config_button.setFixedHeight(button_height)
+        self.remote_config_button.setFixedWidth(button_width)
+        self.remote_config_button.setStyleSheet(button_style)
+
+        self.remote_config_button.clicked.connect(self.browse_slurm_config)
+        self.remote_user_label = QLabel("User:")
+        self.remote_user_entry = QLineEdit()
+        self.remote_user_entry.setMaximumWidth(line_edit_max_width)
+        self.remote_key_label = QLabel("SSH Key:")
+        self.remote_key_entry = QLineEdit()
+        self.remote_key_entry.setMaximumWidth(line_edit_max_width)
+        self.key_button = QPushButton("Browse", self)
+        self.key_button.setFixedHeight(button_height)
+        self.key_button.setFixedWidth(button_width)
+        self.key_button.setStyleSheet(button_style)
+        self.key_button.clicked.connect(self.browse_ssh_key)
+        self.remote_key_pass_label = QLabel("Key Password:")
+        self.remote_key_pass_entry = QLineEdit()
+        self.remote_key_pass_entry.setMaximumWidth(line_edit_max_width)
+        self.remote_key_pass_entry.setEchoMode(QLineEdit.EchoMode.Password)
+        self.remote_address_row = QHBoxLayout()
+        self.remote_address_row.addWidget(self.remote_address_label)
+        self.remote_address_row.addWidget(self.remote_address_entry)
+        self.remote_address_row.addWidget(self.remote_config_label)
+        self.remote_address_row.addWidget(self.remote_config_entry)
+        self.remote_address_row.addWidget(self.remote_config_button)
+        self.remote_address_row.addStretch()
+        self.left_layout.addRow(self.remote_address_row)
+        self.show_hide_widgets(self.remote_address_row, show=False)
+        self.remote_info_row = QHBoxLayout()
+        self.remote_info_row.addWidget(self.remote_user_label)
+        self.remote_info_row.addWidget(self.remote_user_entry)
+        self.remote_info_row.addWidget(self.remote_key_label)
+        self.remote_info_row.addWidget(self.remote_key_entry)
+        self.remote_info_row.addWidget(self.key_button)
+        self.remote_info_row.addWidget(self.remote_key_pass_label)
+        self.remote_info_row.addWidget(self.remote_key_pass_entry)
+        self.remote_info_row.addStretch()
+        self.left_layout.addRow(self.remote_info_row)
+        self.show_hide_widgets(self.remote_info_row, show=False)
+        self.local_mode_combo.currentTextChanged.connect(self.toggle_remote_row)
+
+    def add_line_widgets(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # Line Mode
+        self.line_mode_checkbox = QCheckBox("Line Mode")
+        self.line_mode_checkbox.stateChanged.connect(self.toggle_line_mode_widgets)
+        self.line_mode_row = QHBoxLayout()
+        self.line_mode_row.addWidget(self.line_mode_checkbox)
+        self.line_mode_row.addStretch()
+        self.left_layout.addRow(self.line_mode_row)
+        self.line_index_label = QLabel("Select Line Indices (space-separated):")
+        # self.line_index_label.setFixedWidth(self.max_label_width)
+        self.line_index_entry = QLineEdit()
+        self.redshift_label = QLabel("Redshift (space-separated):")
+        self.redshift_label.setFixedWidth(self.max_label_width)
+        self.redshift_entry = QLineEdit()
+        self.redshift_entry.setMaximumWidth(line_edit_max_width)
+        self.num_lines_label = QLabel("Number of Lines:")
+        self.num_lines_label.setFixedWidth(self.max_label_width)
+        self.num_lines_entry = QLineEdit()
+        self.num_lines_entry.setMaximumWidth(line_edit_max_width)
+        self.non_line_mode_row1 = QHBoxLayout()
+        self.non_line_mode_row1.addWidget(self.redshift_label)
+        self.non_line_mode_row1.addWidget(self.redshift_entry)
+        self.non_line_mode_row1.addStretch()
+        self.left_layout.addRow(self.non_line_mode_row1)
+        self.non_line_mode_row2 = QHBoxLayout()
+        self.non_line_mode_row2.addWidget(self.num_lines_label)
+        self.non_line_mode_row2.addWidget(self.num_lines_entry)
+        self.non_line_mode_row2.addStretch()
+        self.left_layout.addRow(self.non_line_mode_row2)
+        self.show_hide_widgets(self.non_line_mode_row1, show=False)
+        self.show_hide_widgets(self.non_line_mode_row2, show=False)
+
+    def add_width_slider(self):
+        line_edit_max_width = 250  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # Line Width
+        szp = QtW.QSizePolicy.Maximum
+        self.line_width_label = QtW.QLabel("Line Widths in Km/s:")
+        self.line_width_label.setFixedWidth(self.max_label_width)
+        self.line_width_label.setSizePolicy(szp, szp)
+        self.line_width_value_label_min = QLabel("Min: 50 km/s")
+        self.line_width_value_label_max = QLabel("Max: 1700 km/s")
+        self.line_width_slider = QRangeSlider(QtCore.Qt.Horizontal)
+        self.line_width_slider.setRange(
+            50, 1700
+        )  # Set min and max range for the slider
+        self.line_width_slider.setValue((100, 500))  # Initial values for min/max
+        self.line_width_slider.setMinimumSize(line_edit_max_width, 20)
+        self.line_width_slider.setMaximumWidth(line_edit_max_width + button_width)
+        self.line_width_slider.valueChanged.connect(self.update_width_labels)
+        self.line_width_row = QHBoxLayout()
+        self.line_width_row.addWidget(self.line_width_label)
+        self.line_width_row.addWidget(self.line_width_value_label_min)
+        self.line_width_row.addWidget(self.line_width_slider)
+        self.line_width_row.addWidget(self.line_width_value_label_max)
+        self.line_width_row.addStretch()
+        self.left_layout.addRow(self.line_width_row)
+
+    def add_robust_slider(self):
+        line_edit_max_width = 300  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # Briggs Robustness
+        self.robust_label = QLabel("Briggs Robustness:")
+        self.robust_slider = QSlider(Qt.Orientation.Horizontal)
+        self.robust_value_label = QLabel(f"{self.robust_slider.value()}")
+        self.robust_slider.setRange(-20, 20)
+        self.robust_slider.setTickInterval(1)
+        self.robust_slider.setSingleStep(1)
+        self.robust_slider.setValue(0)
+        self.robust_slider.setMaximumWidth(line_edit_max_width + button_width)
+        self.robust_slider.valueChanged.connect(self.update_robust_label)
+        self.robust_row = QHBoxLayout()
+        self.robust_row.addWidget(self.robust_label)
+        self.robust_row.addWidget(self.robust_slider)
+        self.robust_row.addWidget(self.robust_value_label)
+        self.left_layout.addRow(self.robust_row)
+
+    def add_dim_widgets(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # Set SNR
+        self.snr_checkbox = QCheckBox("Set SNR")
+        self.snr_entry = QLineEdit()
+        self.snr_entry.setMaximumWidth(line_edit_max_width)
+        self.snr_entry.setVisible(False)
+        self.snr_checkbox.stateChanged.connect(
+            lambda: self.toggle_dim_widgets_visibility(self.snr_entry)
+        )
+
+        # Set Infrared Luminosity
+        self.ir_luminosity_checkbox = QCheckBox("Set IR Luminosity")
+        self.ir_luminosity_entry = QLineEdit()
+        self.ir_luminosity_entry.setMaximumWidth(line_edit_max_width)
+        self.ir_luminosity_entry.setVisible(False)
+        self.ir_luminosity_checkbox.stateChanged.connect(
+            lambda: self.toggle_dim_widgets_visibility(self.ir_luminosity_entry)
+        )
+
+        # Fix Spatial Dimensions
+        self.fix_spatial_checkbox = QCheckBox("Fix Spatial Dimensions")
+        self.n_pix_entry = QLineEdit()
+        self.n_pix_entry.setMaximumWidth(line_edit_max_width)
+        self.n_pix_entry.setVisible(False)
+        self.fix_spatial_checkbox.stateChanged.connect(
+            lambda: self.toggle_dim_widgets_visibility(self.n_pix_entry)
+        )
+
+        # Fix Spectral Dimensions
+        self.fix_spectral_checkbox = QCheckBox("Fix Spectral Dimensions")
+        self.n_channels_entry = QLineEdit()
+        self.n_channels_entry.setMaximumWidth(line_edit_max_width)
+        self.n_channels_entry.setVisible(False)
+        self.fix_spectral_checkbox.stateChanged.connect(
+            lambda: self.toggle_dim_widgets_visibility(self.n_channels_entry)
+        )
+
+        # Serendipitous Sources
+        self.serendipitous_checkbox = QCheckBox("Serendipitous Sources")
+
+        self.chechbox_row = QHBoxLayout()
+        self.chechbox_row_2 = QHBoxLayout()
+        self.chechbox_row.addWidget(self.snr_checkbox)
+        self.chechbox_row.addWidget(self.snr_entry)
+        self.chechbox_row.addWidget(self.ir_luminosity_checkbox)
+        self.chechbox_row.addWidget(self.ir_luminosity_entry)
+        self.chechbox_row_2.addWidget(self.fix_spatial_checkbox)
+        self.chechbox_row_2.addWidget(self.n_pix_entry)
+        self.chechbox_row_2.addWidget(self.fix_spectral_checkbox)
+        self.chechbox_row_2.addWidget(self.n_channels_entry)
+        self.chechbox_row_2.addWidget(self.serendipitous_checkbox)
+        self.chechbox_row.addStretch()
+        self.chechbox_row_2.addStretch()
+        self.left_layout.addRow(self.chechbox_row)
+        self.left_layout.addRow(self.chechbox_row_2)
+
+    def add_model_widgets(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        self.model_label = QLabel("Select Model:")
+        self.model_label.setFixedWidth(self.max_label_width)
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(
+            [
+                "Point",
+                "Gaussian",
+                "Extended",
+                "Diffuse",
+                "Galaxy Zoo",
+                "Hubble 100",
+                "Molecular",
+            ]
+        )
+        self.model_combo.currentTextChanged.connect(self.toggle_tng_api_key_row)
+        self.model_row = QHBoxLayout()
+        self.model_row.addWidget(self.model_label)
+        self.model_row.addWidget(self.model_combo)
+        self.model_row.addStretch()
+        self.left_layout.addRow(self.model_row)
+
+        self.tng_api_key_label = QLabel("TNG API Key:")
+        self.tng_api_key_label.setFixedWidth(self.max_label_width)
+        self.tng_api_key_entry = QLineEdit()
+        self.tng_api_key_entry.setMaximumWidth(line_edit_max_width)
+        self.tng_api_key_row = QHBoxLayout()
+        self.tng_api_key_row.addWidget(self.tng_api_key_label)
+        self.tng_api_key_row.addWidget(self.tng_api_key_entry)
+        self.tng_api_key_row.addStretch()
+        self.show_hide_widgets(self.tng_api_key_row, show=False)
+        self.left_layout.addRow(self.tng_api_key_row)
+
+    def add_meta_widgets(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # Metadata
+        self.metadata_mode_label = QLabel("Metadata Mode:")
+        self.metadata_mode_label.setFixedWidth(self.max_label_width)
+        self.metadata_mode_entry = QLineEdit()
+        self.metadata_mode_combo = QComboBox()
+        self.metadata_mode_combo.addItems(["get", "query"])
+        self.metadata_mode_combo.currentTextChanged.connect(self.toggle_metadata_browse)
+        self.metadata_mode_row = QHBoxLayout()
+        self.metadata_mode_row.addWidget(self.metadata_mode_label)
+        self.metadata_mode_row.addWidget(self.metadata_mode_combo)
+        self.metadata_mode_row.addStretch()
+        self.left_layout.addRow(self.metadata_mode_row)
+
+    def add_metadata_widgets(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # self.metadata_path_label = QLabel("Metadata Path:")
+        # self.metadata_path_label.setFixedWidth(self.max_label_width)
+        # self.metadata_path_entry = QLineEdit()
+        # self.metadata_path_entry.setMaximumWidth(line_edit_max_width)
+        # self.metadata_path_button = QPushButton("Browse")
+        # self.metadata_path_button.setFixedHeight(button_height)
+        # self.metadata_path_button.setFixedWidth(button_width)
+        # self.metadata_path_button.setStyleSheet(button_style)
+
+        # self.metadata_path_button.clicked.connect(self.browse_metadata_path)
+        # self.metadata_path_row = QHBoxLayout()
+        # self.metadata_path_row.addWidget(self.metadata_path_label)
+        # self.metadata_path_row.addWidget(self.metadata_path_entry)
+        # self.metadata_path_row.addWidget(self.metadata_path_button)
+        self.metadata_path_row.addStretch()
+        self.left_layout.addRow(self.metadata_path_row)
+        # self.left_layout.update()
+
+    def add_metadata_query_widgets(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        labels = [
+            QLabel("Select Science Keyword by number (space-separated):"),
+            QLabel("Select Scientific Category by number (space-separated):"),
+            QLabel("Select observing bands (space-separated):"),
+            QLabel("Select FOV range (min max) or max only (space-separated):"),
+            QLabel(
+                "Select integration time  range (min max) or max only (space-separated):"
+            ),
+            QLabel(
+                "Select source frequency range (min max) or max only (space-separated):"
+            ),
+        ]
+        # Find the maximum width of the labels
+        max_label_width = max(label.sizeHint().width() for label in labels)
+
+        science_keyword_label = QLabel(
+            "Select Science Keyword by number (space-separated):"
+        )
+        science_keyword_label.setFixedWidth(max_label_width)
+        self.science_keyword_entry = QLineEdit()  # Use QLineEdit instead of input
+        self.science_keyword_entry.setMaximumWidth(line_edit_max_width)
+        scientific_category_label = QLabel(
+            "Select Scientific Category by number (space-separated):"
+        )
+        scientific_category_label.setFixedWidth(max_label_width)
+        self.scientific_category_entry = QLineEdit()
+        self.scientific_category_entry.setMaximumWidth(line_edit_max_width)
+
+        band_label = QLabel("Select observing bands (space-separated):")
+        band_label.setFixedWidth(max_label_width)
+        self.band_entry = QLineEdit()
+        self.band_entry.setMaximumWidth(line_edit_max_width)
+
+        fov_label = QLabel("Select FOV range (min max) or max only (space-separated):")
+        fov_label.setFixedWidth(max_label_width)
+        self.fov_entry = QLineEdit()
+        self.fov_entry.setMaximumWidth(line_edit_max_width)
+
+        time_resolution_label = QLabel(
+            "Select integration time  range (min max) or max only (space-separated):"
+        )
+        time_resolution_label.setFixedWidth(max_label_width)
+        self.time_resolution_entry = QLineEdit()
+        self.time_resolution_entry.setMaximumWidth(line_edit_max_width)
+
+        frequency_label = QLabel(
+            "Select source frequency range (min max) or max only (space-separated):"
+        )
+        frequency_label.setFixedWidth(max_label_width)
+        self.frequency_entry = QLineEdit()
+        self.frequency_entry.setMaximumWidth(line_edit_max_width)
+
+        self.continue_query_button = QPushButton("Continue Query")
+        self.continue_query_button.clicked.connect(self.execute_query)
+        self.continue_query_button.setFixedHeight(button_height)
+        self.continue_query_button.setFixedWidth(2 * button_width)
+        self.continue_query_button.setStyleSheet(button_style)
+
+        # Create layouts and add widgets
+        self.science_keyword_row = QHBoxLayout()
+        self.science_keyword_row.addWidget(science_keyword_label)
+        self.science_keyword_row.addWidget(self.science_keyword_entry)
+        self.science_keyword_row.addStretch()
+
+        self.scientific_category_row = QHBoxLayout()
+        self.scientific_category_row.addWidget(scientific_category_label)
+        self.scientific_category_row.addWidget(self.scientific_category_entry)
+        self.scientific_category_row.addStretch()
+
+        self.band_row = QHBoxLayout()
+        self.band_row.addWidget(band_label)
+        self.band_row.addWidget(self.band_entry)
+        self.band_row.addStretch()
+
+        self.fov_row = QHBoxLayout()
+        self.fov_row.addWidget(fov_label)
+        self.fov_row.addWidget(self.fov_entry)
+        self.fov_row.addStretch()
+
+        self.time_resolution_row = QHBoxLayout()
+        self.time_resolution_row.addWidget(time_resolution_label)
+        self.time_resolution_row.addWidget(self.time_resolution_entry)
+        self.time_resolution_row.addStretch()
+
+        self.frequency_row = QHBoxLayout()
+        self.frequency_row.addWidget(frequency_label)
+        self.frequency_row.addWidget(self.frequency_entry)
+        self.frequency_row.addStretch()
+
+        # self.continue_query_row = QHBoxLayout()
+        self.query_save_row.addWidget(self.continue_query_button)
+
+        # Insert rows into left_layout (adjust index if needed)
+        self.left_layout.addRow(self.science_keyword_row)
+        self.left_layout.addRow(self.scientific_category_row)
+        self.left_layout.addRow(self.band_row)
+        self.left_layout.addRow(self.fov_row)
+        self.left_layout.addRow(self.time_resolution_row)
+        self.left_layout.addRow(self.frequency_row)
+        self.terminal.add_log(
+            "\n\nFill out the fields and click 'Continue Query' to proceed."
+        )
+        self.query_execute_button.hide()  # Hide
+        self.continue_query_button.show()  # Show
+
+    def add_query_widgets(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 80
+        button_height = 20
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        self.query_type_label = QLabel("Query Type:")
+        self.query_type_label.setFixedWidth(self.max_label_width)
+        self.query_type_combo = QComboBox()
+        self.query_type_combo.addItems(["science", "target"])
+        self.query_type_combo.currentTextChanged.connect(self.update_query_save_label)
+        self.query_type_row = QHBoxLayout()
+        self.query_type_row.addWidget(self.query_type_label)
+        self.query_type_row.addWidget(self.query_type_combo)
+        self.query_type_row.addStretch()
+        self.left_layout.addRow(self.query_type_row)
+
+        self.target_list_label = QLabel("Load Target List:")
+        self.target_list_entry = QLineEdit()
+        self.target_list_entry.setMaximumWidth(line_edit_max_width)
+        self.target_list_button = QPushButton("Browse")
+        self.target_list_button.setFixedHeight(button_height)
+        self.target_list_button.setFixedWidth(button_width)
+        self.target_list_button.setStyleSheet(button_style)
+        self.target_list_button.clicked.connect(self.browse_target_list)
+        self.target_list_row = QHBoxLayout()
+        self.target_list_row.addWidget(self.target_list_label)
+        self.target_list_row.addWidget(self.target_list_entry)
+        self.target_list_row.addWidget(self.target_list_button)
+        self.target_list_row.addStretch()
+        self.left_layout.addRow(self.target_list_row)
+        self.show_hide_widgets(self.target_list_row, show=False)
+
+        self.query_save_label = QLabel("Save Metadata to:")
+        self.query_save_entry = QLineEdit()
+        self.query_save_entry.setMaximumWidth(line_edit_max_width)
+        self.query_save_button = QPushButton("Browse")
+        self.query_save_button.setFixedHeight(button_height)
+        self.query_save_button.setFixedWidth(button_width)
+        self.query_save_button.setStyleSheet(button_style)
+        self.query_save_button.clicked.connect(self.select_metadata_path)
+        self.query_execute_button = QPushButton("Execute Query")
+        self.query_execute_button.setFixedHeight(button_height)
+        self.query_execute_button.setFixedWidth(2 * button_width)
+        self.query_execute_button.setStyleSheet(button_style)
+        self.query_execute_button.clicked.connect(self.execute_query)
+        self.query_save_row = QHBoxLayout()
+        self.query_save_row.addWidget(self.query_save_label)
+        self.query_save_row.addWidget(self.query_save_entry)
+        self.query_save_row.addWidget(self.query_save_button)
+        self.query_save_row.addStretch()
+        self.query_save_row.addWidget(self.query_execute_button)
+        self.query_save_row.addStretch()
+        self.left_layout.addRow(self.query_save_row)
+        # self.left_layout.addRow(self.query_execute_button)
+
+    def add_footer_buttons(self):
+        line_edit_max_width = 400  # Example width (you can adjust this)
+        button_width = 70
+        button_height = 30
+        border_radius = 10
+        button_style = f"""
+            QPushButton {{
+                background-color: #5DADE2;
+                color: white;
+                border-radius: {border_radius}px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #3498DB;
+            }}
+        """
+        # Start / Stop Simulation
+        self.start_button = QPushButton("Start Simulation")
+        self.start_button.clicked.connect(self.start_simulation)
+        self.start_button.setFixedHeight(button_height)
+        self.start_button.setFixedWidth(2 * button_width)
+        self.start_button.setStyleSheet(button_style)
+
+        self.stop_button = QPushButton("Stop Simulation")
+        self.stop_button.clicked.connect(self.stop_simulation)
+        self.stop_button.setFixedHeight(button_height)
+        self.stop_button.setFixedWidth(2 * button_width)
+        self.stop_button.setStyleSheet(button_style)
+
+        self.reset_button = QPushButton("Reset Fields")
+        self.reset_button.clicked.connect(self.reset_fields)
+        self.reset_button.setFixedHeight(button_height)
+        self.reset_button.setFixedWidth(2 * button_width)
+        self.reset_button.setStyleSheet(button_style)
+
+        self.dashboard_button = QPushButton("Dashboard")
+        self.dashboard_button.clicked.connect(self.open_dask_dashboard)
+        self.dashboard_button.setFixedHeight(button_height)
+        self.dashboard_button.setFixedWidth(2 * button_width)
+        self.dashboard_button.setStyleSheet(button_style)
+
+        # Create a layout for the buttons
+        self.footer_layout = QHBoxLayout()
+        self.footer_layout.addWidget(self.start_button)
+        self.footer_layout.addWidget(self.stop_button)
+        self.footer_layout.addWidget(self.reset_button)
+        self.footer_layout.addWidget(self.dashboard_button)
+        self.footer_layout.addStretch()
+
+        # Add the footer layout to the bottom of the left_content_layout
+        self.left_content_layout.addLayout(self.footer_layout)
+
+    # Remove Widgets Functions
+    def remove_metadata_query_widgets(self):
+        # Similar to remove_query_widgets from the previous response, but remove
+        # all the rows and widgets added in add_metadata_query_widgets.
+        widgets_to_remove = [
+            self.science_keyword_row,
+            self.scientific_category_row,
+            self.band_row,
+            self.fov_row,
+            self.time_resolution_row,
+            self.frequency_row,
+        ]
+
+        for widget in widgets_to_remove:
+            if widget.parent() is not None:
+                layout = widget.parent()
+                layout.removeItem(widget)
+                widget.setParent(None)
+                for i in reversed(range(widget.count())):
+                    item = widget.takeAt(i)
+                    if item.widget():
+                        item.widget().deleteLater()
+
+        self.metadata_query_widgets_added = False
+        self.query_execute_button.hide()
+        self.continue_query_button.hide()
+
+    def remove_metadata_browse(self):
+        if self.metadata_path_row.parent() is not None:
+            layout = self.metadata_path_row.parent()  # Get the parent layout
+
+            # Remove all items from the layout
+            for i in reversed(range(self.metadata_path_row.count())):
+                item = self.metadata_path_row.takeAt(i)
+                if item.widget():
+                    item.widget().deleteLater()
+
+            layout.removeItem(
+                self.metadata_path_row
+            )  # Remove the row layout from its parent
+            self.metadata_path_row.setParent(None)  # Set the parent to None
+            self.metadata = None
+
+    def remove_query_widgets(self):
+        """Removes the query type and save location rows from the layout."""
+
+        # Remove query type row
+        if self.query_type_row.parent() is not None:  # Check if row is in layout
+            layout = self.query_type_row.parent()
+            layout.removeItem(self.query_type_row)  # Remove the row
+            self.query_type_row.setParent(None)  # Disassociate the row from parent
+
+            # Delete widgets in row
+            for i in reversed(range(self.query_type_row.count())):
+                item = self.query_type_row.takeAt(i)
+                widget = item.widget()
+                if widget is not None:  # Check if it's a widget before deleting
+                    widget.deleteLater()
+
+        # Remove query save row (same logic as above)
+        if self.query_save_row.parent() is not None:
+            layout = self.query_save_row.parent()
+            layout.removeItem(self.query_save_row)
+            self.query_save_row.setParent(None)
+
+            for i in reversed(range(self.query_save_row.count())):
+                item = self.query_save_row.takeAt(i)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+        # Remove execute query button
+        if self.query_execute_button.parent() is not None:
+            layout = self.left_layout  # Directly access the main vertical layout
+            # Remove the widget from the layout
+            index = layout.indexOf(self.query_execute_button)
+            if index >= 0:
+                item = layout.takeAt(index)
+                if item.widget() is not None:
+                    item.widget().deleteLater()
+        if self.target_list_row.parent() is not None:
+            layout = self.target_list_row.parent()
+            layout.removeItem(self.target_list_row)
+            self.target_list_row.setParent(None)
+            for i in reversed(range(self.target_list_row.count())):
+                item = self.target_list_row.takeAt(i)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+
+        self.metadata_query_widgets_added = False
+
+    # Toggle Widgets Functions
+    def toggle_config_label(self):
+        if self.remote_mode_combo.currentText() == "SLURM":
+            self.remote_config_label.setText("Slurm Config:")
+        elif self.remote_mode_combo.currentText() == "PBS":
+            self.remote_config_label.setText("PBS Config:")
+        else:
+            self.remote_config_label.setText("MPI Config")
+
+    def toggle_remote_folder_line(self):
+        if self.remote_folder_checkbox.isChecked():
+            self.remote_folder_line.show()
+        else:
+            self.remote_folder_line.hide()
+
+    def toggle_remote_folder(self):
+        if self.remote_folder_checkbox.isChecked():
+            self.remote_folder_line.show()
+        else:
+            self.remote_folder_line.hide()
+
+    def toggle_remote_row(self):
+        if self.local_mode_combo.currentText() == "remote":
+            self.show_hide_widgets(self.remote_address_row, show=True)
+            self.show_hide_widgets(self.remote_info_row, show=True)
+            self.toggle_config_label()
+            self.remote_mode_label.show()
+            self.remote_mode_combo.show()
+            self.remote_folder_checkbox.show()
+            if self.output_entry.text() != "" and self.remote_user_entry.text() != "":
+                self.output_entry.setText(
+                    self.map_to_remote_directory(self.output_entry.text())
+                )
+            if self.tng_entry.text() != "" and self.remote_user_entry.text() != "":
+                self.tng_entry.setText(
+                    self.map_to_remote_directory(self.tng_entry.text())
+                )
+            if (
+                self.galaxy_zoo_entry.text() != ""
+                and self.remote_user_entry.text() != ""
+            ):
+                self.galaxy_zoo_entry.setText(
+                    self.map_to_remote_directory(self.galaxy_zoo_entry.text())
+                )
+        else:
+            self.show_hide_widgets(self.remote_address_row, show=False)
+            self.show_hide_widgets(self.remote_info_row, show=False)
+            self.remote_mode_label.hide()
+            self.remote_mode_combo.hide()
+            self.remote_folder_checkbox.hide()
+            self.remote_folder_line.hide()
+            if self.output_entry.text() != "":
+                folder = self.output_entry.text().split(os.path.sep)[-1]
+                self.output_entry.setText(os.path.join(os.path.expanduser("~"), folder))
+            if self.tng_entry.text() != "":
+                folder = self.tng_entry.text().split(os.path.sep)[-1]
+                self.tng_entry.setText(os.path.join(os.path.expanduser("~"), folder))
+            if self.galaxy_zoo_entry.text() != "":
+                folder = self.galaxy_zoo_entry.text().split(os.path.sep)[-1]
+                self.galaxy_zoo_entry.setText(
+                    os.path.join(os.path.expanduser("~"), folder)
+                )
+
+    def toggle_line_mode_widgets(self):
+        """Shows/hides the appropriate input rows based on line mode checkbox state."""
+        if self.line_mode_checkbox.isChecked():
+            if not self.has_widget(self.line_mode_row, QLabel):
+                self.line_mode_row.addWidget(self.line_index_label)
+                self.line_mode_row.addWidget(self.line_index_entry)
+            # Show the widgets in line_mode_row
+            self.show_hide_widgets(self.line_mode_row, show=True)
+            # Hide the widgets in non_line_mode_row1 and non_line_mode_row2
+            self.show_hide_widgets(self.non_line_mode_row1, show=False)
+            self.show_hide_widgets(self.non_line_mode_row2, show=False)
+            self.line_mode_row.addStretch()
+            if self.line_displayed is False:
+                self.line_display()
+        else:
+            # Hide the widgets in line_mode_row
+            self.show_hide_widgets(self.line_mode_row, show=False)
+            if self.has_widget(self.line_mode_row, QLabel):
+                self.line_mode_row.removeWidget(self.line_index_label)
+                self.line_mode_row.removeWidget(self.line_index_entry)
+            self.show_hide_widgets(self.line_mode_row, show=True)
+            # Show the widgets in non_line_mode_row1 and non_line_mode_row2
+            self.show_hide_widgets(self.non_line_mode_row1, show=True)
+            self.show_hide_widgets(self.non_line_mode_row2, show=True)
+
+    def toggle_dim_widgets_visibility(self, widget):
+        widget.setVisible(self.sender().isChecked())
+
+    def toggle_tng_api_key_row(self):
+        """Shows/hides the TNG API key row based on the selected model."""
+        if self.model_combo.currentText() == "Extended":
+            self.show_hide_widgets(self.tng_api_key_row, show=True)
+        else:
+            self.show_hide_widgets(self.tng_api_key_row, show=False)
+
+    def toggle_metadata_browse(self, mode):
+        if mode == "get":
+            if self.metadata_path_row.parent() is None:  # Check if already added
+                # self.left_layout.insertLayout(8, self.metadata_path_row)
+                # # Re-insert at correct position
+                # self.left_layout.update()  # Force layout update to show the row
+                self.remove_query_widgets()  # Remove query widgets if present
+                self.add_metadata_widgets()
+                if self.metadata_query_widgets_added:
+                    self.remove_metadata_query_widgets()
+        elif mode == "query":
+            if self.query_type_row.parent() is None:
+                self.remove_metadata_browse()  # Remove browse widgets if present
+                self.add_query_widgets()
+        else:
+            self.remove_metadata_browse()
+            self.remove_query_widgets()
+
+    # ------- Progress Bar ---------------------------------
+    @pyqtSlot(int)
+    def handle_progress(self, value):
+        self.update_progress.emit(value)
+
+    @pyqtSlot(int)
+    def update_progress_bar(self, value):
+        self.progress_bar.setValue(value)
+
+    # -------- Metadata Query Functions ---------------------
+    @pyqtSlot(object)
+    def print_keywords(self, keywords):
+        self.terminal.add_log("Available science keywords:")
+        self.science_keywords = keywords["science_keywords"]
+        self.scientific_categories = keywords["scientific_categories"]
+
+        for i, keyword in enumerate(self.science_keywords):
+            self.terminal.add_log(f"{i}: {keyword}")
+
+        self.terminal.add_log("\nAvailable scientific categories:")
+        for i, category in enumerate(self.scientific_categories):
+            self.terminal.add_log(f"{i}: {category}")
+
+        # Add metadata query widgets after displaying results
+        self.add_metadata_query_widgets()
+        self.metadata_query_widgets_added = True
+
     def execute_query(self):
         self.terminal.add_log("Executing query...")
+        self.progress_bar_entr
         if self.metadata_mode_combo.currentText() == "query":
             query_type = self.query_type_combo.currentText()
             if query_type == "science":
@@ -1973,14 +2077,14 @@ class ALMASimulator(QMainWindow):
                     not hasattr(self, "metadata_query_widgets_added")
                     or not self.metadata_query_widgets_added
                 ):
-                    self.show_scientific_keywords()
-                    self.add_metadata_query_widgets()
-                    self.metadata_query_widgets_added = True
-                    self.query_execute_button.hide()
+                    runnable = QueryKeyword(self)  # Pass the current instance
+                    runnable.signals.queryFinished.connect(
+                        self.print_keywords
+                    )  # Connect the signal to the slot
+                    self.thread_pool.start(runnable)
+
                 else:
-                    self.metadata = self.query_for_metadata_by_science_type()
-                    self.remove_metadata_query_widgets()
-                    self.query_execute_button.show()
+                    self.query_for_metadata_by_science_type()
             elif query_type == "target":
                 if self.target_list_entry.text():
                     self.terminal.add_log(
@@ -1988,23 +2092,33 @@ class ALMASimulator(QMainWindow):
                     )
                     target_list = pd.read_csv(self.target_list_entry.text())
                     self.target_list = target_list.values.tolist()
-                    self.metadata = self.query_for_metadata_by_targets()
+                    self.query_for_metadata_by_targets()
             else:
                 # Handle invalid query type (optional)
                 pass
 
-    def show_scientific_keywords(self):
-        # Implement the logic to query metadata based on science type
-        self.terminal.add_log("Querying metadata by science type...")
-        # self.plot_window = PlotWindow()
-        # self.plot_window.show()
-        self.science_keywords, self.scientific_categories = ual.get_science_types()
-        self.terminal.add_log("Available science keywords:")
-        for i, keyword in enumerate(self.science_keywords):
-            self.terminal.add_log(f"{i}: {keyword}")
-        self.terminal.add_log("\nAvailable scientific categories:")
-        for i, category in enumerate(self.scientific_categories):
-            self.terminal.add_log(f"{i}: {category}")
+    def load_metadata(self, metadata_path):
+        try:
+            self.terminal.add_log(f"Loading metadata from {metadata_path}")
+            self.metadata = pd.read_csv(metadata_path)
+            self.terminal.add_log(
+                "Metadata contains {} samples".format(len(self.metadata))
+            )
+
+            # ... rest of your metadata loading logic ...
+        except Exception as e:
+            self.terminal.add_log(f"Error loading metadata: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    @pyqtSlot(object)
+    def get_metadata(self, database):
+        self.metadata = database
+        del database
+        self.terminal.add_log(f"Metadata saved to {self.query_save_entry.text()}")
+        self.remove_metadata_query_widgets()
+        self.query_execute_button.show()
 
     def query_for_metadata_by_science_type(self):
         self.terminal.add_log("Querying by Science Keyword")
@@ -2043,68 +2157,18 @@ class ALMASimulator(QMainWindow):
         fov_range = to_range(fov_input)
         time_resolution_range = to_range(time_resolution_input)
         frequency_range = to_range(frequency_input)
-        df = ual.query_by_science_type(
-            science_keyword,
-            scientific_category,
-            bands,
-            fov_range,
-            time_resolution_range,
-            frequency_range,
-        )
-        df = df.drop_duplicates(subset="member_ous_uid").drop(
-            df[df["science_keyword"] == ""].index
-        )
-        # Rename columns and select relevant data
-        rename_columns = {
-            "target_name": "ALMA_source_name",
-            "pwv": "PWV",
-            "schedblock_name": "SB_name",
-            "velocity_resolution": "Vel.res.",
-            "spatial_resolution": "Ang.res.",
-            "s_ra": "RA",
-            "s_dec": "Dec",
-            "s_fov": "FOV",
-            "t_resolution": "Int.Time",
-            "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
-            "sensitivity_10kms": "Line_sens_10kms_mJybeam",
-            "obs_release_date": "Obs.date",
-            "band_list": "Band",
-            "bandwidth": "Bandwidth",
-            "frequency": "Freq",
-            "frequency_support": "Freq.sup.",
+        sql_fields = {
+            "science_keyword": science_keyword,
+            "scientific_category": scientific_category,
+            "bands": bands,
+            "fov_range": fov_range,
+            "time_resolution_range": time_resolution_range,
+            "frequency_range": frequency_range,
+            "save_to": save_to_input,
         }
-        df.rename(columns=rename_columns, inplace=True)
-        database = df[
-            [
-                "ALMA_source_name",
-                "Band",
-                "PWV",
-                "SB_name",
-                "Vel.res.",
-                "Ang.res.",
-                "RA",
-                "Dec",
-                "FOV",
-                "Int.Time",
-                "Cont_sens_mJybeam",
-                "Line_sens_10kms_mJybeam",
-                "Obs.date",
-                "Bandwidth",
-                "Freq",
-                "Freq.sup.",
-                "antenna_arrays",
-                "proposal_id",
-                "member_ous_uid",
-                "group_ous_uid",
-            ]
-        ]
-        database.loc[:, "Obs.date"] = database["Obs.date"].apply(
-            lambda x: x.split("T")[0]
-        )
-        database.to_csv(save_to_input, index=False)
-        self.metadata = database
-        self.terminal.add_log(f"Metadata saved to {save_to_input}")
-        del database
+        runnable = QueryByScience(self, sql_fields)
+        runnable.signals.queryFinished.connect(self.get_metadata)
+        self.thread_pool.start(runnable)
 
     def query_for_metadata_by_targets(self):
         """Query for metadata for all predefined targets and compile the results
@@ -2121,642 +2185,11 @@ class ALMASimulator(QMainWindow):
         """
         # Query all targets and compile the results
         self.terminal.add_log("Querying metadata from target list...")
-        df = ual.query_all_targets(self.target_list)
-        df = df.drop_duplicates(subset="member_ous_uid")
-        save_to_input = self.query_save_entry.text()
-        # Define a dictionary to map existing column names to new names with unit initials
-        rename_columns = {
-            "target_name": "ALMA_source_name",
-            "pwv": "PWV",
-            "schedblock_name": "SB_name",
-            "velocity_resolution": "Vel.res.",
-            "spatial_resolution": "Ang.res.",
-            "s_ra": "RA",
-            "s_dec": "Dec",
-            "s_fov": "FOV",
-            "t_resolution": "Int.Time",
-            "cont_sensitivity_bandwidth": "Cont_sens_mJybeam",
-            "sensitivity_10kms": "Line_sens_10kms_mJybeam",
-            "obs_release_date": "Obs.date",
-            "band_list": "Band",
-            "bandwidth": "Bandwidth",
-            "frequency": "Freq",
-            "frequency_support": "Freq.sup.",
-        }
-        df.rename(columns=rename_columns, inplace=True)
-        database = df[
-            [
-                "ALMA_source_name",
-                "Band",
-                "PWV",
-                "SB_name",
-                "Vel.res.",
-                "Ang.res.",
-                "RA",
-                "Dec",
-                "FOV",
-                "Int.Time",
-                "Cont_sens_mJybeam",
-                "Line_sens_10kms_mJybeam",
-                "Obs.date",
-                "Bandwidth",
-                "Freq",
-                "Freq.sup.",
-                "antenna_arrays",
-                "proposal_id",
-                "member_ous_uid",
-                "group_ous_uid",
-            ]
-        ]
-        database.loc[:, "Obs.date"] = database["Obs.date"].apply(
-            lambda x: x.split("T")[0]
-        )
-        database.to_csv(save_to_input, index=False)
-        self.metadata = database
-        self.terminal.add_log(f"Metadata saved to {save_to_input}")
+        runnable = QueryByTarget(self)
+        runnable.signals.queryFinished.connect(self.get_metadata)
+        self.thread_pool.start(runnable)
 
-    # ----- Auxiliary Functions ----------------
-
-    def load_metadata(self, metadata_path):
-        try:
-            self.terminal.add_log(f"Loading metadata from {metadata_path}")
-            self.metadata = pd.read_csv(metadata_path)
-            self.terminal.add_log(
-                "Metadata contains {} samples".format(len(self.metadata))
-            )
-
-            # ... rest of your metadata loading logic ...
-        except Exception as e:
-            self.terminal.add_log(f"Error loading metadata: {e}")
-            import traceback
-
-            traceback.print_exc()
-
-    def line_display(self):
-        """
-        Display the line emission's rest frequency.
-
-        Parameter:
-        main_path (str): Path to the directory where the file.csv is stored.
-
-        Return:
-        pd.DataFrame : Dataframe with line names and rest frequencies.
-        """
-
-        path_line_emission_csv = os.path.join(
-            self.main_path, "brightnes", "calibrated_lines.csv"
-        )
-        db_line = uas.read_line_emission_csv(
-            path_line_emission_csv, sep=","
-        ).sort_values(by="Line")
-        line_names = db_line["Line"].values
-        rest_frequencies = db_line["freq(GHz)"].values
-        self.terminal.add_log("Please choose the lines from the following list\n")
-        for i in range(len(line_names)):
-            self.terminal.add_log(
-                f"{i}: {line_names[i]} - {rest_frequencies[i]:.2e} GHz\n"
-            )
-        self.line_displayed = True
-
-    def download_galaxy_zoo(self):
-        """
-        Downloads a Kaggle dataset to the specified path.
-        """
-        self.terminal.add_log(
-            "\nGalaxy Zoo data not found on disk, downloading from Kaggle..."
-        )
-        api.authenticate()  # Authenticate with your Kaggle credentials
-        dataset_name = "jaimetrickz/galaxy-zoo-2-images"
-        # Download the dataset as a zip file
-        api.dataset_download_files(
-            dataset_name, path=self.galaxy_zoo_entry.text(), unzip=True
-        )
-        self.terminal.add_log(
-            f"\nDataset {dataset_name} downloaded to {self.galaxy_zoo_entry.text()}"
-        )
-        # os.remove(os.path.join(self.galaxy_zoo_entry.text(), "galaxy-zoo-2-images.zip"))
-
-    def download_galaxy_zoo_on_remote(self):
-        """
-        Downloads a Kaggle dataset to the specified path.
-        """
-        if self.remote_key_pass_entry.text() != "":
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-                private_key_pass=self.remote_key_pass_entry.text(),
-            )
-
-        else:
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-            )
-        if sftp.exists(self.galaxy_zoo_entry.text()):
-            if not sftp.listdir(self.galaxy_zoo_entry.text()):
-                self.terminal.add_log(
-                    "\nGalaxy Zoo data not found on disk, downloading from Kaggle..."
-                )
-                if not sftp.exists(
-                    "/home/{}/.kaggle".format(self.remote_user_entry.text())
-                ):
-                    sftp.mkdir("/home/{}/.kaggle".format(self.remote_user_entry.text()))
-                if not sftp.exists(
-                    "/home/{}/.kaggle/kaggle.json".format(self.remote_user_entry.text())
-                ):
-                    sftp.put(
-                        os.path.join(os.path.expanduser("~"), ".kaggle", "kaggle.json"),
-                        "/home/{}/.kaggle/kaggle.json".format(
-                            self.remote_user_entry.text()
-                        ),
-                    )
-                    sftp.chmod(
-                        "/home/{}/.kaggle/kaggle.json".format(
-                            self.remote_user_entry.text()
-                        ),
-                        600,
-                    )
-                if self.remote_key_pass_entry.text() != "":
-                    key = paramiko.RSAKey.from_private_key_file(
-                        self.remote_key_entry.text(),
-                        password=self.remote_key_pass_entry.text(),
-                    )
-                else:
-                    key = paramiko.RSAKey.from_private_key_file(
-                        self.remote_key_entry.text()
-                    )
-                venv_dir = os.path.join(
-                    "/home/{}/".format(self.remote_user_entry.text()), "almasim_env"
-                )
-                commands = f"""
-                source {venv_dir}/bin/activate
-                python -c "from kaggle import api; \
-                    api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
-                        path='{self.galaxy_zoo_entry.text()}', unzip=True)"
-                """
-                paramiko_client = paramiko.SSHClient()
-                paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                paramiko_client.connect(
-                    self.remote_address_entry.text(),
-                    username=self.remote_user_entry.text(),
-                    pkey=key,
-                )
-                stdin, stdout, stderr = paramiko_client.exec_command(commands)
-                self.terminal.add_log(stdout.read().decode())
-                self.terminal.add_log(stderr.read().decode())
-
-    def download_hubble(self):
-        """
-        Download 10GB of iconic Hubble images to hubble_image_path/top100.
-        These are large in size which allows random cropping and
-        scaling for data-augmentation.
-        """
-        baseurl = "https://esahubble.org/static/images/zip/top100/top100-original.zip"
-        self.terminal.add_log("Hubble images not found on disk, downloading ...")
-        zipfilename = os.path.join(self.hubble_entry.text(), os.path.basename(baseurl))
-        if not os.path.exists(zipfilename):
-            response = requests.Session().get(baseurl, stream=True)
-            with open(zipfilename, "wb") as f:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-        with zipfile.ZipFile(zipfilename) as zf:
-            zf.extractall(self.hubble_entry.text())
-        os.remove(zipfilename)
-        message = f"Hubble 100 Images downloaded to {self.hubble_entry.text()}"
-        self.terminal.add_log(message)
-
-    def download_hubble_on_remote(self):
-        self.terminal.add_log("Not yet implemented")
-
-    def check_tng_dirs(self):
-        tng_dir = self.tng_entry.text()
-        if not os.path.exists(os.path.join(tng_dir, "TNG100-1")):
-            os.makedirs(os.path.join(tng_dir, "TNG100-1"))
-        if not os.path.exists(os.path.join(tng_dir, "TNG100-1", "output")):
-            os.makedirs(os.path.join(tng_dir, "TNG100-1", "output"))
-        if not os.path.exists(os.path.join(tng_dir, "TNG100-1", "postprocessing")):
-            os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
-        if not os.path.exists(
-            os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
-        ):
-            os.makedirs(os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets"))
-        if not isfile(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
-            if self.terminal is not None:
-                self.terminal.add_log("Downloading simulation file")
-            url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
-            cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
-                self.tng_api_key_entry.text(),
-                os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
-                url,
-            )
-            subprocess.run(cmd, shell=True)
-            if self.terminal is not None:
-                self.terminal.add_log("Done.")
-
-    def create_remote_environment(self):
-        self.terminal.add_log("Checking ALMASim environment")
-        repo_url = "https://github.com/MicheleDelliVeneri/ALMASim.git"
-        if self.remote_dir_line.text() != "":
-            work_dir = self.remote_dir_line.text()
-            repo_dir = os.path.join(work_dir, "ALMASim")
-            venv_dir = os.path.join(work_dir, "almasim_env")
-        else:
-            venv_dir = os.path.join(
-                "/home/{}".format(self.remote_user_entry.text()), "almasim_env"
-            )
-            repo_dir = os.path.join(
-                "/home/{}".format(self.remote_user_entry.text()), "ALMASim"
-            )
-        self.remote_main_dir = repo_dir
-        self.remote_venv_dir = venv_dir
-        if self.remote_key_pass_entry.text() != "":
-            key = paramiko.RSAKey.from_private_key_file(
-                self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
-            )
-        else:
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-
-        if self.remote_key_pass_entry.text() != "":
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-                private_key_pass=self.remote_key_pass_entry.text(),
-            )
-
-        else:
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-            )
-        if not sftp.exists("/home/{}/.config".format(self.remote_user_entry.text())):
-            sftp.mkdir("/home/{}/.config".format(self.remote_user_entry.text()))
-
-        if not sftp.exists(
-            "/home/.config/{}/{}".format(
-                self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
-            )
-        ):
-            sftp.put(
-                self.settings_path,
-                "/home/{}/.config/{}".format(
-                    self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
-                ),
-            )
-        sftp.chmod(
-            "/home/{}/.config/{}".format(
-                self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
-            ),
-            600,
-        )
-        # Get the path to the Python executable
-        paramiko_client = paramiko.SSHClient()
-        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        paramiko_client.connect(
-            self.remote_address_entry.text(),
-            username=self.remote_user_entry.text(),
-            pkey=key,
-        )
-        stdin, stdout, stderr = paramiko_client.exec_command("which python3.12")
-        python_path = stdout.read().decode().strip()
-        if not python_path:
-            self.terminal.add_log("Python 3.12 not found on remote machine.")
-            paramiko_client.close()
-            return
-
-        commands = f"""
-            if [ ! -d {repo_dir} ]; then
-                git clone {repo_url} {repo_dir}
-            fi
-            cd {repo_dir}
-            git pull
-            if [ ! -d {venv_dir} ]; then
-                {python_path} -m venv {venv_dir}
-                source {venv_dir}/bin/activate
-                pip install --upgrade pip
-                pip install -e .
-            fi
-            """
-
-        stdin, stdout, stderr = paramiko_client.exec_command(commands)
-        self.terminal.add_log(stdout.read().decode())
-        self.terminal.add_log(stderr.read().decode())
-
-    def create_remote_output_dir(self):
-        if self.remote_key_pass_entry.text() != "":
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-                private_key_pass=self.remote_key_pass_entry.text(),
-            )
-
-        else:
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-            )
-        output_path = os.path.join(
-            self.output_entry.text(), self.project_name_entry.text()
-        )
-        plot_path = os.path.join(output_path, "plots")
-        if not sftp.exists(output_path):
-            sftp.mkdir(output_path)
-        if not sftp.exists(plot_path):
-            sftp.mkdir(plot_path)
-
-    def remote_check_tng_dirs(self):
-        if self.remote_key_pass_entry.text() != "":
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-                private_key_pass=self.remote_key_pass_entry.text(),
-            )
-
-        else:
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-            )
-        tng_dir = self.tng_entry.text()
-        if not sftp.exists(os.path.join(tng_dir, "TNG100-1")):
-            sftp.mkdir(os.path.join(tng_dir, "TNG100-1"))
-        if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "output")):
-            sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "output"))
-        if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "postprocessing")):
-            sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "postprocessing"))
-        if not sftp.exists(
-            os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets")
-        ):
-            sftp.mkdir(os.path.join(tng_dir, "TNG100-1", "postprocessing", "offsets"))
-        if not sftp.exists(os.path.join(tng_dir, "TNG100-1", "simulation.hdf5")):
-            self.terminal.add_log("Downloading simulation file")
-            url = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
-            cmd = "wget -nv --content-disposition --header=API-Key:{} -O {} {}".format(
-                self.tng_api_key_entry.text(),
-                os.path.join(tng_dir, "TNG100-1", "simulation.hdf5"),
-                url,
-            )
-            if self.remote_key_pass_entry.text() != "":
-                key = paramiko.RSAKey.from_private_key_file(
-                    self.remote_key_entry.text(),
-                    password=self.remote_key_pass_entry.text(),
-                )
-            else:
-                key = paramiko.RSAKey.from_private_key_file(
-                    self.remote_key_entry.text()
-                )
-            paramiko_client = paramiko.SSHClient()
-            paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            paramiko_client.connect(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                pkey=key,
-            )
-            stdin, stdout, stderr = paramiko_client.exec_command(cmd)
-            self.terminal.add_log(stdout.read().decode())
-            self.terminal.add_log(stderr.read().decode())
-            self.terminal.add_log("Done.")
-
-    def copy_metadata_on_remote(self):
-        if self.remote_key_pass_entry.text() != "":
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-                private_key_pass=self.remote_key_pass_entry.text(),
-            )
-
-        else:
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-            )
-
-        self.input_params.to_csv("input_params.csv", index=False, na_rep="None")
-        sftp.put("input_params.csv", self.remote_main_dir + "/input_params.csv")
-        os.remove("input_params.csv")
-
-    def copy_settings_on_remote(self):
-        if self.remote_key_pass_entry.text() != "":
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-                private_key_pass=self.remote_key_pass_entry.text(),
-            )
-
-        else:
-            sftp = pysftp.Connection(
-                self.remote_address_entry.text(),
-                username=self.remote_user_entry.text(),
-                private_key=self.remote_key_entry.text(),
-            )
-        sftp.put(self.settings_path, self.remote_main_dir + "/settings.plist")
-
-    @staticmethod
-    def nan_to_none(value):
-        if pd.isna(value):
-            return None
-        return value
-
-    def run_on_pbs_cluster(self):
-        # pbs_config = self.remote_config_entry.text()
-        if self.remote_key_pass_entry.text() != "":
-            key = paramiko.RSAKey.from_private_key_file(
-                self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
-            )
-        else:
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-        settings_path = os.path.join(self.remote_main_dir, "settings.plist")
-        dask_commands = f"""
-        cd {self.remote_main_dir}
-        source {self.remote_venv_dir}/bin/activate
-        """
-
-        _QApplication = QApplication
-        python_command = [
-            'python -c "import sys; import os; import almasim.ui as ui; ',
-            f"app = ui.{_QApplication}(sys.argv); ",
-            f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
-            "window=ui.ALMASimulator(); ",
-            "window.create_pbs_cluster_and_run()",
-            'sys.exit(app.exec())"',
-        ]
-        python_command_str = "".join(python_command)
-        # Add it as a new line to dask_commands, and add a newline character
-        dask_commands += "\n" + python_command_str
-        paramiko_client = paramiko.SSHClient()
-        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        paramiko_client.connect(
-            self.remote_address_entry.text(),
-            username=self.remote_user_entry.text(),
-            pkey=key,
-        )
-        stdin, stdout, stderr = paramiko_client.exec_command(dask_commands)
-        self.terminal.add_log(stdout.read().decode())
-        self.terminal.add_log(stderr.read().decode())
-
-    def run_on_mpi_machine(self):
-        # slurm_config = self.remote_config_entry.text()
-        if self.remote_key_pass_entry.text() != "":
-            key = paramiko.RSAKey.from_private_key_file(
-                self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
-            )
-        else:
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-
-        settings_path = os.path.join(self.remote_main_dir, "settings.plist")
-        dask_commands = f"""
-            cd {self.remote_main_dir}
-            source {self.remote_venv_dir}/bin/activate
-            export QT_QPA_PLATFORM=offscreen
-        """
-        # Separate the Python command for readability and maintainability
-        python_command = (
-            'python -c "import sys; import os; import almasim.ui as ui; '
-            f"app = ui.QApplication(sys.argv); "
-            f"ui.ALMASimulator.settings_file = '{settings_path}'; "
-            "window=ui.ALMASimulator(); "
-            "ui.ALMASimulator.initiate_parallel_simulation_remote(window); "
-            'sys.exit(app.exec())"'
-        )
-        # Join the list elements into a single string
-        python_command_str = "".join(python_command)
-        # Add it as a new line to dask_commands, and add a newline character
-        dask_commands += "\n" + python_command_str
-        exclude_pattern = re.compile(
-            r"""
-            # Pattern 1: Specific command lines
-            (^cd /home/astro/ALMASim$)
-            |(source /home/astro/almasim_env/bin/activate$)
-            |(export QT_QPA_PLATFORM=offscreen$)
-            |(python -c "import sys.*initiate_parallel_simulation_remote\(window\);)
-            |(sys.exit\(app.exec\(\)"\s*$)
-            # Pattern 2: ANSI escape codes
-            |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))
-        """,
-            re.VERBOSE,
-        )
-        paramiko_client = paramiko.SSHClient()
-        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        paramiko_client.connect(
-            self.remote_address_entry.text(),
-            username=self.remote_user_entry.text(),
-            pkey=key,
-        )
-        channel = paramiko_client.invoke_shell()
-
-        # Continuously read and display output
-        def read_output():
-            while True:
-                if channel.recv_ready():
-                    output = channel.recv(1024).decode()
-                    # Filter out unwanted lines
-                    filtered_output = ""
-                    for line in output.splitlines():
-                        if not exclude_pattern.search(line):
-                            filtered_output += line + "\n"
-                    if (
-                        filtered_output
-                    ):  # Only add to the log if there's filtered output
-                        self.terminal.add_log(filtered_output)
-                if channel.exit_status_ready():
-                    break
-
-        output_thread = threading.Thread(target=read_output)
-        output_thread.start()
-        channel.send(dask_commands + "\n")
-
-        # Wait for the command to finish
-        output_thread.join()
-        paramiko_client.close()
-        output_thread.close()
-
-    def run_on_slurm_cluster(self):
-        # slurm_config = self.remote_config_entry.text()
-        if self.remote_key_pass_entry.text() != "":
-            key = paramiko.RSAKey.from_private_key_file(
-                self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
-            )
-        else:
-            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
-
-        settings_path = os.path.join(self.remote_main_dir, "settings.plist")
-        dask_commands = f"""
-            cd {self.remote_main_dir}
-            source {self.remote_venv_dir}/bin/activate
-            export QT_QPA_PLATFORM=offscreen
-        """
-        _QApplication = QApplication
-        python_command = [
-            'python -c "import sys; import os; import almasim.ui as ui; ',
-            f"app = ui.{_QApplication}(sys.argv); ",
-            f"ui.ALMASimulator.settings_file = '{settings_path}'; ",
-            "window=ui.ALMASimulator(); ",
-            "ui.ALMASimulator.initiate_slurm_simulation_remote(window); ",
-            'sys.exit(app.exec())"',
-        ]
-        # Join the list elements into a single string
-        python_command_str = "".join(python_command)
-        # Add it as a new line to dask_commands, and add a newline character
-        dask_commands += "\n" + python_command_str
-        exclude_pattern = re.compile(
-            r"""
-            # Pattern 1: Specific command lines
-            (^cd /home/astro/ALMASim$)
-            |(source /home/astro/almasim_env/bin/activate$)
-            |(export QT_QPA_PLATFORM=offscreen$)
-            |(python -c "import sys.*initiate_slurm_simulation_remote\(window\);)
-            |(sys.exit\(app.exec\(\)"\s*$)
-            # Pattern 2: ANSI escape codes
-            |(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))
-        """,
-            re.VERBOSE,
-        )
-        paramiko_client = paramiko.SSHClient()
-        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        paramiko_client.connect(
-            self.remote_address_entry.text(),
-            username=self.remote_user_entry.text(),
-            pkey=key,
-        )
-        channel = paramiko_client.invoke_shell()
-
-        # Continuously read and display output
-        def read_output():
-            while True:
-                if channel.recv_ready():
-                    output = channel.recv(1024).decode()
-                    # Filter out unwanted lines
-                    filtered_output = ""
-                    for line in output.splitlines():
-                        if not exclude_pattern.search(line):
-                            filtered_output += line + "\n"
-                    if (
-                        filtered_output
-                    ):  # Only add to the log if there's filtered output
-                        self.terminal.add_log(filtered_output)
-                if channel.exit_status_ready():
-                    break
-
-        output_thread = threading.Thread(target=read_output)
-        output_thread.start()
-        channel.send(dask_commands + "\n")
-
-        # Wait for the command to finish
-        output_thread.join()
-        paramiko_client.close()
-        output_thread.close()
-
+    # -------- Simulation Functions -------------------------
     def transform_source_type_label(self):
         if self.model_combo.currentText() == "Galaxy Zoo":
             self.source_type = "galaxy-zoo"
@@ -2773,139 +2206,7 @@ class ALMASimulator(QMainWindow):
         elif self.model_combo.currentText() == "Extended":
             self.source_type = "extended"
 
-    def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
-        pd.options.mode.chained_assignment = None
-        if isinstance(rest_frequency, np.ndarray) or isinstance(rest_frequency, list):
-            rest_frequency = np.sort(np.array(rest_frequency))
-        else:
-            rest_frequency = np.array([rest_frequency])
-
-        if self.terminal is not None:
-            max_freq = np.max(metadata["Freq"].values)
-            self.terminal.add_log(f"Max frequency recorded in metadata: {max_freq} GHz")
-            min_freq = np.min(metadata["Freq"].values)
-            self.terminal.add_log(f"Min frequency recorded in metadata: {min_freq} GHz")
-            self.terminal.add_log("Filtering metadata based on line catalogue...")
-        if self.terminal is not None:
-            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
-        freqs = metadata["Freq"].values
-        closest_rest_frequencies = []
-        for freq in freqs:
-            # Calculate the absolute difference between the freq and all rest_frequencies
-            differences = rest_frequency - freq
-            # if the difference is negative, set it to a large number
-            differences[differences < 0] = 1e10
-            # Find the index of the minimum difference
-            index_min = np.argmin(differences)
-            # Append the closest rest frequency to the list
-            closest_rest_frequencies.append(rest_frequency[index_min])
-        rest_frequencies = np.array(closest_rest_frequencies)
-
-        redshifts = [
-            uas.compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz)
-            for source_freq, rest_frequency in zip(freqs, rest_frequencies)
-        ]
-        metadata.loc[:, "redshift"] = redshifts
-        snapshots = [
-            uas.redshift_to_snapshot(redshift)
-            for redshift in metadata["redshift"].values
-        ]
-        metadata["rest_frequency"] = rest_frequencies
-        n_metadata = 0
-        z_save = zmax
-        self.terminal.add_log("Computing redshifts")
-        while n_metadata < ceil(n / 10):
-            s_metadata = n_metadata
-            if zmax is not None:
-                f_metadata = metadata[
-                    (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
-                ]
-            else:
-                f_metadata = metadata[metadata["redshift"] >= 0]
-            n_metadata = len(f_metadata)
-            if n_metadata == s_metadata:
-                zmax += 0.1
-        if zmax is not None:
-            metadata = metadata[
-                (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
-            ]
-        else:
-            metadata = metadata[metadata["redshift"] >= 0]
-        if z_save != zmax:
-            if self.terminal is not None:
-                self.terminal.add_log(
-                    f"Max redshift has been adjusted fit metadata,\
-                         new max redshift: {round(zmax, 3)}"
-                )
-        if self.terminal is not None:
-            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
-        snapshots = [
-            uas.redshift_to_snapshot(redshift)
-            for redshift in metadata["redshift"].values
-        ]
-        metadata["snapshot"] = snapshots
-        if extended is True:
-            # metatada = metadata[metadata['redshift'] < 0.05]
-            metadata = metadata[
-                (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
-            ]
-        sample = metadata.sample(n, replace=True)
-        return sample
-
-    def remove_non_numeric(self, text):
-        """Removes non-numeric characters from a string.
-        Args:
-            text: The string to process.
-
-        Returns:
-            A new string containing only numeric characters and the decimal point (.).
-        """
-        numbers = "0123456789."
-        return "".join(char for char in text if char in numbers)
-
-    @staticmethod
-    def closest_power_of_2(x):
-        op = math.floor if bin(x)[3] != "1" else math.ceil
-        return 2 ** op(math.log(x, 2))
-
-    def freq_supp_extractor(self, freq_sup, obs_freq):
-        freq_band, n_channels, freq_mins, freq_maxs, freq_ds = [], [], [], [], []
-        freq_sup = freq_sup.split("U")
-        for i in range(len(freq_sup)):
-            sup = freq_sup[i][1:-1].split(",")
-            sup = [su.split("..") for su in sup][:2]
-            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(
-                self.remove_non_numeric(sup[0][1])
-            )
-            freq_d = float(self.remove_non_numeric(sup[1][0]))
-            freq_min = freq_min * U.GHz
-            freq_max = freq_max * U.GHz
-            freq_d = freq_d * U.kHz
-            freq_d = freq_d.to(U.GHz)
-            freq_b = freq_max - freq_min
-            n_chan = int(freq_b / freq_d)
-            freq_band.append(freq_b)
-            n_channels.append(n_chan)
-            freq_mins.append(freq_min)
-            freq_maxs.append(freq_max)
-            freq_ds.append(freq_d)
-        freq_ranges = np.array(
-            [[freq_mins[i].value, freq_maxs[i].value] for i in range(len(freq_mins))]
-        )
-        idx_ = np.argwhere(
-            (obs_freq.value >= freq_ranges[:, 0])
-            & (obs_freq.value <= freq_ranges[:, 1])
-        )[0][0]
-        freq_range = freq_ranges[idx_]
-        band_range = freq_range[1] - freq_range[0]
-        n_channels = n_channels[idx_]
-        central_freq = freq_range[0] + band_range / 2
-        freq_d = freq_ds[idx_]
-        return band_range * U.GHz, central_freq * U.GHz, n_channels, freq_d
-
-    # -------- Simulation Functions ------------------------
     def start_simulation(self):
-        # Implement the logic to start the simulation
         if self.local_mode_combo.currentText() == "local":
             self.terminal.add_log("Starting simulation on your local machine")
         else:
@@ -2924,42 +2225,68 @@ class ALMASimulator(QMainWindow):
         # Output Directory
         if self.local_mode_combo.currentText() == "local":
             if not os.path.exists(self.output_path):
-                os.makedirs(self.output_path)
+                try:
+                    os.makedirs(self.output_path)
+                except Exception as e:
+                    self.terminal.add_log(f"Cannot create output directory: {e}")
+                    return
             if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
         else:
             self.create_remote_output_dir()
-
         output_paths = np.array([self.output_path] * n_sims)
         tng_paths = np.array([self.tng_entry.text()] * n_sims)
-
-        # Galaxy Zoo Directory
         if self.local_mode_combo.currentText() == "local":
             if self.model_combo.currentText() == "Galaxy Zoo":
                 if self.galaxy_zoo_entry.text() and not os.path.exists(
                     os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
                 ):
-                    self.terminal.add_log("Downloading Galaxy Zoo")
-                    runnable = DownloadGalaxyZooRunnable(self)
-                    runnable.finished.connect(
-                        self.on_download_finished
-                    )  # Connect signal
-                    self.thread_pool.start(runnable)
-                    self.terminal.add_log("Waiting for download to finish...")
-            if self.model_combo.currentText() == "Hubble 100":
+                    try:
+                        self.terminal.add_log("Downloading Galaxy Zoo")
+                        runnable = DownloadGalaxyZoo(self, remote=False)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+                        return
+            elif self.model_combo.currentText() == "Hubble 100":
                 if self.hubble_entry.text() and not os.path.exists(
                     os.path.join(self.hubble_entry.text(), "top100")
                 ):
-
-                    self.terminal.add_log("Downloading Hubble Images")
-                    # pool = QThreadPool.globalInstance()
-                    runnable = DownloadHubbleRunnable(self)
-                    self.thread_pool.start(runnable)
+                    try:
+                        self.terminal.add_log("Downloading Hubble 100")
+                        runnable = DownloadHubble(self, remote=False)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+                        return
         else:
-            self.create_remote_environment()
-            self.download_galaxy_zoo_on_remote()
-            self.download_hubble_on_remote()
-
+            try:
+                self.create_remote_environment()
+            except Exception as e:
+                self.terminal.add_log(f"Error creating remote environment: {e}")
+                return
+            if self.model_combo.currentText() == "Galaxy Zoo":
+                if self.galaxy_zoo_entry.text():
+                    try:
+                        self.terminal.add_log("Downloading Galaxy Zoo on remote")
+                        runnable = DownloadGalaxyZoo(self, remote=True)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+                        return
+            elif self.model_combo.currentText() == "Hubble 100":
+                if self.hubble_entry.text():
+                    try:
+                        self.terminal.add_log("Downloading Hubble 100 on remote")
+                        runnable = DownloadHubble(self, remote=True)
+                        runnable.finished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+                        return
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
         hubble_paths = np.array([self.hubble_entry.text()] * n_sims)
         if self.local_mode_combo.currentText() == "local":
@@ -3047,20 +2374,21 @@ class ALMASimulator(QMainWindow):
             n_pixs = np.array([int(self.n_pix_entry.text())] * n_sims)
         else:
             n_pixs = np.array([None] * n_sims)
-
         # Checking Number of Channels
         if self.fix_spectral_checkbox.isChecked():
             n_channels = np.array([int(self.n_channels_entry.text())] * n_sims)
         else:
             n_channels = np.array([None] * n_sims)
         if self.model_combo.currentText() == "Extended":
+            self.terminal.add_log("Checking TNG Directories")
             if self.local_mode_combo.currentText() == "local":
-                self.terminal.add_log("Checking TNG Directories")
-                # pool = QThreadPool.globalInstance()
-                runnable = DownloadTNGStructureRunnable(self)
-                self.thread_pool.start(runnable)
+                runnable = DownloadTNGStructure(self, remote=False)
+
             else:
-                self.remote_check_tng_dirs()
+                runnable = DownloadTNGStructure(self, remote=True)
+            runnable.finished.connect(self.on_download_finished)
+            self.thread_pool.start(runnable)
+
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
             self.metadata = self.sample_given_redshift(
                 self.metadata, n_sims, rest_freq, True, z1
@@ -3175,33 +2503,103 @@ class ALMASimulator(QMainWindow):
                 "remote",
             ],
         )
-        if self.local_mode_combo.currentText() == "remote":
-            self.copy_metadata_on_remote()
-            self.copy_settings_on_remote()
-        if self.comp_mode_combo.currentText() == "parallel":
-            if self.local_mode_combo.currentText() == "local":
-                self.initiate_parallel_simulation()
-            else:
-                if self.remote_mode_combo.currentText() == "SLURM":
-                    self.run_on_slurm_cluster()
-                elif self.remote_mode_combo.currentText() == "PBS":
-                    self.run_on_pbs_cluster()
-                elif self.remote_mode_combo.currentText() == "MPI":
-                    thread = threading.Thread(
-                        target=self.run_on_mpi_machine, daemon=True
-                    )
-                    thread.start()
-                else:
-                    self.terminal.add_log("Please select a valid remote mode")
+        if self.local_mode_combo.currentText() == "local":
+            self.run_simulator_locally()
+
         else:
-            if self.local_mode_combo.currentText() == "local":
-                self.run_simulator_sequentially()
-            else:
-                self.terminal.add_log(
-                    "Cannot run on remote in sequential mode, changing it to parallel"
-                )
-                self.comp_mode_combo.setCurrentText("parallel")
-        os.chdir(self.main_path)
+            self.run_simulator_remotely()
+
+        return
+
+    def run_simulator_locally(self):
+        self.stop_simulation_flag = False
+        self.current_sim_index = 0
+        cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()))
+        client = Client(cluster, timeout=60, heartbeat_interval=10)
+        self.client = client
+        self.terminal.add_log(f"Dashboard hosted at {self.client.dashboard_link}")
+        self.nextSimulation.connect(self.run_next_simulation)
+        self.run_next_simulation()
+
+    def run_simulator_remotely(self):
+        self.stop_simulation_flag = False
+        self.current_sim_index = 0
+
+        # Collect input from UI elements
+        remote_host = self.remote_address_entry.text().strip()
+        remote_user = self.remote_user_entry.text().strip()
+        ssh_key_path = self.remote_key_entry.text().strip()
+        ssh_key_password = self.remote_key_pass_entry.text().strip()
+        n_workers_per_host = int(self.ncpu_entry.text())
+
+        # Prepare the list of remote hosts
+        # If multiple hosts are entered, they should be comma-separated
+        remote_hosts = [host.strip() for host in remote_host.split(",") if host.strip()]
+
+        # Prepend the username to each host
+        if remote_user:
+            remote_hosts = [f"{remote_user}@{host}" for host in remote_hosts]
+
+        # Prepare SSH connection options
+        connect_options = {
+            "known_hosts": None,  # Disable known_hosts checking (use with caution)
+        }
+
+        if ssh_key_path:
+            connect_options["client_keys"] = ssh_key_path
+
+        if ssh_key_password:
+            connect_options["passphrase"] = ssh_key_password
+
+        # Create the SSHCluster
+        try:
+            cluster = SSHCluster(
+                hosts=remote_hosts,
+                connect_options=connect_options,
+                worker_options={
+                    "nthreads": n_workers_per_host,
+                    # Add more worker options if needed
+                },
+                scheduler_options={
+                    # 'port': 8786,  # Uncomment to specify scheduler port if necessary
+                },
+            )
+
+            # Connect the Dask client to the cluster
+            client = Client(cluster, timeout=60, heartbeat_interval="5s")
+            self.client = client
+
+            # Inform the user about the dashboard
+            self.terminal.add_log(f"Dashboard hosted at {self.client.dashboard_link}")
+            self.terminal.add_log(
+                "To access the dashboard, you may need to set up SSH port forwarding."
+            )
+
+            self.nextSimulation.connect(self.run_next_simulation)
+            self.run_next_simulation()
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "SSH Cluster Error",
+                f"An error occurred while creating the SSH cluster:\n{e}",
+            )
+            return
+
+    def run_next_simulation(self):
+        if self.current_sim_index >= int(self.n_sims_entry.text()):
+            self.progress_bar_entry.setText("Simluation Finished")
+            # self.send_email()
+            return
+        self.progress_bar_entry.setText(
+            f"Running Simulation {self.current_sim_index + 1}"
+        )
+        runnable = Simulator(self, *self.input_params.iloc[self.current_sim_index])
+        self.update_progress.connect(self.update_progress_bar)
+        runnable.signals.simulationFinished.connect(self.start_plot_runnable)
+        runnable.signals.simulationFinished.connect(self.nextSimulation.emit)
+        self.thread_pool.start(runnable)
+        self.current_sim_index += 1
 
     def stop_simulation(self):
         # Implement the logic to stop the simulation
@@ -3210,181 +2608,131 @@ class ALMASimulator(QMainWindow):
         self.update_progress_bar(0)
         self.terminal.add_log("# ------------------------------------- #\n")
 
-    def run_simulator_sequentially(self):
-        self.stop_simulation_flag = False
-        self.current_sim_index = 0
-        self.nextSimulation.connect(self.run_next_simulation)
-        self.run_next_simulation()
+    # -------- Astro Functions -------------------------
+    def remove_non_numeric(self, text):
+        """Removes non-numeric characters from a string.
+        Args:
+            text: The string to process.
 
-    def run_next_simulation(self):
-        if self.current_sim_index >= int(self.n_sims_entry.text()):
-            self.progress_bar_entry.setText("Simluation Finished")
-            # self.send_email()
-            return
-        # pool = QThreadPool.globalInstance()
-        self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
-        runnable = SimulatorRunnable(
-            self, *self.input_params.iloc[self.current_sim_index]
-        )
-        self.update_progress.connect(self.update_progress_bar)
-        # runnable.signals.simulationFinished.connect(self.plot_simulation_results)
-        runnable.signals.simulationFinished.connect(self.start_plot_runnable)
-        runnable.signals.simulationFinished.connect(self.nextSimulation.emit)
-        self.thread_pool.start(runnable)
-        self.current_sim_index += 1
-        # for i in range(int(self.n_sims_entry.text())):
-        #    runnable = SimulatorRunnable(self, *self.input_params.iloc[i])
-        #    self.update_progress.connect(self.update_progress_bar)
-        #    runnable.signals.simulationFinished.connect(
-        #        self.plot_simulation_results
-        #    )  # Connect the signal
-        #    pool.start(runnable)
+        Returns:
+            A new string containing only numeric characters and the decimal point (.).
+        """
+        numbers = "0123456789."
+        return "".join(char for char in text if char in numbers)
 
-    def run_simulator_parallel_remote(self, input_params):
-        # Access instance attributes here using `self`
-        self.output_path = os.path.join(
-            self.output_entry.text(), self.project_name_entry.text()
-        )
-        dask.config.set({"temporary_directory": self.output_path})
-        total_memory = psutil.virtual_memory().total
-        num_workers = int(self.ncpu_entry.text()) // 4
-        memory_limit = int(0.9 * total_memory / num_workers)
-
-        ddf = dd.from_pandas(input_params, npartitions=num_workers)
-        with LocalCluster(
-            n_workers=num_workers, threads_per_worker=4, dashboard_address=None
-        ) as cluster:
-            with Client(cluster) as client:
-                client.register_plugin(MemoryLimitPlugin(memory_limit))
-                futures = []
-
-                with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                    for df in ddf.partitions:
-                        worker = SimulatorWorker(self, df)
-                        # Connect signals using the instance ('self')
-                        self.update_progress.connect(self.update_progress_bar)
-                        worker.signals.simulationFinished.connect(
-                            self.plot_simulation_results
-                        )
-                        futures.append(executor.submit(worker.run))
-
-                for future in futures:
-                    future.result()
-            client.close()
-        cluster.close()
-        self.remote_simulation_finished = True
-        # self.send_email()
-
-    def run_simulator_slurm_remote(self, input_params):
-        self.output_path = os.path.join(
-            self.output_entry.text(), self.project_name_entry.text()
-        )
-        with open("slurm_config.json", "r") as f:
-            config = json.load(f)
-        with SLURMCluster(
-            queue=config["queue"],
-            account=config["account"],
-            cores=config["cores"],
-            memory=config["memory"],
-            job_extra_directives=config["job_extra"],
-        ) as cluster:
-            with Client(cluster) as client:
-
-                self.terminal.add_log(
-                    "Dashboard Link: {}".format(client.dashboard_link)
-                )
-                self.terminal.add_log(
-                    "Workers: {}".format(len(client.scheduler_info()["workers"]))
-                )
-                self.terminal.add_log(
-                    "Total threads: {}".format(
-                        sum(
-                            w["nthreads"]
-                            for w in client.scheduler_info()["workers"].values()
-                        )
-                    )
-                )
-                self.terminal.add_log(
-                    "Total memory: {}".format(
-                        sum(
-                            w["memory_limit"]
-                            for w in client.scheduler_info()["workers"].values()
-                        )
-                    )
-                )
-                cluster.scale(jobs=int(int(self.ncpu_entry.text()) // 4))
-                ddf = dd.from_pandas(input_params, npartitions=cluster.n_workers)
-                futures = []
-                with ThreadPoolExecutor(max_workers=cluster.n_workers) as executor:
-                    for df in ddf.partitions:
-                        worker = SimulatorWorker(self, df)
-                        self.update_progress.connect(self.update_progress_bar)
-                        worker.signals.simulationFinished.connect(
-                            self.plot_simulation_results
-                        )
-                        futures.append(executor.submit(worker.run))
-
-                for future in futures:
-                    future.result()
-            client.close()
-        cluster.close()
-
-    def run_simulator_parallel(self):
-        dask.config.set({"temporary_directory": self.output_path})
-        total_memory = psutil.virtual_memory().total
-        num_cpus = os.cpu_count()
-        # Ensure the number of CPUs does not exceed available CPUs
-        self.ncpu = min(int(self.ncpu_entry.text()), num_cpus)
-        n_sims = int(self.n_sims_entry.text())
-        if n_sims > 1:
-            self.n_threads = 4
-            num_workers = int(self.ncpu_entry.text()) // self.n_threads
+    def sample_given_redshift(self, metadata, n, rest_frequency, extended, zmax=None):
+        pd.options.mode.chained_assignment = None
+        if isinstance(rest_frequency, np.ndarray) or isinstance(rest_frequency, list):
+            rest_frequency = np.sort(np.array(rest_frequency))
         else:
-            num_workers = 1
-        memory_limit = int(0.9 * total_memory / num_workers)
-        self.n_threads = self.ncpu
-        ddf = dd.from_pandas(self.input_params, npartitions=num_workers)
-        with LocalCluster(
-            n_workers=num_workers,
-            threads_per_worker=self.n_threads,
-            dashboard_address=None,
-        ) as cluster:
-            with Client(cluster) as client:
-                client.register_plugin(MemoryLimitPlugin(memory_limit))
-                futures = []
-                with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                    for df in ddf.partitions:
-                        worker = SimulatorWorker(self, df)
-                        self.update_progress.connect(self.update_progress_bar)
-                        worker.signals.simulationFinished.connect(
-                            self.plot_simulation_results
-                        )
-                        futures.append(executor.submit(worker.run))
+            rest_frequency = np.array([rest_frequency])
 
-                # Optionally wait for all workers to complete before proceeding
-                for future in futures:
-                    future.result()  # This blocks until the worker is done
-        # self.send_email()
+        if self.terminal is not None:
+            max_freq = np.max(metadata["Freq"].values)
+            self.terminal.add_log(f"Max frequency recorded in metadata: {max_freq} GHz")
+            min_freq = np.min(metadata["Freq"].values)
+            self.terminal.add_log(f"Min frequency recorded in metadata: {min_freq} GHz")
+            self.terminal.add_log("Filtering metadata based on line catalogue...")
+        if self.terminal is not None:
+            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
+        freqs = metadata["Freq"].values
+        closest_rest_frequencies = []
+        for freq in freqs:
+            # Calculate the absolute difference between the freq and all rest_frequencies
+            differences = rest_frequency - freq
+            # if the difference is negative, set it to a large number
+            differences[differences < 0] = 1e10
+            # Find the index of the minimum difference
+            index_min = np.argmin(differences)
+            # Append the closest rest frequency to the list
+            closest_rest_frequencies.append(rest_frequency[index_min])
+        rest_frequencies = np.array(closest_rest_frequencies)
 
-    def initiate_parallel_simulation(self):
-        # pool = QThreadPool.globalInstance()
-        self.thread_pool.setMaxThreadCount(int(self.ncpu_entry.text()))
-        runnable = ParallelSimulatorRunnable(self)
-        self.thread_pool.start(runnable)
+        redshifts = [
+            uas.compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz)
+            for source_freq, rest_frequency in zip(freqs, rest_frequencies)
+        ]
+        metadata.loc[:, "redshift"] = redshifts
+        snapshots = [
+            uas.redshift_to_snapshot(redshift)
+            for redshift in metadata["redshift"].values
+        ]
+        metadata["rest_frequency"] = rest_frequencies
+        n_metadata = 0
+        z_save = zmax
+        self.terminal.add_log("Computing redshifts")
+        while n_metadata < ceil(n / 10):
+            s_metadata = n_metadata
+            if zmax is not None:
+                f_metadata = metadata[
+                    (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
+                ]
+            else:
+                f_metadata = metadata[metadata["redshift"] >= 0]
+            n_metadata = len(f_metadata)
+            if n_metadata == s_metadata:
+                zmax += 0.1
+        if zmax is not None:
+            metadata = metadata[
+                (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
+            ]
+        else:
+            metadata = metadata[metadata["redshift"] >= 0]
+        if z_save != zmax:
+            if self.terminal is not None:
+                self.terminal.add_log(
+                    f"Max redshift has been adjusted fit metadata,\
+                         new max redshift: {round(zmax, 3)}"
+                )
+        if self.terminal is not None:
+            self.terminal.add_log(f"Remaining metadata: {len(metadata)}")
+        snapshots = [
+            uas.redshift_to_snapshot(redshift)
+            for redshift in metadata["redshift"].values
+        ]
+        metadata["snapshot"] = snapshots
+        if extended is True:
+            # metatada = metadata[metadata['redshift'] < 0.05]
+            metadata = metadata[
+                (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
+            ]
+        sample = metadata.sample(n, replace=True)
+        return sample
 
-    @classmethod
-    def initiate_parallel_simulation_remote(cls, window_instance):
-        input_params = pd.read_csv("input_params.csv")
-        # pool = QThreadPool.globalInstance()
-        runnable = ParallelSimulatorRunnableRemote(window_instance, input_params)
-        window_instance.thread_pool.start(runnable)
-
-    @classmethod
-    def initialize_slurm_simulation_remote(cls, window_instance):
-        input_params = pd.read_csv("input_params.csv")
-        pool = QThreadPool.globalInstance()
-        runnable = SlurmSimulatorRunnableRemote(window_instance, input_params)
-        pool.start(runnable)
+    def freq_supp_extractor(self, freq_sup, obs_freq):
+        freq_band, n_channels, freq_mins, freq_maxs, freq_ds = [], [], [], [], []
+        freq_sup = freq_sup.split("U")
+        for i in range(len(freq_sup)):
+            sup = freq_sup[i][1:-1].split(",")
+            sup = [su.split("..") for su in sup][:2]
+            freq_min, freq_max = float(self.remove_non_numeric(sup[0][0])), float(
+                self.remove_non_numeric(sup[0][1])
+            )
+            freq_d = float(self.remove_non_numeric(sup[1][0]))
+            freq_min = freq_min * U.GHz
+            freq_max = freq_max * U.GHz
+            freq_d = freq_d * U.kHz
+            freq_d = freq_d.to(U.GHz)
+            freq_b = freq_max - freq_min
+            n_chan = int(freq_b / freq_d)
+            freq_band.append(freq_b)
+            n_channels.append(n_chan)
+            freq_mins.append(freq_min)
+            freq_maxs.append(freq_max)
+            freq_ds.append(freq_d)
+        freq_ranges = np.array(
+            [[freq_mins[i].value, freq_maxs[i].value] for i in range(len(freq_mins))]
+        )
+        idx_ = np.argwhere(
+            (obs_freq.value >= freq_ranges[:, 0])
+            & (obs_freq.value <= freq_ranges[:, 1])
+        )[0][0]
+        freq_range = freq_ranges[idx_]
+        band_range = freq_range[1] - freq_range[0]
+        n_channels = n_channels[idx_]
+        central_freq = freq_range[0] + band_range / 2
+        freq_d = freq_ds[idx_]
+        return band_range * U.GHz, central_freq * U.GHz, n_channels, freq_d
 
     def cont_finder(self, cont_frequencies, line_frequency):
         # cont_frequencies=sed['GHz'].values
@@ -3539,8 +2887,8 @@ class ALMASimulator(QMainWindow):
         simulated.
         """
         c_km_s = c.to(U.km / U.s)
-        min_delta_v = float(self.min_line_width_slider.value())
-        max_delta_v = float(self.max_line_width_slider.value())
+        min_delta_v = float(self.line_width_slider.value()[0])
+        max_delta_v = float(self.line_width_slider.value()[1])
         db_line = db_line.copy()
         db_line["redshift"] = (db_line["freq(GHz)"].values - source_freq) / source_freq
         db_line = db_line.loc[~((db_line["redshift"] < 0) | (db_line["redshift"] > 20))]
@@ -3991,9 +3339,9 @@ class ALMASimulator(QMainWindow):
         cell_size = beam_size / 5
         if n_pix is None:
             # cell_size = beam_size / 5
-            n_pix = self.closest_power_of_2(int(1.5 * fov.value / cell_size.value))
+            n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
         else:
-            n_pix = self.closest_power_of_2(n_pix)
+            n_pix = closest_power_of_2(n_pix)
             cell_size = fov / n_pix
             # just added
             # beam_size = cell_size * 5
@@ -4048,7 +3396,7 @@ class ALMASimulator(QMainWindow):
         if remote is True:
             print("Beam size: {} arcsec\n".format(round(beam_size.value, 4)))
             print("Central Frequency: {}\n".format(central_freq))
-            print("Spectral Window: {}\n".format(band_range))
+            print("Spectral Window: {} GHz\n".format(round(band_range.value, 3)))
             print("Freq Support: {}\n".format(delta_freq))
             print("Cube Dimensions: {} x {} x {}\n".format(n_pix, n_pix, n_channels))
             print("Redshift: {}\n".format(round(redshift, 3)))
@@ -4166,6 +3514,7 @@ class ALMASimulator(QMainWindow):
             fwhm_y = np.random.randint(3, 10)
             angle = np.random.randint(0, 180)
             datacube = usm.insert_gaussian(
+                self.client,
                 self.update_progress,
                 datacube,
                 continum,
@@ -4183,6 +3532,7 @@ class ALMASimulator(QMainWindow):
         elif source_type == "extended":
             self.progress_bar_entry.setText("Inserting Extended Source Model")
             datacube = usm.insert_extended(
+                self.client,
                 self.update_progress,
                 self.terminal,
                 datacube,
@@ -4197,6 +3547,7 @@ class ALMASimulator(QMainWindow):
             )
         elif source_type == "diffuse":
             datacube = usm.insert_diffuse(
+                self.client,
                 self.update_progress,
                 datacube,
                 continum,
@@ -4211,6 +3562,7 @@ class ALMASimulator(QMainWindow):
             galaxy_path = os.path.join(galaxy_zoo_dir, "images_gz2", "images")
             pos_z = [int(index) for index in source_channel_index]
             datacube = usm.insert_galaxy_zoo(
+                self.client,
                 self.update_progress,
                 datacube,
                 continum,
@@ -4225,6 +3577,7 @@ class ALMASimulator(QMainWindow):
             self.progress_bar_entry.setText("Inserting Molecular Cloud Source Model")
             pos_z = [int(index) for index in source_channel_index]
             datacube = usm.insert_molecular_cloud(
+                self.client,
                 self.update_progress,
                 datacube,
                 continum,
@@ -4239,6 +3592,7 @@ class ALMASimulator(QMainWindow):
             hubble_path = os.path.join(hubble_dir, "top100")
             pos_z = [int(index) for index in source_channel_index]
             datacube = usm.insert_hubble(
+                self.client,
                 self.update_progress,
                 datacube,
                 continum,
@@ -4287,6 +3641,7 @@ class ALMASimulator(QMainWindow):
                 fwhm_y = np.random.randint(3, 10)
             datacube = usm.insert_serendipitous(
                 self.terminal,
+                self.client,
                 self.update_progress,
                 datacube,
                 continum,
@@ -4304,14 +3659,9 @@ class ALMASimulator(QMainWindow):
                 os.path.join(output_dir, "sim_params_{}.txt".format(inx)),
             )
         header = usm.get_datacube_header(datacube, obs_date)
-        model = datacube._array.to_value(datacube._array.unit).T
-        model = model / beam_area.value
+        model = datacube._array.to_value(datacube._array.unit)
+        model = model[0] / beam_area.value
         totflux = np.sum(model)
-        plt.figure(figsize=(8, 8))
-        plt.imshow(np.sum(model, axis=0), origin="lower", cmap="inferno")
-        plt.colorbar()
-        plt.savefig(os.path.join(sim_output_dir, "model_image_{}.png".format(inx)))
-
         if remote is True:
             print("Total Flux injected in model cube: {:.3f} Jy\n".format(totflux))
             print("Done\n")
@@ -4327,26 +3677,25 @@ class ALMASimulator(QMainWindow):
             self.terminal.add_log("Observing with ALMA")
         min_line_flux = np.min(line_fluxes)
         interferometer = uin.Interferometer(
-            inx,
-            model,
-            main_dir,
-            output_dir,
-            ra,
-            dec,
-            central_freq,
-            band_range,
-            fov,
-            antenna_array,
-            (min_line_flux / beam_area.value) / snr,
-            snr,
-            int_time.value * second2hour,
-            obs_date,
-            header,
-            save_mode,
-            self.n_threads,
-            self.terminal,
-            self.stop_simulation_flag,
-            float(self.robust_slider.value()) / 10,
+            idx=inx,
+            client=self.client,
+            skymodel=model,
+            main_dir=main_dir,
+            output_dir=output_dir,
+            ra=ra,
+            dec=dec,
+            central_freq=central_freq,
+            bandwidth=band_range,
+            fov=fov.value,
+            antenna_array=antenna_array,
+            noise=0.1 * (min_line_flux / beam_area.value) / snr,
+            snr=snr,
+            integration_time=int_time.value * second2hour,
+            observation_date=obs_date,
+            header=header,
+            save_mode=save_mode,
+            robust=float(self.robust_slider.value()) / 10,
+            terminal=self.terminal,
         )
         interferometer.progress_signal.connect(self.handle_progress)
         self.terminal.add_log(
@@ -4377,25 +3726,456 @@ class ALMASimulator(QMainWindow):
         shutil.rmtree(sim_output_dir)
         return simulation_results
 
-    # ------- Progress Bar ---------------------------------
-    @pyqtSlot(int)
-    def handle_progress(self, value):
-        self.update_progress.emit(value)
+    # -------- UI Save / Load Settings functions -----------------------
+    def load_settings(self):
+        self.output_entry.setText(self.settings.value("output_directory", ""))
+        self.tng_entry.setText(self.settings.value("tng_directory", ""))
+        self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
+        self.galaxy_zoo_checkbox.setChecked(
+            self.settings.value("get_galaxy_zoo", False, type=bool)
+        )
+        self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
+        self.hubble_checkbox.setChecked(
+            self.settings.value("get_hubble_100", False, type=bool)
+        )
+        self.n_sims_entry.setText(self.settings.value("n_sims", ""))
+        self.ncpu_entry.setText(self.settings.value("ncpu", ""))
+        self.metadata_mode_combo.setCurrentText(
+            self.settings.value("metadata_mode", "")
+        )
+        self.local_mode_combo.setCurrentText(self.settings.value("local_mode", ""))
+        if self.local_mode_combo.currentText() == "remote":
+            self.remote_address_entry.setText(self.settings.value("remote_address", ""))
+            self.remote_user_entry.setText(self.settings.value("remote_user", ""))
+            self.remote_key_entry.setText(self.settings.value("remote_key", ""))
+            self.remote_key_pass_entry.setText(
+                self.settings.value("remote_key_pass", "")
+            )
+            self.remote_config_entry.setText(self.settings.value("remote_config", ""))
+            self.remote_mode_combo.setCurrentText(
+                self.settings.value("remote_mode", "")
+            )
+            remote_folder = self.settings.value("remote_folder", False, type=bool)
+            self.remote_folder_checkbox.setChecked(remote_folder)
+            if remote_folder:
+                self.remote_folder_line.setText(self.settings.value("remote_dir", ""))
+        self.project_name_entry.setText(self.settings.value("project_name", ""))
+        self.save_format_combo.setCurrentText(self.settings.value("save_format", ""))
+        self.metadata_path_entry.setText(self.settings.value("metadata_path", ""))
+        if (
+            self.metadata_mode_combo.currentText() == "get"
+            and self.metadata_path_entry.text() != ""
+        ):
+            self.load_metadata(self.metadata_path_entry.text())
+        elif self.metadata_mode_combo.currentText() == "query":
+            self.query_save_entry.setText(self.settings.value("query_save_entry", ""))
+        if self.galaxy_zoo_entry.text() != "":
+            if self.local_mode_combo.currentText() == "local":
+                kaggle_path = os.path.join(os.path.expanduser("~"), ".kaggle")
+                if not os.path.exists(kaggle_path):
+                    os.mkdir(kaggle_path)
+                kaggle_file = os.path.join(kaggle_path, "kaggle.json")
+                if not os.path.exists(kaggle_file):
+                    shutil.copyfile(
+                        os.path.join(os.getcwd(), "kaggle.json"), kaggle_file
+                    )
+                try:
+                    if os.path.exists(self.galaxy_zoo_entry.text()):
+                        if self.galaxy_zoo_checkbox.isChecked():
+                            if not os.path.exists(
+                                os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
+                            ):
+                                self.terminal.add_log("Downloading Galaxy Zoo")
+                                runnable = DownloadGalaxyZoo(self, remote=False)
+                                runnable.finished.connect(
+                                    self.on_download_finished
+                                )  # Connect signal
+                                self.thread_pool.start(runnable)
+                except Exception as e:
+                    self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
-    @pyqtSlot(int)
-    def update_progress_bar(self, value):
-        self.progress_bar.setValue(value)
+            else:
+                if (
+                    self.remote_address_entry.text() != ""
+                    and self.remote_user_entry.text() != ""
+                    and self.remote_key_entry.text() != ""
+                ):
+                    try:
+                        self.terminal.add_log("Downloading Galaxy Zoo on remote")
+                        runnable = DownloadGalaxyZoo(self, remote=True)
+                        runnable.finished.connect(
+                            self.on_download_finished
+                        )  # Connect signal
+                        self.thread_pool.start(runnable)
+                    except (
+                        Exception
+                    ) as e:  # Catch any exception that occurs during download
+                        error_message = (
+                            f"Error downloading Galaxy Zoo data on remote machine: {e}"
+                        )
+                        print(error_message)  # Print the error to the console
+                        self.terminal.add_log(
+                            error_message
+                        )  # Add the error to your ALMASimulator terminal
+        if self.hubble_entry.text() != "":
+            if self.local_mode_combo.currentText() == "local":
+                try:
+                    if not os.path.exists(self.hubble_entry.text()):
+                        os.mkdir(self.hubble_entry.text())
+                    if self.hubble_checkbox.isChecked():
+                        if not os.path.exists(
+                            os.path.join(self.hubble_entry.text(), "top100")
+                        ):
+                            # pool = QThreadPool.globalInstance()
+                            runnable = DownloadHubble(self, remote=False)
+                            runnable.finished.connect(self.on_download_finished)
+                            self.thread_pool.start(runnable)
 
-    # -------- Plotting Functions ---------------------------
+                except Exception as e:
+                    self.terminal.add_log(f"Cannot dowload Hubble 100: {e}")
+
+            else:
+                if (
+                    self.remote_address_entry.text() != ""
+                    and self.remote_user_entry.text() != ""
+                    and self.remote_key_entry.text() != ""
+                ):
+                    try:
+                        self.download_hubble_on_remote()
+                    except (
+                        Exception
+                    ) as e:  # Catch any exception that occurs during download
+                        error_message = (
+                            f"Error downloading Galaxy Zoo data on remote machine: {e}"
+                        )
+                        print(error_message)  # Print the error to the console
+                        self.terminal.add_log(
+                            error_message
+                        )  # Add the error to your ALMASimulator terminal
+        line_mode = self.settings.value("line_mode", False, type=bool)
+        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
+        self.line_mode_checkbox.setChecked(line_mode)
+        if line_mode:
+            self.line_index_entry.setText(self.settings.value("line_indices", ""))
+        else:
+            # Load non-line mode values
+            self.redshift_entry.setText(self.settings.value("redshifts", ""))
+            self.num_lines_entry.setText(self.settings.value("num_lines", ""))
+        self.line_width_slider.setValue(
+            (
+                int(self.settings.value("min_line_width", 100)),
+                int(self.settings.value("max_line_width", 500)),
+            )
+        )
+        self.robust_slider.setValue(int(self.settings.value("robust", 0)))
+        self.snr_entry.setText(self.settings.value("snr", ""))
+        self.snr_checkbox.setChecked(self.settings.value("set_snr", False, type=bool))
+        self.fix_spatial_checkbox.setChecked(
+            self.settings.value("fix_spatial", False, type=bool)
+        )
+        self.n_pix_entry.setText(self.settings.value("n_pix", ""))
+        self.fix_spectral_checkbox.setChecked(
+            self.settings.value("fix_spectral", False, type=bool)
+        )
+        self.n_channels_entry.setText(self.settings.value("n_channels", ""))
+        self.serendipitous_checkbox.setChecked(
+            self.settings.value("inject_serendipitous", False, type=bool)
+        )
+        self.model_combo.setCurrentText(self.settings.value("model", ""))
+        self.tng_api_key_entry.setText(self.settings.value("tng_api_key", ""))
+        self.toggle_tng_api_key_row()
+        self.ir_luminosity_checkbox.setChecked(
+            self.settings.value("set_ir_luminosity", False, type=bool)
+        )
+        self.ir_luminosity_entry.setText(self.settings.value("ir_luminosity", ""))
+        self.left_layout.update()
+
+    def load_settings_on_remote(self):
+        self.output_entry.setText(self.settings.value("output_directory", ""))
+        self.tng_entry.setText(self.settings.value("tng_directory", ""))
+        self.galaxy_zoo_entry.setText(self.settings.value("galaxy_zoo_directory", ""))
+        self.hubble_entry.setText(self.settings.value("hubble_directory", ""))
+        self.n_sims_entry.setText(self.settings.value("n_sims", ""))
+        self.ncpu_entry.setText(self.settings.value("ncpu", ""))
+        self.mail_entry.setText(self.settings.value("email", ""))
+        self.metadata_path_entry.setText("")
+
+    def reset_fields(self):
+        self.output_entry.clear()
+        self.tng_entry.clear()
+        self.galaxy_zoo_entry.clear()
+        self.galaxy_zoo_checkbox.setChecked(False)
+        self.hubble_entry.clear()
+        self.hubble_checkbox.setChecked(False)
+        self.ncpu_entry.clear()
+        self.n_sims_entry.clear()
+        self.metadata_path_entry.clear()
+        if self.local_mode_combo.currentText() == "remote":
+            self.remote_address_entry.clear()
+            self.remote_user_entry.clear()
+            self.remote_key_entry.clear()
+            self.remote_key_pass_entry.clear()
+            self.remote_config_entry.clear()
+            self.remote_mode_combo.setCurrentText("MPI")
+            self.remote_folder_line.clear()
+            self.remote_folder_checkbox.setChecked(False)
+        if self.metadata_mode_combo.currentText() == "query":
+            self.query_save_entry.clear()
+        self.metadata_mode_combo.setCurrentText("get")
+        self.project_name_entry.clear()
+        self.save_format_combo.setCurrentText("npz")
+        self.redshift_entry.clear()
+        self.num_lines_entry.clear()
+        self.snr_checkbox.setChecked(False)
+        # self.line_width_slider.setValue(200)
+        self.robust_slider.setValue(0)
+        self.robust_value_label.setText("0")
+        self.snr_entry.clear()
+        self.fix_spatial_checkbox.setChecked(False)
+        self.n_pix_entry.clear()
+        self.fix_spectral_checkbox.setChecked(False)
+        self.n_channels_entry.clear()
+        self.ir_luminosity_checkbox.setChecked(False)
+        self.ir_luminosity_entry.clear()
+        self.model_combo.setCurrentText("Point")  # Reset to default model
+        self.tng_api_key_entry.clear()
+        self.line_mode_checkbox.setChecked(False)
+        self.serendipitous_checkbox.setChecked(False)
+
+    def closeEvent(self, event):
+        if self.local_mode_combo.currentText() == "local":
+            if self.thread_pool.activeThreadCount() > 0:
+                event.ignore()
+                self.hide()
+                self.show_background_notification()
+            else:
+                self.save_settings()
+                self.stop_simulation_flag = True
+                self.thread_pool.waitForDone()
+                self.thread_pool.clear()
+                super().closeEvent(event)
+        else:
+            if self.remote_simulation_finished is False:
+                event.ignore()
+                self.hide()
+                self.show_background_notification()
+            else:
+                self.save_settings()
+                self.stop_simulation_flag = True
+                self.thread_pool.waitForDone()
+                self.thread_pool.clear()
+                super().closeEvent(event)
+
+    def show_background_notification(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            print("System Tray not available")
+            return
+        if self.tray_icon is None:
+            path = os.path.dirname(self.main_path)
+            icon_path = os.path.join(path, "pictures", "almasim-icon.png")
+            icon = QIcon(icon_path)
+            self.tray_icon = QSystemTrayIcon(icon, self)
+            menu = QMenu()
+            restore_action = menu.addAction("Restore")
+            restore_action.triggered.connect(self.showNormal)  # Restore the window
+            exit_action = menu.addAction("Exit")
+            exit_action.triggered.connect(QApplication.instance().quit)
+            self.tray_icon.setContextMenu(menu)
+            self.tray_icon.setIcon(icon)
+        self.tray_icon.showMessage(
+            "ALMA Simulator",
+            "Simulations running in the background.",
+            QSystemTrayIcon.MessageIcon.Information,
+            5000,
+        )
+        self.tray_icon.show()
+
+    def save_settings(self):
+        self.settings.setValue("output_directory", self.output_entry.text())
+        self.settings.setValue("tng_directory", self.tng_entry.text())
+        self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
+        self.settings.setValue("hubble_directory", self.hubble_entry.text())
+        self.settings.setValue("n_sims", self.n_sims_entry.text())
+        self.settings.setValue("ncpu", self.ncpu_entry.text())
+        self.settings.setValue("project_name", self.project_name_entry.text())
+        if self.metadata_mode_combo.currentText() == "get":
+            self.settings.setValue("metadata_path", self.metadata_path_entry.text())
+        elif self.metadata_mode_combo.currentText() == "query":
+            self.settings.setValue("query_save_entry", self.query_save_entry.text())
+        self.settings.setValue("metadata_mode", self.metadata_mode_combo.currentText())
+        self.settings.setValue("local_mode", self.local_mode_combo.currentText())
+        if self.local_mode_combo.currentText() == "remote":
+            self.settings.setValue("remote_address", self.remote_address_entry.text())
+            self.settings.setValue("remote_user", self.remote_user_entry.text())
+            self.settings.setValue("remote_key", self.remote_key_entry.text())
+            self.settings.setValue("remote_key_pass", self.remote_key_pass_entry.text())
+            self.settings.setValue("remote_config", self.remote_config_entry.text())
+            self.settings.setValue("remote_mode", self.remote_mode_combo.currentText())
+            self.settings.setValue("remote_folder", self.remote_folder_line.text())
+        self.settings.setValue("save_format", self.save_format_combo.currentText())
+        self.settings.setValue("line_mode", self.line_mode_checkbox.isChecked())
+        if self.line_mode_checkbox.isChecked():
+            self.settings.setValue("line_indices", self.line_index_entry.text())
+        else:
+            # Save non-line mode values
+            self.settings.setValue("redshifts", self.redshift_entry.text())
+            self.settings.setValue("num_lines", self.num_lines_entry.text())
+        self.settings.setValue("min_line_width", self.line_width_slider.value()[0])
+        self.settings.setValue("max_line_width", self.line_width_slider.value()[1])
+        self.settings.setValue("robust", self.robust_slider.value())
+        self.settings.setValue("set_snr", self.snr_checkbox.isChecked())
+        self.settings.setValue("snr", self.snr_entry.text())
+        self.settings.setValue("fix_spatial", self.fix_spatial_checkbox.isChecked())
+        self.settings.setValue("n_pix", self.n_pix_entry.text())
+        self.settings.setValue("fix_spectral", self.fix_spectral_checkbox.isChecked())
+        self.settings.setValue("n_channels", self.n_channels_entry.text())
+        self.settings.setValue(
+            "inject_serendipitous", self.serendipitous_checkbox.isChecked()
+        )
+        self.settings.setValue("model", self.model_combo.currentText())
+        self.settings.setValue("tng_api_key", self.tng_api_key_entry.text())
+        self.settings.setValue(
+            "set_ir_luminosity", self.ir_luminosity_checkbox.isChecked()
+        )
+        self.settings.setValue("ir_luminosity", self.ir_luminosity_entry.text())
+        self.settings.sync()
+
+    def open_dask_dashboard(self):
+        if self.client is not None:
+            webbrowser.open(self.client.dashboard_link)
+        else:
+            self.terminal.add_log("Please start the simulation to see the dashboard")
+
+    # -------- Download Data Functions -------------------------
+    def on_download_finished(self):
+        self.terminal.add_log("Download Finished")
+        self.terminal.add_log("# ------------------------------------- #\n")
+
+    # -------- IO Functions -------------------------
+    def create_remote_output_dir(self):
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+                private_key_pass=self.remote_key_pass_entry.text(),
+            )
+
+        else:
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+            )
+        output_path = os.path.join(
+            self.output_entry.text(), self.project_name_entry.text()
+        )
+        plot_path = os.path.join(output_path, "plots")
+        if not sftp.exists(output_path):
+            sftp.mkdir(output_path)
+        if not sftp.exists(plot_path):
+            sftp.mkdir(plot_path)
+
+    def create_remote_environment(self):
+        self.terminal.add_log("Checking ALMASim environment")
+        repo_url = "https://github.com/MicheleDelliVeneri/ALMASim.git"
+        if self.remote_folder_line.text() != "":
+            work_dir = self.remote_folder_line.text()
+            repo_dir = os.path.join(work_dir, "ALMASim")
+            venv_dir = os.path.join(work_dir, "almasim_env")
+        else:
+            venv_dir = os.path.join(
+                "/home/{}".format(self.remote_user_entry.text()), "almasim_env"
+            )
+            repo_dir = os.path.join(
+                "/home/{}".format(self.remote_user_entry.text()), "ALMASim"
+            )
+        self.remote_main_dir = repo_dir
+        self.remote_venv_dir = venv_dir
+        if self.remote_key_pass_entry.text() != "":
+            key = paramiko.RSAKey.from_private_key_file(
+                self.remote_key_entry.text(), password=self.remote_key_pass_entry.text()
+            )
+        else:
+            key = paramiko.RSAKey.from_private_key_file(self.remote_key_entry.text())
+
+        if self.remote_key_pass_entry.text() != "":
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+                private_key_pass=self.remote_key_pass_entry.text(),
+            )
+
+        else:
+            sftp = pysftp.Connection(
+                self.remote_address_entry.text(),
+                username=self.remote_user_entry.text(),
+                private_key=self.remote_key_entry.text(),
+            )
+        if not sftp.exists("/home/{}/.config".format(self.remote_user_entry.text())):
+            sftp.mkdir("/home/{}/.config".format(self.remote_user_entry.text()))
+
+        if not sftp.exists(
+            "/home/.config/{}/{}".format(
+                self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
+            )
+        ):
+            sftp.put(
+                self.settings_path,
+                "/home/{}/.config/{}".format(
+                    self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
+                ),
+            )
+        sftp.chmod(
+            "/home/{}/.config/{}".format(
+                self.remote_user_entry.text(), self.settings_path.split(os.sep)[-1]
+            ),
+            600,
+        )
+        # Get the path to the Python executable
+        paramiko_client = paramiko.SSHClient()
+        paramiko_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        paramiko_client.connect(
+            self.remote_address_entry.text(),
+            username=self.remote_user_entry.text(),
+            pkey=key,
+        )
+        stdin, stdout, stderr = paramiko_client.exec_command("which python3.12")
+        python_path = stdout.read().decode().strip()
+        if not python_path:
+            self.terminal.add_log("Python 3.12 not found on remote machine.")
+            paramiko_client.close()
+            return
+
+        commands = f"""
+            if [ ! -d {repo_dir} ]; then
+                git clone {repo_url} {repo_dir}
+            fi
+            cd {repo_dir}
+            git pull
+            if [ ! -d {venv_dir} ]; then
+                {python_path} -m venv {venv_dir}
+                source {venv_dir}/bin/activate
+                pip install --upgrade pip
+                pip install -e .
+            fi
+            """
+
+        stdin, stdout, stderr = paramiko_client.exec_command(commands)
+        self.terminal.add_log(stdout.read().decode())
+        self.terminal.add_log(stderr.read().decode())
+
+    # ------- Plotting Functions -------------------------
     @pyqtSlot(object)
     def plot_simulation_results(self, simulation_results):
         if simulation_results is not None:
             self.progress_bar_entry.setText("Generating Plots")
             # Extract data from the simulation_results dictionary
-            self.modelCube = simulation_results["modelCube"]
-            self.dirtyCube = simulation_results["dirtyCube"]
-            self.visCube = simulation_results["visCube"]
-            self.dirtyvisCube = simulation_results["dirtyvisCube"]
+            self.modelCube = simulation_results["model_cube"]
+            self.dirtyCube = simulation_results["dirty_cube"]
+            self.visCube = simulation_results["model_vis"]
+            self.dirtyvisCube = simulation_results["dirty_vis"]
             self.Npix = simulation_results["Npix"]
             self.Np4 = simulation_results["Np4"]
             self.Nchan = simulation_results["Nchan"]
@@ -4428,7 +4208,7 @@ class ALMASimulator(QMainWindow):
 
     @pyqtSlot(object)
     def start_plot_runnable(self, simulation_results):
-        runnable = PlotResultsRunnable(self, simulation_results)
+        runnable = PlotResults(self, simulation_results)
         self.thread_pool.start(runnable)
 
     def _plot_antennas(self):
@@ -4673,3 +4453,10 @@ class ALMASimulator(QMainWindow):
         ax[1].set_title("DIRTY SPECTRUM")
         plt.savefig(os.path.join(self.plot_dir, "spectra_{}.png".format(str(self.idx))))
         plt.close()
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = ALMASimulator()
+    window.show()
+    sys.exit(app.exec())
