@@ -11,6 +11,7 @@ documentation = "https://almasim.readthedocs.io/en/latest"
 [tool.poetry.dependencies]
 python = ">=3.12.4"
 astropy = "*"
+asyncssh = "*"
 pyvo = "*"
 numpy = "*"
 pandas = "*"

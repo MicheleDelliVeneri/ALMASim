@@ -35,6 +35,8 @@ setuptools.setup(
     python_requires=">=3.12.4",
     install_requires=[
         "astropy",
+        "asyncssh"
+        "bokeh",
         "pyvo",
         "numpy",
         "pandas",

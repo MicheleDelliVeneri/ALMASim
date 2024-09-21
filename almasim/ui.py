@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QFileDialog,
     QComboBox,
@@ -75,6 +76,7 @@ import requests
 import zipfile
 import sys
 import webbrowser
+import traceback
 
 
 def closest_power_of_2(x):
@@ -624,7 +626,7 @@ class PlotResults(QRunnable):
 
     def run(self):
         """Downloads Galaxy Zoo data."""
-        self.almas_simulator.progress_bar_entry.setText("Plotting Simulation Results")
+        self.alma_simulator.progress_bar_entry.setText("Plotting Simulation Results")
         self.alma_simulator.plot_simulation_results(self.simulation_results)
 
 
@@ -2522,6 +2524,7 @@ class ALMASimulator(QMainWindow):
         self.run_next_simulation()
 
     def run_simulator_remotely(self):
+        import socket
         self.stop_simulation_flag = False
         self.current_sim_index = 0
 
@@ -2532,24 +2535,25 @@ class ALMASimulator(QMainWindow):
         ssh_key_password = self.remote_key_pass_entry.text().strip()
         n_workers_per_host = int(self.ncpu_entry.text())
 
-        # Prepare the list of remote hosts
-        # If multiple hosts are entered, they should be comma-separated
-        remote_hosts = [host.strip() for host in remote_host.split(",") if host.strip()]
-
-        # Prepend the username to each host
-        if remote_user:
-            remote_hosts = [f"{remote_user}@{host}" for host in remote_hosts]
+        # Prepare the list of remote hosts (do not include username)
+        remote_hosts = [host.strip() for host in remote_host.split(',') if host.strip()]
 
         # Prepare SSH connection options
         connect_options = {
-            "known_hosts": None,  # Disable known_hosts checking (use with caution)
+            'known_hosts': None,  # Disable known_hosts checking (use with caution)
+            'username': remote_user,
+            'client_keys': [ssh_key_path],
+            'family': socket.AF_INET,  # Force IPv4
         }
 
-        if ssh_key_path:
-            connect_options["client_keys"] = ssh_key_path
-
         if ssh_key_password:
-            connect_options["passphrase"] = ssh_key_password
+            connect_options['passphrase'] = ssh_key_password
+
+        # Debugging: Print out the values
+        print(f"Remote host entry: '{remote_host}'")
+        print(f"Remote user entry: '{remote_user}'")
+        print(f"Remote hosts: {remote_hosts}")
+        print(f"Connect options: {connect_options}")
 
         # Create the SSHCluster
         try:
@@ -2563,28 +2567,29 @@ class ALMASimulator(QMainWindow):
                 scheduler_options={
                     # 'port': 8786,  # Uncomment to specify scheduler port if necessary
                 },
+                remote_python=os.path.join(self.venv_dir, "bin", "python3.12")
             )
 
             # Connect the Dask client to the cluster
-            client = Client(cluster, timeout=60, heartbeat_interval="5s")
+            client = Client(cluster, timeout=60, heartbeat_interval='5s')
             self.client = client
 
             # Inform the user about the dashboard
-            self.terminal.add_log(f"Dashboard hosted at {self.client.dashboard_link}")
-            self.terminal.add_log(
-                "To access the dashboard, you may need to set up SSH port forwarding."
-            )
+            self.terminal.add_log(f'Dashboard hosted at {self.client.dashboard_link}')
+            self.terminal.add_log('To access the dashboard, you may need to set up SSH port forwarding.')
 
             self.nextSimulation.connect(self.run_next_simulation)
             self.run_next_simulation()
 
         except Exception as e:
+            error_message = f"An error occurred while creating the SSH cluster:\n{e}\n{traceback.format_exc()}"
             QMessageBox.critical(
                 self,
                 "SSH Cluster Error",
-                f"An error occurred while creating the SSH cluster:\n{e}",
+                error_message
             )
             return
+
 
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
@@ -4071,6 +4076,8 @@ class ALMASimulator(QMainWindow):
             self.output_entry.text(), self.project_name_entry.text()
         )
         plot_path = os.path.join(output_path, "plots")
+        if not sftp.exists(self.output_entry.text()):
+            sftp.mkdir(self.output_entry.text())
         if not sftp.exists(output_path):
             sftp.mkdir(output_path)
         if not sftp.exists(plot_path):
@@ -4087,6 +4094,7 @@ class ALMASimulator(QMainWindow):
             venv_dir = os.path.join(
                 "/home/{}".format(self.remote_user_entry.text()), "almasim_env"
             )
+            self.venv_dir = venv_dir
             repo_dir = os.path.join(
                 "/home/{}".format(self.remote_user_entry.text()), "ALMASim"
             )

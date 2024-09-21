@@ -1,10 +1,12 @@
 astropy
+asyncssh
 pyvo
 numpy
 pandas
 matplotlib
 seaborn
 pyQt6
+qtrangeslider
 tqdm
 scipy
 h5py
@@ -19,6 +21,7 @@ paramiko
 pysftp
 setuptools
 tenacity
+threading
 nifty8
 setuptools
 multiprocess
