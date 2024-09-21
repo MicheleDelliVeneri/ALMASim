@@ -626,7 +626,7 @@ class PlotResults(QRunnable):
 
     def run(self):
         """Downloads Galaxy Zoo data."""
-        self.almas_simulator.progress_bar_entry.setText("Plotting Simulation Results")
+        self.alma_simulator.progress_bar_entry.setText("Plotting Simulation Results")
         self.alma_simulator.plot_simulation_results(self.simulation_results)
 
 
