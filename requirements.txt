@@ -1,5 +1,6 @@
 astropy
 asyncssh
+bokeh
 pyvo
 numpy
 pandas
