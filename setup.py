@@ -43,6 +43,7 @@ setuptools.setup(
         "matplotlib",
         "seaborn",
         "pyQt6",
+        "qtrangeslider",
         "tqdm",
         "scipy",
         "h5py",
