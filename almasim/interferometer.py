@@ -351,6 +351,7 @@ def _prepare_model(Npix, img, Nphf, Np4, zooming):
             sh1 + Np4 : sh1 + Np4 + dims[1],
         ] += zoomimg
     else:
+        
         zoomimg = zoom(img, float(Nphf) / d1)
         zdims = np.shape(zoomimg)
         zd0 = min(zdims[0], Nphf)

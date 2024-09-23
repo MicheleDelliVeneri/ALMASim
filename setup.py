@@ -41,6 +41,7 @@ setuptools.setup(
         "numpy",
         "pandas",
         "matplotlib",
+        "memory_profiler",
         "seaborn",
         "pyQt6",
         "qtrangeslider",
