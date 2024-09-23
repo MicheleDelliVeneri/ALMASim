@@ -2543,11 +2543,11 @@ class ALMASimulator(QMainWindow):
         print(f"Remote host entry: '{remote_host}'")
         print(f"Remote user entry: '{remote_user}'")
         print(f"Remote hosts: {remote_hosts}")
-        print(f"Connect options: {connect_options}")
 
         # Create the SSHCluster
         try:
-            with open("slurm_config.json", "r") as f:
+            slurm_config = self.remote_config_entry.text().strip()
+            with open(slurm_config, "r") as f:
                 config = json.load(f)
             cluster = SLURMCluster(
                 queue=config["queue"],
