@@ -35,7 +35,7 @@ setuptools.setup(
     python_requires=">=3.12.4",
     install_requires=[
         "astropy",
-        "asyncssh"
+        "asyncssh",
         "bokeh",
         "pyvo",
         "numpy",
@@ -43,6 +43,7 @@ setuptools.setup(
         "matplotlib",
         "seaborn",
         "pyQt6",
+        "qtrangeslider",
         "tqdm",
         "scipy",
         "h5py",
