@@ -2539,16 +2539,6 @@ class ALMASimulator(QMainWindow):
         remote_hosts = [host.strip() for host in remote_host.split(',') if host.strip()]
 
         # Prepare SSH connection options
-        connect_options = {
-            'known_hosts': None,  # Disable known_hosts checking (use with caution)
-            'username': remote_user,
-            'client_keys': [ssh_key_path],
-            'family': socket.AF_INET,  # Force IPv4
-        }
-
-        if ssh_key_password:
-            connect_options['passphrase'] = ssh_key_password
-
         # Debugging: Print out the values
         print(f"Remote host entry: '{remote_host}'")
         print(f"Remote user entry: '{remote_user}'")
@@ -2557,23 +2547,17 @@ class ALMASimulator(QMainWindow):
 
         # Create the SSHCluster
         try:
-            cluster = SSHCluster(
-                hosts=remote_hosts,
-                connect_options=connect_options,
-                worker_options={
-                    "nthreads": n_workers_per_host,
-                    # Add more worker options if needed
-                },
-                scheduler_options={
-                    # 'port': 8786,  # Uncomment to specify scheduler port if necessary
-                },
-                remote_python=os.path.join(self.venv_dir, "bin", "python3.12")
-            )
-
+            with open("slurm_config.json", "r") as f:
+                config = json.load(f)
+            cluster = SLURMCluster(
+                queue=config["queue"],
+                account=config["account"],
+                cores=config["cores"],
+                memory=config["memory"],
+                job_extra_directives=config["job_extra"])
             # Connect the Dask client to the cluster
             client = Client(cluster, timeout=60, heartbeat_interval='5s')
             self.client = client
-
             # Inform the user about the dashboard
             self.terminal.add_log(f'Dashboard hosted at {self.client.dashboard_link}')
             self.terminal.add_log('To access the dashboard, you may need to set up SSH port forwarding.')
@@ -2589,7 +2573,6 @@ class ALMASimulator(QMainWindow):
                 error_message
             )
             return
-
 
     def run_next_simulation(self):
         if self.current_sim_index >= int(self.n_sims_entry.text()):
