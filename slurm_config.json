@@ -1,8 +1,8 @@
 {
     "queue": "parallel",  
     "account": "ibisco",    
-    "cores": 4,            
-    "memory": "16GB",
+    "cores": 32,            
+    "memory": "64GB",
     "job_extra": [
         "--nodelist=ibisco-gpu06"
     ]

@@ -351,6 +351,7 @@ def _prepare_model(Npix, img, Nphf, Np4, zooming):
             sh1 + Np4 : sh1 + Np4 + dims[1],
         ] += zoomimg
     else:
+        
         zoomimg = zoom(img, float(Nphf) / d1)
         zdims = np.shape(zoomimg)
         zd0 = min(zdims[0], Nphf)
@@ -699,15 +700,15 @@ class Interferometer(QObject):
         if self.nH > 200:
             # Try increasing the divisor to 8.064 to lower nH
             self.scan_time = 8.064
-            self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+            self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
             if self.nH > 200:
                 # Further increase the divisor to 18.144
                 self.scan_time = 18.144
-                self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+                self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
                 if self.nH > 200:
                     self.scan_time = 30.24
                     # Final attempt with the largest divisor (30.24)
-                    self.nH = int(self.int_time / (self.scan_time * self.second2hour))
+                    self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
         self.header.append(("EPOCH", self.nH))
 
     def _read_antennas(self):
@@ -1147,7 +1148,7 @@ if __name__ == "__main__":
     idx = 0
     noise = 0.2
     snr = 3
-    int_time = 10
+    integration_time = 10
     obs_date = "2022-01-01"
     header = fits.header.Header()
     save_mode = "npz"
@@ -1167,7 +1168,7 @@ if __name__ == "__main__":
         antenna_array=antenna_array,
         noise=noise,
         snr=snr,
-        integration_time=int_time,
+        integration_time=integration_time,
         observation_date=obs_date,
         header=header,
         save_mode=save_mode,
