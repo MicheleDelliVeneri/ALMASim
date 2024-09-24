@@ -99,9 +99,11 @@ def insert_pointlike(
     datacube._array[
         pos_x,
         pos_y,
+        :,
     ] = (
         (continum + gs) * U.Jy * U.pix**-2
     )
+    del z_idxs, gs
     return datacube
 
 
