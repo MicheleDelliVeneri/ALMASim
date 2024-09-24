@@ -2517,7 +2517,12 @@ class ALMASimulator(QMainWindow):
     def run_simulator_locally(self):
         self.stop_simulation_flag = False
         self.current_sim_index = 0
-        cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()))
+        cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()), 
+                    memory_limit='auto', local_directory=self.output_path)
+        os.environ['TMPDIR'] = self.output_path
+        os.environ['TEMP'] = self.output_path
+        os.environ['TMP'] = self.output_path
+        os.environ['DASK_TEMPORARY_DIRECTORY'] = self.output_path
         client = Client(cluster, timeout=60, heartbeat_interval=10)
         self.client = client
         self.terminal.add_log(f"Dashboard hosted at {self.client.dashboard_link}")
