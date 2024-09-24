@@ -2690,7 +2690,7 @@ class ALMASimulator(QMainWindow):
             return metadata
         elif len(metadata) < n:
             a_n = n - len(metadata)
-            sample = pd.concatg([metadata, metadata.sample(a_n, replace=True)], ignore_index=True)
+            sample = pd.concat([metadata, metadata.sample(a_n, replace=True)], ignore_index=True)
             
         else:
             sample = metadata.sample(n, replace=False)
