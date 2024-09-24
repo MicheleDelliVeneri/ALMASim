@@ -77,6 +77,7 @@ import zipfile
 import sys
 import webbrowser
 import traceback
+import random
 
 
 def closest_power_of_2(x):
@@ -2685,7 +2686,14 @@ class ALMASimulator(QMainWindow):
             metadata = metadata[
                 (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
             ]
-        sample = metadata.sample(n, replace=True)
+        if len(metadata) == n:
+            return metadata
+        elif len(metadata) < n:
+            a_n = n - len(metadata)
+            sample = pd.concatg([metadata, metadata.sample(a_n, replace=True)], ignore_index=True)
+            
+        else:
+            sample = metadata.sample(n, replace=False)
         return sample
 
     def freq_supp_extractor(self, freq_sup, obs_freq):
@@ -3473,13 +3481,13 @@ class ALMASimulator(QMainWindow):
         fwhm_x, fwhm_y, angle = None, None, None
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
         shift_x = np.random.randint(
-            0.1 * fov.value / cell_size.value, fov.value / cell_size.value - pos_x
+            0.1 * fov.value / cell_size.value, 1.5 *(fov.value / cell_size.value) - pos_x
         )
         shift_y = np.random.randint(
-            0.1 * fov.value / cell_size.value, fov.value / cell_size.value - pos_y
+            0.1 * fov.value / cell_size.value, 1.5 * (fov.value / cell_size.value) - pos_y
         )
-        pos_x = pos_x + shift_x
-        pos_y = pos_x + shift_y
+        pos_x = pos_x + shift_x * random.choice([-1, 1])
+        pos_y = pos_y + shift_y * random.choice([-1, 1])
         pos_x = min(pos_x, n_pix - 1)
         pos_y = min(pos_y, n_pix - 1)
         pos_z = [int(index) for index in source_channel_index]
