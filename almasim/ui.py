@@ -77,6 +77,7 @@ import zipfile
 import sys
 import webbrowser
 import traceback
+import random
 
 
 def closest_power_of_2(x):
@@ -3470,7 +3471,6 @@ class ALMASimulator(QMainWindow):
         wcs = datacube.wcs
         fwhm_x, fwhm_y, angle = None, None, None
         pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-        print(0.1 * fov.value / cell_size.value, 1.5 * (fov.value / cell_size.value) - pos_x)
         shift_x = np.random.randint(
             0.1 * fov.value / cell_size.value, 1.5 *(fov.value / cell_size.value) - pos_x
         )
