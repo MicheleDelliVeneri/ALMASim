@@ -3648,7 +3648,12 @@ class ALMASimulator(QMainWindow):
             )
         header = usm.get_datacube_header(datacube, obs_date)
         model = datacube._array.to_value(datacube._array.unit)
-        model = model[0] / beam_area.value
+        print(model.shape)
+        if source_type == "point":
+            model = model.T / beam_area.value
+        else:
+            model = model[0] / beam_area.value
+        print(model.shape)
         totflux = np.sum(model)
         if remote is True:
             print("Total Flux injected in model cube: {:.3f} Jy\n".format(totflux))
