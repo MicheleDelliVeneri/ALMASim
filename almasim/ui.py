@@ -288,7 +288,7 @@ class DownloadGalaxyZoo(QRunnable):
     @pyqtSlot()
     def run(self):
         try:
-            if self.remote is False:
+            #if self.remote is False:
                 galaxy_zoo_path = self.alma_simulator.galaxy_zoo_entry.text()
                 if galaxy_zoo_path == "":
                     galaxy_zoo_path = os.path.join(
@@ -301,84 +301,84 @@ class DownloadGalaxyZoo(QRunnable):
                     "zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True
                 )
                 self.signals.queryFinished.emit(galaxy_zoo_path)
-            else:
-                if self.alma_simulator.remote_key_pass_entry.text() != "":
-                    sftp = pysftp.Connection(
-                        self.alma_simulator.remote_address_entry.text(),
-                        username=self.alma_simulator.remote_user_entry.text(),
-                        private_key=self.alma_simulator.remote_key_entry.text(),
-                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
-                    )
+            #else:
+            #    if self.alma_simulator.remote_key_pass_entry.text() != "":
+            #        sftp = pysftp.Connection(
+            #            self.alma_simulator.remote_address_entry.text(),
+            #            username=self.alma_simulator.remote_user_entry.text(),
+            #            private_key=self.alma_simulator.remote_key_entry.text(),
+            #            private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+            #        )
 
-                else:
-                    sftp = pysftp.Connection(
-                        self.alma_simulator.remote_address_entry.text(),
-                        username=self.alma_simulator.remote_user_entry.text(),
-                        private_key=self.alma_simulator.remote_key_entry.text(),
-                    )
-                if sftp.exists(self.galaxy_zoo_entry.text()):
-                    if not sftp.listdir(self.galaxy_zoo_entry.text()):
-                        if not sftp.exists(
-                            "/home/{}/.kaggle".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            )
-                        ):
-                            sftp.mkdir(
-                                "/home/{}/.kaggle".format(
-                                    self.alma_simulator.remote_user_entry.text()
-                                )
-                            )
-                        if not sftp.exists(
-                            "/home/{}/.kaggle/kaggle.json".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            )
-                        ):
-                            sftp.put(
-                                os.path.join(
-                                    os.path.expanduser("~"), ".kaggle", "kaggle.json"
-                                ),
-                                "/home/{}/.kaggle/kaggle.json".format(
-                                    self.alma_simulator.remote_user_entry.text()
-                                ),
-                            )
-                            sftp.chmod(
-                                "/home/{}/.kaggle/kaggle.json".format(
-                                    self.alma_simulator.remote_user_entry.text()
-                                ),
-                                600,
-                            )
-                        if self.alma_simulator.remote_key_pass_entry.text() != "":
-                            key = paramiko.RSAKey.from_private_key_file(
-                                self.alma_simulator.remote_key_entry.text(),
-                                password=self.alma_simulator.remote_key_pass_entry.text(),
-                            )
-                        else:
-                            key = paramiko.RSAKey.from_private_key_file(
-                                self.alma_simulator.remote_key_entry.text()
-                            )
-                        venv_dir = os.path.join(
-                            "/home/{}/".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            ),
-                            "almasim_env",
-                        )
-                        commands = f"""
-                        source {venv_dir}/bin/activate
-                        python -c "from kaggle import api; \
-                            api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
-                                path='{self.alma_simulator.galaxy_zoo_entry.text()}', unzip=True)"
-                        """
-                        paramiko_client = paramiko.SSHClient()
-                        paramiko_client.set_missing_host_key_policy(
-                            paramiko.AutoAddPolicy()
-                        )
-                        paramiko_client.connect(
-                            self.alma_simulator.remote_address_entry.text(),
-                            username=self.alma_simulator.remote_user_entry.text(),
-                            pkey=key,
-                        )
-                        stdin, stdout, stderr = paramiko_client.exec_command(commands)
-                    self.signals.queryFinished.emit(galaxy_zoo_path)
+            #    else:
+            #        sftp = pysftp.Connection(
+            #            self.alma_simulator.remote_address_entry.text(),
+            #            username=self.alma_simulator.remote_user_entry.text(),
+            #            private_key=self.alma_simulator.remote_key_entry.text(),
+            #        )
+            #    if sftp.exists(self.galaxy_zoo_entry.text()):
+            #        if not sftp.listdir(self.galaxy_zoo_entry.text()):
+            #            if not sftp.exists(
+            #                "/home/{}/.kaggle".format(
+            #                    self.alma_simulator.remote_user_entry.text()
+            #                )
+            #            ):
+            #                sftp.mkdir(
+            #                    "/home/{}/.kaggle".format(
+            #                        self.alma_simulator.remote_user_entry.text()
+            #                    )
+            #                )
+            #            if not sftp.exists(
+            #                "/home/{}/.kaggle/kaggle.json".format(
+            #                    self.alma_simulator.remote_user_entry.text()
+            #                )
+            #            ):
+            #                sftp.put(
+            #                    os.path.join(
+            #                        os.path.expanduser("~"), ".kaggle", "kaggle.json"
+            #                    ),
+            #                    "/home/{}/.kaggle/kaggle.json".format(
+            #                        self.alma_simulator.remote_user_entry.text()
+            #                    ),
+            #                )
+            #                sftp.chmod(
+            #                    "/home/{}/.kaggle/kaggle.json".format(
+            #                        self.alma_simulator.remote_user_entry.text()
+            #                    ),
+            #                    600,
+            #                )
+            #            if self.alma_simulator.remote_key_pass_entry.text() != "":
+            #                key = paramiko.RSAKey.from_private_key_file(
+            #                    self.alma_simulator.remote_key_entry.text(),
+            #                    password=self.alma_simulator.remote_key_pass_entry.text(),
+            #                )
+            #            else:
+            #                key = paramiko.RSAKey.from_private_key_file(
+            #                    self.alma_simulator.remote_key_entry.text()
+            #                )
+            #            venv_dir = os.path.join(
+            #                "/home/{}/".format(
+            #                    self.alma_simulator.remote_user_entry.text()
+            #                ),
+            #                "almasim_env",
+            #            )
+            #            commands = f"""
+            #            source {venv_dir}/bin/activate
+            #            python -c "from kaggle import api; \
+            #                api.dataset_download_files('jaimetrickz/galaxy-zoo-2-images', \
+            #                    path='{self.alma_simulator.galaxy_zoo_entry.text()}', unzip=True)"
+            #            """
+            #            paramiko_client = paramiko.SSHClient()
+            #            paramiko_client.set_missing_host_key_policy(
+            #                paramiko.AutoAddPolicy()
+            #            )
+            #            paramiko_client.connect(
+            #                self.alma_simulator.remote_address_entry.text(),
+            #                username=self.alma_simulator.remote_user_entry.text(),
+            #                pkey=key,
+            #            )
+            #            stdin, stdout, stderr = paramiko_client.exec_command(commands)
+            #        self.signals.queryFinished.emit(galaxy_zoo_path)
 
         except Exception as e:
             logging.error(f"Error in Query: {e}")
@@ -394,97 +394,97 @@ class DownloadHubble(QRunnable):
     @pyqtSlot()
     def run(self):
         try:
-            if self.remote is False:
-                hubble_path = self.alma_simulator.hubble_entry.text()
-                if hubble_path == "":
-                    hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
-                if not os.path.exists(hubble_path):
-                    os.makedirs(hubble_path)
-                api.authernticate()
-                api.dataset_download_files(
-                    "redwankarimsony/top-100-hubble-telescope-images",
-                    path=hubble_path,
-                    unzip=True,
-                )
-                self.signals.downloadFinished.emit(hubble_path)
-            else:
-                if self.alma_simulator.remote_key_pass_entry.text() != "":
-                    sftp = pysftp.Connection(
-                        self.alma_simulator.remote_address_entry.text(),
-                        username=self.alma_simulator.remote_user_entry.text(),
-                        private_key=self.alma_simulator.remote_key_entry.text(),
-                        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
-                    )
+            #if self.remote is False:
+            hubble_path = self.alma_simulator.hubble_entry.text()
+            if hubble_path == "":
+                hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
+            if not os.path.exists(hubble_path):
+                os.makedirs(hubble_path)
+            api.authernticate()
+            api.dataset_download_files(
+                "redwankarimsony/top-100-hubble-telescope-images",
+                path=hubble_path,
+                unzip=True,
+            )
+            self.signals.downloadFinished.emit(hubble_path)
+            #else:
+                #if self.alma_simulator.remote_key_pass_entry.text() != "":
+                #    sftp = pysftp.Connection(
+                #        self.alma_simulator.remote_address_entry.text(),
+                #        username=self.alma_simulator.remote_user_entry.text(),
+                #        private_key=self.alma_simulator.remote_key_entry.text(),
+                #        private_key_pass=self.alma_simulator.remote_key_pass_entry.text(),
+                #    )
 
-                else:
-                    sftp = pysftp.Connection(
-                        self.alma_simulator.remote_address_entry.text(),
-                        username=self.alma_simulator.remote_user_entry.text(),
-                        private_key=self.alma_simulator.remote_key_entry.text(),
-                    )
-                if not sftp.exists(self.alma_simulator.hubble_entry.text()):
-                    if not sftp.listdir(self.alma_simulator.hubble_entry.text()):
-                        if not sftp.exists(
-                            "/home/{}/.kaggle".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            )
-                        ):
-                            sftp.mkdir(
-                                "/home/{}/.kaggle".format(
-                                    self.alma_simulator.remote_user_entry.text()
-                                )
-                            )
-                        if not sftp.exists(
-                            "/home/{}/.kaggle/kaggle.json".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            )
-                        ):
-                            sftp.put(
-                                os.path.join(
-                                    os.path.expanduser("~"), ".kaggle", "kaggle.json"
-                                ),
-                                "/home/{}/.kaggle/kaggle.json".format(
-                                    self.alma_simulator.remote_user_entry.text()
-                                ),
-                            )
-                            sftp.chmod(
-                                "/home/{}/.kaggle/kaggle.json".format(
-                                    self.alma_simulator.remote_user_entry.text()
-                                ),
-                                600,
-                            )
-                        if self.alma_simulator.remote_key_pass_entry.text() != "":
-                            key = paramiko.RSAKey.from_private_key_file(
-                                self.alma_simulator.remote_key_entry.text(),
-                                password=self.alma_simulator.remote_key_pass_entry.text(),
-                            )
-                        else:
-                            key = paramiko.RSAKey.from_private_key_file(
-                                self.alma_simulator.remote_key_entry.text()
-                            )
-                        venv_dir = os.path.join(
-                            "/home/{}/".format(
-                                self.alma_simulator.remote_user_entry.text()
-                            ),
-                            "almasim_env",
-                        )
-                        commands = f"""
-                        source {venv_dir}/bin/activate
-                        python -c "from kaggle import api; \
-                            api.dataset_download_files('redwankarimsony/top-100-hubble-telescope-images', \
-                                path='{self.alma_simulator.hubble_entry.text()}', unzip=True)"
-                        """
-                        paramiko_client = paramiko.SSHClient()
-                        paramiko_client.set_missing_host_key_policy(
-                            paramiko.AutoAddPolicy()
-                        )
-                        paramiko_client.connect(
-                            self.alma_simulator.remote_address_entry.text(),
-                            username=self.alma_simulator.remote_user_entry.text(),
-                            pkey=key,
-                        )
-                        stdin, stdout, stderr = paramiko_client.exec_command(commands)
-                        self.signals.downloadFinished.emit(hubble_path)
+                #else:
+                #    sftp = pysftp.Connection(
+                #        self.alma_simulator.remote_address_entry.text(),
+                #        username=self.alma_simulator.remote_user_entry.text(),
+                #        private_key=self.alma_simulator.remote_key_entry.text(),
+                #    )
+                #if not sftp.exists(self.alma_simulator.hubble_entry.text()):
+                #    if not sftp.listdir(self.alma_simulator.hubble_entry.text()):
+                #        if not sftp.exists(
+                #            "/home/{}/.kaggle".format(
+                #                self.alma_simulator.remote_user_entry.text()
+                #            )
+                #        ):
+                #            sftp.mkdir(
+                #                "/home/{}/.kaggle".format(
+                #                    self.alma_simulator.remote_user_entry.text()
+                #                )
+                #            )
+                #        if not sftp.exists(
+                #            "/home/{}/.kaggle/kaggle.json".format(
+                #                self.alma_simulator.remote_user_entry.text()
+                #            )
+                #        ):
+                #            sftp.put(
+                #                os.path.join(
+                #                    os.path.expanduser("~"), ".kaggle", "kaggle.json"
+                #                ),
+                #                "/home/{}/.kaggle/kaggle.json".format(
+                #                    self.alma_simulator.remote_user_entry.text()
+                #                ),
+                #            )
+                #            sftp.chmod(
+                #                "/home/{}/.kaggle/kaggle.json".format(
+                #                    self.alma_simulator.remote_user_entry.text()
+                #                ),
+                #                600,
+                #            )
+                #        if self.alma_simulator.remote_key_pass_entry.text() != "":
+                #            key = paramiko.RSAKey.from_private_key_file(
+                #                self.alma_simulator.remote_key_entry.text(),
+                #                password=self.alma_simulator.remote_key_pass_entry.text(),
+                #            )
+                #        else:
+                #            key = paramiko.RSAKey.from_private_key_file(
+                #                self.alma_simulator.remote_key_entry.text()
+                #            )
+                #        venv_dir = os.path.join(
+                #            "/home/{}/".format(
+                #                self.alma_simulator.remote_user_entry.text()
+                #            ),
+                #            "almasim_env",
+                #        )
+                #        commands = f"""
+                #        source {venv_dir}/bin/activate
+                #        python -c "from kaggle import api; \
+                #            api.dataset_download_files('redwankarimsony/top-100-hubble-telescope-images', \
+                #                path='{self.alma_simulator.hubble_entry.text()}', unzip=True)"
+                #        """
+                #        paramiko_client = paramiko.SSHClient()
+                #        paramiko_client.set_missing_host_key_policy(
+                #            paramiko.AutoAddPolicy()
+                #        )
+                #        paramiko_client.connect(
+                #            self.alma_simulator.remote_address_entry.text(),
+                #            username=self.alma_simulator.remote_user_entry.text(),
+                #            pkey=key,
+                #        )
+                #        stdin, stdout, stderr = paramiko_client.exec_command(commands)
+                #        self.signals.downloadFinished.emit(hubble_path)
         except Exception as e:
             logging.error(f"Error in Query: {e}")
 
@@ -2225,84 +2225,84 @@ class ALMASimulator(QMainWindow):
         )
         plot_path = os.path.join(self.output_path, "plots")
         # Output Directory
-        if self.local_mode_combo.currentText() == "local":
-            if not os.path.exists(self.output_path):
-                try:
-                    os.makedirs(self.output_path)
-                except Exception as e:
-                    self.terminal.add_log(f"Cannot create output directory: {e}")
-                    return
-            if not os.path.exists(plot_path):
-                os.makedirs(plot_path)
-        else:
-            self.create_remote_output_dir()
+        #if self.local_mode_combo.currentText() == "local":
+        if not os.path.exists(self.output_path):
+            try:
+                os.makedirs(self.output_path)
+            except Exception as e:
+                self.terminal.add_log(f"Cannot create output directory: {e}")
+                return
+        if not os.path.exists(plot_path):
+            os.makedirs(plot_path)
+        #else:
+        #    self.create_remote_output_dir()
         output_paths = np.array([self.output_path] * n_sims)
         tng_paths = np.array([self.tng_entry.text()] * n_sims)
-        if self.local_mode_combo.currentText() == "local":
-            if self.model_combo.currentText() == "Galaxy Zoo":
-                if self.galaxy_zoo_entry.text() and not os.path.exists(
-                    os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
-                ):
-                    try:
-                        self.terminal.add_log("Downloading Galaxy Zoo")
-                        runnable = DownloadGalaxyZoo(self, remote=False)
-                        runnable.finished.connect(self.on_download_finished)
-                        self.thread_pool.start(runnable)
-                    except Exception as e:
-                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
-                        return
-            elif self.model_combo.currentText() == "Hubble 100":
-                if self.hubble_entry.text() and not os.path.exists(
-                    os.path.join(self.hubble_entry.text(), "top100")
-                ):
-                    try:
-                        self.terminal.add_log("Downloading Hubble 100")
-                        runnable = DownloadHubble(self, remote=False)
-                        runnable.finished.connect(self.on_download_finished)
-                        self.thread_pool.start(runnable)
-                    except Exception as e:
-                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
-                        return
-        else:
-            try:
-                self.create_remote_environment()
-            except Exception as e:
-                self.terminal.add_log(f"Error creating remote environment: {e}")
-                return
-            if self.model_combo.currentText() == "Galaxy Zoo":
-                if self.galaxy_zoo_entry.text():
-                    try:
-                        self.terminal.add_log("Downloading Galaxy Zoo on remote")
-                        runnable = DownloadGalaxyZoo(self, remote=True)
-                        runnable.finished.connect(self.on_download_finished)
-                        self.thread_pool.start(runnable)
-                    except Exception as e:
-                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
-                        return
-            elif self.model_combo.currentText() == "Hubble 100":
-                if self.hubble_entry.text():
-                    try:
-                        self.terminal.add_log("Downloading Hubble 100 on remote")
-                        runnable = DownloadHubble(self, remote=True)
-                        runnable.finished.connect(self.on_download_finished)
-                        self.thread_pool.start(runnable)
-                    except Exception as e:
-                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
-                        return
+        #if self.local_mode_combo.currentText() == "local":
+        if self.model_combo.currentText() == "Galaxy Zoo":
+            if self.galaxy_zoo_entry.text() and not os.path.exists(
+                os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
+            ):
+                try:
+                    self.terminal.add_log("Downloading Galaxy Zoo")
+                    runnable = DownloadGalaxyZoo(self, remote=False)
+                    runnable.finished.connect(self.on_download_finished)
+                    self.thread_pool.start(runnable)
+                except Exception as e:
+                    self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+                    return
+        elif self.model_combo.currentText() == "Hubble 100":
+            if self.hubble_entry.text() and not os.path.exists(
+                os.path.join(self.hubble_entry.text(), "top100")
+            ):
+                try:
+                    self.terminal.add_log("Downloading Hubble 100")
+                    runnable = DownloadHubble(self, remote=False)
+                    runnable.finished.connect(self.on_download_finished)
+                    self.thread_pool.start(runnable)
+                except Exception as e:
+                    self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+                    return
+        #else:
+        #    try:
+        #        self.create_remote_environment()
+        #    except Exception as e:
+        #        self.terminal.add_log(f"Error creating remote environment: {e}")
+        #        return
+        #    if self.model_combo.currentText() == "Galaxy Zoo":
+        #        if self.galaxy_zoo_entry.text():
+        #            try:
+        #                self.terminal.add_log("Downloading Galaxy Zoo on remote")
+        #                runnable = DownloadGalaxyZoo(self, remote=True)
+        #                runnable.finished.connect(self.on_download_finished)
+        #                self.thread_pool.start(runnable)
+        #            except Exception as e:
+        #                self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+        #                return
+        #    elif self.model_combo.currentText() == "Hubble 100":
+        #        if self.hubble_entry.text():
+        #            try:
+        #                self.terminal.add_log("Downloading Hubble 100 on remote")
+        #                runnable = DownloadHubble(self, remote=True)
+        #                runnable.finished.connect(self.on_download_finished)
+        #                self.thread_pool.start(runnable)
+        #            except Exception as e:
+        #                self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+        #                return
         galaxy_zoo_paths = np.array([self.galaxy_zoo_entry.text()] * n_sims)
         hubble_paths = np.array([self.hubble_entry.text()] * n_sims)
-        if self.local_mode_combo.currentText() == "local":
-            main_paths = np.array([self.main_path] * n_sims)
-        else:
-            main_paths = np.array(
-                [
-                    os.path.join(
-                        "/home/{}/".format(self.remote_user_entry.text()),
-                        "ALMASim/almasim/",
-                    )
-                ]
-                * n_sims
-            )
+        #if self.local_mode_combo.currentText() == "local":
+        main_paths = np.array([self.main_path] * n_sims)
+        #else:
+        #    main_paths = np.array(
+        #        [
+        #            os.path.join(
+        #                "/home/{}/".format(self.remote_user_entry.text()),
+        #                "ALMASim/almasim/",
+        #            )
+        #        ]
+        #        * n_sims
+        #    )
         ncpus = np.array([int(self.ncpu_entry.text())] * n_sims)
         project_names = np.array([self.project_name_entry.text()] * n_sims)
         save_mode = np.array([self.save_format_combo.currentText()] * n_sims)
@@ -2555,6 +2555,7 @@ class ALMASimulator(QMainWindow):
                 cores=config["cores"],
                 memory=config["memory"],
                 job_extra_directives=config["job_extra"])
+            cluster.scale(jobs=self.ncpu_entry.text())
             # Connect the Dask client to the cluster
             client = Client(cluster, timeout=60, heartbeat_interval='5s')
             self.client = client
@@ -3648,12 +3649,13 @@ class ALMASimulator(QMainWindow):
             )
         header = usm.get_datacube_header(datacube, obs_date)
         model = datacube._array.to_value(datacube._array.unit)
-        print(model.shape)
-        if source_type == "point":
-            model = model.T / beam_area.value
+        if len(model.shape) == 4:
+            model = model[0]
+        dim1, dim2, dim3 = model.shape
+        if dim1 == n_channels:
+            model = model / beam_area.value
         else:
-            model = model[0] / beam_area.value
-        print(model.shape)
+            model = model.T / beam_area.value
         totflux = np.sum(model)
         if remote is True:
             print("Total Flux injected in model cube: {:.3f} Jy\n".format(totflux))
