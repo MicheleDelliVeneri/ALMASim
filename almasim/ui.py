@@ -3646,6 +3646,7 @@ class ALMASimulator(QMainWindow):
             )
         header = usm.get_datacube_header(datacube, obs_date)
         model = datacube._array.to_value(datacube._array.unit)
+        print(model.shape)
         if source_type == "point":
             model = model.T / beam_area.value
         else:
