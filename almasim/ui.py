@@ -2686,7 +2686,10 @@ class ALMASimulator(QMainWindow):
             metadata = metadata[
                 (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
             ]
-        sample = metadata.sample(n, replace=True)
+        if len(metadata) < n:
+            return metadata
+        else:
+            sample = metadata.sample(n, replace=True)
         return sample
 
     def freq_supp_extractor(self, freq_sup, obs_freq):
