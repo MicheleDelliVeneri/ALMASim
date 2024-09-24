@@ -2686,7 +2686,7 @@ class ALMASimulator(QMainWindow):
             metadata = metadata[
                 (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
             ]
-        if len(metadata) < n:
+        if len(metadata) <= n:
             return metadata
         else:
             sample = metadata.sample(n, replace=True)
