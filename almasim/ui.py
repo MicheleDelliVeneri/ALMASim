@@ -2517,7 +2517,12 @@ class ALMASimulator(QMainWindow):
     def run_simulator_locally(self):
         self.stop_simulation_flag = False
         self.current_sim_index = 0
-        cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()))
+        cluster = LocalCluster(n_workers=int(self.ncpu_entry.text()), 
+                    memory_limit='auto', local_directory=self.output_path)
+        os.environ['TMPDIR'] = self.output_path
+        os.environ['TEMP'] = self.output_path
+        os.environ['TMP'] = self.output_path
+        os.environ['DASK_TEMPORARY_DIRECTORY'] = self.output_path
         client = Client(cluster, timeout=60, heartbeat_interval=10)
         self.client = client
         self.terminal.add_log(f"Dashboard hosted at {self.client.dashboard_link}")
@@ -2690,7 +2695,7 @@ class ALMASimulator(QMainWindow):
             return metadata
         elif len(metadata) < n:
             a_n = n - len(metadata)
-            sample = pd.concatg([metadata, metadata.sample(a_n, replace=True)], ignore_index=True)
+            sample = pd.concat([metadata, metadata.sample(a_n, replace=True)], ignore_index=True)
             
         else:
             sample = metadata.sample(n, replace=False)
@@ -3486,8 +3491,8 @@ class ALMASimulator(QMainWindow):
         shift_y = np.random.randint(
             0.1 * fov.value / cell_size.value, 1.5 * (fov.value / cell_size.value) - pos_y
         )
-        pos_x = pos_x + shift_x * random.choice([-1, 1])
-        pos_y = pos_y + shift_y * random.choice([-1, 1])
+        pos_x = pos_x + (shift_x/2) * random.choice([-1, 1])
+        pos_y = pos_y + (shift_y/2) * random.choice([-1, 1])
         pos_x = min(pos_x, n_pix - 1)
         pos_y = min(pos_y, n_pix - 1)
         pos_z = [int(index) for index in source_channel_index]

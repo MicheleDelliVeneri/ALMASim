@@ -16,7 +16,6 @@ from memory_profiler import memory_usage
 from dask import delayed, compute
 from dask.distributed import Client, LocalCluster, progress
 
-
 def get_channel_wavelength(obs_wavelengths, channel):
     wavelength = list(obs_wavelengths[channel] * 1e-3)
     wavelength.append((wavelength[0] + wavelength[1]) / 2.0)
@@ -832,7 +831,6 @@ class Interferometer(QObject):
         v = [res[5] for res in results_per_channel]
         beam = [res[6] for res in results_per_channel]
         totsampling = [res[7] for res in results_per_channel]
-
         # Stack the results into 3D arrays
         modelCube = np.stack(modelcube, axis=0)
         modelVis = np.stack(modelvis, axis=0)
