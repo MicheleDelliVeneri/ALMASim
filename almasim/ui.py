@@ -3489,8 +3489,8 @@ class ALMASimulator(QMainWindow):
         shift_y = np.random.randint(
             0.1 * fov.value / cell_size.value, 1.5 * (fov.value / cell_size.value) - pos_y
         )
-        pos_x = pos_x + shift_x * random.choice([-1, 1])
-        pos_y = pos_y + shift_y * random.choice([-1, 1])
+        pos_x = pos_x + (shift_x/2) * random.choice([-1, 1])
+        pos_y = pos_y + (shift_y/2) * random.choice([-1, 1])
         pos_x = min(pos_x, n_pix - 1)
         pos_y = min(pos_y, n_pix - 1)
         pos_z = [int(index) for index in source_channel_index]
