@@ -310,14 +310,9 @@ class DownloadGalaxyZoo(QRunnable):
                     print(f"Error during dataset download: {e}")
                 finally:
                     locale.setlocale(locale.LC_ALL, saved)
-                    expected_files_folder = os.path.join(galaxy_zoo_path, 'images_gz2', 'images')  # Replace with an actual filename
-                    while not os.path.exists(expected_files_folder):
-                        time.sleep(5)
-                    if os.path.exists(expected_files_folder):
-                        print('folder created')
-                        while len(os.listdir(expected_files_folder)) < 10:
-                            time.sleep(5)
-                        self.signals.downloadFinished.emit(galaxy_zoo_path)
+                    self.signals.downloadFinished.emit(galaxy_zoo_path)
+        except Exception as e:
+            logging.error(f"Error in Downlaod: {e}")
             #else:
             #    if self.alma_simulator.remote_key_pass_entry.text() != "":
             #        sftp = pysftp.Connection(
@@ -397,9 +392,6 @@ class DownloadGalaxyZoo(QRunnable):
             #            stdin, stdout, stderr = paramiko_client.exec_command(commands)
             #        self.signals.queryFinished.emit(galaxy_zoo_path)
 
-        except Exception as e:
-            logging.error(f"Error in Downlaod: {e}")
-
 
 class DownloadHubble(QRunnable):
     def __init__(self, alma_simulator_instance, remote):
@@ -418,12 +410,19 @@ class DownloadHubble(QRunnable):
             if not os.path.exists(hubble_path):
                 os.makedirs(hubble_path)
             api.authernticate()
-            api.dataset_download_files(
-                "redwankarimsony/top-100-hubble-telescope-images",
-                path=hubble_path,
-                unzip=True,
-            )
-            self.signals.downloadFinished.emit(hubble_path)
+            saved = locale.setlocale(locale.LC_ALL)
+            locale.setlocale(locale.LC_ALL, 'C')
+            try:
+                api.dataset_download_files(
+                    "redwankarimsony/top-100-hubble-telescope-images",
+                    path=hubble_path,
+                    unzip=True,
+                )
+            except Exception as e:
+                    print(f"Error during dataset download: {e}")
+            finally:
+                locale.setlocale(locale.LC_ALL, saved)
+                self.signals.downloadFinished.emit(hubble_path)
             #else:
                 #if self.alma_simulator.remote_key_pass_entry.text() != "":
                 #    sftp = pysftp.Connection(
@@ -503,7 +502,7 @@ class DownloadHubble(QRunnable):
                 #        stdin, stdout, stderr = paramiko_client.exec_command(commands)
                 #        self.signals.downloadFinished.emit(hubble_path)
         except Exception as e:
-            logging.error(f"Error in Query: {e}")
+            logging.error(f"Download Error: {e}")
 
 
 class DownloadTNGStructure(QRunnable):
@@ -2260,26 +2259,31 @@ class ALMASimulator(QMainWindow):
             if self.galaxy_zoo_entry.text() and not os.path.exists(
                 os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
             ):
-                try:
-                    self.terminal.add_log("Downloading Galaxy Zoo")
-                    runnable = DownloadGalaxyZoo(self, remote=False)
-                    runnable.signals.downloadFinished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
-                except Exception as e:
-                    self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
-                    return
+                if self.galaxy_zoo_checkbox.isChecked():
+                    try:
+                        self.terminal.add_log("Downloading Galaxy Zoo")
+                        runnable = DownloadGalaxyZoo(self, remote=False)
+                        runnable.signals.downloadFinished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                        self.thread_pool.waitForDone()
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+                        return
         elif self.model_combo.currentText() == "Hubble 100":
             if self.hubble_entry.text() and not os.path.exists(
                 os.path.join(self.hubble_entry.text(), "top100")
             ):
-                try:
-                    self.terminal.add_log("Downloading Hubble 100")
-                    runnable = DownloadHubble(self, remote=False)
-                    runnable.finished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
-                except Exception as e:
-                    self.terminal.add_log(f"Error downloading Hubble 100: {e}")
-                    return
+                if self.hubble_checkbox.isChecked():
+                    try:
+                        self.terminal.add_log("Downloading Hubble 100")
+                        runnable = DownloadHubble(self, remote=False)
+                        runnable.signals.downloadFinished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                        self.thead_pool.waitForDone()
+
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+                        return
         if self.local_mode_combo.currentText() == "remote":
             self.create_remote_environment()
         
@@ -3829,10 +3833,9 @@ class ALMASimulator(QMainWindow):
                             ):
                                 self.terminal.add_log("Downloading Galaxy Zoo")
                                 runnable = DownloadGalaxyZoo(self, remote=False)
-                                runnable.finished.connect(
-                                    self.on_download_finished
-                                )  # Connect signal
+                                runnable.signals.downloadFinished.connect(self.on_download_finished)
                                 self.thread_pool.start(runnable)
+                                self.thread_pool.waitForDone()
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
@@ -3870,8 +3873,9 @@ class ALMASimulator(QMainWindow):
                         ):
                             # pool = QThreadPool.globalInstance()
                             runnable = DownloadHubble(self, remote=False)
-                            runnable.finished.connect(self.on_download_finished)
+                            runnable.signals.downloadFinished.connect(self.on_download_finished)
                             self.thread_pool.start(runnable)
+                            self.thread_pool.waitForDone()
 
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Hubble 100: {e}")
