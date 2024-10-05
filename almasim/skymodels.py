@@ -444,11 +444,12 @@ def insert_molecolar_cloud(
     n_pix,
     n_chan,
 ):
-    im = molecular_cloud(n_pix)
+    im = molecolar_cloud(n_pix)
     im - np.min(im)
     im *= 1 / np.max(im)
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
+    skymodel = []
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
@@ -482,6 +483,9 @@ def insert_hubble(
     n_chan,
     data_path,
 ):
+    files = np.array(
+        [file for file in os.listdir(data_path) if not file.startswith(".")]
+    )
     imfile = os.path.join(data_path, np.random.choice(files))
     img = io.imread(imfile).astype(np.float32)
     dims = np.shape(img)
@@ -489,10 +493,11 @@ def insert_hubble(
     avimg = np.average(img[:, :, :d3], axis=2)
     avimg -= np.min(avimg)
     avimg *= 1 / np.max(avimg)
-    avimg = interpolate_array(avimg, n_px)
+    avimg = interpolate_array(avimg, n_pix)
     avimg /= np.sum(avimg)
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
+    skymodel = []
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
