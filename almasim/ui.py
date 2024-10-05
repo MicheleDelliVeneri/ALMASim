@@ -409,7 +409,7 @@ class DownloadHubble(QRunnable):
                 hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
             if not os.path.exists(hubble_path):
                 os.makedirs(hubble_path)
-            api.authernticate()
+            api.authenticate()
             saved = locale.setlocale(locale.LC_ALL)
             locale.setlocale(locale.LC_ALL, 'C')
             try:
@@ -419,7 +419,7 @@ class DownloadHubble(QRunnable):
                     unzip=True,
                 )
             except Exception as e:
-                    print(f"Error during dataset download: {e}")
+                print(f"Error during dataset download: {e}")
             finally:
                 locale.setlocale(locale.LC_ALL, saved)
                 self.signals.downloadFinished.emit(hubble_path)
