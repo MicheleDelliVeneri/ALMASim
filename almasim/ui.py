@@ -409,13 +409,16 @@ class DownloadHubble(QRunnable):
                 hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
             if not os.path.exists(hubble_path):
                 os.makedirs(hubble_path)
+            download_path = os.path.join(hubble_path, "top100")
+            if not os.path.exists(download_path):
+                os.makedirs(download_path)
             api.authenticate()
             saved = locale.setlocale(locale.LC_ALL)
             locale.setlocale(locale.LC_ALL, 'C')
             try:
                 api.dataset_download_files(
                     "redwankarimsony/top-100-hubble-telescope-images",
-                    path=hubble_path,
+                    path=download_path,
                     unzip=True,
                 )
             except Exception as e:
