@@ -2415,7 +2415,7 @@ class ALMASimulator(QMainWindow):
 
             else:
                 runnable = DownloadTNGStructure(self, remote=True)
-            runnable.finished.connect(self.on_download_finished)
+            runnable.signals.downloadFinished.connect(self.on_download_finished)
             self.thread_pool.start(runnable)
 
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
@@ -3586,7 +3586,6 @@ class ALMASimulator(QMainWindow):
                 ra,
                 dec,
                 tng_api_key,
-                ncpu,
             )
         elif source_type == "diffuse":
             datacube = usm.insert_diffuse(
