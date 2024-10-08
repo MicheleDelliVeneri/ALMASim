@@ -397,7 +397,7 @@ class DownloadHubble(QRunnable):
     def __init__(self, alma_simulator_instance, remote):
         super().__init__()
         self.alma_simulator = alma_simulator_instance
-        self.signals = SignalEmitter()
+        self.signals = SignalEmitter()  
         self.remote = remote
 
     @pyqtSlot()
@@ -2090,7 +2090,7 @@ class ALMASimulator(QMainWindow):
 
     def execute_query(self):
         self.terminal.add_log("Executing query...")
-        self.progress_bar_entr
+        self.progress_bar_entry.setText("Executing query...")
         if self.metadata_mode_combo.currentText() == "query":
             query_type = self.query_type_combo.currentText()
             if query_type == "science":
