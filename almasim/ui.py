@@ -78,7 +78,7 @@ import sys
 import webbrowser
 import traceback
 import random
-
+import locale
 
 def closest_power_of_2(x):
     op = math.floor if bin(x)[3] != "1" else math.ceil
@@ -297,11 +297,22 @@ class DownloadGalaxyZoo(QRunnable):
                     )
                 if not os.path.exists(galaxy_zoo_path):
                     os.makedirs(galaxy_zoo_path)
-                api.authernticate()
-                api.dataset_download_files(
-                    "zooniverse/galaxy-zoo", path=galaxy_zoo_path, unzip=True
+                api.authenticate()
+                saved = locale.setlocale(locale.LC_ALL)
+                locale.setlocale(locale.LC_ALL, 'C')
+
+                try:
+                    api.dataset_download_files(
+                    "jaimetrickz/galaxy-zoo-2-images", path=galaxy_zoo_path, unzip=True
                 )
-                self.signals.queryFinished.emit(galaxy_zoo_path)
+
+                except Exception as e:
+                    print(f"Error during dataset download: {e}")
+                finally:
+                    locale.setlocale(locale.LC_ALL, saved)
+                    self.signals.downloadFinished.emit(galaxy_zoo_path)
+        except Exception as e:
+            logging.error(f"Error in Downlaod: {e}")
             #else:
             #    if self.alma_simulator.remote_key_pass_entry.text() != "":
             #        sftp = pysftp.Connection(
@@ -381,9 +392,6 @@ class DownloadGalaxyZoo(QRunnable):
             #            stdin, stdout, stderr = paramiko_client.exec_command(commands)
             #        self.signals.queryFinished.emit(galaxy_zoo_path)
 
-        except Exception as e:
-            logging.error(f"Error in Query: {e}")
-
 
 class DownloadHubble(QRunnable):
     def __init__(self, alma_simulator_instance, remote):
@@ -401,13 +409,23 @@ class DownloadHubble(QRunnable):
                 hubble_path = os.path.join(self.alma_simulator.main_path, "hubble")
             if not os.path.exists(hubble_path):
                 os.makedirs(hubble_path)
-            api.authernticate()
-            api.dataset_download_files(
-                "redwankarimsony/top-100-hubble-telescope-images",
-                path=hubble_path,
-                unzip=True,
-            )
-            self.signals.downloadFinished.emit(hubble_path)
+            download_path = os.path.join(hubble_path, "top100")
+            if not os.path.exists(download_path):
+                os.makedirs(download_path)
+            api.authenticate()
+            saved = locale.setlocale(locale.LC_ALL)
+            locale.setlocale(locale.LC_ALL, 'C')
+            try:
+                api.dataset_download_files(
+                    "redwankarimsony/top-100-hubble-telescope-images",
+                    path=download_path,
+                    unzip=True,
+                )
+            except Exception as e:
+                print(f"Error during dataset download: {e}")
+            finally:
+                locale.setlocale(locale.LC_ALL, saved)
+                self.signals.downloadFinished.emit(hubble_path)
             #else:
                 #if self.alma_simulator.remote_key_pass_entry.text() != "":
                 #    sftp = pysftp.Connection(
@@ -487,7 +505,7 @@ class DownloadHubble(QRunnable):
                 #        stdin, stdout, stderr = paramiko_client.exec_command(commands)
                 #        self.signals.downloadFinished.emit(hubble_path)
         except Exception as e:
-            logging.error(f"Error in Query: {e}")
+            logging.error(f"Download Error: {e}")
 
 
 class DownloadTNGStructure(QRunnable):
@@ -790,35 +808,35 @@ class ALMASimulator(QMainWindow):
 
     def browse_output_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
-        if (
-            self.local_mode_combo.currentText() == "remote"
-            and self.remote_address_entry.text() != ""
-            and self.remote_key_entry.text() != ""
-            and self.remote_user_entry != ""
-        ):
-            if directory:
-                remote_dir = self.map_to_remote_directory(directory)
-                if self.remote_key_pass_entry.text() != "":
-                    with pysftp.Connection(
-                        self.remote_address_entry.text(),
-                        username=self.remote_user_entry.text(),
-                        private_key=self.remote_key_entry.text(),
-                        private_key_pass=self.remote_key_pass_entry.text(),
-                    ) as sftp:
-                        if not sftp.exists(remote_dir):
-                            sftp.mkdir(remote_dir)
-                else:
-                    with pysftp.Connection(
-                        self.remote_address_entry.text(),
-                        username=self.remote_user_entry.text(),
-                        private_key=self.remote_key_entry.text(),
-                    ) as sftp:
-                        if not sftp.exists(remote_dir):
-                            sftp.mkdir(remote_dir)
-                self.output_entry.setText(remote_dir)
-        else:
-            if directory:
-                self.output_entry.setText(directory)
+        #if (
+        #    self.local_mode_combo.currentText() == "remote"
+        #    and self.remote_address_entry.text() != ""
+        #    and self.remote_key_entry.text() != ""
+        #    and self.remote_user_entry != ""
+        #):
+        #    if directory:
+        #        remote_dir = self.map_to_remote_directory(directory)
+        #        if self.remote_key_pass_entry.text() != "":
+        #            with pysftp.Connection(
+        #                self.remote_address_entry.text(),
+        #                username=self.remote_user_entry.text(),
+        #                private_key=self.remote_key_entry.text(),
+        #                private_key_pass=self.remote_key_pass_entry.text(),
+        ##            ) as sftp:
+        #                if not sftp.exists(remote_dir):
+        #                    sftp.mkdir(remote_dir)
+        #        else:
+        #            with pysftp.Connection(
+        #                self.remote_address_entry.text(),
+        #                username=self.remote_user_entry.text(),
+        #                private_key=self.remote_key_entry.text(),
+        #            ) as sftp:
+        #                if not sftp.exists(remote_dir):
+        #                    sftp.mkdir(remote_dir)
+        #        self.output_entry.setText(remote_dir)
+        #else:
+        if directory:
+            self.output_entry.setText(directory)
 
     def browse_tng_directory(self):
         directory = QFileDialog.getExistingDirectory(self, "Select TNG Directory")
@@ -1956,21 +1974,21 @@ class ALMASimulator(QMainWindow):
             self.remote_mode_label.show()
             self.remote_mode_combo.show()
             self.remote_folder_checkbox.show()
-            if self.output_entry.text() != "" and self.remote_user_entry.text() != "":
-                self.output_entry.setText(
-                    self.map_to_remote_directory(self.output_entry.text())
-                )
-            if self.tng_entry.text() != "" and self.remote_user_entry.text() != "":
-                self.tng_entry.setText(
-                    self.map_to_remote_directory(self.tng_entry.text())
-                )
-            if (
-                self.galaxy_zoo_entry.text() != ""
-                and self.remote_user_entry.text() != ""
-            ):
-                self.galaxy_zoo_entry.setText(
-                    self.map_to_remote_directory(self.galaxy_zoo_entry.text())
-                )
+            #if self.output_entry.text() != "" and self.remote_user_entry.text() != "":
+            #    self.output_entry.setText(
+            #        self.map_to_remote_directory(self.output_entry.text())
+            #    )
+            #if self.tng_entry.text() != "" and self.remote_user_entry.text() != "":
+            #    self.tng_entry.setText(
+            #        self.map_to_remote_directory(self.tng_entry.text())
+            #    )
+            #if (
+            #    self.galaxy_zoo_entry.text() != ""
+            #    and self.remote_user_entry.text() != ""
+            #):
+            #    self.galaxy_zoo_entry.setText(
+            #        self.map_to_remote_directory(self.galaxy_zoo_entry.text())
+            #    )
         else:
             self.show_hide_widgets(self.remote_address_row, show=False)
             self.show_hide_widgets(self.remote_info_row, show=False)
@@ -2244,26 +2262,34 @@ class ALMASimulator(QMainWindow):
             if self.galaxy_zoo_entry.text() and not os.path.exists(
                 os.path.join(self.galaxy_zoo_entry.text(), "images_gz2")
             ):
-                try:
-                    self.terminal.add_log("Downloading Galaxy Zoo")
-                    runnable = DownloadGalaxyZoo(self, remote=False)
-                    runnable.finished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
-                except Exception as e:
-                    self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
-                    return
+                if self.galaxy_zoo_checkbox.isChecked():
+                    try:
+                        self.terminal.add_log("Downloading Galaxy Zoo")
+                        runnable = DownloadGalaxyZoo(self, remote=False)
+                        runnable.signals.downloadFinished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                        self.thread_pool.waitForDone()
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Galaxy Zoo: {e}")
+                        return
         elif self.model_combo.currentText() == "Hubble 100":
             if self.hubble_entry.text() and not os.path.exists(
                 os.path.join(self.hubble_entry.text(), "top100")
             ):
-                try:
-                    self.terminal.add_log("Downloading Hubble 100")
-                    runnable = DownloadHubble(self, remote=False)
-                    runnable.finished.connect(self.on_download_finished)
-                    self.thread_pool.start(runnable)
-                except Exception as e:
-                    self.terminal.add_log(f"Error downloading Hubble 100: {e}")
-                    return
+                if self.hubble_checkbox.isChecked():
+                    try:
+                        self.terminal.add_log("Downloading Hubble 100")
+                        runnable = DownloadHubble(self, remote=False)
+                        runnable.signals.downloadFinished.connect(self.on_download_finished)
+                        self.thread_pool.start(runnable)
+                        self.thead_pool.waitForDone()
+
+                    except Exception as e:
+                        self.terminal.add_log(f"Error downloading Hubble 100: {e}")
+                        return
+        if self.local_mode_combo.currentText() == "remote":
+            self.create_remote_environment()
+        
         #else:
         #    try:
         #        self.create_remote_environment()
@@ -2389,7 +2415,7 @@ class ALMASimulator(QMainWindow):
 
             else:
                 runnable = DownloadTNGStructure(self, remote=True)
-            runnable.finished.connect(self.on_download_finished)
+            runnable.signals.downloadFinished.connect(self.on_download_finished)
             self.thread_pool.start(runnable)
 
             tng_apis = np.array([self.tng_api_key_entry.text()] * n_sims)
@@ -2549,19 +2575,36 @@ class ALMASimulator(QMainWindow):
         print(f"Remote host entry: '{remote_host}'")
         print(f"Remote user entry: '{remote_user}'")
         print(f"Remote hosts: {remote_hosts}")
-
+        print(f"SSH key path: '{ssh_key_path}'")
+        print(f"SSH key password: '{ssh_key_password}'")
+        print(f'Remote python venv: {self.remote_venv_dir}')
         # Create the SSHCluster
         try:
             slurm_config = self.remote_config_entry.text().strip()
             with open(slurm_config, "r") as f:
                 config = json.load(f)
-            cluster = SLURMCluster(
+            # Create the SSHCluster
+            cluster = SSHCluster(
+            hosts=remote_hosts,
+            connect_options={
+                "username": remote_user,
+                "client_keys": ssh_key_path,
+                "passphrase": ssh_key_password
+            },
+            remote_python=os.path.join(self.remote_venv_dir, 'bin', 'python'),
+            worker_class='dask_jobqueue.SLURMCluster',
+            worker_options=dict(
                 queue=config["queue"],
                 account=config["account"],
                 cores=config["cores"],
                 memory=config["memory"],
-                job_extra_directives=config["job_extra"])
-            cluster.scale(jobs=self.ncpu_entry.text())
+                job_extra_directives=config["job_extra"],
+                walltime=config.get("walltime", "01:00:00"),
+                python=os.path.join('/home/delliven/almasim_env', 'bin', 'python'),  # Use remote virtual environment
+                processes=1  # Optional, can be adjusted
+            )
+        )
+            cluster.scale(int(self.ncpu_entry.text()))
             # Connect the Dask client to the cluster
             client = Client(cluster, timeout=60, heartbeat_interval='5s')
             self.client = client
@@ -3545,7 +3588,6 @@ class ALMASimulator(QMainWindow):
                 ra,
                 dec,
                 tng_api_key,
-                ncpu,
             )
         elif source_type == "diffuse":
             datacube = usm.insert_diffuse(
@@ -3795,10 +3837,9 @@ class ALMASimulator(QMainWindow):
                             ):
                                 self.terminal.add_log("Downloading Galaxy Zoo")
                                 runnable = DownloadGalaxyZoo(self, remote=False)
-                                runnable.finished.connect(
-                                    self.on_download_finished
-                                )  # Connect signal
+                                runnable.signals.downloadFinished.connect(self.on_download_finished)
                                 self.thread_pool.start(runnable)
+                                self.thread_pool.waitForDone()
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Galaxy Zoo: {e}")
 
@@ -3836,8 +3877,9 @@ class ALMASimulator(QMainWindow):
                         ):
                             # pool = QThreadPool.globalInstance()
                             runnable = DownloadHubble(self, remote=False)
-                            runnable.finished.connect(self.on_download_finished)
+                            runnable.signals.downloadFinished.connect(self.on_download_finished)
                             self.thread_pool.start(runnable)
+                            self.thread_pool.waitForDone()
 
                 except Exception as e:
                     self.terminal.add_log(f"Cannot dowload Hubble 100: {e}")
@@ -4002,7 +4044,9 @@ class ALMASimulator(QMainWindow):
         self.settings.setValue("output_directory", self.output_entry.text())
         self.settings.setValue("tng_directory", self.tng_entry.text())
         self.settings.setValue("galaxy_zoo_directory", self.galaxy_zoo_entry.text())
+        self.settings.setValue("get_galaxy_zoo", self.galaxy_zoo_checkbox.isChecked())
         self.settings.setValue("hubble_directory", self.hubble_entry.text())
+        self.settings.setValue("get_hubble", self.hubble_checkbox.isChecked())
         self.settings.setValue("n_sims", self.n_sims_entry.text())
         self.settings.setValue("ncpu", self.ncpu_entry.text())
         self.settings.setValue("project_name", self.project_name_entry.text())

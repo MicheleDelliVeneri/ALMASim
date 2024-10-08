@@ -281,7 +281,7 @@ def insert_diffuse(
     return datacube
 
 
-# ----------------------- MOLECOLAR SIMULATIONS --------------------------------
+# ----------------------- molecular SIMULATIONS --------------------------------
 
 
 def make_extended(
@@ -414,7 +414,7 @@ def make_extended(
     return newmap
 
 
-def molecolar_cloud(n_px):
+def molecular_cloud(n_px):
     powerlaw = random.random() * 3.0 + 1.5
     ellip = random.random() * 0.5 + 0.5
     theta = random.random() * 2 * 3.1415927
@@ -429,11 +429,11 @@ def molecolar_cloud(n_px):
 
 
 @delayed
-def molecolar_image(molecolar_cld, amp):
-    return molecolar_cld * amp
+def molecular_image(molecular_cld, amp):
+    return molecular_cld * amp
 
 
-def insert_molecolar_cloud(
+def insert_molecular_cloud(
     client,
     update_progress,
     datacube,
@@ -449,10 +449,11 @@ def insert_molecolar_cloud(
     im *= 1 / np.max(im)
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
+    skymodel = []
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
-        delayed_result = molecolar_image(im, gs[z] + continum[z])
+        delayed_result = molecular_image(im, gs[z] + continum[z])
         skymodel.append(delayed_result)
     delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
     futures = client.compute([delayed_skymodel])
@@ -482,6 +483,9 @@ def insert_hubble(
     n_chan,
     data_path,
 ):
+    files = np.array(
+        [file for file in os.listdir(data_path) if not file.startswith(".")]
+    )
     imfile = os.path.join(data_path, np.random.choice(files))
     img = io.imread(imfile).astype(np.float32)
     dims = np.shape(img)
@@ -489,10 +493,11 @@ def insert_hubble(
     avimg = np.average(img[:, :, :d3], axis=2)
     avimg -= np.min(avimg)
     avimg *= 1 / np.max(avimg)
-    avimg = interpolate_array(avimg, n_px)
+    avimg = interpolate_array(avimg, n_pix)
     avimg /= np.sum(avimg)
     z_idxs = np.arange(0, n_chan)
     gs = np.zeros(n_chan)
+    skymodel = []
     for i in range(len(line_fluxes)):
         gs += gaussian(z_idxs, line_fluxes[i], pos_z[i], fwhm_z[i])
     for z in range(0, n_chan):
@@ -521,11 +526,10 @@ def insert_pixel(self, datacube_array, insertion_slice, insertion_data):
 @delayed
 def evaluate_pixel_spectrum(
     ranks_and_ij_pxs,
-    datacube_array,
     pixcoords,
     kernel_sm_ranges,
     kernel_px_weights,
-    datacube_strokes_axis,
+    datacube_stokes_axis,
     spectral_model_spectra,
 ):
     """
@@ -545,7 +549,7 @@ def evaluate_pixel_spectrum(
         result.append(
             (
                 insertion_slice,
-                (self.spectral_model_spectra[mask] * weights[..., np.newaxis]).sum(
+                (spectral_model_spectra[mask] * weights[..., np.newaxis]).sum(
                     axis=-2
                 ),
             )
@@ -562,7 +566,6 @@ class MartiniMod(Martini):
         terminal=None,
     ):
         assert self.spectral_model.spectra is not None
-
         self.sph_kernel._confirm_validation(noraise=True, quiet=True)
 
         # Scatter the datacube array across the workers
@@ -582,9 +585,8 @@ class MartiniMod(Martini):
             # Directly call the delayed method (no need for explicit dask.delayed)
             delayed_result = evaluate_pixel_spectrum(
                 (icpu, [ij_pxs[icpu]]),
-                scattered_array,
-                self.source.pixels_coords,
-                self.sph_kernel._sm_ranges,
+                self.source.pixcoords,
+                self.sph_kernel.sm_ranges,
                 self.sph_kernel._px_weight,
                 self._datacube.stokes_axis,
                 self.spectral_model.spectra,
@@ -592,7 +594,7 @@ class MartiniMod(Martini):
             delayed_results.append(delayed_result)
 
         # Compute all the delayed tasks in parallel
-        futures = dask.compute(*delayed_results)
+        futures = client.compute(delayed_results)
         track_progress(update_progress, futures)
         # Process the results and insert into the scattered datacube array
         for result in futures:
@@ -708,6 +710,7 @@ def insert_tng(
 def insert_extended(
     client,
     update_progress,
+    terminal,
     datacube,
     tngpath,
     snapshot,
