@@ -665,7 +665,7 @@ class ALMASimulator(QMainWindow):
         self.thread_pool = QThreadPool.globalInstance()
         self.main_path = Path(inspect.getfile(inspect.currentframe())).resolve().parent
         path = os.path.dirname(self.main_path)
-        icon_path = os.path.join(path, "pictures", "almasim-icon.png")
+        icon_path = os.path.join(path, "pictures", "almasim-icon.jpeg")
         icon = QIcon(icon_path)
         self.setWindowIcon(icon)
 
@@ -4020,7 +4020,7 @@ class ALMASimulator(QMainWindow):
             return
         if self.tray_icon is None:
             path = os.path.dirname(self.main_path)
-            icon_path = os.path.join(path, "pictures", "almasim-icon.png")
+            icon_path = os.path.join(path, "pictures", "almasim-icon.jpeg")
             icon = QIcon(icon_path)
             self.tray_icon = QSystemTrayIcon(icon, self)
             menu = QMenu()
