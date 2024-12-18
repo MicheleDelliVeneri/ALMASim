@@ -4,10 +4,10 @@ profile:
   name: qodana.recommended
 
 bootstrap: |
+  rm -rf .idea
   pip install --upgrade pip
   pip install -r requirements.txt
-  rm -rf .idea
-
+  
 include:
   - name: CheckDependencyLicenses
   - name: PyCoverageInspection
