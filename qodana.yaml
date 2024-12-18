@@ -4,12 +4,17 @@ profile:
   name: qodana.recommended
 
 bootstrap: |
-  pyenv install 3.12.8
+  curl https://pyenv.run | bash
+  export PATH="/root/.pyenv/bin:$PATH"
+  eval "$(pyenv init --path)"
+  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)" 
+  pyenv install 3.12.8 -s
   pyenv global 3.12.8
   python3 -m venv /data/cache/venv
   rm -rf .idea
   source /data/cache/venv/bin/activate
-  pip3 install -r /data/project/requirements.txt'
+  pip3 install -r /data/project/requirements.txt
   
 include:
   - name: CheckDependencyLicenses
