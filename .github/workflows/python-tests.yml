@@ -1,16 +1,10 @@
 name: Python Tests with Coverage
 
 on:
-  push:
-    branches:
-      - development
-    paths:
-      - "**.py"
-      - "!old-version/**"
   pull_request:
-    branches:
+  push:
+    branches: # Specify your branches here
       - development
-
 jobs:
   test:
     runs-on: ubuntu-latest
