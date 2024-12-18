@@ -7,10 +7,14 @@ on:
       - development  # Include the development branch
     paths:
       - '**.py'
+      - '!old-version/**'  # Exclude all files in the old-version folder
   pull_request:
     branches:
       - main
       - development  # Include the development branch
+    paths:
+      - '**.py'
+      - '!old-version/**'  # Exclude all files in the old-version folder
 
 jobs:
   test:
