@@ -11,11 +11,14 @@ from app.alma_utils import (
     query_by_science,
     query_alma,
     fetch_science_types,
-    validate_science_filters, compute_distance,
+    validate_science_filters,
+    compute_distance,
+    TAP_URLS
 )
 from astropy import units as u
 from pyvo.dal import DALServiceError
 from tenacity import RetryError
+from pyvo.dal import TAPService
 import pandas as pd
 import os
 import numpy as np
@@ -31,6 +34,26 @@ class TestAlmaUtils(unittest.TestCase):
             mock_tap.side_effect = Exception("Service Error")
             with self.assertRaises(Exception):
                 get_tap_service()
+
+    @patch("app.alma_utils.TAPService")
+    @patch("app.alma_utils.logger")
+    def test_tap_service_query_failed(self, mock_logger, mock_tap_service):
+        """Test exception when TAP service query fails for a URL."""
+        # Mock TAPService to simulate query failure for the first URL
+        mock_service = Mock()
+        mock_service.search.side_effect = [Exception("Query failed"), Mock()]
+        mock_tap_service.side_effect = [mock_service, mock_service]
+
+        result = get_tap_service()
+
+        # Ensure the TAPService was called for both URLs
+        self.assertEqual(mock_tap_service.call_count, 2)
+        self.assertIsNotNone(result)
+
+        # Verify the logger was called with the appropriate error message
+        mock_logger.error.assert_any_call(
+            "TAP service query failed for https://almascience.eso.org/tap: Query failed"
+        )
 
     @patch("app.alma_utils.TAPService")
     def test_query_alma_success(self, mock_tap_service):
