@@ -4,8 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e3c9fa36-62f5-459b-9261-04d0dbd50b87" name="Changes" comment="testL added get_tap_service_query_failed tests">
-      <change beforePath="$PROJECT_DIR$/tests/test_alma_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_alma_utils.py" afterDir="false" />
+    <list default="true" id="e3c9fa36-62f5-459b-9261-04d0dbd50b87" name="Changes" comment="testL added generate_query_for_science tests">
+      <change beforePath="$PROJECT_DIR$/tests/test_main.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -68,7 +68,15 @@
       <option name="project" value="LOCAL" />
       <updated>1734549193776</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="testL added generate_query_for_science tests">
+      <option name="closed" value="true" />
+      <created>1734549435639</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1734549435639</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -79,6 +87,7 @@
     <MESSAGE value="added back tests" />
     <MESSAGE value="testL added query_alma tests" />
     <MESSAGE value="testL added get_tap_service_query_failed tests" />
-    <option name="LAST_COMMIT_MESSAGE" value="testL added get_tap_service_query_failed tests" />
+    <MESSAGE value="testL added generate_query_for_science tests" />
+    <option name="LAST_COMMIT_MESSAGE" value="testL added generate_query_for_science tests" />
   </component>
 </project>
