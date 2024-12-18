@@ -1,184 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="AnalysisUIOptions">
-    <option name="ANALYZE_INJECTED_CODE" value="false" />
-  </component>
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e286eaf-d74e-4e06-8119-0f7693964f51" name="Changes" comment="fix: updated coverage command">
-      <change beforePath="$PROJECT_DIR$/.github/workflows/python-tests.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/python-tests.yml" afterDir="false" />
+    <list default="true" id="484f7300-20bc-4e53-a23c-5c16866db59b" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/project.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/project.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
-  </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "MicheleDelliVeneri"
-  }
-}]]></component>
-  <component name="GithubProjectSettings">
-    <option name="branchProtectionPatterns">
-      <list>
-        <option value="main" />
-      </list>
-    </option>
-  </component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/MicheleDelliVeneri/ALMASim.git",
-    "accountId": "2bea13c2-e5ec-48e6-affe-d445f7b31b60"
-  }
-}]]></component>
-  <component name="ProblemsViewState">
-    <option name="selectedTabId" value="CurrentFile" />
-  </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 8
-}]]></component>
-  <component name="ProjectId" id="2qOEMQu3hfHFIiLb7XgbEtCnHUJ" />
-  <component name="ProjectLevelVcsManager">
-    <ConfirmationsSetting value="2" id="Add" />
-  </component>
+  <component name="ProjectId" id="2qORKMqyIs1vn1dt7Bi3X3ssvUN" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "development",
-    "run.code.analysis.last.selected.profile": "aDefault",
-    "settings.editor.selected.configurable": "settings.qodana"
+    "node.js.detected.package.eslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
-  <component name="QodanaCIConfigService">
-    <option name="ciType" value="GITHUB" />
-    <option name="path" value="$PROJECT_DIR$/.github/workflows/qodana_code_quality.yml" />
-  </component>
-  <component name="QodanaCloudProjectLink">
-    <option name="lastReportId" value="YPWOv" />
-    <option name="linkedProjectId" value="pnB19" />
-    <option name="linkedProjectName" value="ALMASim" />
-    <option name="organizationId" value="3oklJ" />
-    <option name="userId" value="Q6Wk9" />
-  </component>
-  <component name="QodanaHighlightedReportService">
-    <option name="cloudReportPersistedInfo">
-      <CloudReportPersistedInfo>
-        <option name="projectId" value="pnB19" />
-        <option name="reportId" value="YPWOv" />
-      </CloudReportPersistedInfo>
-    </option>
-  </component>
-  <component name="QodanaIsSelectedPersistenceService">
-    <option name="selectedOrLoading" value="true" />
-  </component>
-  <component name="QodanaReportsService">
-    <option name="descriptions">
-      <ReportDescription localRun="true" path="/private/var/folders/66/76q50s015tq8wc5qz1pvg7y40000gn/T/qodana_output/qodana.sarif.json" publishedReportLink="https://qodana.cloud/projects/pnB19/reports/bZGrY" reportGuid="e56d81db-0a7e-4c6e-8dbf-8388654eb978" reportId="ALMASim/qodana/2024-12-18" />
-    </option>
-  </component>
-  <component name="QodanaSettings">
-    <option name="autoLoadCloudReport" value="true" />
-  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-1b1018131e27-aa17d162503b-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-243.22562.180" />
+        <option value="bundled-js-predefined-d6986cc7102b-41abf3b868a6-JavaScript-QDPY-243.23413" />
+        <option value="bundled-python-sdk-265936f46965-ae1375a7cb55-com.jetbrains.pycharm.pro.sharedIndexes.bundled-QDPY-243.23413" />
       </set>
     </attachedChunks>
   </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
-  <component name="TaskManager">
-    <task active="true" id="Default" summary="Default task">
-      <changelist id="8e286eaf-d74e-4e06-8119-0f7693964f51" name="Changes" comment="" />
-      <created>1734525173205</created>
-      <option name="number" value="Default" />
-      <option name="presentableId" value="Default" />
-      <updated>1734525173205</updated>
-    </task>
-    <task id="LOCAL-00001" summary="fix: updated code requirements">
-      <option name="closed" value="true" />
-      <created>1734525604640</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1734525604640</updated>
-    </task>
-    <task id="LOCAL-00002" summary="fix: deleted ._frontend.py">
-      <option name="closed" value="true" />
-      <created>1734525675062</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1734525675062</updated>
-    </task>
-    <task id="LOCAL-00003" summary="fix: added codecov token">
-      <option name="closed" value="true" />
-      <created>1734526049344</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1734526049344</updated>
-    </task>
-    <task id="LOCAL-00004" summary="fix: added codecov token">
-      <option name="closed" value="true" />
-      <created>1734530302279</created>
-      <option name="number" value="00004" />
-      <option name="presentableId" value="LOCAL-00004" />
-      <option name="project" value="LOCAL" />
-      <updated>1734530302279</updated>
-    </task>
-    <task id="LOCAL-00005" summary="fix: added codecov token">
-      <option name="closed" value="true" />
-      <created>1734530524625</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1734530524625</updated>
-    </task>
-    <task id="LOCAL-00006" summary="fix: removed codecov.yaml">
-      <option name="closed" value="true" />
-      <created>1734530564755</created>
-      <option name="number" value="00006" />
-      <option name="presentableId" value="LOCAL-00006" />
-      <option name="project" value="LOCAL" />
-      <updated>1734530564755</updated>
-    </task>
-    <task id="LOCAL-00007" summary="fix: updated coverage command">
-      <option name="closed" value="true" />
-      <created>1734530906253</created>
-      <option name="number" value="00007" />
-      <option name="presentableId" value="LOCAL-00007" />
-      <option name="project" value="LOCAL" />
-      <updated>1734530906253</updated>
-    </task>
-    <task id="LOCAL-00008" summary="fix: updated coverage command">
-      <option name="closed" value="true" />
-      <created>1734531453777</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1734531453777</updated>
-    </task>
-    <option name="localTasksCounter" value="9" />
-    <servers />
-  </component>
-  <component name="VcsManagerConfiguration">
-    <MESSAGE value="fix: updated code requirements" />
-    <MESSAGE value="fix: deleted ._frontend.py" />
-    <MESSAGE value="fix: added codecov token" />
-    <MESSAGE value="fix: removed codecov.yaml" />
-    <MESSAGE value="fix: updated coverage command" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix: updated coverage command" />
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
 </project>
