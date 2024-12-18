@@ -34,3 +34,9 @@ jobs:
           flags: unittests # optional
           token: ${{ secrets.CODECOV_TOKEN }}
           verbose: true # optional (default = fals
+
+      - name: Upload tests
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

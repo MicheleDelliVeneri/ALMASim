@@ -7,7 +7,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e286eaf-d74e-4e06-8119-0f7693964f51" name="Changes" comment="fix: updated coverage command" />
+    <list default="true" id="8e286eaf-d74e-4e06-8119-0f7693964f51" name="Changes" comment="fix: updated coverage command">
+      <change beforePath="$PROJECT_DIR$/.github/workflows/python-tests.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/python-tests.yml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -63,7 +65,7 @@
     <option name="path" value="$PROJECT_DIR$/.github/workflows/qodana_code_quality.yml" />
   </component>
   <component name="QodanaCloudProjectLink">
-    <option name="lastReportId" value="8j1r9" />
+    <option name="lastReportId" value="YPWOv" />
     <option name="linkedProjectId" value="pnB19" />
     <option name="linkedProjectName" value="ALMASim" />
     <option name="organizationId" value="3oklJ" />
@@ -73,7 +75,7 @@
     <option name="cloudReportPersistedInfo">
       <CloudReportPersistedInfo>
         <option name="projectId" value="pnB19" />
-        <option name="reportId" value="8j1r9" />
+        <option name="reportId" value="YPWOv" />
       </CloudReportPersistedInfo>
     </option>
   </component>
@@ -160,7 +162,15 @@
       <option name="project" value="LOCAL" />
       <updated>1734530906253</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="fix: updated coverage command">
+      <option name="closed" value="true" />
+      <created>1734531453777</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1734531453777</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
