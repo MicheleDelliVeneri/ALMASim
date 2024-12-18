@@ -2,6 +2,13 @@ version: "1.0"
 linter: jetbrains/qodana-python:2024.3
 profile:
   name: qodana.recommended
+
+bootstrap: |
+  pyenv install 3.12.8
+  pyenv global 3.12.8
+  pip install --upgrade pip
+  pip install -r requirements.txt
+
 include:
   - name: CheckDependencyLicenses
   - name: PyCoverageInspection
