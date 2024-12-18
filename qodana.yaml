@@ -4,12 +4,6 @@ profile:
   name: qodana.recommended
 
 bootstrap: |
-  curl https://pyenv.run | bash
-  pyenv install 3.12.8
-  pyenv global 3.12.8
-  rm -rf .idea
-  python3 -m venv /data/cache/venv
-  source /data/cache/venv/bin/activate
   pip install --upgrade pip
   pip install -r requirements.txt
 
