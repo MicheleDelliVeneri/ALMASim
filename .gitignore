@@ -136,3 +136,6 @@ metadata/test.csv
 
 # MACOS
 .DS_Store
+
+node_modules/
+old-version/
