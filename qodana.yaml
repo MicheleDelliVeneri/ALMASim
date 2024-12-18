@@ -4,9 +4,12 @@ profile:
   name: qodana.recommended
 
 bootstrap: |
+  pyenv install 3.12.8
+  pyenv global 3.12.8
+  python3 -m venv /data/cache/venv
   rm -rf .idea
-  pip install --upgrade pip
-  pip install -r requirements.txt
+  source /data/cache/venv/bin/activate
+  pip3 install -r /data/project/requirements.txt'
   
 include:
   - name: CheckDependencyLicenses
