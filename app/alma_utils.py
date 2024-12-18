@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import os
 import math
-import astropy.units as U
+import astropy.units as u
 from astropy.constants import c
 
 # Configure logging
@@ -228,11 +228,11 @@ def estimate_alma_beam_size(central_frequency_ghz,
         raise ValueError(
             "Central frequency and maximum baseline must be positive.")
 
-    central_frequency = central_frequency_ghz * U.GHz
-    max_baseline = max_baseline_km * U.km
+    central_frequency = central_frequency_ghz * u.GHz
+    max_baseline = max_baseline_km * u.km
 
     theta = (c / central_frequency) / max_baseline
-    beam_size_arcsec = theta.to(U.arcsec)
+    beam_size_arcsec = theta.to(u.arcsec)
     return beam_size_arcsec.value if return_value else beam_size_arcsec
 
 
@@ -241,23 +241,23 @@ def get_fov_from_band(band, antenna_diameter=12, return_value=True):
     Calculate field of view for an ALMA band.
     """
     band_frequencies = {
-        1: 43 * U.GHz,
-        2: 67 * U.GHz,
-        3: 100 * U.GHz,
-        4: 150 * U.GHz,
-        5: 217 * U.GHz,
-        6: 250 * U.GHz,
-        7: 353 * U.GHz,
-        8: 545 * U.GHz,
-        9: 650 * U.GHz,
-        10: 868.5 * U.GHz,
+        1: 43 * u.GHz,
+        2: 67 * u.GHz,
+        3: 100 * u.GHz,
+        4: 150 * u.GHz,
+        5: 217 * u.GHz,
+        6: 250 * u.GHz,
+        7: 353 * u.GHz,
+        8: 545 * u.GHz,
+        9: 650 * u.GHz,
+        10: 868.5 * u.GHz,
     }
     if band not in band_frequencies:
         raise ValueError("Invalid band number. Must be between 1 and 10.")
 
-    wavelength = (c / band_frequencies[band]).to(U.m)
+    wavelength = (c / band_frequencies[band]).to(u.m)
     fov = (1.22 * wavelength / antenna_diameter) * \
-        (180 / math.pi) * 3600 * U.arcsec
+        (180 / math.pi) * 3600 * u.arcsec
     return fov.value if return_value else fov
 
 
