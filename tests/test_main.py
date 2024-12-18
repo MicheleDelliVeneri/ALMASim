@@ -86,3 +86,38 @@ def test_query_science_exception():
         response = client.post("/query_science/", json=filters)
         assert response.status_code == 500
         assert response.json() == {"detail": "Error querying science filters"}
+
+def test_query_targets_missing_keys():
+    """Test query_targets endpoint with missing required keys."""
+    targets = [{"invalid_key": "NGC253"}]  # Missing 'target_name' and 'member_ous_uid'
+    response = client.post("/query_targets/", json=targets)
+    assert response.status_code == 400
+    assert response.json()["detail"].strip() == "Each target must include 'target_name' and                     'member_ous_uid'."
+
+
+@patch("app.main.query_by_targets", side_effect=ValueError("Invalid target format"))
+def test_query_targets_value_error(mock_query):
+    """Test query_targets raises ValueError."""
+    targets = [{"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}]
+    response = client.post("/query_targets/", json=targets)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid target format"}
+    mock_query.assert_called_once()
+
+@patch("app.main.query_by_science", side_effect=ValueError("Invalid science filter"))
+def test_query_science_value_error(mock_query):
+    """Test query_science raises ValueError."""
+    filters = {"invalid_key": "AGN"}  # Invalid key
+    response = client.post("/query_science/", json=filters)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid science filter"}
+    mock_query.assert_called_once()
+
+@patch("app.main.query_by_targets", return_value=pd.DataFrame())
+def test_query_targets_empty_response(mock_query):
+    """Test query_targets with an empty response."""
+    targets = [{"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}]
+    response = client.post("/query_targets/", json=targets)
+    assert response.status_code == 200
+    assert response.json() == {"message": "No observations found."}
+    mock_query.assert_called_once()
