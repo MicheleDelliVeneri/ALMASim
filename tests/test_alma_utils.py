@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, Mock
 from app.alma_utils import (
     estimate_alma_beam_size,
     get_fov_from_band,
@@ -9,11 +9,13 @@ from app.alma_utils import (
     query_by_targets,
     get_tap_service,
     query_by_science,
+    query_alma,
     fetch_science_types,
     validate_science_filters, compute_distance,
 )
 from astropy import units as u
 from pyvo.dal import DALServiceError
+from tenacity import RetryError
 import pandas as pd
 import os
 import numpy as np
@@ -29,6 +31,41 @@ class TestAlmaUtils(unittest.TestCase):
             mock_tap.side_effect = Exception("Service Error")
             with self.assertRaises(Exception):
                 get_tap_service()
+
+    @patch("app.alma_utils.TAPService")
+    def test_query_alma_success(self, mock_tap_service):
+        """Test query_alma with successful query."""
+        # Mock the behavior of service.search
+        mock_service = mock_tap_service.return_value
+        mock_search_result = Mock()
+        mock_search_result.to_table.return_value.to_pandas.return_value = pd.DataFrame(
+            {"col1": [1, 2, 3], "col2": ["a", "b", "c"]}
+        )
+        mock_service.search.return_value = mock_search_result
+
+        query = "SELECT * FROM ivoa.obscore"
+        result = query_alma(mock_service, query)
+
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(list(result.columns), ["col1", "col2"])
+        mock_service.search.assert_called_once_with(query, response_timeout=120)
+
+    def test_query_alma_failure(self):
+        """Test query_alma with a query failure."""
+        # Mock the behavior of service.search to raise an exception
+        with patch("app.alma_utils.TAPService") as mock_tap_service:
+            mock_service = mock_tap_service.return_value
+            mock_service.search.side_effect = Exception("Query failed")
+
+            query = "SELECT * FROM ivoa.obscore"
+            with self.assertRaises(RetryError) as context:
+                query_alma(mock_service, query)
+
+            # Check the cause of the RetryError
+            self.assertIn("Query failed", str(context.exception.last_attempt.exception()))
+            mock_service.search.assert_called_with(query, response_timeout=120)
+
     def test_query_by_targets(self):
         targets = [("NGC253", "uid://A001/X122/X1")]
         with patch("app.alma_utils.query_alma") as mock_query:
