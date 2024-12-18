@@ -30,11 +30,9 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests with coverage
-        run: |
-          pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-config=.coveragerc tests
+        run: pytest --cov=api.calculator --cov-report=xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml  # Upload the coverage report
-          fail_ci_if_error: true
+        uses: codecov/codecov-action@v5
+        env:
+          token: ${{ secrets.CODECOV_TOKEN }}
