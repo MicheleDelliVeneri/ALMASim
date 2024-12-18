@@ -5,4 +5,6 @@ profile:
 include:
   - name: CheckDependencyLicenses
 exclude:
-  - old-version/**
+  - name: OldFiles
+    paths:
+    - old-version/**
