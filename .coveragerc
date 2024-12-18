@@ -1,0 +1,8 @@
+[run]
+omit =
+    old-version/*  # Exclude everything in the old-version folder
+
+[report]
+exclude_lines =
+    if __name__ == .__main__.:
+    pragma: no cover

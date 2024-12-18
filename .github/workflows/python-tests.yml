@@ -1,24 +1,22 @@
-name: Python Tests
+name: Python Tests with Coverage
 
 on:
   push:
     branches:
       - main
-      - development  # Include the development branch
+      - development
     paths:
-      - '**.py'
-      - '!old-version/**'  # Exclude all files in the old-version folder
+      - "**.py"
+      - "!old-version/**"
   pull_request:
     branches:
       - main
-      - development  # Include the development branch
-    paths:
-      - '**.py'
-      - '!old-version/**'  # Exclude all files in the old-version folder
+      - development
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -33,5 +31,12 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
-        run: pytest tests
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-config=.coveragerc tests
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml  # Upload the coverage report
+          fail_ci_if_error: true

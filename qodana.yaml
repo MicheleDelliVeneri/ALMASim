@@ -8,3 +8,5 @@ exclude:
   - name: OldFiles
     paths:
     - old-version/**
+    - tests/**
+    - "*.pyc"
