@@ -4,6 +4,7 @@ from app.alma_utils import (
     estimate_alma_beam_size,
     get_fov_from_band,
     generate_antenna_config_file_from_antenna_array,
+    generate_query_for_science,
     get_max_baseline_from_antenna_config,
     get_max_baseline_from_antenna_array,
     query_by_targets,
@@ -129,6 +130,65 @@ class TestAlmaUtils(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             validate_science_filters(invalid_filters)
         self.assertIn("must be a tuple", str(context.exception))
+
+    def test_scientific_categories_filter(self):
+        """Test query generation with scientific_categories filter."""
+        science_filters = {
+            "scientific_categories": ["Category1", "Category2"]
+        }
+        query = generate_query_for_science(science_filters)
+        self.assertIn("scientific_category IN ('Category1', 'Category2')", query)
+
+    def test_bands_filter(self):
+        """Test query generation with bands filter."""
+        science_filters = {
+            "bands": [3, 7]
+        }
+        query = generate_query_for_science(science_filters)
+        self.assertIn("band_list IN ('3', '7')", query)
+
+    def test_frequency_filter(self):
+        """Test query generation with frequency filter."""
+        science_filters = {
+            "frequency": (100.0, 200.0)
+        }
+        query = generate_query_for_science(science_filters)
+        self.assertIn("frequency BETWEEN 100.0 AND 200.0", query)
+
+    def test_spatial_resolution_filter(self):
+        """Test query generation with spatial_resolution filter."""
+        science_filters = {
+            "spatial_resolution": (0.5, 1.5)
+        }
+        query = generate_query_for_science(science_filters)
+        self.assertIn("spatial_resolution BETWEEN 0.5 AND 1.5", query)
+
+    def test_velocity_resolution_filter(self):
+        """Test query generation with velocity_resolution filter."""
+        science_filters = {
+            "velocity_resolution": (0.1, 1.0)
+        }
+        query = generate_query_for_science(science_filters)
+        self.assertIn("velocity_resolution BETWEEN 0.1 AND 1.0", query)
+
+    def test_combined_filters(self):
+        """Test query generation with multiple filters."""
+        science_filters = {
+            "science_keywords": ["Keyword1"],
+            "scientific_categories": ["Category1"],
+            "bands": [3],
+            "frequency": (100.0, 200.0),
+            "spatial_resolution": (0.5, 1.5),
+            "velocity_resolution": (0.1, 1.0)
+        }
+        query = generate_query_for_science(science_filters)
+        self.assertIn("science_keyword IN ('Keyword1')", query)
+        self.assertIn("scientific_category IN ('Category1')", query)
+        self.assertIn("band_list IN ('3')", query)
+        self.assertIn("frequency BETWEEN 100.0 AND 200.0", query)
+        self.assertIn("spatial_resolution BETWEEN 0.5 AND 1.5", query)
+        self.assertIn("velocity_resolution BETWEEN 0.1 AND 1.0", query)
+
     def test_query_by_targets_service_error(self):
         """Test exception when querying targets fails due to service error."""
         targets = [("NGC253", "uid://A001/X122/X1")]

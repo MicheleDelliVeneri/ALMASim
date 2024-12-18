@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e3c9fa36-62f5-459b-9261-04d0dbd50b87" name="Changes" comment="added back tests">
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="e3c9fa36-62f5-459b-9261-04d0dbd50b87" name="Changes" comment="testL added get_tap_service_query_failed tests">
       <change beforePath="$PROJECT_DIR$/tests/test_alma_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_alma_utils.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -54,7 +52,23 @@
       <option name="project" value="LOCAL" />
       <updated>1734548279464</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="testL added query_alma tests">
+      <option name="closed" value="true" />
+      <created>1734549064950</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1734549064950</updated>
+    </task>
+    <task id="LOCAL-00003" summary="testL added get_tap_service_query_failed tests">
+      <option name="closed" value="true" />
+      <created>1734549193776</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1734549193776</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -63,6 +77,8 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="added files" />
     <MESSAGE value="added back tests" />
-    <option name="LAST_COMMIT_MESSAGE" value="added back tests" />
+    <MESSAGE value="testL added query_alma tests" />
+    <MESSAGE value="testL added get_tap_service_query_failed tests" />
+    <option name="LAST_COMMIT_MESSAGE" value="testL added get_tap_service_query_failed tests" />
   </component>
 </project>
