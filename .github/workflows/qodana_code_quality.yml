@@ -4,9 +4,7 @@ on:
     pull_request:
     push:
         branches: # Specify your branches here
-            - main # The 'main' branch
             - development
-            - 'releases/*' # The release branches
 jobs:
     qodana:
         runs-on: ubuntu-latest

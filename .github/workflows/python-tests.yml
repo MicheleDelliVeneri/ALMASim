@@ -3,14 +3,12 @@ name: Python Tests with Coverage
 on:
   push:
     branches:
-      - main
       - development
     paths:
       - "**.py"
       - "!old-version/**"
   pull_request:
     branches:
-      - main
       - development
 
 jobs:
