@@ -7,7 +7,7 @@ from app.alma_utils import (
     get_max_baseline_from_antenna_config,
     get_max_baseline_from_antenna_array,
     query_by_targets,
-    validate_science_filters,
+    validate_science_filters, compute_distance,
 )
 from astropy import units as u
 import pandas as pd
@@ -19,6 +19,14 @@ class TestAlmaUtilsRemaining(unittest.TestCase):
         """Test estimate_alma_beam_size with valid input."""
         result = estimate_alma_beam_size(230 * u.GHz, 1.5 * u.km)  # Central frequency in GHz, max baseline in km
         self.assertGreater(result, 0)
+
+    def test_estimate_alma_beam_size_not_quantity(self):
+        result = estimate_alma_beam_size(230, 1.5)  # Central frequency in GHz, max baseline in km
+        self.assertGreater(result, 0)
+    def test_compute_distance(self):
+        """Test compute_distance"""
+        result = compute_distance(1, 1, 1, 2, 2, 2)
+        self.assertGreaterEqual(result, 0)
 
     def test_estimate_alma_beam_size_invalid_input(self):
         """Test estimate_alma_beam_size with invalid input."""
