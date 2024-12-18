@@ -7,6 +7,7 @@ bootstrap: |
   pyenv install 3.12.8
   pyenv global 3.12.8
   pip install --upgrade pip
+  rm -rf .idea
   pip install -r requirements.txt
 
 include:
