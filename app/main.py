@@ -5,12 +5,12 @@ from app.alma_utils import (
     fetch_science_types,
 )
 import logging
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="ALMASim API",
-              description="Advanced querying for ALMA data.")
+app = FastAPI(title="ALMASim API", description="Advanced querying for ALMA data.")
 
 
 @app.get("/science_keywords/")
@@ -22,8 +22,7 @@ def get_science_keywords():
         logger.info("Fetching science keywords and categories...")
         keywords, categories = fetch_science_types()
         logger.info("Fetched science keywords and categories successfully.")
-        return {"science_keywords": keywords,
-                "scientific_categories": categories}
+        return {"science_keywords": keywords, "scientific_categories": categories}
     except Exception as e:
         logger.error(f"Error fetching science keywords: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -51,8 +50,7 @@ def query_targets(targets: list[dict]):
                 )
 
         target_list = [
-            (target["target_name"],
-             target["member_ous_uid"]) for target in targets
+            (target["target_name"], target["member_ous_uid"]) for target in targets
         ]
         results = query_by_targets(target_list)
         if results.empty:
@@ -105,15 +103,15 @@ def query_science(
                 else None
             ),
         }
-        science_filters = {
-            k: v for k, v in science_filters.items() if v is not None
-        }
+        science_filters = {k: v for k, v in science_filters.items() if v is not None}
         logger.info(f"Science filters: {science_filters}")
 
         results = query_by_science(science_filters)
         if results.empty:
-            logger.info("No observations found for the provided science \
-                        filters.")
+            logger.info(
+                "No observations found for the provided science \
+                        filters."
+            )
             return {"message": "No observations found."}
         logger.info("Query successful, returning results.")
         return results.to_dict(orient="records")
@@ -127,4 +125,5 @@ def query_science(
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)

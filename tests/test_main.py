@@ -18,9 +18,7 @@ def test_get_science_keywords():
 
 
 def test_query_targets():
-    targets = [
-        {"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}
-    ]
+    targets = [{"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}]
     with patch("app.main.query_by_targets") as mock_query:
         mock_query.return_value = pd.DataFrame(
             {"target_name": ["NGC253"], "frequency": [230.5]}
@@ -40,30 +38,35 @@ def test_query_science():
         assert response.status_code == 200
         assert "target_name" in response.json()[0]
 
+
 def test_get_science_keywords_exception():
-    with patch("app.main.fetch_science_types", side_effect=Exception("Error fetching science types")):
+    with patch(
+        "app.main.fetch_science_types",
+        side_effect=Exception("Error fetching science types"),
+    ):
         response = client.get("/science_keywords/")
         assert response.status_code == 500
         assert response.json() == {"detail": "Error fetching science types"}
 
+
 def test_query_targets_empty_return():
-    targets = [
-        {"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}
-    ]
+    targets = [{"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}]
     with patch("app.main.query_by_targets") as mock_query:
         mock_query.return_value = pd.DataFrame()  # Empty DataFrame
         response = client.post("/query_targets/", json=targets)
         assert response.status_code == 200
         assert response.json() == {"message": "No observations found."}
 
+
 def test_query_targets_exception():
-    targets = [
-        {"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}
-    ]
-    with patch("app.main.query_by_targets", side_effect=Exception("Error querying targets")):
+    targets = [{"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}]
+    with patch(
+        "app.main.query_by_targets", side_effect=Exception("Error querying targets")
+    ):
         response = client.post("/query_targets/", json=targets)
         assert response.status_code == 500
         assert response.json() == {"detail": "Error querying targets"}
+
 
 def test_query_science_empty_return():
     filters = {"science_keywords": ["AGN"], "bands": [3, 7]}
@@ -73,9 +76,13 @@ def test_query_science_empty_return():
         assert response.status_code == 200
         assert response.json() == {"message": "No observations found."}
 
+
 def test_query_science_exception():
     filters = {"science_keywords": ["AGN"], "bands": [3, 7]}
-    with patch("app.main.query_by_science", side_effect=Exception("Error querying science filters")):
+    with patch(
+        "app.main.query_by_science",
+        side_effect=Exception("Error querying science filters"),
+    ):
         response = client.post("/query_science/", json=filters)
         assert response.status_code == 500
         assert response.json() == {"detail": "Error querying science filters"}

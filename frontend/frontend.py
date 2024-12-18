@@ -19,8 +19,7 @@ app.layout = html.Div(
             [
                 html.H3("Fetch Science Keywords and Categories"),
                 html.Button(
-                    "Fetch Science Keywords", id="fetch_science_keywords",
-                    n_clicks=0
+                    "Fetch Science Keywords", id="fetch_science_keywords", n_clicks=0
                 ),
                 html.Div(id="science_keywords_output"),
             ],
@@ -37,10 +36,7 @@ app.layout = html.Div(
                         "uid://A001/X122/X1"}]',
                     style={"width": "100%", "height": "100px"},
                 ),
-                html.Button(
-                    "Query Targets",
-                    id="query_targets_button",
-                    n_clicks=0),
+                html.Button("Query Targets", id="query_targets_button", n_clicks=0),
                 html.Div(id="targets_output"),
             ],
             style={"margin-bottom": "30px"},
@@ -65,8 +61,7 @@ app.layout = html.Div(
                         ),
                         html.Label("Bands (comma-separated):"),
                         dcc.Input(
-                            id="bands_input", type="text",
-                            placeholder="e.g., 3,6,7"
+                            id="bands_input", type="text", placeholder="e.g., 3,6,7"
                         ),
                         html.Label("Frequency Range (min,max in GHz):"),
                         dcc.Input(
@@ -74,15 +69,13 @@ app.layout = html.Div(
                             type="text",
                             placeholder="e.g., 100,300",
                         ),
-                        html.Label(
-                            "Spatial Resolution Range (min,max in arcsec):"),
+                        html.Label("Spatial Resolution Range (min,max in arcsec):"),
                         dcc.Input(
                             id="spatial_resolution_input",
                             type="text",
                             placeholder="e.g., 0.1,1.0",
                         ),
-                        html.Label(
-                            "Velocity Resolution Range (min,max in km/s):"),
+                        html.Label("Velocity Resolution Range (min,max in km/s):"),
                         dcc.Input(
                             id="velocity_resolution_input",
                             type="text",
@@ -91,10 +84,7 @@ app.layout = html.Div(
                     ],
                     style={"margin-bottom": "20px"},
                 ),
-                html.Button(
-                    "Query Science",
-                    id="query_science_button",
-                    n_clicks=0),
+                html.Button("Query Science", id="query_science_button", n_clicks=0),
                 html.Div(id="science_output"),
             ]
         ),
@@ -116,12 +106,10 @@ def fetch_science_keywords(n_clicks):
                 return html.Div(
                     [
                         html.H4("Science Keywords:"),
-                        html.Ul([html.Li(kw)
-                                for kw in data["science_keywords"]]),
+                        html.Ul([html.Li(kw) for kw in data["science_keywords"]]),
                         html.H4("Scientific Categories:"),
                         html.Ul(
-                            [html.Li(cat)
-                             for cat in data["scientific_categories"]]
+                            [html.Li(cat) for cat in data["scientific_categories"]]
                         ),
                     ]
                 )

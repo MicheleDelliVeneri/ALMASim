@@ -16,16 +16,15 @@ class TestFrontend(unittest.TestCase):
             self.assertIn("AGN", response.json()["science_keywords"])
 
     def test_query_targets_frontend(self):
-        targets = [
-            {"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}
-        ]
+        targets = [{"target_name": "NGC253", "member_ous_uid": "uid://A001/X122/X1"}]
         with patch("requests.post") as mock_post:
             mock_post.return_value.status_code = 200
             mock_post.return_value.json.return_value = [
                 {"target_name": "NGC253", "frequency": 230.5}
             ]
-            response = requests.post("http://localhost:8000/query_targets/", 
-                                     json=targets)
+            response = requests.post(
+                "http://localhost:8000/query_targets/", json=targets
+            )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()[0]["target_name"], "NGC253")
 
@@ -36,8 +35,9 @@ class TestFrontend(unittest.TestCase):
             mock_post.return_value.json.return_value = [
                 {"target_name": "NGC253", "frequency": 230.5}
             ]
-            response = requests.post("http://localhost:8000/query_science/", 
-                                     json=filters)
+            response = requests.post(
+                "http://localhost:8000/query_science/", json=filters
+            )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()[0]["target_name"], "NGC253")
 

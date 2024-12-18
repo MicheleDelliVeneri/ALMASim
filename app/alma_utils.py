@@ -31,8 +31,7 @@ def get_tap_service():
                 # Test Query
                 service.search("SELECT TOP 1 * FROM ivoa.obscore")
             except Exception as query_error:
-                logger.error(
-                    f"TAP service query failed for {url}: {query_error}")
+                logger.error(f"TAP service query failed for {url}: {query_error}")
                 continue
             logger.info(f"Connected to {url}")
             return service
@@ -220,21 +219,21 @@ def query_by_science(science_filters):
     return query_alma(service, query)
 
 
-def estimate_alma_beam_size(central_frequency_ghz,
-                            max_baseline_km, return_value=True):
+def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
     """
     Estimate ALMA beam size in arcseconds.
     """
     if central_frequency_ghz <= 0 or max_baseline_km <= 0:
-        raise ValueError(
-            "Central frequency and maximum baseline must be positive.")
+        raise ValueError("Central frequency and maximum baseline must be positive.")
 
     if not isinstance(central_frequency_ghz, Quantity):
         central_frequency_ghz = central_frequency_ghz * u.GHz
     if not isinstance(max_baseline_km, Quantity):
         max_baseline_km = max_baseline_km * u.km
     light_speed = c.to(u.m / u.s).value
-    theta = (light_speed / central_frequency_ghz.to(u.Hz).value) / max_baseline_km.to(u.m).value
+    theta = (light_speed / central_frequency_ghz.to(u.Hz).value) / max_baseline_km.to(
+        u.m
+    ).value
     beam_size_arcsec = theta * (180 / math.pi) * 3600 * u.arcsec
     return beam_size_arcsec.value if return_value else beam_size_arcsec
 
@@ -259,8 +258,7 @@ def get_fov_from_band(band, antenna_diameter=12, return_value=True):
         raise ValueError("Invalid band number. Must be between 1 and 10.")
 
     wavelength = (c / band_frequencies[band]).to(u.m)
-    fov = (1.22 * wavelength / antenna_diameter) * \
-        (180 / math.pi) * 3600 * u.arcsec
+    fov = (1.22 * wavelength / antenna_diameter) * (180 / math.pi) * 3600 * u.arcsec
     return fov.value if return_value else fov
 
 
@@ -298,11 +296,8 @@ def get_max_baseline_from_antenna_config(antenna_config):
     """
     Calculate maximum baseline from an antenna configuration file.
     """
-    positions = np.loadtxt(
-        antenna_config, comments="#", usecols=(
-            0, 1, 2), dtype=float)
-    distances = np.linalg.norm(
-        positions[:, None, :] - positions[None, :, :], axis=-1)
+    positions = np.loadtxt(antenna_config, comments="#", usecols=(0, 1, 2), dtype=float)
+    distances = np.linalg.norm(positions[:, None, :] - positions[None, :, :], axis=-1)
     max_baseline = np.max(distances) / 1000  # Convert to km
     return max_baseline
 
