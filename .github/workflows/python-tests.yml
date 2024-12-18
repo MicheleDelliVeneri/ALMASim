@@ -28,5 +28,9 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
-        env:
+        with:
+          fail_ci_if_error: true # optional (default = false)
+          files: ./coverage.xml
+          flags: unittests # optional
           token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true # optional (default = fals

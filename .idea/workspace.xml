@@ -7,7 +7,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="8e286eaf-d74e-4e06-8119-0f7693964f51" name="Changes" comment="fix: removed codecov.yaml" />
+    <list default="true" id="8e286eaf-d74e-4e06-8119-0f7693964f51" name="Changes" comment="fix: updated coverage command" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -63,7 +63,7 @@
     <option name="path" value="$PROJECT_DIR$/.github/workflows/qodana_code_quality.yml" />
   </component>
   <component name="QodanaCloudProjectLink">
-    <option name="lastReportId" value="D78lY" />
+    <option name="lastReportId" value="8j1r9" />
     <option name="linkedProjectId" value="pnB19" />
     <option name="linkedProjectName" value="ALMASim" />
     <option name="organizationId" value="3oklJ" />
@@ -73,7 +73,7 @@
     <option name="cloudReportPersistedInfo">
       <CloudReportPersistedInfo>
         <option name="projectId" value="pnB19" />
-        <option name="reportId" value="D78lY" />
+        <option name="reportId" value="8j1r9" />
       </CloudReportPersistedInfo>
     </option>
   </component>
@@ -152,7 +152,15 @@
       <option name="project" value="LOCAL" />
       <updated>1734530564755</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="fix: updated coverage command">
+      <option name="closed" value="true" />
+      <created>1734530906253</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1734530906253</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -160,6 +168,7 @@
     <MESSAGE value="fix: deleted ._frontend.py" />
     <MESSAGE value="fix: added codecov token" />
     <MESSAGE value="fix: removed codecov.yaml" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix: removed codecov.yaml" />
+    <MESSAGE value="fix: updated coverage command" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix: updated coverage command" />
   </component>
 </project>
