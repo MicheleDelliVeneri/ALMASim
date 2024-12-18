@@ -36,3 +36,5 @@ astropy
 pytest
 pytest-mock
 pytest-cov
+dash
+requests
