@@ -5,8 +5,9 @@ import logging
 import numpy as np
 import os
 import math
-import astropy.units as u
+from astropy import units as u
 from astropy.constants import c
+from astropy.units import Quantity
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -228,11 +229,13 @@ def estimate_alma_beam_size(central_frequency_ghz,
         raise ValueError(
             "Central frequency and maximum baseline must be positive.")
 
-    central_frequency = central_frequency_ghz * u.GHz
-    max_baseline = max_baseline_km * u.km
-
-    theta = (c / central_frequency) / max_baseline
-    beam_size_arcsec = theta.to(u.arcsec)
+    if not isinstance(central_frequency_ghz, Quantity):
+        central_frequency_ghz = central_frequency_ghz * u.GHz
+    if not isinstance(max_baseline_km, Quantity):
+        max_baseline_km = max_baseline_km * u.km
+    light_speed = c.to(u.m / u.s).value
+    theta = (light_speed / central_frequency_ghz.to(u.Hz).value) / max_baseline_km.to(u.m).value
+    beam_size_arcsec = theta * (180 / math.pi) * 3600 * u.arcsec
     return beam_size_arcsec.value if return_value else beam_size_arcsec
 
 
@@ -291,7 +294,7 @@ def compute_distance(x1, y1, z1, x2, y2, z2):
     return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
 
 
-def get_max_baseline_from_antenna_config(update_progress, antenna_config):
+def get_max_baseline_from_antenna_config(antenna_config):
     """
     Calculate maximum baseline from an antenna configuration file.
     """
@@ -301,8 +304,6 @@ def get_max_baseline_from_antenna_config(update_progress, antenna_config):
     distances = np.linalg.norm(
         positions[:, None, :] - positions[None, :, :], axis=-1)
     max_baseline = np.max(distances) / 1000  # Convert to km
-    if update_progress:
-        update_progress.emit(100)
     return max_baseline
 
 
