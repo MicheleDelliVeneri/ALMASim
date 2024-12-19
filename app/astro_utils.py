@@ -122,7 +122,7 @@ def redshift_to_snapshot(redshift):
     }
     snaps, redshifts = list(snap_db.keys())[::-1], list(snap_db.values())[::-1]
     for i in range(len(redshifts) - 1):
-        if redshift >= redshifts[i] and redshift < redshifts[i + 1]:
+        if  redshifts[i] <= redshift  < redshifts[i + 1]:
             return snaps[i]
 
 
