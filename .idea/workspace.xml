@@ -4,213 +4,41 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e3c9fa36-62f5-459b-9261-04d0dbd50b87" name="Changes" comment="not-ready: working">
-      <change afterPath="$PROJECT_DIR$/app/skymodel_utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/test_skymodel.py" afterDir="false" />
+    <list default="true" id="d0679f76-313c-4121-90d3-56d92822487e" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/project.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/project.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/astro_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/astro_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/skymodel_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/skymodel_utils.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="FileTemplateManagerImpl">
-    <option name="RECENT_TEMPLATES">
-      <list>
-        <option value="Python Script" />
-      </list>
-    </option>
-  </component>
-  <component name="FlaskConsoleOptions" custom-start-script="import sys; print('Python %s on %s' % (sys.version, sys.platform)); sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo, NoAppException&#10;for module in [&quot;main.py&quot;, &quot;wsgi.py&quot;, &quot;app.py&quot;]:&#10;    try: locals().update(ScriptInfo(app_import_path=module, create_app=None).load_app().make_shell_context()); print(&quot;\nFlask App: %s&quot; % app.import_name); break&#10;    except NoAppException: pass">
-    <envs>
-      <env key="FLASK_APP" value="app" />
-    </envs>
-    <option name="myCustomStartScript" value="import sys; print('Python %s on %s' % (sys.version, sys.platform)); sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo, NoAppException&#10;for module in [&quot;main.py&quot;, &quot;wsgi.py&quot;, &quot;app.py&quot;]:&#10;    try: locals().update(ScriptInfo(app_import_path=module, create_app=None).load_app().make_shell_context()); print(&quot;\nFlask App: %s&quot; % app.import_name); break&#10;    except NoAppException: pass" />
-    <option name="myEnvs">
-      <map>
-        <entry key="FLASK_APP" value="app" />
-      </map>
-    </option>
-  </component>
-  <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
-  </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "MicheleDelliVeneri"
-  }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/MicheleDelliVeneri/ALMASim.git",
-    "accountId": "2bea13c2-e5ec-48e6-affe-d445f7b31b60"
-  }
-}]]></component>
-  <component name="ProblemsViewState">
-    <option name="selectedTabId" value="QODANA_PROBLEMS_VIEW_TAB" />
-  </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 1
-}]]></component>
-  <component name="ProjectId" id="2qOxbEembvOhJeknXaq4mYPA82J" />
-  <component name="ProjectLevelVcsManager">
-    <ConfirmationsSetting value="2" id="Add" />
-  </component>
+  <component name="ProjectId" id="2qQfvHmPQvyAXBNQxNT6TT5gBhl" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "development",
     "node.js.detected.package.eslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
-  <component name="QodanaCIConfigService">
-    <option name="ciType" value="GITHUB" />
-    <option name="path" value="$PROJECT_DIR$/.github/workflows/qodana_code_quality.yml" />
-  </component>
-  <component name="QodanaCloudProjectLink">
-    <option name="lastReportId" value="qLBZb" />
-    <option name="linkedProjectId" value="pnB19" />
-    <option name="linkedProjectName" value="ALMASim" />
-    <option name="organizationId" value="3oklJ" />
-    <option name="userId" value="Q6Wk9" />
-  </component>
-  <component name="QodanaHighlightedReportService">
-    <option name="cloudReportPersistedInfo">
-      <CloudReportPersistedInfo>
-        <option name="projectId" value="pnB19" />
-        <option name="reportId" value="qLBZb" />
-      </CloudReportPersistedInfo>
-    </option>
-  </component>
-  <component name="QodanaIsSelectedPersistenceService">
-    <option name="selectedOrLoading" value="true" />
-  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-deb605915726-JavaScript-PY-243.22562.180" />
-        <option value="bundled-python-sdk-85c76a3b01b3-9a18a617cbe4-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.22562.180" />
+        <option value="bundled-js-predefined-d6986cc7102b-41abf3b868a6-JavaScript-QDPY-243.23413" />
+        <option value="bundled-python-sdk-265936f46965-ae1375a7cb55-com.jetbrains.pycharm.pro.sharedIndexes.bundled-QDPY-243.23413" />
       </set>
     </attachedChunks>
   </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
-  <component name="TaskManager">
-    <task id="LOCAL-00001" summary="added back tests">
-      <option name="closed" value="true" />
-      <created>1734548279464</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1734548279464</updated>
-    </task>
-    <task id="LOCAL-00002" summary="testL added query_alma tests">
-      <option name="closed" value="true" />
-      <created>1734549064950</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1734549064950</updated>
-    </task>
-    <task id="LOCAL-00003" summary="testL added get_tap_service_query_failed tests">
-      <option name="closed" value="true" />
-      <created>1734549193776</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1734549193776</updated>
-    </task>
-    <task id="LOCAL-00004" summary="testL added generate_query_for_science tests">
-      <option name="closed" value="true" />
-      <created>1734549435639</created>
-      <option name="number" value="00004" />
-      <option name="presentableId" value="LOCAL-00004" />
-      <option name="project" value="LOCAL" />
-      <updated>1734549435639</updated>
-    </task>
-    <task id="LOCAL-00005" summary="test: added more main tests">
-      <option name="closed" value="true" />
-      <created>1734549981561</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1734549981561</updated>
-    </task>
-    <task id="LOCAL-00006" summary="lint: general linting">
-      <option name="closed" value="true" />
-      <created>1734550299909</created>
-      <option name="number" value="00006" />
-      <option name="presentableId" value="LOCAL-00006" />
-      <option name="project" value="LOCAL" />
-      <updated>1734550299909</updated>
-    </task>
-    <task id="LOCAL-00007" summary="test: finalized main tests">
-      <option name="closed" value="true" />
-      <created>1734550957776</created>
-      <option name="number" value="00007" />
-      <option name="presentableId" value="LOCAL-00007" />
-      <option name="project" value="LOCAL" />
-      <updated>1734550957776</updated>
-    </task>
-    <task id="LOCAL-00008" summary="feat: added astro_utils and tests">
-      <option name="closed" value="true" />
-      <created>1734552784514</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1734552784514</updated>
-    </task>
-    <task active="true" id="Default" summary="Default task">
-      <changelist id="e3c9fa36-62f5-459b-9261-04d0dbd50b87" name="Changes" comment="not-ready: working" />
-      <created>1734594211277</created>
-      <option name="number" value="Default" />
-      <option name="presentableId" value="Default" />
-      <updated>1734594211277</updated>
-      <workItem from="1734594213064" duration="2308000" />
-    </task>
-    <option name="localTasksCounter" value="9" />
-    <servers />
-  </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
-  </component>
-  <component name="VcsManagerConfiguration">
-    <MESSAGE value="added files" />
-    <MESSAGE value="added back tests" />
-    <MESSAGE value="testL added query_alma tests" />
-    <MESSAGE value="testL added get_tap_service_query_failed tests" />
-    <MESSAGE value="testL added generate_query_for_science tests" />
-    <MESSAGE value="test: added more main tests" />
-    <MESSAGE value="lint: general linting" />
-    <MESSAGE value="test: finalized main tests" />
-    <MESSAGE value="feat: added astro_utils and tests" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: added astro_utils and tests" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/old-version/almasim/skymodels.py</url>
-          <line>248</line>
-          <option name="timeStamp" value="12" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/old-version/almasim/skymodels.py</url>
-          <line>445</line>
-          <option name="timeStamp" value="13" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>

@@ -289,7 +289,7 @@ def get_pos(x_radius, y_radius, z_radius):
     x = np.random.randint(-x_radius, x_radius)
     y = np.random.randint(-y_radius, y_radius)
     z = np.random.randint(-z_radius, z_radius)
-    return (x, y, z)
+    return x, y, z
 
 
 def sample_positions(
