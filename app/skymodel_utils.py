@@ -191,7 +191,7 @@ def insert_model(datacube, model_type, line_fluxes, continuum, **kwargs):
     elif model_type == "hubble":
         data_path = kwargs["data_path"]
         files = [file for file in os.listdir(data_path) if not file.startswith(".")]
-        img_path = os.path.join(data_path, random.choice(files))
+        os.path.join(data_path, random.choice(files))
         template = load_template(data_path, n_px)
         if template is None:
             template = np.ones((n_px, n_px), dtype=np.float32) / n_px
