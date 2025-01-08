@@ -9,25 +9,50 @@ from dask import delayed, compute
 import random
 
 # Utility Functions
-def interpolate_array(arr, n_px):
-    """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
-    x_zoom_factor = n_px / arr.shape[0]
-    y_zoom_factor = n_px / arr.shape[1]
-    return zoom(arr, [x_zoom_factor, y_zoom_factor])
+def interpolate_array(arr, target_size):
+    """Resize a 2D array while preserving aspect ratio."""
+    zoom_factors = [target_size / dim for dim in arr.shape]
+    return zoom(arr, zoom_factors)
 
 
 def gaussian(x, amp, cen, fwhm):
     """Generates a 1D Gaussian."""
-    gaussian = np.exp(-((x - cen) ** 2) / (2 * (fwhm / 2.35482) ** 2))
-    norm = amp / np.sum(gaussian) if np.sum(gaussian) != 0 else amp
-    return norm * gaussian
+    sigma = fwhm / 2.35482  # Convert FWHM to standard deviation
+    gaussian = amp * np.exp(-0.5 * ((x - cen) / sigma) ** 2)
+    norm = np.sum(gaussian)
+    return gaussian / norm if norm != 0 else gaussian
 
 
-def diffuse_signal(n_px):
-    """Generates a diffuse signal using a correlated field."""
-    ift.random.push_sseq(random.randint(1, 1000))
+def diffuse_signal(n_px, seed=None, args=None):
+    """
+    Generates a normalized diffuse signal using a correlated random field.
+
+    Parameters:
+        n_px (int): Number of pixels along each dimension (must be positive).
+        seed (int, optional): Random seed for reproducibility. Defaults to None.
+        args (dict, optional): Custom parameters for the correlated field.
+            Defaults to a predefined configuration.
+
+    Returns:
+        np.ndarray: Normalized 2D diffuse signal of size (n_px, n_px).
+
+    Raises:
+        ValueError: If n_px is not greater than 0.
+    """
+
+    # Validate input
+    if n_px <= 0:
+        raise ValueError("`n_px` must be greater than 0 to generate a signal.")
+
+    # Set random seed
+    if seed is not None:
+        ift.random.push_sseq(seed)
+    else:
+        ift.random.push_sseq(random.randint(1, 1000))
+    # Define the space
     space = ift.RGSpace((2 * n_px, 2 * n_px))
-    args = {
+    # Default arguments for the correlated field
+    default_args = {
         "offset_mean": 24,
         "offset_std": (1, 0.1),
         "fluctuations": (5.0, 1.0),
@@ -35,13 +60,22 @@ def diffuse_signal(n_px):
         "flexibility": (1.2, 0.4),
         "asperity": (0.2, 0.2),
     }
+    args = args or default_args  # Use passed arguments or fall back to default
 
+    # Correlated field generation
     cf = ift.SimpleCorrelatedField(space, **args)
     exp_cf = ift.exp(cf)
+
+    # Generate random positions and sample the field
     random_pos = ift.from_random(exp_cf.domain)
     sample = np.log(exp_cf(random_pos))
-    data = sample.val[0:n_px, 0:n_px]
-    normalized_data = (data - np.min(data)) / (np.max(data) - np.min(data))
+    data = sample.val[:n_px, :n_px]  # Slice to the desired size
+
+    # Normalize the data
+    data_min = np.min(data)
+    data_max = np.max(data)
+    normalized_data = (data - data_min) / (data_max - data_min) if data_max != data_min else data
+
     return normalized_data
 
 
@@ -83,16 +117,20 @@ def make_extended(imsize, powerlaw=2.0, theta=0.0, ellip=1.0, randomseed=None):
 
 
 @delayed
-def delayed_model_insertion(slice_data, template, line_flux, continum):
+def delayed_model_insertion(template, line_flux, continuum):
     """Inserts a model slice into the datacube."""
-    return template * (line_flux + continum)
+    return template * (line_flux + continuum)
 
 
-def insert_model(datacube, model_type, line_fluxes, continum, **kwargs):
+def insert_model(datacube, model_type, line_fluxes, continuum, **kwargs):
     """Inserts a specified model into the datacube using Dask for parallelization."""
     n_px = datacube.n_px_x
     n_chan = datacube.n_channels
     delayed_slices = []
+    gs = np.zeros(n_chan)
+    z_idxs = np.arange(n_chan)
+    for z in range(len(line_fluxes)):
+        gs += gaussian(z_idxs, line_fluxes[z], kwargs['pos_z'][z], kwargs['fwhm_z'][z])
 
     if model_type == "pointlike":
         pos_x, pos_y = kwargs["pos_x"], kwargs["pos_y"]
@@ -100,7 +138,7 @@ def insert_model(datacube, model_type, line_fluxes, continum, **kwargs):
             slice_data = np.zeros((n_px, n_px))
             slice_data[pos_x, pos_y] = 1
             delayed_slices.append(
-                delayed_model_insertion(slice_data, slice_data, line_fluxes[z], continum[z])
+                delayed_model_insertion(slice_data, gs[z], continuum[z])
             )
 
     elif model_type == "gaussian":
@@ -116,22 +154,18 @@ def insert_model(datacube, model_type, line_fluxes, continum, **kwargs):
         )
         for z in range(n_chan):
             delayed_slices.append(
-                delayed_model_insertion(template, template, line_fluxes[z], continum[z])
+                delayed_model_insertion(template, gs[z], continuum[z])
             )
 
     elif model_type == "galaxy_zoo":
-        data_path = kwargs["data_path"]
-        files = [file for file in os.listdir(data_path) if not file.startswith(".")]
-        img_path = os.path.join(data_path, random.choice(files))
-        img = io.imread(img_path).astype(np.float32)
-        template = np.average(img, axis=2) if img.ndim == 3 else img
-        template -= np.min(template)
-        template /= np.max(template)
-        template = interpolate_array(template, n_px)
+        template = load_template(kwargs.get("data_path"), n_px)
+        if template is None:
+            template = np.ones((n_px, n_px), dtype=np.float32) / n_px
+            print("Warning: Using default uniform template.")
 
         for z in range(n_chan):
             delayed_slices.append(
-                delayed_model_insertion(template, template, line_fluxes[z], continum[z])
+                delayed_model_insertion(template, gs[z], continuum[z])
             )
 
     elif model_type == "diffuse":
@@ -141,7 +175,7 @@ def insert_model(datacube, model_type, line_fluxes, continum, **kwargs):
 
         for z in range(n_chan):
             delayed_slices.append(
-                delayed_model_insertion(template, template, line_fluxes[z], continum[z])
+                delayed_model_insertion(template, line_fluxes[z], continuum[z])
             )
 
     elif model_type == "molecular_cloud":
@@ -151,33 +185,21 @@ def insert_model(datacube, model_type, line_fluxes, continum, **kwargs):
 
         for z in range(n_chan):
             delayed_slices.append(
-                delayed_model_insertion(template, template, line_fluxes[z], continum[z])
+                delayed_model_insertion(template, line_fluxes[z], continuum[z])
             )
 
     elif model_type == "hubble":
         data_path = kwargs["data_path"]
         files = [file for file in os.listdir(data_path) if not file.startswith(".")]
         img_path = os.path.join(data_path, random.choice(files))
-        img = io.imread(img_path).astype(np.float32)
-        # Normalize the image and handle edge cases
-        if img.ndim == 3:
-            template = np.average(img, axis=2)  # Convert to 2D if RGB
-        else:
-            template = img
-        template -= np.min(template)
-        # Check for uniform template
-        if np.max(template) > 0:
-            template /= np.max(template)
-        else:
-            # Fallback to a default uniform template
+        template = load_template(data_path, n_px)
+        if template is None:
             template = np.ones((n_px, n_px), dtype=np.float32) / n_px
-            print("Warning: Hubble template is uniform. Using default uniform template.")
-        # Resize the template to match the datacube dimensions
-        template = interpolate_array(template, n_px)
+            print("Warning: Using default uniform template.")
         for z in range(n_chan):
             delayed_slices.append(
 
-                delayed_model_insertion(template, template, line_fluxes[z], continum[z])
+                delayed_model_insertion(template, line_fluxes[z], continuum[z])
             )
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
@@ -271,7 +293,6 @@ def get_iou(bb1, bb2):
 
     return intersection_area / float(bb1_area + bb2_area - intersection_area)
 
-
 def get_iou_1d(bb1, bb2):
     """Calculate the IoU for 1D intervals."""
     z_left = max(bb1["z1"], bb2["z1"])
@@ -283,7 +304,6 @@ def get_iou_1d(bb1, bb2):
     bb2_area = bb2["z2"] - bb2["z1"]
     return intersection / (bb1_area + bb2_area - intersection)
 
-
 def get_pos(x_radius, y_radius, z_radius):
     """Generate random positions within the given radius."""
     x = np.random.randint(-x_radius, x_radius)
@@ -291,18 +311,11 @@ def get_pos(x_radius, y_radius, z_radius):
     z = np.random.randint(-z_radius, z_radius)
     return x, y, z
 
-
 def sample_positions(
     pos_x,
     pos_y,
     pos_z,
-    fwhm_x,
-    fwhm_y,
-    fwhm_z,
     n_components,
-    fwhm_xs,
-    fwhm_ys,
-    fwhm_zs,
     xy_radius,
     z_radius,
     sep_xy,
@@ -339,7 +352,7 @@ def sample_positions(
 
 def insert_serendipitous(
     datacube,
-    continum,
+    continuum,
     line_fluxes,
     line_names,
     line_frequencies,
@@ -361,49 +374,53 @@ def insert_serendipitous(
     fwhm_xs = np.random.randint(1, fwhm_x, n_sources)
     fwhm_ys = np.random.randint(1, fwhm_y, n_sources)
     n_lines = np.random.randint(1, 3, n_sources)
-
+    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
     sample_coords = sample_positions(
         pos_x=n_px // 2,
         pos_y=n_px // 2,
         pos_z=n_chan // 2,
-        fwhm_x=fwhm_x,
-        fwhm_y=fwhm_y,
-        fwhm_z=fwhm_zs[0],
         n_components=n_sources,
-        fwhm_xs=fwhm_xs,
-        fwhm_ys=fwhm_ys,
-        fwhm_zs=fwhm_zs,
         xy_radius=xy_radius,
         z_radius=z_radius,
         sep_xy=sep_xy,
         sep_z=sep_z,
     )
 
-    with open(sim_params_path, "a") as f:
+    with (open(sim_params_path, "a") as f):
         f.write(f"\n Injected {n_sources} serendipitous sources\n")
-
         for c_id, (pos_x, pos_y, pos_z) in enumerate(sample_coords):
             n_line = n_lines[c_id]
-            s_line_fluxes = np.random.uniform(np.min(line_fluxes), np.max(line_fluxes), n_line)
+            peak_line_fluxes = np.random.uniform(np.min(line_fluxes), np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
             s_freq = [line_freq + (pos_z - pos_zs[0]) * freq_sup for line_freq in line_frequencies[:n_line]]
             fwhmsz = np.random.randint(2, np.max(fwhm_zs), n_line)
-
+            angle = np.random.uniform(0, 2 * np.pi)
+            z_idxs = np.arange(n_chan)
+            gs = np.zeros(n_chan)
+            for i in range(len(peak_line_fluxes)):
+                gs += gaussian(z_idxs, peak_line_fluxes[c_id], pos_z[i], fwhmsz[i])
             f.write(f"RA: {pos_x}, DEC: {pos_y}\n")
             f.write(f"FWHM_x (pixels): {fwhm_xs[c_id]}\n")
             f.write(f"FWHM_y (pixels): {fwhm_ys[c_id]}\n")
+            template = np.exp(
+                -(
+                        ((x - pos_x) * np.cos(angle) - (y - pos_y) * np.sin(angle)) ** 2 / (2 * (fwhm_x / 2.35482) ** 2)
+                        + ((x - pos_x) * np.sin(angle) + (y - pos_y) * np.cos(angle)) ** 2 / (
+                                    2 * (fwhm_y / 2.35482) ** 2)
+                )
+            )
 
             for i in range(len(s_freq)):
                 f.write(
-                    f"Line: {s_line_names[i]} - Frequency: {s_freq[i]} GHz - Flux: {s_line_fluxes[i]} Jy - Width (Channels): {fwhmsz[i]}\n"
+                    f"Line: {s_line_names[i]} - Frequency: {s_freq[i]} GHz - Flux: {peak_line_fluxes[i]} Jy - Width (Channels): {fwhmsz[i]}\n"
                 )
-
+            delayed_slices = []
             for z in range(n_chan):
-                datacube._array[z] += gaussian(
-                    np.arange(n_px),
-                    s_line_fluxes[0],
-                    pos_z,
-                    fwhm_xs[c_id],
+                delayed_slices.append(
+                    delayed_model_insertion(template, gs[z], continuum[z])
                 )
 
+            computed_slices = compute(*delayed_slices)
+            datacube._array += np.stack(computed_slices)
+    datacube._array = datacube._array * u.Jy / u.pix ** 2
     return datacube
