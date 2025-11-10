@@ -18,6 +18,8 @@
 .. |CodeCov| image:: https://codecov.io/github/MicheleDelliVeneri/ALMASim/graph/badge.svg?token=9SZVW78DR2
    :target: https://codecov.io/github/MicheleDelliVeneri/ALMASim
 
+.. INTRO_START_LABEL
+
 Overview
 --------
 
@@ -27,11 +29,18 @@ ALMASim primary goal is to allow users to generate simulated datasets on
 which to test deconvolution and source detection models. ALMASim is
 intended to leverage MPI parallel computing (Dask, Slurm, PBS) on modern HPC clusters to
 generate thousands of ALMA data cubes, but can also work on laptopts.
+The legacy PyQt desktop interface has been retired; ALMASim now exposes a
+set of headless services that can be orchestrated from CLIs, notebooks,
+or web backends (e.g. FastAPI + React).
 ALMA database or a prepared catalogue is queried to sample observational
 metadata such as band, bandwidth, integration time, antenna
 configurations and so on. ALMASim employs the MARTINI Package
 (https://github.com/kyleaoman/martini), and the Illustris Python Package
 (https://github.com/illustristng/illustris_python).
+
+.. INTRO_END_LABEL
+
+.. CITING_START_LABEL
 
 Citing ALMASim
 --------------
@@ -55,6 +64,10 @@ If you use ALMASim in your research, please cite the following paper:
 
 ALMASim entry: https://doi.org/10.1093/mnras/stac3314
 
+.. CITING_END_LABEL
+
+.. INSTALLATION_NOTES_START_LABEL
+
 Installation Notes
 ------------------
 
@@ -67,9 +80,13 @@ activate it. Then install the required packages with ``pip``:
    is Bash, otherwise check the other activations scripts within the bin
    folders)
 
+.. INSTALLATION_NOTES_END_LABEL
+
 Installing with pip
 -------------------
 - pip install almasim
+
+.. GITHUB_INSTALLATION_NOTES_START_LABEL
 
 Installing from GitHub 
 ----------------------
@@ -78,18 +95,65 @@ Installing from GitHub
 -  Install packages from the requirements file:
    ``pip install -e .``
 
+.. GITHUB_INSTALLATION_NOTES_END_LABEL
+
 Adding Kaggle API
 -----------------
 -  Login into Kaggle and go to: ``https://www.kaggle.com/settings``
 -  Click on ``create new token``, this will produce a kaggle.json file
    which must be saved in your home folder: ``~/.kaggle/kaggle.json``
 
+.. QUICKSTART_START_LABEL
+
 Getting started
 ---------------
 
-To run the simulation, just run:
+The refactor removes the PyQt desktop shell in favour of three headless
+services (metadata, datasets, simulation). A typical workflow is now:
 
-``python -c "from almasim import run; run()"``
+1. Query or load ALMA metadata (``almasim.services.metadata`` contains helpers).
+2. Convert one of the metadata rows into :class:`SimulationParams`.
+3. Call :func:`run_simulation` to generate skymodels and visibilities.
+
+Below is a minimal end-to-end example that uses the bundled
+``qso_metadata.csv`` catalogue:
+
+.. code-block:: python
+
+   from pathlib import Path
+
+   import almasim.astro as astro
+   from almasim.services import metadata as metadata_service
+   from almasim.services import simulation as sim
+   from almasim import SimulationParams, run_simulation
+
+   repo_root = Path(__file__).resolve().parents[1]
+   main_dir = repo_root / "almasim"
+   metadata = metadata_service.load_metadata(main_dir / "metadata" / "qso_metadata.csv")
+   rest_frequency, _ = astro.get_line_info(main_dir)
+   sample = sim.sample_given_redshift(metadata, 1, rest_frequency, False, None)
+   target = sample.iloc[0]
+
+   params = SimulationParams.from_metadata_row(
+       target,
+       idx=0,
+       project_name="demo",
+       main_dir=main_dir,
+       output_dir=Path("./outputs"),
+       tng_dir=Path("/data/TNG100-1"),
+       galaxy_zoo_dir=Path("/data/galaxy_zoo"),
+       hubble_dir=Path("/data/hubble"),
+       source_type="point",
+       save_mode="npz",
+   )
+
+   run_simulation(params)
+
+``SimulationParams.from_metadata_row`` normalises an ALMA record,
+expands/absolutises all directories, and accepts overrides for knobs
+such as ``snr``, ``source_type``, ``n_pix``, or ``save_mode``. You can
+still instantiate the dataclass manually if you already have fully
+prepared values.
 
 Notes
 -----
@@ -97,6 +161,8 @@ Notes
 Cube size will dictate simulation speed and RAM usage. To gauge what you
 can affort to run, we advice to start with a single simulation of a 256 x
 256 x 256 cube.
+
+.. QUICKSTART_END_LABEL
 
 
 Parameters and Configuration

@@ -1,22 +1,5 @@
 import setuptools
 
-APP = ['almasim/ui.py']  # Replace with the path to your main script
-DATA_FILES = []  # Include any additional data files needed
-OPTIONS = {
-    'argv_emulation': True,
-    'iconfile': 'pictures/almasim.icns',  # Path to your .icns icon file
-    'packages': [],  # List any additional packages your app needs
-    'plist': {
-        'CFBundleName': 'ALMASim',
-        'CFBundleDisplayName': 'ALMASim',
-        'CFBundleGetInfoString': 'ALMASim Application',
-        'CFBundleIdentifier': 'The University of the Street',
-        'CFBundleVersion': '2.1.10',
-        'CFBundleShortVersionString': '2.1.10',
-    },
-}
-
-
 setuptools.setup(
     name="almasim",
     version="2.1.10",
@@ -43,8 +26,6 @@ setuptools.setup(
         "matplotlib",
         "memory_profiler",
         "seaborn",
-        "pyQt6",
-        "qtrangeslider",
         "tqdm",
         "scipy",
         "h5py",
@@ -60,7 +41,6 @@ setuptools.setup(
         "setuptools",
         "tenacity",
         "nifty8",
-        "setuptools",
         "scikit-image",
         "imagecodecs",
     ],

@@ -9,7 +9,7 @@ homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
 documentation = "https://almasim.readthedocs.io/en/latest"
 
 [tool.poetry.dependencies]
-python = ">=3.12.4"
+python = "^3.14"
 astropy = "*"
 asyncssh = "*"
 pyvo = "*"
@@ -17,8 +17,6 @@ numpy = "*"
 pandas = "*"
 matplotlib = "*"
 seaborn = "*"
-pyqt6 = "*"
-qtrageslider = "*"
 tqdm = "*"
 scipy = "*"
 h5py = "*"
@@ -32,7 +30,6 @@ Hdecompose = "*"
 paramiko = "*"
 pysftp = "*"
 tenacity = "*"
-threading = "*"
 nifty8 = "*"
 setuptools = "*"
 multiprocess = "*"
@@ -41,9 +38,21 @@ imagecodecs = "*"
 
 
 
-[tool.poetry.group.dev.dependencies]  # Optional: Development dependencies
+[tool.poetry.group.dev.dependencies]
 pytest = "*"
-pytest-qt = "*"
+pytest-cov = "*"
 flake8 = "*"
 mypy = "*"
 black = "*"
+fastapi = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+httpx = "*"
+pydantic-settings = "*"
+
+[tool.poetry.group.test.dependencies]
+pytest = "*"
+pytest-cov = "*"
+fastapi = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+httpx = "*"
+pydantic-settings = "*"

@@ -1,0 +1,1 @@
+{"version":3,"file":"touch.d.ts","sourceRoot":"","sources":["../../../src/src/commands/touch.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,uBAAuB,CAAC;AAK5D,wBAAsB,YAAY,CAAC,OAAO,EAAE,cAAc,iDAOzD;AASD,UAAU,UAAU;IAClB,KAAK,EAAE,MAAM,EAAE,CAAC;CACjB;AAED,wBAAgB,SAAS,CAAC,IAAI,EAAE,MAAM,EAAE,GAAG,UAAU,CASpD"}

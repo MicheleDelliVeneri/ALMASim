@@ -1,1 +1,0 @@
-stubtest --mypy-config-file mypy.ini --allowlist stubtest_allowlist almasim.astro almasim.alma almasim.skymodels almasim.ui almasim.interferometer

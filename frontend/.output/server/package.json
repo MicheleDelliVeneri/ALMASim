@@ -1,0 +1,13 @@
+{
+  "name": "almasim-frontend-prod",
+  "version": "2.1.10",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "pathe": "1.1.2",
+    "seroval": "1.3.2",
+    "seroval-plugins": "1.3.3",
+    "solid-js": "1.9.10",
+    "vinxi": "0.5.8"
+  }
+}

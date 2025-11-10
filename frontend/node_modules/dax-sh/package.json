@@ -1,0 +1,33 @@
+{
+  "name": "dax-sh",
+  "version": "0.43.2",
+  "description": "Cross platform shell tools inspired by zx.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsherret/dax.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dsherret/dax/issues"
+  },
+  "main": "./script/mod.js",
+  "module": "./esm/mod.js",
+  "exports": {
+    ".": {
+      "import": "./esm/mod.js",
+      "require": "./script/mod.js"
+    }
+  },
+  "scripts": {
+    "test": "node test_runner.js"
+  },
+  "dependencies": {
+    "@deno/shim-deno": "~0.19.0",
+    "undici-types": "^5.26"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "picocolors": "^1.0.0"
+  },
+  "_generatedBy": "dnt@dev"
+}

@@ -1,5 +1,6 @@
 import pytest
-import almasim.alma as alma
+from almasim.services.metadata.tap import service as alma
+from almasim.services.interferometry import antenna as alma_antenna
 from pathlib import Path
 import inspect
 import faulthandler
@@ -38,33 +39,33 @@ def test_alma_functions():
     metadata = pd.read_csv(metadata_path).iloc[0]
     antenna_array = metadata["antenna_arrays"]
     central_freq = metadata["Freq"] * U.GHz
-    alma.generate_antenna_config_file_from_antenna_array(
+    alma_antenna.generate_antenna_config_file_from_antenna_array(
         antenna_array, os.path.join(main_path, "almasim"), main_path
     )
     antennalist = os.path.join(main_path, "antenna.cfg")
     assert os.path.isfile(antennalist)
-    max_baseline = alma.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
     assert max_baseline > 0
-    max_baseline = alma.get_max_baseline_from_antenna_array(
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_array(
         antenna_array, os.path.join(main_path, "almasim")
     )
     assert max_baseline > 0
-    beam_size = alma.estimate_alma_beam_size(
+    beam_size = alma_antenna.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=False
     )
     assert beam_size > 0
-    beam_size = alma.estimate_alma_beam_size(
+    beam_size = alma_antenna.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=True
     )
     assert beam_size > 0
     os.remove(os.path.join(main_path, "antenna.cfg"))
 
-    fov = alma.get_fov_from_band(6, return_value=False)
+    fov = alma_antenna.get_fov_from_band(6, return_value=False)
     assert fov > 0
-    fov = alma.get_fov_from_band(6, return_value=True)
+    fov = alma_antenna.get_fov_from_band(6, return_value=True)
     assert fov > 0
     for band in range(1, 11):
-        fov = alma.get_fov_from_band(band)
+        fov = alma_antenna.get_fov_from_band(band)
         assert fov > 0
 
 

@@ -1,5 +1,5 @@
 import pytest
-import almasim.astro as astro
+from almasim.services import astro
 from pathlib import Path
 import inspect
 import faulthandler
