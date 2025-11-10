@@ -39,7 +39,17 @@ const columnLabels: Record<string, string> = {
 };
 
 const RESULTS_CACHE_KEY = "almasim:metadata-results";
-const DEFAULT_METADATA_PATH = "@almasim/metadata/metadata-results.json";
+const DEFAULT_METADATA_PATH = "almasim/metadata";
+
+type FileSystemFileHandle = {
+  name?: string;
+  createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
+};
+
+type SaveFilePickerOptions = {
+  suggestedName?: string;
+  types?: { description?: string; accept: Record<string, string[]> }[];
+};
 
 const numberFromForm = (value: FormDataEntryValue | null) => {
   if (value === null || value === undefined || value === "") return undefined;
@@ -69,6 +79,16 @@ const SkeletonCell = () => (
   <div class="h-4 w-full animate-pulse rounded bg-gray-200/80" aria-hidden="true" />
 );
 
+const supportsFilePicker = () =>
+  typeof window !== "undefined" && typeof (window as Window & { showSaveFilePicker?: () => unknown }).showSaveFilePicker === "function";
+
+const formatDateStamp = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}-${String(
+    date.getHours()
+  ).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}`;
+};
+
 const getCachedResults = (): MetadataResponse | null => {
   if (typeof window === "undefined") return null;
   try {
@@ -93,7 +113,11 @@ const downloadMetadata = (data: MetadataResponse, path: string) => {
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json",
   });
-  const fileName = path.replace(/^@/, "").replace(/\//g, "_") || "metadata-results.json";
+  const safePath = path.replace(/^[.@/\\]+/, "");
+  const sanitized = safePath.length > 0 ? safePath.replace(/\s+/g, "-").replace(/[^\w./-]/g, "_") : "";
+  const segments = sanitized.split("/").filter(Boolean);
+  let fileName = segments.length ? segments.join("_") : `metadata-results-${formatDateStamp()}`;
+  if (!fileName.endsWith(".json")) fileName += ".json";
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = fileName;
@@ -101,6 +125,12 @@ const downloadMetadata = (data: MetadataResponse, path: string) => {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
+};
+
+const normalizeBackendPath = (input: string) => {
+  const cleaned = input.replace(/^[./\\]+/, "").trim() || DEFAULT_METADATA_PATH;
+  if (cleaned.endsWith(".json")) return cleaned;
+  return `${cleaned.replace(/\/$/, "")}/metadata-results.json`;
 };
 
 export default function MetadataPage() {
@@ -250,8 +280,10 @@ export default function MetadataPage() {
     }
   };
 
+  const [localSaveFileName, setLocalSaveFileName] = createSignal("");
   let loadFormRef: HTMLFormElement | undefined;
   let saveFormRef: HTMLFormElement | undefined;
+  let localSaveHandle: FileSystemFileHandle | null = null;
 
   const handleLoadFile: JSX.EventHandlerUnion<HTMLFormElement, SubmitEvent> = async (event) => {
     event.preventDefault();
@@ -301,28 +333,91 @@ export default function MetadataPage() {
     const formElement = saveFormRef ?? (event.currentTarget as HTMLFormElement | undefined);
     if (!formElement) return;
     const formData = new FormData(formElement);
-    const path =
-      ((formData.get("save_path") as string) || DEFAULT_METADATA_PATH).trim() || DEFAULT_METADATA_PATH;
+    const backendPath = normalizeBackendPath((formData.get("save_path") as string) || DEFAULT_METADATA_PATH);
 
     setSaving(true);
     setError("");
+    let backendSucceeded = false;
     try {
-      await metadataApi.save({ path, data: current.data });
-      setStatusMessage(`Saved ${current.count ?? current.data.length} rows to ${path}`);
-      setSaveModalOpen(false);
-      formElement.reset();
+      await metadataApi.save({ path: backendPath, data: current.data });
+      backendSucceeded = true;
+      setStatusMessage(`Saved ${current.count ?? current.data.length} rows to backend path ${backendPath}`);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Unable to save metadata via API. Downloading locally.";
+        err instanceof Error ? err.message : "Unable to save metadata via API. We'll keep working on a local copy.";
       setError(message);
-      try {
-        downloadMetadata(current, path);
-        setStatusMessage(`Downloaded metadata to ${path}.json`);
-      } catch (downloadError) {
-        console.error(downloadError);
-      }
     } finally {
       setSaving(false);
+    }
+
+    const completeCleanup = () => {
+      formElement.reset();
+      localSaveHandle = null;
+      setLocalSaveFileName("");
+      setSaveModalOpen(false);
+    };
+
+    const needsLocalFallback = !backendSucceeded;
+    try {
+      if (localSaveHandle) {
+        const writable = await localSaveHandle.createWritable();
+        await writable.write(new Blob([JSON.stringify(current, null, 2)], { type: "application/json" }));
+        await writable.close();
+        setStatusMessage(
+          `Saved locally to ${localSaveFileName() || localSaveHandle.name || "metadata.json"}${
+            backendSucceeded ? " (backend copy updated too)" : ""
+          }`,
+        );
+      } else if (needsLocalFallback) {
+        downloadMetadata(current, backendPath);
+        setStatusMessage(`Downloaded metadata snapshot (${current.count ?? current.data.length} rows)`);
+      }
+    } catch (localError) {
+      console.error(localError);
+      setError("Unable to write metadata locally.");
+    } finally {
+      completeCleanup();
+    }
+  };
+
+  const chooseLocalSavePath = async () => {
+    if (!supportsFilePicker()) {
+      setError("Your browser does not support choosing a local save location. The file will download instead.");
+      return;
+    }
+    try {
+      const picker = (window as Window & {
+        showSaveFilePicker?: (options: SaveFilePickerOptions) => Promise<FileSystemFileHandle>;
+      }).showSaveFilePicker;
+      if (!picker) {
+        setError("File picker API is unavailable in this environment.");
+        return;
+      }
+      const handle = await picker({
+        suggestedName: `almasim-metadata-${formatDateStamp()}.json`,
+        types: [
+          {
+            description: "JSON file",
+            accept: { "application/json": [".json"] },
+          },
+        ],
+      });
+      localSaveHandle = handle;
+      setLocalSaveFileName(handle.name || "");
+      setStatusMessage(`Local save target selected: ${handle.name || "metadata.json"}`);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Unable to open save dialog.");
+    }
+  };
+
+  const clearMetadata = () => {
+    setResults(null);
+    setStatusMessage("Metadata cleared.");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(RESULTS_CACHE_KEY);
     }
   };
 
@@ -360,10 +455,10 @@ export default function MetadataPage() {
           </p>
         </header>
 
-        <section class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section class="grid grid-cols-1 gap-6">
           <form
             onSubmit={handleSubmit}
-            class="bg-white rounded-lg shadow p-6 space-y-4 lg:col-span-2"
+            class="bg-white rounded-lg shadow p-6 space-y-4"
           >
             <div class="flex items-center justify-between">
               <h2 class="text-xl font-semibold text-gray-900">Query Builder</h2>
@@ -491,19 +586,6 @@ export default function MetadataPage() {
             </div>
           </form>
 
-          <div class="bg-white rounded-lg shadow p-6 space-y-4">
-            <h2 class="text-xl font-semibold text-gray-900">Load Metadata File</h2>
-            <p class="text-sm text-gray-600">
-              Provide a relative path (as seen by the API) to load a precomputed metadata file.
-            </p>
-            <button
-              type="button"
-              onClick={() => setLoadModalOpen(true)}
-              class="w-full bg-gray-900 text-white py-2 px-4 rounded-md hover:bg-gray-800"
-            >
-              Open Loader
-            </button>
-          </div>
         </section>
 
         <Show when={error()}>
@@ -527,6 +609,14 @@ export default function MetadataPage() {
               </span>
             </div>
             <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
+                onClick={clearMetadata}
+                disabled={loading() || !results()}
+              >
+                Clear Metadata
+              </button>
               <button
                 type="button"
                 class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -701,11 +791,9 @@ export default function MetadataPage() {
               </header>
               <form ref={(el) => (saveFormRef = el)} onSubmit={handleSaveMetadata} class="space-y-4 px-6 py-6">
                 <p class="text-sm text-gray-600">
-                  Save the current metadata result set to a path accessible by the backend (default:
-                  <code class="ml-1 rounded bg-gray-100 px-1 py-0.5 text-xs text-gray-800">
-                    {DEFAULT_METADATA_PATH}
-                  </code>
-                  ).
+                  Save the current metadata result set to a backend-visible path (default:{" "}
+                  <code class="rounded bg-gray-100 px-1 py-0.5 text-xs text-gray-800">{DEFAULT_METADATA_PATH}</code>) or pick a local
+                  destination on your machine.
                 </p>
                 <label class="block text-sm font-medium text-gray-700" for="save_path">
                   Destination path
@@ -720,6 +808,29 @@ export default function MetadataPage() {
                 </label>
                 <div class="text-xs text-gray-500">
                   We attempt to persist the file server-side; if that fails, a download starts in your browser.
+                </div>
+
+                <div class="rounded-md border border-dashed border-gray-300 p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p class="text-sm font-medium text-gray-700">Local save location (optional)</p>
+                      <p class="text-xs text-gray-500">
+                        {supportsFilePicker()
+                          ? localSaveFileName()
+                            ? `Selected: ${localSaveFileName()}`
+                            : "No local file chosen yet."
+                          : "Your browser will prompt for a download instead."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={chooseLocalSavePath}
+                      disabled={!supportsFilePicker()}
+                      class="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400"
+                    >
+                      Choose location
+                    </button>
+                  </div>
                 </div>
 
                 <div class="flex items-center justify-end gap-2">

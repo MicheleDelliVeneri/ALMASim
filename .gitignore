@@ -57,3 +57,4 @@ Thumbs.db
 *.npz
 *.fits
 wget-log
+frontend/.output/

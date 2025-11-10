@@ -21,3 +21,17 @@ class MetadataResponse(BaseModel):
     data: list[dict] = Field(..., description="Metadata records")
 
 
+class MetadataSaveRequest(BaseModel):
+    """Request payload for saving metadata on the backend."""
+
+    path: str = Field(..., description="Target path relative to the ALMASim metadata directory")
+    data: list[dict] = Field(..., description="Metadata records to persist")
+
+
+class MetadataSaveResponse(BaseModel):
+    """Response returned after saving metadata."""
+
+    path: str = Field(..., description="Resolved path where the data was stored")
+    count: int = Field(..., description="Number of records saved")
+    message: Optional[str] = Field(default=None, description="Optional status message")
+
