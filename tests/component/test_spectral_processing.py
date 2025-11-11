@@ -11,12 +11,18 @@ from almasim.services.astro.spectral import (
 )
 
 
-def test_sample_given_redshift(test_data_dir):
+def test_sample_given_redshift(test_data_dir, main_dir):
     """Test sampling metadata by redshift."""
     import pandas as pd
+    from almasim.services.astro.lines import get_line_info
     
     metadata = pd.read_csv(test_data_dir / "qso_metadata.csv")
-    rest_frequency = np.array([100.0, 200.0, 300.0])
+    # Get actual rest frequencies from the calibrated lines file
+    # These should be higher than observed frequencies (which are ~250-500 GHz)
+    rest_frequency, _ = get_line_info(main_dir)
+    # Use a subset of rest frequencies that are higher than typical observed frequencies
+    # CO lines are typically 100-500 GHz rest, so use those
+    rest_frequency = rest_frequency[rest_frequency > 100.0][:3]  # Get 3 frequencies > 100 GHz
     
     sample = sample_given_redshift(
         metadata,

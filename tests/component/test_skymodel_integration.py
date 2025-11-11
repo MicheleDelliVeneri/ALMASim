@@ -43,6 +43,8 @@ def test_pointlike_model_integration():
 
 def test_gaussian_model_integration():
     """Test Gaussian sky model end-to-end."""
+    from dask.distributed import Client
+    
     datacube = DataCube(
         n_px_x=64,
         n_px_y=64,
@@ -58,22 +60,24 @@ def test_gaussian_model_integration():
     pos_z = [10]
     fwhm_z = [2.0]
     
-    model = skymodels.GaussianSkyModel(
-        datacube=datacube,
-        continuum=continuum,
-        line_fluxes=line_fluxes,
-        pos_x=32,
-        pos_y=32,
-        pos_z=pos_z,
-        fwhm_x=5,
-        fwhm_y=5,
-        fwhm_z=fwhm_z,
-        angle=45,
-        n_px=64,
-        n_chan=32,
-    )
-    
-    result = model.insert()
-    assert result is not None
+    with Client() as client:
+        model = skymodels.GaussianSkyModel(
+            datacube=datacube,
+            continuum=continuum,
+            line_fluxes=line_fluxes,
+            pos_x=32,
+            pos_y=32,
+            pos_z=pos_z,
+            fwhm_x=5,
+            fwhm_y=5,
+            fwhm_z=fwhm_z,
+            angle=45,
+            n_px=64,
+            n_chan=32,
+            client=client,
+        )
+        
+        result = model.insert()
+        assert result is not None
 
 

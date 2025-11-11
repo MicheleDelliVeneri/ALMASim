@@ -9,8 +9,8 @@ from almasim.services.simulation import SimulationParams
 
 def _sample_metadata_row():
     repo_root = Path(__file__).resolve().parents[1]
-    main_dir = repo_root / "almasim"
-    metadata = pd.read_csv(main_dir / "metadata" / "qso_metadata.csv")
+    main_dir = repo_root / "src" / "almasim"
+    metadata = pd.read_csv(repo_root / "data" / "qso_metadata.csv")
     rest_frequency, _ = astro.get_line_info(main_dir)
     from almasim.services.astro.spectral import sample_given_redshift
     sample = sample_given_redshift(metadata, 1, rest_frequency, False, None)

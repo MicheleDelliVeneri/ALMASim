@@ -24,7 +24,7 @@ def test_luminosity_functions():
     rest_freq, line_names = astro.get_line_info(line_path, [0])
     assert len(rest_freq) > 0
     assert len(line_names) > 0
-    metadata_path = os.path.join(main_path, "almasim", "metadata", "qso_metadata.csv")
+    metadata_path = os.path.join(main_path, "data", "qso_metadata.csv")
     metadata = pd.read_csv(metadata_path).iloc[0]
     source_freq = metadata["Freq"]
     redshift = 0.01

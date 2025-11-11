@@ -7,6 +7,7 @@ readme = "README.rst"
 repository = "https://github.com/MicheleDelliVeneri/ALMASim"
 homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
 documentation = "https://almasim.readthedocs.io/en/latest"
+packages = [{include = "almasim", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.14"

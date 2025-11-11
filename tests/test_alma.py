@@ -22,7 +22,7 @@ def test_query():
     science_keyword = science_keywods[0]
     results = alma.query_by_science_type(science_keyword, band=[6])
     target_list = pd.read_csv(
-        os.path.join(main_path, "almasim", "metadata", "targets_qso.csv")
+        os.path.join(main_path, "data", "targets_qso.csv")
     ).values.tolist()
     data = alma.query_all_targets(target_list)
     assert not data.empty
@@ -35,7 +35,7 @@ def test_alma_functions():
             os.path.sep
         )[:-2]
     )
-    metadata_path = os.path.join(main_path, "almasim", "metadata", "qso_metadata.csv")
+    metadata_path = os.path.join(main_path, "data", "qso_metadata.csv")
     metadata = pd.read_csv(metadata_path).iloc[0]
     antenna_array = metadata["antenna_arrays"]
     central_freq = metadata["Freq"] * U.GHz

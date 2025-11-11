@@ -32,7 +32,7 @@ export default function Simulations() {
       cont_sens: parseFloat(formData.get("cont_sens") as string),
       antenna_array: formData.get("antenna_array") as string,
       source_type: (formData.get("source_type") as string) || "point",
-      main_dir: (formData.get("main_dir") as string) || "./almasim",
+      main_dir: (formData.get("main_dir") as string) || "./src/almasim",
       output_dir: (formData.get("output_dir") as string) || "./outputs",
       tng_dir: (formData.get("tng_dir") as string) || "./data/TNG100-1",
       galaxy_zoo_dir: (formData.get("galaxy_zoo_dir") as string) || "./data/galaxy_zoo",

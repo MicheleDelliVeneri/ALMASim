@@ -120,7 +120,7 @@ def test_gaussian_skymodel_generation(sample_datacube, sample_spectral_data):
     pos_z = [int(idx) for idx in source_channel_index]
     
     # Use threads client for testing
-    with Client(threads=True) as client:
+    with Client() as client:
         model = skymodels.GaussianSkyModel(
             datacube=sample_datacube,
             continuum=continum,
@@ -164,7 +164,7 @@ def test_diffuse_skymodel_generation(sample_datacube, sample_spectral_data):
     
     pos_z = [int(idx) for idx in source_channel_index]
     
-    with Client(threads=True) as client:
+    with Client() as client:
         model = skymodels.DiffuseSkyModel(
             datacube=sample_datacube,
             continuum=continum,
@@ -229,7 +229,7 @@ def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, 
     sim_params_path = tmp_path / "sim_params.txt"
     sim_params_path.write_text("test")
     
-    with Client(threads=True) as client:
+    with Client() as client:
         result = skymodels.insert_serendipitous(
             terminal=None,
             client=client,

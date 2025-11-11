@@ -9,7 +9,8 @@ setuptools.setup(
     long_description=open("README.rst").read(),
     long_description_content_type="text/x-rst",
     url="https://github.com/MicheleDelliVeneri/ALMASim",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(where="src"),
+    package_dir={"": "src"},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",

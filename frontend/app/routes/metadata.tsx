@@ -39,7 +39,7 @@ const columnLabels: Record<string, string> = {
 };
 
 const RESULTS_CACHE_KEY = "almasim:metadata-results";
-const DEFAULT_METADATA_PATH = "almasim/metadata";
+const DEFAULT_METADATA_PATH = "data";
 
 type FileSystemFileHandle = {
   name?: string;

@@ -11,7 +11,7 @@ pip install -r requirements.txt
 
 2. Set environment variables (optional, defaults are provided):
 ```bash
-export MAIN_DIR=./almasim
+export MAIN_DIR=./src/almasim
 export OUTPUT_DIR=./outputs
 ```
 
