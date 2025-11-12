@@ -75,8 +75,9 @@ async def load_metadata(file_path: str) -> MetadataResponse:
 
 
 def _resolve_metadata_path(raw_path: str) -> Path:
-    """Resolve and validate metadata save path within the ALMASim metadata directory."""
-    base_dir = (settings.MAIN_DIR / "metadata").resolve()
+    """Resolve and validate metadata save path within the data directory."""
+    # Use DATA_DIR for saving query results
+    base_dir = (settings.DATA_DIR / "query_results").resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
 
     sanitized = (raw_path or "").strip()
@@ -86,10 +87,8 @@ def _resolve_metadata_path(raw_path: str) -> Path:
         resolved = candidate.resolve()
     else:
         parts = list(candidate.parts)
-        root_name = settings.MAIN_DIR.name
-        if parts and parts[0] == root_name:
-            parts = parts[1:]
-        if parts and parts[0] == "metadata":
+        # Remove common prefixes if present
+        if parts and parts[0] in ("data", "metadata", "query_results"):
             parts = parts[1:]
         relative = Path(*parts) if parts else Path("metadata-results.json")
         resolved = (base_dir / relative).resolve()
@@ -102,7 +101,7 @@ def _resolve_metadata_path(raw_path: str) -> Path:
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Path must be within the ALMASim metadata directory.",
+            detail="Path must be within the data/query_results directory.",
         )
 
     resolved.parent.mkdir(parents=True, exist_ok=True)

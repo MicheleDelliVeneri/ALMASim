@@ -1,12 +1,13 @@
 """Simulation business logic service."""
 from pathlib import Path
 from typing import Any, Optional
-from dask.distributed import Client
 
 import almasim.services.simulation as sim_service
 from almasim.services.simulation import SimulationParams
+from almasim.services.compute.base import ComputationBackend
 
 from app.schemas.simulation import SimulationParamsCreate
+from app.services.status_store import status_store
 
 
 class SimulationService:
@@ -19,7 +20,7 @@ class SimulationService:
         tng_dir: Path,
         galaxy_zoo_dir: Path,
         hubble_dir: Path,
-        dask_client: Optional[Client] = None,
+        compute_backend: Optional[ComputationBackend] = None,
     ):
         """Initialize simulation service."""
         self.main_dir = main_dir
@@ -27,7 +28,7 @@ class SimulationService:
         self.tng_dir = tng_dir
         self.galaxy_zoo_dir = galaxy_zoo_dir
         self.hubble_dir = hubble_dir
-        self.dask_client = dask_client
+        self.compute_backend = compute_backend
 
     def run_simulation(
         self,
@@ -35,52 +36,116 @@ class SimulationService:
         params: SimulationParamsCreate,
     ) -> None:
         """Run a simulation."""
-        # Convert API params to internal SimulationParams
-        sim_params = SimulationParams(
-            idx=params.idx,
-            source_name=params.source_name,
-            member_ouid=params.member_ouid,
-            main_dir=str(self.main_dir),
-            output_dir=str(self.output_dir),
-            tng_dir=str(self.tng_dir),
-            galaxy_zoo_dir=str(self.galaxy_zoo_dir),
-            hubble_dir=str(self.hubble_dir),
-            project_name=params.project_name,
-            ra=params.ra,
-            dec=params.dec,
-            band=params.band,
-            ang_res=params.ang_res,
-            vel_res=params.vel_res,
-            fov=params.fov,
-            obs_date=params.obs_date,
-            pwv=params.pwv,
-            int_time=params.int_time,
-            bandwidth=params.bandwidth,
-            freq=params.freq,
-            freq_support=params.freq_support,
-            cont_sens=params.cont_sens,
-            antenna_array=params.antenna_array,
-            n_pix=params.n_pix,
-            n_channels=params.n_channels,
-            source_type=params.source_type,
-            tng_api_key=params.tng_api_key,
-            ncpu=params.ncpu,
-            rest_frequency=params.rest_frequency,
-            redshift=params.redshift,
-            lum_infrared=params.lum_infrared,
-            snr=params.snr,
-            n_lines=params.n_lines,
-            line_names=params.line_names,
-            save_mode=params.save_mode,
-            inject_serendipitous=params.inject_serendipitous,
-            remote=False,
-        )
+        # Define simulation steps for progress tracking
+        simulation_steps = [
+            "Initializing",
+            "Generating antenna configuration",
+            "Computing max baseline",
+            "Creating sky model",
+            "Running interferometric simulation",
+            "Processing results",
+            "Saving output",
+        ]
+        
+        def status_callback(message: str):
+            """Callback to update simulation status."""
+            # Try to match message to a simulation step
+            step_index = next((i for i, s in enumerate(simulation_steps) if s.lower() in message.lower()), 0)
+            progress = (step_index / len(simulation_steps)) * 100
+            
+            # Extract step name from message
+            current_step = next((s for s in simulation_steps if s.lower() in message.lower()), message)
+            
+            status_store.update(
+                simulation_id,
+                status="running",
+                progress=progress,
+                current_step=current_step,
+                message=message,
+            )
+        
+        def log_callback(message: str):
+            """Callback to log messages."""
+            status_store.update(simulation_id, log=message)
+        
+        def progress_callback(progress: int):
+            """Callback for progress updates."""
+            # Map progress to overall simulation progress (50-95% range for interferometric simulation)
+            overall_progress = 50 + (progress * 0.45)  # 50% to 95%
+            status_store.update(simulation_id, progress=overall_progress)
+        
+        try:
+            status_store.update(simulation_id, status="running", progress=0.0, current_step="Initializing")
+            
+            # Convert API params to internal SimulationParams
+            sim_params = SimulationParams(
+                idx=params.idx,
+                source_name=params.source_name,
+                member_ouid=params.member_ouid,
+                main_dir=str(self.main_dir),
+                output_dir=str(self.output_dir),
+                tng_dir=str(self.tng_dir),
+                galaxy_zoo_dir=str(self.galaxy_zoo_dir),
+                hubble_dir=str(self.hubble_dir),
+                project_name=params.project_name,
+                ra=params.ra,
+                dec=params.dec,
+                band=params.band,
+                ang_res=params.ang_res,
+                vel_res=params.vel_res,
+                fov=params.fov,
+                obs_date=params.obs_date,
+                pwv=params.pwv,
+                int_time=params.int_time,
+                bandwidth=params.bandwidth,
+                freq=params.freq,
+                freq_support=params.freq_support,
+                cont_sens=params.cont_sens,
+                antenna_array=params.antenna_array,
+                n_pix=params.n_pix,
+                n_channels=params.n_channels,
+                source_type=params.source_type,
+                tng_api_key=params.tng_api_key,
+                ncpu=params.ncpu,
+                rest_frequency=params.rest_frequency,
+                redshift=params.redshift,
+                lum_infrared=params.lum_infrared,
+                snr=params.snr,
+                n_lines=params.n_lines,
+                line_names=params.line_names,
+                save_mode=params.save_mode,
+                inject_serendipitous=params.inject_serendipitous,
+                remote=False,
+            )
 
-        # Run simulation
-        sim_service.run_simulation(
-            sim_params,
-            dask_client=self.dask_client,
-            robust=params.robust,
-        )
+            # Run simulation with callbacks
+            sim_service.run_simulation(
+                sim_params,
+                compute_backend=self.compute_backend,
+                robust=params.robust,
+                status_callback=status_callback,
+                progress_emitter=progress_callback,
+                logger=log_callback,
+            )
+            
+            # Mark as completed
+            status_store.update(
+                simulation_id,
+                status="completed",
+                progress=100.0,
+                current_step="Completed",
+                message="Simulation completed successfully",
+            )
+        except Exception as e:
+            # Mark as failed
+            error_msg = str(e)
+            status_store.update(
+                simulation_id,
+                status="failed",
+                error=error_msg,
+                message=f"Simulation failed: {error_msg}",
+            )
+            log_callback(f"ERROR: {error_msg}")
+            raise
 
 

@@ -13,7 +13,11 @@ from astropy.time import Time
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
 import astropy.units as U
 from astropy.constants import c
-from dask.distributed import Client
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from dask.distributed import Client
+    from ..compute.base import ComputationBackend
 
 from .imaging import image_channel
 
@@ -44,7 +48,7 @@ class Interferometer:
         self,
         idx: int,
         skymodel: np.ndarray,
-        client: Client,
+        backend: "ComputationBackend",
         main_dir: str,
         output_dir: str,
         ra: U.Quantity,
@@ -71,8 +75,8 @@ class Interferometer:
             Simulation index
         skymodel : np.ndarray
             Sky model cube
-        client : Client
-            Dask client for parallel processing
+        backend : ComputationBackend
+            Computation backend for parallel processing
         main_dir : str
             Main data directory
         output_dir : str
@@ -108,7 +112,7 @@ class Interferometer:
         """
         self.idx = idx
         self.skymodel = skymodel
-        self.client = client
+        self.backend = backend
         self.main_dir = main_dir
         self.output_dir = output_dir
         self.plot_dir = os.path.join(output_dir, "plots")
@@ -317,13 +321,43 @@ class Interferometer:
         """Run interferometric simulation."""
         # Scatter input data to workers
         scattered_channels = [
-            self.client.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
+            self.backend.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
         ]
+
+        # Convert FITS header to dict for pickling (header contains thread locks)
+        # FITS headers can be converted to dict using dict() constructor
+        # Ensure we create a plain Python dict, not a Header-like object
+        try:
+            if isinstance(self.header, fits.Header):
+                # Convert to plain dict by iterating over items
+                # Convert all values to basic Python types to ensure picklability
+                header_dict = {}
+                for k, v in self.header.items():
+                    key = str(k)
+                    if isinstance(v, (int, float, bool, type(None))):
+                        header_dict[key] = v
+                    elif isinstance(v, str):
+                        header_dict[key] = str(v)
+                    else:
+                        # Convert any other type to string
+                        header_dict[key] = str(v)
+            elif isinstance(self.header, dict):
+                # Already a dict, but ensure it's a plain dict with basic types
+                header_dict = {str(k): (str(v) if not isinstance(v, (int, float, bool, type(None))) else v) 
+                              for k, v in self.header.items()}
+            else:
+                header_dict = {}
+        except Exception:
+            # Fallback: create empty dict if conversion fails
+            header_dict = {}
+
+        # Get the delayed decorator from the backend
+        delayed = self.backend.delayed(image_channel)
 
         delayed_results = []
         for i in range(self.Nchan):
             wavelength, _ = self.get_channel_wavelength(i)
-            delayed_result = image_channel(
+            delayed_result = delayed(
                 scattered_channels[i],
                 wavelength,
                 self.Npix,
@@ -343,19 +377,19 @@ class Interferometer:
                 self.Nphf,
                 self.Np4,
                 self.zooming,
-                self.header,
+                header_dict,  # Pass dict instead of Header object
                 self.robust,
             )
             delayed_results.append(delayed_result)
 
         # Compute per-channel futures
-        futures_per_channel = [self.client.compute(dr) for dr in delayed_results]
+        futures_per_channel = [self.backend.compute(dr, sync=False) for dr in delayed_results]
 
         # Start tracking progress of the per-channel computations
         self.track_progress(futures_per_channel)
 
         # Gather the results after completion
-        results_per_channel = self.client.gather(futures_per_channel)
+        results_per_channel = self.backend.gather(futures_per_channel)
 
         # Extract and stack the outputs
         modelcube = [res[0] for res in results_per_channel]
@@ -433,11 +467,14 @@ class Interferometer:
         return simulation_results
 
     def track_progress(self, futures: list) -> None:
-        """Track progress of Dask futures."""
+        """Track progress of computation futures."""
         total_tasks = len(futures)
         completed_tasks = 0
         while completed_tasks < total_tasks:
-            completed_tasks = sum(f.done() for f in futures)
+            # Check if futures have a done() method (Dask futures) or are already results
+            completed_tasks = sum(
+                f.done() if hasattr(f, "done") else True for f in futures
+            )
             progress_value = int((completed_tasks / total_tasks) * 100)
             self.progress_signal.emit(progress_value)
             time.sleep(1)

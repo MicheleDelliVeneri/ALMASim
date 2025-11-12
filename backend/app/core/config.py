@@ -27,8 +27,12 @@ class Settings(BaseSettings):
 
     # Paths
     MAIN_DIR: Path = Field(
-        default=Path("almasim"),
-        description="Main ALMASim data directory",
+        default=Path("src/almasim"),
+        description="Main ALMASim package directory",
+    )
+    DATA_DIR: Path = Field(
+        default=Path("data"),
+        description="Data directory (metadata, etc.)",
     )
     OUTPUT_DIR: Path = Field(
         default=Path("outputs"),
@@ -47,14 +51,24 @@ class Settings(BaseSettings):
         description="Hubble data directory",
     )
 
-    # Dask configuration
+    # Computation backend configuration
+    COMPUTE_BACKEND: str = Field(
+        default="local",
+        description="Computation backend type: local, dask, slurm, or kubernetes",
+    )
+    COMPUTE_BACKEND_CONFIG: dict = Field(
+        default_factory=dict,
+        description="Backend-specific configuration (JSON dict)",
+    )
+    
+    # Legacy Dask configuration (for backward compatibility)
     DASK_SCHEDULER: str = Field(
         default="threads",
-        description="Dask scheduler type",
+        description="Dask scheduler type (deprecated, use COMPUTE_BACKEND)",
     )
     DASK_N_WORKERS: int = Field(
         default=4,
-        description="Number of Dask workers",
+        description="Number of Dask workers (deprecated, use COMPUTE_BACKEND_CONFIG)",
     )
 
     # Simulation defaults

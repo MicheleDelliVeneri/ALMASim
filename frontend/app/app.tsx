@@ -7,6 +7,7 @@ const navItems = [
   { href: "/", label: "Overview" },
   { href: "/simulations", label: "Simulations" },
   { href: "/metadata", label: "Metadata" },
+  { href: "/visualizer", label: "Visualizer" },
 ];
 
 const AppShell: ParentComponent = (props) => (

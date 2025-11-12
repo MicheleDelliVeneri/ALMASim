@@ -2,7 +2,6 @@
 import numpy as np
 from scipy.ndimage import zoom
 from astropy.io import fits
-from dask import delayed
 
 from .baselines import prepare_baselines, set_baselines, set_noise
 
@@ -219,7 +218,6 @@ def observe(
     return dirtymap, modelvis, dirtyvis
 
 
-@delayed
 def image_channel(
     img: np.ndarray,
     wavelength: list[float],
@@ -240,10 +238,14 @@ def image_channel(
     Nphf: int,
     Np4: int,
     zooming: int,
-    header: fits.Header,
+    header: fits.Header | dict,
     robust: float,
 ) -> tuple:
     """Process a single channel through interferometric simulation."""
+    # Convert header dict back to FITS Header if needed (for pickling compatibility)
+    if isinstance(header, dict):
+        header = fits.Header(header)
+    
     (
         beam,
         totsampling,

@@ -1,0 +1,19 @@
+Simulation Parameters:
+Source Name: J0842+1218
+Member OUID: "uid://A001/X2fb/X3ec"
+RA: 130.62179166666667 deg
+DEC: 12.31338888888889 deg
+Band: 6.0
+Bandwidth 0.24812544 GHz
+Band Central Frequency: 269.695 GHz
+Pixel size: 0.08720203002053159 arcsec
+Beam Size: 0.6926919997654556 arcsec
+Fov: 22.323719685256087 arcsec
+Angular Resolution: 1.0125727183224749 arcsec
+Velocity Resolution: 2162.3907407039 km / s
+Redshift: 0.0
+Integration Time: 453.6 s
+Cube Size: 256 x 256 x 128 pixels
+Mean Continum Flux: 0.014526602330329928
+Infrared Luminosity: 1000000000000.0
+Line: HNC(3–2) 1102.25 - Frequency: 269.6956997518065 GHz - Flux: 0.00698219603803493 Jy  - Width (Channels): 52.655815733158285

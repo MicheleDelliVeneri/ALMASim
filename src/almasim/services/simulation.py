@@ -22,6 +22,11 @@ from .interferometry.utils import closest_power_of_2
 from .utils import log_message, as_progress_emitter
 from .astro.spectral import process_spectral_data
 from .. import skymodels as usm
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..services.compute.base import ComputationBackend
+    from dask.distributed import Client
 
 LogFn = Optional[Callable[[str], None]]
 
@@ -203,13 +208,103 @@ class SimulationParams:
 # Progress emitter functions moved to services.utils
 
 
+def _get_client_from_backend(compute_backend: Optional["ComputationBackend"]) -> Optional["Client"]:
+    """Extract Dask client from computation backend for backward compatibility.
+    
+    TODO: Update skymodels to use ComputationBackend directly.
+    """
+    if compute_backend is None:
+        return None
+    # For Dask backend, extract the client
+    if hasattr(compute_backend, "client"):
+        return compute_backend.client
+    return None
+
+
+def _create_sky_model(
+    source_type: str,
+    common_params: dict,
+    params: SimulationParams,
+    pos_x: float,
+    pos_y: float,
+    n_pix: int,
+    snapshot: Optional[int],
+    tng_subhaloid: Optional[int],
+    redshift: float,
+    ra: U.Quantity,
+    dec: U.Quantity,
+    tng_api_key: Optional[str],
+    terminal_logger: Optional[Any],
+    client: Optional["Client"],
+) -> Any:
+    """Create and return the appropriate sky model based on source type."""
+    source_type_handlers = {
+        "point": lambda: usm.PointlikeSkyModel(
+            **common_params,
+            pos_x=int(pos_x),
+            pos_y=int(pos_y),
+        ),
+        "gaussian": lambda: usm.GaussianSkyModel(
+            **common_params,
+            pos_x=int(pos_x),
+            pos_y=int(pos_y),
+            fwhm_x=int(np.random.randint(3, 10)),
+            fwhm_y=int(np.random.randint(3, 10)),
+            angle=int(np.random.randint(0, 180)),
+            n_px=int(n_pix),
+            client=client,
+        ),
+        "extended": lambda: usm.ExtendedSkyModel(
+            datacube=common_params["datacube"],
+            tngpath=params.tng_dir,
+            snapshot=snapshot,
+            subhalo_id=int(tng_subhaloid) if tng_subhaloid else 0,
+            redshift=redshift,
+            ra=ra,
+            dec=dec,
+            api_key=tng_api_key,
+            client=client,
+            update_progress=common_params["update_progress"],
+            terminal=terminal_logger,
+        ),
+        "diffuse": lambda: usm.DiffuseSkyModel(
+            **common_params,
+            n_px=int(n_pix),
+            client=client,
+        ),
+        "galaxy-zoo": lambda: usm.GalaxyZooSkyModel(
+            **common_params,
+            n_px=int(n_pix),
+            data_path=os.path.join(params.galaxy_zoo_dir, "images_gz2", "images"),
+            client=client,
+        ),
+        "molecular": lambda: usm.MolecularCloudSkyModel(
+            **common_params,
+            n_px=int(n_pix),
+            client=client,
+        ),
+        "hubble-100": lambda: usm.HubbleSkyModel(
+            **common_params,
+            n_px=int(n_pix),
+            data_path=os.path.join(params.hubble_dir, "top100"),
+            client=client,
+        ),
+    }
+
+    handler = source_type_handlers.get(source_type)
+    if handler is None:
+        raise ValueError(f"Unknown source type: {source_type}")
+    
+    return handler()
+
+
 def run_simulation(
     params: SimulationParams,
     *,
     logger: LogFn = None,
     status_callback: Optional[Callable[[str], None]] = None,
     progress_emitter=None,
-    dask_client=None,
+    compute_backend=None,
     terminal_logger=None,
     robust: float = 0.0,
     interferometer_progress_callback: Optional[Callable[[int], None]] = None,
@@ -322,11 +417,27 @@ def run_simulation(
         band_range = n_channels * delta_freq
 
     if redshift is None:
-        if isinstance(rest_frequency, (np.ndarray, list)):
-            rest_frequency = np.sort(np.array(rest_frequency))[0]
-        rest_frequency = rest_frequency * U.GHz
-        redshift = uas.compute_redshift(rest_frequency, source_freq)
-    else:
+        if rest_frequency is None:
+            # For point sources, default to redshift=0 (local universe)
+            # For other source types, this should be provided
+            if params.source_type == "point":
+                redshift = 0.0
+                log("No redshift or rest_frequency provided, using default redshift=0 for point source")
+            else:
+                raise ValueError(
+                    "Either 'redshift' or 'rest_frequency' must be provided. "
+                    f"Cannot compute redshift without rest frequency for source type '{params.source_type}'."
+                )
+        
+        if rest_frequency is not None:
+            if isinstance(rest_frequency, (np.ndarray, list)):
+                rest_frequency = np.sort(np.array(rest_frequency))[0]
+            rest_frequency = rest_frequency * U.GHz
+            redshift = uas.compute_redshift(rest_frequency, source_freq)
+    
+    # Compute rest_frequency from redshift if not already set
+    # Check if rest_frequency is None or hasn't been converted to a Quantity yet
+    if not isinstance(rest_frequency, U.Quantity):
         rest_frequency = (
             uas.compute_rest_frequency_from_redshift(
                 params.main_dir, source_freq.value, redshift
@@ -446,118 +557,47 @@ def run_simulation(
     pos_z = [int(index) for index in source_channel_index]
     log(f"Source Position (x, y): ({pos_x}, {pos_y})")
 
-    if params.source_type == "point":
-        status("Inserting Point Source Model")
-        model = usm.PointlikeSkyModel(
-            datacube=datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_x=int(pos_x),
-            pos_y=int(pos_y),
-            pos_z=pos_z,
-            fwhm_z=fwhm_z,
-            n_chan=n_channels,
-            update_progress=progress_adapter,
-        )
-        datacube = model.insert()
-    elif params.source_type == "gaussian":
-        status("Inserting Gaussian Source Model")
-        fwhm_x = np.random.randint(3, 10)
-        fwhm_y = np.random.randint(3, 10)
-        angle = np.random.randint(0, 180)
-        model = usm.GaussianSkyModel(
-            datacube=datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_x=int(pos_x),
-            pos_y=int(pos_y),
-            pos_z=pos_z,
-            fwhm_x=int(fwhm_x),
-            fwhm_y=int(fwhm_y),
-            fwhm_z=fwhm_z,
-            angle=int(angle),
-            n_px=int(n_pix),
-            n_chan=n_channels,
-            client=dask_client,
-            update_progress=progress_adapter,
-        )
-        datacube = model.insert()
-    elif params.source_type == "extended":
-        status("Inserting Extended Source Model")
-        model = usm.ExtendedSkyModel(
-            datacube=datacube,
-            tngpath=params.tng_dir,
-            snapshot=snapshot,
-            subhalo_id=int(tng_subhaloid),
-            redshift=redshift,
-            ra=ra,
-            dec=dec,
-            api_key=tng_api_key,
-            client=dask_client,
-            update_progress=progress_adapter,
-            terminal=terminal_logger,
-        )
-        datacube = model.insert()
-    elif params.source_type == "diffuse":
-        status("Inserting Diffuse Source Model")
-        model = usm.DiffuseSkyModel(
-            datacube=datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_z=pos_z,
-            fwhm_z=fwhm_z,
-            n_px=int(n_pix),
-            n_chan=n_channels,
-            client=dask_client,
-            update_progress=progress_adapter,
-        )
-        datacube = model.insert()
-    elif params.source_type == "galaxy-zoo":
-        status("Inserting Galaxy Zoo Source Model")
-        galaxy_path = os.path.join(params.galaxy_zoo_dir, "images_gz2", "images")
-        model = usm.GalaxyZooSkyModel(
-            datacube=datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_z=pos_z,
-            fwhm_z=fwhm_z,
-            n_px=int(n_pix),
-            n_chan=n_channels,
-            data_path=galaxy_path,
-            client=dask_client,
-            update_progress=progress_adapter,
-        )
-        datacube = model.insert()
-    elif params.source_type == "molecular":
-        status("Inserting Molecular Cloud Source Model")
-        model = usm.MolecularCloudSkyModel(
-            datacube=datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_z=pos_z,
-            fwhm_z=fwhm_z,
-            n_px=int(n_pix),
-            n_chan=n_channels,
-            client=dask_client,
-            update_progress=progress_adapter,
-        )
-        datacube = model.insert()
-    elif params.source_type == "hubble-100":
-        status("Insert Hubble Top 100 Source Model")
-        hubble_path = os.path.join(params.hubble_dir, "top100")
-        model = usm.HubbleSkyModel(
-            datacube=datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_z=pos_z,
-            fwhm_z=fwhm_z,
-            n_px=int(n_pix),
-            n_chan=n_channels,
-            data_path=hubble_path,
-            client=dask_client,
-            update_progress=progress_adapter,
-        )
-        datacube = model.insert()
+    # Common parameters for all sky models
+    common_params = {
+        "datacube": datacube,
+        "continuum": continum,
+        "line_fluxes": line_fluxes,
+        "pos_z": pos_z,
+        "fwhm_z": fwhm_z,
+        "n_chan": n_channels,
+        "update_progress": progress_adapter,
+    }
+
+    # Get client from backend if available (for backward compatibility with skymodels)
+    client_for_skymodel = _get_client_from_backend(compute_backend)
+
+    # Create and insert sky model
+    status(f"Inserting {params.source_type.replace('-', ' ').title()} Source Model")
+    model = _create_sky_model(
+        source_type=params.source_type,
+        common_params=common_params,
+        params=params,
+        pos_x=pos_x,
+        pos_y=pos_y,
+        n_pix=n_pix,
+        snapshot=snapshot,
+        tng_subhaloid=tng_subhaloid,
+        redshift=redshift,
+        ra=ra,
+        dec=dec,
+        tng_api_key=tng_api_key,
+        terminal_logger=terminal_logger,
+        client=client_for_skymodel,
+    )
+    datacube = model.insert()
+    
+    # Extract fwhm_x, fwhm_y, angle for parameter writing (if gaussian)
+    if params.source_type == "gaussian":
+        fwhm_x = getattr(model, "fwhm_x", None)
+        fwhm_y = getattr(model, "fwhm_y", None)
+        angle = getattr(model, "angle", None)
+    else:
+        fwhm_x = fwhm_y = angle = None
 
     sim_params_path = os.path.join(
         params.output_dir, f"sim_params_{params.idx}.txt"
@@ -596,12 +636,12 @@ def run_simulation(
 
     if params.inject_serendipitous and not stop_requested:
         status("Inserting Serendipitous Sources")
-        if params.source_type != "gaussian":
+        if params.source_type != "gaussian" or fwhm_x is None:
             fwhm_x = np.random.randint(3, 10)
             fwhm_y = np.random.randint(3, 10)
         datacube = usm.insert_serendipitous(
             terminal_logger,
-            dask_client,
+            client_for_skymodel,
             progress_adapter,
             datacube,
             continum,
@@ -611,8 +651,8 @@ def run_simulation(
             line_frequency,
             delta_freq.value,
             pos_z,
-            fwhm_x,
-            fwhm_y,
+            fwhm_x or np.random.randint(3, 10),
+            fwhm_y or np.random.randint(3, 10),
             fwhm_z,
             n_pix,
             n_channels,
@@ -639,7 +679,7 @@ def run_simulation(
     min_line_flux = np.min(line_fluxes)
     interferometer = uin.Interferometer(
         idx=params.idx,
-        client=dask_client,
+        backend=compute_backend,
         skymodel=model,
         main_dir=params.main_dir,
         output_dir=params.output_dir,

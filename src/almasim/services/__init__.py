@@ -7,6 +7,6 @@ so that future backends (FastAPI, CLI, notebooks) can compose them
 without pulling in GUI dependencies.
 """
 
-from . import simulation, astro, interferometry  # re-export convenience
+from . import simulation, astro, interferometry, compute  # re-export convenience
 
-__all__ = ["simulation", "astro", "interferometry"]
+__all__ = ["simulation", "astro", "interferometry", "compute"]

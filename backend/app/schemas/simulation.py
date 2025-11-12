@@ -37,17 +37,19 @@ class SimulationParamsBase(BaseModel):
     save_mode: str = Field(default="npz", description="Save mode")
     inject_serendipitous: bool = Field(default=False, description="Inject serendipitous sources")
     robust: float = Field(default=0.0, description="Robustness parameter")
+    compute_backend: Optional[str] = Field(default="local", description="Computation backend type: local, dask, slurm, or kubernetes")
+    compute_backend_config: Optional[dict] = Field(default_factory=dict, description="Backend-specific configuration")
 
 
 class SimulationParamsCreate(SimulationParamsBase):
     """Simulation parameters for creation."""
 
     idx: int = Field(..., description="Simulation index")
-    main_dir: str = Field(..., description="Main directory path")
-    output_dir: str = Field(..., description="Output directory path")
-    tng_dir: str = Field(..., description="TNG directory path")
-    galaxy_zoo_dir: str = Field(..., description="Galaxy Zoo directory path")
-    hubble_dir: str = Field(..., description="Hubble directory path")
+    main_dir: Optional[str] = Field(None, description="Main directory path (uses settings if not provided)")
+    output_dir: Optional[str] = Field(None, description="Output directory path (uses settings if not provided)")
+    tng_dir: Optional[str] = Field(None, description="TNG directory path (uses settings if not provided)")
+    galaxy_zoo_dir: Optional[str] = Field(None, description="Galaxy Zoo directory path (uses settings if not provided)")
+    hubble_dir: Optional[str] = Field(None, description="Hubble directory path (uses settings if not provided)")
 
 
 class SimulationResponse(BaseModel):
@@ -66,5 +68,8 @@ class SimulationStatus(BaseModel):
     status: str = Field(..., description="Status")
     progress: Optional[float] = Field(None, description="Progress percentage")
     message: Optional[str] = Field(None, description="Status message")
+    current_step: Optional[str] = Field(None, description="Current simulation step")
+    logs: Optional[list[str]] = Field(None, description="Recent log entries")
+    error: Optional[str] = Field(None, description="Error message if failed")
 
 
