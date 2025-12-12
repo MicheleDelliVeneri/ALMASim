@@ -1,19 +1,19 @@
 Simulation Parameters:
-Source Name: J0842+1218
-Member OUID: "uid://A001/X2fb/X3ec"
-RA: 130.62179166666667 deg
-DEC: 12.31338888888889 deg
+Source Name: NGC1068
+Member OUID: "uid://A001/X879/X2d7"
+RA: 40.66987874994658 deg
+DEC: -0.013289000000016187 deg
 Band: 6.0
 Bandwidth 0.24812544 GHz
-Band Central Frequency: 269.695 GHz
-Pixel size: 0.08720203002053159 arcsec
-Beam Size: 0.6926919997654556 arcsec
-Fov: 22.323719685256087 arcsec
-Angular Resolution: 1.0125727183224749 arcsec
-Velocity Resolution: 2162.3907407039 km / s
+Band Central Frequency: 217.655 GHz
+Pixel size: 0.10169914783373106 arcsec
+Beam Size: 0.017645776215501476 arcsec
+Fov: 26.03498184543515 arcsec
+Angular Resolution: 0.034144521487882606 arcsec
+Velocity Resolution: 2525.5986850382087 km / s
 Redshift: 0.0
-Integration Time: 453.6 s
+Integration Time: 5588.352 s
 Cube Size: 256 x 256 x 128 pixels
-Mean Continum Flux: 0.014526602330329928
+Mean Continum Flux: 0.008502053981394296
 Infrared Luminosity: 1000000000000.0
-Line: HNC(3–2) 1102.25 - Frequency: 269.6956997518065 GHz - Flux: 0.00698219603803493 Jy  - Width (Channels): 52.655815733158285
+Line: SO(6-5) 1363.01 - Frequency: 217.65454941447948 GHz - Flux: 11.40799826544042 Jy  - Width (Channels): 16.645709380060826

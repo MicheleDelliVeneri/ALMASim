@@ -1,0 +1,13 @@
+node_modules
+.svelte-kit
+build
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.git
+.gitignore
+README.md
+MIGRATION.md
+MIGRATION_SUMMARY.md

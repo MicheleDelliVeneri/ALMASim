@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # Backend FastAPI service (same as dev)
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: almasim-backend-prod
+    image: almasim-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - MAIN_DIR=/app/src/almasim
+      - DATA_DIR=/app/data
+      - OUTPUT_DIR=/app/outputs
+      - TNG_DIR=/app/data/TNG100-1
+      - GALAXY_ZOO_DIR=/app/data/galaxy_zoo
+      - HUBBLE_DIR=/app/data/hubble
+      - PYTHONOPTIMIZE=1
+    volumes:
+      - ./data:/app/data:ro
+      - ./backend/outputs:/app/outputs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - almasim-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+  # Frontend SvelteKit service (production build)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: almasim-frontend-prod
+    image: almasim-frontend:prod
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=production
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {if(r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - almasim-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+networks:
+  almasim-network:
+    driver: bridge

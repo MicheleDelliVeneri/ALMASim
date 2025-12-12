@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # Backend FastAPI service
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: almasim-backend
+    image: almasim-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - MAIN_DIR=/app/src/almasim
+      - DATA_DIR=/app/data
+      - OUTPUT_DIR=/app/outputs
+      - TNG_DIR=/app/data/TNG100-1
+      - GALAXY_ZOO_DIR=/app/data/galaxy_zoo
+      - HUBBLE_DIR=/app/data/hubble
+    volumes:
+      # Mount data directory for persistence (read-only for safety)
+      - ./data:/app/data:ro
+      # Mount outputs directory for simulation results
+      - ./backend/outputs:/app/outputs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - almasim-network
+
+  # Frontend SvelteKit service (development mode with hot reload)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: almasim-frontend
+    image: almasim-frontend:dev
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      # Mount source code for hot reload
+      - ./frontend/src:/app/src
+      - ./frontend/static:/app/static
+      - ./frontend/svelte.config.js:/app/svelte.config.js
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js
+      - ./frontend/postcss.config.js:/app/postcss.config.js
+      # Exclude node_modules from volume mount
+      - /app/node_modules
+      - /app/.svelte-kit
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {if(r.statusCode !== 200 && r.statusCode !== 304) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - almasim-network
+
+networks:
+  almasim-network:
+    driver: bridge
