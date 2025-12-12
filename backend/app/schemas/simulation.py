@@ -1,5 +1,8 @@
 """Simulation-related schemas."""
+
+from datetime import datetime
 from typing import Any, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -35,21 +38,38 @@ class SimulationParamsBase(BaseModel):
     n_lines: Optional[int] = Field(None, description="Number of spectral lines")
     line_names: Optional[Any] = Field(None, description="Line names")
     save_mode: str = Field(default="npz", description="Save mode")
-    inject_serendipitous: bool = Field(default=False, description="Inject serendipitous sources")
+    inject_serendipitous: bool = Field(
+        default=False, description="Inject serendipitous sources"
+    )
     robust: float = Field(default=0.0, description="Robustness parameter")
-    compute_backend: Optional[str] = Field(default="local", description="Computation backend type: local, dask, slurm, or kubernetes")
-    compute_backend_config: Optional[dict] = Field(default_factory=dict, description="Backend-specific configuration")
+    compute_backend: Optional[str] = Field(
+        default="local",
+        description="Computation backend type: local, dask, slurm, or kubernetes",
+    )
+    compute_backend_config: Optional[dict] = Field(
+        default_factory=dict, description="Backend-specific configuration"
+    )
 
 
 class SimulationParamsCreate(SimulationParamsBase):
     """Simulation parameters for creation."""
 
     idx: int = Field(..., description="Simulation index")
-    main_dir: Optional[str] = Field(None, description="Main directory path (uses settings if not provided)")
-    output_dir: Optional[str] = Field(None, description="Output directory path (uses settings if not provided)")
-    tng_dir: Optional[str] = Field(None, description="TNG directory path (uses settings if not provided)")
-    galaxy_zoo_dir: Optional[str] = Field(None, description="Galaxy Zoo directory path (uses settings if not provided)")
-    hubble_dir: Optional[str] = Field(None, description="Hubble directory path (uses settings if not provided)")
+    main_dir: Optional[str] = Field(
+        None, description="Main directory path (uses settings if not provided)"
+    )
+    output_dir: Optional[str] = Field(
+        None, description="Output directory path (uses settings if not provided)"
+    )
+    tng_dir: Optional[str] = Field(
+        None, description="TNG directory path (uses settings if not provided)"
+    )
+    galaxy_zoo_dir: Optional[str] = Field(
+        None, description="Galaxy Zoo directory path (uses settings if not provided)"
+    )
+    hubble_dir: Optional[str] = Field(
+        None, description="Hubble directory path (uses settings if not provided)"
+    )
 
 
 class SimulationResponse(BaseModel):
@@ -73,3 +93,20 @@ class SimulationStatus(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
 
 
+class SimulationSummary(BaseModel):
+    """Simulation summary for list view."""
+
+    simulation_id: str = Field(..., description="Simulation ID")
+    status: str = Field(..., description="Status")
+    progress: float = Field(..., description="Progress percentage")
+    message: str = Field(..., description="Status message")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    error: Optional[str] = Field(None, description="Error message if failed")
+
+
+class SimulationListResponse(BaseModel):
+    """Response for listing simulations."""
+
+    simulations: list[SimulationSummary] = Field(..., description="List of simulations")
+    total: int = Field(..., description="Total number of simulations")

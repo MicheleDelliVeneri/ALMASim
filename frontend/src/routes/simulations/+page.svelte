@@ -7,6 +7,7 @@
 	import MetadataSelector from '$lib/components/simulations/MetadataSelector.svelte';
 	import SelectedRowPreview from '$lib/components/simulations/SelectedRowPreview.svelte';
 	import SimulationStatusDisplay from '$lib/components/simulations/SimulationStatusDisplay.svelte';
+	import SimulationsList from '$lib/components/simulations/SimulationsList.svelte';
 
 	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -269,5 +270,9 @@
 		{#if simulationId}
 			<SimulationStatusDisplay {simulationId} status={simulationStatus} />
 		{/if}
+
+		<div class="mt-8">
+			<SimulationsList apiUrl={API_BASE_URL} />
+		</div>
 	</div>
 </div>

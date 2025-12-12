@@ -1,20 +1,31 @@
 """Simulation API endpoints."""
+
 import asyncio
 import json
 import uuid
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
-
 from app.core.config import settings
 from app.core.dependencies import get_compute_backend
 from app.schemas.simulation import (
+    SimulationListResponse,
     SimulationParamsCreate,
     SimulationResponse,
+)
+from app.schemas.simulation import (
     SimulationStatus as SimulationStatusSchema,
 )
 from app.services.simulation_service import SimulationService
@@ -23,7 +34,35 @@ from app.services.status_store import status_store
 router = APIRouter()
 
 
-@router.post("/", response_model=SimulationResponse, status_code=status.HTTP_201_CREATED)
+@router.get("/", response_model=SimulationListResponse)
+async def list_simulations() -> SimulationListResponse:
+    """List all simulations."""
+    from app.schemas.simulation import SimulationSummary
+
+    all_simulations = status_store.list_all()
+
+    summaries = [
+        SimulationSummary(
+            simulation_id=sim.simulation_id,
+            status=sim.status,
+            progress=sim.progress,
+            message=sim.message,
+            created_at=sim.created_at,
+            updated_at=sim.updated_at,
+            error=sim.error,
+        )
+        for sim in all_simulations
+    ]
+
+    # Sort by updated_at descending (most recent first)
+    summaries.sort(key=lambda x: x.updated_at, reverse=True)
+
+    return SimulationListResponse(simulations=summaries, total=len(summaries))
+
+
+@router.post(
+    "/", response_model=SimulationResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_simulation(
     params: SimulationParamsCreate,
     background_tasks: BackgroundTasks,
@@ -32,14 +71,14 @@ async def create_simulation(
     """Create and start a new simulation."""
     try:
         simulation_id = str(uuid.uuid4())
-        
+
         # Use backend from params if provided, otherwise use default
         if params.compute_backend:
             backend_config = params.compute_backend_config or {}
             compute_backend = create_backend(params.compute_backend, **backend_config)
         else:
             compute_backend = default_backend
-        
+
         # Use settings values for paths (frontend doesn't need to know Docker paths)
         service = SimulationService(
             main_dir=settings.MAIN_DIR,
@@ -52,8 +91,10 @@ async def create_simulation(
 
         # Create status entry
         status_store.create(simulation_id)
-        status_store.update(simulation_id, status="queued", message="Simulation queued successfully")
-        
+        status_store.update(
+            simulation_id, status="queued", message="Simulation queued successfully"
+        )
+
         # Start simulation in background
         background_tasks.add_task(
             service.run_simulation,
@@ -82,7 +123,7 @@ async def get_simulation_status(simulation_id: str) -> SimulationStatusSchema:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Simulation {simulation_id} not found",
         )
-    
+
     return SimulationStatusSchema(
         simulation_id=sim_status.simulation_id,
         status=sim_status.status,
@@ -98,37 +139,37 @@ async def get_simulation_status(simulation_id: str) -> SimulationStatusSchema:
 async def websocket_status(websocket: WebSocket, simulation_id: str):
     """WebSocket endpoint for real-time simulation status updates."""
     await websocket.accept()
-    
+
     try:
         while True:
             sim_status = status_store.get(simulation_id)
             if not sim_status:
-                await websocket.send_json({
-                    "error": f"Simulation {simulation_id} not found"
-                })
+                await websocket.send_json(
+                    {"error": f"Simulation {simulation_id} not found"}
+                )
                 break
-            
+
             # Send current status
-            await websocket.send_json({
-                "simulation_id": sim_status.simulation_id,
-                "status": sim_status.status,
-                "progress": sim_status.progress,
-                "current_step": sim_status.current_step,
-                "message": sim_status.message,
-                "logs": sim_status.logs[-50:],  # Send last 50 logs
-                "error": sim_status.error,
-            })
-            
+            await websocket.send_json(
+                {
+                    "simulation_id": sim_status.simulation_id,
+                    "status": sim_status.status,
+                    "progress": sim_status.progress,
+                    "current_step": sim_status.current_step,
+                    "message": sim_status.message,
+                    "logs": sim_status.logs[-50:],  # Send last 50 logs
+                    "error": sim_status.error,
+                }
+            )
+
             # If simulation is completed or failed, close connection
             if sim_status.status in ("completed", "failed"):
                 break
-            
+
             # Wait a bit before next update
             await asyncio.sleep(0.5)  # Update every 500ms
-            
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
         await websocket.send_json({"error": str(e)})
-
-

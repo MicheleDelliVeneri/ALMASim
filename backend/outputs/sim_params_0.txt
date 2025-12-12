@@ -1,19 +1,19 @@
 Simulation Parameters:
-Source Name: NGC1068
-Member OUID: "uid://A001/X879/X2d7"
-RA: 40.66987874994658 deg
-DEC: -0.013289000000016187 deg
+Source Name: SDSS_J115826.16+245014.9
+Member OUID: "uid://A001/X3833/X6777"
+RA: 179.60902000002721 deg
+DEC: 24.83747000000253 deg
 Band: 6.0
-Bandwidth 0.24812544 GHz
-Band Central Frequency: 217.655 GHz
-Pixel size: 0.10169914783373106 arcsec
-Beam Size: 0.017645776215501476 arcsec
-Fov: 26.03498184543515 arcsec
-Angular Resolution: 0.034144521487882606 arcsec
-Velocity Resolution: 2525.5986850382087 km / s
+Bandwidth 4.0 GHz
+Band Central Frequency: 241.735 GHz
+Pixel size: 0.16754085141806102 arcsec
+Beam Size: 5.225908816070541 arcsec
+Fov: 42.89045796302362 arcsec
+Angular Resolution: 5.128971512159215 arcsec
+Velocity Resolution: 38912.607716520106 km / s
 Redshift: 0.0
-Integration Time: 5588.352 s
+Integration Time: 151.2 s
 Cube Size: 256 x 256 x 128 pixels
-Mean Continum Flux: 0.008502053981394296
-Infrared Luminosity: 1000000000000.0
-Line: SO(6-5) 1363.01 - Frequency: 217.65454941447948 GHz - Flux: 11.40799826544042 Jy  - Width (Channels): 16.645709380060826
+Mean Continum Flux: 0.019356814987168233
+Infrared Luminosity: 1771561000000.0
+Line: CH3OH(5-4) 1240.01 - Frequency: 241.7365664480295 GHz - Flux: 2.696299591292526 Jy  - Width (Channels): 4.843365808835667

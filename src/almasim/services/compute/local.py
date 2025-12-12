@@ -1,14 +1,39 @@
 """Local computation backend (synchronous execution)."""
-from typing import Any, Callable, List, Optional
-from concurrent.futures import ProcessPoolExecutor
+
 import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from typing import Any, Callable, List, Optional
 
 from .base import ComputationBackend
 
 
+def _execute_task(task: Any) -> Any:
+    """Execute a single task (module-level function for pickling compatibility)."""
+    if callable(task):
+        return task()
+    elif hasattr(task, "compute"):
+        # Handle delayed objects
+        return task.compute()
+    else:
+        return task
+
+
+class DelayedTask:
+    """Delayed task wrapper for local execution (module-level for pickling)."""
+
+    def __init__(self, func: Callable, *args, **kwargs):
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+
+    def compute(self):
+        """Execute the task."""
+        return self.func(*self.args, **self.kwargs)
+
+
 class LocalBackend(ComputationBackend):
     """Local computation backend using processes.
-    
+
     This backend executes computations locally using Python's
     ProcessPoolExecutor for true parallelism across CPU cores.
     Ideal for CPU-bound workloads like ALMA simulations.
@@ -16,7 +41,7 @@ class LocalBackend(ComputationBackend):
 
     def __init__(self, n_workers: Optional[int] = None):
         """Initialize local backend.
-        
+
         Parameters
         ----------
         n_workers : int, optional
@@ -36,29 +61,19 @@ class LocalBackend(ComputationBackend):
 
     def compute(self, tasks: Any, sync: bool = True) -> Any:
         """Compute tasks locally.
-        
+
         For local backend, tasks are executed immediately.
         """
         if isinstance(tasks, list):
             if sync:
-                return [self._execute_task(task) for task in tasks]
+                return [_execute_task(task) for task in tasks]
             else:
-                return [self.executor.submit(self._execute_task, task) for task in tasks]
+                return [self.executor.submit(_execute_task, task) for task in tasks]
         else:
             if sync:
-                return self._execute_task(tasks)
+                return _execute_task(tasks)
             else:
-                return self.executor.submit(self._execute_task, tasks)
-
-    def _execute_task(self, task: Any) -> Any:
-        """Execute a single task."""
-        if callable(task):
-            return task()
-        elif hasattr(task, "compute"):
-            # Handle delayed objects
-            return task.compute()
-        else:
-            return task
+                return self.executor.submit(_execute_task, tasks)
 
     def gather(self, futures: Any) -> List[Any]:
         """Gather results from futures."""
@@ -69,18 +84,9 @@ class LocalBackend(ComputationBackend):
 
     def delayed(self, func: Callable) -> Callable:
         """Create a delayed version of a function for local execution.
-        
+
         Returns a decorator that wraps the function to create delayed tasks.
         """
-        class DelayedTask:
-            def __init__(self, f, *args, **kwargs):
-                self.f = f
-                self.args = args
-                self.kwargs = kwargs
-
-            def compute(self):
-                """Execute the task immediately."""
-                return self.f(*self.args, **self.kwargs)
 
         def delayed_decorator(*args, **kwargs):
             """Create a delayed task from function call."""
@@ -101,4 +107,3 @@ class LocalBackend(ComputationBackend):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.close()
-
