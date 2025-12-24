@@ -93,7 +93,7 @@ class Observation(Base):
     # Observation parameters
     band = Column(Integer, index=True)
     pwv = Column(Float)
-    schedblock_name = Column(String(255))
+    schedblock_name = Column(Text)  # Can be very long with multiple schedblocks
 
     # Resolution and sensitivity
     velocity_resolution = Column(Float)  # km/s
@@ -106,14 +106,16 @@ class Observation(Base):
     # Spectral information
     frequency = Column(Float)  # GHz
     bandwidth = Column(Float)  # GHz
-    frequency_support = Column(Text)  # Complex frequency range string
+    frequency_support = Column(
+        Text
+    )  # Complex frequency range string (can be very long)
 
     # Timing
     obs_release_date = Column(DateTime)
     t_max = Column(Float)  # Integration time in seconds
 
     # Arrays and configuration
-    antenna_arrays = Column(String(255))  # Semicolon-separated
+    antenna_arrays = Column(Text)  # Semicolon-separated (can be long)
     band_list = Column(String(100))
 
     # Metadata

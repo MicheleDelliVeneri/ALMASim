@@ -65,10 +65,10 @@ def initialize_database_on_startup(data_dir: Path) -> None:
         with SessionLocal() as db:
             results = initialize_database_from_csv(db, data_dir)
 
+            total_imported = sum(results.values())
             logger.info(
                 f"Database initialization complete. Imported {total_imported} total observations"
             )
-            logger.info(f"Database initialization complete. Imported {total_imported} total observations")
 
             for filename, count in results.items():
                 if count > 0:

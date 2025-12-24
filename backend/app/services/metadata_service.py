@@ -52,7 +52,32 @@ class MetadataService:
 
         # Fall back to TAP query
         logger.info("Querying science types from ALMA TAP")
-        return query_science_types()
+        keywords, categories = query_science_types()
+
+        # Cache the keywords and categories in the database
+        if self.db_service:
+            try:
+                from database.csv_importer import CSVImporter
+
+                importer = CSVImporter(self.db)
+
+                # Cache all keywords
+                for keyword in keywords:
+                    importer.get_or_create_keyword(keyword)
+
+                # Cache all categories
+                for category in categories:
+                    importer.get_or_create_category(category)
+
+                self.db.commit()
+                logger.info(
+                    f"Cached {len(keywords)} keywords and {len(categories)} categories in database"
+                )
+            except Exception as e:
+                logger.error(f"Failed to cache science types in database: {e}")
+                self.db.rollback()
+
+        return keywords, categories
 
     def query_by_science(
         self,
@@ -174,8 +199,69 @@ class MetadataService:
         return results
 
     def _cache_tap_results_in_db(self, result_df):
-        """Cache TAP query results in database."""
-        # This would need proper implementation to parse DataFrame
-        # and create Observation objects with proper relationships
-        # For now, we'll skip this as the CSV importer handles initial data load
-        pass
+        """Cache TAP query results in database with keywords and categories."""
+        if not self.db_service or result_df.empty:
+            return
+
+        from database.csv_importer import CSVImporter
+
+        try:
+            importer = CSVImporter(self.db)
+            cached_count = 0
+
+            for _, row in result_df.iterrows():
+                # Convert DataFrame row to dict
+                row_dict = row.to_dict()
+
+                # Check if already exists
+                member_ous_uid = row_dict.get("member_ous_uid")
+                if not member_ous_uid:
+                    continue
+
+                existing = self.db_service.get_observation_by_member_uid(member_ous_uid)
+                if existing:
+                    logger.debug(
+                        f"Observation {member_ous_uid} already cached, skipping"
+                    )
+                    continue
+
+                # Extract science keywords and category from the TAP result
+                science_keyword_str = row_dict.get("science_keyword", "")
+                scientific_category_str = row_dict.get("scientific_category", "")
+
+                # Parse observation using the importer
+                observation = importer.parse_csv_row(row_dict, "tap_query")
+                if not observation:
+                    continue
+
+                # Add science keywords (comma-separated in TAP results)
+                if science_keyword_str:
+                    keywords = [
+                        kw.strip()
+                        for kw in str(science_keyword_str).split(",")
+                        if kw.strip()
+                    ]
+                    for keyword in keywords:
+                        kw_obj = importer.get_or_create_keyword(keyword)
+                        if kw_obj not in observation.science_keywords:
+                            observation.science_keywords.append(kw_obj)
+
+                # Add scientific category
+                if scientific_category_str:
+                    category = str(scientific_category_str).strip()
+                    if category:
+                        cat_obj = importer.get_or_create_category(category)
+                        observation.scientific_category = cat_obj
+
+                self.db.add(observation)
+                cached_count += 1
+
+            self.db.commit()
+            logger.info(
+                f"Successfully cached {cached_count} new observations from TAP query"
+            )
+
+        except Exception as e:
+            logger.error(f"Error caching TAP results: {e}", exc_info=True)
+            self.db.rollback()
+            raise

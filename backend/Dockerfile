@@ -28,13 +28,9 @@ COPY backend/ /app/backend/
 RUN cd /app && pip install --no-cache-dir -e . && \
     python -c "import almasim; print(f'almasim installed: {almasim.__file__}')"
 
-# Install backend dependencies (excluding the -e ../. line)
-RUN pip install --no-cache-dir \
-    fastapi>=0.104.0 \
-    uvicorn[standard]>=0.24.0 \
-    pydantic>=2.5.0 \
-    pydantic-settings>=2.1.0 \
-    python-multipart>=0.0.6
+# Install backend dependencies from requirements.txt
+RUN grep -v '^-e' /app/backend/requirements.txt > /tmp/backend-deps.txt && \
+    pip install --no-cache-dir -r /tmp/backend-deps.txt
 
 # Remove build dependencies to reduce image size
 RUN apt-get purge -y gcc g++ && \

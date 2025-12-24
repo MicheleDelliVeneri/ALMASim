@@ -37,14 +37,23 @@
 	let message = $state('');
 	let simulationId = $state('');
 	let metadata = $state<MetadataResponse | null>(null);
-	let selectedRowIndex = $state<number | null>(null);
+	let selectedRowIndices = $state<number[]>([]);
 
 	let simulationStatus = $state<SimulationStatus | null>(null);
 	let ws: WebSocket | null = null;
 
+	// Simulation form state
 	let nPix = $state(256);
 	let nChannels = $state(128);
 	let sourceType = $state('point');
+	let simulationName = $state('');
+	let outputDir = $state('/app/outputs');
+	let snr = $state(1.3);
+	let saveMode = $state('npz');
+	let nLines = $state(0);
+	let robust = $state(0.0);
+	let numSimulations = $state(1);
+
 	let computeBackend = $state('local');
 	let backendConfig = $state<Record<string, unknown>>({});
 
@@ -91,9 +100,11 @@
 	}
 
 	const selectedRow = $derived.by(() => {
-		const idx = selectedRowIndex;
+		const indices = selectedRowIndices;
 		const data = metadata?.data;
-		if (idx === null || !data || idx < 0 || idx >= data.length) return null;
+		if (indices.length === 0 || !data) return null;
+		const idx = indices[0]; // Use first selected row for preview
+		if (idx < 0 || idx >= data.length) return null;
 		return data[idx];
 	});
 
@@ -128,81 +139,133 @@
 		loading = true;
 		message = '';
 
-		const row = selectedRow;
-		if (!row) {
-			message = 'Error: Please select a metadata row first.';
+		// Get selected rows or use first selected row
+		const data = metadata?.data;
+		if (!data || selectedRowIndices.length === 0) {
+			message = 'Error: Please select at least one metadata row first.';
 			loading = false;
 			return;
 		}
 
-		const getValue = (keys: string[], fallback: any = null) => {
-			for (const key of keys) {
-				const value = row[key];
-				if (value !== null && value !== undefined && value !== '') {
-					return value;
+		// Determine rows to process
+		const rowsToProcess: Array<Record<string, unknown>> = [];
+
+		if (numSimulations > 1 && selectedRowIndices.length === 1) {
+			// Create multiple simulations from the same row
+			const row = data[selectedRowIndices[0]];
+			for (let i = 0; i < numSimulations; i++) {
+				rowsToProcess.push(row);
+			}
+		} else {
+			// Create one simulation per selected row
+			for (const idx of selectedRowIndices) {
+				if (idx >= 0 && idx < data.length) {
+					rowsToProcess.push(data[idx]);
 				}
 			}
-			return fallback;
-		};
+		}
 
-		const getNumber = (keys: string[], fallback: number): number => {
-			const value = getValue(keys, fallback);
-			if (typeof value === 'number') {
-				if (isNaN(value)) return fallback;
-				return value;
-			}
-			if (typeof value === 'string') {
-				const parsed = parseFloat(value);
-				return isNaN(parsed) ? fallback : parsed;
-			}
-			return fallback;
-		};
-
-		const getString = (keys: string[], fallback: string): string => {
-			const value = getValue(keys, fallback);
-			return String(value ?? fallback);
-		};
-
-		const params: SimulationParamsCreate = {
-			idx: 0,
-			source_name: getString(['ALMA_source_name', 'source_name'], 'Unknown'),
-			member_ouid: getString(['member_ous_uid', 'member_ouid'], 'unknown'),
-			project_name: getString(['proposal_id', 'project_name'], 'ALMASim'),
-			ra: getNumber(['RA', 'ra'], 0.0),
-			dec: getNumber(['Dec', 'dec'], 0.0),
-			band: getNumber(['Band', 'band'], 3),
-			ang_res: getNumber(['Ang.res.', 'Ang.res', 'ang_res'], 0.1),
-			vel_res: getNumber(['Vel.res.', 'Vel.res', 'vel_res'], 1.0),
-			fov: getNumber(['FOV', 'fov'], 10.0),
-			obs_date: getString(['Obs.date', 'obs_date'], new Date().toISOString().split('T')[0]),
-			pwv: getNumber(['PWV', 'pwv'], 1.0),
-			int_time: getNumber(['Int.Time', 'int_time'], 3600.0),
-			bandwidth: getNumber(['Bandwidth', 'bandwidth'], 2.0),
-			freq: getNumber(['Freq', 'freq'], 100.0),
-			freq_support: getString(['Freq.sup.', 'Freq.sup', 'freq_support'], '100.0-102.0'),
-			cont_sens: getNumber(['Cont_sens_mJybeam', 'Cont_sens', 'cont_sens'], 0.1),
-			antenna_array: getString(['antenna_arrays', 'antenna_array'], 'C43-1'),
-			source_type: sourceType,
-			n_pix: nPix,
-			n_channels: nChannels,
-			main_dir: './src/almasim',
-			output_dir: './outputs',
-			tng_dir: './data/TNG100-1',
-			galaxy_zoo_dir: './data/galaxy_zoo',
-			hubble_dir: './data/hubble',
-			compute_backend: computeBackend,
-			compute_backend_config: backendConfig
-		};
-
-		try {
-			const response = await simulationApi.create(params);
-			simulationId = response.simulation_id;
-			connectWebSocket(response.simulation_id);
-			message = `Simulation created successfully! ID: ${response.simulation_id}`;
-		} catch (error) {
-			message = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-		} finally {
+		if (rowsToProcess.length === 0) {
+			message = 'Error: No valid rows to process.';
 			loading = false;
+			return;
+		}
+
+		// Process all rows
+		const createdSimulations: string[] = [];
+		const errors: string[] = [];
+
+		for (let i = 0; i < rowsToProcess.length; i++) {
+			const row = rowsToProcess[i];
+
+			const getValue = (keys: string[], fallback: any = null) => {
+				for (const key of keys) {
+					const value = row[key];
+					if (value !== null && value !== undefined && value !== '') {
+						return value;
+					}
+				}
+				return fallback;
+			};
+
+			const getNumber = (keys: string[], fallback: number): number => {
+				const value = getValue(keys, fallback);
+				if (typeof value === 'number') {
+					if (isNaN(value)) return fallback;
+					return value;
+				}
+				if (typeof value === 'string') {
+					const parsed = parseFloat(value);
+					return isNaN(parsed) ? fallback : parsed;
+				}
+				return fallback;
+			};
+
+			const getString = (keys: string[], fallback: string): string => {
+				const value = getValue(keys, fallback);
+				return String(value ?? fallback);
+			};
+
+			const simParams: SimulationParamsCreate = {
+				idx: i,
+				source_name: getString(['ALMA_source_name', 'source_name'], 'Unknown'),
+				member_ouid: getString(['member_ous_uid', 'member_ouid'], 'unknown'),
+				project_name: simulationName || getString(['proposal_id', 'project_name'], 'ALMASim'),
+				ra: getNumber(['RA', 'ra'], 0.0),
+				dec: getNumber(['Dec', 'dec'], 0.0),
+				band: getNumber(['Band', 'band'], 3),
+				ang_res: getNumber(['Ang.res.', 'Ang.res', 'ang_res'], 0.1),
+				vel_res: getNumber(['Vel.res.', 'Vel.res', 'vel_res'], 1.0),
+				fov: getNumber(['FOV', 'fov'], 10.0),
+				obs_date: getString(['Obs.date', 'obs_date'], new Date().toISOString().split('T')[0]),
+				pwv: getNumber(['PWV', 'pwv'], 1.0),
+				int_time: getNumber(['Int.Time', 'int_time'], 3600.0),
+				bandwidth: getNumber(['Bandwidth', 'bandwidth'], 2.0),
+				freq: getNumber(['Freq', 'freq'], 100.0),
+				freq_support: getString(['Freq.sup.', 'Freq.sup', 'freq_support'], '100.0-102.0'),
+				cont_sens: getNumber(['Cont_sens_mJybeam', 'Cont_sens', 'cont_sens'], 0.1),
+				antenna_array: getString(['antenna_arrays', 'antenna_array'], 'C43-1'),
+				source_type: sourceType,
+				n_pix: nPix,
+				n_channels: nChannels,
+				snr: snr,
+				save_mode: saveMode,
+				n_lines: nLines > 0 ? nLines : undefined,
+				robust: robust,
+				main_dir: './src/almasim',
+				output_dir: outputDir || './outputs',
+				tng_dir: './data/TNG100-1',
+				galaxy_zoo_dir: './data/galaxy_zoo',
+				hubble_dir: './data/hubble',
+				compute_backend: computeBackend,
+				compute_backend_config: backendConfig
+			};
+
+			try {
+				const response = await simulationApi.create(simParams);
+				createdSimulations.push(response.simulation_id);
+
+				// Connect to first simulation's websocket
+				if (i === 0) {
+					simulationId = response.simulation_id;
+					connectWebSocket(response.simulation_id);
+				}
+			} catch (error) {
+				errors.push(
+					`Simulation ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`
+				);
+			}
+		}
+
+		// Show results
+		loading = false;
+
+		if (createdSimulations.length > 0 && errors.length === 0) {
+			message = `Successfully created ${createdSimulations.length} simulation(s)!`;
+		} else if (createdSimulations.length > 0 && errors.length > 0) {
+			message = `Created ${createdSimulations.length} simulation(s) with ${errors.length} error(s). Errors: ${errors.join('; ')}`;
+		} else {
+			message = `Error: Failed to create simulations. ${errors.join('; ')}`;
 		}
 	}
 </script>
@@ -237,15 +300,29 @@
 			{sourceType}
 			{nPix}
 			{nChannels}
+			{simulationName}
+			{outputDir}
+			{snr}
+			{saveMode}
+			{nLines}
+			{robust}
+			{numSimulations}
 			onSourceTypeChange={(type) => (sourceType = type)}
 			onNPixChange={(value) => (nPix = value)}
 			onNChannelsChange={(value) => (nChannels = value)}
+			onSimulationNameChange={(value) => (simulationName = value)}
+			onOutputDirChange={(value) => (outputDir = value)}
+			onSnrChange={(value) => (snr = value)}
+			onSaveModeChange={(value) => (saveMode = value)}
+			onNLinesChange={(value) => (nLines = value)}
+			onRobustChange={(value) => (robust = value)}
+			onNumSimulationsChange={(value) => (numSimulations = value)}
 		/>
 
 		<MetadataSelector
 			{metadata}
-			selectedIndices={selectedRowIndex !== null ? [selectedRowIndex] : []}
-			onSelect={(indices) => (selectedRowIndex = indices[0] ?? null)}
+			selectedIndices={selectedRowIndices}
+			onSelect={(indices) => (selectedRowIndices = indices)}
 			{getRowValue}
 			{getRowNumber}
 		/>
