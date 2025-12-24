@@ -244,13 +244,20 @@
 
 		<MetadataSelector
 			{metadata}
-			selectedIndex={selectedRowIndex}
-			onSelect={(idx) => (selectedRowIndex = idx)}
+			selectedIndices={selectedRowIndex !== null ? [selectedRowIndex] : []}
+			onSelect={(indices) => (selectedRowIndex = indices[0] ?? null)}
 			{getRowValue}
 			{getRowNumber}
 		/>
 
-		<SelectedRowPreview row={selectedRow} {getRowValue} {getRowNumber} {sourceType} {nPix} {nChannels} />
+		<SelectedRowPreview
+			row={selectedRow}
+			{getRowValue}
+			{getRowNumber}
+			{sourceType}
+			{nPix}
+			{nChannels}
+		/>
 
 		<form onsubmit={handleSubmit}>
 			<button

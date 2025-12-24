@@ -1,4 +1,5 @@
 """Application configuration."""
+
 from pathlib import Path
 from typing import List
 
@@ -60,7 +61,7 @@ class Settings(BaseSettings):
         default_factory=dict,
         description="Backend-specific configuration (JSON dict)",
     )
-    
+
     # Legacy Dask configuration (for backward compatibility)
     DASK_SCHEDULER: str = Field(
         default="threads",
@@ -77,7 +78,11 @@ class Settings(BaseSettings):
     DEFAULT_SAVE_MODE: str = "npz"
     DEFAULT_ROBUST: float = 0.0
 
+    # Database configuration
+    DATABASE_URL: str = Field(
+        default="postgresql://almasim:almasim_dev_password@localhost:5432/almasim",
+        description="PostgreSQL database URL",
+    )
+
 
 settings = Settings()
-
-

@@ -1,8 +1,11 @@
 """Metadata API endpoints."""
+
 import json
+import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.schemas.metadata import (
@@ -13,14 +16,20 @@ from app.schemas.metadata import (
 )
 from app.services.metadata_service import MetadataService
 
+# Import database dependency
+backend_dir = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(backend_dir))
+
+from database.config import get_db
+
 router = APIRouter()
 
 
 @router.get("/science-types", response_model=dict)
-async def get_science_types() -> dict:
-    """Get available science types and categories."""
+async def get_science_types(db: Session = Depends(get_db)) -> dict:
+    """Get available science types and categories from database."""
     try:
-        service = MetadataService()
+        service = MetadataService(db=db)
         keywords, categories = service.get_science_types()
         return {
             "keywords": keywords,
@@ -34,11 +43,13 @@ async def get_science_types() -> dict:
 
 
 @router.post("/query", response_model=MetadataResponse)
-async def query_metadata(query: MetadataQuery) -> MetadataResponse:
-    """Query ALMA metadata."""
+async def query_metadata(
+    query: MetadataQuery, db: Session = Depends(get_db)
+) -> MetadataResponse:
+    """Query ALMA metadata from database cache or TAP archive."""
     try:
-        service = MetadataService()
-        df = service.query_by_science(
+        service = MetadataService(db=db)
+        data = service.query_by_science(
             science_keyword=query.science_keyword,
             scientific_category=query.scientific_category,
             bands=query.bands,
@@ -47,8 +58,8 @@ async def query_metadata(query: MetadataQuery) -> MetadataResponse:
             frequency_range=query.frequency_range,
         )
         return MetadataResponse(
-            count=len(df),
-            data=df.to_dict("records"),
+            count=len(data),
+            data=data,
         )
     except Exception as e:
         raise HTTPException(
@@ -58,14 +69,16 @@ async def query_metadata(query: MetadataQuery) -> MetadataResponse:
 
 
 @router.get("/load/{file_path:path}", response_model=MetadataResponse)
-async def load_metadata(file_path: str) -> MetadataResponse:
-    """Load metadata from a CSV file."""
+async def load_metadata(
+    file_path: str, db: Session = Depends(get_db)
+) -> MetadataResponse:
+    """Load metadata from a CSV file and cache in database."""
     try:
-        service = MetadataService()
-        df = service.load_metadata(Path(file_path))
+        service = MetadataService(db=db)
+        data = service.load_metadata(Path(file_path))
         return MetadataResponse(
-            count=len(df),
-            data=df.to_dict("records"),
+            count=len(data),
+            data=data,
         )
     except Exception as e:
         raise HTTPException(
@@ -127,4 +140,3 @@ async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save metadata: {str(e)}",
         )
-
