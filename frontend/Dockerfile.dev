@@ -20,4 +20,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000', (r) => {if(r.statusCode !== 200 && r.statusCode !== 304) throw new Error(r.statusCode)})"
 
 # Start development server with hot reload
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+# Run svelte-kit sync first to generate .svelte-kit files before starting vite
+CMD ["sh", "-c", "npx svelte-kit sync && npm run dev -- --host 0.0.0.0 --port 3000"]
