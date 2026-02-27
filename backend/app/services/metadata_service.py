@@ -81,9 +81,15 @@ class MetadataService:
 
     def query_by_science(
         self,
+        source_name: Optional[str] = None,
         science_keyword: Optional[Sequence[str]] = None,
         scientific_category: Optional[Sequence[str]] = None,
         bands: Optional[Sequence[int]] = None,
+        antenna_arrays: Optional[str] = None,
+        angular_resolution_range: Optional[Tuple[float, float]] = None,
+        observation_date_range: Optional[Tuple[str, str]] = None,
+        qa2_status: Optional[Sequence[str]] = None,
+        obs_type: Optional[str] = None,
         fov_range: Optional[Tuple[float, float]] = None,
         time_resolution_range: Optional[Tuple[float, float]] = None,
         frequency_range: Optional[Tuple[float, float]] = None,
@@ -97,27 +103,35 @@ class MetadataService:
         """
         if self.db_service:
             try:
-                # Check if we have any observations in the database at all
-                total_cached = self.db_service.count_observations()
+                # Only serve from cache when observations have science keywords —
+                # rows cached before keyword support was added would show empty values.
+                cached_with_keywords = self.db_service.count_observations_with_keywords()
 
-                if total_cached > 0:
-                    # We have cached data, query it with filters
+                if cached_with_keywords > 0:
                     observations = self.db_service.query_observations(
+                        target_name=source_name,
                         science_keywords=science_keyword,
                         scientific_categories=scientific_category,
                         bands=bands,
+                        antenna_arrays=antenna_arrays,
+                        angular_resolution_range=angular_resolution_range,
+                        observation_date_range=observation_date_range,
+                        qa2_status=qa2_status,
+                        obs_type=obs_type,
                         fov_range=fov_range,
                         time_resolution_range=time_resolution_range,
                         frequency_range=frequency_range,
-                        limit=1000,  # Reasonable limit for performance
+                        limit=1000,
                     )
 
                     logger.info(
-                        f"Retrieved {len(observations)} observations from database cache (total cached: {total_cached})"
+                        f"Retrieved {len(observations)} observations from database cache"
                     )
                     return self._observations_to_dict(observations)
                 else:
-                    logger.info("Database is empty, querying ALMA TAP")
+                    logger.info(
+                        "No keyword-annotated observations in cache, querying ALMA TAP"
+                    )
             except Exception as e:
                 logger.warning(f"Database query failed: {e}, falling back to TAP")
 
@@ -174,23 +188,32 @@ class MetadataService:
                 {
                     "ALMA_source_name": obs.target_name,
                     "Band": obs.band,
+                    "antenna_arrays": obs.antenna_arrays,
+                    "Ang.res.": obs.spatial_resolution,
+                    "Obs.date": obs.obs_release_date.isoformat()
+                    if obs.obs_release_date
+                    else None,
+                    "Project_abstract": obs.proposal_abstract,
+                    "science_keyword": ", ".join(
+                        [kw.keyword for kw in obs.science_keywords]
+                    ),
+                    "scientific_category": obs.scientific_category.category
+                    if obs.scientific_category
+                    else None,
+                    "QA2_status": obs.qa2_passed,
+                    "Type": obs.obs_type,
                     "PWV": obs.pwv,
                     "SB_name": obs.schedblock_name,
                     "Vel.res.": obs.velocity_resolution,
-                    "Ang.res.": obs.spatial_resolution,
                     "RA": obs.ra,
                     "Dec": obs.dec,
                     "FOV": obs.s_fov,
                     "Int.Time": obs.t_max,
                     "Cont_sens_mJybeam": obs.cont_sensitivity_bandwidth,
                     "Line_sens_10kms_mJybeam": obs.sensitivity_10kms,
-                    "Obs.date": obs.obs_release_date.isoformat()
-                    if obs.obs_release_date
-                    else None,
                     "Bandwidth": obs.bandwidth,
                     "Freq": obs.frequency,
                     "Freq.sup.": obs.frequency_support,
-                    "antenna_arrays": obs.antenna_arrays,
                     "proposal_id": obs.proposal_id,
                     "member_ous_uid": obs.member_ous_uid,
                     "group_ous_uid": obs.group_ous_uid,
@@ -219,17 +242,33 @@ class MetadataService:
                     continue
 
                 existing = self.db_service.get_observation_by_member_uid(member_ous_uid)
-                if existing:
-                    logger.debug(
-                        f"Observation {member_ous_uid} already cached, skipping"
-                    )
-                    continue
 
                 # Extract science keywords and category from the TAP result
                 science_keyword_str = row_dict.get("science_keyword", "")
                 scientific_category_str = row_dict.get("scientific_category", "")
 
-                # Parse observation using the importer
+                if existing:
+                    # Observation already in DB — upsert keywords/category if missing
+                    if not existing.science_keywords and science_keyword_str:
+                        keywords = [
+                            kw.strip()
+                            for kw in str(science_keyword_str).split(",")
+                            if kw.strip()
+                        ]
+                        for keyword in keywords:
+                            kw_obj = importer.get_or_create_keyword(keyword)
+                            if kw_obj not in existing.science_keywords:
+                                existing.science_keywords.append(kw_obj)
+                        cached_count += 1
+
+                    if existing.scientific_category is None and scientific_category_str:
+                        category = str(scientific_category_str).strip()
+                        if category:
+                            cat_obj = importer.get_or_create_category(category)
+                            existing.scientific_category = cat_obj
+                    continue
+
+                # New observation — parse and insert
                 observation = importer.parse_csv_row(row_dict, "tap_query")
                 if not observation:
                     continue

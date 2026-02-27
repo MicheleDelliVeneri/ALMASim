@@ -6,9 +6,15 @@ from pydantic import BaseModel, Field
 class MetadataQuery(BaseModel):
     """Metadata query parameters."""
 
+    source_name: Optional[str] = Field(None, description="Source name (partial match)")
     science_keyword: Optional[Sequence[str]] = Field(None, description="Science keywords")
     scientific_category: Optional[Sequence[str]] = Field(None, description="Scientific categories")
     bands: Optional[Sequence[int]] = Field(None, description="Band numbers")
+    antenna_arrays: Optional[str] = Field(None, description="Antenna array configuration (partial match)")
+    angular_resolution_range: Optional[tuple[float, float]] = Field(None, description="Angular resolution range (arcsec)")
+    observation_date_range: Optional[tuple[str, str]] = Field(None, description="Observation date range (ISO date strings)")
+    qa2_status: Optional[Sequence[str]] = Field(None, description="QA2 status values (e.g. 'T', 'F')")
+    obs_type: Optional[str] = Field(None, description="Observation type (partial match)")
     fov_range: Optional[tuple[float, float]] = Field(None, description="FOV range")
     time_resolution_range: Optional[tuple[float, float]] = Field(None, description="Time resolution range")
     frequency_range: Optional[tuple[float, float]] = Field(None, description="Frequency range")

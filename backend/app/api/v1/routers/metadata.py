@@ -50,9 +50,15 @@ async def query_metadata(
     try:
         service = MetadataService(db=db)
         data = service.query_by_science(
+            source_name=query.source_name,
             science_keyword=query.science_keyword,
             scientific_category=query.scientific_category,
             bands=query.bands,
+            antenna_arrays=query.antenna_arrays,
+            angular_resolution_range=query.angular_resolution_range,
+            observation_date_range=query.observation_date_range,
+            qa2_status=query.qa2_status,
+            obs_type=query.obs_type,
             fov_range=query.fov_range,
             time_resolution_range=query.time_resolution_range,
             frequency_range=query.frequency_range,

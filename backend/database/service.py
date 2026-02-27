@@ -42,6 +42,11 @@ class DatabaseService:
         science_keywords: Optional[Sequence[str]] = None,
         scientific_categories: Optional[Sequence[str]] = None,
         bands: Optional[Sequence[int]] = None,
+        antenna_arrays: Optional[str] = None,
+        angular_resolution_range: Optional[tuple[float, float]] = None,
+        observation_date_range: Optional[tuple[str, str]] = None,
+        qa2_status: Optional[Sequence[str]] = None,
+        obs_type: Optional[str] = None,
         fov_range: Optional[tuple[float, float]] = None,
         time_resolution_range: Optional[tuple[float, float]] = None,
         frequency_range: Optional[tuple[float, float]] = None,
@@ -106,6 +111,32 @@ class DatabaseService:
             if max_freq is not None:
                 filters.append(Observation.frequency <= max_freq)
 
+        if antenna_arrays:
+            filters.append(Observation.antenna_arrays.ilike(f"%{antenna_arrays}%"))
+
+        if angular_resolution_range:
+            min_ang, max_ang = angular_resolution_range
+            if min_ang is not None:
+                filters.append(Observation.spatial_resolution >= min_ang)
+            if max_ang is not None:
+                filters.append(Observation.spatial_resolution <= max_ang)
+
+        if observation_date_range:
+            from datetime import datetime as dt
+            min_date_str, max_date_str = observation_date_range
+            if min_date_str:
+                min_date = dt.fromisoformat(min_date_str)
+                filters.append(Observation.obs_release_date >= min_date)
+            if max_date_str:
+                max_date = dt.fromisoformat(max_date_str)
+                filters.append(Observation.obs_release_date <= max_date)
+
+        if qa2_status:
+            filters.append(Observation.qa2_passed.in_(qa2_status))
+
+        if obs_type:
+            filters.append(Observation.obs_type.ilike(f"%{obs_type}%"))
+
         if scientific_categories:
             # Join with categories table for filtering
             stmt = stmt.join(Observation.scientific_category)
@@ -137,6 +168,15 @@ class DatabaseService:
         """Get a single observation by member OUS UID."""
         stmt = select(Observation).where(Observation.member_ous_uid == member_ous_uid)
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def count_observations_with_keywords(self) -> int:
+        """Count observations that have at least one science keyword associated."""
+        from sqlalchemy import exists
+        from .models import observation_keywords
+        stmt = select(func.count(Observation.id)).where(
+            exists().where(observation_keywords.c.observation_id == Observation.id)
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def count_observations(
         self,

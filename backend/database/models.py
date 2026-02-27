@@ -118,6 +118,11 @@ class Observation(Base):
     antenna_arrays = Column(Text)  # Semicolon-separated (can be long)
     band_list = Column(String(100))
 
+    # Proposal and quality
+    proposal_abstract = Column(Text)
+    qa2_passed = Column(String(10))  # 'T', 'F', or other values from TAP
+    obs_type = Column(String(100))  # TAP 'type' field (renamed to avoid Python keyword conflict)
+
     # Metadata
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(

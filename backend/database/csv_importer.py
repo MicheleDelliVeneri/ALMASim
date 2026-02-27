@@ -128,6 +128,9 @@ class CSVImporter:
                 t_max=float(row["Int.Time"]) if row.get("Int.Time") else None,
                 antenna_arrays=row.get("antenna_arrays"),
                 band_list=str(band) if band else None,
+                proposal_abstract=row.get("Project_abstract"),
+                qa2_passed=row.get("QA2_status"),
+                obs_type=row.get("Type"),
                 source_file=source_file,
             )
 

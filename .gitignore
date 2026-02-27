@@ -58,3 +58,4 @@ Thumbs.db
 *.fits
 wget-log
 frontend/.output/
+backend/outputs

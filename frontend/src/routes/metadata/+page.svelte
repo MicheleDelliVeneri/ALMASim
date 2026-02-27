@@ -346,7 +346,7 @@
 	{#if initialLoading}
 		<FullScreenLoader />
 	{/if}
-	<div class="mx-auto max-w-6xl space-y-8">
+	<div class="space-y-8">
 		<header>
 			<h1 class="text-3xl font-bold text-gray-900">Metadata Explorer</h1>
 			<p class="mt-2 text-gray-600">Query ALMA observation metadata or load a precomputed dataset.</p>

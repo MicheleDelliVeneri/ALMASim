@@ -125,6 +125,9 @@ def query_observations(member_ous_uid, target_name):
         "scientific_category",
         "antenna_arrays",
         "t_max",
+        "proposal_abstract",
+        "qa2_passed",
+        "type",
     ]
     columns_str = ", ".join(columns)
     query = f"""
@@ -207,6 +210,9 @@ def query_by_science_type(
         "scientific_category",
         "antenna_arrays",
         "t_max",
+        "proposal_abstract",
+        "qa2_passed",
+        "type",
     ]
     columns_str = ", ".join(columns)
     # Default values for parameters if they are None
