@@ -18,7 +18,6 @@ class MetadataQuery(BaseModel):
     fov_range: Optional[tuple[float, float]] = Field(None, description="FOV range")
     time_resolution_range: Optional[tuple[float, float]] = Field(None, description="Time resolution range")
     frequency_range: Optional[tuple[float, float]] = Field(None, description="Frequency range")
-    max_rows: int = Field(2000, description="Maximum number of rows to return from TAP")
 
 
 class MetadataResponse(BaseModel):

@@ -14,7 +14,6 @@ export interface MetadataQuery {
 	fov_range?: [number, number];
 	time_resolution_range?: [number, number];
 	frequency_range?: [number, number];
-	max_rows?: number;
 }
 
 export interface MetadataResponse {

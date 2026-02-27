@@ -1,6 +1,7 @@
 """TAP service functions for querying ALMA metadata."""
 import pyvo
 import pandas as pd
+from astropy.time import Time
 from tenacity import retry, stop_after_attempt, wait_exponential
 import requests
 
@@ -177,7 +178,6 @@ def query_by_science_type(
     observation_date_range=None,
     qa2_status=None,
     obs_type=None,
-    max_rows=2000,
 ):
     """Query for all science observations by science type and other filters.
 
@@ -286,11 +286,11 @@ def query_by_science_type(
             f"spatial_resolution BETWEEN {angular_resolution_range[0]} AND {angular_resolution_range[1]}"
         )
 
-    # Observation date range
+    # Observation date range — t_max is MJD in ivoa.obscore (observation end time)
     if observation_date_range:
-        conditions.append(
-            f"obs_release_date BETWEEN '{observation_date_range[0]}' AND '{observation_date_range[1]}'"
-        )
+        mjd_min = Time(observation_date_range[0], format="iso", scale="utc").mjd
+        mjd_max = Time(observation_date_range[1], format="iso", scale="utc").mjd
+        conditions.append(f"t_max >= {mjd_min} AND t_max <= {mjd_max}")
 
     # QA2 status
     if qa2_status:
@@ -322,11 +322,9 @@ def query_by_science_type(
 
     where_clause = " AND ".join(conditions)
     query = f"""
-            SELECT TOP {max_rows} {columns_str}
+            SELECT {columns_str}
             FROM ivoa.obscore
             WHERE {where_clause}
             """
     results = search_with_retry(service, query)
     return results
-
-

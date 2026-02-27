@@ -66,7 +66,6 @@ async def query_metadata(
             fov_range=query.fov_range,
             time_resolution_range=query.time_resolution_range,
             frequency_range=query.frequency_range,
-            max_rows=query.max_rows,
         )
         return MetadataResponse(
             count=len(data),
@@ -105,7 +104,6 @@ async def start_query(
             fov_range=query.fov_range,
             time_resolution_range=query.time_resolution_range,
             frequency_range=query.frequency_range,
-            max_rows=query.max_rows,
         )
         return MetadataQueryStartResponse(query_id=query_id, status="running")
     except Exception as e:

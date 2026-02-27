@@ -12,6 +12,7 @@ from almasim.services.metadata.tap.queries import (
     query_metadata_by_science,
     query_science_types,
 )
+from almasim.services.metadata.tap.service import query_by_science_type as _tap_query
 
 backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
@@ -93,7 +94,6 @@ class MetadataService:
         fov_range: Optional[Tuple[float, float]] = None,
         time_resolution_range: Optional[Tuple[float, float]] = None,
         frequency_range: Optional[Tuple[float, float]] = None,
-        max_rows: int = 2000,
         save_to: Optional[Path] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -151,7 +151,6 @@ class MetadataService:
             observation_date_range=observation_date_range,
             qa2_status=qa2_status,
             obs_type=obs_type,
-            max_rows=max_rows,
             save_to=save_to,
         )
 
@@ -181,16 +180,16 @@ class MetadataService:
         fov_range: Optional[Tuple[float, float]] = None,
         time_resolution_range: Optional[Tuple[float, float]] = None,
         frequency_range: Optional[Tuple[float, float]] = None,
-        max_rows: int = 10000,
     ) -> None:
         """Run a full TAP query in the background and store results in query_store."""
         from app.services.status_store import query_store
 
         try:
-            result_df = query_metadata_by_science(
+            # Call TAP directly — bypasses DB cache so we always get fresh results
+            result_df = _tap_query(
                 science_keyword=science_keyword,
                 scientific_category=scientific_category,
-                bands=bands,
+                band=bands,
                 fov_range=fov_range,
                 time_resolution_range=time_resolution_range,
                 frequency_range=frequency_range,
@@ -200,7 +199,6 @@ class MetadataService:
                 observation_date_range=observation_date_range,
                 qa2_status=qa2_status,
                 obs_type=obs_type,
-                max_rows=max_rows,
             )
             rows = result_df.to_dict("records") if result_df is not None and not result_df.empty else []
             query_store.append_rows(query_id, rows)

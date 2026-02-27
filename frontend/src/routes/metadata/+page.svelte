@@ -246,6 +246,8 @@
 					allRows = [...allRows, ...pageData.rows];
 					results = { data: allRows, count: allRows.length };
 					persistResults(results);
+					// Only advance the page when we actually received rows for it
+					page += 1;
 				}
 
 				statusMessage = pageData.done
@@ -257,9 +259,8 @@
 					return;
 				}
 
-				// If this page was full, there may be more ready; otherwise wait
+				// Poll faster when the last page was full (more pages likely ready)
 				const delay = pageData.rows.length >= PAGE_SIZE ? 200 : 1500;
-				page += 1;
 				pollTimer = setTimeout(pollNext, delay);
 			} catch (err) {
 				error = err instanceof Error ? err.message : 'Polling failed';
