@@ -29,11 +29,22 @@
 		types?: { description?: string; accept: Record<string, string[]> }[];
 	};
 
+	// Columns required in cached data — if any are missing the cache is stale and discarded.
+	const REQUIRED_CACHE_COLUMNS = ['Project_abstract', 'QA2_status', 'Type'];
+
 	const getCachedResults = (): MetadataResponse | null => {
 		if (typeof window === 'undefined') return null;
 		try {
 			const raw = window.localStorage.getItem(RESULTS_CACHE_KEY);
-			return raw ? (JSON.parse(raw) as MetadataResponse) : null;
+			if (!raw) return null;
+			const parsed = JSON.parse(raw) as MetadataResponse;
+			// Invalidate cache if it predates required columns
+			const sample = parsed?.data?.[0];
+			if (sample && REQUIRED_CACHE_COLUMNS.some((col) => !(col in sample))) {
+				window.localStorage.removeItem(RESULTS_CACHE_KEY);
+				return null;
+			}
+			return parsed;
 		} catch {
 			return null;
 		}
