@@ -99,18 +99,31 @@ def query_metadata_by_science(
     fov_range: Optional[Tuple[float, float]] = None,
     time_resolution_range: Optional[Tuple[float, float]] = None,
     frequency_range: Optional[Tuple[float, float]] = None,
+    source_name: Optional[str] = None,
+    antenna_arrays: Optional[str] = None,
+    angular_resolution_range: Optional[Tuple[float, float]] = None,
+    observation_date_range: Optional[Tuple[str, str]] = None,
+    qa2_status: Optional[Sequence[str]] = None,
+    obs_type: Optional[str] = None,
     save_to: Optional[Path | str] = None,
 ) -> pd.DataFrame:
     """Query ALMA obscore metadata filtered by science configuration."""
     df = _query_by_science_type(
-        science_keyword,
-        scientific_category,
-        bands,
-        fov_range,
-        time_resolution_range,
-        frequency_range,
+        science_keyword=science_keyword,
+        scientific_category=scientific_category,
+        band=bands,
+        fov_range=fov_range,
+        time_resolution_range=time_resolution_range,
+        frequency_range=frequency_range,
+        source_name=source_name,
+        antenna_arrays=antenna_arrays,
+        angular_resolution_range=angular_resolution_range,
+        observation_date_range=observation_date_range,
+        qa2_status=qa2_status,
+        obs_type=obs_type,
     )
-    df = df[df.get("science_keyword", "") != ""]
+    if df.empty:
+        return df
     normalized = _normalize_metadata(df)
     save_path = _prepare_save_path(save_to)
     if save_path is not None:

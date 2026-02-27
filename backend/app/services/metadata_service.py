@@ -144,6 +144,12 @@ class MetadataService:
             fov_range=fov_range,
             time_resolution_range=time_resolution_range,
             frequency_range=frequency_range,
+            source_name=source_name,
+            antenna_arrays=antenna_arrays,
+            angular_resolution_range=angular_resolution_range,
+            observation_date_range=observation_date_range,
+            qa2_status=qa2_status,
+            obs_type=obs_type,
             save_to=save_to,
         )
 

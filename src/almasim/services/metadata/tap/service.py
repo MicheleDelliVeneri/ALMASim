@@ -171,16 +171,28 @@ def query_by_science_type(
     fov_range=None,
     time_resolution_range=None,
     frequency_range=None,
+    source_name=None,
+    antenna_arrays=None,
+    angular_resolution_range=None,
+    observation_date_range=None,
+    qa2_status=None,
+    obs_type=None,
 ):
     """Query for all science observations by science type and other filters.
 
     Parameters:
-    science_keyword: Science keyword filter
-    scientific_category: Scientific category filter
-    band: Band filter
+    science_keyword: Science keyword filter (str or list)
+    scientific_category: Scientific category filter (str or list)
+    band: Band filter (int or list of ints)
     fov_range: Field of view range [min, max]
     time_resolution_range: Time resolution range [min, max]
     frequency_range: Frequency range [min, max]
+    source_name: Target name filter (partial match)
+    antenna_arrays: Antenna array configuration filter (partial match)
+    angular_resolution_range: Angular resolution range [min, max] in arcsec
+    observation_date_range: Observation date range [min, max] as ISO date strings
+    qa2_status: QA2 status filter (str or list, e.g. 'T', 'F')
+    obs_type: Observation type filter (partial match)
 
     Returns:
     pandas.DataFrame: A table of query results.
@@ -215,76 +227,99 @@ def query_by_science_type(
         "type",
     ]
     columns_str = ", ".join(columns)
-    # Default values for parameters if they are None
-    if science_keyword is None:
-        science_keyword = ""
-    if scientific_category is None:
-        scientific_category = ""
-    if band is None:
-        band = ""
 
-    # Build query components based on the type and content of each parameter
-    science_keyword_query = f"science_keyword like '%{science_keyword}%'"
-    if isinstance(science_keyword, list):
-        if len(science_keyword) == 1:
-            science_keyword_query = f"science_keyword like '%{science_keyword[0]}%'"
+    conditions = ["is_mosaic = 'F'", "science_observation = 'T'"]
+
+    # Science keyword
+    if science_keyword:
+        if isinstance(science_keyword, list):
+            if len(science_keyword) == 1:
+                conditions.append(f"science_keyword LIKE '%{science_keyword[0]}%'")
+            else:
+                kw_clauses = " OR ".join(
+                    f"science_keyword LIKE '%{kw}%'" for kw in science_keyword
+                )
+                conditions.append(f"({kw_clauses})")
         else:
-            science_keywords = "', '".join(science_keyword)
-            science_keyword_query = f"science_keyword in ('{science_keywords}')"
+            conditions.append(f"science_keyword LIKE '%{science_keyword}%'")
 
-    scientific_category_query = f"scientific_category like '%{scientific_category}%'"
-    if isinstance(scientific_category, list):
-        if len(scientific_category) == 1:
-            scientific_category_query = (
-                f"scientific_category like '%{scientific_category[0]}%'"
-            )
+    # Scientific category
+    if scientific_category:
+        if isinstance(scientific_category, list):
+            if len(scientific_category) == 1:
+                conditions.append(
+                    f"scientific_category LIKE '%{scientific_category[0]}%'"
+                )
+            else:
+                cat_clauses = " OR ".join(
+                    f"scientific_category LIKE '%{cat}%'" for cat in scientific_category
+                )
+                conditions.append(f"({cat_clauses})")
         else:
-            scientific_categories = "', '".join(scientific_category)
-            scientific_category_query = (
-                f"scientific_category in ('{scientific_categories}')"
-            )
+            conditions.append(f"scientific_category LIKE '%{scientific_category}%'")
 
-    band_query = f"band_list like '%{band}%'"
-    if isinstance(band, list):
-        if len(band) == 1:
-            band_query = f"band_list like '%{band[0]}%'"
+    # Band
+    if band:
+        if isinstance(band, list):
+            if len(band) == 1:
+                conditions.append(f"band_list LIKE '%{band[0]}%'")
+            else:
+                band_clauses = " OR ".join(
+                    f"band_list LIKE '%{b}%'" for b in band
+                )
+                conditions.append(f"({band_clauses})")
         else:
-            bands = [str(x) for x in band]
-            bands = "', '".join(bands)
-            band_query = f"band_list in ('{bands}')"
+            conditions.append(f"band_list LIKE '%{band}%'")
 
-    # Additional filtering based on ranges
-    if fov_range is None:
-        fov_query = ""
-    else:
-        fov_query = f"s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}"
-    if time_resolution_range is None:
-        time_resolution_query = ""
-    else:
-        time_resolution_query = f"t_resolution BETWEEN {
-            time_resolution_range[0]} AND {
-            time_resolution_range[1]}"
+    # Source name
+    if source_name:
+        conditions.append(f"target_name LIKE '%{source_name}%'")
 
-    if frequency_range is None:
-        frequency_query = ""
-    else:
-        frequency_query = (
+    # Antenna arrays
+    if antenna_arrays:
+        conditions.append(f"antenna_arrays LIKE '%{antenna_arrays}%'")
+
+    # Angular resolution range
+    if angular_resolution_range:
+        conditions.append(
+            f"spatial_resolution BETWEEN {angular_resolution_range[0]} AND {angular_resolution_range[1]}"
+        )
+
+    # Observation date range
+    if observation_date_range:
+        conditions.append(
+            f"obs_release_date BETWEEN '{observation_date_range[0]}' AND '{observation_date_range[1]}'"
+        )
+
+    # QA2 status
+    if qa2_status:
+        if isinstance(qa2_status, list):
+            statuses = "', '".join(qa2_status)
+            conditions.append(f"qa2_passed IN ('{statuses}')")
+        else:
+            conditions.append(f"qa2_passed = '{qa2_status}'")
+
+    # Observation type
+    if obs_type:
+        conditions.append(f"type LIKE '%{obs_type}%'")
+
+    # FOV range
+    if fov_range:
+        conditions.append(f"s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}")
+
+    # Time resolution range
+    if time_resolution_range:
+        conditions.append(
+            f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
+        )
+
+    # Frequency range
+    if frequency_range:
+        conditions.append(
             f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
         )
 
-    # Combine all conditions into one WHERE clause
-    conditions = [
-        science_keyword_query,
-        scientific_category_query,
-        band_query,
-        fov_query,
-        time_resolution_query,
-        frequency_query,
-    ]
-    conditions = [cond for cond in conditions if cond]  # Remove empty conditions
     where_clause = " AND ".join(conditions)
-    where_clause = where_clause + " AND is_mosaic = 'F' AND science_observation = 'T'"
-
     query = f"""
             SELECT {columns_str}
             FROM ivoa.obscore
