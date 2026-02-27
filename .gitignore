@@ -59,3 +59,7 @@ Thumbs.db
 wget-log
 frontend/.output/
 backend/outputs
+
+# Allow frontend source lib (overrides the generic lib/ rule above)
+!frontend/src/lib/
+!frontend/src/lib/**

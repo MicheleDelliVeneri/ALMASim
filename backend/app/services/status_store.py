@@ -88,3 +88,99 @@ class StatusStore:
 # Global status store instance
 status_store = StatusStore()
 
+
+# ---------------------------------------------------------------------------
+# Query store — holds results of background TAP query jobs
+# ---------------------------------------------------------------------------
+
+@dataclass
+class QueryJobStatus:
+    """Status and accumulated rows for a background TAP query job."""
+    query_id: str
+    status: str = "running"   # running | completed | failed
+    rows: List[dict] = field(default_factory=list)
+    total: int = 0
+    error: Optional[str] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+    _TTL_SECONDS: int = 3600  # drop jobs older than 1 hour
+
+    def is_expired(self) -> bool:
+        return (datetime.now() - self.created_at).total_seconds() > self._TTL_SECONDS
+
+
+class QueryStore:
+    """Thread-safe in-memory store for background TAP query jobs."""
+
+    def __init__(self):
+        self._store: Dict[str, QueryJobStatus] = {}
+        self._lock = threading.Lock()
+
+    def _evict_expired(self):
+        """Remove jobs older than TTL (called under lock)."""
+        expired = [qid for qid, job in self._store.items() if job.is_expired()]
+        for qid in expired:
+            del self._store[qid]
+
+    def create(self, query_id: str) -> QueryJobStatus:
+        with self._lock:
+            self._evict_expired()
+            job = QueryJobStatus(query_id=query_id)
+            self._store[query_id] = job
+            return job
+
+    def get(self, query_id: str) -> Optional[QueryJobStatus]:
+        with self._lock:
+            return self._store.get(query_id)
+
+    def append_rows(self, query_id: str, rows: List[dict]) -> None:
+        with self._lock:
+            job = self._store.get(query_id)
+            if job:
+                job.rows.extend(rows)
+                job.updated_at = datetime.now()
+
+    def complete(self, query_id: str) -> None:
+        with self._lock:
+            job = self._store.get(query_id)
+            if job:
+                job.status = "completed"
+                job.total = len(job.rows)
+                job.updated_at = datetime.now()
+
+    def fail(self, query_id: str, error: str) -> None:
+        with self._lock:
+            job = self._store.get(query_id)
+            if job:
+                job.status = "failed"
+                job.error = error
+                job.updated_at = datetime.now()
+
+    def get_page(self, query_id: str, page: int, page_size: int) -> dict:
+        with self._lock:
+            job = self._store.get(query_id)
+            if not job:
+                return {"rows": [], "done": True, "total_fetched": 0, "page": page, "error": "Job not found"}
+            start = page * page_size
+            end = start + page_size
+            rows = job.rows[start:end]
+            done = job.status in ("completed", "failed") and end >= len(job.rows)
+            return {
+                "query_id": query_id,
+                "page": page,
+                "rows": rows,
+                "page_size": page_size,
+                "total_fetched": len(job.rows),
+                "done": done,
+                "error": job.error,
+            }
+
+    def delete(self, query_id: str) -> bool:
+        with self._lock:
+            return self._store.pop(query_id, None) is not None
+
+
+# Global query store instance
+query_store = QueryStore()
+

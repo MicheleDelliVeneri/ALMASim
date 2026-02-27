@@ -177,6 +177,7 @@ def query_by_science_type(
     observation_date_range=None,
     qa2_status=None,
     obs_type=None,
+    max_rows=2000,
 ):
     """Query for all science observations by science type and other filters.
 
@@ -321,7 +322,7 @@ def query_by_science_type(
 
     where_clause = " AND ".join(conditions)
     query = f"""
-            SELECT {columns_str}
+            SELECT TOP {max_rows} {columns_str}
             FROM ivoa.obscore
             WHERE {where_clause}
             """

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import {
 		metadataApi,
 		type MetadataQuery,
@@ -169,6 +169,7 @@
 	let scienceTypes = $state<{ keywords: string[]; categories: string[] } | null>(null);
 	let results = $state<MetadataResponse | null>(null);
 	let loading = $state(false);
+	let fetching = $state(false);
 	let saving = $state(false);
 	let error = $state<string>('');
 	let loadModalOpen = $state(false);
@@ -179,6 +180,16 @@
 	let saveFormRef = $state<HTMLFormElement>();
 	let localSaveHandle: FileSystemFileHandle | null = null;
 	let initialLoading = $state(true);
+	let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function stopPolling() {
+		if (pollTimer !== null) {
+			clearTimeout(pollTimer);
+			pollTimer = null;
+		}
+	}
+
+	onDestroy(stopPolling);
 
 	onMount(async () => {
 		try {
@@ -197,18 +208,66 @@
 	});
 
 	async function runQuery(query: MetadataQuery) {
+		stopPolling();
 		loading = true;
+		fetching = false;
 		error = '';
+		results = null;
+
+		let queryId: string;
 		try {
-			const data = await metadataApi.query(query);
-			results = data;
-			persistResults(data);
-			statusMessage = `Fetched ${data.count} rows from ALMA TAP`;
+			const start = await metadataApi.startQuery(query);
+			queryId = start.query_id;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Unable to fetch metadata';
-		} finally {
+			error = err instanceof Error ? err.message : 'Unable to start metadata query';
 			loading = false;
+			return;
 		}
+
+		loading = false;
+		fetching = true;
+		statusMessage = 'Querying ALMA TAP…';
+
+		const PAGE_SIZE = 500;
+		let page = 0;
+		let allRows: Record<string, unknown>[] = [];
+
+		async function pollNext() {
+			try {
+				const pageData = await metadataApi.getQueryPage(queryId, page, PAGE_SIZE);
+
+				if (pageData.error) {
+					error = pageData.error;
+					fetching = false;
+					return;
+				}
+
+				if (pageData.rows.length > 0) {
+					allRows = [...allRows, ...pageData.rows];
+					results = { data: allRows, count: allRows.length };
+					persistResults(results);
+				}
+
+				statusMessage = pageData.done
+					? `Fetched ${allRows.length} rows from ALMA TAP`
+					: `Fetching… ${allRows.length} rows so far`;
+
+				if (pageData.done) {
+					fetching = false;
+					return;
+				}
+
+				// If this page was full, there may be more ready; otherwise wait
+				const delay = pageData.rows.length >= PAGE_SIZE ? 200 : 1500;
+				page += 1;
+				pollTimer = setTimeout(pollNext, delay);
+			} catch (err) {
+				error = err instanceof Error ? err.message : 'Polling failed';
+				fetching = false;
+			}
+		}
+
+		pollTimer = setTimeout(pollNext, 1000);
 	}
 
 	async function handleLoadFile(event: Event) {
@@ -380,6 +439,7 @@
 		<MetadataResultsTable
 			{results}
 			{loading}
+			{fetching}
 			onClear={clearMetadata}
 			onLoad={() => (loadModalOpen = true)}
 			onSave={() => (saveModalOpen = true)}

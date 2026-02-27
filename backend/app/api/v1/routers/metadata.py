@@ -2,19 +2,23 @@
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.schemas.metadata import (
+    MetadataPageResponse,
     MetadataQuery,
+    MetadataQueryStartResponse,
     MetadataResponse,
     MetadataSaveRequest,
     MetadataSaveResponse,
 )
 from app.services.metadata_service import MetadataService
+from app.services.status_store import query_store
 
 # Import database dependency
 backend_dir = Path(__file__).parent.parent.parent.parent.parent
@@ -62,6 +66,7 @@ async def query_metadata(
             fov_range=query.fov_range,
             time_resolution_range=query.time_resolution_range,
             frequency_range=query.frequency_range,
+            max_rows=query.max_rows,
         )
         return MetadataResponse(
             count=len(data),
@@ -72,6 +77,59 @@ async def query_metadata(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to query metadata: {str(e)}",
         )
+
+
+@router.post("/query/start", response_model=MetadataQueryStartResponse)
+async def start_query(
+    query: MetadataQuery,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> MetadataQueryStartResponse:
+    """Start a background TAP query job and return a query_id to poll for results."""
+    try:
+        query_id = str(uuid.uuid4())
+        query_store.create(query_id)
+        service = MetadataService(db=db)
+        background_tasks.add_task(
+            service.run_background_query,
+            query_id=query_id,
+            source_name=query.source_name,
+            science_keyword=query.science_keyword,
+            scientific_category=query.scientific_category,
+            bands=query.bands,
+            antenna_arrays=query.antenna_arrays,
+            angular_resolution_range=query.angular_resolution_range,
+            observation_date_range=query.observation_date_range,
+            qa2_status=query.qa2_status,
+            obs_type=query.obs_type,
+            fov_range=query.fov_range,
+            time_resolution_range=query.time_resolution_range,
+            frequency_range=query.frequency_range,
+            max_rows=query.max_rows,
+        )
+        return MetadataQueryStartResponse(query_id=query_id, status="running")
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start query: {str(e)}",
+        )
+
+
+@router.get("/query/{query_id}/results", response_model=MetadataPageResponse)
+async def get_query_results(
+    query_id: str,
+    page: int = 0,
+    page_size: int = 500,
+) -> MetadataPageResponse:
+    """Poll for a page of results from a background TAP query job."""
+    job = query_store.get(query_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Query job {query_id} not found or expired",
+        )
+    page_data = query_store.get_page(query_id, page, page_size)
+    return MetadataPageResponse(**page_data)
 
 
 @router.get("/load/{file_path:path}", response_model=MetadataResponse)

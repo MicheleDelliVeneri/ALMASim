@@ -93,6 +93,7 @@ class MetadataService:
         fov_range: Optional[Tuple[float, float]] = None,
         time_resolution_range: Optional[Tuple[float, float]] = None,
         frequency_range: Optional[Tuple[float, float]] = None,
+        max_rows: int = 2000,
         save_to: Optional[Path] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -150,6 +151,7 @@ class MetadataService:
             observation_date_range=observation_date_range,
             qa2_status=qa2_status,
             obs_type=obs_type,
+            max_rows=max_rows,
             save_to=save_to,
         )
 
@@ -163,6 +165,56 @@ class MetadataService:
 
         # Convert to dict for API response
         return result_df.to_dict("records") if result_df is not None else []
+
+    def run_background_query(
+        self,
+        query_id: str,
+        source_name: Optional[str] = None,
+        science_keyword: Optional[Sequence[str]] = None,
+        scientific_category: Optional[Sequence[str]] = None,
+        bands: Optional[Sequence[int]] = None,
+        antenna_arrays: Optional[str] = None,
+        angular_resolution_range: Optional[Tuple[float, float]] = None,
+        observation_date_range: Optional[Tuple[str, str]] = None,
+        qa2_status: Optional[Sequence[str]] = None,
+        obs_type: Optional[str] = None,
+        fov_range: Optional[Tuple[float, float]] = None,
+        time_resolution_range: Optional[Tuple[float, float]] = None,
+        frequency_range: Optional[Tuple[float, float]] = None,
+        max_rows: int = 10000,
+    ) -> None:
+        """Run a full TAP query in the background and store results in query_store."""
+        from app.services.status_store import query_store
+
+        try:
+            result_df = query_metadata_by_science(
+                science_keyword=science_keyword,
+                scientific_category=scientific_category,
+                bands=bands,
+                fov_range=fov_range,
+                time_resolution_range=time_resolution_range,
+                frequency_range=frequency_range,
+                source_name=source_name,
+                antenna_arrays=antenna_arrays,
+                angular_resolution_range=angular_resolution_range,
+                observation_date_range=observation_date_range,
+                qa2_status=qa2_status,
+                obs_type=obs_type,
+                max_rows=max_rows,
+            )
+            rows = result_df.to_dict("records") if result_df is not None and not result_df.empty else []
+            query_store.append_rows(query_id, rows)
+            query_store.complete(query_id)
+            logger.info(f"Background query {query_id} completed: {len(rows)} rows")
+
+            if self.db_service and rows:
+                try:
+                    self._cache_tap_results_in_db(result_df)
+                except Exception as e:
+                    logger.error(f"Failed to cache background query results: {e}")
+        except Exception as e:
+            logger.error(f"Background query {query_id} failed: {e}", exc_info=True)
+            query_store.fail(query_id, str(e))
 
     def load_metadata(self, metadata_path: Path) -> List[Dict[str, Any]]:
         """

@@ -18,6 +18,7 @@ class MetadataQuery(BaseModel):
     fov_range: Optional[tuple[float, float]] = Field(None, description="FOV range")
     time_resolution_range: Optional[tuple[float, float]] = Field(None, description="Time resolution range")
     frequency_range: Optional[tuple[float, float]] = Field(None, description="Frequency range")
+    max_rows: int = Field(2000, description="Maximum number of rows to return from TAP")
 
 
 class MetadataResponse(BaseModel):
@@ -25,6 +26,23 @@ class MetadataResponse(BaseModel):
 
     count: int = Field(..., description="Number of records")
     data: list[dict] = Field(..., description="Metadata records")
+
+
+class MetadataQueryStartResponse(BaseModel):
+    """Response from starting a background TAP query job."""
+    query_id: str
+    status: str = Field("running", description="Job status: running | completed | failed")
+
+
+class MetadataPageResponse(BaseModel):
+    """One page of results from a background TAP query job."""
+    query_id: str
+    page: int
+    rows: list[dict]
+    page_size: int
+    total_fetched: int
+    done: bool
+    error: Optional[str] = None
 
 
 class MetadataSaveRequest(BaseModel):

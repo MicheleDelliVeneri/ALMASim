@@ -105,6 +105,7 @@ def query_metadata_by_science(
     observation_date_range: Optional[Tuple[str, str]] = None,
     qa2_status: Optional[Sequence[str]] = None,
     obs_type: Optional[str] = None,
+    max_rows: int = 2000,
     save_to: Optional[Path | str] = None,
 ) -> pd.DataFrame:
     """Query ALMA obscore metadata filtered by science configuration."""
@@ -121,6 +122,7 @@ def query_metadata_by_science(
         observation_date_range=observation_date_range,
         qa2_status=qa2_status,
         obs_type=obs_type,
+        max_rows=max_rows,
     )
     if df.empty:
         return df
