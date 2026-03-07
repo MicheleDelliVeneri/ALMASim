@@ -31,6 +31,11 @@ class ScienceQueryParams:
     exclude_solar: bool = False
     # Cycle / proposal_id filtering
     proposal_id_prefix: Optional[List[str]] = None
+    # Data rights
+    public_only: bool = True
+    # Observation type
+    science_only: bool = True
+    exclude_mosaic: bool = True
     # Output
     visible_columns: Optional[List[str]] = None
 
@@ -78,6 +83,13 @@ class MetadataQuery(BaseModel):
         description="ALMA cycle numbers to include (e.g. [4, 5, 6]). Cycle N → proposal_id prefix '{2012+N}.'",
     )
 
+    # --- Data rights ---
+    public_only: bool = Field(True, description="Only query non-proprietary (public) data")
+
+    # --- Observation type ---
+    science_only: bool = Field(True, description="Only query science observations")
+    exclude_mosaic: bool = Field(True, description="Exclude mosaic observations")
+
     # --- Output control ---
     visible_columns: Optional[List[str]] = Field(
         None,
@@ -107,6 +119,9 @@ class MetadataQuery(BaseModel):
             exclude_obs_type=list(self.exclude_obs_type) if self.exclude_obs_type else None,
             exclude_solar=self.exclude_solar,
             proposal_id_prefix=[f"{2012 + c}." for c in self.cycles] if self.cycles else None,
+            public_only=self.public_only,
+            science_only=self.science_only,
+            exclude_mosaic=self.exclude_mosaic,
             visible_columns=self.visible_columns,
         )
 

@@ -9,9 +9,10 @@
 		onLoad: () => void;
 		onSave: () => void;
 		saving: boolean;
+		onDownload: (memberOusUids: string[]) => void;
 	}
 
-	let { results, loading, fetching, onClear, onLoad, onSave, saving }: Props = $props();
+	let { results, loading, fetching, onClear, onLoad, onSave, saving, onDownload }: Props = $props();
 
 	let isCollapsed = $state(false);
 	let columnsMenuOpen = $state(false);
@@ -130,6 +131,48 @@
 		);
 	});
 
+	// --- Row selection (must come after filteredData) ---
+	let selectedRowIndices = $state(new Set<number>());
+
+	const selectedCount = $derived(selectedRowIndices.size);
+
+	const allFilteredSelected = $derived(
+		filteredData.length > 0 && filteredData.every((_, i) => selectedRowIndices.has(i))
+	);
+
+	function toggleRowSelection(globalIndex: number) {
+		const next = new Set(selectedRowIndices);
+		if (next.has(globalIndex)) {
+			next.delete(globalIndex);
+		} else {
+			next.add(globalIndex);
+		}
+		selectedRowIndices = next;
+	}
+
+	function toggleSelectAll() {
+		if (allFilteredSelected) {
+			selectedRowIndices = new Set();
+		} else {
+			selectedRowIndices = new Set(filteredData.map((_, i) => i));
+		}
+	}
+
+	function getSelectedMemberOusUids(): string[] {
+		const data = filteredData;
+		const uids: string[] = [];
+		for (const idx of selectedRowIndices) {
+			const row = data[idx];
+			if (row?.member_ous_uid) uids.push(String(row.member_ous_uid));
+		}
+		return [...new Set(uids)];
+	}
+
+	// Reset selection when results change
+	$effect(() => {
+		if (results) selectedRowIndices = new Set();
+	});
+
 	// Virtual scrolling constants
 	const ROW_HEIGHT = 36;        // px — matches row height below
 	const OVERSCAN = 15;          // extra rows above/below viewport
@@ -160,14 +203,14 @@
 		obs.observe(scrollContainer);
 
 		const onScroll = () => {
-			scrollTop = scrollContainer!.scrollTop;
 			mirrorBar!.scrollLeft = scrollContainer!.scrollLeft;
+			scrollTop = scrollContainer!.scrollTop;
 		};
 		const onMirrorScroll = () => {
 			scrollContainer!.scrollLeft = mirrorBar!.scrollLeft;
 		};
 
-		scrollContainer.addEventListener('scroll', onScroll);
+		scrollContainer.addEventListener('scroll', onScroll, { passive: true });
 		mirrorBar.addEventListener('scroll', onMirrorScroll);
 
 		return () => {
@@ -177,7 +220,6 @@
 		};
 	});
 
-	// --- Sticky pinned-column widths ---
 	let pinnedColEls = $state<HTMLElement[]>([]);
 	let pinnedColWidths = $state<number[]>([0, 0]);
 
@@ -191,8 +233,10 @@
 		return () => obs.disconnect();
 	});
 
+		const CHECKBOX_COL_WIDTH = 40;
+
 	function pinnedLeft(index: number): number {
-		let left = 0;
+		let left = CHECKBOX_COL_WIDTH; // offset for checkbox column
 		for (let i = 0; i < index; i++) left += pinnedColWidths[i];
 		return left;
 	}
@@ -460,6 +504,15 @@
 					{saving ? 'Saving...' : 'Save Metadata'}
 				</button>
 			{/if}
+			{#if selectedCount > 0}
+				<button
+					type="button"
+					class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+					onclick={() => onDownload(getSelectedMemberOusUids())}
+				>
+					Download ({selectedCount})
+				</button>
+			{/if}
 		</div>
 	</div>
 
@@ -474,11 +527,26 @@
 		</div>
 
 		<!-- Main scroll container: vertical (capped height) + horizontal -->
-		<div bind:this={scrollContainer} class="overflow-auto" style="max-height: {CONTAINER_HEIGHT}px;">
+		<div bind:this={scrollContainer} class="overflow-auto" style="max-height: {CONTAINER_HEIGHT}px; overscroll-behavior: contain;">
 			<table class="divide-y divide-gray-200 text-sm" style="min-width: max-content; width: 100%;">
 				<thead class="sticky top-0 z-10">
 					<!-- Column header row -->
 					<tr class="bg-gray-50">
+						<!-- Selection checkbox header -->
+						<th
+							scope="col"
+							class="sticky left-0 z-20 w-10 bg-gray-50 px-2 py-2 text-center border-r border-gray-200"
+						>
+							{#if results?.data?.length}
+								<input
+									type="checkbox"
+									checked={allFilteredSelected}
+									onchange={toggleSelectAll}
+									class="rounded border-gray-300"
+									title="Select all"
+								/>
+							{/if}
+						</th>
 						{#each pinnedTableColumns as col, i}
 							<th
 								bind:this={pinnedColEls[i]}
@@ -507,6 +575,8 @@
 					<!-- Filter row — only shown when there is data -->
 					{#if results?.data?.length}
 						<tr class="bg-white shadow-sm">
+							<!-- Empty cell for checkbox column -->
+							<th scope="col" class="sticky left-0 z-20 bg-white px-2 py-1 border-r border-gray-200"></th>
 							{#each pinnedTableColumns as column, i}
 								<th scope="col" class="sticky z-20 bg-white px-2 py-1 border-r border-gray-200" style="left: {pinnedLeft(i)}px;">
 									<input
@@ -536,13 +606,29 @@
 				</thead>
 				<tbody class="bg-white">
 					{#if !loading && results?.data?.length}
-						{#if topPad > 0}
-							<tr style="height: {topPad}px;" aria-hidden="true">
-								<td colspan={tableColumns.length}></td>
-							</tr>
-						{/if}
-						{#each visibleRows as row}
-							<tr class="group border-b border-gray-100 hover:bg-gray-50" style="height: {ROW_HEIGHT}px;">
+						<tr style="height: {topPad}px;" aria-hidden="true">
+							<td colspan={tableColumns.length + 1}></td>
+						</tr>
+						{#each visibleRows as row, vi}
+							{@const globalIndex = virtualStart + vi}
+							{@const isSelected = selectedRowIndices.has(globalIndex)}
+							<tr
+								class="group border-b border-gray-100 hover:bg-gray-50"
+								class:bg-blue-50={isSelected}
+								style="height: {ROW_HEIGHT}px;"
+							>
+								<!-- Selection checkbox -->
+								<td
+									class="sticky left-0 z-[5] bg-white px-2 text-center align-middle border-r border-gray-200 group-hover:bg-gray-50"
+									class:bg-blue-50={isSelected}
+								>
+									<input
+										type="checkbox"
+										checked={isSelected}
+										onchange={() => toggleRowSelection(globalIndex)}
+										class="rounded border-gray-300"
+									/>
+								</td>
 								{#each pinnedTableColumns as column, i}
 									{@const displayValue = stringifyValue(row[column])}
 									<td
@@ -572,14 +658,12 @@
 								{/each}
 							</tr>
 						{/each}
-						{#if bottomPad > 0}
-							<tr style="height: {bottomPad}px;" aria-hidden="true">
-								<td colspan={tableColumns.length}></td>
-							</tr>
-						{/if}
+						<tr style="height: {bottomPad}px;" aria-hidden="true">
+							<td colspan={tableColumns.length + 1}></td>
+						</tr>
 					{:else if !loading && hasActiveFilters}
 						<tr>
-							<td colspan={tableColumns.length} class="px-4 py-8 text-center text-sm text-gray-400">
+							<td colspan={tableColumns.length + 1} class="px-4 py-8 text-center text-sm text-gray-400">
 								No rows match the current filters.
 							</td>
 						</tr>

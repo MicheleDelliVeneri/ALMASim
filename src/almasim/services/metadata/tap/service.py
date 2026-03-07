@@ -49,6 +49,9 @@ class InclusionFilters:
     qa2_status: Optional[List[str]] = None
     obs_type: Optional[str] = None
     proposal_id_prefix: Optional[List[str]] = None   # e.g. ['2016.', '2017.']
+    public_only: bool = True  # default: only query non-proprietary data
+    science_only: bool = True  # default: only science observations
+    exclude_mosaic: bool = True  # default: exclude mosaic observations
 
 
 @dataclass
@@ -248,6 +251,7 @@ _SCIENCE_COLUMNS = [
     "proposal_abstract",
     "qa2_passed",
     "type",
+    "data_rights",
 ]
 
 
@@ -324,6 +328,15 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
         prefix_clauses = [f"proposal_id LIKE '{p}%'" for p in f.proposal_id_prefix]
         conds.append(f"({' OR '.join(prefix_clauses)})")
 
+    if f.public_only:
+        conds.append("data_rights = 'Public'")
+
+    if f.science_only:
+        conds.append("science_observation = 'T'")
+
+    if f.exclude_mosaic:
+        conds.append("is_mosaic = 'F'")
+
     return conds
 
 
@@ -372,9 +385,13 @@ def query_by_science_type(
     service = get_tap_service()
     columns_str = ", ".join(_SCIENCE_COLUMNS)
 
-    conditions = ["is_mosaic = 'F'", "science_observation = 'T'"]
+    conditions = []
     if include is not None:
         conditions.extend(_build_inclusion_conditions(include))
+    else:
+        # defaults when no filters provided
+        conditions.append("is_mosaic = 'F'")
+        conditions.append("science_observation = 'T'")
     if exclude is not None:
         conditions.extend(_build_exclusion_conditions(exclude))
 

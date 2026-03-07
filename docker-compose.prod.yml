@@ -18,9 +18,12 @@ services:
       - GALAXY_ZOO_DIR=/app/data/galaxy_zoo
       - HUBBLE_DIR=/app/data/hubble
       - PYTHONOPTIMIZE=1
+      - DOWNLOAD_DIR=/host_home
     volumes:
       - ./data:/app/data:ro
       - ./backend/outputs:/app/outputs
+      # Mount host home directory so downloads land on the host filesystem
+      - ${HOME}:/host_home
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

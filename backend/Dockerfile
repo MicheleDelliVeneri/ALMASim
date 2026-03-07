@@ -38,7 +38,7 @@ RUN apt-get purge -y gcc g++ && \
     rm -rf /var/lib/apt/lists/*
 
 # Create necessary directories
-RUN mkdir -p /app/outputs /app/data/query_results
+RUN mkdir -p /app/outputs /app/data/query_results /tmp/download
 
 WORKDIR /app/backend
 

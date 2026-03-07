@@ -26,6 +26,11 @@ export interface MetadataQuery {
 	// Cycle filtering: ALMA cycle numbers (e.g. [4, 5, 6]).
 	// Cycle N → year 2012+N → proposal_id prefix "{year}."
 	cycles?: number[];
+	// Data rights
+	public_only?: boolean;
+	// Observation type
+	science_only?: boolean;
+	exclude_mosaic?: boolean;
 	// Output control
 	visible_columns?: string[];
 }

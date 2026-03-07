@@ -41,6 +41,9 @@
 	let excludeKeywordDropdownOpen = $state(false);
 	let excludeCategoryDropdownOpen = $state(false);
 	let excludeSolar = $state(false);
+	let publicOnly = $state(true);
+	let scienceOnly = $state(true);
+	let excludeMosaic = $state(true);
 
 	const filteredKeywords = $derived(
 		(scienceTypes?.keywords ?? []).filter(
@@ -182,6 +185,10 @@
 
 		if (selectedCycles.length) query.cycles = selectedCycles;
 
+		query.public_only = publicOnly;
+		query.science_only = scienceOnly;
+		query.exclude_mosaic = excludeMosaic;
+
 		onSubmit(query);
 	}
 </script>
@@ -209,6 +216,14 @@
 		>
 			{loading ? 'Running...' : 'Run Query'}
 		</button>
+	</div>
+
+	<!-- Quick-filter toggles -->
+	<div class="flex flex-wrap gap-x-6 gap-y-2">
+		<label class="inline-flex items-center gap-2 text-sm text-gray-700">
+			<input type="checkbox" bind:checked={publicOnly} class="rounded border-gray-300" />
+			<span>Public data only</span>
+		</label>
 	</div>
 
 	<!-- Source Name -->
@@ -419,8 +434,23 @@
 		<div>
 			<label class="block">
 				<span class="text-sm font-medium text-gray-700">Type</span>
-				<input type="text" name="obs_type" placeholder="e.g. S" class="mt-1 w-full rounded-md border border-gray-300 p-2" />
+				<select name="obs_type" class="mt-1 w-full rounded-md border border-gray-300 bg-white p-2 text-sm">
+					<option value="">Any</option>
+					<option value="S">S (Spectral)</option>
+					<option value="C">C (Continuum)</option>
+					<option value="T">T (Target)</option>
+				</select>
 			</label>
+			<div class="mt-2 flex gap-4">
+				<label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
+					<input type="checkbox" bind:checked={scienceOnly} class="rounded border-gray-300" />
+					<span>Science only</span>
+				</label>
+				<label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
+					<input type="checkbox" bind:checked={excludeMosaic} class="rounded border-gray-300" />
+					<span>Exclude mosaics</span>
+				</label>
+			</div>
 		</div>
 	</div>
 

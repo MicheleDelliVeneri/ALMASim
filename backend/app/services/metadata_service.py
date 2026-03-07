@@ -192,6 +192,9 @@ class MetadataService:
             qa2_status=params.qa2_status,  # QA2 mapping is applied inside the TAP layer
             obs_type=params.obs_type,
             proposal_id_prefix=params.proposal_id_prefix,
+            public_only=params.public_only,
+            science_only=params.science_only,
+            exclude_mosaic=params.exclude_mosaic,
         )
         exclude = ExclusionFilters(
             science_keyword=params.exclude_science_keyword,
@@ -238,6 +241,9 @@ class MetadataService:
                 qa2_status=params.qa2_status,
                 obs_type=params.obs_type,
                 proposal_id_prefix=params.proposal_id_prefix,
+                public_only=params.public_only,
+                science_only=params.science_only,
+                exclude_mosaic=params.exclude_mosaic,
             )
             exclude = ExclusionFilters(
                 science_keyword=params.exclude_science_keyword,

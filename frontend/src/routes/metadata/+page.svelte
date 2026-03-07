@@ -10,6 +10,8 @@
 	import MetadataResultsTable from '$lib/components/metadata/MetadataResultsTable.svelte';
 	import MetadataLoadModal from '$lib/components/metadata/MetadataLoadModal.svelte';
 	import MetadataSaveModal from '$lib/components/metadata/MetadataSaveModal.svelte';
+	import DownloadDialog from '$lib/components/metadata/DownloadDialog.svelte';
+	import DownloadProgress from '$lib/components/metadata/DownloadProgress.svelte';
 	import FullScreenLoader from '$lib/components/shared/Loader.svelte';
 	import { formatDateStamp, supportsFilePicker } from '$lib/utils';
 
@@ -181,6 +183,11 @@
 	let localSaveHandle: FileSystemFileHandle | null = null;
 	let initialLoading = $state(true);
 	let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Download state
+	let downloadDialogOpen = $state(false);
+	let downloadMemberOusUids = $state<string[]>([]);
+	let activeJobIds = $state<string[]>([]);
 
 	function stopPolling() {
 		if (pollTimer !== null) {
@@ -411,6 +418,20 @@
 			window.localStorage.removeItem(RESULTS_CACHE_KEY);
 		}
 	}
+
+	function handleDownload(memberOusUids: string[]) {
+		downloadMemberOusUids = memberOusUids;
+		downloadDialogOpen = true;
+	}
+
+	function handleDownloadStarted(jobId: string) {
+		activeJobIds = [...activeJobIds, jobId];
+		statusMessage = `Download started (job ${jobId.slice(0, 8)}…)`;
+	}
+
+	function dismissJob(jobId: string) {
+		activeJobIds = activeJobIds.filter((id) => id !== jobId);
+	}
 </script>
 
 <div class="container mx-auto px-4 py-8">
@@ -445,6 +466,7 @@
 			onLoad={() => (loadModalOpen = true)}
 			onSave={() => (saveModalOpen = true)}
 			{saving}
+			onDownload={handleDownload}
 		/>
 
 		<MetadataLoadModal
@@ -466,5 +488,20 @@
 			onChooseLocalPath={chooseLocalSavePath}
 			bind:formRef={saveFormRef}
 		/>
+
+		<DownloadDialog
+			open={downloadDialogOpen}
+			memberOusUids={downloadMemberOusUids}
+			onClose={() => (downloadDialogOpen = false)}
+			onStarted={handleDownloadStarted}
+		/>
+
+		{#if activeJobIds.length > 0}
+			<div class="space-y-3">
+				{#each activeJobIds as jobId (jobId)}
+					<DownloadProgress {jobId} onDone={() => dismissJob(jobId)} />
+				{/each}
+			</div>
+		{/if}
 	</div>
 </div>

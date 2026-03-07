@@ -40,6 +40,7 @@ services:
       - GALAXY_ZOO_DIR=/app/data/galaxy_zoo
       - HUBBLE_DIR=/app/data/hubble
       - DATABASE_URL=postgresql://almasim:almasim_dev_password@postgres:5432/almasim
+      - DOWNLOAD_DIR=/host_home
     volumes:
       # Mount data directory for persistence (read-only for safety)
       - ./data:/app/data:ro
@@ -49,6 +50,8 @@ services:
       - ./backend/app:/app/backend/app
       - ./backend/database:/app/backend/database
       - ./src:/app/src
+      # Mount host home directory so downloads land on the host filesystem
+      - ${HOME}:/host_home
     command: >
       uvicorn app.main:app
       --host 0.0.0.0

@@ -243,3 +243,56 @@ class SimulationLog(Base):
 
     # Relationships
     simulation = relationship("SimulationJob", back_populates="logs")
+
+
+class DownloadJobRecord(Base):
+    """Persisted record of a download job."""
+
+    __tablename__ = "download_jobs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(
+        UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4, index=True
+    )
+    destination = Column(Text, nullable=False)
+    total_files = Column(Integer, nullable=False, default=0)
+    total_bytes = Column(Float, nullable=False, default=0)
+    bytes_downloaded = Column(Float, nullable=False, default=0)
+    files_completed = Column(Integer, nullable=False, default=0)
+    files_failed = Column(Integer, nullable=False, default=0)
+    status = Column(
+        String(20), nullable=False, default="pending"
+    )  # pending, running, completed, failed, cancelled
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    files = relationship(
+        "DownloadFileRecord", back_populates="job", cascade="all, delete-orphan"
+    )
+
+
+class DownloadFileRecord(Base):
+    """Persisted record of a single file within a download job."""
+
+    __tablename__ = "download_files"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("download_jobs.job_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    filename = Column(Text, nullable=False)
+    access_url = Column(Text, nullable=False)
+    content_length = Column(Float, nullable=False, default=0)
+    bytes_downloaded = Column(Float, nullable=False, default=0)
+    status = Column(
+        String(20), nullable=False, default="pending"
+    )  # pending, downloading, completed, failed
+    error = Column(Text, nullable=True)
+
+    # Relationships
+    job = relationship("DownloadJobRecord", back_populates="files")
