@@ -48,6 +48,7 @@ class InclusionFilters:
     observation_date_range: Optional[Tuple[str, str]] = None
     qa2_status: Optional[List[str]] = None
     obs_type: Optional[str] = None
+    proposal_id_prefix: Optional[List[str]] = None   # e.g. ['2016.', '2017.']
 
 
 @dataclass
@@ -318,6 +319,10 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
 
     if f.frequency_range:
         conds.append(f"frequency BETWEEN {f.frequency_range[0]} AND {f.frequency_range[1]}")
+
+    if f.proposal_id_prefix:
+        prefix_clauses = [f"proposal_id LIKE '{p}%'" for p in f.proposal_id_prefix]
+        conds.append(f"({' OR '.join(prefix_clauses)})")
 
     return conds
 

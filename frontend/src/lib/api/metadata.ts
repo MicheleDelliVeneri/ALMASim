@@ -23,6 +23,9 @@ export interface MetadataQuery {
 	exclude_source_name?: string[];
 	exclude_obs_type?: string[];
 	exclude_solar?: boolean;
+	// Cycle filtering: ALMA cycle numbers (e.g. [4, 5, 6]).
+	// Cycle N → year 2012+N → proposal_id prefix "{year}."
+	cycles?: number[];
 	// Output control
 	visible_columns?: string[];
 }

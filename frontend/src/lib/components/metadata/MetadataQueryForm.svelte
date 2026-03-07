@@ -11,6 +11,13 @@
 
 	const bandOptions = [3, 4, 5, 6, 7, 8, 9, 10];
 	const arrayTypeOptions = ['12m', '7m', 'TP'];
+	// Cycle N → year 2012+N. Cycles 1-12 cover 2013-2024 (Cycle 0 = 2012, pilot).
+	const cycleOptions = Array.from({ length: 13 }, (_, i) => ({
+		cycle: i,
+		year: 2012 + i,
+		label: `Cycle ${i} (${2012 + i})`,
+	}));
+	let selectedCycles = $state<number[]>([]);
 	const qa2Options = [
 		{ value: 'Pass', label: 'Pass' },
 		{ value: 'SemiPass', label: 'Semi-Pass' },
@@ -173,6 +180,8 @@
 
 		if (excludeSolar) query.exclude_solar = true;
 
+		if (selectedCycles.length) query.cycles = selectedCycles;
+
 		onSubmit(query);
 	}
 </script>
@@ -299,6 +308,42 @@
 			</div>
 			<p class="mt-0.5 text-xs text-gray-400">{selectedCategories.length} selected</p>
 		</div>
+	</div>
+
+	<!-- ALMA Cycle -->
+	<div>
+		<div class="flex items-center justify-between">
+			<span class="text-sm font-medium text-gray-700">ALMA Cycle</span>
+			{#if selectedCycles.length > 0}
+				<button
+					type="button"
+					onclick={() => (selectedCycles = [])}
+					class="text-xs text-gray-400 hover:text-gray-600 underline"
+				>Clear all</button>
+			{/if}
+		</div>
+		<div class="mt-2 flex flex-wrap gap-2">
+			{#each cycleOptions as opt}
+				<label class="inline-flex items-center space-x-1 text-sm text-gray-700">
+					<input
+						type="checkbox"
+						checked={selectedCycles.includes(opt.cycle)}
+						onchange={() => {
+							selectedCycles = selectedCycles.includes(opt.cycle)
+								? selectedCycles.filter((c) => c !== opt.cycle)
+								: [...selectedCycles, opt.cycle];
+						}}
+						class="rounded border-gray-300"
+					/>
+					<span>{opt.label}</span>
+				</label>
+			{/each}
+		</div>
+		<p class="mt-0.5 text-xs text-gray-400">
+			{selectedCycles.length > 0
+				? `Filtering by ${selectedCycles.length} cycle(s): proposal_id prefix ${selectedCycles.map((c) => `${2012 + c}.`).join(', ')}`
+				: 'All cycles (no filter)'}
+		</p>
 	</div>
 
 	<!-- Bands -->

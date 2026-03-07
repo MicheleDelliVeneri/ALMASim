@@ -29,6 +29,8 @@ class ScienceQueryParams:
     exclude_source_name: Optional[List[str]] = None
     exclude_obs_type: Optional[List[str]] = None
     exclude_solar: bool = False
+    # Cycle / proposal_id filtering
+    proposal_id_prefix: Optional[List[str]] = None
     # Output
     visible_columns: Optional[List[str]] = None
 
@@ -68,6 +70,14 @@ class MetadataQuery(BaseModel):
     exclude_obs_type: Optional[Sequence[str]] = Field(None, description="Observation type substrings to exclude")
     exclude_solar: bool = Field(False, description="Exclude solar observations (target/keyword/category contain 'sun')")
 
+    # --- Cycle / proposal_id filtering ---
+    # Cycle N → year 2012+N → proposal_id prefix "{year}."
+    # Pass cycle numbers (e.g. [4, 5, 6]) and they are converted to proposal_id prefixes.
+    cycles: Optional[Sequence[int]] = Field(
+        None,
+        description="ALMA cycle numbers to include (e.g. [4, 5, 6]). Cycle N → proposal_id prefix '{2012+N}.'",
+    )
+
     # --- Output control ---
     visible_columns: Optional[List[str]] = Field(
         None,
@@ -96,6 +106,7 @@ class MetadataQuery(BaseModel):
             exclude_source_name=list(self.exclude_source_name) if self.exclude_source_name else None,
             exclude_obs_type=list(self.exclude_obs_type) if self.exclude_obs_type else None,
             exclude_solar=self.exclude_solar,
+            proposal_id_prefix=[f"{2012 + c}." for c in self.cycles] if self.cycles else None,
             visible_columns=self.visible_columns,
         )
 

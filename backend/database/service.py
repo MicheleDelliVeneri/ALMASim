@@ -44,6 +44,7 @@ class ObservationQueryParams:
     frequency_range: Optional[tuple] = None
     target_name: Optional[str] = None
     member_ous_uid: Optional[str] = None
+    proposal_id_prefix: Optional[List[str]] = None
 
 
 @dataclass
@@ -148,6 +149,8 @@ class DatabaseService:
             filters.append(Observation.obs_type.ilike(f"%{p.obs_type}%"))
         if p.antenna_arrays:
             filters.append(Observation.antenna_arrays.ilike(f"%{p.antenna_arrays}%"))
+        if p.proposal_id_prefix:
+            filters.append(or_(*(Observation.proposal_id.ilike(f"{prefix}%") for prefix in p.proposal_id_prefix)))
         return filters
 
     @staticmethod

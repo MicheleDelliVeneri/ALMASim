@@ -151,6 +151,7 @@ class MetadataService:
                 fov_range=params.fov_range,
                 time_resolution_range=params.time_resolution_range,
                 frequency_range=params.frequency_range,
+                proposal_id_prefix=params.proposal_id_prefix,
                 exclude_science_keywords=params.exclude_science_keyword,
                 exclude_scientific_categories=params.exclude_scientific_category,
                 exclude_source_names=params.exclude_source_name,
@@ -190,6 +191,7 @@ class MetadataService:
             observation_date_range=params.observation_date_range,
             qa2_status=params.qa2_status,  # QA2 mapping is applied inside the TAP layer
             obs_type=params.obs_type,
+            proposal_id_prefix=params.proposal_id_prefix,
         )
         exclude = ExclusionFilters(
             science_keyword=params.exclude_science_keyword,
@@ -235,6 +237,7 @@ class MetadataService:
                 observation_date_range=params.observation_date_range,
                 qa2_status=params.qa2_status,
                 obs_type=params.obs_type,
+                proposal_id_prefix=params.proposal_id_prefix,
             )
             exclude = ExclusionFilters(
                 science_keyword=params.exclude_science_keyword,
