@@ -16,6 +16,9 @@
 	let isCollapsed = $state(false);
 	let columnsMenuOpen = $state(false);
 
+	// Pinned columns — always first, always visible, not reorderable
+	const pinnedColumns = ['proposal_id', 'ALMA_source_name'];
+
 	// All known columns with their display labels (kept in preferred display order)
 	const columnLabels: Record<string, string> = {
 		ALMA_source_name: 'Source Name',
@@ -48,7 +51,6 @@
 
 	// Preferred display order (first columns shown in table)
 	const preferredOrder = [
-		'ALMA_source_name',
 		'Band',
 		'Array_type',
 		'Ang.res.',
@@ -60,11 +62,16 @@
 		'Type',
 	];
 
-	// All columns available for the Columns menu — always the full ALMA set, in display order
-	const menuColumns = [
+	// Default order for reorderable columns (excludes pinned)
+	const defaultColumnOrder = [
 		...preferredOrder,
-		...Object.keys(columnLabels).filter((c) => !preferredOrder.includes(c)),
+		...Object.keys(columnLabels).filter(
+			(c) => !preferredOrder.includes(c) && !pinnedColumns.includes(c)
+		),
 	];
+
+	// User-reorderable column order (mutable)
+	let columnOrder = $state([...defaultColumnOrder]);
 
 	// Columns hidden by default (verbose / less commonly needed)
 	const defaultHidden = new Set([
@@ -75,7 +82,6 @@
 		'Cont_sens_mJybeam',
 		'Line_sens_10kms_mJybeam',
 		'Freq.sup.',
-		'proposal_id',
 		'group_ous_uid',
 	]);
 	let hiddenColumns = $state(new Set<string>(defaultHidden));
@@ -96,10 +102,19 @@
 		return new Set(Object.keys(data[0]));
 	});
 
-	// Visible table columns: from menuColumns, not hidden, and present in data
-	const tableColumns = $derived(
-		menuColumns.filter((c) => !hiddenColumns.has(c) && dataColumnSet.has(c))
+	// Visible pinned columns (present in data)
+	const pinnedTableColumns = $derived(pinnedColumns.filter((c) => dataColumnSet.has(c)));
+
+	// Visible reorderable columns
+	const reorderableTableColumns = $derived(
+		columnOrder.filter((c) => !hiddenColumns.has(c) && dataColumnSet.has(c))
 	);
+
+	// Full ordered list of visible columns (pinned first, then reorderable)
+	const tableColumns = $derived([...pinnedTableColumns, ...reorderableTableColumns]);
+
+	// Total column count for display
+	const totalColumnCount = $derived(pinnedColumns.length + columnOrder.length);
 
 	// Apply column filters to data
 	const filteredData = $derived.by(() => {
@@ -161,6 +176,104 @@
 			mirrorBar!.removeEventListener('scroll', onMirrorScroll);
 		};
 	});
+
+	// --- Sticky pinned-column widths ---
+	let pinnedColEls = $state<HTMLElement[]>([]);
+	let pinnedColWidths = $state<number[]>([0, 0]);
+
+	$effect(() => {
+		const els = pinnedColEls.filter(Boolean);
+		if (els.length === 0) return;
+		const obs = new ResizeObserver(() => {
+			pinnedColWidths = els.map((el) => el.offsetWidth);
+		});
+		els.forEach((el) => obs.observe(el));
+		return () => obs.disconnect();
+	});
+
+	function pinnedLeft(index: number): number {
+		let left = 0;
+		for (let i = 0; i < index; i++) left += pinnedColWidths[i];
+		return left;
+	}
+
+	// --- Drag-and-drop: table column headers ---
+	let draggedTableCol = $state<string | null>(null);
+	let dragOverTableCol = $state<string | null>(null);
+
+	function onTableColDragStart(col: string, e: DragEvent) {
+		draggedTableCol = col;
+		e.dataTransfer!.effectAllowed = 'move';
+		e.dataTransfer!.setData('text/plain', col);
+	}
+
+	function onTableColDragOver(col: string, e: DragEvent) {
+		if (!draggedTableCol || pinnedColumns.includes(col)) return;
+		e.preventDefault();
+		dragOverTableCol = col;
+	}
+
+	function onTableColDrop(col: string) {
+		if (!draggedTableCol || draggedTableCol === col) {
+			draggedTableCol = null;
+			dragOverTableCol = null;
+			return;
+		}
+		const order = [...columnOrder];
+		const fromIdx = order.indexOf(draggedTableCol);
+		const toIdx = order.indexOf(col);
+		if (fromIdx !== -1 && toIdx !== -1) {
+			order.splice(fromIdx, 1);
+			order.splice(toIdx, 0, draggedTableCol);
+			columnOrder = order;
+		}
+		draggedTableCol = null;
+		dragOverTableCol = null;
+	}
+
+	function onTableColDragEnd() {
+		draggedTableCol = null;
+		dragOverTableCol = null;
+	}
+
+	// --- Drag-and-drop: column selector menu ---
+	let draggedMenuCol = $state<string | null>(null);
+	let dragOverMenuCol = $state<string | null>(null);
+
+	function onMenuDragStart(col: string, e: DragEvent) {
+		draggedMenuCol = col;
+		e.dataTransfer!.effectAllowed = 'move';
+		e.dataTransfer!.setData('text/plain', col);
+	}
+
+	function onMenuDragOver(col: string, e: DragEvent) {
+		if (!draggedMenuCol) return;
+		e.preventDefault();
+		dragOverMenuCol = col;
+	}
+
+	function onMenuDrop(col: string) {
+		if (!draggedMenuCol || draggedMenuCol === col) {
+			draggedMenuCol = null;
+			dragOverMenuCol = null;
+			return;
+		}
+		const order = [...columnOrder];
+		const fromIdx = order.indexOf(draggedMenuCol);
+		const toIdx = order.indexOf(col);
+		if (fromIdx !== -1 && toIdx !== -1) {
+			order.splice(fromIdx, 1);
+			order.splice(toIdx, 0, draggedMenuCol);
+			columnOrder = order;
+		}
+		draggedMenuCol = null;
+		dragOverMenuCol = null;
+	}
+
+	function onMenuDragEnd() {
+		draggedMenuCol = null;
+		dragOverMenuCol = null;
+	}
 
 	const placeholderRows = Array.from({ length: 5 }, (_, i) => i);
 
@@ -247,11 +360,11 @@
 					class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
 					onclick={() => (columnsMenuOpen = !columnsMenuOpen)}
 				>
-					Columns ({tableColumns.length}/{menuColumns.length})
+					Columns ({tableColumns.length}/{totalColumnCount})
 				</button>
 				{#if columnsMenuOpen}
 					<div
-						class="absolute right-0 z-30 mt-1 max-h-72 w-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+						class="absolute right-0 z-30 mt-1 max-h-96 w-64 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
 					>
 						<div class="flex items-center justify-between border-b border-gray-100 px-3 py-2">
 							<span class="text-xs font-semibold uppercase tracking-wide text-gray-500"
@@ -266,15 +379,38 @@
 								<button
 									type="button"
 									class="text-xs text-blue-600 hover:underline"
-									onclick={() => (hiddenColumns = new Set(menuColumns))}>None</button
+									onclick={() => (hiddenColumns = new Set(columnOrder))}>None</button
 								>
 							</div>
 						</div>
-						{#each menuColumns as col}
-							<label
-								class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-								class:text-gray-400={!dataColumnSet.has(col)}
+						<!-- Pinned columns (always visible, not reorderable) -->
+						{#each pinnedColumns as col}
+							<div
+								class="flex items-center gap-2 bg-gray-50 px-3 py-1.5 text-sm text-gray-500"
 							>
+								<svg class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+									<path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+								</svg>
+								{formatColumnName(col)}
+								<span class="ml-auto text-xs text-gray-300">pinned</span>
+							</div>
+						{/each}
+						<!-- Reorderable columns (drag up/down to reorder) -->
+						{#each columnOrder as col}
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+							<label
+								class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+								class:text-gray-400={!dataColumnSet.has(col)}
+								class:border-t-2={dragOverMenuCol === col && draggedMenuCol !== col}
+								class:border-blue-400={dragOverMenuCol === col && draggedMenuCol !== col}
+								draggable="true"
+								ondragstart={(e: DragEvent) => onMenuDragStart(col, e)}
+								ondragover={(e: DragEvent) => onMenuDragOver(col, e)}
+								ondrop={() => onMenuDrop(col)}
+								ondragend={onMenuDragEnd}
+								role="listitem"
+							>
+								<span class="cursor-grab text-gray-300 hover:text-gray-500 select-none" aria-label="Drag to reorder">⠇⠇</span>
 								<input
 									type="checkbox"
 									checked={!hiddenColumns.has(col)}
@@ -343,10 +479,26 @@
 				<thead class="sticky top-0 z-10">
 					<!-- Column header row -->
 					<tr class="bg-gray-50">
-						{#each tableColumns as column}
+						{#each pinnedTableColumns as col, i}
+							<th
+								bind:this={pinnedColEls[i]}
+								scope="col"
+								class="sticky z-20 whitespace-nowrap bg-gray-50 px-4 py-2 text-left font-semibold text-gray-700 border-r border-gray-200"
+								style="left: {pinnedLeft(i)}px;"
+							>
+								{formatColumnName(col)}
+							</th>
+						{/each}
+						{#each reorderableTableColumns as column}
 							<th
 								scope="col"
-								class="whitespace-nowrap px-4 py-2 text-left font-semibold text-gray-700"
+								class="whitespace-nowrap px-4 py-2 text-left font-semibold text-gray-700 cursor-grab select-none"
+								class:bg-blue-100={dragOverTableCol === column && draggedTableCol !== column}
+								draggable="true"
+								ondragstart={(e: DragEvent) => onTableColDragStart(column, e)}
+								ondragover={(e: DragEvent) => onTableColDragOver(column, e)}
+								ondrop={() => onTableColDrop(column)}
+								ondragend={onTableColDragEnd}
 							>
 								{formatColumnName(column)}
 							</th>
@@ -355,7 +507,19 @@
 					<!-- Filter row — only shown when there is data -->
 					{#if results?.data?.length}
 						<tr class="bg-white shadow-sm">
-							{#each tableColumns as column}
+							{#each pinnedTableColumns as column, i}
+								<th scope="col" class="sticky z-20 bg-white px-2 py-1 border-r border-gray-200" style="left: {pinnedLeft(i)}px;">
+									<input
+										type="text"
+										placeholder="filter…"
+										bind:value={columnFilters[column]}
+										class="w-full min-w-16 rounded border border-gray-200 px-1.5 py-0.5 text-xs font-normal text-gray-700 placeholder-gray-300 focus:border-blue-400 focus:outline-none"
+										class:border-blue-400={columnFilters[column]?.length > 0}
+										class:bg-blue-50={columnFilters[column]?.length > 0}
+									/>
+								</th>
+							{/each}
+							{#each reorderableTableColumns as column}
 								<th scope="col" class="px-2 py-1">
 									<input
 										type="text"
@@ -378,8 +542,23 @@
 							</tr>
 						{/if}
 						{#each visibleRows as row}
-							<tr class="border-b border-gray-100 hover:bg-gray-50" style="height: {ROW_HEIGHT}px;">
-								{#each tableColumns as column}
+							<tr class="group border-b border-gray-100 hover:bg-gray-50" style="height: {ROW_HEIGHT}px;">
+								{#each pinnedTableColumns as column, i}
+									{@const displayValue = stringifyValue(row[column])}
+									<td
+										class="sticky z-[5] bg-white px-4 align-middle border-r border-gray-200 group-hover:bg-gray-50"
+										style="left: {pinnedLeft(i)}px;"
+									>
+										<div
+											class="whitespace-nowrap text-gray-800"
+											style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;"
+											title={displayValue}
+										>
+											{displayValue}
+										</div>
+									</td>
+								{/each}
+								{#each reorderableTableColumns as column}
 									{@const displayValue = stringifyValue(row[column])}
 									<td class="px-4 align-middle">
 										<div
