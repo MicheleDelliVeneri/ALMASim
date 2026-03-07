@@ -2,11 +2,14 @@
 import { apiClient } from './client';
 
 export interface MetadataQuery {
+	// Inclusion filters
 	source_name?: string;
 	science_keyword?: string[];
 	scientific_category?: string[];
 	bands?: number[];
 	antenna_arrays?: string;
+	array_type?: string[];
+	array_configuration?: string[];
 	angular_resolution_range?: [number, number];
 	observation_date_range?: [string, string];
 	qa2_status?: string[];
@@ -14,6 +17,14 @@ export interface MetadataQuery {
 	fov_range?: [number, number];
 	time_resolution_range?: [number, number];
 	frequency_range?: [number, number];
+	// Exclusion filters
+	exclude_science_keyword?: string[];
+	exclude_scientific_category?: string[];
+	exclude_source_name?: string[];
+	exclude_obs_type?: string[];
+	exclude_solar?: boolean;
+	// Output control
+	visible_columns?: string[];
 }
 
 export interface MetadataResponse {

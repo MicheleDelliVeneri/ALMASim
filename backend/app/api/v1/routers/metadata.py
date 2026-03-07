@@ -16,6 +16,7 @@ from app.schemas.metadata import (
     MetadataResponse,
     MetadataSaveRequest,
     MetadataSaveResponse,
+    ScienceQueryParams,
 )
 from app.services.metadata_service import MetadataService
 from app.services.status_store import query_store
@@ -53,24 +54,8 @@ async def query_metadata(
     """Query ALMA metadata from database cache or TAP archive."""
     try:
         service = MetadataService(db=db)
-        data = service.query_by_science(
-            source_name=query.source_name,
-            science_keyword=query.science_keyword,
-            scientific_category=query.scientific_category,
-            bands=query.bands,
-            antenna_arrays=query.antenna_arrays,
-            angular_resolution_range=query.angular_resolution_range,
-            observation_date_range=query.observation_date_range,
-            qa2_status=query.qa2_status,
-            obs_type=query.obs_type,
-            fov_range=query.fov_range,
-            time_resolution_range=query.time_resolution_range,
-            frequency_range=query.frequency_range,
-        )
-        return MetadataResponse(
-            count=len(data),
-            data=data,
-        )
+        data = service.query_by_science(query.to_params())
+        return MetadataResponse(count=len(data), data=data)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -92,18 +77,7 @@ async def start_query(
         background_tasks.add_task(
             service.run_background_query,
             query_id=query_id,
-            source_name=query.source_name,
-            science_keyword=query.science_keyword,
-            scientific_category=query.scientific_category,
-            bands=query.bands,
-            antenna_arrays=query.antenna_arrays,
-            angular_resolution_range=query.angular_resolution_range,
-            observation_date_range=query.observation_date_range,
-            qa2_status=query.qa2_status,
-            obs_type=query.obs_type,
-            fov_range=query.fov_range,
-            time_resolution_range=query.time_resolution_range,
-            frequency_range=query.frequency_range,
+            params=query.to_params(),
         )
         return MetadataQueryStartResponse(query_id=query_id, status="running")
     except Exception as e:

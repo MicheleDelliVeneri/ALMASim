@@ -14,37 +14,14 @@
 	let { results, loading, fetching, onClear, onLoad, onSave, saving }: Props = $props();
 
 	let isCollapsed = $state(false);
+	let columnsMenuOpen = $state(false);
 
-	// Mirror-scroll: top scrollbar synced to the real scroll container
-	let scrollContainer = $state<HTMLDivElement | null>(null);
-	let mirrorBar = $state<HTMLDivElement | null>(null);
-	let tableScrollWidth = $state(0);
-
-	$effect(() => {
-		if (!scrollContainer || !mirrorBar) return;
-
-		const obs = new ResizeObserver(() => {
-			tableScrollWidth = scrollContainer!.scrollWidth;
-		});
-		obs.observe(scrollContainer);
-
-		const onScroll = () => { mirrorBar!.scrollLeft = scrollContainer!.scrollLeft; };
-		const onMirrorScroll = () => { scrollContainer!.scrollLeft = mirrorBar!.scrollLeft; };
-
-		scrollContainer.addEventListener('scroll', onScroll);
-		mirrorBar.addEventListener('scroll', onMirrorScroll);
-
-		return () => {
-			obs.disconnect();
-			scrollContainer!.removeEventListener('scroll', onScroll);
-			mirrorBar!.removeEventListener('scroll', onMirrorScroll);
-		};
-	});
-
+	// All known columns with their display labels (kept in preferred display order)
 	const columnLabels: Record<string, string> = {
 		ALMA_source_name: 'Source Name',
 		Band: 'Band',
-		antenna_arrays: 'Array',
+		Array_type: 'Array Type',
+		antenna_arrays: 'Antenna Arrays',
 		'Ang.res.': 'Ang. Res. (arcsec)',
 		'Obs.date': 'Obs. Date',
 		Project_abstract: 'Project Abstract',
@@ -66,14 +43,63 @@
 		'Freq.sup.': 'Freq. Support',
 		proposal_id: 'Proposal ID',
 		member_ous_uid: 'Member OUS UID',
-		group_ous_uid: 'Group OUS UID'
+		group_ous_uid: 'Group OUS UID',
 	};
 
-	// The 10 key fields shown first; remaining columns follow in data order
+	// Columns hidden by default (verbose / less commonly needed)
+	const defaultHidden = new Set(['antenna_arrays', 'PWV', 'SB_name', 'Vel.res.', 'Cont_sens_mJybeam', 'Line_sens_10kms_mJybeam', 'Freq.sup.', 'proposal_id', 'group_ous_uid']);
+	let hiddenColumns = $state(new Set<string>(defaultHidden));
+
+	// Virtual scrolling constants
+	const ROW_HEIGHT = 36;      // px — matches row height below
+	const OVERSCAN = 15;        // extra rows above/below viewport
+	const CONTAINER_HEIGHT = 480; // must match max-height in CSS
+
+	// Mirror-scroll: top scrollbar synced to the real scroll container
+	let scrollContainer = $state<HTMLDivElement | null>(null);
+	let mirrorBar = $state<HTMLDivElement | null>(null);
+	let tableScrollWidth = $state(0);
+	let scrollTop = $state(0);
+
+	// Virtual window derived from scroll position
+	const totalRows = $derived(results?.data?.length ?? 0);
+	const virtualStart = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
+	const virtualEnd = $derived(
+		Math.min(totalRows, Math.ceil((scrollTop + CONTAINER_HEIGHT) / ROW_HEIGHT) + OVERSCAN)
+	);
+	const topPad = $derived(virtualStart * ROW_HEIGHT);
+	const bottomPad = $derived(Math.max(0, (totalRows - virtualEnd) * ROW_HEIGHT));
+	const visibleRows = $derived(results?.data?.slice(virtualStart, virtualEnd) ?? []);
+
+	$effect(() => {
+		if (!scrollContainer || !mirrorBar) return;
+
+		const obs = new ResizeObserver(() => {
+			tableScrollWidth = scrollContainer!.scrollWidth;
+		});
+		obs.observe(scrollContainer);
+
+		const onScroll = () => {
+			scrollTop = scrollContainer!.scrollTop;
+			mirrorBar!.scrollLeft = scrollContainer!.scrollLeft;
+		};
+		const onMirrorScroll = () => { scrollContainer!.scrollLeft = mirrorBar!.scrollLeft; };
+
+		scrollContainer.addEventListener('scroll', onScroll);
+		mirrorBar.addEventListener('scroll', onMirrorScroll);
+
+		return () => {
+			obs.disconnect();
+			scrollContainer!.removeEventListener('scroll', onScroll);
+			mirrorBar!.removeEventListener('scroll', onMirrorScroll);
+		};
+	});
+
+	// The key fields shown first; remaining columns follow in data order
 	const preferredOrder = [
 		'ALMA_source_name',
 		'Band',
-		'antenna_arrays',
+		'Array_type',
 		'Ang.res.',
 		'Obs.date',
 		'Project_abstract',
@@ -99,7 +125,8 @@
 		return value?.toString() ?? '';
 	}
 
-	const tableColumns = $derived.by(() => {
+	// All columns available in the current data (ordered by preferredOrder then rest)
+	const allDataColumns = $derived.by(() => {
 		const data = results?.data;
 		if (!data || data.length === 0) return preferredOrder;
 		const allKeys = Object.keys(data[0]);
@@ -107,7 +134,27 @@
 		const rest = allKeys.filter((c) => !preferredOrder.includes(c));
 		return [...leading, ...rest];
 	});
+
+	// Visible subset respecting hiddenColumns
+	const tableColumns = $derived(allDataColumns.filter((c) => !hiddenColumns.has(c)));
+
+	function toggleColumn(col: string) {
+		const next = new Set(hiddenColumns);
+		if (next.has(col)) {
+			next.delete(col);
+		} else {
+			next.add(col);
+		}
+		hiddenColumns = next;
+	}
 </script>
+
+<svelte:window
+	onclick={(e) => {
+		if (!(e.target as HTMLElement).closest('[data-columns-menu]'))
+			columnsMenuOpen = false;
+	}}
+/>
 
 <section class="rounded-lg bg-white p-6 shadow">
 	<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -143,6 +190,40 @@
 			</div>
 		</div>
 		<div class="flex flex-wrap gap-2">
+			<!-- Column visibility toggle -->
+			<div class="relative" data-columns-menu>
+				<button
+					type="button"
+					class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+					onclick={() => (columnsMenuOpen = !columnsMenuOpen)}
+				>
+					Columns ({tableColumns.length}/{allDataColumns.length})
+				</button>
+				{#if columnsMenuOpen}
+					<div
+						class="absolute right-0 z-30 mt-1 max-h-72 w-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+					>
+						<div class="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+							<span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Show / Hide</span>
+							<div class="flex gap-2">
+								<button type="button" class="text-xs text-blue-600 hover:underline" onclick={() => (hiddenColumns = new Set())}>All</button>
+								<button type="button" class="text-xs text-blue-600 hover:underline" onclick={() => (hiddenColumns = new Set(allDataColumns))}>None</button>
+							</div>
+						</div>
+						{#each allDataColumns as col}
+							<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-sm text-gray-700">
+								<input
+									type="checkbox"
+									checked={!hiddenColumns.has(col)}
+									onchange={() => toggleColumn(col)}
+									class="rounded border-gray-300"
+								/>
+								{formatColumnName(col)}
+							</label>
+						{/each}
+					</div>
+				{/if}
+			</div>
 			<button
 				type="button"
 				class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
@@ -185,7 +266,7 @@
 		<div
 			bind:this={scrollContainer}
 			class="overflow-auto"
-			style="max-height: 480px;"
+			style="max-height: {CONTAINER_HEIGHT}px;"
 		>
 			<table class="divide-y divide-gray-200 text-sm" style="min-width: max-content; width: 100%;">
 				<thead class="sticky top-0 z-10 bg-gray-50">
@@ -200,13 +281,18 @@
 						{/each}
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-100 bg-white">
+				<tbody class="bg-white">
 					{#if !loading && results?.data?.length}
-						{#each results.data as row}
-							<tr class="hover:bg-gray-50">
+						{#if topPad > 0}
+							<tr style="height: {topPad}px;" aria-hidden="true">
+								<td colspan={tableColumns.length}></td>
+							</tr>
+						{/if}
+						{#each visibleRows as row}
+							<tr class="border-b border-gray-100 hover:bg-gray-50" style="height: {ROW_HEIGHT}px;">
 								{#each tableColumns as column}
 									{@const displayValue = stringifyValue(row[column])}
-									<td class="px-4 py-2 align-top">
+									<td class="px-4 align-middle">
 										<div
 											class="whitespace-nowrap text-gray-800"
 											style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;"
@@ -218,9 +304,14 @@
 								{/each}
 							</tr>
 						{/each}
+						{#if bottomPad > 0}
+							<tr style="height: {bottomPad}px;" aria-hidden="true">
+								<td colspan={tableColumns.length}></td>
+							</tr>
+						{/if}
 					{:else}
 						{#each placeholderRows as _}
-							<tr class="animate-pulse">
+							<tr class="animate-pulse border-b border-gray-100">
 								{#each tableColumns as _}
 									<td class="px-4 py-3">
 										<div class="h-4 w-32 rounded bg-gray-200/80" aria-hidden="true"></div>

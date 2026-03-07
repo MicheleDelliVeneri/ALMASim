@@ -45,6 +45,17 @@ services:
       - ./data:/app/data:ro
       # Mount outputs directory for simulation results
       - ./backend/outputs:/app/outputs
+      # Mount source code for hot reload (no rebuild needed on code changes)
+      - ./backend/app:/app/backend/app
+      - ./backend/database:/app/backend/database
+      - ./src:/app/src
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/backend
+      --reload-dir /app/src
     depends_on:
       postgres:
         condition: service_healthy

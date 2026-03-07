@@ -1,9 +1,64 @@
 """TAP service functions for querying ALMA metadata."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
 import pyvo
 import pandas as pd
 from astropy.time import Time
 from tenacity import retry, stop_after_attempt, wait_exponential
 import requests
+
+# Map human-friendly QA2 labels to ALMA TAP stored values
+_QA2_STATUS_MAP = {
+    "Pass": "T",
+    "Fail": "F",
+    "SemiPass": "X",
+    # Pass-through for raw values already in TAP form
+    "T": "T",
+    "F": "F",
+    "X": "X",
+}
+
+# Antenna prefix patterns used to identify array type from antenna_arrays column
+# 12m arrays: DA / DV antennas; 7m arrays: CM antennas; TP: PM antennas
+_ARRAY_TYPE_ANTENNA_PATTERNS = {
+    "12m": ["%DA%", "%DV%"],
+    "7m": ["%CM%"],
+    "TP": ["%PM%"],
+}
+
+
+@dataclass
+class InclusionFilters:
+    """Positive (include-only) filters for ALMA TAP science queries."""
+
+    science_keyword: Optional[List[str]] = None
+    scientific_category: Optional[List[str]] = None
+    band: Optional[List[int]] = None
+    fov_range: Optional[Tuple[float, float]] = None
+    time_resolution_range: Optional[Tuple[float, float]] = None
+    frequency_range: Optional[Tuple[float, float]] = None
+    source_name: Optional[str] = None
+    antenna_arrays: Optional[str] = None
+    array_type: Optional[List[str]] = None          # e.g. ['12m', '7m', 'TP']
+    array_configuration: Optional[List[str]] = None  # e.g. ['C-1', 'C-2']
+    angular_resolution_range: Optional[Tuple[float, float]] = None
+    observation_date_range: Optional[Tuple[str, str]] = None
+    qa2_status: Optional[List[str]] = None
+    obs_type: Optional[str] = None
+
+
+@dataclass
+class ExclusionFilters:
+    """Negative (exclude) filters for ALMA TAP science queries."""
+
+    science_keyword: Optional[List[str]] = None
+    scientific_category: Optional[List[str]] = None
+    source_name: Optional[List[str]] = None
+    obs_type: Optional[List[str]] = None
+    solar: bool = False  # exclude observations related to the Sun
 
 
 def get_tap_service():
@@ -165,160 +220,158 @@ def query_all_targets(targets):
     return df
 
 
+_SCIENCE_COLUMNS = [
+    "target_name",
+    "member_ous_uid",
+    "group_ous_uid",
+    "pwv",
+    "schedblock_name",
+    "velocity_resolution",
+    "spatial_resolution",
+    "s_ra",
+    "s_dec",
+    "s_fov",
+    "t_resolution",
+    "proposal_id",
+    "cont_sensitivity_bandwidth",
+    "sensitivity_10kms",
+    "obs_release_date",
+    "band_list",
+    "bandwidth",
+    "frequency",
+    "frequency_support",
+    "science_keyword",
+    "scientific_category",
+    "antenna_arrays",
+    "t_max",
+    "proposal_abstract",
+    "qa2_passed",
+    "type",
+]
+
+
+def _like_or_clause(column: str, values: list, negate: bool = False) -> str:
+    """Build a (col LIKE '%v1%' OR col LIKE '%v2%') clause."""
+    op = "NOT LIKE" if negate else "LIKE"
+    join_op = " AND " if negate else " OR "
+    clauses = [f"{column} {op} '%{v}%'" for v in values]
+    return f"({join_op.join(clauses)})"
+
+
+def _build_inclusion_conditions(f: InclusionFilters) -> list:
+    """Translate an InclusionFilters object into a list of ADQL condition strings."""
+    conds = []
+
+    if f.science_keyword:
+        conds.append(_like_or_clause("science_keyword", f.science_keyword))
+
+    if f.scientific_category:
+        conds.append(_like_or_clause("scientific_category", f.scientific_category))
+
+    if f.band:
+        conds.append(_like_or_clause("band_list", [str(b) for b in f.band]))
+
+    if f.source_name:
+        conds.append(f"target_name LIKE '%{f.source_name}%'")
+
+    if f.antenna_arrays:
+        conds.append(f"antenna_arrays LIKE '%{f.antenna_arrays}%'")
+
+    # Array type: 12m → DA/DV antennas, 7m → CM antennas, TP → PM antennas
+    if f.array_type:
+        type_clauses = [
+            f"antenna_arrays LIKE '{pattern}'"
+            for atype in f.array_type
+            for pattern in _ARRAY_TYPE_ANTENNA_PATTERNS.get(atype, [f"%{atype}%"])
+        ]
+        conds.append(f"({' OR '.join(type_clauses)})")
+
+    # Array configuration matched against schedblock_name (e.g. 'C-1', 'C-2')
+    if f.array_configuration:
+        conf_clauses = [f"schedblock_name LIKE '%{c}%'" for c in f.array_configuration]
+        conds.append(f"({' OR '.join(conf_clauses)})")
+
+    if f.angular_resolution_range:
+        lo, hi = f.angular_resolution_range
+        conds.append(f"spatial_resolution BETWEEN {lo} AND {hi}")
+
+    if f.observation_date_range:
+        mjd_min = Time(f.observation_date_range[0], format="iso", scale="utc").mjd
+        mjd_max = Time(f.observation_date_range[1], format="iso", scale="utc").mjd
+        conds.append(f"t_max >= {mjd_min} AND t_max <= {mjd_max}")
+
+    # QA2 status: map human-friendly labels to TAP-stored single-char values
+    if f.qa2_status:
+        mapped = [_QA2_STATUS_MAP.get(s, s) for s in f.qa2_status]
+        statuses = "', '".join(mapped)
+        conds.append(f"qa2_passed IN ('{statuses}')")
+
+    if f.obs_type:
+        conds.append(f"type LIKE '%{f.obs_type}%'")
+
+    if f.fov_range:
+        conds.append(f"s_fov BETWEEN {f.fov_range[0]} AND {f.fov_range[1]}")
+
+    if f.time_resolution_range:
+        lo, hi = f.time_resolution_range
+        conds.append(f"t_resolution BETWEEN {lo} AND {hi}")
+
+    if f.frequency_range:
+        conds.append(f"frequency BETWEEN {f.frequency_range[0]} AND {f.frequency_range[1]}")
+
+    return conds
+
+
+def _build_exclusion_conditions(f: ExclusionFilters) -> list:
+    """Translate an ExclusionFilters object into a list of ADQL NOT conditions."""
+    conds = []
+
+    if f.science_keyword:
+        for kw in f.science_keyword:
+            conds.append(f"science_keyword NOT LIKE '%{kw}%'")
+
+    if f.scientific_category:
+        for cat in f.scientific_category:
+            conds.append(f"scientific_category NOT LIKE '%{cat}%'")
+
+    if f.source_name:
+        for name in f.source_name:
+            conds.append(f"LOWER(target_name) NOT LIKE LOWER('%{name}%')")
+
+    if f.obs_type:
+        for t in f.obs_type:
+            conds.append(f"type NOT LIKE '%{t}%'")
+
+    # Solar exclusion: all three fields must not mention 'sun' (case-insensitive)
+    if f.solar:
+        conds.append("LOWER(target_name) NOT LIKE '%sun%'")
+        conds.append("LOWER(science_keyword) NOT LIKE '%sun%'")
+        conds.append("LOWER(scientific_category) NOT LIKE '%sun%'")
+
+    return conds
+
+
 def query_by_science_type(
-    science_keyword=None,
-    scientific_category=None,
-    band=None,
-    fov_range=None,
-    time_resolution_range=None,
-    frequency_range=None,
-    source_name=None,
-    antenna_arrays=None,
-    angular_resolution_range=None,
-    observation_date_range=None,
-    qa2_status=None,
-    obs_type=None,
+    include: Optional[InclusionFilters] = None,
+    exclude: Optional[ExclusionFilters] = None,
 ):
-    """Query for all science observations by science type and other filters.
+    """Query for all science observations filtered by inclusion and exclusion criteria.
 
     Parameters:
-    science_keyword: Science keyword filter (str or list)
-    scientific_category: Scientific category filter (str or list)
-    band: Band filter (int or list of ints)
-    fov_range: Field of view range [min, max]
-    time_resolution_range: Time resolution range [min, max]
-    frequency_range: Frequency range [min, max]
-    source_name: Target name filter (partial match)
-    antenna_arrays: Antenna array configuration filter (partial match)
-    angular_resolution_range: Angular resolution range [min, max] in arcsec
-    observation_date_range: Observation date range [min, max] as ISO date strings
-    qa2_status: QA2 status filter (str or list, e.g. 'T', 'F')
-    obs_type: Observation type filter (partial match)
+    include: InclusionFilters dataclass (positive/keep-only filters)
+    exclude: ExclusionFilters dataclass (negative/remove filters)
 
     Returns:
     pandas.DataFrame: A table of query results.
     """
     service = get_tap_service()
-    columns = [
-        "target_name",
-        "member_ous_uid",
-        "group_ous_uid",
-        "pwv",
-        "schedblock_name",
-        "velocity_resolution",
-        "spatial_resolution",
-        "s_ra",
-        "s_dec",
-        "s_fov",
-        "t_resolution",
-        "proposal_id",
-        "cont_sensitivity_bandwidth",
-        "sensitivity_10kms",
-        "obs_release_date",
-        "band_list",
-        "bandwidth",
-        "frequency",
-        "frequency_support",
-        "science_keyword",
-        "scientific_category",
-        "antenna_arrays",
-        "t_max",
-        "proposal_abstract",
-        "qa2_passed",
-        "type",
-    ]
-    columns_str = ", ".join(columns)
+    columns_str = ", ".join(_SCIENCE_COLUMNS)
 
     conditions = ["is_mosaic = 'F'", "science_observation = 'T'"]
-
-    # Science keyword
-    if science_keyword:
-        if isinstance(science_keyword, list):
-            if len(science_keyword) == 1:
-                conditions.append(f"science_keyword LIKE '%{science_keyword[0]}%'")
-            else:
-                kw_clauses = " OR ".join(
-                    f"science_keyword LIKE '%{kw}%'" for kw in science_keyword
-                )
-                conditions.append(f"({kw_clauses})")
-        else:
-            conditions.append(f"science_keyword LIKE '%{science_keyword}%'")
-
-    # Scientific category
-    if scientific_category:
-        if isinstance(scientific_category, list):
-            if len(scientific_category) == 1:
-                conditions.append(
-                    f"scientific_category LIKE '%{scientific_category[0]}%'"
-                )
-            else:
-                cat_clauses = " OR ".join(
-                    f"scientific_category LIKE '%{cat}%'" for cat in scientific_category
-                )
-                conditions.append(f"({cat_clauses})")
-        else:
-            conditions.append(f"scientific_category LIKE '%{scientific_category}%'")
-
-    # Band
-    if band:
-        if isinstance(band, list):
-            if len(band) == 1:
-                conditions.append(f"band_list LIKE '%{band[0]}%'")
-            else:
-                band_clauses = " OR ".join(
-                    f"band_list LIKE '%{b}%'" for b in band
-                )
-                conditions.append(f"({band_clauses})")
-        else:
-            conditions.append(f"band_list LIKE '%{band}%'")
-
-    # Source name
-    if source_name:
-        conditions.append(f"target_name LIKE '%{source_name}%'")
-
-    # Antenna arrays
-    if antenna_arrays:
-        conditions.append(f"antenna_arrays LIKE '%{antenna_arrays}%'")
-
-    # Angular resolution range
-    if angular_resolution_range:
-        conditions.append(
-            f"spatial_resolution BETWEEN {angular_resolution_range[0]} AND {angular_resolution_range[1]}"
-        )
-
-    # Observation date range — t_max is MJD in ivoa.obscore (observation end time)
-    if observation_date_range:
-        mjd_min = Time(observation_date_range[0], format="iso", scale="utc").mjd
-        mjd_max = Time(observation_date_range[1], format="iso", scale="utc").mjd
-        conditions.append(f"t_max >= {mjd_min} AND t_max <= {mjd_max}")
-
-    # QA2 status
-    if qa2_status:
-        if isinstance(qa2_status, list):
-            statuses = "', '".join(qa2_status)
-            conditions.append(f"qa2_passed IN ('{statuses}')")
-        else:
-            conditions.append(f"qa2_passed = '{qa2_status}'")
-
-    # Observation type
-    if obs_type:
-        conditions.append(f"type LIKE '%{obs_type}%'")
-
-    # FOV range
-    if fov_range:
-        conditions.append(f"s_fov BETWEEN {fov_range[0]} AND {fov_range[1]}")
-
-    # Time resolution range
-    if time_resolution_range:
-        conditions.append(
-            f"t_resolution BETWEEN {time_resolution_range[0]} AND {time_resolution_range[1]}"
-        )
-
-    # Frequency range
-    if frequency_range:
-        conditions.append(
-            f"frequency BETWEEN {frequency_range[0]} AND {frequency_range[1]}"
-        )
+    if include is not None:
+        conditions.extend(_build_inclusion_conditions(include))
+    if exclude is not None:
+        conditions.extend(_build_exclusion_conditions(exclude))
 
     where_clause = " AND ".join(conditions)
     query = f"""
@@ -326,5 +379,46 @@ def query_by_science_type(
             FROM ivoa.obscore
             WHERE {where_clause}
             """
-    results = search_with_retry(service, query)
-    return results
+    return search_with_retry(service, query)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def query_products_for_members(member_ous_uids):
+    """Return available data products for one or more member OUS UIDs.
+
+    Each row in the result corresponds to a single data product (visibility data,
+    cube, continuum image, etc.) associated with the given member_ous_uid(s).
+    Unlike the main science query, rows are NOT deduplicated so all products are
+    returned.
+
+    Parameters:
+    member_ous_uids: A single member OUS UID string or a list of them.
+
+    Returns:
+    pandas.DataFrame with columns:
+        member_ous_uid, target_name, dataproduct_type, calib_level,
+        access_url, obs_publisher_did, band_list, qa2_passed, type
+    """
+    service = get_tap_service()
+    if isinstance(member_ous_uids, str):
+        member_ous_uids = [member_ous_uids]
+    uid_list = "', '".join(member_ous_uids)
+    product_columns = [
+        "member_ous_uid",
+        "target_name",
+        "dataproduct_type",
+        "calib_level",
+        "access_url",
+        "obs_publisher_did",
+        "band_list",
+        "qa2_passed",
+        "type",
+    ]
+    columns_str = ", ".join(product_columns)
+    query = f"""
+            SELECT {columns_str}
+            FROM ivoa.obscore
+            WHERE member_ous_uid IN ('{uid_list}')
+            AND science_observation = 'T'
+            """
+    return search_with_retry(service, query)

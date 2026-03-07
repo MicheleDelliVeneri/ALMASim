@@ -86,9 +86,9 @@ class Observation(Base):
     proposal_id = Column(String(100), index=True)
 
     # Source information
-    target_name = Column(String(255), nullable=False, index=True)
-    ra = Column(Float, nullable=False)
-    dec = Column(Float, nullable=False)
+    target_name = Column(String(255), index=True)
+    ra = Column(Float)
+    dec = Column(Float)
 
     # Observation parameters
     band = Column(Integer, index=True)

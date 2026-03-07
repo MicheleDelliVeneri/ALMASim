@@ -1,7 +1,8 @@
 """Database service layer for querying and managing data."""
 
 import uuid
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import and_, func, or_, select
@@ -15,6 +16,45 @@ from .models import (
     SimulationJob,
     SimulationLog,
 )
+
+# Antenna prefix → array type mapping (mirrors the TAP service constant)
+_DB_ARRAY_PREFIX_MAP: Dict[str, List[str]] = {
+    "12m": ["%DA%", "%DV%"],
+    "7m": ["%CM%"],
+    "TP": ["%PM%"],
+}
+
+
+@dataclass
+class ObservationQueryParams:
+    """Inclusion parameters for database observation queries."""
+
+    science_keywords: Optional[List[str]] = None
+    scientific_categories: Optional[List[str]] = None
+    bands: Optional[List[int]] = None
+    antenna_arrays: Optional[str] = None
+    array_type: Optional[List[str]] = None
+    array_configuration: Optional[List[str]] = None
+    angular_resolution_range: Optional[tuple] = None
+    observation_date_range: Optional[tuple] = None
+    qa2_status: Optional[List[str]] = None
+    obs_type: Optional[str] = None
+    fov_range: Optional[tuple] = None
+    time_resolution_range: Optional[tuple] = None
+    frequency_range: Optional[tuple] = None
+    target_name: Optional[str] = None
+    member_ous_uid: Optional[str] = None
+
+
+@dataclass
+class ObservationExclusionParams:
+    """Exclusion parameters for database observation queries."""
+
+    science_keywords: Optional[List[str]] = None
+    scientific_categories: Optional[List[str]] = None
+    source_names: Optional[List[str]] = None
+    obs_types: Optional[List[str]] = None
+    solar: bool = False
 
 
 class DatabaseService:
@@ -39,128 +79,168 @@ class DatabaseService:
 
     def query_observations(
         self,
-        science_keywords: Optional[Sequence[str]] = None,
-        scientific_categories: Optional[Sequence[str]] = None,
-        bands: Optional[Sequence[int]] = None,
-        antenna_arrays: Optional[str] = None,
-        angular_resolution_range: Optional[tuple[float, float]] = None,
-        observation_date_range: Optional[tuple[str, str]] = None,
-        qa2_status: Optional[Sequence[str]] = None,
-        obs_type: Optional[str] = None,
-        fov_range: Optional[tuple[float, float]] = None,
-        time_resolution_range: Optional[tuple[float, float]] = None,
-        frequency_range: Optional[tuple[float, float]] = None,
-        target_name: Optional[str] = None,
-        member_ous_uid: Optional[str] = None,
+        include: Optional[ObservationQueryParams] = None,
+        exclude: Optional[ObservationExclusionParams] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = 0,
+        # Legacy flat kwargs kept for backwards compatibility with direct callers
+        **kwargs,
     ) -> List[Observation]:
-        """
-        Query observations with various filters.
+        """Query observations with inclusion and exclusion filter dataclasses.
 
-        Args:
-            science_keywords: List of science keywords (OR logic)
-            scientific_categories: List of scientific categories (OR logic)
-            bands: List of bands to filter by
-            fov_range: Tuple of (min_fov, max_fov) in arcsec
-            time_resolution_range: Tuple of (min_time, max_time)
-            frequency_range: Tuple of (min_freq, max_freq) in GHz
-            target_name: Filter by target name (partial match)
-            member_ous_uid: Exact match on member ous uid
-            limit: Maximum number of results
-            offset: Number of results to skip
-
-        Returns:
-            List of Observation objects
+        Accepts ``include`` (ObservationQueryParams) and ``exclude``
+        (ObservationExclusionParams).  Any extra keyword arguments are merged
+        into an ObservationQueryParams so existing call-sites continue working.
         """
+        if include is None:
+            include = ObservationQueryParams(**{
+                k: v for k, v in kwargs.items()
+                if k in ObservationQueryParams.__dataclass_fields__
+            })
+        if exclude is None:
+            exclude = ObservationExclusionParams(**{
+                k: v for k, v in kwargs.items()
+                if k in ObservationExclusionParams.__dataclass_fields__
+            })
+
         stmt = select(Observation).options(
             joinedload(Observation.scientific_category),
             joinedload(Observation.science_keywords),
         )
+        stmt, filters = self._apply_inclusion_filters(stmt, include)
+        filters.extend(self._build_exclusion_filters(exclude))
 
-        # Build filters
-        filters = []
-
-        if member_ous_uid:
-            filters.append(Observation.member_ous_uid == member_ous_uid)
-
-        if target_name:
-            filters.append(Observation.target_name.ilike(f"%{target_name}%"))
-
-        if bands:
-            filters.append(Observation.band.in_(bands))
-
-        if fov_range:
-            min_fov, max_fov = fov_range
-            if min_fov is not None:
-                filters.append(Observation.s_fov >= min_fov)
-            if max_fov is not None:
-                filters.append(Observation.s_fov <= max_fov)
-
-        if time_resolution_range:
-            min_time, max_time = time_resolution_range
-            if min_time is not None:
-                filters.append(Observation.t_resolution >= min_time)
-            if max_time is not None:
-                filters.append(Observation.t_resolution <= max_time)
-
-        if frequency_range:
-            min_freq, max_freq = frequency_range
-            if min_freq is not None:
-                filters.append(Observation.frequency >= min_freq)
-            if max_freq is not None:
-                filters.append(Observation.frequency <= max_freq)
-
-        if antenna_arrays:
-            filters.append(Observation.antenna_arrays.ilike(f"%{antenna_arrays}%"))
-
-        if angular_resolution_range:
-            min_ang, max_ang = angular_resolution_range
-            if min_ang is not None:
-                filters.append(Observation.spatial_resolution >= min_ang)
-            if max_ang is not None:
-                filters.append(Observation.spatial_resolution <= max_ang)
-
-        if observation_date_range:
-            from datetime import datetime as dt
-            min_date_str, max_date_str = observation_date_range
-            if min_date_str:
-                min_date = dt.fromisoformat(min_date_str)
-                filters.append(Observation.obs_release_date >= min_date)
-            if max_date_str:
-                max_date = dt.fromisoformat(max_date_str)
-                filters.append(Observation.obs_release_date <= max_date)
-
-        if qa2_status:
-            filters.append(Observation.qa2_passed.in_(qa2_status))
-
-        if obs_type:
-            filters.append(Observation.obs_type.ilike(f"%{obs_type}%"))
-
-        if scientific_categories:
-            # Join with categories table for filtering
-            stmt = stmt.join(Observation.scientific_category)
-            filters.append(ScientificCategory.category.in_(scientific_categories))
-
-        if science_keywords:
-            # Join with keywords table for filtering
-            stmt = stmt.join(Observation.science_keywords)
-            filters.append(ScienceKeyword.keyword.in_(science_keywords))
-
-        # Apply all filters
         if filters:
             stmt = stmt.where(and_(*filters))
-
-        # Apply ordering
         stmt = stmt.order_by(Observation.created_at.desc())
-
-        # Apply pagination
         if offset:
             stmt = stmt.offset(offset)
         if limit:
             stmt = stmt.limit(limit)
-
         return list(self.db.execute(stmt).unique().scalars().all())
+
+    # -- private filter helpers -----------------------------------------------
+
+    @staticmethod
+    def _apply_inclusion_filters(stmt, p: ObservationQueryParams):
+        """Return (stmt, filters) with all positive filter clauses applied."""
+        filters: list = []
+        filters.extend(DatabaseService._direct_filters(p))
+        filters.extend(DatabaseService._array_filters(p))
+        filters.extend(DatabaseService._range_filters(p))
+        stmt, taxonomy_filters = DatabaseService._taxonomy_filters(stmt, p)
+        filters.extend(taxonomy_filters)
+        return stmt, filters
+
+    @staticmethod
+    def _direct_filters(p: ObservationQueryParams) -> list:
+        """Simple equality / ilike filters that don't require extra joins."""
+        filters = []
+        if p.member_ous_uid:
+            filters.append(Observation.member_ous_uid == p.member_ous_uid)
+        if p.target_name:
+            filters.append(Observation.target_name.ilike(f"%{p.target_name}%"))
+        if p.bands:
+            filters.append(Observation.band.in_(p.bands))
+        if p.qa2_status:
+            filters.append(Observation.qa2_passed.in_(p.qa2_status))
+        if p.obs_type:
+            filters.append(Observation.obs_type.ilike(f"%{p.obs_type}%"))
+        if p.antenna_arrays:
+            filters.append(Observation.antenna_arrays.ilike(f"%{p.antenna_arrays}%"))
+        return filters
+
+    @staticmethod
+    def _array_filters(p: ObservationQueryParams) -> list:
+        """Filters for array_type (antenna prefix) and array_configuration (schedblock_name)."""
+        filters = []
+        if p.array_type:
+            clauses = [
+                Observation.antenna_arrays.ilike(pat)
+                for atype in p.array_type
+                for pat in _DB_ARRAY_PREFIX_MAP.get(atype, [f"%{atype}%"])
+            ]
+            if clauses:
+                filters.append(or_(*clauses))
+        if p.array_configuration:
+            filters.append(or_(*(
+                Observation.schedblock_name.ilike(f"%{c}%") for c in p.array_configuration
+            )))
+        return filters
+
+    @staticmethod
+    def _range_filters(p: ObservationQueryParams) -> list:
+        """Numeric and date range filters."""
+        filters = []
+        for col, rng in (
+            (Observation.s_fov, p.fov_range),
+            (Observation.t_resolution, p.time_resolution_range),
+            (Observation.frequency, p.frequency_range),
+            (Observation.spatial_resolution, p.angular_resolution_range),
+        ):
+            if rng:
+                lo, hi = rng
+                if lo is not None:
+                    filters.append(col >= lo)
+                if hi is not None:
+                    filters.append(col <= hi)
+        if p.observation_date_range:
+            lo_str, hi_str = p.observation_date_range
+            if lo_str:
+                filters.append(Observation.obs_release_date >= datetime.fromisoformat(lo_str))
+            if hi_str:
+                filters.append(Observation.obs_release_date <= datetime.fromisoformat(hi_str))
+        return filters
+
+    @staticmethod
+    def _taxonomy_filters(stmt, p: ObservationQueryParams):
+        """Filters that require joining the keywords / categories association tables."""
+        filters = []
+        if p.scientific_categories:
+            stmt = stmt.join(Observation.scientific_category)
+            filters.append(ScientificCategory.category.in_(p.scientific_categories))
+        if p.science_keywords:
+            stmt = stmt.join(Observation.science_keywords)
+            filters.append(ScienceKeyword.keyword.in_(p.science_keywords))
+        return stmt, filters
+
+    @staticmethod
+    def _build_exclusion_filters(e: ObservationExclusionParams) -> list:
+        """Return a list of NOT conditions for the exclusion parameters."""
+        from .models import observation_keywords
+
+        filters = []
+
+        if e.source_names:
+            for name in e.source_names:
+                filters.append(~Observation.target_name.ilike(f"%{name}%"))
+
+        if e.obs_types:
+            for t in e.obs_types:
+                filters.append(~Observation.obs_type.ilike(f"%{t}%"))
+
+        if e.solar:
+            filters.append(~Observation.target_name.ilike("%sun%"))
+
+        if e.science_keywords:
+            for kw in e.science_keywords:
+                kw_subq = (
+                    select(observation_keywords.c.observation_id)
+                    .join(ScienceKeyword, ScienceKeyword.id == observation_keywords.c.keyword_id)
+                    .where(ScienceKeyword.keyword.ilike(f"%{kw}%"))
+                )
+                filters.append(~Observation.id.in_(kw_subq))
+
+        if e.scientific_categories:
+            for cat in e.scientific_categories:
+                cat_subq = (
+                    select(Observation.id)
+                    .join(Observation.scientific_category)
+                    .where(ScientificCategory.category.ilike(f"%{cat}%"))
+                )
+                filters.append(~Observation.id.in_(cat_subq))
+
+        return filters
 
     def get_observation_by_member_uid(
         self, member_ous_uid: str
