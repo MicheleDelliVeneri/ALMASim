@@ -20,6 +20,7 @@ from app.schemas.download import (
     StartDownloadResponse,
 )
 from app.services.download_service import (
+    DataProduct,
     DownloadJob,
     download_store,
     filter_products,
@@ -198,6 +199,8 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
     job = DownloadJob(
         job_id=job_id,
         destination=body.destination,
+        member_ous_uids=body.member_ous_uids,
+        product_filter=body.product_filter,
         total_files=len(products),
         total_bytes=total_bytes,
     )
@@ -242,9 +245,19 @@ async def list_download_jobs():
                 files_failed=active.files_failed,
                 progress=active.bytes_downloaded / total if total > 0 else 0,
                 created_at=active.created_at.isoformat(),
+                member_ous_uids=active.member_ous_uids,
+                product_filter=active.product_filter,
+                total_bytes=active.total_bytes,
+                bytes_downloaded=active.bytes_downloaded,
+                error=active.error,
             ))
         else:
+            import json
             total = rec.total_bytes or 1
+            try:
+                uids = json.loads(rec.member_ous_uids) if rec.member_ous_uids else []
+            except (json.JSONDecodeError, TypeError):
+                uids = []
             result.append(DownloadJobSummary(
                 job_id=str(rec.job_id),
                 status=rec.status,
@@ -254,6 +267,11 @@ async def list_download_jobs():
                 files_failed=rec.files_failed,
                 progress=rec.bytes_downloaded / total if total > 0 else 0,
                 created_at=rec.created_at.isoformat(),
+                member_ous_uids=uids,
+                product_filter=rec.product_filter or "all",
+                total_bytes=int(rec.total_bytes),
+                bytes_downloaded=int(rec.bytes_downloaded),
+                error=rec.error,
             ))
     return result
 
@@ -324,17 +342,142 @@ async def get_download_job(job_id: str):
 @router.post("/jobs/{job_id}/cancel")
 async def cancel_download_job(job_id: str):
     """Cancel a running download job."""
+    # Try in-memory first (active jobs)
     job = download_store.get(job_id)
-    if not job:
+    if job:
+        if job.status not in ("pending", "running"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Job is already {job.status}",
+            )
+        download_store.update(job_id, status="cancelled")
+        download_store.persist(job_id)
+        return {"job_id": job_id, "status": "cancelled"}
+
+    # Fall back to DB (job already finished or server restarted)
+    rec = download_store.get_from_db(job_id)
+    if not rec:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Download job {job_id} not found or already finished",
+            detail=f"Download job {job_id} not found",
         )
-    if job.status not in ("pending", "running"):
+    if rec.status not in ("pending", "running"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Job is already {job.status}",
+            detail=f"Job is already {rec.status}",
         )
-    download_store.update(job_id, status="cancelled")
-    download_store.persist(job_id)
+    # Update directly in DB
+    download_store.update_in_db(job_id, status="cancelled")
     return {"job_id": job_id, "status": "cancelled"}
+
+
+@router.post("/jobs/{job_id}/redownload", response_model=StartDownloadResponse)
+async def redownload_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+):
+    """Re-download a previous job using the stored file records.
+
+    Uses the original access URLs from the database so UID resolution is not
+    needed.  Existing files at the destination are overwritten.
+    """
+    rec = download_store.get_from_db(job_id)
+    if not rec:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Download job {job_id} not found",
+        )
+
+    import json
+    try:
+        uids = json.loads(rec.member_ous_uids) if rec.member_ous_uids else []
+    except (json.JSONDecodeError, TypeError):
+        uids = []
+
+    if rec.files:
+        # Build DataProduct list from stored file records
+        products = [
+            DataProduct(
+                access_url=f.access_url,
+                uid="",
+                filename=f.filename,
+                content_length=int(f.content_length),
+                content_type="",
+                product_type="other",
+            )
+            for f in rec.files
+        ]
+    elif uids:
+        # No file records (e.g. early cancellation) – re-resolve from DataLink
+        try:
+            all_products = resolve_products(uids)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to resolve products: {e}",
+            )
+        products = filter_products(all_products, rec.product_filter or "all")
+        if not products:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No products found when re-resolving from ALMA DataLink",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No file records or UIDs stored for this job – cannot re-download",
+        )
+
+    total_bytes = sum(p.content_length for p in products)
+    new_job_id = str(uuid.uuid4())
+    job = DownloadJob(
+        job_id=new_job_id,
+        destination=rec.destination,
+        member_ous_uids=uids,
+        product_filter=rec.product_filter or "all",
+        total_files=len(products),
+        total_bytes=total_bytes,
+    )
+    download_store.create(job)
+
+    background_tasks.add_task(
+        run_download_job,
+        job_id=new_job_id,
+        products=products,
+        destination=rec.destination,
+        max_parallel=3,
+    )
+
+    return StartDownloadResponse(
+        job_id=new_job_id,
+        status="pending",
+        total_files=len(products),
+        total_bytes=total_bytes,
+        total_size_display=_format_bytes(total_bytes),
+        destination=rec.destination,
+    )
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_download_job(job_id: str):
+    """Delete a download job from history.
+
+    Active (running/pending) jobs must be cancelled first.
+    """
+    active = download_store.get(job_id)
+    if active and active.status in ("pending", "running"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete an active job — cancel it first",
+        )
+
+    deleted = download_store.delete_from_db(job_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Download job {job_id} not found",
+        )
+    # Also remove from memory if still lingering
+    with download_store._lock:
+        download_store._active.pop(job_id, None)
+    return {"job_id": job_id, "deleted": True}

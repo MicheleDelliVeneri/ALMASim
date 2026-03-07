@@ -42,6 +42,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db():
     """Initialize database tables."""
     Base.metadata.create_all(bind=engine)
+    # Add columns that may be missing from older schemas
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    if insp.has_table("download_jobs"):
+        cols = {c["name"] for c in insp.get_columns("download_jobs")}
+        with engine.begin() as conn:
+            if "member_ous_uids" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN member_ous_uids TEXT NOT NULL DEFAULT ''"))
+            if "product_filter" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN product_filter VARCHAR(20) NOT NULL DEFAULT 'all'"))
 
 
 def get_db() -> Generator[Session, None, None]:

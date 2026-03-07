@@ -19,7 +19,7 @@
 		<header class="mb-8">
 			<h1 class="mb-2 text-4xl font-bold text-gray-900">ALMASim</h1>
 			<p class="text-lg text-gray-600">
-				Generate realistic ALMA observations with advanced simulation capabilities
+				An elegant ALMA simulator for a more civilized age
 			</p>
 			<div class="mt-4">
 				<span class="inline-block rounded-full bg-blue-100 px-3 py-1 text-sm text-blue-800">
@@ -43,6 +43,22 @@
 			>
 				<h2 class="mb-2 text-xl font-semibold text-gray-900">Metadata</h2>
 				<p class="text-gray-600">Query and browse ALMA observation metadata</p>
+			</a>
+
+			<a
+				href="/data"
+				class="block rounded-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
+			>
+				<h2 class="mb-2 text-xl font-semibold text-gray-900">Data</h2>
+				<p class="text-gray-600">View download history, monitor active downloads, and re-download previous jobs</p>
+			</a>
+
+			<a
+				href="/visualizer"
+				class="block rounded-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
+			>
+				<h2 class="mb-2 text-xl font-semibold text-gray-900">Visualizer</h2>
+				<p class="text-gray-600">Visualize and explore ALMA data products</p>
 			</a>
 		</div>
 	</div>

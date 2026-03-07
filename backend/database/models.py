@@ -255,6 +255,8 @@ class DownloadJobRecord(Base):
         UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4, index=True
     )
     destination = Column(Text, nullable=False)
+    member_ous_uids = Column(Text, nullable=False, default="")  # JSON array string
+    product_filter = Column(String(20), nullable=False, default="all")
     total_files = Column(Integer, nullable=False, default=0)
     total_bytes = Column(Float, nullable=False, default=0)
     bytes_downloaded = Column(Float, nullable=False, default=0)

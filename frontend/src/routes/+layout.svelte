@@ -5,6 +5,7 @@
 		{ href: '/', label: 'Overview' },
 		{ href: '/simulations', label: 'Simulations' },
 		{ href: '/metadata', label: 'Metadata' },
+		{ href: '/data', label: 'Data' },
 		{ href: '/visualizer', label: 'Visualizer' }
 	];
 </script>

@@ -195,6 +195,8 @@ class DownloadJob:
 
     job_id: str
     destination: str
+    member_ous_uids: List[str] = field(default_factory=list)
+    product_filter: str = "all"
     total_files: int = 0
     total_bytes: int = 0
     bytes_downloaded: int = 0
@@ -228,11 +230,14 @@ class DownloadStore:
             self._active[job.job_id] = job
         # Persist to DB
         from database.models import DownloadJobRecord
+        import json
         db = self._get_db()
         try:
             rec = DownloadJobRecord(
                 job_id=job.job_id,
                 destination=job.destination,
+                member_ous_uids=json.dumps(job.member_ous_uids),
+                product_filter=job.product_filter,
                 total_files=job.total_files,
                 total_bytes=job.total_bytes,
                 status=job.status,
@@ -336,6 +341,41 @@ class DownloadStore:
         finally:
             db.close()
 
+    def delete_from_db(self, job_id: str) -> bool:
+        """Delete a job and its file records from the database."""
+        from database.models import DownloadJobRecord
+        db = self._get_db()
+        try:
+            rec = db.query(DownloadJobRecord).filter(
+                DownloadJobRecord.job_id == job_id
+            ).first()
+            if not rec:
+                return False
+            db.delete(rec)  # cascade deletes file records
+            db.commit()
+            return True
+        finally:
+            db.close()
+
+    def update_in_db(self, job_id: str, **kwargs) -> bool:
+        """Update a job directly in the database (for jobs no longer in memory)."""
+        from database.models import DownloadJobRecord
+        db = self._get_db()
+        try:
+            rec = db.query(DownloadJobRecord).filter(
+                DownloadJobRecord.job_id == job_id
+            ).first()
+            if not rec:
+                return False
+            for k, v in kwargs.items():
+                if hasattr(rec, k):
+                    setattr(rec, k, v)
+            rec.updated_at = datetime.now()
+            db.commit()
+            return True
+        finally:
+            db.close()
+
 
 # Singleton store
 download_store = DownloadStore()
@@ -372,6 +412,9 @@ def _download_single_file(
                 resp.raise_for_status()
                 with open(dest_path, "wb") as f:
                     for chunk in resp.iter_bytes(chunk_size=_CHUNK_SIZE):
+                        if job.status == "cancelled":
+                            file_status.status = "cancelled"
+                            return
                         f.write(chunk)
                         file_status.bytes_downloaded += len(chunk)
                         job.bytes_downloaded += len(chunk)
@@ -421,6 +464,17 @@ def run_download_job(
         )
         file_statuses.append(fs)
 
+    # If already cancelled while we were setting up, bail out
+    if job.status == "cancelled":
+        download_store.update(
+            job_id,
+            files=file_statuses,
+            total_files=len(products),
+            total_bytes=total_bytes,
+        )
+        download_store.finish(job_id)
+        return
+
     download_store.update(
         job_id,
         status="running",
@@ -428,6 +482,8 @@ def run_download_job(
         total_files=len(products),
         total_bytes=total_bytes,
     )
+    # Persist file records early so they survive cancellation
+    download_store.persist(job_id)
 
     # Download files in parallel batches
     import concurrent.futures

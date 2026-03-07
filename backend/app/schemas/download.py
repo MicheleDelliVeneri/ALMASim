@@ -150,3 +150,8 @@ class DownloadJobSummary(BaseModel):
     files_failed: int
     progress: float
     created_at: str
+    member_ous_uids: List[str] = []
+    product_filter: str = "all"
+    total_bytes: int = 0
+    bytes_downloaded: int = 0
+    error: Optional[str] = None

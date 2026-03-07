@@ -11,7 +11,6 @@
 	import MetadataLoadModal from '$lib/components/metadata/MetadataLoadModal.svelte';
 	import MetadataSaveModal from '$lib/components/metadata/MetadataSaveModal.svelte';
 	import DownloadDialog from '$lib/components/metadata/DownloadDialog.svelte';
-	import DownloadProgress from '$lib/components/metadata/DownloadProgress.svelte';
 	import FullScreenLoader from '$lib/components/shared/Loader.svelte';
 	import { formatDateStamp, supportsFilePicker } from '$lib/utils';
 
@@ -187,7 +186,6 @@
 	// Download state
 	let downloadDialogOpen = $state(false);
 	let downloadMemberOusUids = $state<string[]>([]);
-	let activeJobIds = $state<string[]>([]);
 
 	function stopPolling() {
 		if (pollTimer !== null) {
@@ -425,12 +423,7 @@
 	}
 
 	function handleDownloadStarted(jobId: string) {
-		activeJobIds = [...activeJobIds, jobId];
-		statusMessage = `Download started (job ${jobId.slice(0, 8)}…)`;
-	}
-
-	function dismissJob(jobId: string) {
-		activeJobIds = activeJobIds.filter((id) => id !== jobId);
+		statusMessage = `Download started (job ${jobId.slice(0, 8)}…). Track progress on the <a href="/data" class="underline font-medium">Data</a> page.`;
 	}
 </script>
 
@@ -454,7 +447,7 @@
 
 		{#if statusMessage}
 			<div class="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-				{statusMessage}
+				{@html statusMessage}
 			</div>
 		{/if}
 
@@ -495,13 +488,5 @@
 			onClose={() => (downloadDialogOpen = false)}
 			onStarted={handleDownloadStarted}
 		/>
-
-		{#if activeJobIds.length > 0}
-			<div class="space-y-3">
-				{#each activeJobIds as jobId (jobId)}
-					<DownloadProgress {jobId} onDone={() => dismissJob(jobId)} />
-				{/each}
-			</div>
-		{/if}
 	</div>
 </div>

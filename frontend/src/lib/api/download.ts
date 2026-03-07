@@ -71,6 +71,11 @@ export interface DownloadJobSummary {
 	files_failed: number;
 	progress: number;
 	created_at: string;
+	member_ous_uids: string[];
+	product_filter: string;
+	total_bytes: number;
+	bytes_downloaded: number;
+	error: string | null;
 }
 
 export interface BrowseDirectoryEntry {
@@ -137,6 +142,20 @@ export const downloadApi = {
 	cancelJob(jobId: string): Promise<{ message: string }> {
 		return apiClient.post<{ message: string }>(
 			`/api/v1/downloads/jobs/${encodeURIComponent(jobId)}/cancel`
+		);
+	},
+
+	/** Re-download a previous job using stored file records */
+	redownloadJob(jobId: string): Promise<StartDownloadResponse> {
+		return apiClient.post<StartDownloadResponse>(
+			`/api/v1/downloads/jobs/${encodeURIComponent(jobId)}/redownload`
+		);
+	},
+
+	/** Delete a download job from history */
+	deleteJob(jobId: string): Promise<{ job_id: string; deleted: boolean }> {
+		return apiClient.delete<{ job_id: string; deleted: boolean }>(
+			`/api/v1/downloads/jobs/${encodeURIComponent(jobId)}`
 		);
 	}
 };
