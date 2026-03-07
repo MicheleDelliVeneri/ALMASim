@@ -243,7 +243,13 @@ class MetadataService:
                 obs_type=params.exclude_obs_type,
                 solar=params.exclude_solar,
             )
-            result_df = _tap_query(include=include, exclude=exclude)
+            # Use query_metadata_by_science so columns are normalized/renamed
+            # to display names (same as the sync path).
+            result_df = query_metadata_by_science(
+                include=include,
+                exclude=exclude,
+                visible_columns=None,
+            )
             rows = result_df.to_dict("records") if result_df is not None and not result_df.empty else []
             query_store.append_rows(query_id, rows)
             query_store.complete(query_id)
