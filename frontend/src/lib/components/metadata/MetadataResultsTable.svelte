@@ -122,16 +122,28 @@
 	const totalColumnCount = $derived(pinnedColumns.length + columnOrder.length);
 
 	// Apply column filters to data
+	// Supports glob-style wildcards: * matches any sequence of characters.
+	// e.g. "2023*.L" matches anything starting with "2023" and ending with ".L"
+	// Without *, plain substring matching is used.
+	function matchesFilter(cellValue: string, pattern: string): boolean {
+		const cell = cellValue.toLowerCase();
+		const pat = pattern.toLowerCase();
+		if (!pat.includes('*')) return cell.includes(pat);
+		// Convert glob to regex: escape regex chars, replace * with .*
+		const escaped = pat.replace(/([.+?^${}()|[\]\\])/g, '\\$1').replace(/\*/g, '.*');
+		try {
+			return new RegExp(`^${escaped}$`).test(cell);
+		} catch {
+			return cell.includes(pat);
+		}
+	}
+
 	const filteredData = $derived.by(() => {
 		const data = results?.data ?? [];
 		const active = Object.entries(columnFilters).filter(([, v]) => v.length > 0);
 		if (active.length === 0) return data;
 		return data.filter((row) =>
-			active.every(([col, val]) =>
-				String(row[col] ?? '')
-					.toLowerCase()
-					.includes(val.toLowerCase())
-			)
+			active.every(([col, val]) => matchesFilter(String(row[col] ?? ''), val))
 		);
 	});
 
@@ -651,7 +663,7 @@
 								<th scope="col" class="sticky z-20 bg-white px-2 py-1 border-r border-gray-200" style="left: {pinnedLeft(i)}px;">
 									<input
 										type="text"
-										placeholder="filter…"
+										placeholder="filter (* = wildcard)"
 										bind:value={columnFilters[column]}
 										class="w-full min-w-16 rounded border border-gray-200 px-1.5 py-0.5 text-xs font-normal text-gray-700 placeholder-gray-300 focus:border-blue-400 focus:outline-none"
 										class:border-blue-400={columnFilters[column]?.length > 0}
@@ -663,7 +675,7 @@
 								<th scope="col" class="px-2 py-1">
 									<input
 										type="text"
-										placeholder="filter…"
+										placeholder="filter (* = wildcard)"
 										bind:value={columnFilters[column]}
 										class="w-full min-w-16 rounded border border-gray-200 px-1.5 py-0.5 text-xs font-normal text-gray-700 placeholder-gray-300 focus:border-blue-400 focus:outline-none"
 										class:border-blue-400={columnFilters[column]?.length > 0}
