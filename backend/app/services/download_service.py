@@ -1,9 +1,11 @@
 """Download service for fetching ALMA data products via DataLink."""
 
+import hashlib
 import logging
 import os
 import shutil
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -26,6 +28,13 @@ _DATALINK_MIRRORS = [
 # VOTable XML namespace
 _VOT_NS = "http://www.ivoa.net/xml/VOTable/v1.3"
 
+# Rate-limit between consecutive file downloads (seconds)
+_RATE_LIMIT_SEC = 0.5
+
+# Per-file retry policy
+_MAX_FILE_ATTEMPTS = 3
+_RETRY_BACKOFF_BASE = 2  # seconds; doubles each attempt
+
 
 # ---------------------------------------------------------------------------
 # DataLink resolution (replaces astroquery.alma.get_data_info)
@@ -40,27 +49,90 @@ class DataProduct:
     filename: str
     content_length: int  # bytes
     content_type: str
-    product_type: str  # "raw", "fits", "auxiliary", "weblog", "other"
+    product_type: str  # see PRODUCT_TYPES below
+    semantics: str = ""  # raw value from VOTable semantics column
 
     @property
     def size_mb(self) -> float:
         return self.content_length / (1024 * 1024)
 
 
-def _classify_product(url: str, content_type: str) -> str:
-    """Classify a product URL into a human-readable type."""
+# Supported product_type values (superset of former coarse set)
+PRODUCT_TYPES = {
+    "all",
+    "raw",           # ASDM / raw measurement sets
+    "calibration",   # pipeline calibration tables / scripts
+    "scripts",       # pipeline scripts only
+    "weblog",        # pipeline weblog HTML
+    "qa_reports",    # QA2 / QA3 reports
+    "auxiliary",     # auxiliary files, READMEs, licence files
+    "cubes",         # spectral-line image cubes
+    "continuum",     # continuum images
+    "fits",          # any FITS product (legacy catch-all)
+    "other",
+}
+
+# Semantics → product_type mapping (IVOA DataLink + ALMA-specific URIs)
+_SEMANTICS_MAP: Dict[str, str] = {
+    # IVOA standard
+    "#progenitor": "raw",
+    "#derivation": "fits",
+    "#auxiliary": "auxiliary",
+    # ALMA-specific (case-insensitive prefix matching done at runtime)
+    "alma#calibration": "calibration",
+    "alma#calibratedmeasurementset": "calibration",
+    "alma#pipeline_calibration": "calibration",
+    "alma#script": "scripts",
+    "alma#pipelinescript": "scripts",
+    "alma#weblog": "weblog",
+    "alma#qa": "qa_reports",
+    "alma#qa2report": "qa_reports",
+    "alma#imagecube": "cubes",
+    "alma#spectralcube": "cubes",
+    "alma#continuumimage": "continuum",
+    "alma#continuum": "continuum",
+    "alma#asdm": "raw",
+    "alma#raw": "raw",
+    "alma#auxiliary": "auxiliary",
+    "alma#readme": "auxiliary",
+}
+
+
+def _classify_product(url: str, content_type: str, semantics: str = "") -> str:
+    """Classify a product using VOTable semantics (preferred) then URL patterns."""
+    # --- Semantics-based (most accurate) ---
+    if semantics:
+        sem_lower = semantics.lower().strip()
+        # Direct match
+        if sem_lower in _SEMANTICS_MAP:
+            return _SEMANTICS_MAP[sem_lower]
+        # Strip URI prefix: "http://almascience.org/ALMA#Calibration" → "alma#calibration"
+        for frag in ("#", "/ALMA#", "/alma#"):
+            if frag in sem_lower:
+                short = "alma#" + sem_lower.split(frag)[-1]
+                if short in _SEMANTICS_MAP:
+                    return _SEMANTICS_MAP[short]
+
+    # --- URL-pattern fallback ---
     lower = url.lower()
-    if lower.endswith(".fits"):
-        return "fits"
     if "asdm" in lower or lower.endswith(".asdm.sdm.tar"):
         return "raw"
     if "weblog" in lower:
         return "weblog"
-    if "auxiliary" in lower or "readme" in lower:
+    if "qa" in lower and ("report" in lower or ".pdf" in lower):
+        return "qa_reports"
+    if "script" in lower:
+        return "scripts"
+    if "auxiliary" in lower or "readme" in lower or "licence" in lower:
         return "auxiliary"
-    if lower.endswith(".tar"):
-        # Tar files that aren't asdm are usually pipeline products
+    if lower.endswith(".fits"):
         return "fits"
+    if "cube" in lower:
+        return "cubes"
+    if "continuum" in lower or "cont_" in lower:
+        return "continuum"
+    if lower.endswith(".tar"):
+        return "fits"  # pipeline product tarballs are usually FITS
     return "other"
 
 
@@ -73,11 +145,9 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
         logger.warning("Failed to parse VOTable XML for uid=%s", uid)
         return products
 
-    # Find TABLEDATA rows.  VOTable can use namespace or not.
     for ns_prefix in [f"{{{_VOT_NS}}}", ""]:
         table = root.find(f".//{ns_prefix}TABLEDATA")
         if table is not None:
-            # Discover column order from FIELD elements
             resource = root.find(f".//{ns_prefix}RESOURCE")
             tbl = resource.find(f".//{ns_prefix}TABLE") if resource is not None else None
             fields = tbl.findall(f"{ns_prefix}FIELD") if tbl is not None else []
@@ -93,6 +163,7 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
             i_size = col_idx("content_length")
             i_type = col_idx("content_type")
             i_id = col_idx("ID")
+            i_sem = col_idx("semantics")
 
             for tr in table.findall(f"{ns_prefix}TR"):
                 tds = tr.findall(f"{ns_prefix}TD")
@@ -104,6 +175,7 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
                 size_str = tds[i_size].text if i_size >= 0 and i_size < len(tds) else "0"
                 ctype = tds[i_type].text if i_type >= 0 and i_type < len(tds) else ""
                 row_uid = tds[i_id].text if i_id >= 0 and i_id < len(tds) else uid
+                semantics = (tds[i_sem].text or "").strip() if i_sem >= 0 and i_sem < len(tds) else ""
 
                 try:
                     content_length = int(size_str or 0)
@@ -118,9 +190,10 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
                     filename=filename,
                     content_length=content_length,
                     content_type=ctype or "",
-                    product_type=_classify_product(url, ctype or ""),
+                    product_type=_classify_product(url, ctype or "", semantics),
+                    semantics=semantics,
                 ))
-            break  # found the data, no need to try other namespace
+            break
 
     return products
 
@@ -166,7 +239,8 @@ def filter_products(
 ) -> List[DataProduct]:
     """Filter products by type.
 
-    product_filter: "all", "fits", "raw", "auxiliary", "weblog"
+    product_filter: any value in PRODUCT_TYPES, or "fits" for legacy compat.
+    The special value "all" returns every product.
     """
     if product_filter == "all":
         return products
@@ -185,8 +259,9 @@ class FileDownloadStatus:
     access_url: str
     content_length: int
     bytes_downloaded: int = 0
-    status: str = "pending"  # pending, downloading, completed, failed
+    status: str = "pending"  # pending, downloading, completed, failed, cancelled
     error: Optional[str] = None
+    sha256: Optional[str] = None  # computed after successful download
 
 
 @dataclass
@@ -228,7 +303,6 @@ class DownloadStore:
         """Register a new job in memory and persist the initial record to DB."""
         with self._lock:
             self._active[job.job_id] = job
-        # Persist to DB
         from database.models import DownloadJobRecord
         import json
         db = self._get_db()
@@ -288,9 +362,7 @@ class DownloadStore:
             rec.error = job.error
             rec.updated_at = datetime.now()
 
-            # Sync per-file records
             if job.files:
-                # Remove old file records and insert fresh ones
                 db.query(DownloadFileRecord).filter(
                     DownloadFileRecord.job_id == job_id
                 ).delete()
@@ -303,6 +375,7 @@ class DownloadStore:
                         bytes_downloaded=fs.bytes_downloaded,
                         status=fs.status,
                         error=fs.error,
+                        sha256=fs.sha256,
                     ))
             db.commit()
         finally:
@@ -351,7 +424,7 @@ class DownloadStore:
             ).first()
             if not rec:
                 return False
-            db.delete(rec)  # cascade deletes file records
+            db.delete(rec)
             db.commit()
             return True
         finally:
@@ -394,47 +467,44 @@ def _check_disk_space(path: str, needed_bytes: int) -> bool:
         usage = shutil.disk_usage(path)
         return usage.free >= needed_bytes
     except OSError:
-        return True  # if we can't check, proceed anyway
+        return True
 
 
-def _download_single_file(
+def _sha256_file(path: Path) -> str:
+    """Compute SHA-256 hex digest of a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _download_single_attempt(
     file_status: FileDownloadStatus,
     dest_dir: Path,
     job: DownloadJob,
-) -> None:
-    """Download a single file, resuming from a partial download when possible."""
-    dest_path = dest_dir / file_status.filename
+    part_path: Path,
+) -> bool:
+    """Single download attempt. Returns True on success, False on failure.
 
-    # Check for an existing partial (or complete) file
-    existing_bytes = dest_path.stat().st_size if dest_path.exists() else 0
-
-    # File is already fully downloaded – nothing to do
-    if (
-        existing_bytes > 0
-        and file_status.content_length > 0
-        and existing_bytes >= file_status.content_length
-    ):
-        file_status.bytes_downloaded = existing_bytes
-        file_status.status = "completed"
-        job.bytes_downloaded += existing_bytes
-        job.files_completed += 1
-        job.updated_at = datetime.now()
-        return
-
-    file_status.status = "downloading"
+    Writes to `part_path` (.part staging file); does NOT rename on success —
+    the caller handles the atomic rename after all retries.
+    """
+    existing_bytes = part_path.stat().st_size if part_path.exists() else 0
 
     headers = {}
     if existing_bytes > 0:
         headers["Range"] = f"bytes={existing_bytes}-"
+
+    bytes_before = job.bytes_downloaded
 
     try:
         with httpx.Client(timeout=300, follow_redirects=True) as client:
             with client.stream(
                 "GET", file_status.access_url, headers=headers
             ) as resp:
-                # If the server ignored the Range header and sends the whole file,
-                # fall back to a full overwrite from the beginning.
                 if existing_bytes > 0 and resp.status_code == 200:
+                    # Server ignored Range header — restart from scratch
                     resume_from = 0
                     open_mode = "wb"
                 else:
@@ -443,29 +513,105 @@ def _download_single_file(
 
                 resp.raise_for_status()
 
+                # Credit already-on-disk bytes only on the first attempt
+                # (resume_from > 0 means we're resuming a partial file)
                 file_status.bytes_downloaded = resume_from
-                job.bytes_downloaded += resume_from
+                job.bytes_downloaded = bytes_before + resume_from
                 job.updated_at = datetime.now()
 
-                with open(dest_path, open_mode) as f:
+                with open(part_path, open_mode) as f:
                     for chunk in resp.iter_bytes(chunk_size=_CHUNK_SIZE):
                         if job.status == "cancelled":
                             file_status.status = "cancelled"
-                            return
+                            return False
                         f.write(chunk)
                         file_status.bytes_downloaded += len(chunk)
                         job.bytes_downloaded += len(chunk)
                         job.updated_at = datetime.now()
+        return True
 
-        file_status.status = "completed"
-        job.files_completed += 1
     except Exception as e:
-        file_status.status = "failed"
-        file_status.error = str(e)
-        job.files_failed += 1
-        logger.error("Failed to download %s: %s", file_status.filename, e)
-    finally:
+        # Undo any bytes counted during this failed attempt so the next
+        # retry (which will resume from the .part file) starts clean.
+        job.bytes_downloaded = bytes_before
         job.updated_at = datetime.now()
+        raise e
+
+
+def _download_single_file(
+    file_status: FileDownloadStatus,
+    dest_dir: Path,
+    job: DownloadJob,
+) -> None:
+    """Download a single file with resume, per-file retry, .part staging, and SHA-256."""
+    dest_path = dest_dir / file_status.filename
+    part_path = dest_path.with_suffix(dest_path.suffix + ".part")
+
+    # Already fully downloaded — skip
+    if dest_path.exists():
+        existing = dest_path.stat().st_size
+        if file_status.content_length > 0 and existing >= file_status.content_length:
+            file_status.bytes_downloaded = existing
+            file_status.status = "completed"
+            job.bytes_downloaded += existing
+            job.files_completed += 1
+            job.updated_at = datetime.now()
+            return
+
+    file_status.status = "downloading"
+
+    last_error: Optional[Exception] = None
+    for attempt in range(1, _MAX_FILE_ATTEMPTS + 1):
+        try:
+            success = _download_single_attempt(file_status, dest_dir, job, part_path)
+            if not success:
+                # Cancelled
+                return
+            last_error = None
+            break
+        except Exception as e:
+            last_error = e
+            if attempt < _MAX_FILE_ATTEMPTS:
+                backoff = _RETRY_BACKOFF_BASE ** (attempt - 1)
+                logger.warning(
+                    "Download attempt %d/%d failed for %s: %s — retrying in %ds",
+                    attempt, _MAX_FILE_ATTEMPTS, file_status.filename, e, backoff,
+                )
+                time.sleep(backoff)
+            else:
+                logger.error(
+                    "All %d attempts failed for %s: %s",
+                    _MAX_FILE_ATTEMPTS, file_status.filename, e,
+                )
+
+    if last_error:
+        file_status.status = "failed"
+        file_status.error = str(last_error)
+        job.files_failed += 1
+        job.updated_at = datetime.now()
+        return
+
+    # Atomic rename: .part → final destination
+    try:
+        os.replace(part_path, dest_path)
+    except OSError as e:
+        file_status.status = "failed"
+        file_status.error = f"Rename failed: {e}"
+        job.files_failed += 1
+        job.updated_at = datetime.now()
+        return
+
+    # SHA-256 verification
+    try:
+        digest = _sha256_file(dest_path)
+        file_status.sha256 = digest
+        logger.debug("SHA-256 %s  %s", digest, file_status.filename)
+    except OSError as e:
+        logger.warning("Could not compute SHA-256 for %s: %s", file_status.filename, e)
+
+    file_status.status = "completed"
+    job.files_completed += 1
+    job.updated_at = datetime.now()
 
 
 def run_download_job(
@@ -473,6 +619,7 @@ def run_download_job(
     products: List[DataProduct],
     destination: str,
     max_parallel: int = 3,
+    rate_limit_sec: float = _RATE_LIMIT_SEC,
 ) -> None:
     """Execute a download job (designed to run in a background thread)."""
     job = download_store.get(job_id)
@@ -491,17 +638,15 @@ def run_download_job(
         )
         return
 
-    # Set up per-file status
-    file_statuses: List[FileDownloadStatus] = []
-    for p in products:
-        fs = FileDownloadStatus(
+    file_statuses: List[FileDownloadStatus] = [
+        FileDownloadStatus(
             filename=p.filename,
             access_url=p.access_url,
             content_length=p.content_length,
         )
-        file_statuses.append(fs)
+        for p in products
+    ]
 
-    # If already cancelled while we were setting up, bail out
     if job.status == "cancelled":
         download_store.update(
             job_id,
@@ -519,39 +664,37 @@ def run_download_job(
         total_files=len(products),
         total_bytes=total_bytes,
     )
-    # Persist file records early so they survive cancellation
     download_store.persist(job_id)
 
-    # Download files in parallel batches
     import concurrent.futures
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_parallel) as pool:
         futures = []
-        for fs in file_statuses:
-            # Check if job was cancelled
+        for i, fs in enumerate(file_statuses):
             current_job = download_store.get(job_id)
             if current_job and current_job.status == "cancelled":
                 break
             futures.append(pool.submit(_download_single_file, fs, dest_dir, job))
+            # Rate-limit: sleep between submissions (except before the first)
+            if i < len(file_statuses) - 1 and rate_limit_sec > 0:
+                time.sleep(rate_limit_sec)
 
-        # Wait for all to finish
         for fut in concurrent.futures.as_completed(futures):
             try:
                 fut.result()
             except Exception:
-                pass  # errors are already recorded per-file
+                pass
 
-    # Final status
     final_job = download_store.get(job_id)
     if final_job and final_job.status != "cancelled":
         if final_job.files_failed == 0:
             download_store.update(job_id, status="completed")
         elif final_job.files_completed > 0:
-            download_store.update(job_id, status="completed",
-                                  error=f"{final_job.files_failed} file(s) failed")
+            download_store.update(
+                job_id, status="completed",
+                error=f"{final_job.files_failed} file(s) failed",
+            )
         else:
-            download_store.update(job_id, status="failed",
-                                  error="All downloads failed")
+            download_store.update(job_id, status="failed", error="All downloads failed")
 
-    # Persist final state to DB and release from memory
     download_store.finish(job_id)

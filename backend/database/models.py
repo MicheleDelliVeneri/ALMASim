@@ -295,6 +295,7 @@ class DownloadFileRecord(Base):
         String(20), nullable=False, default="pending"
     )  # pending, downloading, completed, failed
     error = Column(Text, nullable=True)
+    sha256 = Column(String(64), nullable=True)
 
     # Relationships
     job = relationship("DownloadJobRecord", back_populates="files")

@@ -160,10 +160,16 @@
 
 	const productTypes = [
 		{ value: 'all', label: 'All Products' },
-		{ value: 'fits', label: 'FITS (Continuum)' },
+		{ value: 'fits', label: 'FITS' },
 		{ value: 'raw', label: 'Raw (ASDM)' },
+		{ value: 'calibration', label: 'Calibration' },
+		{ value: 'scripts', label: 'Pipeline Scripts' },
+		{ value: 'weblog', label: 'Web Logs' },
+		{ value: 'qa_reports', label: 'QA Reports' },
+		{ value: 'cubes', label: 'Spectral Cubes' },
+		{ value: 'continuum', label: 'Continuum Images' },
 		{ value: 'auxiliary', label: 'Auxiliary' },
-		{ value: 'weblog', label: 'Web Logs' }
+		{ value: 'other', label: 'Other' }
 	];
 </script>
 

@@ -14,7 +14,7 @@ class DataProductInfo(BaseModel):
     content_type: str = ""
     product_type: str = Field(
         ...,
-        description="Classified type: fits, raw, auxiliary, weblog, other",
+        description="Classified type: all, raw, calibration, scripts, weblog, qa_reports, auxiliary, cubes, continuum, fits, other",
     )
     size_mb: float = Field(..., description="Size in MB")
 
@@ -86,7 +86,7 @@ class StartDownloadRequest(BaseModel):
     )
     product_filter: str = Field(
         "all",
-        description="Product type filter: all, fits, raw, auxiliary, weblog",
+        description="Product type filter: all, raw, calibration, scripts, weblog, qa_reports, auxiliary, cubes, continuum, fits, other",
     )
     destination: str = Field(
         ..., description="Local directory to save files"
