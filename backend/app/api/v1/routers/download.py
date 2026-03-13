@@ -232,6 +232,7 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
         products=products,
         destination=body.destination,
         max_parallel=body.max_parallel,
+        extract_tar=body.extract_tar,
     )
 
     return StartDownloadResponse(

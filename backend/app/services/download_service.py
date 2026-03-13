@@ -131,8 +131,10 @@ def _classify_product(url: str, content_type: str, semantics: str = "") -> str:
         return "cubes"
     if "continuum" in lower or "cont_" in lower:
         return "continuum"
-    if lower.endswith(".tar"):
-        return "fits"  # pipeline product tarballs are usually FITS
+    if lower.endswith(".tar") or lower.endswith(".tgz"):
+        # Pipeline product tarballs (contain FITS) — classify as "fits"
+        # unless they match a more specific category above.
+        return "fits"
     return "other"
 
 
@@ -614,12 +616,44 @@ def _download_single_file(
     job.updated_at = datetime.now()
 
 
+def _extract_tar(tar_path: Path, dest_dir: Path) -> List[str]:
+    """Safely extract a tar archive and return list of extracted filenames.
+
+    Validates member paths to prevent directory traversal attacks.
+    Removes the tar archive after successful extraction.
+    """
+    import tarfile
+
+    extracted: List[str] = []
+    try:
+        with tarfile.open(tar_path, "r:*") as tf:
+            for member in tf.getmembers():
+                # Security: reject absolute paths and directory traversal
+                if member.name.startswith("/") or ".." in member.name:
+                    logger.warning("Skipping unsafe tar member: %s", member.name)
+                    continue
+                resolved = (dest_dir / member.name).resolve()
+                if not str(resolved).startswith(str(dest_dir.resolve())):
+                    logger.warning("Skipping tar member escaping dest: %s", member.name)
+                    continue
+            # Re-open to extract (after validation pass)
+            tf.extractall(dest_dir, filter="data")
+            extracted = [m.name for m in tf.getmembers() if not m.isdir()]
+        # Remove the archive after successful extraction
+        tar_path.unlink(missing_ok=True)
+        logger.info("Extracted %d files from %s", len(extracted), tar_path.name)
+    except Exception as e:
+        logger.warning("Failed to extract %s: %s", tar_path.name, e)
+    return extracted
+
+
 def run_download_job(
     job_id: str,
     products: List[DataProduct],
     destination: str,
     max_parallel: int = 3,
     rate_limit_sec: float = _RATE_LIMIT_SEC,
+    extract_tar: bool = False,
 ) -> None:
     """Execute a download job (designed to run in a background thread)."""
     job = download_store.get(job_id)
@@ -684,6 +718,18 @@ def run_download_job(
                 fut.result()
             except Exception:
                 pass
+
+    # Extract tar archives if requested
+    if extract_tar:
+        final_job = download_store.get(job_id)
+        if final_job and final_job.status != "cancelled":
+            for fs in file_statuses:
+                if fs.status == "completed" and (
+                    fs.filename.endswith(".tar") or fs.filename.endswith(".tgz")
+                ):
+                    tar_path = dest_dir / fs.filename
+                    if tar_path.exists():
+                        _extract_tar(tar_path, dest_dir)
 
     final_job = download_store.get(job_id)
     if final_job and final_job.status != "cancelled":

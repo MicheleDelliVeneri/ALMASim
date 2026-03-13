@@ -126,12 +126,14 @@ export const downloadApi = {
 		productFilter?: string;
 		destination: string;
 		maxParallel?: number;
+		extractTar?: boolean;
 	}): Promise<StartDownloadResponse> {
 		return apiClient.post<StartDownloadResponse>('/api/v1/downloads/start', {
 			member_ous_uids: params.memberOusUids,
 			product_filter: params.productFilter ?? 'all',
 			destination: params.destination,
-			max_parallel: params.maxParallel ?? 3
+			max_parallel: params.maxParallel ?? 3,
+			extract_tar: params.extractTar ?? false
 		});
 	},
 

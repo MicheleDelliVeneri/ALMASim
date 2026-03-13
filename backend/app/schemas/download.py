@@ -97,6 +97,10 @@ class StartDownloadRequest(BaseModel):
         ge=1,
         le=8,
     )
+    extract_tar: bool = Field(
+        False,
+        description="Extract tar archives after download and remove the archives",
+    )
 
 
 class StartDownloadResponse(BaseModel):

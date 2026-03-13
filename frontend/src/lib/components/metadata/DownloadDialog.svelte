@@ -22,6 +22,7 @@
 	let productFilter = $state('all');
 	let destination = $state('/host_home/Downloads');
 	let maxParallel = $state(3);
+	let extractTar = $state(false);
 
 	let diskSpace = $state<DiskSpaceInfo | null>(null);
 	let diskSpaceLoading = $state(false);
@@ -102,6 +103,7 @@
 			diskSpaceError = '';
 			startError = '';
 			productFilter = 'all';
+			extractTar = false;
 			browserOpen = false;
 			browseResult = null;
 			browseError = '';
@@ -137,7 +139,7 @@
 	}
 
 	async function startDownload() {
-		logger.info({ productFilter, destination, maxParallel, fileCount: filteredInfo.count }, 'Starting download');
+		logger.info({ productFilter, destination, maxParallel, extractTar, fileCount: filteredInfo.count }, 'Starting download');
 		starting = true;
 		startError = '';
 		try {
@@ -145,7 +147,8 @@
 				memberOusUids,
 				productFilter,
 				destination,
-				maxParallel
+				maxParallel,
+				extractTar
 			});
 			logger.info({ jobId: resp.job_id }, 'Download job created');
 			onStarted(resp.job_id);
@@ -308,6 +311,19 @@
 						/>
 						<p class="text-xs text-gray-500">{maxParallel} simultaneous files</p>
 					</div>
+
+					<!-- Extract tar archives -->
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input
+							type="checkbox"
+							bind:checked={extractTar}
+							class="rounded border-gray-300"
+						/>
+						<span class="text-sm text-gray-700">Extract tar archives after download</span>
+					</label>
+					<p class="text-xs text-gray-500 -mt-3 ml-6">
+						ALMA delivers data as .tar bundles. Enable this to automatically extract FITS files and remove the archives.
+					</p>
 
 					<!-- Errors -->
 					{#if startError}
