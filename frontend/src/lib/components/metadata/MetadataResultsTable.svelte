@@ -190,26 +190,61 @@
 
 	// --- Compute total size of selected observations ---
 	let sizeResolving = $state(false);
-	let sizeResult = $state<ResolveProductsResponse | null>(null);
+	let sizeResolved = $state(0);    // UIDs resolved so far
+	let sizeTotal = $state(0);       // total UIDs to resolve
+	let sizeTotalBytes = $state(0);  // accumulated bytes
+	let sizeTotalFiles = $state(0);  // accumulated file count
 	let sizeError = $state<string>('');
+	let sizeCancelled = $state(false);
+
+	function formatBytes(bytes: number): string {
+		for (const unit of ['B', 'KB', 'MB', 'GB', 'TB']) {
+			if (Math.abs(bytes) < 1000) return `${bytes.toFixed(1)} ${unit}`;
+			bytes /= 1000;
+		}
+		return `${bytes.toFixed(1)} PB`;
+	}
 
 	// Reset size result when selection changes
 	$effect(() => {
-		// read selectedRowIndices to track changes
 		selectedRowIndices;
-		sizeResult = null;
+		sizeResolved = 0;
+		sizeTotal = 0;
+		sizeTotalBytes = 0;
+		sizeTotalFiles = 0;
 		sizeError = '';
+		sizeCancelled = false;
 	});
+
+	function cancelSizeComputation() {
+		sizeCancelled = true;
+	}
 
 	async function computeSelectedSize() {
 		const uids = getSelectedMemberOusUids();
 		if (uids.length === 0) return;
 		sizeResolving = true;
 		sizeError = '';
-		sizeResult = null;
+		sizeResolved = 0;
+		sizeTotal = uids.length;
+		sizeTotalBytes = 0;
+		sizeTotalFiles = 0;
+		sizeCancelled = false;
+
 		try {
-			sizeResult = await downloadApi.resolveProducts(uids);
-			logger.info({ totalSize: sizeResult.total_size_display, files: sizeResult.total_count }, 'Size computed');
+			for (let i = 0; i < uids.length; i++) {
+				if (sizeCancelled) {
+					logger.info({ resolved: i, total: uids.length }, 'Size computation cancelled');
+					break;
+				}
+				const result = await downloadApi.resolveProducts([uids[i]]);
+				sizeTotalBytes += result.total_size_bytes;
+				sizeTotalFiles += result.total_count;
+				sizeResolved = i + 1;
+			}
+			if (!sizeCancelled) {
+				logger.info({ totalSize: formatBytes(sizeTotalBytes), files: sizeTotalFiles }, 'Size computed');
+			}
 		} catch (e) {
 			sizeError = e instanceof Error ? e.message : 'Failed to compute size';
 			logger.error({ err: e }, 'Failed to compute size');
@@ -217,6 +252,8 @@
 			sizeResolving = false;
 		}
 	}
+
+	const sizeFinished = $derived(!sizeResolving && sizeResolved > 0);
 
 	// Reset selection when results change
 	$effect(() => {
@@ -559,32 +596,48 @@
 				</button>
 			{/if}
 			{#if selectedCount > 0}
-				<button
-					type="button"
-					class="rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
-					disabled={sizeResolving}
-					onclick={computeSelectedSize}
-					title="Compute total download size for selected observations"
-				>
-					{#if sizeResolving}
-						<span class="inline-flex items-center gap-1">
-							<svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-								<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
-							</svg>
-							Computing…
-						</span>
-					{:else}
+				{#if sizeResolving}
+					<span class="inline-flex items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800">
+						<svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+						</svg>
+						{sizeResolved}/{sizeTotal}
+						{#if sizeTotalBytes > 0}
+							— {formatBytes(sizeTotalBytes)}
+						{/if}
+					</span>
+					<button
+						type="button"
+						class="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+						onclick={cancelSizeComputation}
+						title="Stop computing size"
+					>
+						Stop
+					</button>
+				{:else}
+					<button
+						type="button"
+						class="rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+						onclick={computeSelectedSize}
+						title="Compute total download size for selected observations"
+					>
 						Compute Size ({selectedCount})
-					{/if}
-				</button>
-				{#if sizeResult}
+					</button>
+				{/if}
+				{#if sizeFinished}
 					<span class="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800">
-						{sizeResult.total_size_display} — {sizeResult.total_count} files
+						{formatBytes(sizeTotalBytes)} — {sizeTotalFiles} files
+						{#if sizeCancelled}
+							<span class="text-xs text-amber-600">({sizeResolved}/{sizeTotal} resolved)</span>
+						{/if}
 					</span>
 				{:else if sizeError}
 					<span class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
 						{sizeError}
+						{#if sizeResolved > 0}
+							({sizeResolved}/{sizeTotal} resolved — {formatBytes(sizeTotalBytes)})
+						{/if}
 					</span>
 				{/if}
 				<button
