@@ -60,6 +60,16 @@ export interface SimulationStatus {
 	message?: string;
 }
 
+export interface DaskTestResult {
+	ok: boolean;
+	scheduler: string;
+	dashboard_port: number;
+	workers: number;
+	total_threads: number;
+	total_memory_gb: number;
+	error?: string | null;
+}
+
 export const simulationApi = {
 	create: async (params: SimulationParamsCreate): Promise<SimulationResponse> => {
 		return apiClient.post<SimulationResponse>('/api/v1/simulations/', params);
@@ -67,5 +77,9 @@ export const simulationApi = {
 
 	getStatus: async (simulationId: string): Promise<SimulationStatus> => {
 		return apiClient.get<SimulationStatus>(`/api/v1/simulations/${simulationId}/status`);
+	},
+
+	testDask: async (scheduler: string): Promise<DaskTestResult> => {
+		return apiClient.post<DaskTestResult>('/api/v1/simulations/test-dask', { scheduler });
 	}
 };

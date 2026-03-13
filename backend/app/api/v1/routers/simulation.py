@@ -15,6 +15,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from pydantic import BaseModel
 
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
@@ -32,6 +33,20 @@ from app.services.simulation_service import SimulationService
 from app.services.status_store import status_store
 
 router = APIRouter()
+
+
+class DaskTestRequest(BaseModel):
+    scheduler: str
+
+
+class DaskTestResponse(BaseModel):
+    ok: bool
+    scheduler: str
+    dashboard_port: int
+    workers: int
+    total_threads: int
+    total_memory_gb: float
+    error: str | None = None
 
 
 @router.get("/", response_model=SimulationListResponse)
@@ -174,3 +189,38 @@ async def websocket_status(websocket: WebSocket, simulation_id: str):
         pass
     except Exception as e:
         await websocket.send_json({"error": str(e)})
+
+
+@router.post("/test-dask", response_model=DaskTestResponse)
+async def test_dask_connection(body: DaskTestRequest):
+    """Test connectivity to a Dask scheduler and return cluster info."""
+    from dask.distributed import Client
+
+    try:
+        client = Client(body.scheduler, timeout=10)
+        info = client.scheduler_info()
+        workers = info.get("workers", {})
+        total_threads = sum(w.get("nthreads", 0) for w in workers.values())
+        total_memory = sum(w.get("memory_limit", 0) for w in workers.values())
+        dashboard_port = info.get("services", {}).get("dashboard", 8787)
+
+        result = DaskTestResponse(
+            ok=True,
+            scheduler=info["address"],
+            dashboard_port=dashboard_port,
+            workers=len(workers),
+            total_threads=total_threads,
+            total_memory_gb=round(total_memory / 1e9, 2),
+        )
+        client.close()
+        return result
+    except Exception as e:
+        return DaskTestResponse(
+            ok=False,
+            scheduler=body.scheduler,
+            dashboard_port=0,
+            workers=0,
+            total_threads=0,
+            total_memory_gb=0,
+            error=str(e),
+        )

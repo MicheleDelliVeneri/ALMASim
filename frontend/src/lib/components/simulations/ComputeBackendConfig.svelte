@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { simulationApi, type DaskTestResult } from '$lib/api/simulation';
+
 	interface Props {
 		backendType: string;
 		backendConfig: Record<string, unknown>;
@@ -8,6 +10,11 @@
 
 	let { backendType, backendConfig, onBackendTypeChange, onConfigChange }: Props = $props();
 
+	// Dask connection test state
+	let daskTesting = $state(false);
+	let daskResult: DaskTestResult | null = $state(null);
+	let daskTestError: string | null = $state(null);
+
 	function updateConfig(key: string, value: unknown) {
 		onConfigChange({ ...backendConfig, [key]: value });
 	}
@@ -15,6 +22,40 @@
 	function removeConfigKey(key: string) {
 		const { [key]: _, ...rest } = backendConfig;
 		onConfigChange(rest);
+	}
+
+	async function testDaskConnection() {
+		const scheduler = (backendConfig.scheduler as string) || '';
+		if (!scheduler) {
+			daskTestError = 'Enter a scheduler address first';
+			daskResult = null;
+			return;
+		}
+		daskTesting = true;
+		daskTestError = null;
+		daskResult = null;
+		try {
+			daskResult = await simulationApi.testDask(scheduler);
+			if (!daskResult.ok) {
+				daskTestError = daskResult.error || 'Connection failed';
+			}
+		} catch (e: unknown) {
+			daskTestError = e instanceof Error ? e.message : 'Connection failed';
+		} finally {
+			daskTesting = false;
+		}
+	}
+
+	function openDaskDashboard() {
+		if (!daskResult?.ok || !daskResult.dashboard_port) return;
+		// Extract host from the scheduler address the user typed
+		const addr = (backendConfig.scheduler as string) || '';
+		let host = addr.replace(/^tcp:\/\//, '').split(':')[0] || 'localhost';
+		// Docker-internal hostnames aren't reachable from the browser
+		if (host === 'dask-scheduler' || host.includes('.internal') || !host.includes('.')) {
+			host = 'localhost';
+		}
+		window.open(`http://${host}:${daskResult.dashboard_port}/status`, '_blank');
 	}
 </script>
 
@@ -77,22 +118,72 @@
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
 						<label for="dask_scheduler" class="mb-1 block text-xs font-medium text-gray-700">
-							Scheduler Address (optional)
+							Scheduler Address
 						</label>
-						<input
-							type="text"
-							id="dask_scheduler"
-							value={(backendConfig.scheduler as string) || ''}
-							oninput={(e) => {
-								const val = e.currentTarget.value.trim();
-								updateConfig('scheduler', val || undefined);
-							}}
-							placeholder="tcp://localhost:8786"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-						/>
+						<div class="flex gap-2">
+							<input
+								type="text"
+								id="dask_scheduler"
+								value={(backendConfig.scheduler as string) || ''}
+								oninput={(e) => {
+									const val = e.currentTarget.value.trim();
+									updateConfig('scheduler', val || undefined);
+									// Reset test state when address changes
+									daskResult = null;
+									daskTestError = null;
+								}}
+								placeholder="tcp://localhost:8786"
+								class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							/>
+							<button
+								type="button"
+								onclick={testDaskConnection}
+								disabled={daskTesting}
+								class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+								title="Test connection"
+							>
+								{#if daskTesting}
+									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+										<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+									</svg>
+								{:else}
+									Test
+								{/if}
+							</button>
+						</div>
 						<p class="mt-1 text-xs text-gray-500">
 							Leave empty for local Dask cluster (uses processes)
 						</p>
+
+						<!-- Connection test result -->
+						{#if daskResult?.ok}
+							<div class="mt-2 flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2">
+								<span class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
+								<span class="text-xs font-medium text-green-800">
+									Connected — {daskResult.workers} worker{daskResult.workers !== 1 ? 's' : ''}, {daskResult.total_threads} threads, {daskResult.total_memory_gb} GB
+								</span>
+								<button
+									type="button"
+									onclick={openDaskDashboard}
+									class="ml-auto inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-200"
+									title="Open Dask Dashboard"
+								>
+									<!-- Dask logo (simplified) -->
+									<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+										<path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+										<path d="M12 22V12" stroke="currentColor" stroke-width="2"/>
+										<path d="M3 7l9 5 9-5" stroke="currentColor" stroke-width="2"/>
+									</svg>
+									Dashboard
+								</button>
+							</div>
+						{:else if daskTestError}
+							<div class="mt-2 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+								<span class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
+								<span class="text-xs font-medium text-red-800">{daskTestError}</span>
+							</div>
+						{/if}
 					</div>
 					<div>
 						<label for="dask_n_workers" class="mb-1 block text-xs font-medium text-gray-700">
@@ -111,7 +202,7 @@
 							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 						<p class="mt-1 text-xs text-gray-500">
-							Local Dask cluster uses processes for true parallelism.
+							Only used for local Dask cluster (ignored when using external scheduler).
 						</p>
 					</div>
 				</div>

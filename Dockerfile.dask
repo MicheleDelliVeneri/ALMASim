@@ -1,0 +1,23 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# System deps for building Python scientific packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Dask + the scientific packages used by ALMASim workers
+RUN pip install --no-cache-dir \
+    dask[complete] \
+    distributed \
+    numpy \
+    scipy \
+    astropy \
+    h5py \
+    pandas \
+    scikit-image
+
+# tini as PID-1 for proper signal handling
+ENTRYPOINT ["tini", "-g", "--"]
