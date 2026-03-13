@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { MetadataResponse } from '$lib/api/metadata';
+	import { downloadApi, type ResolveProductsResponse } from '$lib/api/download';
 	import { createLogger } from '$lib/logger';
 
 	const logger = createLogger('components/metadata/MetadataResultsTable');
@@ -173,6 +174,36 @@
 		const unique = [...new Set(uids)];
 		logger.info({ selectedRows: selectedRowIndices.size, uniqueUids: unique.length }, 'Download initiated from table');
 		return unique;
+	}
+
+	// --- Compute total size of selected observations ---
+	let sizeResolving = $state(false);
+	let sizeResult = $state<ResolveProductsResponse | null>(null);
+	let sizeError = $state<string>('');
+
+	// Reset size result when selection changes
+	$effect(() => {
+		// read selectedRowIndices to track changes
+		selectedRowIndices;
+		sizeResult = null;
+		sizeError = '';
+	});
+
+	async function computeSelectedSize() {
+		const uids = getSelectedMemberOusUids();
+		if (uids.length === 0) return;
+		sizeResolving = true;
+		sizeError = '';
+		sizeResult = null;
+		try {
+			sizeResult = await downloadApi.resolveProducts(uids);
+			logger.info({ totalSize: sizeResult.total_size_display, files: sizeResult.total_count }, 'Size computed');
+		} catch (e) {
+			sizeError = e instanceof Error ? e.message : 'Failed to compute size';
+			logger.error({ err: e }, 'Failed to compute size');
+		} finally {
+			sizeResolving = false;
+		}
 	}
 
 	// Reset selection when results change
@@ -516,6 +547,34 @@
 				</button>
 			{/if}
 			{#if selectedCount > 0}
+				<button
+					type="button"
+					class="rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+					disabled={sizeResolving}
+					onclick={computeSelectedSize}
+					title="Compute total download size for selected observations"
+				>
+					{#if sizeResolving}
+						<span class="inline-flex items-center gap-1">
+							<svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+								<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+							</svg>
+							Computing…
+						</span>
+					{:else}
+						Compute Size ({selectedCount})
+					{/if}
+				</button>
+				{#if sizeResult}
+					<span class="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800">
+						{sizeResult.total_size_display} — {sizeResult.total_count} files
+					</span>
+				{:else if sizeError}
+					<span class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+						{sizeError}
+					</span>
+				{/if}
 				<button
 					type="button"
 					class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
