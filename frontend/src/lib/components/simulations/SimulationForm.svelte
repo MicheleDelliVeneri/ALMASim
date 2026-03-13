@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
+
 	interface Props {
 		sourceType: string;
 		nPix: number;
@@ -45,21 +47,57 @@
 		onNumSimulationsChange
 	}: Props = $props();
 
-	let fileInputRef: HTMLInputElement;
+	// Directory browser state
+	let browserOpen = $state(false);
+	let browsing = $state(false);
+	let browseResult = $state<BrowseDirectoryResponse | null>(null);
+	let browseError = $state('');
+	let newFolderName = $state('');
+	let creatingFolder = $state(false);
 
-	function handleBrowseDirectory() {
-		fileInputRef.click();
+	async function browseDir(path: string) {
+		browsing = true;
+		browseError = '';
+		try {
+			browseResult = await downloadApi.browseDirectory(path);
+		} catch (e) {
+			browseError = e instanceof Error ? e.message : 'Failed to browse directory';
+		} finally {
+			browsing = false;
+		}
 	}
 
-	function handleDirectorySelect(event: Event) {
-		const input = event.target as HTMLInputElement;
-		if (input.files && input.files.length > 0) {
-			// Get the path of the first file and extract the directory
-			const file = input.files[0];
-			const path = (file as any).path || file.webkitRelativePath || file.name;
-			const directory = path.substring(0, path.lastIndexOf('/')) || '/';
-			onOutputDirChange(directory);
+	function openBrowser() {
+		browserOpen = true;
+		newFolderName = '';
+		browseDir(outputDir || '/host_home');
+	}
+
+	function closeBrowser() {
+		browserOpen = false;
+		browseResult = null;
+		browseError = '';
+		newFolderName = '';
+	}
+
+	async function createFolder() {
+		if (!browseResult || !newFolderName.trim()) return;
+		creatingFolder = true;
+		try {
+			const newPath = `${browseResult.current}/${newFolderName.trim()}`;
+			browseResult = await downloadApi.createDirectory(newPath);
+			newFolderName = '';
+		} catch (e) {
+			browseError = e instanceof Error ? e.message : 'Failed to create folder';
+		} finally {
+			creatingFolder = false;
 		}
+	}
+
+	function selectCurrent() {
+		if (!browseResult) return;
+		onOutputDirChange(browseResult.current);
+		closeBrowser();
 	}
 </script>
 
@@ -148,12 +186,12 @@
 					id="output_dir"
 					value={outputDir}
 					oninput={(e) => onOutputDirChange(e.currentTarget.value)}
-					placeholder="/app/outputs"
+					placeholder="/host_home"
 					class="flex-1 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
 				/>
 				<button
 					type="button"
-					onclick={handleBrowseDirectory}
+					onclick={openBrowser}
 					class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
 					title="Browse for directory"
 				>
@@ -161,15 +199,6 @@
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 					</svg>
 				</button>
-				<input
-					bind:this={fileInputRef}
-					type="file"
-					webkitdirectory
-					directory
-					multiple
-					onchange={handleDirectorySelect}
-					class="hidden"
-				/>
 			</div>
 			<p class="mt-1 text-xs text-gray-500">Directory to save results (optional)</p>
 		</div>
@@ -262,3 +291,96 @@
 		</div>
 	</div>
 </section>
+
+{#if browserOpen}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div class="w-full max-w-lg rounded-lg bg-white shadow-2xl">
+			<header class="flex items-center justify-between border-b px-5 py-3">
+				<h3 class="text-sm font-semibold text-gray-900">Choose Output Folder</h3>
+				<button type="button" class="text-gray-400 hover:text-gray-700" aria-label="Close" onclick={closeBrowser}>✕</button>
+			</header>
+
+			<div class="px-5 py-4 space-y-3">
+				{#if browsing && !browseResult}
+					<div class="flex items-center justify-center gap-2 py-6 text-sm text-gray-500">
+						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
+							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+						</svg>
+						Loading…
+					</div>
+				{:else if browseError}
+					<div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{browseError}</div>
+				{:else if browseResult}
+					<!-- Current path -->
+					<div class="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2">
+						<span class="truncate font-mono text-xs text-gray-600">{browseResult.current}</span>
+						{#if browsing}
+							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
+								<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+							</svg>
+						{/if}
+					</div>
+
+					<!-- Directory listing -->
+					<ul class="max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white">
+						{#if browseResult.parent}
+							<li class="border-b border-gray-100">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50" onclick={() => browseDir(browseResult!.parent!)}>
+									<span class="text-gray-400">↩</span>
+									<span class="text-gray-500">..</span>
+								</button>
+							</li>
+						{/if}
+						{#each browseResult.entries as entry}
+							<li class="border-b border-gray-100 last:border-b-0">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-blue-50" onclick={() => browseDir(entry.path)}>
+									<span class="text-yellow-500">📁</span>
+									<span class="truncate text-gray-700">{entry.name}</span>
+								</button>
+							</li>
+						{:else}
+							<li class="px-3 py-4 text-center text-sm italic text-gray-400">No subdirectories</li>
+						{/each}
+					</ul>
+
+					<!-- New folder row -->
+					<div class="flex gap-2">
+						<input
+							type="text"
+							bind:value={newFolderName}
+							placeholder="New folder name…"
+							class="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							onkeydown={(e) => e.key === 'Enter' && createFolder()}
+						/>
+						<button
+							type="button"
+							disabled={!newFolderName.trim() || creatingFolder}
+							onclick={createFolder}
+							class="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+						>
+							{creatingFolder ? '…' : '+ Create'}
+						</button>
+					</div>
+				{/if}
+			</div>
+
+			<footer class="flex items-center justify-end gap-3 border-t px-5 py-3">
+				<button type="button" class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" onclick={closeBrowser}>Cancel</button>
+				<button
+					type="button"
+					disabled={!browseResult}
+					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
+					onclick={selectCurrent}
+				>
+					Select this folder
+				</button>
+			</footer>
+		</div>
+	</div>
+{/if}

@@ -4,8 +4,11 @@
 	import DatacubeUpload from '$lib/components/visualizer/DatacubeUpload.svelte';
 	import ImageCanvas from '$lib/components/visualizer/ImageCanvas.svelte';
 	import ImageStatistics from '$lib/components/visualizer/ImageStatistics.svelte';
+	import { createLogger } from '$lib/logger';
+	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
 
 	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+	const logger = createLogger('routes/visualizer');
 
 	interface ImageData {
 		image: number[][];
@@ -50,24 +53,62 @@
 	let fileList = $state<DatacubeFile[]>([]);
 	let fileListLoading = $state(false);
 
+	// Directory browser
+	let dirBrowserOpen = $state(false);
+	let dirBrowsing = $state(false);
+	let dirBrowseResult = $state<BrowseDirectoryResponse | null>(null);
+	let dirBrowseError = $state('');
+
 	// View controls
 	let linkedView = $state(false);
 	let gridLayout = $state<'horizontal' | 'vertical'>('horizontal');
 
-	async function loadFileList() {
+	async function loadFileList(dir?: string) {
 		fileListLoading = true;
 		try {
-			const response = await fetch(`${API_BASE_URL}/api/v1/visualizer/files`);
+			const url = dir
+				? `${API_BASE_URL}/api/v1/visualizer/files?dir=${encodeURIComponent(dir)}`
+				: `${API_BASE_URL}/api/v1/visualizer/files`;
+			const response = await fetch(url);
 			if (!response.ok) throw new Error('Failed to load file list');
 			const data: FileListResponse = await response.json();
 			outputDir = data.output_dir;
 			fileList = data.files;
 		} catch (err) {
-			console.error('Failed to load file list:', err);
+			logger.error({ err }, 'Failed to load file list');
 			fileList = [];
 		} finally {
 			fileListLoading = false;
 		}
+	}
+
+	async function browseDir(path: string) {
+		dirBrowsing = true;
+		dirBrowseError = '';
+		try {
+			dirBrowseResult = await downloadApi.browseDirectory(path);
+		} catch (e) {
+			dirBrowseError = e instanceof Error ? e.message : 'Failed to browse directory';
+		} finally {
+			dirBrowsing = false;
+		}
+	}
+
+	function openDirBrowser() {
+		dirBrowserOpen = true;
+		browseDir(outputDir || '/host_home');
+	}
+
+	function closeDirBrowser() {
+		dirBrowserOpen = false;
+		dirBrowseResult = null;
+		dirBrowseError = '';
+	}
+
+	function selectDir() {
+		if (!dirBrowseResult) return;
+		closeDirBrowser();
+		loadFileList(dirBrowseResult.current);
 	}
 
 	// Process a file (either uploaded or from server)
@@ -82,8 +123,9 @@
 			if (typeof file === 'string') {
 				// Load file from server
 				fileName = file.split('/').pop() || 'file.npz';
+				const dirParam = outputDir ? `?dir=${encodeURIComponent(outputDir)}` : '';
 				const fileResponse = await fetch(
-					`${API_BASE_URL}/api/v1/visualizer/files/${encodeURIComponent(file)}`
+					`${API_BASE_URL}/api/v1/visualizer/files/${encodeURIComponent(file)}${dirParam}`
 				);
 				if (!fileResponse.ok) {
 					throw new Error(`Failed to load file: ${fileResponse.statusText}`);
@@ -198,8 +240,21 @@
 		}
 	}
 
-	onMount(() => {
-		loadFileList();
+	async function getLastSimulationOutputDir(): Promise<string | undefined> {
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/v1/simulations/`);
+			if (!response.ok) return undefined;
+			const data = await response.json();
+			const sims: Array<{ output_dir?: string }> = data.simulations ?? [];
+			return sims.find((s) => s.output_dir)?.output_dir ?? undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	onMount(async () => {
+		const lastDir = await getLastSimulationOutputDir();
+		loadFileList(lastDir);
 	});
 </script>
 
@@ -214,7 +269,8 @@
 					loading={fileListLoading}
 					{outputDir}
 					onFileSelect={handleFileSelect}
-					onRefresh={loadFileList}
+					onRefresh={() => loadFileList(outputDir || undefined)}
+					onBrowseRequest={openDirBrowser}
 					disabled={loading}
 				/>
 
@@ -347,3 +403,75 @@
 		{/if}
 	</div>
 </div>
+
+{#if dirBrowserOpen}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div class="w-full max-w-lg rounded-lg bg-white shadow-2xl">
+			<header class="flex items-center justify-between border-b px-5 py-3">
+				<h2 class="text-sm font-semibold text-gray-900">Select Directory</h2>
+			</header>
+
+			<div class="space-y-3 px-5 py-4">
+				{#if dirBrowsing && !dirBrowseResult}
+					<div class="flex items-center justify-center gap-2 py-6 text-sm text-gray-500">
+						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
+							<path fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 100 10h-2A8 8 0 014 12z" class="opacity-75" />
+						</svg>
+						Loading…
+					</div>
+				{:else if dirBrowseError}
+					<div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{dirBrowseError}</div>
+				{:else if dirBrowseResult}
+					<div class="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2">
+						<span class="truncate font-mono text-xs text-gray-600">{dirBrowseResult.current}</span>
+						{#if dirBrowsing}
+							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
+								<path fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 100 10h-2A8 8 0 014 12z" class="opacity-75" />
+							</svg>
+						{/if}
+					</div>
+
+					<ul class="max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white">
+						{#if dirBrowseResult.parent}
+							<li class="border-b border-gray-100">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50" onclick={() => browseDir(dirBrowseResult!.parent!)}>
+									<span class="text-gray-400">↩</span>
+									<span class="text-gray-500">..</span>
+								</button>
+							</li>
+						{/if}
+						{#each dirBrowseResult.entries as entry}
+							<li class="border-b border-gray-100 last:border-b-0">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-blue-50" onclick={() => browseDir(entry.path)}>
+									<span class="text-yellow-500">📁</span>
+									<span class="truncate text-gray-700">{entry.name}</span>
+								</button>
+							</li>
+						{/each}
+						{#if dirBrowseResult.entries.length === 0 && !dirBrowseResult.parent}
+							<li class="px-3 py-4 text-center text-sm text-gray-400">No subdirectories</li>
+						{/if}
+					</ul>
+				{/if}
+			</div>
+
+			<footer class="flex justify-end gap-3 border-t px-5 py-3">
+				<button type="button" class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" onclick={closeDirBrowser}>Cancel</button>
+				<button
+					type="button"
+					disabled={!dirBrowseResult}
+					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+					onclick={selectDir}
+				>
+					Select This Directory
+				</button>
+			</footer>
+		</div>
+	</div>
+{/if}

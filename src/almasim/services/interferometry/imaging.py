@@ -1,5 +1,7 @@
 """Image processing functions for interferometry."""
 import numpy as np
+
+_rng = np.random.default_rng(0)
 from scipy.ndimage import zoom
 from astropy.io import fits
 
@@ -59,9 +61,10 @@ def _grid_uv(
         # Add atmospheric phase errors
         phase_nb = np.angle(Gains[nb, goodpix])
         baseline_phases[nb] = phase_nb
-        phase_rms = np.std(baseline_phases[nb])
-        random_phase_error = np.random.normal(scale=phase_rms)
-        Gains[nb] *= np.exp(1j * random_phase_error)
+        phase_rms = np.std(phase_nb) if phase_nb.size > 1 else 0.0
+        if phase_rms > 0.0:
+            random_phase_error = _rng.normal(scale=phase_rms)
+            Gains[nb] *= np.exp(1j * random_phase_error)
 
         pU = pixU[goodpix] + Nphf
         pV = pixV[goodpix] + Nphf
@@ -164,7 +167,7 @@ def _prepare_model(
 
 def add_thermal_noise(img: np.ndarray, noise: float) -> np.ndarray:
     """Add thermal noise to image."""
-    return img + np.random.normal(loc=0.0, scale=noise, size=np.shape(img))
+    return img + _rng.normal(loc=0.0, scale=noise, size=np.shape(img))
 
 
 def set_primary_beam(

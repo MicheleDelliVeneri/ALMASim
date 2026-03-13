@@ -98,6 +98,13 @@ export const downloadApi = {
 		);
 	},
 
+	/** Create a directory and return its browse result */
+	createDirectory(path: string): Promise<BrowseDirectoryResponse> {
+		return apiClient.post<BrowseDirectoryResponse>(
+			`/api/v1/downloads/mkdir?path=${encodeURIComponent(path)}`
+		);
+	},
+
 	/** Resolve downloadable products for selected member_ous_uids */
 	resolveProducts(memberOusUids: string[]): Promise<ResolveProductsResponse> {
 		return apiClient.post<ResolveProductsResponse>('/api/v1/downloads/resolve', {

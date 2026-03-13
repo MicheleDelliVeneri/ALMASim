@@ -402,15 +402,52 @@ def _download_single_file(
     dest_dir: Path,
     job: DownloadJob,
 ) -> None:
-    """Download a single file, updating status as we go."""
-    file_status.status = "downloading"
+    """Download a single file, resuming from a partial download when possible."""
     dest_path = dest_dir / file_status.filename
+
+    # Check for an existing partial (or complete) file
+    existing_bytes = dest_path.stat().st_size if dest_path.exists() else 0
+
+    # File is already fully downloaded – nothing to do
+    if (
+        existing_bytes > 0
+        and file_status.content_length > 0
+        and existing_bytes >= file_status.content_length
+    ):
+        file_status.bytes_downloaded = existing_bytes
+        file_status.status = "completed"
+        job.bytes_downloaded += existing_bytes
+        job.files_completed += 1
+        job.updated_at = datetime.now()
+        return
+
+    file_status.status = "downloading"
+
+    headers = {}
+    if existing_bytes > 0:
+        headers["Range"] = f"bytes={existing_bytes}-"
 
     try:
         with httpx.Client(timeout=300, follow_redirects=True) as client:
-            with client.stream("GET", file_status.access_url) as resp:
+            with client.stream(
+                "GET", file_status.access_url, headers=headers
+            ) as resp:
+                # If the server ignored the Range header and sends the whole file,
+                # fall back to a full overwrite from the beginning.
+                if existing_bytes > 0 and resp.status_code == 200:
+                    resume_from = 0
+                    open_mode = "wb"
+                else:
+                    resume_from = existing_bytes
+                    open_mode = "ab" if existing_bytes > 0 else "wb"
+
                 resp.raise_for_status()
-                with open(dest_path, "wb") as f:
+
+                file_status.bytes_downloaded = resume_from
+                job.bytes_downloaded += resume_from
+                job.updated_at = datetime.now()
+
+                with open(dest_path, open_mode) as f:
                     for chunk in resp.iter_bytes(chunk_size=_CHUNK_SIZE):
                         if job.status == "cancelled":
                             file_status.status = "cancelled"

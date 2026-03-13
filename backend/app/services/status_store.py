@@ -15,6 +15,7 @@ class SimulationStatus:
     message: str = ""
     logs: List[str] = field(default_factory=list)
     error: Optional[str] = None
+    output_dir: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -47,6 +48,7 @@ class StatusStore:
         message: Optional[str] = None,
         log: Optional[str] = None,
         error: Optional[str] = None,
+        output_dir: Optional[str] = None,
     ) -> Optional[SimulationStatus]:
         """Update simulation status."""
         with self._lock:
@@ -70,7 +72,9 @@ class StatusStore:
             if error is not None:
                 sim_status.error = error
                 sim_status.status = "failed"
-            
+            if output_dir is not None:
+                sim_status.output_dir = output_dir
+
             sim_status.updated_at = datetime.now()
             return sim_status
     

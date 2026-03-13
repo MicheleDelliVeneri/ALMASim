@@ -31,6 +31,36 @@ from app.services.download_service import (
 router = APIRouter()
 
 
+def _browse_path(resolved_path) -> BrowseDirectoryResponse:
+    """Build a BrowseDirectoryResponse for an existing directory path."""
+    import os
+
+    parent = str(resolved_path.parent) if resolved_path != resolved_path.parent else None
+    entries: list[BrowseDirectoryEntry] = []
+    try:
+        for entry in sorted(os.scandir(str(resolved_path)), key=lambda e: e.name.lower()):
+            if entry.name.startswith("."):
+                continue
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    entries.append(
+                        BrowseDirectoryEntry(
+                            name=entry.name,
+                            path=str(resolved_path / entry.name),
+                            is_dir=True,
+                        )
+                    )
+            except PermissionError:
+                continue
+    except PermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: {resolved_path}",
+        )
+
+    return BrowseDirectoryResponse(current=str(resolved_path), parent=parent, entries=entries)
+
+
 @router.get("/browse", response_model=BrowseDirectoryResponse)
 async def browse_directory(path: str = "/host_home"):
     """List subdirectories of a server-side path for the destination picker.
@@ -39,7 +69,6 @@ async def browse_directory(path: str = "/host_home"):
     with '.') are excluded for clarity.  The host home directory is mounted
     at /host_home so users can browse and download to their real filesystem.
     """
-    import os
     from pathlib import Path
 
     resolved = Path(path).expanduser().resolve()
@@ -49,34 +78,7 @@ async def browse_directory(path: str = "/host_home"):
             break
         resolved = resolved.parent
 
-    parent = str(resolved.parent) if resolved != resolved.parent else None
-    entries: list[BrowseDirectoryEntry] = []
-    try:
-        for entry in sorted(os.scandir(str(resolved)), key=lambda e: e.name.lower()):
-            if entry.name.startswith("."):
-                continue
-            try:
-                if entry.is_dir(follow_symlinks=False):
-                    entries.append(
-                        BrowseDirectoryEntry(
-                            name=entry.name,
-                            path=str(resolved / entry.name),
-                            is_dir=True,
-                        )
-                    )
-            except PermissionError:
-                continue
-    except PermissionError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permission denied: {resolved}",
-        )
-
-    return BrowseDirectoryResponse(
-        current=str(resolved),
-        parent=parent,
-        entries=entries,
-    )
+    return _browse_path(resolved)
 
 
 def _format_bytes(size: int) -> str:
@@ -86,6 +88,23 @@ def _format_bytes(size: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1000
     return f"{size:.1f} PB"
+
+
+@router.post("/mkdir", response_model=BrowseDirectoryResponse)
+async def make_directory(path: str):
+    """Create a new directory and return a browse result for it."""
+    from pathlib import Path
+
+    target = Path(path)
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot create directory: {e}",
+        )
+
+    return _browse_path(target)
 
 
 @router.post("/resolve", response_model=ResolveProductsResponse)

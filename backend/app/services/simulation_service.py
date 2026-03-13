@@ -104,20 +104,13 @@ class SimulationService:
                 status_store.update(simulation_id, progress=overall_progress)
 
         try:
-            status_store.update(
-                simulation_id,
-                status="running",
-                progress=0.0,
-                current_step="Initializing",
-            )
-
             # Convert API params to internal SimulationParams
             sim_params = SimulationParams(
                 idx=params.idx,
                 source_name=params.source_name,
                 member_ouid=params.member_ouid,
                 main_dir=str(self.main_dir),
-                output_dir=str(self.output_dir),
+                output_dir=params.output_dir or str(self.output_dir),
                 tng_dir=str(self.tng_dir),
                 galaxy_zoo_dir=str(self.galaxy_zoo_dir),
                 hubble_dir=str(self.hubble_dir),
@@ -150,6 +143,14 @@ class SimulationService:
                 save_mode=params.save_mode,
                 inject_serendipitous=params.inject_serendipitous,
                 remote=False,
+            )
+
+            status_store.update(
+                simulation_id,
+                status="running",
+                progress=0.0,
+                current_step="Initializing",
+                output_dir=sim_params.output_dir,
             )
 
             # Run simulation with callbacks

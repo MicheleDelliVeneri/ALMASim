@@ -50,6 +50,7 @@ async def list_simulations() -> SimulationListResponse:
             created_at=sim.created_at,
             updated_at=sim.updated_at,
             error=sim.error,
+            output_dir=sim.output_dir,
         )
         for sim in all_simulations
     ]

@@ -12,28 +12,31 @@ router = APIRouter()
 
 
 @router.get("/files")
-async def list_datacube_files() -> JSONResponse:
-    """List available datacube files in the output directory.
-    
+async def list_datacube_files(dir: Optional[str] = None) -> JSONResponse:
+    """List available datacube files in the given directory (recursively).
+
+    Parameters
+    ----------
+    dir : str, optional
+        Absolute path to search. Defaults to settings.OUTPUT_DIR.
+
     Returns
     -------
     JSONResponse
         List of available .npz files with metadata
     """
-    output_dir = Path(settings.OUTPUT_DIR)
-    
+    output_dir = Path(dir) if dir else Path(settings.OUTPUT_DIR)
+
     if not output_dir.exists():
         return JSONResponse({
             "files": [],
             "output_dir": str(output_dir),
             "message": "Output directory does not exist",
         })
-    
-    # Find all .npz files
-    npz_files = list(output_dir.glob("*.npz"))
-    
+
+    # Find all .npz files recursively
     files_info = []
-    for file_path in sorted(npz_files, key=lambda p: p.stat().st_mtime, reverse=True):
+    for file_path in sorted(output_dir.rglob("*.npz"), key=lambda p: p.stat().st_mtime, reverse=True):
         try:
             stat = file_path.stat()
             files_info.append({
@@ -43,9 +46,8 @@ async def list_datacube_files() -> JSONResponse:
                 "modified": stat.st_mtime,
             })
         except Exception:
-            # Skip files that can't be accessed
             continue
-    
+
     return JSONResponse({
         "files": files_info,
         "output_dir": str(output_dir),
@@ -53,20 +55,22 @@ async def list_datacube_files() -> JSONResponse:
 
 
 @router.get("/files/{file_path:path}")
-async def get_datacube_file(file_path: str) -> FileResponse:
+async def get_datacube_file(file_path: str, dir: Optional[str] = None) -> FileResponse:
     """Get a datacube file from the output directory.
-    
+
     Parameters
     ----------
     file_path : str
         Relative path to the file within the output directory
-    
+    dir : str, optional
+        Absolute path of the base directory. Defaults to settings.OUTPUT_DIR.
+
     Returns
     -------
     FileResponse
         The .npz file
     """
-    output_dir = Path(settings.OUTPUT_DIR)
+    output_dir = Path(dir) if dir else Path(settings.OUTPUT_DIR)
     file_path_obj = Path(file_path)
     
     # Security: ensure path is within output directory

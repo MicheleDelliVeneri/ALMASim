@@ -12,10 +12,11 @@
 		outputDir: string;
 		onFileSelect: (path: string) => void;
 		onRefresh: () => void;
+		onBrowseRequest: () => void;
 		disabled: boolean;
 	}
 
-	let { files, loading, outputDir, onFileSelect, onRefresh, disabled }: Props = $props();
+	let { files, loading, outputDir, onFileSelect, onRefresh, onBrowseRequest, disabled }: Props = $props();
 
 	function formatFileSize(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
@@ -30,19 +31,22 @@
 
 <div class="space-y-4">
 	<!-- Output Directory Info -->
-	{#if outputDir}
-		<div class="rounded-md border border-blue-200 bg-blue-50 p-3">
-			<p class="text-sm text-blue-800">
-				<span class="font-medium">Output Directory:</span>
-				{outputDir}
-			</p>
-		</div>
-	{/if}
+	<div class="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
+		<span class="shrink-0 text-sm font-medium text-blue-800">Directory:</span>
+		<span class="flex-1 truncate font-mono text-xs text-blue-700">{outputDir || '(none selected)'}</span>
+		<button
+			type="button"
+			onclick={onBrowseRequest}
+			class="shrink-0 rounded-md border border-blue-300 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+		>
+			Browse…
+		</button>
+	</div>
 
 	<!-- Available Files List -->
 	<div class="space-y-2">
 		<div class="flex items-center justify-between">
-			<label class="block text-sm font-medium text-gray-700"> Available Datacubes </label>
+			<span class="block text-sm font-medium text-gray-700">Available Datacubes</span>
 			<button
 				onclick={onRefresh}
 				class="rounded-md bg-gray-100 px-2 py-1 text-xs transition-colors hover:bg-gray-200"

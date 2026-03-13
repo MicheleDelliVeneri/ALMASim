@@ -103,6 +103,7 @@ class SimulationSummary(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     error: Optional[str] = Field(None, description="Error message if failed")
+    output_dir: Optional[str] = Field(None, description="Output directory path")
 
 
 class SimulationListResponse(BaseModel):

@@ -364,11 +364,12 @@ def run_simulation(
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
         params.freq_support, source_freq
     )
+    output_dir_abs = os.path.abspath(params.output_dir)
     sim_output_dir = os.path.join(
-        params.output_dir, f"{params.project_name}_{params.idx}"
+        output_dir_abs, f"{params.project_name}_{params.idx}"
     )
     os.makedirs(sim_output_dir, exist_ok=True)
-    os.chdir(params.output_dir)
+    os.chdir(output_dir_abs)
 
     if remote:
         print(f"RA: {ra}")
@@ -600,7 +601,7 @@ def run_simulation(
         fwhm_x = fwhm_y = angle = None
 
     sim_params_path = os.path.join(
-        params.output_dir, f"sim_params_{params.idx}.txt"
+        output_dir_abs, f"sim_params_{params.idx}.txt"
     )
     uas.write_sim_parameters(
         sim_params_path,
@@ -682,7 +683,7 @@ def run_simulation(
         backend=compute_backend,
         skymodel=model,
         main_dir=params.main_dir,
-        output_dir=params.output_dir,
+        output_dir=output_dir_abs,
         ra=ra,
         dec=dec,
         central_freq=central_freq,

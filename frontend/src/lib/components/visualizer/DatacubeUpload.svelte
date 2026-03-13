@@ -22,9 +22,10 @@
 
 	<!-- File Upload -->
 	<div class="space-y-2">
-		<label class="block text-sm font-medium text-gray-700"> Upload Datacube (.npz file) </label>
+		<label for="datacube-upload" class="block text-sm font-medium text-gray-700">Upload Datacube (.npz file)</label>
 		<div class="flex items-center space-x-4">
 			<input
+				id="datacube-upload"
 				type="file"
 				accept=".npz"
 				onchange={onFileUpload}
@@ -36,8 +37,9 @@
 
 	<!-- Integration Method -->
 	<div class="space-y-2">
-		<label class="block text-sm font-medium text-gray-700"> Integration Method </label>
+		<label for="integration-method" class="block text-sm font-medium text-gray-700">Integration Method</label>
 		<select
+			id="integration-method"
 			value={integrationMethod}
 			onchange={(e) => onMethodChange(e.currentTarget.value as 'sum' | 'mean')}
 			disabled={loading}

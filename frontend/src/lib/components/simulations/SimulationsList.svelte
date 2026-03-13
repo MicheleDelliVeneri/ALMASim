@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { createLogger } from '$lib/logger';
 
 	interface SimulationSummary {
 		simulation_id: string;
@@ -9,6 +10,7 @@
 		created_at: string;
 		updated_at: string;
 		error?: string;
+		output_dir?: string;
 	}
 
 	interface Props {
@@ -16,6 +18,7 @@
 	}
 
 	let { apiUrl = 'http://localhost:8000' }: Props = $props();
+	const logger = createLogger('components/SimulationsList');
 
 	let simulations = $state<SimulationSummary[]>([]);
 	let loading = $state(true);
@@ -33,7 +36,7 @@
 			simulations = data.simulations || [];
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load simulations';
-			console.error('Error fetching simulations:', err);
+			logger.error({ err, apiUrl }, 'Error fetching simulations');
 		} finally {
 			loading = false;
 		}
@@ -64,9 +67,11 @@
 		window.location.href = `/visualizer?simulation=${simulationId}`;
 	}
 
-	function handleLocate(simulationId: string) {
-		// Open file browser or show path
-		alert(`Simulation output location:\n/app/outputs/${simulationId}/`);
+	function handleLocate(sim: SimulationSummary) {
+		const path = sim.output_dir
+			? `${sim.output_dir}/${sim.simulation_id}`
+			: `(output directory not recorded)`;
+		alert(`Simulation output location:\n${path}`);
 	}
 
 	onMount(() => {
@@ -172,7 +177,7 @@
 									<button
 										type="button"
 										class="text-gray-600 hover:text-gray-800"
-										onclick={() => handleLocate(sim.simulation_id)}
+										onclick={() => handleLocate(sim)}
 										title="Show file location"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -8,8 +8,10 @@
 	import SelectedRowPreview from '$lib/components/simulations/SelectedRowPreview.svelte';
 	import SimulationStatusDisplay from '$lib/components/simulations/SimulationStatusDisplay.svelte';
 	import SimulationsList from '$lib/components/simulations/SimulationsList.svelte';
+	import { createLogger } from '$lib/logger';
 
 	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+	const logger = createLogger('routes/simulations');
 
 	interface SimulationStatus {
 		simulation_id: string;
@@ -47,7 +49,7 @@
 	let nChannels = $state(128);
 	let sourceType = $state('point');
 	let simulationName = $state('');
-	let outputDir = $state('/app/outputs');
+	let outputDir = $state('/host_home');
 	let snr = $state(1.3);
 	let saveMode = $state('npz');
 	let nLines = $state(0);
@@ -75,7 +77,7 @@
 		const socket = new WebSocket(`${wsUrl}/api/v1/simulations/${id}/ws`);
 
 		socket.onopen = () => {
-			console.log('WebSocket connected');
+			logger.info({ simulationId: id }, 'WebSocket connected');
 		};
 
 		socket.onmessage = (event) => {
@@ -83,16 +85,16 @@
 				const status: SimulationStatus = JSON.parse(event.data);
 				simulationStatus = status;
 			} catch (e) {
-				console.error('Failed to parse WebSocket message:', e);
+				logger.error({ err: e, simulationId: id }, 'Failed to parse WebSocket message');
 			}
 		};
 
 		socket.onerror = (error) => {
-			console.error('WebSocket error:', error);
+			logger.error({ err: error, simulationId: id }, 'WebSocket error');
 		};
 
 		socket.onclose = () => {
-			console.log('WebSocket disconnected');
+			logger.info({ simulationId: id }, 'WebSocket disconnected');
 			ws = null;
 		};
 

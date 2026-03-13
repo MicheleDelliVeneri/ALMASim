@@ -12,10 +12,12 @@
 	import MetadataSaveModal from '$lib/components/metadata/MetadataSaveModal.svelte';
 	import DownloadDialog from '$lib/components/metadata/DownloadDialog.svelte';
 	import FullScreenLoader from '$lib/components/shared/Loader.svelte';
+	import { createLogger } from '$lib/logger';
 	import { formatDateStamp, supportsFilePicker } from '$lib/utils';
 
 	const RESULTS_CACHE_KEY = 'almasim:metadata-results';
 	const DEFAULT_METADATA_PATH = 'data';
+	const logger = createLogger('routes/metadata');
 
 	type FileSystemFileHandle = {
 		name?: string;
@@ -200,7 +202,7 @@
 		try {
 			scienceTypes = await metadataApi.getScienceTypes();
 		} catch (err) {
-			console.error('Failed to load science types:', err);
+			logger.error({ err }, 'Failed to load science types');
 		} finally {
 			initialLoading = false;
 		}
@@ -366,7 +368,7 @@
 				statusMessage = `Downloaded metadata snapshot (${current.count ?? current.data.length} rows)`;
 			}
 		} catch (localError) {
-			console.error(localError);
+			logger.error({ err: localError }, 'Unable to write metadata locally');
 			error = 'Unable to write metadata locally.';
 		} finally {
 			completeCleanup();
