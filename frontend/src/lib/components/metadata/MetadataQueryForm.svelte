@@ -139,8 +139,8 @@
 		const qa2Status = formData.getAll('qa2_status').filter(Boolean) as string[];
 		if (qa2Status.length) query.qa2_status = qa2Status;
 
-		const obsType = formData.get('obs_type') as string;
-		if (obsType?.trim()) query.obs_type = obsType.trim();
+		const obsTypes = formData.getAll('obs_type') as string[];
+		if (obsTypes.length) query.obs_type = obsTypes;
 
 		const fovMin = formData.get('fov_min');
 		const fovMax = formData.get('fov_max');
@@ -449,18 +449,17 @@
 			</div>
 		</div>
 		<div>
-			<label class="block">
+			<div>
 				<span class="text-sm font-medium text-gray-700">Project Type</span>
-				<select name="obs_type" class="mt-1 w-full rounded-md border border-gray-300 bg-white p-2 text-sm">
-					<option value="">Any</option>
-					<option value="S">S (Science)</option>
-					<option value="L">L (Large)</option>
-					<option value="SV">SV (Science Verification)</option>
-					<option value="V">V (VLBI)</option>
-					<option value="T">T (Target of Opportunity)</option>
-					<option value="P">P (Phased Array)</option>
-				</select>
-			</label>
+				<div class="mt-2 flex flex-wrap gap-3">
+					{#each [['S', 'Science'], ['L', 'Large'], ['SV', 'Science Verification'], ['V', 'VLBI'], ['T', 'Target of Opportunity'], ['P', 'Phased Array']] as [val, lbl]}
+						<label class="inline-flex items-center space-x-1 text-sm text-gray-700">
+							<input type="checkbox" name="obs_type" value={val} class="rounded border-gray-300" />
+							<span>{val} ({lbl})</span>
+						</label>
+					{/each}
+				</div>
+			</div>
 			<div class="mt-2 flex gap-4">
 				<label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
 					<input type="checkbox" bind:checked={scienceOnly} class="rounded border-gray-300" />

@@ -38,7 +38,7 @@ class ObservationQueryParams:
     angular_resolution_range: Optional[tuple] = None
     observation_date_range: Optional[tuple] = None
     qa2_status: Optional[List[str]] = None
-    obs_type: Optional[str] = None
+    obs_type: Optional[List[str]] = None
     fov_range: Optional[tuple] = None
     time_resolution_range: Optional[tuple] = None
     frequency_range: Optional[tuple] = None
@@ -146,7 +146,7 @@ class DatabaseService:
         if p.qa2_status:
             filters.append(Observation.qa2_passed.in_(p.qa2_status))
         if p.obs_type:
-            filters.append(Observation.obs_type.ilike(f"%{p.obs_type}%"))
+            filters.append(or_(*(Observation.obs_type.ilike(f"%{t}%") for t in p.obs_type)))
         if p.antenna_arrays:
             filters.append(Observation.antenna_arrays.ilike(f"%{p.antenna_arrays}%"))
         if p.proposal_id_prefix:

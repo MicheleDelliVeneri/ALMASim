@@ -13,7 +13,7 @@ export interface MetadataQuery {
 	angular_resolution_range?: [number, number];
 	observation_date_range?: [string, string];
 	qa2_status?: string[];
-	obs_type?: string;
+	obs_type?: string[];
 	fov_range?: [number, number];
 	time_resolution_range?: [number, number];
 	frequency_range?: [number, number];

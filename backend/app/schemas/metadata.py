@@ -19,7 +19,7 @@ class ScienceQueryParams:
     angular_resolution_range: Optional[Tuple[float, float]] = None
     observation_date_range: Optional[Tuple[str, str]] = None
     qa2_status: Optional[List[str]] = None
-    obs_type: Optional[str] = None
+    obs_type: Optional[List[str]] = None
     fov_range: Optional[Tuple[float, float]] = None
     time_resolution_range: Optional[Tuple[float, float]] = None
     frequency_range: Optional[Tuple[float, float]] = None
@@ -63,7 +63,7 @@ class MetadataQuery(BaseModel):
         None,
         description="QA2 status values: 'Pass', 'Fail', 'SemiPass', or raw 'T'/'F'/'X'",
     )
-    obs_type: Optional[str] = Field(None, description="Observation type to include (partial match)")
+    obs_type: Optional[Sequence[str]] = Field(None, description="Observation type(s) to include (partial match, OR logic)")
     fov_range: Optional[tuple[float, float]] = Field(None, description="FOV range")
     time_resolution_range: Optional[tuple[float, float]] = Field(None, description="Time resolution range")
     frequency_range: Optional[tuple[float, float]] = Field(None, description="Frequency range")
@@ -109,7 +109,7 @@ class MetadataQuery(BaseModel):
             angular_resolution_range=self.angular_resolution_range,
             observation_date_range=self.observation_date_range,
             qa2_status=list(self.qa2_status) if self.qa2_status else None,
-            obs_type=self.obs_type,
+            obs_type=list(self.obs_type) if self.obs_type else None,
             fov_range=self.fov_range,
             time_resolution_range=self.time_resolution_range,
             frequency_range=self.frequency_range,

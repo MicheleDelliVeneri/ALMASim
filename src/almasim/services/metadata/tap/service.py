@@ -47,7 +47,7 @@ class InclusionFilters:
     angular_resolution_range: Optional[Tuple[float, float]] = None
     observation_date_range: Optional[Tuple[str, str]] = None
     qa2_status: Optional[List[str]] = None
-    obs_type: Optional[str] = None
+    obs_type: Optional[List[str]] = None
     proposal_id_prefix: Optional[List[str]] = None   # e.g. ['2016.', '2017.']
     public_only: bool = True  # default: only query non-proprietary data
     science_only: bool = True  # default: only science observations
@@ -312,7 +312,8 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
         conds.append(f"qa2_passed IN ('{statuses}')")
 
     if f.obs_type:
-        conds.append(f"type LIKE '%{f.obs_type}%'")
+        clauses = " OR ".join(f"type LIKE '%{t}%'" for t in f.obs_type)
+        conds.append(f"({clauses})")
 
     if f.fov_range:
         conds.append(f"s_fov BETWEEN {f.fov_range[0]} AND {f.fov_range[1]}")
