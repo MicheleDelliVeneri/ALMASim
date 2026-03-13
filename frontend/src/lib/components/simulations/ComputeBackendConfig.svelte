@@ -15,6 +15,18 @@
 	let daskResult: DaskTestResult | null = $state(null);
 	let daskTestError: string | null = $state(null);
 
+	// Warn when the user accidentally enters the dashboard port (8787) instead of scheduler port (8786)
+	const daskSchedulerAddr = $derived((backendConfig.scheduler as string) || '');
+	const daskPortWarning = $derived(/:8787\b/.test(daskSchedulerAddr)
+		? 'Port 8787 is the Dask dashboard — the scheduler typically listens on port 8786.'
+		: null);
+	// Warn when localhost is used — the backend runs inside Docker so localhost resolves to the container, not the host
+	const daskLocalhostWarning = $derived(
+		/\/\/localhost\b/.test(daskSchedulerAddr)
+			? 'The backend runs inside Docker — use host.docker.internal instead of localhost (e.g. tcp://host.docker.internal:8786).'
+			: null
+	);
+
 	function updateConfig(key: string, value: unknown) {
 		onConfigChange({ ...backendConfig, [key]: value });
 	}
@@ -153,8 +165,26 @@
 							</button>
 						</div>
 						<p class="mt-1 text-xs text-gray-500">
-							Leave empty for local Dask cluster (uses processes)
+							Scheduler port is <span class="font-mono">8786</span>; dashboard is on <span class="font-mono">8787</span>. Leave empty for a local cluster.
 						</p>
+
+						{#if daskPortWarning}
+							<div class="mt-1 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+								<svg class="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+								</svg>
+								{daskPortWarning}
+							</div>
+						{/if}
+
+						{#if daskLocalhostWarning}
+							<div class="mt-1 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+								<svg class="mt-0.5 h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+								</svg>
+								{daskLocalhostWarning}
+							</div>
+						{/if}
 
 						<!-- Connection test result -->
 						{#if daskResult?.ok}
@@ -179,9 +209,16 @@
 								</button>
 							</div>
 						{:else if daskTestError}
-							<div class="mt-2 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2">
-								<span class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
-								<span class="text-xs font-medium text-red-800">{daskTestError}</span>
+							<div class="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+								<div class="flex items-center gap-2">
+									<span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500"></span>
+									<span class="text-xs font-medium text-red-800">{daskTestError}</span>
+								</div>
+								{#if /localhost/.test(daskSchedulerAddr) && /timeout|refused|connect/i.test(daskTestError)}
+									<p class="mt-1 pl-4 text-xs text-red-700">
+										Tip: try <span class="font-mono font-semibold">tcp://host.docker.internal:8786</span> — the backend runs inside Docker and cannot reach your host via <span class="font-mono">localhost</span>.
+									</p>
+								{/if}
 							</div>
 						{/if}
 					</div>
