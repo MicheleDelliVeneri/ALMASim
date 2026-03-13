@@ -21,6 +21,33 @@
 			status?.status === 'cancelled'
 	);
 
+	// --- Speed & ETA tracking ---
+	// Keep a rolling window of (timestamp, bytes_downloaded) samples
+	const SPEED_WINDOW = 10; // use last N samples for smoothed speed
+	let speedSamples = $state<{ time: number; bytes: number }[]>([]);
+	let speedBytesPerSec = $state(0);
+	let etaSeconds = $state<number | null>(null);
+
+	function updateSpeedAndEta(bytesDownloaded: number, totalBytes: number) {
+		const now = Date.now();
+		speedSamples = [...speedSamples.slice(-(SPEED_WINDOW - 1)), { time: now, bytes: bytesDownloaded }];
+
+		if (speedSamples.length >= 2) {
+			const oldest = speedSamples[0];
+			const newest = speedSamples[speedSamples.length - 1];
+			const dtSec = (newest.time - oldest.time) / 1000;
+			const dBytes = newest.bytes - oldest.bytes;
+			if (dtSec > 0 && dBytes > 0) {
+				speedBytesPerSec = dBytes / dtSec;
+				const remaining = totalBytes - bytesDownloaded;
+				etaSeconds = remaining > 0 ? remaining / speedBytesPerSec : 0;
+			} else {
+				speedBytesPerSec = 0;
+				etaSeconds = null;
+			}
+		}
+	}
+
 	// Poll every 2s while running
 	$effect(() => {
 		if (!jobId) return;
@@ -32,8 +59,13 @@
 				const s = await downloadApi.getJobStatus(jobId);
 				if (stopped) return;
 				status = s;
+				if (s.status === 'running') {
+					updateSpeedAndEta(s.bytes_downloaded, s.total_bytes);
+				}
 				if (s.status === 'completed' || s.status === 'failed' || s.status === 'cancelled') {
 					clearInterval(timer);
+					speedBytesPerSec = 0;
+					etaSeconds = null;
 				}
 			} catch (e) {
 				if (stopped) return;
@@ -67,6 +99,25 @@
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+	}
+
+	function formatSpeed(bytesPerSec: number): string {
+		if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
+		if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+		if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+		return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(2)} GB/s`;
+	}
+
+	function formatEta(seconds: number): string {
+		if (seconds < 60) return `${Math.ceil(seconds)}s`;
+		if (seconds < 3600) {
+			const m = Math.floor(seconds / 60);
+			const s = Math.ceil(seconds % 60);
+			return `${m}m ${s}s`;
+		}
+		const h = Math.floor(seconds / 3600);
+		const m = Math.ceil((seconds % 3600) / 60);
+		return `${h}h ${m}m`;
 	}
 </script>
 
@@ -136,6 +187,14 @@
 			</div>
 			<p class="mt-1 text-xs text-gray-400">
 				{formatBytes(status.bytes_downloaded)} / {formatBytes(status.total_bytes)}
+				{#if isRunning && speedBytesPerSec > 0}
+					<span class="mx-1">·</span>
+					<span class="text-blue-500">{formatSpeed(speedBytesPerSec)}</span>
+					{#if etaSeconds != null && etaSeconds > 0}
+						<span class="mx-1">·</span>
+						<span class="text-gray-500">~{formatEta(etaSeconds)} remaining</span>
+					{/if}
+				{/if}
 				{#if status.files_failed > 0}
 					<span class="text-red-500">({status.files_failed} failed)</span>
 				{/if}

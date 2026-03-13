@@ -479,16 +479,38 @@ async def redownload_job(
 
 @router.delete("/jobs/{job_id}")
 async def delete_download_job(job_id: str):
-    """Delete a download job from history.
+    """Delete a download job from history and its files on disk.
 
     Active (running/pending) jobs must be cancelled first.
     """
+    from pathlib import Path
+
     active = download_store.get(job_id)
     if active and active.status in ("pending", "running"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete an active job — cancel it first",
         )
+
+    # Look up the job (with file records) before deleting from DB
+    rec = download_store.get_from_db(job_id)
+    if not rec:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Download job {job_id} not found",
+        )
+
+    # Delete downloaded files (and any leftover .part files) from disk
+    dest = Path(rec.destination)
+    files_deleted = 0
+    for file_rec in rec.files:
+        for path in (dest / file_rec.filename, dest / (file_rec.filename + ".part")):
+            try:
+                if path.is_file():
+                    path.unlink()
+                    files_deleted += 1
+            except OSError:
+                pass  # best-effort; don't fail the delete if a file is gone
 
     deleted = download_store.delete_from_db(job_id)
     if not deleted:
@@ -499,4 +521,4 @@ async def delete_download_job(job_id: str):
     # Also remove from memory if still lingering
     with download_store._lock:
         download_store._active.pop(job_id, None)
-    return {"job_id": job_id, "deleted": True}
+    return {"job_id": job_id, "deleted": True, "files_deleted": files_deleted}
