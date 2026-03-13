@@ -157,7 +157,6 @@ class MetadataService:
                 exclude_source_names=params.exclude_source_name,
                 exclude_obs_types=params.exclude_obs_type,
                 exclude_solar=params.exclude_solar,
-                limit=1000,
             )
             logger.info(f"Retrieved {len(observations)} observations from database cache")
             records = self._observations_to_dict(observations)
