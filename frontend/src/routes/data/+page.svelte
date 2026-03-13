@@ -2,6 +2,9 @@
 	import type { DownloadJobSummary, DownloadJobStatus } from '$lib/api/download';
 	import { downloadApi } from '$lib/api/download';
 	import DownloadProgress from '$lib/components/metadata/DownloadProgress.svelte';
+	import { createLogger } from '$lib/logger';
+
+	const logger = createLogger('routes/data');
 
 	let jobs = $state<DownloadJobSummary[]>([]);
 	let loading = $state(true);
@@ -23,8 +26,10 @@
 		try {
 			jobs = await downloadApi.listJobs();
 			error = '';
+			logger.debug({ jobCount: jobs.length }, 'Job list refreshed');
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load download history';
+			logger.error({ err: e }, 'Failed to fetch download jobs');
 		} finally {
 			loading = false;
 		}
@@ -32,6 +37,7 @@
 
 	// Initial load + polling for active jobs
 	$effect(() => {
+		logger.info('Data page mounted');
 		fetchJobs();
 
 		pollTimer = setInterval(fetchJobs, 3000);
@@ -42,14 +48,17 @@
 	});
 
 	async function redownload(job: DownloadJobSummary) {
+		logger.info({ jobId: job.job_id }, 'Re-download requested');
 		const newSet = new Set(redownloading);
 		newSet.add(job.job_id);
 		redownloading = newSet;
 		try {
 			await downloadApi.redownloadJob(job.job_id);
+			logger.info({ jobId: job.job_id }, 'Re-download job started');
 			await fetchJobs();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to start re-download';
+			logger.error({ err: e, jobId: job.job_id }, 'Re-download failed');
 		} finally {
 			const s = new Set(redownloading);
 			s.delete(job.job_id);
@@ -58,20 +67,26 @@
 	}
 
 	async function cancelJob(jobId: string) {
+		logger.info({ jobId }, 'Cancel job requested');
 		try {
 			await downloadApi.cancelJob(jobId);
+			logger.info({ jobId }, 'Job cancelled');
 			await fetchJobs();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to cancel job';
+			logger.error({ err: e, jobId }, 'Failed to cancel job');
 		}
 	}
 
 	async function deleteJob(jobId: string) {
+		logger.info({ jobId }, 'Delete job requested');
 		try {
 			await downloadApi.deleteJob(jobId);
+			logger.info({ jobId }, 'Job deleted from history');
 			await fetchJobs();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to delete job';
+			logger.error({ err: e, jobId }, 'Failed to delete job');
 		}
 	}
 

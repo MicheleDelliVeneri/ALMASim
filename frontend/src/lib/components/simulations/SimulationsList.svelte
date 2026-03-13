@@ -34,6 +34,7 @@
 			}
 			const data = await response.json();
 			simulations = data.simulations || [];
+			logger.debug({ count: simulations.length }, 'Simulations list refreshed');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load simulations';
 			logger.error({ err, apiUrl }, 'Error fetching simulations');
@@ -63,6 +64,7 @@
 	}
 
 	function handleVisualize(simulationId: string) {
+		logger.info({ simulationId }, 'Navigating to visualizer');
 		// Navigate to visualizer with simulation output
 		window.location.href = `/visualizer?simulation=${simulationId}`;
 	}
@@ -71,10 +73,12 @@
 		const path = sim.output_dir
 			? `${sim.output_dir}/${sim.simulation_id}`
 			: `(output directory not recorded)`;
+		logger.info({ simulationId: sim.simulation_id, path }, 'Locate simulation output');
 		alert(`Simulation output location:\n${path}`);
 	}
 
 	onMount(() => {
+		logger.info('SimulationsList mounted');
 		fetchSimulations();
 		// Refresh every 5 seconds
 		const interval = setInterval(fetchSimulations, 5000);

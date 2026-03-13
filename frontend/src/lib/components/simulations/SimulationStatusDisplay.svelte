@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { createLogger } from '$lib/logger';
+
+	const logger = createLogger('components/simulations/SimulationStatusDisplay');
 
 	interface SimulationStatus {
 		simulation_id: string;
@@ -29,6 +32,21 @@
 		'Processing results',
 		'Saving output'
 	];
+
+	// Log meaningful status transitions
+	let _lastStatus = '';
+	$effect(() => {
+		if (status && status.status !== _lastStatus) {
+			_lastStatus = status.status;
+			if (status.status === 'completed') {
+				logger.info({ simulationId, progress: status.progress }, 'Simulation completed');
+			} else if (status.status === 'failed') {
+				logger.error({ simulationId, error: status.error }, 'Simulation failed');
+			} else if (status.status === 'running') {
+				logger.info({ simulationId }, 'Simulation running');
+			}
+		}
+	});
 
 	// Auto-scroll logs to bottom when they update
 	$effect(() => {

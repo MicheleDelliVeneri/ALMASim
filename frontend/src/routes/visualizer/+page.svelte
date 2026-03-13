@@ -64,6 +64,7 @@
 	let gridLayout = $state<'horizontal' | 'vertical'>('horizontal');
 
 	async function loadFileList(dir?: string) {
+		logger.debug({ dir }, 'Loading file list');
 		fileListLoading = true;
 		try {
 			const url = dir
@@ -74,6 +75,7 @@
 			const data: FileListResponse = await response.json();
 			outputDir = data.output_dir;
 			fileList = data.files;
+			logger.info({ outputDir: data.output_dir, count: data.files.length }, 'File list loaded');
 		} catch (err) {
 			logger.error({ err }, 'Failed to load file list');
 			fileList = [];
@@ -83,12 +85,14 @@
 	}
 
 	async function browseDir(path: string) {
+		logger.debug({ path }, 'Browsing directory');
 		dirBrowsing = true;
 		dirBrowseError = '';
 		try {
 			dirBrowseResult = await downloadApi.browseDirectory(path);
 		} catch (e) {
 			dirBrowseError = e instanceof Error ? e.message : 'Failed to browse directory';
+			logger.error({ path, err: e }, 'Failed to browse directory');
 		} finally {
 			dirBrowsing = false;
 		}
@@ -107,22 +111,23 @@
 
 	function selectDir() {
 		if (!dirBrowseResult) return;
+		logger.info({ dir: dirBrowseResult.current }, 'Directory selected');
 		closeDirBrowser();
 		loadFileList(dirBrowseResult.current);
 	}
 
 	// Process a file (either uploaded or from server)
 	async function processFile(file: File | string) {
+		const fileName = typeof file === 'string' ? file.split('/').pop() : file.name;
+		logger.info({ fileName, method: integrationMethod }, 'Processing datacube');
 		loading = true;
 		error = null;
 
 		try {
 			let formData: FormData;
-			let fileName: string;
 
 			if (typeof file === 'string') {
 				// Load file from server
-				fileName = file.split('/').pop() || 'file.npz';
 				const dirParam = outputDir ? `?dir=${encodeURIComponent(outputDir)}` : '';
 				const fileResponse = await fetch(
 					`${API_BASE_URL}/api/v1/visualizer/files/${encodeURIComponent(file)}${dirParam}`
@@ -131,14 +136,13 @@
 					throw new Error(`Failed to load file: ${fileResponse.statusText}`);
 				}
 				const blob = await fileResponse.blob();
-				const serverFile = new File([blob], fileName, {
+				const serverFile = new File([blob], fileName ?? 'file.npz', {
 					type: 'application/octet-stream'
 				});
 				formData = new FormData();
 				formData.append('file', serverFile);
 			} else {
 				// Use uploaded file
-				fileName = file.name;
 				formData = new FormData();
 				formData.append('file', file);
 			}
@@ -156,6 +160,7 @@
 			}
 
 			const data: ImageData = await response.json();
+			logger.info({ fileName, shape: data.stats.shape }, 'Datacube processed');
 
 			// Add to loaded images array with unique ID
 			const newImage: LoadedImage = {
@@ -169,6 +174,7 @@
 			loadedImages = [...loadedImages, newImage];
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to process datacube';
+			logger.error({ fileName, err }, 'Failed to process datacube');
 		} finally {
 			loading = false;
 		}
@@ -176,11 +182,13 @@
 
 	// Remove an image from the grid
 	function removeImage(id: string) {
+		logger.debug({ id }, 'Removing image');
 		loadedImages = loadedImages.filter((img) => img.id !== id);
 	}
 
 	// Clear all images
 	function clearAll() {
+		logger.debug('Clearing all images');
 		loadedImages = [];
 	}
 
@@ -191,6 +199,7 @@
 		if (!file) return;
 
 		if (!file.name.endsWith('.npz')) {
+			logger.warn({ name: file.name }, 'Invalid file type selected');
 			error = 'Please select a .npz file';
 			return;
 		}
@@ -253,6 +262,7 @@
 	}
 
 	onMount(async () => {
+		logger.info('Visualizer page mounted');
 		const lastDir = await getLastSimulationOutputDir();
 		loadFileList(lastDir);
 	});

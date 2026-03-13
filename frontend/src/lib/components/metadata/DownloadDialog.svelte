@@ -1,6 +1,9 @@
 <script lang="ts">
 	import type { ResolveProductsResponse, DiskSpaceInfo, BrowseDirectoryResponse } from '$lib/api/download';
 	import { downloadApi } from '$lib/api/download';
+	import { createLogger } from '$lib/logger';
+
+	const logger = createLogger('components/metadata/DownloadDialog');
 
 	interface Props {
 		open: boolean;
@@ -27,6 +30,10 @@
 	let starting = $state(false);
 	let startError = $state('');
 
+	$effect(() => {
+		logger.debug({ productFilter }, 'Product filter changed');
+	});
+
 	// Directory browser state
 	let browserOpen = $state(false);
 	let browsing = $state(false);
@@ -51,6 +58,7 @@
 	}
 
 	function selectDirectory(path: string) {
+		logger.debug({ path }, 'Download destination selected');
 		destination = path;
 		browserOpen = false;
 		browseResult = null;
@@ -101,12 +109,15 @@
 	});
 
 	async function resolveProducts() {
+		logger.info({ count: memberOusUids.length }, 'Resolving ALMA products');
 		resolving = true;
 		resolveError = '';
 		try {
 			resolved = await downloadApi.resolveProducts(memberOusUids);
+			logger.info({ totalCount: resolved.total_count, totalSize: resolved.total_size_display }, 'Products resolved');
 		} catch (e) {
 			resolveError = e instanceof Error ? e.message : 'Failed to resolve products';
+			logger.error({ err: e }, 'Failed to resolve products');
 		} finally {
 			resolving = false;
 		}
@@ -126,6 +137,7 @@
 	}
 
 	async function startDownload() {
+		logger.info({ productFilter, destination, maxParallel, fileCount: filteredInfo.count }, 'Starting download');
 		starting = true;
 		startError = '';
 		try {
@@ -135,10 +147,12 @@
 				destination,
 				maxParallel
 			});
+			logger.info({ jobId: resp.job_id }, 'Download job created');
 			onStarted(resp.job_id);
 			onClose();
 		} catch (e) {
 			startError = e instanceof Error ? e.message : 'Failed to start download';
+			logger.error({ err: e }, 'Failed to start download');
 		} finally {
 			starting = false;
 		}

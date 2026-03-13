@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
+	import { createLogger } from '$lib/logger';
+
+	const logger = createLogger('components/simulations/SimulationForm');
 
 	interface Props {
 		sourceType: string;
@@ -56,18 +59,21 @@
 	let creatingFolder = $state(false);
 
 	async function browseDir(path: string) {
+		logger.debug({ path }, 'Browsing directory');
 		browsing = true;
 		browseError = '';
 		try {
 			browseResult = await downloadApi.browseDirectory(path);
 		} catch (e) {
 			browseError = e instanceof Error ? e.message : 'Failed to browse directory';
+			logger.error({ err: e, path }, 'Failed to browse directory');
 		} finally {
 			browsing = false;
 		}
 	}
 
 	function openBrowser() {
+		logger.debug({ outputDir }, 'Directory browser opened');
 		browserOpen = true;
 		newFolderName = '';
 		browseDir(outputDir || '/host_home');
@@ -83,12 +89,15 @@
 	async function createFolder() {
 		if (!browseResult || !newFolderName.trim()) return;
 		creatingFolder = true;
+		const newPath = `${browseResult.current}/${newFolderName.trim()}`;
+		logger.info({ newPath }, 'Creating new folder');
 		try {
-			const newPath = `${browseResult.current}/${newFolderName.trim()}`;
 			browseResult = await downloadApi.createDirectory(newPath);
 			newFolderName = '';
+			logger.info({ newPath }, 'Folder created');
 		} catch (e) {
 			browseError = e instanceof Error ? e.message : 'Failed to create folder';
+			logger.error({ err: e, newPath }, 'Failed to create folder');
 		} finally {
 			creatingFolder = false;
 		}
@@ -96,6 +105,7 @@
 
 	function selectCurrent() {
 		if (!browseResult) return;
+		logger.info({ path: browseResult.current }, 'Output directory selected');
 		onOutputDirChange(browseResult.current);
 		closeBrowser();
 	}

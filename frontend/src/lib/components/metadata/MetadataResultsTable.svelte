@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { MetadataResponse } from '$lib/api/metadata';
+	import { createLogger } from '$lib/logger';
+
+	const logger = createLogger('components/metadata/MetadataResultsTable');
 
 	interface Props {
 		results: MetadataResponse | null;
@@ -153,8 +156,10 @@
 	function toggleSelectAll() {
 		if (allFilteredSelected) {
 			selectedRowIndices = new Set();
+			logger.debug('All rows deselected');
 		} else {
 			selectedRowIndices = new Set(filteredData.map((_, i) => i));
+			logger.debug({ count: filteredData.length }, 'All filtered rows selected');
 		}
 	}
 
@@ -165,7 +170,9 @@
 			const row = data[idx];
 			if (row?.member_ous_uid) uids.push(String(row.member_ous_uid));
 		}
-		return [...new Set(uids)];
+		const unique = [...new Set(uids)];
+		logger.info({ selectedRows: selectedRowIndices.size, uniqueUids: unique.length }, 'Download initiated from table');
+		return unique;
 	}
 
 	// Reset selection when results change
@@ -270,6 +277,7 @@
 			order.splice(fromIdx, 1);
 			order.splice(toIdx, 0, draggedTableCol);
 			columnOrder = order;
+			logger.debug({ from: draggedTableCol, to: col }, 'Table column reordered');
 		}
 		draggedTableCol = null;
 		dragOverTableCol = null;
@@ -339,13 +347,16 @@
 		const next = new Set(hiddenColumns);
 		if (next.has(col)) {
 			next.delete(col);
+			logger.debug({ col }, 'Column shown');
 		} else {
 			next.add(col);
+			logger.debug({ col }, 'Column hidden');
 		}
 		hiddenColumns = next;
 	}
 
 	function clearFilters() {
+		logger.debug('Column filters cleared');
 		columnFilters = {};
 	}
 </script>

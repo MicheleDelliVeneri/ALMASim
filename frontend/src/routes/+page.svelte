@@ -1,15 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { apiClient } from '$lib/api/client';
+	import { createLogger } from '$lib/logger';
+
+	const logger = createLogger('routes/home');
 
 	let healthStatus = $state('checking...');
 
 	onMount(async () => {
+		logger.info('Home page mounted');
 		try {
 			const response = await apiClient.get<{ status: string }>('/health');
 			healthStatus = response.status === 'healthy' ? '✅ Healthy' : '❌ Unhealthy';
+			logger.info({ status: response.status }, 'API health check complete');
 		} catch (error) {
 			healthStatus = '❌ Error connecting to API';
+			logger.error({ err: error }, 'API health check failed');
 		}
 	});
 </script>

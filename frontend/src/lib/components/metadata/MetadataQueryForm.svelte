@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { MetadataQuery } from '$lib/api/metadata';
+	import { createLogger } from '$lib/logger';
+
+	const logger = createLogger('components/metadata/MetadataQueryForm');
 
 	interface Props {
 		scienceTypes: { keywords: string[]; categories: string[] } | null;
@@ -73,12 +76,14 @@
 		selectedKeywords = selectedKeywords.includes(keyword)
 			? selectedKeywords.filter((k) => k !== keyword)
 			: [...selectedKeywords, keyword];
+		logger.debug({ keyword, selected: selectedKeywords.includes(keyword) }, 'Science keyword toggled');
 	}
 
 	function toggleCategory(category: string) {
 		selectedCategories = selectedCategories.includes(category)
 			? selectedCategories.filter((c) => c !== category)
 			: [...selectedCategories, category];
+		logger.debug({ category, selected: selectedCategories.includes(category) }, 'Science category toggled');
 	}
 
 	function toggleExcludeKeyword(keyword: string) {
@@ -189,6 +194,18 @@
 		query.science_only = scienceOnly;
 		query.exclude_mosaic = excludeMosaic;
 
+		logger.info(
+			{
+				sourceName: query.source_name,
+				bands: query.bands,
+				cycles: query.cycles,
+				keywordCount: (query.science_keyword ?? []).length,
+				categoryCount: (query.scientific_category ?? []).length,
+				publicOnly,
+				scienceOnly,
+			},
+			'Query form submitted'
+		);
 		onSubmit(query);
 	}
 </script>

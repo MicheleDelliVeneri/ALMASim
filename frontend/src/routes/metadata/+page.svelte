@@ -199,8 +199,13 @@
 	onDestroy(stopPolling);
 
 	onMount(async () => {
+		logger.info('Metadata page mounted');
 		try {
 			scienceTypes = await metadataApi.getScienceTypes();
+			logger.info(
+				{ keywords: scienceTypes.keywords.length, categories: scienceTypes.categories.length },
+				'Science types loaded'
+			);
 		} catch (err) {
 			logger.error({ err }, 'Failed to load science types');
 		} finally {
@@ -211,6 +216,7 @@
 		if (cached) {
 			results = cached;
 			statusMessage = `Loaded cached metadata (${cached.count ?? cached.data.length} rows)`;
+			logger.debug({ rowCount: cached.count ?? cached.data.length }, 'Restored metadata from cache');
 		}
 	});
 
@@ -221,13 +227,17 @@
 		error = '';
 		results = null;
 
+		logger.info({ query }, 'Metadata query submitted');
+
 		let queryId: string;
 		try {
 			const start = await metadataApi.startQuery(query);
 			queryId = start.query_id;
+			logger.info({ queryId }, 'Metadata query started');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unable to start metadata query';
 			loading = false;
+			logger.error({ err }, 'Failed to start metadata query');
 			return;
 		}
 
@@ -263,15 +273,18 @@
 
 				if (pageData.done) {
 					fetching = false;
+					logger.info({ totalRows: allRows.length }, 'Metadata query complete');
 					return;
 				}
 
+				logger.debug({ page, rowsSoFar: allRows.length }, 'Polling next metadata page');
 				// Poll faster when the last page was full (more pages likely ready)
 				const delay = pageData.rows.length >= PAGE_SIZE ? 200 : 1500;
 				pollTimer = setTimeout(pollNext, delay);
 			} catch (err) {
 				error = err instanceof Error ? err.message : 'Polling failed';
 				fetching = false;
+				logger.error({ err, page }, 'Metadata polling failed');
 			}
 		}
 
@@ -292,6 +305,9 @@
 			return;
 		}
 
+		const source = file instanceof File && (file as File).size > 0 ? 'local file' : filePath;
+		logger.info({ source }, 'Load metadata requested');
+
 		loading = true;
 		error = '';
 		try {
@@ -309,8 +325,10 @@
 			loadModalOpen = false;
 			formElement.reset();
 			statusMessage = `Loaded ${data.count} rows from ${file instanceof File ? 'local file' : filePath}`;
+			logger.info({ rowCount: data.count, source }, 'Metadata loaded successfully');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unable to load metadata file';
+			logger.error({ err, source }, 'Failed to load metadata file');
 		} finally {
 			loading = false;
 		}
@@ -337,12 +355,14 @@
 			await metadataApi.save({ path: backendPath, data: current.data });
 			backendSucceeded = true;
 			statusMessage = `Saved ${current.count ?? current.data.length} rows to backend path ${backendPath}`;
+			logger.info({ rowCount: current.count ?? current.data.length, backendPath }, 'Metadata saved to backend');
 		} catch (err) {
 			const message =
 				err instanceof Error
 					? err.message
 					: "Unable to save metadata via API. We'll keep working on a local copy.";
 			error = message;
+			logger.error({ err, backendPath }, 'Failed to save metadata to backend');
 		} finally {
 			saving = false;
 		}
@@ -412,6 +432,7 @@
 	}
 
 	function clearMetadata() {
+		logger.info('Metadata cleared by user');
 		results = null;
 		statusMessage = 'Metadata cleared.';
 		if (typeof window !== 'undefined') {
@@ -420,11 +441,13 @@
 	}
 
 	function handleDownload(memberOusUids: string[]) {
+		logger.info({ count: memberOusUids.length }, 'Download dialog opened');
 		downloadMemberOusUids = memberOusUids;
 		downloadDialogOpen = true;
 	}
 
 	function handleDownloadStarted(jobId: string) {
+		logger.info({ jobId }, 'Download job started');
 		statusMessage = `Download started (job ${jobId.slice(0, 8)}…). Track progress on the <a href="/data" class="underline font-medium">Data</a> page.`;
 	}
 </script>

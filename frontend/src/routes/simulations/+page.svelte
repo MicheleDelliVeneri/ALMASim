@@ -60,9 +60,13 @@
 	let backendConfig = $state<Record<string, unknown>>({});
 
 	onMount(() => {
+		logger.info('Simulations page mounted');
 		const cached = getCachedResults();
 		if (cached) {
 			metadata = cached;
+			logger.debug({ rowCount: cached.data.length }, 'Loaded cached metadata');
+		} else {
+			logger.debug('No cached metadata found');
 		}
 	});
 
@@ -141,11 +145,17 @@
 		loading = true;
 		message = '';
 
+		logger.info(
+			{ sourceType, nPix, nChannels, numSimulations, selectedRowCount: selectedRowIndices.length },
+			'Simulation form submitted'
+		);
+
 		// Get selected rows or use first selected row
 		const data = metadata?.data;
 		if (!data || selectedRowIndices.length === 0) {
 			message = 'Error: Please select at least one metadata row first.';
 			loading = false;
+			logger.warn('Simulation submit blocked: no metadata row selected');
 			return;
 		}
 
@@ -246,6 +256,7 @@
 			try {
 				const response = await simulationApi.create(simParams);
 				createdSimulations.push(response.simulation_id);
+				logger.info({ simulationId: response.simulation_id, index: i }, 'Simulation created');
 
 				// Connect to first simulation's websocket
 				if (i === 0) {
@@ -256,6 +267,7 @@
 				errors.push(
 					`Simulation ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`
 				);
+				logger.error({ err: error, index: i }, 'Failed to create simulation');
 			}
 		}
 
@@ -264,10 +276,13 @@
 
 		if (createdSimulations.length > 0 && errors.length === 0) {
 			message = `Successfully created ${createdSimulations.length} simulation(s)!`;
+			logger.info({ count: createdSimulations.length, ids: createdSimulations }, 'All simulations created successfully');
 		} else if (createdSimulations.length > 0 && errors.length > 0) {
 			message = `Created ${createdSimulations.length} simulation(s) with ${errors.length} error(s). Errors: ${errors.join('; ')}`;
+			logger.warn({ created: createdSimulations.length, failed: errors.length }, 'Some simulations failed to create');
 		} else {
 			message = `Error: Failed to create simulations. ${errors.join('; ')}`;
+			logger.error({ errors }, 'All simulations failed to create');
 		}
 	}
 </script>
