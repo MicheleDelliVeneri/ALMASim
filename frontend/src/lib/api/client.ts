@@ -29,6 +29,9 @@ export class ApiClient {
 			throw new Error(error.detail || `HTTP ${response.status}`);
 		}
 
+		if (response.status === 204 || response.headers.get('content-length') === '0') {
+			return undefined as T;
+		}
 		return response.json();
 	}
 

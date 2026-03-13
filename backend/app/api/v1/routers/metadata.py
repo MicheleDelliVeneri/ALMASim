@@ -104,6 +104,17 @@ async def get_query_results(
     return MetadataPageResponse(**page_data)
 
 
+@router.delete("/query/{query_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_query(query_id: str) -> None:
+    """Cancel a running background TAP query job."""
+    cancelled = query_store.cancel(query_id)
+    if not cancelled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Query job {query_id} not found or already finished",
+        )
+
+
 @router.get("/load/{file_path:path}", response_model=MetadataResponse)
 async def load_metadata(
     file_path: str, db: Session = Depends(get_db)

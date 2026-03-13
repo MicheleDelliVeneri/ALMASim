@@ -101,10 +101,11 @@ status_store = StatusStore()
 class QueryJobStatus:
     """Status and accumulated rows for a background TAP query job."""
     query_id: str
-    status: str = "running"   # running | completed | failed
+    status: str = "running"   # running | completed | failed | cancelled
     rows: List[dict] = field(default_factory=list)
     total: int = 0
     error: Optional[str] = None
+    cancelled: bool = False
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -161,6 +162,22 @@ class QueryStore:
                 job.error = error
                 job.updated_at = datetime.now()
 
+    def cancel(self, query_id: str) -> bool:
+        """Mark a job as cancelled. Returns True if the job existed."""
+        with self._lock:
+            job = self._store.get(query_id)
+            if not job:
+                return False
+            job.cancelled = True
+            job.status = "cancelled"
+            job.updated_at = datetime.now()
+            return True
+
+    def is_cancelled(self, query_id: str) -> bool:
+        with self._lock:
+            job = self._store.get(query_id)
+            return job.cancelled if job else False
+
     def get_page(self, query_id: str, page: int, page_size: int) -> dict:
         with self._lock:
             job = self._store.get(query_id)
@@ -169,7 +186,7 @@ class QueryStore:
             start = page * page_size
             end = start + page_size
             rows = job.rows[start:end]
-            done = job.status in ("completed", "failed") and end >= len(job.rows)
+            done = job.status in ("completed", "failed", "cancelled") and end >= len(job.rows)
             return {
                 "query_id": query_id,
                 "page": page,

@@ -184,6 +184,7 @@
 	let localSaveHandle: FileSystemFileHandle | null = null;
 	let initialLoading = $state(true);
 	let pollTimer: ReturnType<typeof setTimeout> | null = null;
+	let activeQueryId: string | null = null;
 
 	// Download state
 	let downloadDialogOpen = $state(false);
@@ -193,6 +194,21 @@
 		if (pollTimer !== null) {
 			clearTimeout(pollTimer);
 			pollTimer = null;
+		}
+	}
+
+	async function stopQuery() {
+		stopPolling();
+		const qid = activeQueryId;
+		fetching = false;
+		activeQueryId = null;
+		statusMessage = 'Query cancelled.';
+		if (qid) {
+			try {
+				await metadataApi.cancelQuery(qid);
+			} catch {
+				// best-effort; the frontend is already stopped
+			}
 		}
 	}
 
@@ -224,6 +240,7 @@
 		stopPolling();
 		loading = true;
 		fetching = false;
+		activeQueryId = null;
 		error = '';
 		results = null;
 
@@ -233,6 +250,7 @@
 		try {
 			const start = await metadataApi.startQuery(query);
 			queryId = start.query_id;
+			activeQueryId = queryId;
 			logger.info({ queryId }, 'Metadata query started');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unable to start metadata query';
@@ -273,6 +291,7 @@
 
 				if (pageData.done) {
 					fetching = false;
+					activeQueryId = null;
 					logger.info({ totalRows: allRows.length }, 'Metadata query complete');
 					return;
 				}
@@ -471,8 +490,16 @@
 		{/if}
 
 		{#if statusMessage}
-			<div class="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-				{@html statusMessage}
+			<div class="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+				<span>{@html statusMessage}</span>
+				{#if fetching}
+					<button
+						onclick={stopQuery}
+						class="ml-4 shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+					>
+						Stop
+					</button>
+				{/if}
 			</div>
 		{/if}
 

@@ -259,6 +259,9 @@ class MetadataService:
                 exclude=exclude,
                 visible_columns=None,
             )
+            if query_store.is_cancelled(query_id):
+                logger.info(f"Background query {query_id} was cancelled; discarding results")
+                return
             rows = result_df.to_dict("records") if result_df is not None and not result_df.empty else []
             query_store.append_rows(query_id, rows)
             query_store.complete(query_id)

@@ -145,6 +145,10 @@ export const metadataApi = {
 		);
 	},
 
+	cancelQuery: async (queryId: string): Promise<void> => {
+		return apiClient.delete(`/api/v1/metadata/query/${queryId}`);
+	},
+
 	load: async (filePath: string): Promise<MetadataResponse> => {
 		return apiClient.get<MetadataResponse>(`/api/v1/metadata/load/${filePath}`);
 	},
