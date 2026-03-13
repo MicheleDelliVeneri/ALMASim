@@ -36,7 +36,7 @@
 		science_keyword: 'Science Keyword',
 		scientific_category: 'Science Category',
 		QA2_status: 'QA2 Status',
-		Type: 'Type',
+		Type: 'Project Type',
 		PWV: 'PWV',
 		SB_name: 'SB Name',
 		'Vel.res.': 'Vel. Res. (km/s)',

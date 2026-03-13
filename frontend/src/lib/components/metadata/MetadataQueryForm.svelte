@@ -450,12 +450,15 @@
 		</div>
 		<div>
 			<label class="block">
-				<span class="text-sm font-medium text-gray-700">Type</span>
+				<span class="text-sm font-medium text-gray-700">Project Type</span>
 				<select name="obs_type" class="mt-1 w-full rounded-md border border-gray-300 bg-white p-2 text-sm">
 					<option value="">Any</option>
-					<option value="S">S (Spectral)</option>
-					<option value="C">C (Continuum)</option>
-					<option value="T">T (Target)</option>
+					<option value="S">S (Science)</option>
+					<option value="L">L (Large)</option>
+					<option value="SV">SV (Science Verification)</option>
+					<option value="V">V (VLBI)</option>
+					<option value="T">T (Target of Opportunity)</option>
+					<option value="P">P (Phased Array)</option>
 				</select>
 			</label>
 			<div class="mt-2 flex gap-4">
