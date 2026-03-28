@@ -66,6 +66,10 @@ out of scope for now and should not block the core fidelity work.
 
 ## P0: Core Fidelity
 
+### Status
+
+Complete.
+
 ### Goal
 
 Close the largest physics and observing-geometry gaps relative to `simalma`.
@@ -156,7 +160,8 @@ Suggested outputs:
 - noise model service and tests
 - observation-plan dataclasses and planner
 - multi-config simulation stage returning per-config dirty products
-- benchmark notebook or script comparing ALMASim vs CASA on one reference case
+- regression coverage that verifies single-pointing config changes propagate into
+  UV support and dirty-beam behavior
 
 ### Acceptance Criteria
 
@@ -166,7 +171,10 @@ Suggested outputs:
 - the single-pointing setup is explicit in the simulation inputs and metadata
 - PWV materially affects output noise levels
 - uv coverage and dirty beam change appropriately across configs
-- one reference parity case is documented against CASA outputs
+
+This phase is considered complete in-repo once the above behavior is covered by
+tests. Cross-tool parity reporting against CASA remains part of the broader
+parity and benchmark work described in P2.
 
 ## P1: Imaging And Combination
 

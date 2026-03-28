@@ -69,6 +69,35 @@ def sample_antenna_array(test_data_dir):
     return metadata["antenna_arrays"].iloc[0]
 
 
+@pytest.fixture
+def compact_antenna_array():
+    """Compact 12 m-like antenna subset for UV/beam regression tests."""
+    return "A001:DA01 A002:DA02 A003:DA03 A004:DA04"
+
+
+@pytest.fixture
+def extended_antenna_array():
+    """More extended 12 m-like antenna subset for UV/beam regression tests."""
+    return "A001:DA01 A020:DV20 A040:DV40 A060:DV60"
+
+
+@pytest.fixture
+def point_source_skymodel():
+    """Create a deterministic centered point-source cube."""
+    n_channels = 4
+    n_pix = 16
+    model = np.zeros((n_channels, n_pix, n_pix), dtype=np.float32)
+    model[:, n_pix // 2, n_pix // 2] = 1.0
+    return model
+
+
+def _beam_core_width(beam: np.ndarray) -> int:
+    """Count central-row pixels above half maximum as a simple beam-width proxy."""
+    center = beam.shape[0] // 2
+    row = beam[center]
+    return int(np.count_nonzero(row >= 0.5))
+
+
 @pytest.mark.component
 def test_interferometer_initialization(main_dir, tmp_path, sample_skymodel, sample_fits_header, sample_antenna_array):
     """Test initializing the Interferometer class."""
@@ -241,3 +270,61 @@ def test_interferometer_save_modes(main_dir, tmp_path, sample_skymodel, sample_f
             
             # Just verify it can be initialized with different save modes
             assert interferometer.save_mode == save_mode
+
+
+@pytest.mark.component
+@pytest.mark.slow
+def test_interferometer_config_changes_uv_coverage_and_dirty_beam(
+    main_dir,
+    tmp_path,
+    point_source_skymodel,
+    compact_antenna_array,
+    extended_antenna_array,
+):
+    """Different antenna configurations should change UV support and beam width."""
+    from astropy.io import fits
+
+    header = fits.Header()
+    header["NAXIS"] = 3
+    header["NAXIS1"] = point_source_skymodel.shape[2]
+    header["NAXIS2"] = point_source_skymodel.shape[1]
+    header["NAXIS3"] = point_source_skymodel.shape[0]
+    common_kwargs = dict(
+        idx=0,
+        skymodel=point_source_skymodel,
+        main_dir=str(main_dir),
+        output_dir=str(tmp_path),
+        ra=0.0 * U.deg,
+        dec=0.0 * U.deg,
+        central_freq=100.0 * U.GHz,
+        bandwidth=1.0 * U.GHz,
+        fov=10.0,
+        noise=0.0,
+        snr=1.3,
+        integration_time=0.02,
+        observation_date="2020-01-01",
+        header=header,
+        save_mode="memory",
+        robust=0.0,
+        persist=False,
+    )
+
+    with InlineBackend() as backend:
+        compact = interferometry.Interferometer(
+            backend=backend,
+            antenna_array=compact_antenna_array,
+            **common_kwargs,
+        ).run_interferometric_sim()
+        extended = interferometry.Interferometer(
+            backend=backend,
+            antenna_array=extended_antenna_array,
+            **common_kwargs,
+        ).run_interferometric_sim()
+
+    compact_uv_support = int(np.count_nonzero(compact["uv_mask_cube"]))
+    extended_uv_support = int(np.count_nonzero(extended["uv_mask_cube"]))
+    compact_beam_width = _beam_core_width(compact["beam"])
+    extended_beam_width = _beam_core_width(extended["beam"])
+
+    assert extended_uv_support > compact_uv_support
+    assert extended_beam_width < compact_beam_width
