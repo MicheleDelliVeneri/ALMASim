@@ -1,0 +1,4 @@
+# Interferometry
+
+```{include} ../interferometry.md
+```

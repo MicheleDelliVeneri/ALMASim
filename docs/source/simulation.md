@@ -1,0 +1,4 @@
+# Simulation
+
+```{include} ../simulation.md
+```

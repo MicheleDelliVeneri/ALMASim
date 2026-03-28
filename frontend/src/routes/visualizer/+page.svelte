@@ -194,6 +194,10 @@
 			// Add to loaded images array with unique ID
 			const newImage: LoadedImage = {
 				...data,
+				stats: {
+					...data.stats,
+					cube_name: fileName ?? data.stats.cube_name
+				},
 				id: `${fileName}-${Date.now()}`,
 				scale: 1.0,
 				panX: 0,

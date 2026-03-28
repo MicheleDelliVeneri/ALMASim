@@ -48,6 +48,11 @@ export interface SimulationParams {
 	ground_temperature_k?: number;
 	correlator?: string;
 	elevation_deg?: number;
+	source_offset_x_arcsec?: number;
+	source_offset_y_arcsec?: number;
+	background_mode?: string;
+	background_level?: number;
+	background_seed?: number;
 }
 
 export interface SimulationParamsCreate extends SimulationParams {

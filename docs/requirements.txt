@@ -1,6 +1,9 @@
 astropy
 asyncssh
 bokeh
+sphinx
+sphinx-rtd-theme
+myst-parser
 pyvo
 numpy
 pandas

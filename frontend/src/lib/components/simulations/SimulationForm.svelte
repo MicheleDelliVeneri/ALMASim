@@ -18,6 +18,11 @@
 		nLines: number;
 		robust: number;
 		numSimulations: number;
+		sourceOffsetXArcsec: number;
+		sourceOffsetYArcsec: number;
+		backgroundMode: string;
+		backgroundLevel: number;
+		backgroundSeed: number | null;
 		onSourceTypeChange: (type: string) => void;
 		onNPixChange: (value: number | null) => void;
 		onNChannelsChange: (value: number | null) => void;
@@ -31,6 +36,11 @@
 		onNLinesChange: (value: number) => void;
 		onRobustChange: (value: number) => void;
 		onNumSimulationsChange: (value: number) => void;
+		onSourceOffsetXChange: (value: number) => void;
+		onSourceOffsetYChange: (value: number) => void;
+		onBackgroundModeChange: (value: string) => void;
+		onBackgroundLevelChange: (value: number) => void;
+		onBackgroundSeedChange: (value: number | null) => void;
 	}
 
 	let {
@@ -47,6 +57,11 @@
 		nLines,
 		robust,
 		numSimulations,
+		sourceOffsetXArcsec,
+		sourceOffsetYArcsec,
+		backgroundMode,
+		backgroundLevel,
+		backgroundSeed,
 		onSourceTypeChange,
 		onNPixChange,
 		onNChannelsChange,
@@ -59,7 +74,12 @@
 		onSaveModeChange,
 		onNLinesChange,
 		onRobustChange,
-		onNumSimulationsChange
+		onNumSimulationsChange,
+		onSourceOffsetXChange,
+		onSourceOffsetYChange,
+		onBackgroundModeChange,
+		onBackgroundLevelChange,
+		onBackgroundSeedChange
 	}: Props = $props();
 
 	// Directory browser state
@@ -395,6 +415,97 @@
 				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
 			/>
 			<p class="mt-1 text-xs text-gray-500">Range: -2 to 2 (default: 0)</p>
+		</div>
+	</div>
+
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-5">
+		<div>
+			<label for="source_offset_x_arcsec" class="mb-1 block text-sm font-medium text-gray-700">
+				Source Offset X
+			</label>
+			<input
+				type="number"
+				id="source_offset_x_arcsec"
+				step="0.1"
+				value={sourceOffsetXArcsec}
+				oninput={(e) => onSourceOffsetXChange(parseFloat(e.currentTarget.value) || 0.0)}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			/>
+			<p class="mt-1 text-xs text-gray-500">Arcsec from phase center. Default: 0</p>
+		</div>
+
+		<div>
+			<label for="source_offset_y_arcsec" class="mb-1 block text-sm font-medium text-gray-700">
+				Source Offset Y
+			</label>
+			<input
+				type="number"
+				id="source_offset_y_arcsec"
+				step="0.1"
+				value={sourceOffsetYArcsec}
+				oninput={(e) => onSourceOffsetYChange(parseFloat(e.currentTarget.value) || 0.0)}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			/>
+			<p class="mt-1 text-xs text-gray-500">Arcsec from phase center. Default: 0</p>
+		</div>
+
+		<div>
+			<label for="background_mode" class="mb-1 block text-sm font-medium text-gray-700">
+				Background Sky
+			</label>
+			<select
+				id="background_mode"
+				value={backgroundMode}
+				onchange={(e) => onBackgroundModeChange(e.currentTarget.value)}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			>
+				<option value="none">None</option>
+				<option value="blank_field_dsfg">Faint Dusty Galaxies</option>
+				<option value="dusty_diffuse">Diffuse Dust</option>
+				<option value="combined">Combined</option>
+			</select>
+			<p class="mt-1 text-xs text-gray-500">ALMA-band additive sky background</p>
+		</div>
+
+		<div>
+			<label for="background_level" class="mb-1 block text-sm font-medium text-gray-700">
+				Background Level
+			</label>
+			<input
+				type="number"
+				id="background_level"
+				min="0"
+				max="10"
+				step="0.1"
+				value={backgroundLevel}
+				oninput={(e) => onBackgroundLevelChange(parseFloat(e.currentTarget.value) || 0.0)}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			/>
+			<p class="mt-1 text-xs text-gray-500">Relative amplitude scaling</p>
+		</div>
+
+		<div>
+			<label for="background_seed" class="mb-1 block text-sm font-medium text-gray-700">
+				Background Seed
+			</label>
+			<input
+				type="number"
+				id="background_seed"
+				step="1"
+				value={backgroundSeed ?? ''}
+				placeholder="Random"
+				oninput={(e) => {
+					const value = e.currentTarget.value.trim();
+					if (value === '') {
+						onBackgroundSeedChange(null);
+						return;
+					}
+					const parsed = parseInt(value, 10);
+					onBackgroundSeedChange(Number.isNaN(parsed) ? null : parsed);
+				}}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			/>
+			<p class="mt-1 text-xs text-gray-500">Optional reproducible background seed</p>
 		</div>
 	</div>
 </section>

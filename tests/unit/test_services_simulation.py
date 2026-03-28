@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch, MagicMock
 
 from almasim.services.simulation import (
     SimulationParams,
+    generate_background_cube,
+    resolve_source_pixel_position,
     run_simulation,
     write_ml_dataset_shard,
 )
@@ -185,6 +187,9 @@ def test_simulation_params_nan_handling(tmp_path, sample_metadata_row_dict):
     
     assert params.n_pix is None
     assert params.n_channels is None
+    assert params.source_offset_x_arcsec == 0.0
+    assert params.source_offset_y_arcsec == 0.0
+    assert params.background_mode == "none"
 
 
 @pytest.mark.unit
@@ -259,6 +264,48 @@ def test_simulation_params_defaults(tmp_path, sample_metadata_row_dict):
     assert params.inject_serendipitous is False  # Default
     assert params.remote is False  # Default
     assert params.ncpu >= 1  # Should use CPU count or 1
+
+
+@pytest.mark.unit
+def test_generate_background_cube_combined_mode_returns_positive_cube():
+    """Background generation should produce a non-empty additive cube for combined mode."""
+    cube = generate_background_cube(
+        mode="combined",
+        n_pix=32,
+        n_channels=8,
+        cell_size_arcsec=0.1,
+        channel_frequencies_hz=np.linspace(240e9, 250e9, 8),
+        cont_sens_jy=1e-4,
+        level=1.0,
+        seed=7,
+    )
+
+    assert cube.shape == (8, 32, 32)
+    assert np.all(cube >= 0.0)
+    assert float(np.sum(cube)) > 0.0
+
+
+@pytest.mark.unit
+def test_resolve_source_pixel_position_applies_explicit_offsets():
+    """Source position should stay centered by default and move only by explicit offsets."""
+    wcs = MagicMock()
+    sub_wcs = MagicMock()
+    sub_wcs.wcs_world2pix.return_value = (32.0, 32.0, 0.0)
+    wcs.sub.return_value = sub_wcs
+
+    pos_x, pos_y = resolve_source_pixel_position(
+        wcs=wcs,
+        ra=0.0,
+        dec=0.0,
+        central_freq=0.0,
+        n_pix=64,
+        cell_size_arcsec=0.1,
+        offset_x_arcsec=0.5,
+        offset_y_arcsec=-0.2,
+    )
+
+    assert pos_x == pytest.approx(37.0)
+    assert pos_y == pytest.approx(30.0)
 
 
 @pytest.mark.unit

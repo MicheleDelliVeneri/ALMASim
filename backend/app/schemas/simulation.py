@@ -80,6 +80,26 @@ class SimulationParamsBase(BaseModel):
         default=None,
         description="Optional source elevation override for the noise model",
     )
+    source_offset_x_arcsec: float = Field(
+        default=0.0,
+        description="Optional source offset along x in arcsec relative to phase center",
+    )
+    source_offset_y_arcsec: float = Field(
+        default=0.0,
+        description="Optional source offset along y in arcsec relative to phase center",
+    )
+    background_mode: str = Field(
+        default="none",
+        description="Background sky mode: none, blank_field_dsfg, dusty_diffuse, or combined",
+    )
+    background_level: float = Field(
+        default=1.0,
+        description="Relative amplitude for the simulated background sky",
+    )
+    background_seed: Optional[int] = Field(
+        default=None,
+        description="Optional random seed for reproducible background sky generation",
+    )
 
 
 class SimulationParamsCreate(SimulationParamsBase):

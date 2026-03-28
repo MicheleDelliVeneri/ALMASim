@@ -218,6 +218,11 @@ class SimulationService:
                 ground_temperature_k=params.ground_temperature_k,
                 correlator=params.correlator,
                 elevation_deg=params.elevation_deg,
+                source_offset_x_arcsec=params.source_offset_x_arcsec,
+                source_offset_y_arcsec=params.source_offset_y_arcsec,
+                background_mode=params.background_mode,
+                background_level=params.background_level,
+                background_seed=params.background_seed,
             )
 
             status_store.update(

@@ -16,12 +16,17 @@
 		saveMode: string;
 		nLines: number;
 		robust: number;
+		sourceOffsetXArcsec: number;
+		sourceOffsetYArcsec: number;
+		backgroundMode: string;
+		backgroundLevel: number;
+		backgroundSeed: number | null;
 		estimate: SimulationEstimate | null;
 		estimating: boolean;
 		estimateError: string | null;
 	}
 
-	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataSnr, useMetadataPwv, pwvOverride, saveMode, nLines, robust, estimate, estimating, estimateError }: Props = $props();
+	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataSnr, useMetadataPwv, pwvOverride, saveMode, nLines, robust, sourceOffsetXArcsec, sourceOffsetYArcsec, backgroundMode, backgroundLevel, backgroundSeed, estimate, estimating, estimateError }: Props = $props();
 
 	function derivePreviewSnr(targetRow: Record<string, unknown>): string {
 		if (!useMetadataSnr) return `${snr.toFixed(2)} (manual)`;
@@ -128,6 +133,12 @@
 				<p class="mt-1 text-gray-900">{sourceType}</p>
 			</div>
 			<div>
+				<span class="font-medium text-gray-700">Source Offset:</span>
+				<p class="mt-1 text-gray-900">
+					{sourceOffsetXArcsec.toFixed(1)}", {sourceOffsetYArcsec.toFixed(1)}"
+				</p>
+			</div>
+			<div>
 				<span class="font-medium text-gray-700">Cube Size:</span>
 				<p class="mt-1 text-gray-900">
 					{#if estimate}
@@ -136,6 +147,15 @@
 						{nPix ?? 'auto'} × {nPix ?? 'auto'} × {nChannels ?? 'auto'}
 					{:else}
 						Auto from metadata-derived FOV and frequency support
+					{/if}
+				</p>
+			</div>
+			<div>
+				<span class="font-medium text-gray-700">Background:</span>
+				<p class="mt-1 text-gray-900">
+					{backgroundMode} @ level {backgroundLevel.toFixed(1)}
+					{#if backgroundSeed !== null}
+						(seed {backgroundSeed})
 					{/if}
 				</p>
 			</div>

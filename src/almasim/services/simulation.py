@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import math
 import os
-import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +82,11 @@ class SimulationParams:
     correlator: Optional[str] = None
     elevation_deg: Optional[float] = None
     line_sens_10kms: Optional[float] = None
+    source_offset_x_arcsec: float = 0.0
+    source_offset_y_arcsec: float = 0.0
+    background_mode: str = "none"
+    background_level: float = 1.0
+    background_seed: Optional[int] = None
 
     @classmethod
     def from_metadata_row(
@@ -116,6 +120,11 @@ class SimulationParams:
         ground_temperature_k: float = 270.0,
         correlator: Optional[str] = None,
         elevation_deg: Optional[float] = None,
+        source_offset_x_arcsec: float = 0.0,
+        source_offset_y_arcsec: float = 0.0,
+        background_mode: str = "none",
+        background_level: float = 1.0,
+        background_seed: Optional[int] = None,
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from a metadata row."""
 
@@ -233,6 +242,13 @@ class SimulationParams:
             ground_temperature_k=float(ground_temperature_k),
             correlator=correlator,
             elevation_deg=elevation_deg,
+            source_offset_x_arcsec=float(source_offset_x_arcsec),
+            source_offset_y_arcsec=float(source_offset_y_arcsec),
+            background_mode=str(background_mode),
+            background_level=float(background_level),
+            background_seed=(
+                int(background_seed) if background_seed is not None else None
+            ),
         )
 
 
@@ -254,6 +270,7 @@ class CleanCubeStage:
     channel_frequencies_hz: np.ndarray
     channel_width_hz: float
     cell_size_arcsec: float
+    background_cube: Optional[np.ndarray]
 
 
 def _json_safe(value: Any) -> Any:
@@ -363,6 +380,104 @@ def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
         "estimated_standard_output_gb": float(estimated_standard_output_gb),
         "note": "Raw uncompressed estimate. Actual NPZ/HDF5 output can be smaller due to compression.",
     }
+
+
+def resolve_source_pixel_position(
+    *,
+    wcs: Any,
+    ra: U.Quantity,
+    dec: U.Quantity,
+    central_freq: U.Quantity,
+    n_pix: int,
+    cell_size_arcsec: float,
+    offset_x_arcsec: float = 0.0,
+    offset_y_arcsec: float = 0.0,
+) -> tuple[float, float]:
+    """Resolve the source pixel position from phase center plus explicit offsets."""
+    pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+    pos_x += float(offset_x_arcsec) / max(float(cell_size_arcsec), 1e-12)
+    pos_y += float(offset_y_arcsec) / max(float(cell_size_arcsec), 1e-12)
+    pos_x = float(np.clip(pos_x, 0, n_pix - 1))
+    pos_y = float(np.clip(pos_y, 0, n_pix - 1))
+    return pos_x, pos_y
+
+
+def _smoothed_positive_field(
+    n_pix: int,
+    rng: np.random.Generator,
+    *,
+    correlation_scale_pix: float,
+) -> np.ndarray:
+    """Generate a positive correlated 2D field using FFT low-pass smoothing."""
+    white = rng.normal(size=(n_pix, n_pix))
+    ky = np.fft.fftfreq(n_pix)
+    kx = np.fft.fftfreq(n_pix)
+    k2 = ky[:, None] ** 2 + kx[None, :] ** 2
+    sigma_k = 1.0 / max(float(correlation_scale_pix), 1.0)
+    low_pass = np.exp(-0.5 * k2 / max(sigma_k**2, 1e-12))
+    field = np.real(np.fft.ifft2(np.fft.fft2(white) * low_pass)).astype(np.float32)
+    field -= float(field.min())
+    peak = float(field.max())
+    if peak > 0.0:
+        field /= peak
+    return field
+
+
+def generate_background_cube(
+    *,
+    mode: str,
+    n_pix: int,
+    n_channels: int,
+    cell_size_arcsec: float,
+    channel_frequencies_hz: np.ndarray,
+    cont_sens_jy: float,
+    level: float = 1.0,
+    seed: Optional[int] = None,
+) -> np.ndarray:
+    """Generate an additive ALMA-band background cube in `(chan, y, x)` order."""
+    mode = str(mode or "none").lower()
+    if mode == "none" or level <= 0.0:
+        return np.zeros((n_channels, n_pix, n_pix), dtype=np.float32)
+
+    rng = np.random.default_rng(seed)
+    nu0 = float(np.median(channel_frequencies_hz))
+    spectral_ratio = np.asarray(channel_frequencies_hz, dtype=float) / max(nu0, 1e-12)
+    cube = np.zeros((n_channels, n_pix, n_pix), dtype=np.float32)
+
+    if mode in {"blank_field_dsfg", "combined"}:
+        field_arcmin2 = ((n_pix * cell_size_arcsec) / 60.0) ** 2
+        expected_sources = max(1.0, 30.0 * field_arcmin2 * max(level, 0.25))
+        n_sources = int(min(250, rng.poisson(expected_sources)))
+        for _ in range(n_sources):
+            x = int(rng.integers(0, n_pix))
+            y = int(rng.integers(0, n_pix))
+            base_flux = cont_sens_jy * level * float(np.exp(rng.normal(-0.4, 0.9)))
+            alpha = float(rng.uniform(2.5, 4.0))
+            spectrum = base_flux * spectral_ratio**alpha
+            cube[:, y, x] += spectrum.astype(np.float32)
+
+    if mode in {"dusty_diffuse", "combined"}:
+        base_field = _smoothed_positive_field(
+            n_pix,
+            rng,
+            correlation_scale_pix=max(4.0, n_pix / 10.0),
+        )
+        diffuse_amp = cont_sens_jy * 0.5 * max(level, 0.1)
+        beta = 3.0
+        for channel in range(n_channels):
+            cube[channel] += (
+                diffuse_amp * spectral_ratio[channel] ** beta * base_field
+            ).astype(np.float32)
+
+    return cube
+
+
+def _channel_first_to_datacube_layout(cube: np.ndarray, datacube_array: Any) -> np.ndarray:
+    """Match a channel-first cube to the current datacube array layout."""
+    datacube_shape = tuple(datacube_array.shape)
+    if datacube_shape[0] == cube.shape[0]:
+        return cube
+    return np.transpose(cube, (2, 1, 0))
 
 
 def _create_sky_model(
@@ -698,19 +813,22 @@ def generate_clean_cube(
     )
     wcs = datacube.wcs
     fwhm_x = fwhm_y = angle = None
-    pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
-    shift_x = np.random.randint(
-        0.1 * fov.value / cell_size.value, 1.5 * (fov.value / cell_size.value) - pos_x
+    pos_x, pos_y = resolve_source_pixel_position(
+        wcs=wcs,
+        ra=ra,
+        dec=dec,
+        central_freq=central_freq,
+        n_pix=n_pix,
+        cell_size_arcsec=float(cell_size.to(U.arcsec).value),
+        offset_x_arcsec=params.source_offset_x_arcsec,
+        offset_y_arcsec=params.source_offset_y_arcsec,
     )
-    shift_y = np.random.randint(
-        0.1 * fov.value / cell_size.value, 1.5 * (fov.value / cell_size.value) - pos_y
-    )
-    pos_x = pos_x + (shift_x / 2) * random.choice([-1, 1])
-    pos_y = pos_y + (shift_y / 2) * random.choice([-1, 1])
-    pos_x = min(pos_x, n_pix - 1)
-    pos_y = min(pos_y, n_pix - 1)
     pos_z = [int(index) for index in source_channel_index]
-    log(f"Source Position (x, y): ({pos_x}, {pos_y})")
+    log(
+        "Source Position (x, y): "
+        f"({pos_x:.2f}, {pos_y:.2f}) with offsets "
+        f"({params.source_offset_x_arcsec:.2f}\", {params.source_offset_y_arcsec:.2f}\")"
+    )
 
     # Common parameters for all sky models
     common_params = {
@@ -745,6 +863,34 @@ def generate_clean_cube(
         client=client_for_skymodel,
     )
     datacube = model.insert()
+
+    channel_width_hz = delta_freq.to(U.Hz).value
+    channel_offsets = (
+        np.arange(n_channels, dtype=float) - (float(n_channels) - 1.0) / 2.0
+    ) * channel_width_hz
+    channel_frequencies_hz = central_freq.to(U.Hz).value + channel_offsets
+
+    background_cube = generate_background_cube(
+        mode=params.background_mode,
+        n_pix=n_pix,
+        n_channels=n_channels,
+        cell_size_arcsec=float(cell_size.to(U.arcsec).value),
+        channel_frequencies_hz=channel_frequencies_hz,
+        cont_sens_jy=float(cont_sens_jy.value),
+        level=params.background_level,
+        seed=params.background_seed,
+    )
+    if np.any(background_cube):
+        datacube._array += (
+            _channel_first_to_datacube_layout(background_cube, datacube._array)
+            * U.Jy
+            * U.pix**-2
+        )
+        log(
+            f"Injected background sky: mode={params.background_mode}, "
+            f"level={params.background_level:.2f}, "
+            f"total_flux={float(np.sum(background_cube)):.3e} Jy"
+        )
     
     # Extract fwhm_x, fwhm_y, angle for parameter writing (if gaussian)
     if params.source_type == "gaussian":
@@ -870,6 +1016,14 @@ def generate_clean_cube(
         "line_frequency_hz": _json_safe(line_frequency),
         "continuum": _json_safe(continum),
         "observation_plan": observation_plan.as_dict(),
+        "source_offset_x_arcsec": params.source_offset_x_arcsec,
+        "source_offset_y_arcsec": params.source_offset_y_arcsec,
+        "source_pixel_x": float(pos_x),
+        "source_pixel_y": float(pos_y),
+        "background_mode": params.background_mode,
+        "background_level": params.background_level,
+        "background_seed": params.background_seed,
+        "background_total_flux_jy": float(np.sum(background_cube)),
     }
     effective_snr = params.snr
     if effective_snr is None:
@@ -899,12 +1053,6 @@ def generate_clean_cube(
     metadata["effective_snr"] = effective_snr
     metadata["snr_mode"] = "auto" if params.snr is None else "manual"
     base_noise_reference = 0.1 * (min_line_flux / beam_area.value) / effective_snr
-    channel_width_hz = delta_freq.to(U.Hz).value
-    channel_offsets = (
-        np.arange(n_channels, dtype=float) - (float(n_channels) - 1.0) / 2.0
-    ) * channel_width_hz
-    channel_frequencies_hz = central_freq.to(U.Hz).value + channel_offsets
-
     interferometer_runs = []
     total_power_runs = []
     for config in observation_plan.configs:
@@ -977,6 +1125,7 @@ def generate_clean_cube(
         channel_frequencies_hz=channel_frequencies_hz,
         channel_width_hz=channel_width_hz,
         cell_size_arcsec=cell_size.to(U.arcsec).value,
+        background_cube=background_cube.astype(np.float32),
     )
 
 
@@ -1129,6 +1278,7 @@ def export_results(
             status_callback(message)
 
     exported_results = dict(simulation_results)
+    exported_results["background_cube"] = clean_cube_stage.background_cube
     persist_outputs = bool(params.persist and params.save_mode != "memory")
 
     status("Exporting results")
@@ -1183,6 +1333,14 @@ def export_results(
                 "tp-dirty-cube",
                 params.idx,
                 exported_results.get("tp_dirty_cube"),
+                params.save_mode,
+                clean_cube_stage.header,
+            )
+            _save_optional_cube(
+                clean_cube_stage.sim_output_dir,
+                "background-cube",
+                params.idx,
+                clean_cube_stage.background_cube,
                 params.save_mode,
                 clean_cube_stage.header,
             )

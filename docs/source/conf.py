@@ -12,9 +12,9 @@
 #
 import os
 import sys
-import almasim
 
 sys.path.insert(0, os.path.abspath("../.."))
+import almasim
 
 # -- Project information -----------------------------------------------------
 
@@ -32,7 +32,7 @@ release = almasim.__version__
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "recommonmark",
+    "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
     "sphinx.ext.doctest",
@@ -50,8 +50,21 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
 
-source_suffix = [".rst", ".md"]
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
 master_doc = "index"
+root_doc = "index"
+
+myst_enable_extensions = [
+    "deflist",
+    "fieldlist",
+]
+
+suppress_warnings = [
+    "myst.xref_missing",
+]
 
 
 # -- Options for HTML output -------------------------------------------------

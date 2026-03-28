@@ -1,0 +1,4 @@
+# Downloads
+
+```{include} ../downloads.md
+```

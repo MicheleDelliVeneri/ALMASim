@@ -66,6 +66,11 @@
 	let nLines = $state(0);
 	let robust = $state(0.0);
 	let numSimulations = $state(1);
+	let sourceOffsetXArcsec = $state(0.0);
+	let sourceOffsetYArcsec = $state(0.0);
+	let backgroundMode = $state('none');
+	let backgroundLevel = $state(1.0);
+	let backgroundSeed = $state<number | null>(null);
 
 	let computeBackend = $state('local');
 	let backendConfig = $state<Record<string, unknown>>({});
@@ -251,6 +256,11 @@
 			save_mode: saveMode,
 			n_lines: nLines > 0 ? nLines : undefined,
 			robust,
+			source_offset_x_arcsec: sourceOffsetXArcsec,
+			source_offset_y_arcsec: sourceOffsetYArcsec,
+			background_mode: backgroundMode,
+			background_level: backgroundLevel,
+			background_seed: backgroundSeed ?? undefined,
 			main_dir: './src/almasim',
 			output_dir: outputDir || './outputs',
 			tng_dir: './data/TNG100-1',
@@ -429,6 +439,11 @@
 			{nLines}
 			{robust}
 			{numSimulations}
+			{sourceOffsetXArcsec}
+			{sourceOffsetYArcsec}
+			{backgroundMode}
+			{backgroundLevel}
+			{backgroundSeed}
 			onSourceTypeChange={(type) => (sourceType = type)}
 			onNPixChange={(value) => (nPix = value)}
 			onNChannelsChange={(value) => (nChannels = value)}
@@ -442,6 +457,11 @@
 			onNLinesChange={(value) => (nLines = value)}
 			onRobustChange={(value) => (robust = value)}
 			onNumSimulationsChange={(value) => (numSimulations = value)}
+			onSourceOffsetXChange={(value) => (sourceOffsetXArcsec = value)}
+			onSourceOffsetYChange={(value) => (sourceOffsetYArcsec = value)}
+			onBackgroundModeChange={(value) => (backgroundMode = value)}
+			onBackgroundLevelChange={(value) => (backgroundLevel = value)}
+			onBackgroundSeedChange={(value) => (backgroundSeed = value)}
 		/>
 
 		<MetadataSelector
@@ -466,6 +486,11 @@
 			{saveMode}
 			{nLines}
 			{robust}
+			{sourceOffsetXArcsec}
+			{sourceOffsetYArcsec}
+			{backgroundMode}
+			{backgroundLevel}
+			{backgroundSeed}
 			estimate={simulationEstimate}
 			{estimating}
 			estimateError={estimateError}
