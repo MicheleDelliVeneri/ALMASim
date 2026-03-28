@@ -6,6 +6,7 @@ import pytest
 from almasim.services.imaging import (
     build_image_products,
     clean_deconvolve_cube,
+    convolve_cube_with_beam,
     feather_merge_cube,
     integrate_cube_preview,
     regrid_cube_to_match,
@@ -141,6 +142,53 @@ def test_clean_deconvolve_cube_improves_blurred_point_source():
     assert residual.shape == dirty_cube.shape
     assert restored_error < dirty_error
     assert np.max(np.abs(residual)) < np.max(np.abs(dirty_cube))
+
+
+@pytest.mark.unit
+def test_clean_deconvolve_cube_can_resume_from_previous_state():
+    """Continuing from saved CLEAN state should match a single longer run."""
+    model_cube = np.zeros((1, 21, 21), dtype=np.float32)
+    model_cube[0, 10, 10] = 1.0
+
+    yy, xx = np.indices((21, 21), dtype=np.float32)
+    sigma = 1.8
+    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(np.float32)
+    beam /= np.max(beam)
+    beam_cube = beam[None, ...]
+
+    dirty_fft = np.fft.fft2(model_cube[0]) * np.fft.fft2(np.fft.ifftshift(beam))
+    dirty_cube = np.real(np.fft.ifft2(dirty_fft)).astype(np.float32)[None, ...]
+
+    first = clean_deconvolve_cube(dirty_cube, beam_cube, n_cycles=40, gain=0.12)
+    resumed = clean_deconvolve_cube(
+        dirty_cube,
+        beam_cube,
+        n_cycles=80,
+        gain=0.12,
+        initial_component_cube=first["component_cube"],
+        initial_residual_cube=first["residual_cube"],
+        initial_clean_beam_cube=first["clean_beam_cube"],
+        initial_cycles_completed=first["cycles_completed"],
+    )
+    direct = clean_deconvolve_cube(dirty_cube, beam_cube, n_cycles=120, gain=0.12)
+
+    assert resumed["cycles_completed"] == 120
+    assert np.allclose(resumed["component_cube"], direct["component_cube"], atol=1e-5)
+    assert np.allclose(resumed["restored_cube"], direct["restored_cube"], atol=1e-5)
+    assert np.allclose(resumed["residual_cube"], direct["residual_cube"], atol=1e-5)
+
+
+@pytest.mark.unit
+def test_convolve_cube_with_beam_matches_cube_shape():
+    """Convolving a cube with a matched beam cube should preserve shape."""
+    cube = np.zeros((2, 9, 9), dtype=np.float32)
+    cube[:, 4, 4] = 1.0
+    beam_cube = np.zeros((2, 9, 9), dtype=np.float32)
+    beam_cube[:, 4, 4] = 1.0
+
+    convolved = convolve_cube_with_beam(cube, beam_cube)
+
+    assert convolved.shape == cube.shape
 
 
 @pytest.mark.unit

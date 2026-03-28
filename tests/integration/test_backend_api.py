@@ -198,8 +198,10 @@ def test_imaging_deconvolution_endpoint(client, temp_output_dir):
     assert response.status_code == 200
     data = response.json()
     assert "dirty" in data
-    assert "deconvolved" in data
+    assert "component_model" in data
+    assert "restored" in data
     assert "residual" in data
     assert data["reference_clean"] is not None
+    assert data["convolved_reference"] is not None
     assert data["metadata"]["cycles_requested"] == 120
-
+    assert data["metadata"]["state_path"].endswith(".npz")

@@ -22,6 +22,10 @@ class DeconvolutionRequest(BaseModel):
         ge=0.0,
         description="Optional absolute stopping threshold on the residual peak",
     )
+    state_path: str | None = Field(
+        default=None,
+        description="Optional deconvolution state NPZ path for resuming with additional cycles",
+    )
     method: Literal["sum", "mean"] = Field(
         default="sum",
         description="Integration method for the 2D preview images",
@@ -40,7 +44,9 @@ class DeconvolutionResponse(BaseModel):
     """Frontend response payload for iterative deconvolution previews."""
 
     dirty: ImagePreviewPayload
-    deconvolved: ImagePreviewPayload
+    component_model: ImagePreviewPayload
+    restored: ImagePreviewPayload
     residual: ImagePreviewPayload
     reference_clean: ImagePreviewPayload | None = None
+    convolved_reference: ImagePreviewPayload | None = None
     metadata: dict[str, Any]

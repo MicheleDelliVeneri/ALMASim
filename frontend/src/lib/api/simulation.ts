@@ -70,6 +70,9 @@ export interface SimulationStatus {
 	status: string;
 	progress?: number;
 	message?: string;
+	current_step?: string;
+	logs?: string[];
+	error?: string;
 }
 
 export interface DaskTestResult {

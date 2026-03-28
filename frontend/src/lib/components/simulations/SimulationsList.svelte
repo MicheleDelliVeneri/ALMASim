@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { createLogger } from '$lib/logger';
+	import { simulationApi, type SimulationStatus } from '$lib/api/simulation';
 
 	interface SimulationSummary {
 		simulation_id: string;
@@ -25,6 +26,12 @@
 	let error = $state<string | null>(null);
 	let currentRequest = $state<AbortController | null>(null);
 	let refreshing = $state(false);
+	let logDialogOpen = $state(false);
+	let logLoading = $state(false);
+	let logError = $state<string | null>(null);
+	let selectedLogSimulation = $state<SimulationSummary | null>(null);
+	let selectedSimulationStatus = $state<SimulationStatus | null>(null);
+	let logSocket: WebSocket | null = null;
 
 	async function fetchSimulations() {
 		if (refreshing) {
@@ -115,6 +122,70 @@
 		alert(`Simulation output location:\n${path}`);
 	}
 
+	function closeLogSocket() {
+		if (logSocket) {
+			logSocket.close();
+			logSocket = null;
+		}
+	}
+
+	function closeLogDialog() {
+		logDialogOpen = false;
+		logLoading = false;
+		logError = null;
+		selectedLogSimulation = null;
+		selectedSimulationStatus = null;
+		closeLogSocket();
+	}
+
+	function connectLogSocket(simulationId: string) {
+		closeLogSocket();
+		const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+		const socket = new WebSocket(`${wsUrl}/api/v1/simulations/${simulationId}/ws`);
+
+		socket.onmessage = (event) => {
+			try {
+				const status: SimulationStatus = JSON.parse(event.data);
+				selectedSimulationStatus = status;
+				logError = null;
+			} catch (err) {
+				logger.error({ err, simulationId }, 'Failed to parse simulation log websocket payload');
+			}
+		};
+
+		socket.onerror = () => {
+			logError = 'Log stream disconnected';
+		};
+
+		socket.onclose = () => {
+			logSocket = null;
+		};
+
+		logSocket = socket;
+	}
+
+	async function openLogDialog(sim: SimulationSummary) {
+		logDialogOpen = true;
+		logLoading = true;
+		logError = null;
+		selectedLogSimulation = sim;
+		selectedSimulationStatus = null;
+		closeLogSocket();
+
+		try {
+			const status = await simulationApi.getStatus(sim.simulation_id);
+			selectedSimulationStatus = status;
+			if (status.status !== 'completed' && status.status !== 'failed') {
+				connectLogSocket(sim.simulation_id);
+			}
+		} catch (err) {
+			logError = err instanceof Error ? err.message : 'Failed to load simulation logs';
+			logger.error({ err, simulationId: sim.simulation_id }, 'Failed to load simulation logs');
+		} finally {
+			logLoading = false;
+		}
+	}
+
 	onMount(() => {
 		logger.info('SimulationsList mounted');
 		fetchSimulations();
@@ -123,6 +194,7 @@
 		return () => {
 			clearInterval(interval);
 			currentRequest?.abort();
+			closeLogSocket();
 		};
 	});
 </script>
@@ -221,6 +293,16 @@
 									</button>
 									<button
 										type="button"
+										class="text-slate-600 hover:text-slate-800"
+										onclick={() => openLogDialog(sim)}
+										title="View simulation logs"
+									>
+										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H9l-4 3V7a2 2 0 012-2z" />
+										</svg>
+									</button>
+									<button
+										type="button"
 										class="text-emerald-600 hover:text-emerald-800 disabled:text-gray-400"
 										onclick={() => handleCombination(sim)}
 										disabled={sim.status !== 'completed'}
@@ -262,3 +344,57 @@
 		</div>
 	{/if}
 </section>
+
+{#if logDialogOpen}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+		<div class="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-2xl">
+			<header class="flex items-start justify-between gap-4 border-b px-5 py-4">
+				<div class="min-w-0">
+					<h3 class="text-lg font-semibold text-gray-900">Simulation Logs</h3>
+					{#if selectedLogSimulation}
+						<p class="mt-1 truncate font-mono text-xs text-gray-500">
+							{selectedLogSimulation.simulation_id}
+						</p>
+					{/if}
+					{#if selectedSimulationStatus}
+						<p class="mt-1 text-sm text-gray-600">
+							Status: <span class="font-medium">{selectedSimulationStatus.status}</span>
+							{#if selectedSimulationStatus.current_step}
+								| Step: <span class="font-medium">{selectedSimulationStatus.current_step}</span>
+							{/if}
+						</p>
+					{/if}
+				</div>
+				<button
+					type="button"
+					class="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+					onclick={closeLogDialog}
+				>
+					Close
+				</button>
+			</header>
+
+			<div class="flex-1 space-y-3 overflow-hidden px-5 py-4">
+				{#if logLoading}
+					<div class="rounded-md bg-gray-50 px-4 py-3 text-sm text-gray-600">Loading logs…</div>
+				{/if}
+
+				{#if logError}
+					<div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{logError}</div>
+				{/if}
+
+				<div class="overflow-hidden rounded-md border border-gray-200 bg-slate-950">
+					<div class="max-h-[55vh] overflow-y-auto p-4 font-mono text-xs leading-5 text-slate-100">
+						{#if selectedSimulationStatus?.logs && selectedSimulationStatus.logs.length > 0}
+							{#each selectedSimulationStatus.logs as line}
+								<div class="whitespace-pre-wrap break-words">{line}</div>
+							{/each}
+						{:else if !logLoading}
+							<div class="text-slate-400">No logs recorded yet.</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}

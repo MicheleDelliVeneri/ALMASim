@@ -53,6 +53,7 @@
 
 	let panels = $state<PreviewPanel[]>([]);
 	let runMetadata = $state<DeconvolutionResponse['metadata'] | null>(null);
+	let resumeStatePath = $state<string | null>(null);
 
 	let linkedView = $state(true);
 
@@ -84,6 +85,7 @@
 	function resetPanels() {
 		panels = [];
 		runMetadata = null;
+		resumeStatePath = null;
 	}
 
 	function buildPanels(response: DeconvolutionResponse): PreviewPanel[] {
@@ -95,6 +97,18 @@
 				title: 'Reference Clean Cube',
 				description: 'Original model/clean cube saved by the simulation',
 				badgeClass: 'bg-emerald-100 text-emerald-800',
+				scale: 1.0,
+				panX: 0,
+				panY: 0
+			});
+		}
+		if (response.convolved_reference) {
+			built.push({
+				...response.convolved_reference,
+				id: 'convolved-reference',
+				title: 'Convolved Clean Reference',
+				description: 'Original clean cube convolved with the clean beam for apples-to-apples comparison with the restored image',
+				badgeClass: 'bg-teal-100 text-teal-800',
 				scale: 1.0,
 				panX: 0,
 				panY: 0
@@ -112,10 +126,20 @@
 				panY: 0
 			},
 			{
-				...response.deconvolved,
-				id: 'deconvolved',
-				title: 'Deconvolved Cube',
-				description: 'Iterative CLEAN-style restored cube after the requested cycles',
+				...response.component_model,
+				id: 'component-model',
+				title: 'Component Model',
+				description: 'CLEAN component cube, which should approach the original clean sky model',
+				badgeClass: 'bg-indigo-100 text-indigo-800',
+				scale: 1.0,
+				panX: 0,
+				panY: 0
+			},
+			{
+				...response.restored,
+				id: 'restored',
+				title: 'Restored Cube',
+				description: 'Component model convolved with the clean beam and added back to the residual',
 				badgeClass: 'bg-blue-100 text-blue-800',
 				scale: 1.0,
 				panX: 0,
@@ -241,10 +265,12 @@
 				cycles,
 				gain,
 				threshold: useThreshold ? threshold : null,
+				statePath: resumeStatePath,
 				method: integrationMethod
 			});
 			panels = buildPanels(response);
 			runMetadata = response.metadata;
+			resumeStatePath = response.metadata.state_path;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to run imaging';
 			logger.error(
@@ -429,18 +455,22 @@
 							disabled={running || !selectedDirtyPath || !matchedBeamPath}
 							class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
 						>
-							{running ? 'Running…' : 'Run Deconvolution'}
+							{running ? 'Running…' : resumeStatePath ? 'Run More Cycles' : 'Run Deconvolution'}
 						</button>
 					</div>
 
 					{#if runMetadata}
 						<div class="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
 							<p>
-								Cycles completed: <span class="font-semibold">{runMetadata.cycles_completed}</span>
-								of {runMetadata.cycles_requested}
+								Total cycles completed: <span class="font-semibold">{runMetadata.cycles_completed}</span>
+								{#if runMetadata.resumed}
+									<span class="ml-1 text-blue-700">(added {runMetadata.cycles_added} more)</span>
+								{:else}
+									<span class="ml-1 text-blue-700">(initial run added {runMetadata.cycles_added})</span>
+								{/if}
 							</p>
 							<p class="mt-1">
-								The deconvolved cube should move closer to the reference clean cube as you increase cycles, until residual structure is dominated by noise.
+								Use the component model to compare against the original clean cube, and the restored cube to compare against the convolved clean reference.
 							</p>
 						</div>
 					{/if}

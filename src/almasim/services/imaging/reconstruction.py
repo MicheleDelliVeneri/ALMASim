@@ -49,6 +49,26 @@ def wiener_deconvolve_cube(
     return recon
 
 
+def convolve_cube_with_beam(
+    cube: np.ndarray,
+    beam_cube: np.ndarray,
+) -> np.ndarray:
+    """Convolve a channel-first cube with a channel-matched beam cube."""
+    cube = np.asarray(cube, dtype=np.float32)
+    beam_cube = np.asarray(beam_cube, dtype=np.float32)
+    if cube.shape != beam_cube.shape:
+        raise ValueError("cube and beam_cube must have the same shape")
+
+    convolved = np.zeros_like(cube, dtype=np.float32)
+    for channel in range(cube.shape[0]):
+        convolved[channel] = np.real(
+            np.fft.ifft2(
+                np.fft.fft2(cube[channel]) * np.fft.fft2(np.fft.ifftshift(beam_cube[channel]))
+            )
+        ).astype(np.float32)
+    return convolved
+
+
 def load_cube_from_npz(npz_path: str | Path) -> tuple[np.ndarray, str]:
     """Load a cube from an NPZ file and normalize to `(chan, y, x)` layout."""
     with np.load(npz_path) as data:
@@ -60,8 +80,11 @@ def load_cube_from_npz(npz_path: str | Path) -> tuple[np.ndarray, str]:
             "clean_cube",
             "dirty_cube",
             "beam_cube",
+            "component_cube",
             "residual_cube",
             "restored_cube",
+            "clean_beam_cube",
+            "convolved_reference_cube",
         ]:
             if name in data:
                 cube = data[name]
@@ -198,6 +221,10 @@ def clean_deconvolve_cube(
     gain: float = 0.1,
     threshold: float | None = None,
     clip_negative: bool = False,
+    initial_component_cube: np.ndarray | None = None,
+    initial_residual_cube: np.ndarray | None = None,
+    initial_clean_beam_cube: np.ndarray | None = None,
+    initial_cycles_completed: int = 0,
 ) -> dict[str, Any]:
     """Run a simple Hogbom-style CLEAN loop per channel."""
     dirty_cube = np.asarray(dirty_cube, dtype=np.float32)
@@ -211,11 +238,30 @@ def clean_deconvolve_cube(
     if not 0.0 < gain <= 1.0:
         raise ValueError("gain must be in the interval (0, 1]")
 
-    component_cube = np.zeros_like(dirty_cube, dtype=np.float32)
-    residual_cube = dirty_cube.copy()
-    clean_beam_cube = np.zeros_like(beam_cube, dtype=np.float32)
+    component_cube = (
+        np.zeros_like(dirty_cube, dtype=np.float32)
+        if initial_component_cube is None
+        else np.asarray(initial_component_cube, dtype=np.float32).copy()
+    )
+    residual_cube = (
+        dirty_cube.copy()
+        if initial_residual_cube is None
+        else np.asarray(initial_residual_cube, dtype=np.float32).copy()
+    )
+    clean_beam_cube = (
+        np.zeros_like(beam_cube, dtype=np.float32)
+        if initial_clean_beam_cube is None
+        else np.asarray(initial_clean_beam_cube, dtype=np.float32).copy()
+    )
+    if component_cube.shape != dirty_cube.shape:
+        raise ValueError("initial_component_cube must match dirty_cube shape")
+    if residual_cube.shape != dirty_cube.shape:
+        raise ValueError("initial_residual_cube must match dirty_cube shape")
+    if clean_beam_cube.shape != beam_cube.shape:
+        raise ValueError("initial_clean_beam_cube must match beam_cube shape")
+
     restored_cube = np.zeros_like(dirty_cube, dtype=np.float32)
-    cycles_completed = 0
+    cycles_added = 0
 
     for channel in range(dirty_cube.shape[0]):
         psf = np.asarray(beam_cube[channel], dtype=np.float32)
@@ -227,7 +273,11 @@ def clean_deconvolve_cube(
         else:
             psf_normalized = (psf / psf_peak).astype(np.float32)
 
-        clean_beam = _build_clean_beam(psf_normalized)
+        clean_beam = (
+            clean_beam_cube[channel]
+            if np.max(np.abs(clean_beam_cube[channel])) > 0.0
+            else _build_clean_beam(psf_normalized)
+        )
         clean_beam_cube[channel] = clean_beam
 
         residual = residual_cube[channel]
@@ -259,7 +309,7 @@ def clean_deconvolve_cube(
         if clip_negative:
             restored = np.clip(restored, 0.0, None)
         restored_cube[channel] = restored
-        cycles_completed = max(cycles_completed, channel_cycles)
+        cycles_added = max(cycles_added, channel_cycles)
 
     return {
         "clean_cube": restored_cube,
@@ -267,7 +317,8 @@ def clean_deconvolve_cube(
         "component_cube": component_cube,
         "residual_cube": residual_cube,
         "clean_beam_cube": clean_beam_cube,
-        "cycles_completed": cycles_completed,
+        "cycles_completed": int(initial_cycles_completed) + cycles_added,
+        "cycles_added": cycles_added,
         "gain": float(gain),
         "threshold": None if threshold is None else float(threshold),
     }

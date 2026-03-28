@@ -3,6 +3,7 @@
 from .reconstruction import (
     build_image_products,
     clean_deconvolve_cube,
+    convolve_cube_with_beam,
     feather_merge_cube,
     integrate_cube_preview,
     load_cube_from_npz,
@@ -14,6 +15,7 @@ from .reconstruction import (
 __all__ = [
     "build_image_products",
     "clean_deconvolve_cube",
+    "convolve_cube_with_beam",
     "feather_merge_cube",
     "integrate_cube_preview",
     "load_cube_from_npz",
