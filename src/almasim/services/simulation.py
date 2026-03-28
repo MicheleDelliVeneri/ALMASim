@@ -18,6 +18,7 @@ import h5py
 
 from . import interferometry as uin
 from . import astro as uas
+from .observation_plan import build_single_pointing_observation_plan
 from .interferometry import antenna as ual_antenna
 from .interferometry.frequency import freq_supp_extractor
 from .interferometry.utils import closest_power_of_2
@@ -73,7 +74,11 @@ class SimulationParams:
     persist: bool
     ml_dataset_path: Optional[str]
     inject_serendipitous: bool
-    remote: bool
+    remote: bool = False
+    observation_configs: Optional[Any] = None
+    ground_temperature_k: float = 270.0
+    correlator: Optional[str] = None
+    elevation_deg: Optional[float] = None
 
     @classmethod
     def from_metadata_row(
@@ -103,6 +108,10 @@ class SimulationParams:
         tng_api_key: Optional[str] = None,
         inject_serendipitous: bool = False,
         remote: bool = False,
+        observation_configs: Optional[Any] = None,
+        ground_temperature_k: float = 270.0,
+        correlator: Optional[str] = None,
+        elevation_deg: Optional[float] = None,
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from a metadata row."""
 
@@ -214,6 +223,10 @@ class SimulationParams:
             ),
             inject_serendipitous=inject_serendipitous,
             remote=remote,
+            observation_configs=observation_configs,
+            ground_temperature_k=float(ground_temperature_k),
+            correlator=correlator,
+            elevation_deg=elevation_deg,
         )
 
 
@@ -228,7 +241,9 @@ class CleanCubeStage:
     sim_output_dir: Optional[str]
     sim_params_payload: dict[str, Any]
     interferometer_kwargs: dict[str, Any]
+    interferometer_runs: list[dict[str, Any]]
     metadata: dict[str, Any]
+    observation_plan: dict[str, Any]
 
 
 def _json_safe(value: Any) -> Any:
@@ -285,6 +300,12 @@ def _get_client_from_backend(compute_backend: Optional["ComputationBackend"]) ->
     if hasattr(compute_backend, "client"):
         return compute_backend.client
     return None
+
+
+def _count_antennas(antenna_array: str) -> int:
+    """Count antennas encoded in an ALMA antenna-array string."""
+    tokens = [token for token in str(antenna_array).split() if token.strip()]
+    return max(len(tokens), 2)
 
 
 def _create_sky_model(
@@ -426,6 +447,7 @@ def generate_clean_cube(
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
         params.freq_support, source_freq
     )
+    observation_plan = build_single_pointing_observation_plan(params)
     output_dir_abs = os.path.abspath(params.output_dir)
     persist_outputs = bool(params.persist and params.save_mode != "memory")
     sim_output_dir = (
@@ -446,13 +468,14 @@ def generate_clean_cube(
         log(f"Integration Time: {int_time}")
 
     status("Computing Max baseline")
-    max_baseline = (
+    max_baseline_km = max(
         ual_antenna.get_max_baseline_from_antenna_array(
-            params.antenna_array,
+            config.antenna_array,
             params.main_dir,
         )
-        * U.km
+        for config in observation_plan.configs
     )
+    max_baseline = max_baseline_km * U.km
     if progress_adapter is not None:
         progress_adapter.emit(100)
     if remote:
@@ -782,26 +805,58 @@ def generate_clean_cube(
         "line_fluxes": _json_safe(line_fluxes),
         "line_frequency_hz": _json_safe(line_frequency),
         "continuum": _json_safe(continum),
+        "observation_plan": observation_plan.as_dict(),
     }
-    interferometer_kwargs = {
-        "idx": params.idx,
-        "skymodel": model,
-        "main_dir": params.main_dir,
-        "output_dir": output_dir_abs,
-        "ra": ra,
-        "dec": dec,
-        "central_freq": central_freq,
-        "bandwidth": band_range,
-        "fov": fov.value,
-        "antenna_array": params.antenna_array,
-        "noise": 0.1 * (min_line_flux / beam_area.value) / params.snr,
-        "snr": params.snr,
-        "integration_time": params.int_time / 3600,
-        "observation_date": params.obs_date,
-        "header": header,
-        "save_mode": params.save_mode,
-        "persist": persist_outputs,
-    }
+    base_noise_reference = 0.1 * (min_line_flux / beam_area.value) / params.snr
+    channel_width_hz = delta_freq.to(U.Hz).value
+    channel_offsets = (
+        np.arange(n_channels, dtype=float) - (float(n_channels) - 1.0) / 2.0
+    ) * channel_width_hz
+    channel_frequencies_hz = central_freq.to(U.Hz).value + channel_offsets
+
+    interferometer_runs = []
+    for config in observation_plan.configs:
+        raw_noise_profile = uin.compute_channel_noise(
+            uin.NoiseModelConfig(
+                pwv_mm=params.pwv,
+                ground_temperature_k=params.ground_temperature_k,
+            ),
+            channel_frequencies_hz,
+            channel_width_hz,
+            config.total_time_s,
+            observation_plan.elevation_deg,
+            antenna_diameter_m=config.antenna_diameter_m,
+            n_antennas=_count_antennas(config.antenna_array),
+        )
+        noise_profile = uin.calibrate_noise_profile(
+            raw_noise_profile,
+            reference_noise=base_noise_reference,
+        )
+        interferometer_runs.append(
+            {
+                "idx": params.idx,
+                "skymodel": model,
+                "main_dir": params.main_dir,
+                "output_dir": output_dir_abs,
+                "ra": ra,
+                "dec": dec,
+                "central_freq": central_freq,
+                "bandwidth": band_range,
+                "fov": fov.value,
+                "antenna_array": config.antenna_array,
+                "noise": noise_profile,
+                "snr": params.snr,
+                "integration_time": config.total_time_s / 3600.0,
+                "observation_date": params.obs_date,
+                "header": header,
+                "save_mode": params.save_mode,
+                "persist": persist_outputs,
+                "antenna_diameter_m": config.antenna_diameter_m,
+                "config_name": config.name,
+                "array_type": config.array_type,
+            }
+        )
+    interferometer_kwargs = interferometer_runs[0]
 
     return CleanCubeStage(
         datacube=datacube,
@@ -811,7 +866,9 @@ def generate_clean_cube(
         sim_output_dir=sim_output_dir,
         sim_params_payload=sim_params_payload,
         interferometer_kwargs=interferometer_kwargs,
+        interferometer_runs=interferometer_runs,
         metadata=metadata,
+        observation_plan=observation_plan.as_dict(),
     )
 
 
@@ -824,15 +881,35 @@ def simulate_observation(
     interferometer_progress_callback: Optional[Callable[[int], None]] = None,
 ) -> dict[str, Any]:
     """Run the interferometric observation stage from a prepared clean cube."""
-    interferometer = uin.Interferometer(
-        backend=compute_backend,
-        robust=robust,
-        logger=terminal_logger,
-        **clean_cube_stage.interferometer_kwargs,
+    per_config_results = []
+    total_configs = max(len(clean_cube_stage.interferometer_runs), 1)
+
+    for config_index, interferometer_kwargs in enumerate(clean_cube_stage.interferometer_runs):
+        interferometer = uin.Interferometer(
+            backend=compute_backend,
+            robust=robust,
+            logger=terminal_logger,
+            **interferometer_kwargs,
+        )
+        if interferometer_progress_callback is not None:
+            def scaled_progress(progress: int, *, idx=config_index):
+                base = idx / total_configs
+                scaled = int(round((base + (progress / 100.0) / total_configs) * 100))
+                interferometer_progress_callback(scaled)
+            interferometer.progress_signal.connect(scaled_progress)
+        config_result = interferometer.run_interferometric_sim()
+        config_result["config_name"] = interferometer_kwargs.get("config_name")
+        config_result["array_type"] = interferometer_kwargs.get("array_type")
+        per_config_results.append(config_result)
+
+    combined_results = uin.combine_interferometric_results(
+        per_config_results,
+        config_weights=[
+            max(float(run["integration_time"]), 0.0) for run in clean_cube_stage.interferometer_runs
+        ],
     )
-    if interferometer_progress_callback is not None:
-        interferometer.progress_signal.connect(interferometer_progress_callback)
-    return interferometer.run_interferometric_sim()
+    combined_results["observation_plan"] = clean_cube_stage.observation_plan
+    return combined_results
 
 
 def export_results(
@@ -859,15 +936,26 @@ def export_results(
     status("Exporting results")
     if persist_outputs:
         if clean_cube_stage.sim_output_dir is not None:
-            ual_antenna.generate_antenna_config_file_from_antenna_array(
-                params.antenna_array,
-                params.main_dir,
-                clean_cube_stage.sim_output_dir,
-            )
-            exported_results["antenna_config_path"] = os.path.join(
-                clean_cube_stage.sim_output_dir,
-                "antenna.cfg",
-            )
+            antenna_config_paths = []
+            for index, observation_config in enumerate(clean_cube_stage.observation_plan["configs"]):
+                if len(clean_cube_stage.observation_plan["configs"]) == 1:
+                    output_dir = clean_cube_stage.sim_output_dir
+                    output_name = "antenna.cfg"
+                else:
+                    output_dir = os.path.join(
+                        clean_cube_stage.sim_output_dir,
+                        f"config_{index}",
+                    )
+                    os.makedirs(output_dir, exist_ok=True)
+                    output_name = "antenna.cfg"
+                ual_antenna.generate_antenna_config_file_from_antenna_array(
+                    observation_config["antenna_array"],
+                    params.main_dir,
+                    output_dir,
+                )
+                antenna_config_paths.append(os.path.join(output_dir, output_name))
+            exported_results["antenna_config_path"] = antenna_config_paths[0]
+            exported_results["antenna_config_paths"] = antenna_config_paths
 
         payload = clean_cube_stage.sim_params_payload
         uas.write_sim_parameters(

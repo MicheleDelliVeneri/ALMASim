@@ -141,6 +141,10 @@ class SimulationService:
                 ml_dataset_path=params.ml_dataset_path,
                 inject_serendipitous=params.inject_serendipitous,
                 remote=False,
+                observation_configs=params.observation_configs,
+                ground_temperature_k=params.ground_temperature_k,
+                correlator=params.correlator,
+                elevation_deg=params.elevation_deg,
             )
 
             status_store.update(

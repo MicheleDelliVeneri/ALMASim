@@ -11,6 +11,12 @@ from almasim.services.simulation import (
     run_simulation,
     write_ml_dataset_shard,
 )
+from almasim.services.observation_plan import build_single_pointing_observation_plan
+from almasim.services.interferometry.noise import (
+    NoiseModelConfig,
+    compute_channel_noise,
+    calibrate_noise_profile,
+)
 
 
 @pytest.fixture
@@ -335,8 +341,25 @@ def test_run_simulation_point_source(
     mock_interferometer.run_interferometric_sim.return_value = {
         'model_cube': np.random.rand(32, 32, 32),
         'dirty_cube': np.random.rand(32, 32, 32),
+        'model_vis': np.random.rand(32, 32, 32),
+        'dirty_vis': np.random.rand(32, 32, 32),
+        'beam_cube': np.random.rand(32, 32, 32),
+        'totsampling_cube': np.random.rand(32, 32, 32),
+        'uv_mask_cube': np.ones((32, 32, 32), dtype=np.uint8),
+        'u_cube': np.random.rand(32, 2, 2),
+        'v_cube': np.random.rand(32, 2, 2),
     }
     mock_interferometry.Interferometer.return_value = mock_interferometer
+    mock_interferometry.compute_channel_noise = compute_channel_noise
+    mock_interferometry.NoiseModelConfig = NoiseModelConfig
+    mock_interferometry.calibrate_noise_profile = calibrate_noise_profile
+    mock_interferometry.combine_interferometric_results.side_effect = (
+        lambda results, config_weights=None: {
+            **results[0],
+            "per_config_results": results,
+            "combined_config_count": len(results),
+        }
+    )
     
     # Create params
     params = SimulationParams.from_metadata_row(
@@ -407,8 +430,26 @@ def test_run_simulation_gaussian_source(
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
         'model_cube': np.random.rand(32, 32, 32),
+        'dirty_cube': np.random.rand(32, 32, 32),
+        'model_vis': np.random.rand(32, 32, 32),
+        'dirty_vis': np.random.rand(32, 32, 32),
+        'beam_cube': np.random.rand(32, 32, 32),
+        'totsampling_cube': np.random.rand(32, 32, 32),
+        'uv_mask_cube': np.ones((32, 32, 32), dtype=np.uint8),
+        'u_cube': np.random.rand(32, 2, 2),
+        'v_cube': np.random.rand(32, 2, 2),
     }
     mock_interferometry.Interferometer.return_value = mock_interferometer
+    mock_interferometry.compute_channel_noise = compute_channel_noise
+    mock_interferometry.NoiseModelConfig = NoiseModelConfig
+    mock_interferometry.calibrate_noise_profile = calibrate_noise_profile
+    mock_interferometry.combine_interferometric_results.side_effect = (
+        lambda results, config_weights=None: {
+            **results[0],
+            "per_config_results": results,
+            "combined_config_count": len(results),
+        }
+    )
     
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
@@ -458,7 +499,8 @@ def test_simulation_params_dataclass_fields(tmp_path, sample_metadata_row_dict):
         'source_type', 'tng_api_key', 'ncpu', 'rest_frequency',
         'redshift', 'lum_infrared', 'snr', 'n_lines', 'line_names',
         'save_mode', 'persist', 'ml_dataset_path',
-        'inject_serendipitous', 'remote',
+        'inject_serendipitous', 'remote', 'observation_configs',
+        'ground_temperature_k', 'correlator', 'elevation_deg',
     ]
     
     # Verify all fields exist and can be accessed
@@ -584,9 +626,24 @@ def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
         'model_cube': np.random.rand(32, 32, 32),
         'dirty_cube': np.random.rand(32, 32, 32),
         'dirty_vis': np.random.rand(32, 32, 32),
+        'model_vis': np.random.rand(32, 32, 32),
+        'beam_cube': np.random.rand(32, 32, 32),
+        'totsampling_cube': np.random.rand(32, 32, 32),
         'uv_mask_cube': np.ones((32, 32, 32), dtype=np.uint8),
+        'u_cube': np.random.rand(32, 2, 2),
+        'v_cube': np.random.rand(32, 2, 2),
     }
     mock_interferometry.Interferometer.return_value = mock_interferometer
+    mock_interferometry.compute_channel_noise = compute_channel_noise
+    mock_interferometry.NoiseModelConfig = NoiseModelConfig
+    mock_interferometry.calibrate_noise_profile = calibrate_noise_profile
+    mock_interferometry.combine_interferometric_results.side_effect = (
+        lambda results, config_weights=None: {
+            **results[0],
+            "per_config_results": results,
+            "combined_config_count": len(results),
+        }
+    )
 
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
@@ -607,7 +664,7 @@ def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
 
     assert mock_interferometry.Interferometer.called
     noise_value = mock_interferometry.Interferometer.call_args.kwargs["noise"]
-    assert noise_value >= 0
+    assert np.all(np.asarray(noise_value) >= 0)
 
 
 @pytest.mark.unit
@@ -633,3 +690,213 @@ def test_simulation_params_clean_function(tmp_path, sample_metadata_row_dict):
     # Clean function should convert None/NaN to None
     assert params.n_pix is None
     assert params.n_channels is None
+
+
+@pytest.mark.unit
+def test_build_single_pointing_observation_plan_defaults(tmp_path, sample_metadata_row_dict):
+    """Single-config simulations should still produce an explicit observation plan."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+    )
+
+    plan = build_single_pointing_observation_plan(params)
+
+    assert plan.phase_center_ra_deg == params.ra
+    assert len(plan.configs) == 1
+    assert plan.configs[0].antenna_array == params.antenna_array
+    assert plan.configs[0].total_time_s == params.int_time
+
+
+@pytest.mark.unit
+def test_build_single_pointing_observation_plan_multiple_configs(tmp_path, sample_metadata_row_dict):
+    """P0 should support multi-config single-pointing plans."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        observation_configs=[
+            {
+                "name": "alma12",
+                "array_type": "12m",
+                "antenna_array": "A001:DA01 A002:DV02",
+                "total_time_s": 1800.0,
+            },
+            {
+                "name": "aca7",
+                "array_type": "7m",
+                "antenna_array": "A001:CM01 A002:CM02",
+                "total_time_s": 2400.0,
+            },
+        ],
+    )
+
+    plan = build_single_pointing_observation_plan(params)
+
+    assert len(plan.configs) == 2
+    assert [cfg.array_type for cfg in plan.configs] == ["12m", "7m"]
+    assert plan.configs[1].antenna_diameter_m == 7.0
+
+
+@pytest.mark.unit
+def test_build_single_pointing_observation_plan_splits_mixed_metadata_antenna_arrays(tmp_path, sample_metadata_row_dict):
+    """Mixed metadata antenna strings should auto-split into 12m and 7m configs."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+    sample_metadata_row_dict["antenna_arrays"] = "A001:DA01 A002:DV02 A003:CM03 A004:CM04"
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+    )
+
+    plan = build_single_pointing_observation_plan(params)
+
+    assert len(plan.configs) == 2
+    assert plan.configs[0].array_type == "12m"
+    assert "DA01" in plan.configs[0].antenna_array
+    assert "CM03" not in plan.configs[0].antenna_array
+    assert plan.configs[1].array_type == "7m"
+    assert "CM03" in plan.configs[1].antenna_array
+
+
+@pytest.mark.unit
+def test_compute_channel_noise_increases_with_pwv():
+    """PWV should materially increase the single-pointing thermal noise profile."""
+    freqs_hz = np.linspace(220e9, 230e9, 8)
+    low = compute_channel_noise(
+        NoiseModelConfig(pwv_mm=0.5),
+        freqs_hz,
+        bandwidth_hz=15.625e6,
+        integration_s=1800.0,
+        elevation_deg=60.0,
+        antenna_diameter_m=12.0,
+        n_antennas=10,
+    )
+    high = compute_channel_noise(
+        NoiseModelConfig(pwv_mm=3.0),
+        freqs_hz,
+        bandwidth_hz=15.625e6,
+        integration_s=1800.0,
+        elevation_deg=60.0,
+        antenna_diameter_m=12.0,
+        n_antennas=10,
+    )
+
+    assert np.all(high > low)
+
+
+@pytest.mark.unit
+@patch('almasim.services.simulation.uin.combine_interferometric_results')
+@patch('almasim.services.simulation.process_spectral_data')
+@patch('almasim.services.simulation.usm')
+@patch('almasim.services.simulation.uin')
+def test_run_simulation_multiconfig_single_pointing(
+    mock_interferometry_module,
+    mock_skymodels,
+    mock_process_spectral,
+    mock_combine_results,
+    tmp_path,
+    sample_metadata_row_dict,
+    main_dir,
+):
+    """Multi-config P0 runs should call the interferometer once per observation config."""
+    mock_process_spectral.return_value = (
+        np.ones(8) * 0.1,
+        np.array([1.0]),
+        ["CO(3-2)"],
+        0.5,
+        np.array([250.0]) * 1e9,
+        [2],
+        8,
+        1.875,
+        0.1,
+        np.array([250.0]) * 1e9,
+        [2.0],
+        1e10,
+    )
+
+    mock_datacube = Mock()
+    mock_datacube._array = Mock()
+    mock_datacube._array.to_value.return_value = np.random.rand(8, 8, 8) * 0.1
+    mock_datacube.wcs = Mock()
+    mock_datacube.wcs.sub.return_value.wcs_world2pix.return_value = (4, 4, 0)
+    mock_pointlike = Mock()
+    mock_pointlike.insert.return_value = mock_datacube
+    mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
+    mock_skymodels.DataCube.return_value = mock_datacube
+    mock_skymodels.get_datacube_header.return_value = Mock()
+
+    mock_interferometer = Mock()
+    mock_interferometer.run_interferometric_sim.side_effect = [
+        {
+            "model_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "dirty_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "model_vis": np.ones((8, 8, 8), dtype=np.complex64),
+            "dirty_vis": np.ones((8, 8, 8), dtype=np.complex64),
+            "beam_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "totsampling_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "uv_mask_cube": np.ones((8, 8, 8), dtype=np.uint8),
+            "u_cube": np.ones((8, 2, 2), dtype=np.float32),
+            "v_cube": np.ones((8, 2, 2), dtype=np.float32),
+        },
+        {
+            "model_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "dirty_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "model_vis": np.ones((8, 8, 8), dtype=np.complex64),
+            "dirty_vis": np.ones((8, 8, 8), dtype=np.complex64),
+            "beam_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "totsampling_cube": np.ones((8, 8, 8), dtype=np.float32),
+            "uv_mask_cube": np.ones((8, 8, 8), dtype=np.uint8),
+            "u_cube": np.ones((8, 2, 2), dtype=np.float32),
+            "v_cube": np.ones((8, 2, 2), dtype=np.float32),
+        },
+    ]
+    mock_interferometry_module.Interferometer.return_value = mock_interferometer
+    mock_interferometry_module.compute_channel_noise = compute_channel_noise
+    mock_interferometry_module.NoiseModelConfig = NoiseModelConfig
+    mock_interferometry_module.calibrate_noise_profile.side_effect = lambda raw, reference_noise: raw * (reference_noise / np.median(raw))
+    mock_combine_results.return_value = {"combined_config_count": 2, "dirty_cube": np.ones((8, 8, 8), dtype=np.float32)}
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        observation_configs=[
+            {"name": "alma12", "array_type": "12m", "antenna_array": "A001:DA01 A002:DV02", "total_time_s": 1800.0},
+            {"name": "aca7", "array_type": "7m", "antenna_array": "A001:CM01 A002:CM02", "total_time_s": 2400.0},
+        ],
+    )
+
+    result = run_simulation(params)
+
+    assert result["combined_config_count"] == 2
+    assert mock_interferometry_module.Interferometer.call_count == 2

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { MetadataResponse } from '$lib/api/metadata';
+	import { deriveArrayType } from '$lib/utils/observationPlan';
 
 	interface Props {
 		metadata: MetadataResponse | null;
@@ -103,6 +104,7 @@
 						<th class="px-4 py-2 text-left font-semibold text-gray-700">RA (deg)</th>
 						<th class="px-4 py-2 text-left font-semibold text-gray-700">Dec (deg)</th>
 						<th class="px-4 py-2 text-left font-semibold text-gray-700">Band</th>
+						<th class="px-4 py-2 text-left font-semibold text-gray-700">Array Type</th>
 						<th class="px-4 py-2 text-left font-semibold text-gray-700">FOV (arcsec)</th>
 						<th class="px-4 py-2 text-left font-semibold text-gray-700">Freq (GHz)</th>
 					</tr>
@@ -140,6 +142,13 @@
 							</td>
 							<td class="px-4 py-2 text-gray-800">
 								{getRowValue(row, 'Band') || getRowValue(row, 'band')}
+							</td>
+							<td class="px-4 py-2 text-gray-800">
+								{getRowValue(row, 'Array_type') ||
+									deriveArrayType(
+										getRowValue(row, 'antenna_arrays') || getRowValue(row, 'antenna_array')
+									) ||
+									'N/A'}
 							</td>
 							<td class="px-4 py-2 text-gray-800">
 								{fovVal !== null ? fovVal.toFixed(2) : 'N/A'}

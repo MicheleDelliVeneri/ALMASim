@@ -9,6 +9,7 @@
 	import SimulationStatusDisplay from '$lib/components/simulations/SimulationStatusDisplay.svelte';
 	import SimulationsList from '$lib/components/simulations/SimulationsList.svelte';
 	import { createLogger } from '$lib/logger';
+	import { inferObservationConfigsFromMetadataRow } from '$lib/utils/observationPlan';
 
 	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 	const logger = createLogger('routes/simulations');
@@ -51,6 +52,8 @@
 	let simulationName = $state('');
 	let outputDir = $state('/host_home');
 	let snr = $state(1.3);
+	let useMetadataPwv = $state(true);
+	let pwvOverride = $state(1.0);
 	let saveMode = $state('npz');
 	let nLines = $state(0);
 	let robust = $state(0.0);
@@ -230,13 +233,17 @@
 				vel_res: getNumber(['Vel.res.', 'Vel.res', 'vel_res'], 1.0),
 				fov: getNumber(['FOV', 'fov'], 10.0),
 				obs_date: getString(['Obs.date', 'obs_date'], new Date().toISOString().split('T')[0]),
-				pwv: getNumber(['PWV', 'pwv'], 1.0),
+				pwv: useMetadataPwv ? getNumber(['PWV', 'pwv'], 1.0) : pwvOverride,
 				int_time: getNumber(['Int.Time', 'int_time'], 3600.0),
 				bandwidth: getNumber(['Bandwidth', 'bandwidth'], 2.0),
 				freq: getNumber(['Freq', 'freq'], 100.0),
 				freq_support: getString(['Freq.sup.', 'Freq.sup', 'freq_support'], '100.0-102.0'),
 				cont_sens: getNumber(['Cont_sens_mJybeam', 'Cont_sens', 'cont_sens'], 0.1),
 				antenna_array: getString(['antenna_arrays', 'antenna_array'], 'C43-1'),
+				observation_configs: inferObservationConfigsFromMetadataRow(
+					row,
+					getNumber(['Int.Time', 'int_time'], 3600.0)
+				),
 				source_type: sourceType,
 				n_pix: nPix,
 				n_channels: nChannels,
@@ -320,6 +327,8 @@
 			{simulationName}
 			{outputDir}
 			{snr}
+			{useMetadataPwv}
+			{pwvOverride}
 			{saveMode}
 			{nLines}
 			{robust}
@@ -330,6 +339,8 @@
 			onSimulationNameChange={(value) => (simulationName = value)}
 			onOutputDirChange={(value) => (outputDir = value)}
 			onSnrChange={(value) => (snr = value)}
+			onUseMetadataPwvChange={(value) => (useMetadataPwv = value)}
+			onPwvOverrideChange={(value) => (pwvOverride = value)}
 			onSaveModeChange={(value) => (saveMode = value)}
 			onNLinesChange={(value) => (nLines = value)}
 			onRobustChange={(value) => (robust = value)}
@@ -351,6 +362,12 @@
 			{sourceType}
 			{nPix}
 			{nChannels}
+			{snr}
+			{useMetadataPwv}
+			{pwvOverride}
+			{saveMode}
+			{nLines}
+			{robust}
 		/>
 
 		<form onsubmit={handleSubmit}>

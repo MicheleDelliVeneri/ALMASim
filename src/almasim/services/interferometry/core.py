@@ -66,6 +66,9 @@ class Interferometer:
         save_mode: str,
         robust: float,
         persist: bool = True,
+        antenna_diameter_m: float = 12.0,
+        config_name: Optional[str] = None,
+        array_type: Optional[str] = None,
         logger: LogFn = None,
     ):
         """
@@ -134,6 +137,9 @@ class Interferometer:
         self.save_mode = save_mode
         self.persist = persist
         self.robust = robust
+        self.antenna_diameter_m = float(antenna_diameter_m)
+        self.config_name = config_name
+        self.array_type = array_type
         self.logger = logger
         self.progress_signal = ProgressSignal()
 
@@ -177,7 +183,7 @@ class Interferometer:
         self.Hmax = np.pi
         self.lat = -23.028 * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
-        self.Diameters = [12.0, 0]
+        self.Diameters = [self.antenna_diameter_m, 0]
         self.ra = self.ra.value * self.deg2rad
         self.dec = self.dec.value * self.deg2rad
         self.trdec = [np.sin(self.dec), np.cos(self.dec)]
@@ -362,6 +368,11 @@ class Interferometer:
         delayed_results = []
         for i in range(self.Nchan):
             wavelength, _ = self.get_channel_wavelength(i)
+            channel_noise = (
+                float(self.noise[i])
+                if isinstance(self.noise, (list, tuple, np.ndarray))
+                else float(self.noise)
+            )
             delayed_result = delayed(
                 scattered_channels[i],
                 wavelength,
@@ -369,7 +380,7 @@ class Interferometer:
                 self.Nant,
                 self.Hcov,
                 self.nH,
-                self.noise,
+                channel_noise,
                 self.antPos,
                 self.robfac,
                 self.trlat,
@@ -469,6 +480,9 @@ class Interferometer:
             "Xmax": self.Xmax,
             "antPos": self.antPos,
             "Nant": self.Nant,
+            "config_name": self.config_name,
+            "array_type": self.array_type,
+            "antenna_diameter_m": self.antenna_diameter_m,
         }
 
         # Clean up variables to free memory

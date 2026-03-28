@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { deriveArrayType, inferObservationConfigsFromMetadataRow } from '$lib/utils/observationPlan';
+
 	interface Props {
 		row: Record<string, unknown> | null;
 		getRowValue: (row: Record<string, unknown>, key: string) => string;
@@ -7,12 +9,14 @@
 		nPix: number;
 		nChannels: number;
 		snr: number;
+		useMetadataPwv: boolean;
+		pwvOverride: number;
 		saveMode: string;
 		nLines: number;
 		robust: number;
 	}
 
-	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, saveMode, nLines, robust }: Props = $props();
+	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataPwv, pwvOverride, saveMode, nLines, robust }: Props = $props();
 </script>
 
 {#if row}
@@ -65,6 +69,37 @@
 						const val = getRowNumber(row, 'Freq') ?? getRowNumber(row, 'freq');
 						return val !== null ? `${val.toFixed(2)} GHz` : 'N/A';
 					})()}
+				</p>
+			</div>
+			<div>
+				<span class="font-medium text-gray-700">PWV:</span>
+				<p class="mt-1 text-gray-900">
+					{#if useMetadataPwv}
+						{(() => {
+							const val = getRowNumber(row, 'PWV') ?? getRowNumber(row, 'pwv');
+							return val !== null ? `${val.toFixed(2)} mm (metadata)` : '1.00 mm (default)';
+						})()}
+					{:else}
+						{`${pwvOverride.toFixed(2)} mm (manual)`}
+					{/if}
+				</p>
+			</div>
+			<div>
+				<span class="font-medium text-gray-700">Array Type:</span>
+				<p class="mt-1 text-gray-900">
+					{getRowValue(row, 'Array_type') || deriveArrayType(getRowValue(row, 'antenna_arrays') || getRowValue(row, 'antenna_array')) || 'N/A'}
+				</p>
+			</div>
+			<div>
+				<span class="font-medium text-gray-700">Inferred Configs:</span>
+				<p class="mt-1 text-gray-900">
+					{#if inferObservationConfigsFromMetadataRow(row, getRowNumber(row, 'Int.Time') ?? getRowNumber(row, 'int_time') ?? 3600)?.length}
+						{inferObservationConfigsFromMetadataRow(row, getRowNumber(row, 'Int.Time') ?? getRowNumber(row, 'int_time') ?? 3600)
+							?.map((config) => `${config.array_type}: ${config.antenna_array}`)
+							.join(' | ')}
+					{:else}
+						{getRowValue(row, 'antenna_arrays') || getRowValue(row, 'antenna_array') || 'N/A'}
+					{/if}
 				</p>
 			</div>
 			<div>

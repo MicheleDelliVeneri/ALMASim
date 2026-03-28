@@ -1,6 +1,14 @@
 /** Simulation API types and functions */
 import { apiClient } from './client';
 
+export interface ObservationConfigInput {
+	name: string;
+	array_type: '12m' | '7m' | 'TP';
+	antenna_array: string;
+	total_time_s: number;
+	correlator?: string;
+}
+
 export interface SimulationParams {
 	source_name: string;
 	member_ouid: string;
@@ -19,6 +27,7 @@ export interface SimulationParams {
 	freq_support: string;
 	cont_sens: number;
 	antenna_array: string;
+	observation_configs?: ObservationConfigInput[];
 	source_type?: string;
 	n_pix?: number;
 	n_channels?: number;
@@ -35,6 +44,9 @@ export interface SimulationParams {
 	robust?: number;
 	compute_backend?: string;
 	compute_backend_config?: Record<string, unknown>;
+	ground_temperature_k?: number;
+	correlator?: string;
+	elevation_deg?: number;
 }
 
 export interface SimulationParamsCreate extends SimulationParams {

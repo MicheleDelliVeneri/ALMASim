@@ -26,6 +26,10 @@ class SimulationParamsBase(BaseModel):
     freq_support: str = Field(..., description="Frequency support string")
     cont_sens: float = Field(..., description="Continuum sensitivity in mJy/beam")
     antenna_array: str = Field(..., description="Antenna array configuration")
+    observation_configs: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description="Optional multi-configuration single-pointing observation plan",
+    )
     source_type: str = Field(default="point", description="Source type")
     n_pix: Optional[int] = Field(None, description="Number of pixels")
     n_channels: Optional[int] = Field(None, description="Number of channels")
@@ -56,6 +60,18 @@ class SimulationParamsBase(BaseModel):
     )
     compute_backend_config: Optional[dict] = Field(
         default_factory=dict, description="Backend-specific configuration"
+    )
+    ground_temperature_k: float = Field(
+        default=270.0,
+        description="Ground temperature used by the PWV-aware noise model",
+    )
+    correlator: Optional[str] = Field(
+        default=None,
+        description="Optional correlator label stored in the observation plan",
+    )
+    elevation_deg: Optional[float] = Field(
+        default=None,
+        description="Optional source elevation override for the noise model",
     )
 
 

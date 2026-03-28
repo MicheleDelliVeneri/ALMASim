@@ -1,6 +1,14 @@
 """Interferometry service for ALMA simulations."""
 from .core import Interferometer, ProgressSignal
 from .baselines import prepare_baselines, set_baselines, set_noise
+from .noise import (
+    NoiseModelConfig,
+    estimate_receiver_temperature_k,
+    estimate_sky_temperature_k,
+    compute_channel_noise,
+    calibrate_noise_profile,
+)
+from .multiconfig import combine_interferometric_results
 from .imaging import (
     prepare_2d_arrays,
     _grid_uv,
@@ -29,6 +37,12 @@ __all__ = [
     "prepare_baselines",
     "set_baselines",
     "set_noise",
+    "NoiseModelConfig",
+    "estimate_receiver_temperature_k",
+    "estimate_sky_temperature_k",
+    "compute_channel_noise",
+    "calibrate_noise_profile",
+    "combine_interferometric_results",
     "prepare_2d_arrays",
     "_grid_uv",
     "set_beam",

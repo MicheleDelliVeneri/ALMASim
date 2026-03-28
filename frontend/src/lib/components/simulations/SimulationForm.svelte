@@ -11,6 +11,8 @@
 		simulationName: string;
 		outputDir: string;
 		snr: number;
+		useMetadataPwv: boolean;
+		pwvOverride: number;
 		saveMode: string;
 		nLines: number;
 		robust: number;
@@ -21,6 +23,8 @@
 		onSimulationNameChange: (value: string) => void;
 		onOutputDirChange: (value: string) => void;
 		onSnrChange: (value: number) => void;
+		onUseMetadataPwvChange: (value: boolean) => void;
+		onPwvOverrideChange: (value: number) => void;
 		onSaveModeChange: (value: string) => void;
 		onNLinesChange: (value: number) => void;
 		onRobustChange: (value: number) => void;
@@ -34,6 +38,8 @@
 		simulationName,
 		outputDir,
 		snr,
+		useMetadataPwv,
+		pwvOverride,
 		saveMode,
 		nLines,
 		robust,
@@ -44,6 +50,8 @@
 		onSimulationNameChange,
 		onOutputDirChange,
 		onSnrChange,
+		onUseMetadataPwvChange,
+		onPwvOverrideChange,
 		onSaveModeChange,
 		onNLinesChange,
 		onRobustChange,
@@ -231,7 +239,7 @@
 		</div>
 	</div>
 
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-5">
 		<div>
 			<label for="snr" class="mb-1 block text-sm font-medium text-gray-700">
 				Signal-to-Noise Ratio (SNR)
@@ -247,6 +255,42 @@
 				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
 			/>
 			<p class="mt-1 text-xs text-gray-500">Default: 1.3</p>
+		</div>
+
+		<div>
+			<label for="use_metadata_pwv" class="mb-1 block text-sm font-medium text-gray-700">
+				PWV Source
+			</label>
+			<select
+				id="use_metadata_pwv"
+				value={useMetadataPwv ? 'metadata' : 'manual'}
+				onchange={(e) => onUseMetadataPwvChange(e.currentTarget.value === 'metadata')}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			>
+				<option value="metadata">Use Metadata Row</option>
+				<option value="manual">Manual Override</option>
+			</select>
+			<p class="mt-1 text-xs text-gray-500">Default: metadata row PWV</p>
+		</div>
+
+		<div>
+			<label for="pwv_override" class="mb-1 block text-sm font-medium text-gray-700">
+				PWV Override (mm)
+			</label>
+			<input
+				type="number"
+				id="pwv_override"
+				min="0"
+				max="20"
+				step="0.1"
+				value={pwvOverride}
+				disabled={useMetadataPwv}
+				oninput={(e) => onPwvOverrideChange(parseFloat(e.currentTarget.value) || 1.0)}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+			/>
+			<p class="mt-1 text-xs text-gray-500">
+				{useMetadataPwv ? 'Disabled while using metadata PWV' : 'Used for all selected rows'}
+			</p>
 		</div>
 
 		<div>

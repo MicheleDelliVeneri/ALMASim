@@ -16,6 +16,7 @@ _MODULES = {
     "compute",
     "download",
     "metadata",
+    "observation_plan",
 }
 
 
@@ -27,4 +28,12 @@ def __getattr__(name):
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__all__ = ["simulation", "astro", "interferometry", "compute", "download", "metadata"]
+__all__ = [
+    "simulation",
+    "astro",
+    "interferometry",
+    "compute",
+    "download",
+    "metadata",
+    "observation_plan",
+]
