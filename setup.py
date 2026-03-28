@@ -41,6 +41,7 @@ setuptools.setup(
         "pysftp",
         "setuptools",
         "tenacity",
+        "httpx",
         "nifty8",
         "scikit-image",
         "imagecodecs",

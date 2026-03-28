@@ -7,33 +7,20 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
+from almasim.services.metadata.adapters import (
+    build_exclusion_filters,
+    build_inclusion_filters,
+    observations_to_metadata_records,
+)
 from almasim.services.metadata.tap.queries import (
     load_metadata,
     query_metadata_by_science,
     query_science_types,
 )
 from almasim.services.metadata.tap.service import (
-    ExclusionFilters,
-    InclusionFilters,
     _QA2_STATUS_MAP,
-    query_by_science_type as _tap_query,
 )
 from app.schemas.metadata import ScienceQueryParams
-
-
-def _derive_array_type_local(antenna_arrays_str: object) -> str:
-    """Derive human-readable array type from antenna_arrays string (DA/DV→12m, CM→7m, PM→TP)."""
-    if not isinstance(antenna_arrays_str, str) or not antenna_arrays_str:
-        return ""
-    upper = antenna_arrays_str.upper()
-    types = []
-    if "DA" in upper or "DV" in upper:
-        types.append("12m")
-    if "CM" in upper:
-        types.append("7m")
-    if "PM" in upper:
-        types.append("TP")
-    return "+".join(types) if types else ""
 
 backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
@@ -159,10 +146,10 @@ class MetadataService:
                 exclude_solar=params.exclude_solar,
             )
             logger.info(f"Retrieved {len(observations)} observations from database cache")
-            records = self._observations_to_dict(observations)
-            if params.visible_columns:
-                vc = set(params.visible_columns)
-                records = [{k: v for k, v in row.items() if k in vc} for row in records]
+            records = observations_to_metadata_records(
+                observations,
+                visible_columns=params.visible_columns,
+            )
             return records
         except Exception as e:
             logger.warning(f"Database query failed: {e}, falling back to TAP")
@@ -175,33 +162,8 @@ class MetadataService:
     ) -> List[Dict[str, Any]]:
         """Run a fresh TAP query and optionally cache the results in the DB."""
         logger.info("Querying ALMA TAP archive")
-        include = InclusionFilters(
-            science_keyword=params.science_keyword,
-            scientific_category=params.scientific_category,
-            band=params.bands,
-            fov_range=params.fov_range,
-            time_resolution_range=params.time_resolution_range,
-            frequency_range=params.frequency_range,
-            source_name=params.source_name,
-            antenna_arrays=params.antenna_arrays,
-            array_type=params.array_type,
-            array_configuration=params.array_configuration,
-            angular_resolution_range=params.angular_resolution_range,
-            observation_date_range=params.observation_date_range,
-            qa2_status=params.qa2_status,  # QA2 mapping is applied inside the TAP layer
-            obs_type=params.obs_type,
-            proposal_id_prefix=params.proposal_id_prefix,
-            public_only=params.public_only,
-            science_only=params.science_only,
-            exclude_mosaic=params.exclude_mosaic,
-        )
-        exclude = ExclusionFilters(
-            science_keyword=params.exclude_science_keyword,
-            scientific_category=params.exclude_scientific_category,
-            source_name=params.exclude_source_name,
-            obs_type=params.exclude_obs_type,
-            solar=params.exclude_solar,
-        )
+        include = build_inclusion_filters(params)
+        exclude = build_exclusion_filters(params)
         result_df = query_metadata_by_science(
             include=include,
             exclude=exclude,
@@ -224,33 +186,8 @@ class MetadataService:
         from app.services.status_store import query_store
 
         try:
-            include = InclusionFilters(
-                science_keyword=params.science_keyword,
-                scientific_category=params.scientific_category,
-                band=params.bands,
-                fov_range=params.fov_range,
-                time_resolution_range=params.time_resolution_range,
-                frequency_range=params.frequency_range,
-                source_name=params.source_name,
-                antenna_arrays=params.antenna_arrays,
-                array_type=params.array_type,
-                array_configuration=params.array_configuration,
-                angular_resolution_range=params.angular_resolution_range,
-                observation_date_range=params.observation_date_range,
-                qa2_status=params.qa2_status,
-                obs_type=params.obs_type,
-                proposal_id_prefix=params.proposal_id_prefix,
-                public_only=params.public_only,
-                science_only=params.science_only,
-                exclude_mosaic=params.exclude_mosaic,
-            )
-            exclude = ExclusionFilters(
-                science_keyword=params.exclude_science_keyword,
-                scientific_category=params.exclude_scientific_category,
-                source_name=params.exclude_source_name,
-                obs_type=params.exclude_obs_type,
-                solar=params.exclude_solar,
-            )
+            include = build_inclusion_filters(params)
+            exclude = build_exclusion_filters(params)
             # Use query_metadata_by_science so columns are normalized/renamed
             # to display names (same as the sync path).
             result_df = query_metadata_by_science(
@@ -298,39 +235,10 @@ class MetadataService:
         self, observations: List[Observation]
     ) -> List[Dict[str, Any]]:
         """Convert Observation objects to dict format matching TAP output."""
-        return [self._obs_to_dict(obs) for obs in observations]
-
-    @staticmethod
-    def _obs_to_dict(obs: Observation) -> Dict[str, Any]:
-        """Serialize a single Observation ORM object to the canonical column dict."""
-        return {
-            "ALMA_source_name": obs.target_name,
-            "Band": obs.band,
-            "Array_type": _derive_array_type_local(obs.antenna_arrays),
-            "antenna_arrays": obs.antenna_arrays,
-            "Ang.res.": obs.spatial_resolution,
-            "Obs.date": obs.obs_release_date.isoformat() if obs.obs_release_date else None,
-            "Project_abstract": obs.proposal_abstract,
-            "science_keyword": ", ".join(kw.keyword for kw in obs.science_keywords),
-            "scientific_category": obs.scientific_category.category if obs.scientific_category else None,
-            "QA2_status": obs.qa2_passed,
-            "Type": obs.obs_type,
-            "PWV": obs.pwv,
-            "SB_name": obs.schedblock_name,
-            "Vel.res.": obs.velocity_resolution,
-            "RA": obs.ra,
-            "Dec": obs.dec,
-            "FOV": obs.s_fov,
-            "Int.Time": obs.t_max,
-            "Cont_sens_mJybeam": obs.cont_sensitivity_bandwidth,
-            "Line_sens_10kms_mJybeam": obs.sensitivity_10kms,
-            "Bandwidth": obs.bandwidth,
-            "Freq": obs.frequency,
-            "Freq.sup.": obs.frequency_support,
-            "proposal_id": obs.proposal_id,
-            "member_ous_uid": obs.member_ous_uid,
-            "group_ous_uid": obs.group_ous_uid,
-        }
+        return observations_to_metadata_records(
+            observations,
+            visible_columns=None,
+        )
 
     def _cache_tap_results_in_db(self, result_df) -> None:
         """Cache TAP query results in database with keywords and categories."""
