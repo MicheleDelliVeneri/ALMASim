@@ -25,3 +25,17 @@ def closest_power_of_2(x):
         return x  # Already a power of 2
     return 2 ** op(math.log(x, 2))
 
+
+def sampling_to_uv_mask(
+    sampling: np.ndarray,
+    *,
+    threshold: float = 0.0,
+    dtype: np.dtype = np.uint8,
+) -> np.ndarray:
+    """Convert UV sampling weights into a binary measurement mask.
+
+    This is useful for inverse methods such as DDRM where the observation
+    operator is represented as a per-channel UV mask.
+    """
+    sampling_arr = np.asarray(sampling)
+    return (sampling_arr > threshold).astype(dtype, copy=False)

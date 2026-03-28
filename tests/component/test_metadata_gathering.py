@@ -13,6 +13,7 @@ from almasim.services.metadata.tap.queries import (
 
 @pytest.mark.component
 @pytest.mark.integration
+@pytest.mark.network
 def test_query_science_types():
     """Test querying science types from TAP service."""
     keywords, categories = query_science_types()
@@ -24,6 +25,7 @@ def test_query_science_types():
 
 @pytest.mark.component
 @pytest.mark.integration
+@pytest.mark.network
 def test_query_metadata_by_science(tmp_path):
     """Test querying metadata by science parameters."""
     df = query_metadata_by_science(
@@ -39,6 +41,7 @@ def test_query_metadata_by_science(tmp_path):
 
 @pytest.mark.component
 @pytest.mark.integration
+@pytest.mark.network
 def test_query_metadata_by_targets(tmp_path):
     """Test querying metadata by target list."""
     targets = [("NGC253", "uid://A001/X123/X456")]
@@ -80,5 +83,4 @@ def test_metadata_normalization(test_data_dir, tmp_path):
     
     for col in expected_columns:
         assert col in df.columns, f"Missing expected column: {col}"
-
 

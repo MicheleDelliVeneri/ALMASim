@@ -1,6 +1,7 @@
 """Simulation helpers decoupled from the legacy PyQt UI."""
 from __future__ import annotations
 
+import json
 import math
 import os
 import random
@@ -13,6 +14,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 import astropy.units as U
+import h5py
 
 from . import interferometry as uin
 from . import astro as uas
@@ -68,6 +70,8 @@ class SimulationParams:
     n_lines: Any
     line_names: Any
     save_mode: str
+    persist: bool
+    ml_dataset_path: Optional[str]
     inject_serendipitous: bool
     remote: bool
 
@@ -86,6 +90,8 @@ class SimulationParams:
         source_type: str = "point",
         snr: float = 1.3,
         save_mode: str = "npz",
+        persist: bool = True,
+        ml_dataset_path: Optional[Path | str] = None,
         n_pix: Optional[float] = None,
         n_channels: Optional[int] = None,
         n_lines: Optional[Any] = None,
@@ -200,9 +206,69 @@ class SimulationParams:
             n_lines=n_lines,
             line_names=line_names,
             save_mode=save_mode,
+            persist=bool(persist),
+            ml_dataset_path=(
+                _resolve_path(ml_dataset_path)
+                if ml_dataset_path is not None
+                else None
+            ),
             inject_serendipitous=inject_serendipitous,
             remote=remote,
         )
+
+
+@dataclass
+class CleanCubeStage:
+    """Intermediate clean-cube stage output."""
+
+    datacube: Any
+    model_cube: np.ndarray
+    header: Any
+    output_dir_abs: str
+    sim_output_dir: Optional[str]
+    sim_params_payload: dict[str, Any]
+    interferometer_kwargs: dict[str, Any]
+    metadata: dict[str, Any]
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert nested metadata values into JSON/HDF5-friendly objects."""
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (np.integer, np.floating)):
+        return value.item()
+    if isinstance(value, U.Quantity):
+        return {"value": value.value, "unit": str(value.unit)}
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def write_ml_dataset_shard(
+    output_path: Path | str,
+    *,
+    clean_cube: np.ndarray,
+    dirty_cube: np.ndarray,
+    dirty_vis: np.ndarray,
+    uv_mask_cube: np.ndarray,
+    metadata: Mapping[str, Any],
+) -> str:
+    """Persist a simulation sample as a single HDF5 shard for ML workflows."""
+    output_path = Path(output_path).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with h5py.File(output_path, "w") as h5f:
+        h5f.create_dataset("clean_cube", data=clean_cube, compression="gzip")
+        h5f.create_dataset("dirty_cube", data=dirty_cube, compression="gzip")
+        h5f.create_dataset("dirty_vis", data=dirty_vis, compression="gzip")
+        h5f.create_dataset("uv_mask_cube", data=uv_mask_cube, compression="gzip")
+        h5f.attrs["metadata_json"] = json.dumps(_json_safe(dict(metadata)))
+
+    return str(output_path)
 
 
 # Progress emitter functions moved to services.utils
@@ -298,7 +364,7 @@ def _create_sky_model(
     return handler()
 
 
-def run_simulation(
+def generate_clean_cube(
     params: SimulationParams,
     *,
     logger: LogFn = None,
@@ -306,11 +372,9 @@ def run_simulation(
     progress_emitter=None,
     compute_backend=None,
     terminal_logger=None,
-    robust: float = 0.0,
-    interferometer_progress_callback: Optional[Callable[[int], None]] = None,
     stop_requested: bool = False,
-):
-    """Execute the full ALMA simulation workflow."""
+) -> CleanCubeStage:
+    """Generate the clean sky cube and derived observation metadata."""
     remote = bool(params.remote)
 
     def log(message: str):
@@ -351,8 +415,6 @@ def run_simulation(
         line_names = None
 
     progress_adapter = as_progress_emitter(progress_emitter)
-    start = time.time()
-    second2hour = 1 / 3600
     ra = params.ra * U.deg
     dec = params.dec * U.deg
     fov = params.fov * 3600 * U.arcsec
@@ -365,11 +427,14 @@ def run_simulation(
         params.freq_support, source_freq
     )
     output_dir_abs = os.path.abspath(params.output_dir)
-    sim_output_dir = os.path.join(
-        output_dir_abs, f"{params.project_name}_{params.idx}"
+    persist_outputs = bool(params.persist and params.save_mode != "memory")
+    sim_output_dir = (
+        os.path.join(output_dir_abs, f"{params.project_name}_{params.idx}")
+        if persist_outputs
+        else None
     )
-    os.makedirs(sim_output_dir, exist_ok=True)
-    os.chdir(output_dir_abs)
+    if sim_output_dir is not None:
+        os.makedirs(sim_output_dir, exist_ok=True)
 
     if remote:
         print(f"RA: {ra}")
@@ -380,14 +445,16 @@ def run_simulation(
         log(f"DEC: {dec}")
         log(f"Integration Time: {int_time}")
 
-    antennalist = os.path.join(sim_output_dir, "antenna.cfg")
-    ual_antenna.generate_antenna_config_file_from_antenna_array(
-        params.antenna_array, params.main_dir, sim_output_dir
-    )
     status("Computing Max baseline")
     max_baseline = (
-        ual_antenna.get_max_baseline_from_antenna_config(progress_adapter, antennalist) * U.km
+        ual_antenna.get_max_baseline_from_antenna_array(
+            params.antenna_array,
+            params.main_dir,
+        )
+        * U.km
     )
+    if progress_adapter is not None:
+        progress_adapter.emit(100)
     if remote:
         print(f"Field of view: {round(fov.value, 3)} arcsec")
     else:
@@ -573,7 +640,7 @@ def run_simulation(
     client_for_skymodel = _get_client_from_backend(compute_backend)
 
     # Create and insert sky model
-    status(f"Inserting {params.source_type.replace('-', ' ').title()} Source Model")
+    status("Creating sky model")
     model = _create_sky_model(
         source_type=params.source_type,
         common_params=common_params,
@@ -600,41 +667,6 @@ def run_simulation(
     else:
         fwhm_x = fwhm_y = angle = None
 
-    sim_params_path = os.path.join(
-        output_dir_abs, f"sim_params_{params.idx}.txt"
-    )
-    uas.write_sim_parameters(
-        sim_params_path,
-        params.source_name,
-        params.member_ouid,
-        ra,
-        dec,
-        ang_res,
-        vel_res,
-        int_time,
-        params.band,
-        band_range,
-        central_freq,
-        redshift,
-        line_fluxes,
-        line_names,
-        line_frequency,
-        continum,
-        fov,
-        beam_size,
-        cell_size,
-        n_pix,
-        n_channels,
-        snapshot,
-        tng_subhaloid,
-        lum_infrared,
-        fwhm_z,
-        params.source_type,
-        fwhm_x,
-        fwhm_y,
-        angle,
-    )
-
     if params.inject_serendipitous and not stop_requested:
         status("Inserting Serendipitous Sources")
         if params.source_type != "gaussian" or fwhm_x is None:
@@ -657,7 +689,7 @@ def run_simulation(
             fwhm_z,
             n_pix,
             n_channels,
-            sim_params_path,
+            None,
         )
 
     header = usm.get_datacube_header(datacube, params.obs_date)
@@ -677,32 +709,263 @@ def run_simulation(
         log(f"Total Flux injected in model cube: {round(totflux, 3)} Jy")
         log("Observing with ALMA")
 
-    min_line_flux = np.min(line_fluxes)
-    interferometer = uin.Interferometer(
-        idx=params.idx,
-        backend=compute_backend,
-        skymodel=model,
-        main_dir=params.main_dir,
-        output_dir=output_dir_abs,
-        ra=ra,
-        dec=dec,
-        central_freq=central_freq,
-        bandwidth=band_range,
-        fov=fov.value,
-        antenna_array=params.antenna_array,
-        noise=0.1 * (min_line_flux / beam_area.value) / params.snr,
-        snr=params.snr,
-        integration_time=int_time.value * second2hour,
-        observation_date=params.obs_date,
+    line_flux_magnitudes = np.abs(np.asarray(line_fluxes, dtype=float))
+    nonzero_line_fluxes = line_flux_magnitudes[line_flux_magnitudes > 0]
+    min_line_flux = (
+        float(np.min(nonzero_line_fluxes))
+        if nonzero_line_fluxes.size > 0
+        else 0.0
+    )
+    sim_params_payload = {
+        "sim_params_path": os.path.join(output_dir_abs, f"sim_params_{params.idx}.txt"),
+        "source_name": params.source_name,
+        "member_ouid": params.member_ouid,
+        "ra": ra,
+        "dec": dec,
+        "ang_res": ang_res,
+        "vel_res": vel_res,
+        "int_time": int_time,
+        "band": params.band,
+        "band_range": band_range,
+        "central_freq": central_freq,
+        "redshift": redshift,
+        "line_fluxes": line_fluxes,
+        "line_names": line_names,
+        "line_frequency": line_frequency,
+        "continuum": continum,
+        "fov": fov,
+        "beam_size": beam_size,
+        "cell_size": cell_size,
+        "n_pix": n_pix,
+        "n_channels": n_channels,
+        "snapshot": snapshot,
+        "tng_subhaloid": tng_subhaloid,
+        "lum_infrared": lum_infrared,
+        "fwhm_z": fwhm_z,
+        "source_type": params.source_type,
+        "fwhm_x": fwhm_x,
+        "fwhm_y": fwhm_y,
+        "angle": angle,
+    }
+    metadata = {
+        "idx": params.idx,
+        "project_name": params.project_name,
+        "source_name": params.source_name,
+        "member_ouid": params.member_ouid,
+        "source_type": params.source_type,
+        "save_mode": params.save_mode,
+        "persist": persist_outputs,
+        "ra_deg": params.ra,
+        "dec_deg": params.dec,
+        "band": params.band,
+        "ang_res_arcsec": params.ang_res,
+        "vel_res_kms": params.vel_res,
+        "fov_arcsec": fov.value,
+        "obs_date": params.obs_date,
+        "pwv": params.pwv,
+        "int_time_s": params.int_time,
+        "bandwidth_ghz": params.bandwidth,
+        "source_freq_ghz": params.freq,
+        "freq_support": params.freq_support,
+        "cont_sens": params.cont_sens,
+        "antenna_array": params.antenna_array,
+        "n_pix": n_pix,
+        "n_channels": n_channels,
+        "central_freq_ghz": central_freq.to(U.GHz).value,
+        "band_range_ghz": band_range.to(U.GHz).value,
+        "channel_width_hz": delta_freq.to(U.Hz).value,
+        "beam_size_arcsec": beam_size.to(U.arcsec).value,
+        "cell_size_arcsec": cell_size.to(U.arcsec).value,
+        "redshift": redshift,
+        "rest_frequency_ghz": rest_frequency.to(U.GHz).value,
+        "line_names": _json_safe(line_names),
+        "line_fluxes": _json_safe(line_fluxes),
+        "line_frequency_hz": _json_safe(line_frequency),
+        "continuum": _json_safe(continum),
+    }
+    interferometer_kwargs = {
+        "idx": params.idx,
+        "skymodel": model,
+        "main_dir": params.main_dir,
+        "output_dir": output_dir_abs,
+        "ra": ra,
+        "dec": dec,
+        "central_freq": central_freq,
+        "bandwidth": band_range,
+        "fov": fov.value,
+        "antenna_array": params.antenna_array,
+        "noise": 0.1 * (min_line_flux / beam_area.value) / params.snr,
+        "snr": params.snr,
+        "integration_time": params.int_time / 3600,
+        "observation_date": params.obs_date,
+        "header": header,
+        "save_mode": params.save_mode,
+        "persist": persist_outputs,
+    }
+
+    return CleanCubeStage(
+        datacube=datacube,
+        model_cube=model,
         header=header,
-        save_mode=params.save_mode,
+        output_dir_abs=output_dir_abs,
+        sim_output_dir=sim_output_dir,
+        sim_params_payload=sim_params_payload,
+        interferometer_kwargs=interferometer_kwargs,
+        metadata=metadata,
+    )
+
+
+def simulate_observation(
+    clean_cube_stage: CleanCubeStage,
+    *,
+    compute_backend=None,
+    robust: float = 0.0,
+    terminal_logger=None,
+    interferometer_progress_callback: Optional[Callable[[int], None]] = None,
+) -> dict[str, Any]:
+    """Run the interferometric observation stage from a prepared clean cube."""
+    interferometer = uin.Interferometer(
+        backend=compute_backend,
         robust=robust,
         logger=terminal_logger,
+        **clean_cube_stage.interferometer_kwargs,
     )
     if interferometer_progress_callback is not None:
         interferometer.progress_signal.connect(interferometer_progress_callback)
-    status("Observing with ALMA")
-    simulation_results = interferometer.run_interferometric_sim()
+    return interferometer.run_interferometric_sim()
+
+
+def export_results(
+    params: SimulationParams,
+    clean_cube_stage: CleanCubeStage,
+    simulation_results: dict[str, Any],
+    *,
+    logger: LogFn = None,
+    status_callback: Optional[Callable[[str], None]] = None,
+) -> dict[str, Any]:
+    """Persist optional file exports for simulation results."""
+    remote = bool(params.remote)
+
+    def log(message: str):
+        log_message(logger, message, remote=remote)
+
+    def status(message: str):
+        if status_callback is not None:
+            status_callback(message)
+
+    exported_results = dict(simulation_results)
+    persist_outputs = bool(params.persist and params.save_mode != "memory")
+
+    status("Exporting results")
+    if persist_outputs:
+        if clean_cube_stage.sim_output_dir is not None:
+            ual_antenna.generate_antenna_config_file_from_antenna_array(
+                params.antenna_array,
+                params.main_dir,
+                clean_cube_stage.sim_output_dir,
+            )
+            exported_results["antenna_config_path"] = os.path.join(
+                clean_cube_stage.sim_output_dir,
+                "antenna.cfg",
+            )
+
+        payload = clean_cube_stage.sim_params_payload
+        uas.write_sim_parameters(
+            payload["sim_params_path"],
+            payload["source_name"],
+            payload["member_ouid"],
+            payload["ra"],
+            payload["dec"],
+            payload["ang_res"],
+            payload["vel_res"],
+            payload["int_time"],
+            payload["band"],
+            payload["band_range"],
+            payload["central_freq"],
+            payload["redshift"],
+            payload["line_fluxes"],
+            payload["line_names"],
+            payload["line_frequency"],
+            payload["continuum"],
+            payload["fov"],
+            payload["beam_size"],
+            payload["cell_size"],
+            payload["n_pix"],
+            payload["n_channels"],
+            payload["snapshot"],
+            payload["tng_subhaloid"],
+            payload["lum_infrared"],
+            payload["fwhm_z"],
+            payload["source_type"],
+            payload["fwhm_x"],
+            payload["fwhm_y"],
+            payload["angle"],
+        )
+        exported_results["sim_params_path"] = payload["sim_params_path"]
+    else:
+        log("Skipping on-disk simulation exports (pure Python mode)")
+
+    if params.ml_dataset_path:
+        ml_dataset_path = write_ml_dataset_shard(
+            params.ml_dataset_path,
+            clean_cube=exported_results["model_cube"],
+            dirty_cube=exported_results["dirty_cube"],
+            dirty_vis=exported_results["dirty_vis"],
+            uv_mask_cube=exported_results["uv_mask_cube"],
+            metadata=clean_cube_stage.metadata,
+        )
+        exported_results["ml_dataset_path"] = ml_dataset_path
+
+    return exported_results
+
+
+def run_simulation(
+    params: SimulationParams,
+    *,
+    logger: LogFn = None,
+    status_callback: Optional[Callable[[str], None]] = None,
+    progress_emitter=None,
+    compute_backend=None,
+    terminal_logger=None,
+    robust: float = 0.0,
+    interferometer_progress_callback: Optional[Callable[[int], None]] = None,
+    stop_requested: bool = False,
+):
+    """Execute the full ALMA simulation workflow."""
+    remote = bool(params.remote)
+
+    def log(message: str):
+        log_message(logger, message, remote=remote)
+
+    start = time.time()
+    if status_callback is not None:
+        status_callback("Generating clean cube")
+    clean_cube_stage = generate_clean_cube(
+        params,
+        logger=logger,
+        status_callback=status_callback,
+        progress_emitter=progress_emitter,
+        compute_backend=compute_backend,
+        terminal_logger=terminal_logger,
+        stop_requested=stop_requested,
+    )
+    if status_callback is not None:
+        status_callback("Running interferometric simulation")
+    simulation_results = simulate_observation(
+        clean_cube_stage,
+        compute_backend=compute_backend,
+        robust=robust,
+        terminal_logger=terminal_logger,
+        interferometer_progress_callback=interferometer_progress_callback,
+    )
+    exported_results = export_results(
+        params,
+        clean_cube_stage,
+        simulation_results,
+        logger=logger,
+        status_callback=status_callback,
+    )
+
     if remote:
         print("Finished")
     else:
@@ -713,4 +976,4 @@ def run_simulation(
             strftime("%H:%M:%S", gmtime(stop - start))
         )
     )
-    return simulation_results
+    return exported_results

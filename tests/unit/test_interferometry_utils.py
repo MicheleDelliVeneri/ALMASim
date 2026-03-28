@@ -5,6 +5,7 @@ import numpy as np
 from almasim.services.interferometry.utils import (
     get_channel_wavelength,
     closest_power_of_2,
+    sampling_to_uv_mask,
 )
 
 
@@ -28,3 +29,26 @@ def test_closest_power_of_2():
     assert closest_power_of_2(1) == 1
     assert closest_power_of_2(2) == 2
 
+
+def test_sampling_to_uv_mask():
+    """Test converting sampling weights into a binary UV mask."""
+    sampling = np.array(
+        [
+            [[0.0, 1.5], [2.0, 0.0]],
+            [[0.1, 0.0], [0.0, 3.2]],
+        ],
+        dtype=np.float32,
+    )
+    uv_mask = sampling_to_uv_mask(sampling)
+
+    assert uv_mask.dtype == np.uint8
+    assert np.array_equal(
+        uv_mask,
+        np.array(
+            [
+                [[0, 1], [1, 0]],
+                [[1, 0], [0, 1]],
+            ],
+            dtype=np.uint8,
+        ),
+    )

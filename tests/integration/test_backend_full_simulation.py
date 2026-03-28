@@ -111,12 +111,12 @@ def test_simulation_service_initialization(main_dir, temp_output_dir):
         tng_dir=temp_output_dir / "tng",
         galaxy_zoo_dir=temp_output_dir / "galaxy_zoo",
         hubble_dir=temp_output_dir / "hubble",
-        dask_client=None,
+        compute_backend=None,
     )
     
     assert service.main_dir == main_dir
     assert service.output_dir == temp_output_dir
-    assert service.dask_client is None
+    assert service.compute_backend is None
 
 
 @pytest.mark.integration
@@ -151,7 +151,7 @@ def test_simulation_service_params_conversion(main_dir, temp_output_dir, sample_
         tng_dir=temp_output_dir / "tng",
         galaxy_zoo_dir=temp_output_dir / "galaxy_zoo",
         hubble_dir=temp_output_dir / "hubble",
-        dask_client=None,
+        compute_backend=None,
     )
     
     # Test that the service can create internal params
@@ -191,6 +191,8 @@ def test_simulation_service_params_conversion(main_dir, temp_output_dir, sample_
         n_lines=params.n_lines,
         line_names=params.line_names,
         save_mode=params.save_mode,
+        persist=params.persist,
+        ml_dataset_path=params.ml_dataset_path,
         inject_serendipitous=params.inject_serendipitous,
         remote=False,
     )
@@ -247,7 +249,7 @@ def test_full_simulation_workflow(main_dir, temp_output_dir, sample_simulation_p
         tng_dir=temp_output_dir / "tng",
         galaxy_zoo_dir=temp_output_dir / "galaxy_zoo",
         hubble_dir=temp_output_dir / "hubble",
-        dask_client=None,
+        compute_backend=None,
     )
     
     # Verify directories are created
@@ -268,4 +270,3 @@ def test_full_simulation_workflow(main_dir, temp_output_dir, sample_simulation_p
         assert service.main_dir == main_dir
         assert service.output_dir == temp_output_dir
         pytest.fail(f"Simulation failed: {str(e)}")
-

@@ -39,12 +39,9 @@ class SimulationService:
         # Define simulation steps for progress tracking
         simulation_steps = [
             "Initializing",
-            "Generating antenna configuration",
-            "Computing max baseline",
-            "Creating sky model",
+            "Generating clean cube",
             "Running interferometric simulation",
-            "Processing results",
-            "Saving output",
+            "Exporting results",
         ]
 
         # Track current progress state
@@ -65,15 +62,14 @@ class SimulationService:
             if step_index is not None:
                 # Update step index and calculate base progress
                 current_progress["step_index"] = step_index
-                # Each step gets equal weight except "Running interferometric simulation" which gets more
-                if step_index < 4:  # Before running simulation
-                    base_progress = (step_index / len(simulation_steps)) * 50  # 0-50%
-                elif (
-                    step_index == 4
-                ):  # During running simulation (handled by progress_callback)
-                    base_progress = 50  # Start of simulation
-                else:  # After simulation (processing, saving)
-                    base_progress = 70 + ((step_index - 5) / 2) * 30  # 70-100%
+                if step_index == 0:
+                    base_progress = 0.0
+                elif step_index == 1:
+                    base_progress = 20.0
+                elif step_index == 2:
+                    base_progress = 50.0
+                else:
+                    base_progress = 85.0
 
                 current_progress["value"] = base_progress
 
@@ -97,9 +93,9 @@ class SimulationService:
         def progress_callback(progress: int):
             """Callback for fine-grained progress updates during simulation step."""
             # Only update progress if we're in the "Running interferometric simulation" step
-            if current_progress["step_index"] == 4:
-                # Map 0-100 progress to 50-70% range
-                overall_progress = 50 + (progress * 0.20)
+            if current_progress["step_index"] == 2:
+                # Map 0-100 progress to 50-85% range
+                overall_progress = 50 + (progress * 0.35)
                 current_progress["value"] = overall_progress
                 status_store.update(simulation_id, progress=overall_progress)
 
@@ -141,6 +137,8 @@ class SimulationService:
                 n_lines=params.n_lines,
                 line_names=params.line_names,
                 save_mode=params.save_mode,
+                persist=params.persist,
+                ml_dataset_path=params.ml_dataset_path,
                 inject_serendipitous=params.inject_serendipitous,
                 remote=False,
             )

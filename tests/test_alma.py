@@ -12,6 +12,8 @@ faulthandler.enable()
 os.environ["LC_ALL"] = "C"
 
 
+@pytest.mark.integration
+@pytest.mark.network
 def test_query():
     main_path = os.path.sep + os.path.join(
         *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
@@ -30,24 +32,21 @@ def test_query():
 
 
 def test_alma_functions():
-    main_path = os.path.sep + os.path.join(
-        *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
-            os.path.sep
-        )[:-2]
-    )
-    metadata_path = os.path.join(main_path, "data", "qso_metadata.csv")
+    repo_root = Path(inspect.getfile(inspect.currentframe())).resolve().parents[1]
+    main_dir = repo_root / "src" / "almasim"
+    metadata_path = repo_root / "data" / "qso_metadata.csv"
     metadata = pd.read_csv(metadata_path).iloc[0]
     antenna_array = metadata["antenna_arrays"]
     central_freq = metadata["Freq"] * U.GHz
     alma_antenna.generate_antenna_config_file_from_antenna_array(
-        antenna_array, os.path.join(main_path, "almasim"), main_path
+        antenna_array, str(main_dir), str(repo_root)
     )
-    antennalist = os.path.join(main_path, "antenna.cfg")
+    antennalist = repo_root / "antenna.cfg"
     assert os.path.isfile(antennalist)
     max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
     assert max_baseline > 0
     max_baseline = alma_antenna.get_max_baseline_from_antenna_array(
-        antenna_array, os.path.join(main_path, "almasim")
+        antenna_array, str(main_dir)
     )
     assert max_baseline > 0
     beam_size = alma_antenna.estimate_alma_beam_size(
@@ -58,7 +57,7 @@ def test_alma_functions():
         central_freq, max_baseline, return_value=True
     )
     assert beam_size > 0
-    os.remove(os.path.join(main_path, "antenna.cfg"))
+    os.remove(antennalist)
 
     fov = alma_antenna.get_fov_from_band(6, return_value=False)
     assert fov > 0

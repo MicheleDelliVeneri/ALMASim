@@ -12,7 +12,7 @@ from .imaging import (
     check_lfac,
     add_thermal_noise,
 )
-from .utils import get_channel_wavelength, closest_power_of_2
+from .utils import get_channel_wavelength, closest_power_of_2, sampling_to_uv_mask
 from .antenna import (
     estimate_alma_beam_size,
     get_fov_from_band,
@@ -40,6 +40,7 @@ __all__ = [
     "add_thermal_noise",
     "get_channel_wavelength",
     "closest_power_of_2",
+    "sampling_to_uv_mask",
     "estimate_alma_beam_size",
     "get_fov_from_band",
     "generate_antenna_config_file_from_antenna_array",
@@ -49,4 +50,3 @@ __all__ = [
     "freq_supp_extractor",
     "remove_non_numeric",
 ]
-

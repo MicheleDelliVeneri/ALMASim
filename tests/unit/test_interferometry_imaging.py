@@ -326,8 +326,6 @@ def test_grid_uv_basic(sample_arrays, sample_npix):
 @pytest.mark.slow
 def test_image_channel(sample_header, sample_wavelength):
     """Test processing a single channel through interferometric simulation."""
-    from dask.distributed import Client
-    
     Npix = 32
     Nant = 12
     Hcov = [0.0, 1.0, 2.0]
@@ -356,42 +354,35 @@ def test_image_channel(sample_header, sample_wavelength):
     # Create sample image
     img = np.random.rand(Nphf, Nphf).astype(np.float32) * 0.1
     
-    with Client() as client:
-        result = image_channel(
-            img,
-            sample_wavelength,
-            Npix,
-            Nant,
-            Hcov,
-            nH,
-            noise,
-            antPos,
-            robfac,
-            trlat,
-            trdec,
-            Diameters,
-            imsize,
-            Xmax,
-            lfac,
-            distmat,
-            Nphf,
-            Np4,
-            zooming,
-            sample_header,
-            robust,
-        )
-        
-        # Compute the delayed result
-        computed = client.compute(result).result()
-        
-        modelim, dirtymap, modelvis, dirtyvis, u, v, beam, totsampling = computed
-        
-        assert modelim.shape == (Npix, Npix)
-        assert dirtymap.shape == (Npix, Npix)
-        assert modelvis.shape == (Npix, Npix)
-        assert dirtyvis.shape == (Npix, Npix)
-        assert u.shape[0] > 0  # Should have baselines
-        assert v.shape[0] > 0
-        assert beam.shape == (Npix, Npix)
-        assert totsampling.shape == (Npix, Npix)
-
+    modelim, dirtymap, modelvis, dirtyvis, u, v, beam, totsampling = image_channel(
+        img,
+        sample_wavelength,
+        Npix,
+        Nant,
+        Hcov,
+        nH,
+        noise,
+        antPos,
+        robfac,
+        trlat,
+        trdec,
+        Diameters,
+        imsize,
+        Xmax,
+        lfac,
+        distmat,
+        Nphf,
+        Np4,
+        zooming,
+        sample_header,
+        robust,
+    )
+    
+    assert modelim.shape == (Npix, Npix)
+    assert dirtymap.shape == (Npix, Npix)
+    assert modelvis.shape == (Npix, Npix)
+    assert dirtyvis.shape == (Npix, Npix)
+    assert u.shape[0] > 0  # Should have baselines
+    assert v.shape[0] > 0
+    assert beam.shape == (Npix, Npix)
+    assert totsampling.shape == (Npix, Npix)

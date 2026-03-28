@@ -39,6 +39,7 @@ def test_simulation_service_run_point_source(
     
     # Create simulation parameters
     params = SimulationParamsCreate(
+        idx=0,
         main_dir=str(main_dir),
         output_dir=str(temp_output_dir),
         tng_dir=str(temp_output_dir / "tng"),
@@ -75,7 +76,7 @@ def test_simulation_service_run_point_source(
         tng_dir=Path(params.tng_dir),
         galaxy_zoo_dir=Path(params.galaxy_zoo_dir),
         hubble_dir=Path(params.hubble_dir),
-        dask_client=None,
+        compute_backend=None,
     )
     
     # This is a long-running test, so we'll just verify the service can be created
@@ -86,5 +87,3 @@ def test_simulation_service_run_point_source(
     # In a real test, you would run the simulation:
     # service.run_simulation(simulation_id="test-123", params=params)
     # But this takes too long for CI, so we skip the actual execution
-
-

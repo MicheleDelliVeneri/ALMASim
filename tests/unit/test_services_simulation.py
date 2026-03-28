@@ -2,10 +2,15 @@
 import pytest
 import pandas as pd
 import numpy as np
+import h5py
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-from almasim.services.simulation import SimulationParams, run_simulation
+from almasim.services.simulation import (
+    SimulationParams,
+    run_simulation,
+    write_ml_dataset_shard,
+)
 
 
 @pytest.fixture
@@ -296,8 +301,6 @@ def test_run_simulation_point_source(
     main_dir,
 ):
     """Test running simulation with point source."""
-    from dask.distributed import Client
-    
     # Setup mocks
     mock_process_spectral.return_value = (
         np.ones(32) * 0.1,  # continuum
@@ -348,12 +351,10 @@ def test_run_simulation_point_source(
         source_type="point",
     )
     
-    with Client() as client:
-        results = run_simulation(
-            params,
-            logger=print,
-            dask_client=client,
-        )
+    results = run_simulation(
+        params,
+        logger=print,
+    )
     
     assert results is not None
     assert 'model_cube' in results or 'dirty_cube' in results
@@ -373,8 +374,6 @@ def test_run_simulation_gaussian_source(
     main_dir,
 ):
     """Test running simulation with Gaussian source."""
-    from dask.distributed import Client
-    
     # Setup mocks
     mock_process_spectral.return_value = (
         np.ones(32) * 0.1,
@@ -423,12 +422,10 @@ def test_run_simulation_gaussian_source(
         source_type="gaussian",
     )
     
-    with Client() as client:
-        results = run_simulation(
-            params,
-            logger=print,
-            dask_client=client,
-        )
+    results = run_simulation(
+        params,
+        logger=print,
+    )
     
     assert results is not None
     mock_gaussian.insert.assert_called_once()
@@ -460,13 +457,157 @@ def test_simulation_params_dataclass_fields(tmp_path, sample_metadata_row_dict):
         'cont_sens', 'antenna_array', 'n_pix', 'n_channels',
         'source_type', 'tng_api_key', 'ncpu', 'rest_frequency',
         'redshift', 'lum_infrared', 'snr', 'n_lines', 'line_names',
-        'save_mode', 'inject_serendipitous', 'remote',
+        'save_mode', 'persist', 'ml_dataset_path',
+        'inject_serendipitous', 'remote',
     ]
     
     # Verify all fields exist and can be accessed
     for field in required_fields:
         assert hasattr(params, field), f"Missing field: {field}"
         getattr(params, field)  # Should not raise AttributeError
+
+
+@pytest.mark.unit
+def test_write_ml_dataset_shard(tmp_path):
+    """Test writing ML dataset shards to HDF5."""
+    output_path = tmp_path / "dataset" / "sample_0001.h5"
+    clean_cube = np.ones((2, 4, 4), dtype=np.float32)
+    dirty_cube = np.zeros((2, 4, 4), dtype=np.float32)
+    dirty_vis = np.ones((2, 4, 4), dtype=np.complex64) * (1 + 2j)
+    uv_mask_cube = np.array(clean_cube > 0, dtype=np.uint8)
+    metadata = {"source_name": "J1234+5678", "n_channels": 2}
+
+    result_path = write_ml_dataset_shard(
+        output_path,
+        clean_cube=clean_cube,
+        dirty_cube=dirty_cube,
+        dirty_vis=dirty_vis,
+        uv_mask_cube=uv_mask_cube,
+        metadata=metadata,
+    )
+
+    assert result_path == str(output_path.resolve())
+    with h5py.File(output_path, "r") as h5f:
+        assert np.array_equal(h5f["clean_cube"][:], clean_cube)
+        assert np.array_equal(h5f["dirty_cube"][:], dirty_cube)
+        assert np.array_equal(h5f["dirty_vis"][:], dirty_vis)
+        assert np.array_equal(h5f["uv_mask_cube"][:], uv_mask_cube)
+        assert "source_name" in h5f.attrs["metadata_json"]
+
+
+@pytest.mark.unit
+@patch('almasim.services.simulation.export_results')
+@patch('almasim.services.simulation.simulate_observation')
+@patch('almasim.services.simulation.generate_clean_cube')
+def test_run_simulation_memory_mode(
+    mock_generate_clean_cube,
+    mock_simulate_observation,
+    mock_export_results,
+    tmp_path,
+    sample_metadata_row_dict,
+    main_dir,
+):
+    """Test pure-Python execution mode without standard on-disk persistence."""
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        save_mode="memory",
+        persist=False,
+        ml_dataset_path=tmp_path / "ml" / "sample_0001.h5",
+    )
+
+    mock_generate_clean_cube.return_value = Mock()
+    mock_simulate_observation.return_value = {
+        "model_cube": np.ones((2, 2, 2), dtype=np.float32),
+        "dirty_cube": np.zeros((2, 2, 2), dtype=np.float32),
+        "dirty_vis": np.zeros((2, 2, 2), dtype=np.complex64),
+        "uv_mask_cube": np.ones((2, 2, 2), dtype=np.uint8),
+    }
+    mock_export_results.return_value = {"status": "ok"}
+
+    result = run_simulation(params)
+
+    assert result == {"status": "ok"}
+    mock_generate_clean_cube.assert_called_once()
+    mock_simulate_observation.assert_called_once()
+    mock_export_results.assert_called_once()
+
+
+@pytest.mark.unit
+@patch('almasim.services.simulation.process_spectral_data')
+@patch('almasim.services.simulation.usm')
+@patch('almasim.services.simulation.uin')
+def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
+    mock_interferometry,
+    mock_skymodels,
+    mock_process_spectral,
+    tmp_path,
+    sample_metadata_row_dict,
+    main_dir,
+):
+    """Negative line fluxes should not produce negative interferometer noise."""
+    mock_process_spectral.return_value = (
+        np.ones(32) * 0.1,
+        np.array([-1.0]),
+        ["CO(3-2)"],
+        0.5,
+        np.array([250.0]) * 1e9,
+        [10],
+        32,
+        1.875,
+        0.1,
+        np.array([250.0]) * 1e9,
+        [2.0],
+        1e10,
+    )
+
+    mock_datacube = Mock()
+    mock_datacube._array = Mock()
+    mock_datacube._array.to_value.return_value = np.random.rand(32, 32, 32) * 0.1
+    mock_datacube.wcs = Mock()
+    mock_datacube.wcs.sub.return_value.wcs_world2pix.return_value = (16, 16, 0)
+
+    mock_pointlike = Mock()
+    mock_pointlike.insert.return_value = mock_datacube
+    mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
+    mock_skymodels.DataCube.return_value = mock_datacube
+    mock_skymodels.get_datacube_header.return_value = Mock()
+
+    mock_interferometer = Mock()
+    mock_interferometer.run_interferometric_sim.return_value = {
+        'model_cube': np.random.rand(32, 32, 32),
+        'dirty_cube': np.random.rand(32, 32, 32),
+        'dirty_vis': np.random.rand(32, 32, 32),
+        'uv_mask_cube': np.ones((32, 32, 32), dtype=np.uint8),
+    }
+    mock_interferometry.Interferometer.return_value = mock_interferometer
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        source_type="point",
+    )
+
+    run_simulation(
+        params,
+        logger=print,
+    )
+
+    assert mock_interferometry.Interferometer.called
+    noise_value = mock_interferometry.Interferometer.call_args.kwargs["noise"]
+    assert noise_value >= 0
 
 
 @pytest.mark.unit
@@ -492,4 +633,3 @@ def test_simulation_params_clean_function(tmp_path, sample_metadata_row_dict):
     # Clean function should convert None/NaN to None
     assert params.n_pix is None
     assert params.n_channels is None
-

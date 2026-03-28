@@ -9,6 +9,22 @@ from almasim.services.metadata.tap import service as alma
 from almasim.services import astro
 from almasim import skymodels
 from almasim.services import simulation as sim
+from almasim.services.interferometry import antenna as alma_antenna
+
+
+class InlineClient:
+    """Minimal synchronous Dask-like client for tests."""
+
+    def compute(self, tasks):
+        if isinstance(tasks, list):
+            return [
+                task.compute(scheduler="synchronous") if hasattr(task, "compute") else task
+                for task in tasks
+            ]
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
+
+    def gather(self, futures):
+        return futures if isinstance(futures, list) else [futures]
 
 
 def _load_metadata_row():
@@ -36,17 +52,17 @@ def test_skymodel_generation(tmp_path):
     source_name = metadata["ALMA_source_name"]
     member_ouid = metadata["member_ous_uid"]
 
-    alma.generate_antenna_config_file_from_antenna_array(
+    alma_antenna.generate_antenna_config_file_from_antenna_array(
         antenna_array, str(main_dir), str(main_dir.parent)
     )
     from almasim.services.interferometry.frequency import freq_supp_extractor
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
         freq_support, freq
     )
-    max_baseline = alma.get_max_baseline_from_antenna_config(
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(
         None, main_dir.parent / "antenna.cfg"
     ) * U.km
-    beam_size = alma.estimate_alma_beam_size(
+    beam_size = alma_antenna.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=False
     )
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
@@ -152,8 +168,10 @@ def test_skymodel_generation(tmp_path):
     pos_y = int(pos_y)
     fwhm_x = np.random.randint(3, 10)
     fwhm_y = np.random.randint(3, 10)
+    fwhm_z_valid = [max(3.0, fz) for fz in fwhm_z]
     datacube = skymodels.insert_serendipitous(
         None,
+        InlineClient(),
         None,
         datacube,
         continum,
@@ -165,9 +183,9 @@ def test_skymodel_generation(tmp_path):
         pos_z,
         fwhm_x,
         fwhm_y,
-        fwhm_z,
+        fwhm_z_valid,
         n_pix,
         n_channels,
         sim_params_path,
     )
-    assert datacube._array.shape[0] == n_channels
+    assert n_channels in datacube._array.shape

@@ -8,8 +8,42 @@ import pandas as pd
 from almasim.services.metadata.tap import service as alma
 from almasim.services import astro
 from almasim.services import interferometry as interferometer
+from almasim.services.interferometry import antenna as alma_antenna
 from almasim import skymodels
 from almasim.services import simulation as sim
+from almasim.services.astro.spectral import sample_given_redshift
+
+
+class InlineBackend:
+    """Minimal synchronous backend for tests."""
+
+    def scatter(self, data, broadcast: bool = False):
+        return data
+
+    def compute(self, tasks, sync: bool = True):
+        if isinstance(tasks, list):
+            return [
+                task() if callable(task) else task.compute() if hasattr(task, "compute") else task
+                for task in tasks
+            ]
+        return tasks() if callable(tasks) else tasks.compute() if hasattr(tasks, "compute") else tasks
+
+    def gather(self, futures):
+        return futures if isinstance(futures, list) else [futures]
+
+    def delayed(self, func):
+        def delayed_decorator(*args, **kwargs):
+            return lambda: func(*args, **kwargs)
+        return delayed_decorator
+
+    def close(self):
+        return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
 
 def _load_metadata_row():
@@ -17,7 +51,7 @@ def _load_metadata_row():
     main_dir = repo_root / "src" / "almasim"
     metadata = pd.read_csv(repo_root / "data" / "qso_metadata.csv")
     rest_frequency, _ = astro.get_line_info(main_dir)
-    sample = sim.sample_given_redshift(metadata, 1, rest_frequency, False, None)
+    sample = sample_given_redshift(metadata, 1, rest_frequency, False, None)
     return main_dir, sample.iloc[0]
 
 
@@ -34,7 +68,7 @@ def test_interferometer_runs(tmp_path):
     freq_support = metadata["Freq.sup."]
     cont_sens = metadata["Cont_sens_mJybeam"] * U.mJy / (U.arcsec**2)
 
-    alma.generate_antenna_config_file_from_antenna_array(
+    alma_antenna.generate_antenna_config_file_from_antenna_array(
         antenna_array, str(main_dir), str(main_dir.parent)
     )
     antennalist = main_dir.parent / "antenna.cfg"
@@ -43,8 +77,8 @@ def test_interferometer_runs(tmp_path):
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
         freq_support, freq
     )
-    max_baseline = alma.get_max_baseline_from_antenna_config(None, antennalist) * U.km
-    beam_size = alma.estimate_alma_beam_size(
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    beam_size = alma_antenna.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=False
     )
     beam_area = 1.1331 * beam_size**2
@@ -122,27 +156,27 @@ def test_interferometer_runs(tmp_path):
     header = skymodels.get_datacube_header(datacube, obs_date)
     second2hour = 1 / 3600
     snr = 1.3
-    inter = interferometer.Interferometer(
-        idx=0,
-        skymodel=model,
-        client=None,
-        main_dir=str(main_dir),
-        output_dir=str(tmp_path),
-        ra=ra,
-        dec=dec,
-        central_freq=central_freq,
-        bandwidth=band_range,
-        fov=fov,
-        antenna_array=antenna_array,
-        noise=(np.min(line_fluxes) / beam_area.value) / snr,
-        snr=snr,
-        integration_time=int_time.value * second2hour,
-        observation_date=obs_date,
-        header=header,
-        save_mode="npz",
-        robust=0,
-        terminal=None,
-    )
+    with InlineBackend() as backend:
+        inter = interferometer.Interferometer(
+            idx=0,
+            skymodel=model,
+            backend=backend,
+            main_dir=str(main_dir),
+            output_dir=str(tmp_path),
+            ra=ra,
+            dec=dec,
+            central_freq=central_freq,
+            bandwidth=band_range,
+            fov=fov.value,
+            antenna_array=antenna_array,
+            noise=(np.min(line_fluxes) / beam_area.value) / snr,
+            snr=snr,
+            integration_time=int_time.value * second2hour,
+            observation_date=obs_date,
+            header=header,
+            save_mode="npz",
+            robust=0,
+        )
 
-    simulation_results = inter.run_interferometric_sim()
-    assert simulation_results is not None
+        simulation_results = inter.run_interferometric_sim()
+        assert simulation_results is not None

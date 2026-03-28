@@ -12,6 +12,7 @@ from almasim.services.metadata.tap.queries import (
 
 
 @pytest.mark.integration
+@pytest.mark.network
 def test_query_science_types():
     """Test querying science types from TAP service."""
     keywords, categories = query_science_types()
@@ -22,6 +23,7 @@ def test_query_science_types():
 
 
 @pytest.mark.integration
+@pytest.mark.network
 def test_query_metadata_by_science(tmp_path, test_data_dir):
     """Test querying metadata by science parameters."""
     # This is an integration test that requires network access
@@ -37,6 +39,7 @@ def test_query_metadata_by_science(tmp_path, test_data_dir):
 
 
 @pytest.mark.integration
+@pytest.mark.network
 def test_query_metadata_by_targets(tmp_path):
     """Test querying metadata by target list."""
     targets = [("NGC253", "uid://A001/X123/X456")]
@@ -54,5 +57,4 @@ def test_load_metadata(test_data_dir):
     assert isinstance(df, pd.DataFrame)
     assert len(df) > 0
     assert "ALMA_source_name" in df.columns or "target_name" in df.columns
-
 

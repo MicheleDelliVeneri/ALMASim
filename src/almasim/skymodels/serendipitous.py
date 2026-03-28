@@ -220,7 +220,7 @@ def insert_serendipitous(
     fwhm_zs: list[float],
     n_px: int,
     n_chan: int,
-    sim_params_path: str,
+    sim_params_path: Optional[str],
 ) -> Any:
     """Insert serendipitous sources into datacube."""
     wcs = datacube.wcs
@@ -278,8 +278,11 @@ def insert_serendipitous(
     )
     # get the rotation angles
     pas = np.random.randint(0, 360, n_sources)
-    with open(sim_params_path, "a") as f:
-        f.write("\n Injected {} serendipitous sources\n".format(n_sources))
+    params_handle = open(sim_params_path, "a") if sim_params_path is not None else None
+    try:
+        if params_handle is not None:
+            params_handle.write("\n Injected {} serendipitous sources\n".format(n_sources))
+
         for c_id, choords in enumerate(sample_coords):
             n_line = n_lines[c_id]
             if terminal is not None:
@@ -304,16 +307,17 @@ def insert_serendipitous(
             for _ in range(n_line - 1):
                 fwhmsz.append(np.random.randint(2, np.random.choice(fwhm_zs, 1))[0])
             s_continum = serendipitous_conts[c_id]
-            f.write("RA: {}\n".format(s_ra))
-            f.write("DEC: {}\n".format(s_dec))
-            f.write("FWHM_x (pixels): {}\n".format(fwhm_xs[c_id]))
-            f.write("FWHM_y (pixels): {}\n".format(fwhm_ys[c_id]))
-            f.write("Projection Angle: {}\n".format(pas[c_id]))
-            for i in range(len(s_freq)):
-                f.write(
-                    f"Line: {s_line_names[i]} - Frequency: {s_freq[i]} GHz "
-                    f"- Flux: {line_fluxes[i]} Jy - Width (Channels): {fwhmsz[i]}\n"
-                )
+            if params_handle is not None:
+                params_handle.write("RA: {}\n".format(s_ra))
+                params_handle.write("DEC: {}\n".format(s_dec))
+                params_handle.write("FWHM_x (pixels): {}\n".format(fwhm_xs[c_id]))
+                params_handle.write("FWHM_y (pixels): {}\n".format(fwhm_ys[c_id]))
+                params_handle.write("Projection Angle: {}\n".format(pas[c_id]))
+                for i in range(len(s_freq)):
+                    params_handle.write(
+                        f"Line: {s_line_names[i]} - Frequency: {s_freq[i]} GHz "
+                        f"- Flux: {line_fluxes[i]} Jy - Width (Channels): {fwhmsz[i]}\n"
+                    )
             # Use GaussianSkyModel to insert serendipitous source
             gaussian_model = GaussianSkyModel(
                 datacube=datacube,
@@ -332,6 +336,8 @@ def insert_serendipitous(
                 update_progress=update_progress,
             )
             datacube = gaussian_model.insert()
+    finally:
+        if params_handle is not None:
+            params_handle.close()
     return datacube
-
 

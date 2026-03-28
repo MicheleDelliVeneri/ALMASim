@@ -7,6 +7,21 @@ import astropy.units as U
 from almasim import skymodels
 
 
+class InlineClient:
+    """Minimal synchronous Dask-like client for component tests."""
+
+    def compute(self, tasks):
+        if isinstance(tasks, list):
+            return [
+                task.compute(scheduler="synchronous") if hasattr(task, "compute") else task
+                for task in tasks
+            ]
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
+
+    def gather(self, futures):
+        return futures if isinstance(futures, list) else [futures]
+
+
 def test_pointlike_model_integration():
     """Test pointlike sky model end-to-end."""
     datacube = DataCube(
@@ -43,8 +58,6 @@ def test_pointlike_model_integration():
 
 def test_gaussian_model_integration():
     """Test Gaussian sky model end-to-end."""
-    from dask.distributed import Client
-    
     datacube = DataCube(
         n_px_x=64,
         n_px_y=64,
@@ -60,7 +73,6 @@ def test_gaussian_model_integration():
     pos_z = [10]
     fwhm_z = [2.0]
     
-    with Client() as client:
     model = skymodels.GaussianSkyModel(
         datacube=datacube,
         continuum=continuum,
@@ -74,10 +86,8 @@ def test_gaussian_model_integration():
         angle=45,
         n_px=64,
         n_chan=32,
-            client=client,
+        client=InlineClient(),
     )
     
     result = model.insert()
     assert result is not None
-
-

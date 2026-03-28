@@ -37,7 +37,15 @@ class SimulationParamsBase(BaseModel):
     snr: float = Field(default=1.3, description="Signal-to-noise ratio")
     n_lines: Optional[int] = Field(None, description="Number of spectral lines")
     line_names: Optional[Any] = Field(None, description="Line names")
-    save_mode: str = Field(default="npz", description="Save mode")
+    save_mode: str = Field(default="npz", description="Save mode: npz, h5, fits, or memory")
+    persist: bool = Field(
+        default=True,
+        description="Whether to persist standard simulation outputs to disk",
+    )
+    ml_dataset_path: Optional[str] = Field(
+        default=None,
+        description="Optional HDF5 shard path for ML dataset export",
+    )
     inject_serendipitous: bool = Field(
         default=False, description="Inject serendipitous sources"
     )

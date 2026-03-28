@@ -9,6 +9,21 @@ from almasim.services.astro.spectral import process_spectral_data
 from almasim.services.interferometry.frequency import freq_supp_extractor
 
 
+class InlineClient:
+    """Minimal synchronous Dask-like client for component tests."""
+
+    def compute(self, tasks):
+        if isinstance(tasks, list):
+            return [
+                task.compute(scheduler="synchronous") if hasattr(task, "compute") else task
+                for task in tasks
+            ]
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
+
+    def gather(self, futures):
+        return futures if isinstance(futures, list) else [futures]
+
+
 @pytest.fixture
 def sample_datacube():
     """Create a sample datacube for testing."""
@@ -97,8 +112,6 @@ def test_pointlike_skymodel_generation(sample_datacube, sample_spectral_data):
 @pytest.mark.component
 def test_gaussian_skymodel_generation(sample_datacube, sample_spectral_data):
     """Test generating a Gaussian sky model."""
-    from dask.distributed import Client
-    
     (
         continum,
         line_fluxes,
@@ -119,34 +132,30 @@ def test_gaussian_skymodel_generation(sample_datacube, sample_spectral_data):
     )
     pos_z = [int(idx) for idx in source_channel_index]
     
-    # Use threads client for testing
-    with Client() as client:
-        model = skymodels.GaussianSkyModel(
-            datacube=sample_datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_x=int(pos_x),
-            pos_y=int(pos_y),
-            pos_z=pos_z,
-            fwhm_x=5,
-            fwhm_y=5,
-            fwhm_z=fwhm_z,
-            angle=45,
-            n_px=64,
-            n_chan=32,
-            client=client,
-        )
-        
-        result = model.insert()
-        assert result is not None
-        assert hasattr(result, '_array')
+    model = skymodels.GaussianSkyModel(
+        datacube=sample_datacube,
+        continuum=continum,
+        line_fluxes=line_fluxes,
+        pos_x=int(pos_x),
+        pos_y=int(pos_y),
+        pos_z=pos_z,
+        fwhm_x=5,
+        fwhm_y=5,
+        fwhm_z=fwhm_z,
+        angle=45,
+        n_px=64,
+        n_chan=32,
+        client=InlineClient(),
+    )
+    
+    result = model.insert()
+    assert result is not None
+    assert hasattr(result, '_array')
 
 
 @pytest.mark.component
 def test_diffuse_skymodel_generation(sample_datacube, sample_spectral_data):
     """Test generating a diffuse sky model."""
-    from dask.distributed import Client
-    
     (
         continum,
         line_fluxes,
@@ -164,29 +173,26 @@ def test_diffuse_skymodel_generation(sample_datacube, sample_spectral_data):
     
     pos_z = [int(idx) for idx in source_channel_index]
     
-    with Client() as client:
-        model = skymodels.DiffuseSkyModel(
-            datacube=sample_datacube,
-            continuum=continum,
-            line_fluxes=line_fluxes,
-            pos_z=pos_z,
-            fwhm_z=fwhm_z,
-            n_px=64,
-            n_chan=32,
-            client=client,
-        )
-        
-        result = model.insert()
-        assert result is not None
-        assert hasattr(result, '_array')
+    model = skymodels.DiffuseSkyModel(
+        datacube=sample_datacube,
+        continuum=continum,
+        line_fluxes=line_fluxes,
+        pos_z=pos_z,
+        fwhm_z=fwhm_z,
+        n_px=64,
+        n_chan=32,
+        client=InlineClient(),
+    )
+    
+    result = model.insert()
+    assert result is not None
+    assert hasattr(result, '_array')
 
 
 @pytest.mark.component
 @pytest.mark.slow
 def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, tmp_path):
     """Test inserting serendipitous sources into a datacube."""
-    from dask.distributed import Client
-    
     (
         continum,
         line_fluxes,
@@ -229,29 +235,28 @@ def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, 
     sim_params_path = tmp_path / "sim_params.txt"
     sim_params_path.write_text("test")
     
-    with Client() as client:
-        result = skymodels.insert_serendipitous(
-            terminal=None,
-            client=client,
-            update_progress=None,
-            datacube=datacube,
-            continum=continum,
-            cont_sens=0.1,
-            line_fluxes=line_fluxes,
-            line_names=line_names,
-            line_frequencies=line_frequency,  # Note: plural form
-            freq_sup=0.1,  # Note: freq_sup not delta_freq
-            pos_zs=pos_z,  # Note: plural form
-            fwhm_x=5,
-            fwhm_y=5,
-            fwhm_zs=fwhm_z_valid,  # Note: plural form, ensure >= 2
-            n_px=64,
-            n_chan=32,  # Note: n_chan not n_channels
-            sim_params_path=str(sim_params_path),
-        )
-        
-        assert result is not None
-        assert hasattr(result, '_array')
+    result = skymodels.insert_serendipitous(
+        terminal=None,
+        client=InlineClient(),
+        update_progress=None,
+        datacube=datacube,
+        continum=continum,
+        cont_sens=0.1,
+        line_fluxes=line_fluxes,
+        line_names=line_names,
+        line_frequencies=line_frequency,  # Note: plural form
+        freq_sup=0.1,  # Note: freq_sup not delta_freq
+        pos_zs=pos_z,  # Note: plural form
+        fwhm_x=5,
+        fwhm_y=5,
+        fwhm_zs=fwhm_z_valid,  # Note: plural form, ensure >= 2
+        n_px=64,
+        n_chan=32,  # Note: n_chan not n_channels
+        sim_params_path=str(sim_params_path),
+    )
+    
+    assert result is not None
+    assert hasattr(result, '_array')
 
 
 @pytest.mark.component
@@ -286,4 +291,3 @@ def test_datacube_header_generation(sample_datacube):
     assert 'NAXIS' in header
     # Check for date-related fields (MJD-OBS is used instead of DATE-OBS)
     assert 'MJD-OBS' in header or 'DATE-OBS' in header or 'DATE' in header
-

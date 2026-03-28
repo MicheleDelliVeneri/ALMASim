@@ -2,6 +2,7 @@
 from typing import Any, Dict, Optional
 
 from .base import ComputationBackend
+from .sync import SyncBackend
 from .local import LocalBackend
 from .dask_backend import DaskBackend
 from .slurm import SlurmBackend
@@ -17,7 +18,7 @@ def create_backend(
     Parameters
     ----------
     backend_type : str
-        Backend type: "local", "dask", "slurm", or "kubernetes"
+        Backend type: "sync", "local", "dask", "slurm", or "kubernetes"
     **kwargs
         Backend-specific configuration parameters
         
@@ -28,6 +29,9 @@ def create_backend(
         
     Examples
     --------
+    >>> # Synchronous backend
+    >>> backend = create_backend("sync")
+
     >>> # Local backend
     >>> backend = create_backend("local", n_workers=4)
     
@@ -42,7 +46,9 @@ def create_backend(
     """
     backend_type = backend_type.lower()
 
-    if backend_type == "local":
+    if backend_type == "sync":
+        return SyncBackend()
+    elif backend_type == "local":
         return LocalBackend(**kwargs)
     elif backend_type == "dask":
         return DaskBackend(**kwargs)
@@ -53,6 +59,5 @@ def create_backend(
     else:
         raise ValueError(
             f"Unknown backend type: {backend_type}. "
-            f"Supported types: local, dask, slurm, kubernetes"
+            f"Supported types: sync, local, dask, slurm, kubernetes"
         )
-

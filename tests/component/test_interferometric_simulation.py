@@ -9,6 +9,35 @@ from almasim.services import interferometry
 from almasim import skymodels
 
 
+class InlineBackend:
+    """Minimal synchronous backend for component tests."""
+
+    def scatter(self, data, broadcast: bool = False):
+        return data
+
+    def compute(self, tasks, sync: bool = True):
+        if isinstance(tasks, list):
+            return [task() if callable(task) else task.compute() if hasattr(task, "compute") else task for task in tasks]
+        return tasks() if callable(tasks) else tasks.compute() if hasattr(tasks, "compute") else tasks
+
+    def gather(self, futures):
+        return futures if isinstance(futures, list) else [futures]
+
+    def delayed(self, func):
+        def delayed_decorator(*args, **kwargs):
+            return lambda: func(*args, **kwargs)
+        return delayed_decorator
+
+    def close(self):
+        return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
 @pytest.fixture
 def sample_skymodel():
     """Create a sample sky model array for testing."""
@@ -43,76 +72,76 @@ def sample_antenna_array(test_data_dir):
 @pytest.mark.component
 def test_interferometer_initialization(main_dir, tmp_path, sample_skymodel, sample_fits_header, sample_antenna_array):
     """Test initializing the Interferometer class."""
-    interferometer = interferometry.Interferometer(
-        idx=0,
-        skymodel=sample_skymodel,
-        client=None,
-        main_dir=str(main_dir),
-        output_dir=str(tmp_path),
-        ra=0.0 * U.deg,
-        dec=0.0 * U.deg,
-        central_freq=100.0 * U.GHz,
-        bandwidth=10.0 * U.GHz,
-        fov=10.0,
-        antenna_array=sample_antenna_array,
-        noise=0.01,
-        snr=1.3,
-        integration_time=1.0,
-        observation_date="2020-01-01",
-        header=sample_fits_header,
-        save_mode="npz",
-        robust=0.0,
-    )
+    with InlineBackend() as backend:
+        interferometer = interferometry.Interferometer(
+            idx=0,
+            skymodel=sample_skymodel,
+            backend=backend,
+            main_dir=str(main_dir),
+            output_dir=str(tmp_path),
+            ra=0.0 * U.deg,
+            dec=0.0 * U.deg,
+            central_freq=100.0 * U.GHz,
+            bandwidth=10.0 * U.GHz,
+            fov=10.0,
+            antenna_array=sample_antenna_array,
+            noise=0.01,
+            snr=1.3,
+            integration_time=1.0,
+            observation_date="2020-01-01",
+            header=sample_fits_header,
+            save_mode="npz",
+            robust=0.0,
+        )
     
-    assert interferometer.idx == 0
-    assert interferometer.skymodel.shape == sample_skymodel.shape
-    assert interferometer.main_dir == str(main_dir)
-    assert interferometer.output_dir == str(tmp_path)
-    assert interferometer.antenna_array == sample_antenna_array
+        assert interferometer.idx == 0
+        assert interferometer.skymodel.shape == sample_skymodel.shape
+        assert interferometer.main_dir == str(main_dir)
+        assert interferometer.output_dir == str(tmp_path)
+        assert interferometer.antenna_array == sample_antenna_array
 
 
 @pytest.mark.component
 def test_interferometer_baseline_preparation(main_dir, tmp_path, sample_skymodel, sample_fits_header, sample_antenna_array):
     """Test baseline preparation in interferometer."""
-    interferometer = interferometry.Interferometer(
-        idx=0,
-        skymodel=sample_skymodel,
-        client=None,
-        main_dir=str(main_dir),
-        output_dir=str(tmp_path),
-        ra=0.0 * U.deg,
-        dec=0.0 * U.deg,
-        central_freq=100.0 * U.GHz,
-        bandwidth=10.0 * U.GHz,
-        fov=10.0,
-        antenna_array=sample_antenna_array,
-        noise=0.01,
-        snr=1.3,
-        integration_time=1.0,
-        observation_date="2020-01-01",
-        header=sample_fits_header,
-        save_mode="npz",
-        robust=0.0,
-    )
+    with InlineBackend() as backend:
+        interferometer = interferometry.Interferometer(
+            idx=0,
+            skymodel=sample_skymodel,
+            backend=backend,
+            main_dir=str(main_dir),
+            output_dir=str(tmp_path),
+            ra=0.0 * U.deg,
+            dec=0.0 * U.deg,
+            central_freq=100.0 * U.GHz,
+            bandwidth=10.0 * U.GHz,
+            fov=10.0,
+            antenna_array=sample_antenna_array,
+            noise=0.01,
+            snr=1.3,
+            integration_time=1.0,
+            observation_date="2020-01-01",
+            header=sample_fits_header,
+            save_mode="npz",
+            robust=0.0,
+        )
     
-    # Check that baseline-related attributes are set
-    assert hasattr(interferometer, 'Nant')
-    assert hasattr(interferometer, 'antPos')
-    assert interferometer.Nant > 0
-    assert len(interferometer.antPos) > 0
+        # Check that baseline-related attributes are set
+        assert hasattr(interferometer, 'Nant')
+        assert hasattr(interferometer, 'antPos')
+        assert interferometer.Nant > 0
+        assert len(interferometer.antPos) > 0
 
 
 @pytest.mark.component
 @pytest.mark.slow
 def test_interferometer_simulation_run(main_dir, tmp_path, sample_skymodel, sample_fits_header, sample_antenna_array):
     """Test running a full interferometric simulation."""
-    from dask.distributed import Client
-    
-    with Client() as client:
+    with InlineBackend() as backend:
         interferometer = interferometry.Interferometer(
             idx=0,
             skymodel=sample_skymodel,
-            client=client,
+            backend=backend,
             main_dir=str(main_dir),
             output_dir=str(tmp_path),
             ra=0.0 * U.deg,
@@ -152,48 +181,47 @@ def test_interferometer_progress_signal(main_dir, tmp_path, sample_skymodel, sam
     def progress_callback(value):
         progress_values.append(value)
     
-    interferometer = interferometry.Interferometer(
-        idx=0,
-        skymodel=sample_skymodel,
-        client=None,
-        main_dir=str(main_dir),
-        output_dir=str(tmp_path),
-        ra=0.0 * U.deg,
-        dec=0.0 * U.deg,
-        central_freq=100.0 * U.GHz,
-        bandwidth=10.0 * U.GHz,
-        fov=10.0,
-        antenna_array=sample_antenna_array,
-        noise=0.01,
-        snr=1.3,
-        integration_time=1.0,
-        observation_date="2020-01-01",
-        header=sample_fits_header,
-        save_mode="npz",
-        robust=0.0,
-    )
-    
-    interferometer.progress_signal.connect(progress_callback)
-    interferometer.progress_signal.emit(50)
-    interferometer.progress_signal.emit(100)
-    
-    assert len(progress_values) == 2
-    assert progress_values == [50, 100]
+    with InlineBackend() as backend:
+        interferometer = interferometry.Interferometer(
+            idx=0,
+            skymodel=sample_skymodel,
+            backend=backend,
+            main_dir=str(main_dir),
+            output_dir=str(tmp_path),
+            ra=0.0 * U.deg,
+            dec=0.0 * U.deg,
+            central_freq=100.0 * U.GHz,
+            bandwidth=10.0 * U.GHz,
+            fov=10.0,
+            antenna_array=sample_antenna_array,
+            noise=0.01,
+            snr=1.3,
+            integration_time=1.0,
+            observation_date="2020-01-01",
+            header=sample_fits_header,
+            save_mode="npz",
+            robust=0.0,
+        )
+        
+        interferometer.progress_signal.connect(progress_callback)
+        interferometer.progress_signal.emit(50)
+        interferometer.progress_signal.emit(100)
+        
+        assert len(progress_values) == 2
+        assert progress_values == [50, 100]
 
 
 @pytest.mark.component
 def test_interferometer_save_modes(main_dir, tmp_path, sample_skymodel, sample_fits_header, sample_antenna_array):
     """Test different save modes for interferometer."""
-    from dask.distributed import Client
-    
     save_modes = ["npz", "fits"]
     
     for save_mode in save_modes:
-        with Client() as client:
+        with InlineBackend() as backend:
             interferometer = interferometry.Interferometer(
                 idx=0,
                 skymodel=sample_skymodel,
-                client=client,
+                backend=backend,
                 main_dir=str(main_dir),
                 output_dir=str(tmp_path / save_mode),
                 ra=0.0 * U.deg,
@@ -213,4 +241,3 @@ def test_interferometer_save_modes(main_dir, tmp_path, sample_skymodel, sample_f
             
             # Just verify it can be initialized with different save modes
             assert interferometer.save_mode == save_mode
-

@@ -39,6 +39,19 @@ faulthandler.enable()
 os.environ["LC_ALL"] = "C"
 
 
+def pytest_collection_modifyitems(config, items):
+    """Skip network-marked tests unless explicitly enabled."""
+    if os.environ.get("ALMASIM_RUN_NETWORK_TESTS") == "1":
+        return
+
+    skip_network = pytest.mark.skip(
+        reason="network tests disabled; set ALMASIM_RUN_NETWORK_TESTS=1 to enable",
+    )
+    for item in items:
+        if "network" in item.keywords:
+            item.add_marker(skip_network)
+
+
 @pytest.fixture
 def repo_root():
     """Return the repository root directory."""
@@ -63,5 +76,4 @@ def sample_metadata_row(test_data_dir):
     import pandas as pd
     metadata = pd.read_csv(test_data_dir / "qso_metadata.csv")
     return metadata.iloc[0]
-
 
