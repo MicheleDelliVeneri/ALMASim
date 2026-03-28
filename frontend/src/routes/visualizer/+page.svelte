@@ -64,22 +64,40 @@
 	let gridLayout = $state<'horizontal' | 'vertical'>('horizontal');
 
 	async function loadFileList(dir?: string) {
-		logger.debug({ dir }, 'Loading file list');
+		const targetDir = dir || '/host_home';
+		logger.debug({ dir: targetDir }, 'Loading file list');
 		fileListLoading = true;
+		outputDir = targetDir;
+		if (targetDir === '/host_home') {
+			fileList = [];
+			fileListLoading = false;
+			return;
+		}
+		let timeoutId: number | undefined;
 		try {
-			const url = dir
-				? `${API_BASE_URL}/api/v1/visualizer/files?dir=${encodeURIComponent(dir)}`
-				: `${API_BASE_URL}/api/v1/visualizer/files`;
-			const response = await fetch(url);
+			const controller = new AbortController();
+			timeoutId = window.setTimeout(() => controller.abort(), 5000);
+			const response = await fetch(
+				`${API_BASE_URL}/api/v1/visualizer/files?dir=${encodeURIComponent(targetDir)}`,
+				{
+					signal: controller.signal
+				}
+			);
 			if (!response.ok) throw new Error('Failed to load file list');
 			const data: FileListResponse = await response.json();
 			outputDir = data.output_dir;
 			fileList = data.files;
 			logger.info({ outputDir: data.output_dir, count: data.files.length }, 'File list loaded');
 		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') {
+				error = 'Timed out while loading visualizer files';
+			}
 			logger.error({ err }, 'Failed to load file list');
 			fileList = [];
 		} finally {
+			if (timeoutId !== undefined) {
+				window.clearTimeout(timeoutId);
+			}
 			fileListLoading = false;
 		}
 	}
@@ -111,9 +129,10 @@
 
 	function selectDir() {
 		if (!dirBrowseResult) return;
-		logger.info({ dir: dirBrowseResult.current }, 'Directory selected');
+		const selectedDir = dirBrowseResult.current;
+		logger.info({ dir: selectedDir }, 'Directory selected');
 		closeDirBrowser();
-		loadFileList(dirBrowseResult.current);
+		loadFileList(selectedDir);
 	}
 
 	// Process a file (either uploaded or from server)
@@ -122,6 +141,8 @@
 		logger.info({ fileName, method: integrationMethod }, 'Processing datacube');
 		loading = true;
 		error = null;
+		let fileTimeoutId: number | undefined;
+		let integrateTimeoutId: number | undefined;
 
 		try {
 			let formData: FormData;
@@ -129,8 +150,13 @@
 			if (typeof file === 'string') {
 				// Load file from server
 				const dirParam = outputDir ? `?dir=${encodeURIComponent(outputDir)}` : '';
+				const fileController = new AbortController();
+				fileTimeoutId = window.setTimeout(() => fileController.abort(), 5000);
 				const fileResponse = await fetch(
-					`${API_BASE_URL}/api/v1/visualizer/files/${encodeURIComponent(file)}${dirParam}`
+					`${API_BASE_URL}/api/v1/visualizer/files/${encodeURIComponent(file)}${dirParam}`,
+					{
+						signal: fileController.signal
+					}
 				);
 				if (!fileResponse.ok) {
 					throw new Error(`Failed to load file: ${fileResponse.statusText}`);
@@ -149,9 +175,12 @@
 
 			formData.append('method', integrationMethod);
 
+			const integrateController = new AbortController();
+			integrateTimeoutId = window.setTimeout(() => integrateController.abort(), 10000);
 			const response = await fetch(`${API_BASE_URL}/api/v1/visualizer/integrate`, {
 				method: 'POST',
-				body: formData
+				body: formData,
+				signal: integrateController.signal
 			});
 
 			if (!response.ok) {
@@ -173,9 +202,19 @@
 
 			loadedImages = [...loadedImages, newImage];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to process datacube';
+			if (err instanceof DOMException && err.name === 'AbortError') {
+				error = 'Timed out while processing datacube';
+			} else {
+				error = err instanceof Error ? err.message : 'Failed to process datacube';
+			}
 			logger.error({ fileName, err }, 'Failed to process datacube');
 		} finally {
+			if (fileTimeoutId !== undefined) {
+				window.clearTimeout(fileTimeoutId);
+			}
+			if (integrateTimeoutId !== undefined) {
+				window.clearTimeout(integrateTimeoutId);
+			}
 			loading = false;
 		}
 	}
@@ -249,22 +288,13 @@
 		}
 	}
 
-	async function getLastSimulationOutputDir(): Promise<string | undefined> {
-		try {
-			const response = await fetch(`${API_BASE_URL}/api/v1/simulations/`);
-			if (!response.ok) return undefined;
-			const data = await response.json();
-			const sims: Array<{ output_dir?: string }> = data.simulations ?? [];
-			return sims.find((s) => s.output_dir)?.output_dir ?? undefined;
-		} catch {
-			return undefined;
-		}
-	}
-
 	onMount(async () => {
 		logger.info('Visualizer page mounted');
-		const lastDir = await getLastSimulationOutputDir();
-		loadFileList(lastDir);
+		const requestedDir =
+			typeof window !== 'undefined'
+				? new URLSearchParams(window.location.search).get('dir')
+				: null;
+		void loadFileList(requestedDir || '/host_home');
 	});
 </script>
 

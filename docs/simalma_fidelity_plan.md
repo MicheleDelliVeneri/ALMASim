@@ -178,6 +178,10 @@ parity and benchmark work described in P2.
 
 ## P1: Imaging And Combination
 
+### Status
+
+Complete.
+
 ### Goal
 
 Add the CASA-like downstream steps that turn simulated measurements into
@@ -248,10 +252,11 @@ path, not full CASA feature parity.
   - combined INT image products
   - TP image products
   - TP+INT merged image products
-- outputs are comparable to CASA at the level of:
-  - beam size
-  - recovered flux fraction
-  - large-scale structure recovery
+
+This phase is considered complete in-repo once the above products are produced
+through the staged API and covered by tests. Cross-tool comparison against CASA
+for beam size, recovered flux fraction, and large-scale structure recovery
+remains part of the broader parity work described in P2.
 
 ## P2: Parity, Diagnostics, And Ingestion
 

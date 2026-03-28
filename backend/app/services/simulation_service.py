@@ -1,5 +1,6 @@
 """Simulation business logic service."""
 
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -8,6 +9,8 @@ from almasim.services.compute.base import ComputationBackend
 from almasim.services.simulation import SimulationParams
 from app.schemas.simulation import SimulationParamsCreate
 from app.services.status_store import status_store
+from database.config import get_db_context
+from database.service import DatabaseService
 
 
 class SimulationService:
@@ -30,6 +33,49 @@ class SimulationService:
         self.hubble_dir = hubble_dir
         self.compute_backend = compute_backend
 
+    def _persist_status(
+        self,
+        simulation_id: str,
+        *,
+        status: str,
+        progress: Optional[float] = None,
+        current_step: Optional[str] = None,
+        message: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Persist simulation status in the database when available."""
+        try:
+            with get_db_context() as db:
+                DatabaseService(db).update_simulation_status(
+                    uuid.UUID(simulation_id),
+                    status=status,
+                    progress=progress,
+                    current_step=current_step,
+                    message=message,
+                    error=error,
+                )
+        except Exception:
+            # Keep the in-memory status path working even if the DB is unavailable.
+            return
+
+    def _persist_log(
+        self,
+        simulation_id: str,
+        message: str,
+        *,
+        level: str = "INFO",
+    ) -> None:
+        """Persist a simulation log entry in the database when available."""
+        try:
+            with get_db_context() as db:
+                DatabaseService(db).add_simulation_log(
+                    uuid.UUID(simulation_id),
+                    message=message,
+                    level=level,
+                )
+        except Exception:
+            return
+
     def run_simulation(
         self,
         simulation_id: str,
@@ -41,6 +87,7 @@ class SimulationService:
             "Initializing",
             "Generating clean cube",
             "Running interferometric simulation",
+            "Reconstructing image products",
             "Exporting results",
         ]
 
@@ -68,8 +115,10 @@ class SimulationService:
                     base_progress = 20.0
                 elif step_index == 2:
                     base_progress = 50.0
-                else:
+                elif step_index == 3:
                     base_progress = 85.0
+                else:
+                    base_progress = 95.0
 
                 current_progress["value"] = base_progress
 
@@ -85,10 +134,18 @@ class SimulationService:
                 current_step=current_step,
                 message=message,
             )
+            self._persist_status(
+                simulation_id,
+                status="running",
+                progress=current_progress["value"],
+                current_step=current_step,
+                message=message,
+            )
 
         def log_callback(message: str):
             """Callback to log messages."""
             status_store.update(simulation_id, log=message)
+            self._persist_log(simulation_id, message)
 
         def progress_callback(progress: int):
             """Callback for fine-grained progress updates during simulation step."""
@@ -98,6 +155,11 @@ class SimulationService:
                 overall_progress = 50 + (progress * 0.35)
                 current_progress["value"] = overall_progress
                 status_store.update(simulation_id, progress=overall_progress)
+                self._persist_status(
+                    simulation_id,
+                    status="running",
+                    progress=overall_progress,
+                )
 
         try:
             # Convert API params to internal SimulationParams
@@ -154,6 +216,13 @@ class SimulationService:
                 current_step="Initializing",
                 output_dir=sim_params.output_dir,
             )
+            self._persist_status(
+                simulation_id,
+                status="running",
+                progress=0.0,
+                current_step="Initializing",
+                message="Simulation started",
+            )
 
             # Run simulation with callbacks
             sim_service.run_simulation(
@@ -173,10 +242,23 @@ class SimulationService:
                 current_step="Completed",
                 message="Simulation completed successfully",
             )
+            self._persist_status(
+                simulation_id,
+                status="completed",
+                progress=100.0,
+                current_step="Completed",
+                message="Simulation completed successfully",
+            )
         except Exception as e:
             # Mark as failed
             error_msg = str(e)
             status_store.update(
+                simulation_id,
+                status="failed",
+                error=error_msg,
+                message=f"Simulation failed: {error_msg}",
+            )
+            self._persist_status(
                 simulation_id,
                 status="failed",
                 error=error_msg,

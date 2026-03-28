@@ -23,12 +23,28 @@
 	let simulations = $state<SimulationSummary[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let currentRequest = $state<AbortController | null>(null);
+	let refreshing = $state(false);
 
 	async function fetchSimulations() {
+		if (refreshing) {
+			return;
+		}
+
+		let timeoutId: number | undefined;
 		try {
-			loading = true;
+			refreshing = true;
+			if (simulations.length === 0) {
+				loading = true;
+			}
 			error = null;
-			const response = await fetch(`${apiUrl}/api/v1/simulations/`);
+			currentRequest?.abort();
+			const controller = new AbortController();
+			timeoutId = window.setTimeout(() => controller.abort(), 5000);
+			currentRequest = controller;
+			const response = await fetch(`${apiUrl}/api/v1/simulations/`, {
+				signal: controller.signal
+			});
 			if (!response.ok) {
 				throw new Error(`Failed to fetch simulations: ${response.statusText}`);
 			}
@@ -36,10 +52,19 @@
 			simulations = data.simulations || [];
 			logger.debug({ count: simulations.length }, 'Simulations list refreshed');
 		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') {
+				error = 'Timed out while loading simulations';
+				return;
+			}
 			error = err instanceof Error ? err.message : 'Failed to load simulations';
 			logger.error({ err, apiUrl }, 'Error fetching simulations');
 		} finally {
+			if (timeoutId !== undefined) {
+				window.clearTimeout(timeoutId);
+			}
 			loading = false;
+			refreshing = false;
+			currentRequest = null;
 		}
 	}
 
@@ -64,9 +89,22 @@
 	}
 
 	function handleVisualize(simulationId: string) {
-		logger.info({ simulationId }, 'Navigating to visualizer');
-		// Navigate to visualizer with simulation output
-		window.location.href = `/visualizer?simulation=${simulationId}`;
+		const sim = simulations.find((entry) => entry.simulation_id === simulationId);
+		const query = sim?.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
+		logger.info({ simulationId, outputDir: sim?.output_dir }, 'Navigating to visualizer');
+		window.location.href = `/visualizer${query}`;
+	}
+
+	function handleCombination(sim: SimulationSummary) {
+		const query = sim.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
+		logger.info({ simulationId: sim.simulation_id, outputDir: sim.output_dir }, 'Navigating to combination');
+		window.location.href = `/combination${query}`;
+	}
+
+	function handleImaging(sim: SimulationSummary) {
+		const query = sim.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
+		logger.info({ simulationId: sim.simulation_id, outputDir: sim.output_dir }, 'Navigating to imaging');
+		window.location.href = `/imaging${query}`;
 	}
 
 	function handleLocate(sim: SimulationSummary) {
@@ -82,7 +120,10 @@
 		fetchSimulations();
 		// Refresh every 5 seconds
 		const interval = setInterval(fetchSimulations, 5000);
-		return () => clearInterval(interval);
+		return () => {
+			clearInterval(interval);
+			currentRequest?.abort();
+		};
 	});
 </script>
 
@@ -176,6 +217,30 @@
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+										</svg>
+									</button>
+									<button
+										type="button"
+										class="text-emerald-600 hover:text-emerald-800 disabled:text-gray-400"
+										onclick={() => handleCombination(sim)}
+										disabled={sim.status !== 'completed'}
+										title="Open combination products"
+									>
+										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h10M4 17h7" />
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12l2 2 4-4" />
+										</svg>
+									</button>
+									<button
+										type="button"
+										class="text-violet-600 hover:text-violet-800 disabled:text-gray-400"
+										onclick={() => handleImaging(sim)}
+										disabled={sim.status !== 'completed'}
+										title="Open imaging workflow"
+									>
+										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M6 12h12M9 17h6" />
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9l3 3-3 3" />
 										</svg>
 									</button>
 									<button

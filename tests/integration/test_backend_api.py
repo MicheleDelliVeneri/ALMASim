@@ -162,3 +162,44 @@ def test_get_simulation_status(client):
     assert "progress" in data
 
 
+@pytest.mark.integration
+def test_imaging_deconvolution_endpoint(client, temp_output_dir):
+    """Test imaging deconvolution on saved dirty/beam/clean cubes."""
+    import numpy as np
+
+    model_cube = np.zeros((1, 17, 17), dtype=np.float32)
+    model_cube[0, 8, 8] = 1.0
+
+    yy, xx = np.indices((17, 17), dtype=np.float32)
+    beam = np.exp(-0.5 * (((yy - 8) / 1.5) ** 2 + ((xx - 8) / 1.5) ** 2)).astype(np.float32)
+    beam /= np.max(beam)
+    beam_cube = beam[None, ...]
+
+    dirty_fft = np.fft.fft2(model_cube[0]) * np.fft.fft2(np.fft.ifftshift(beam))
+    dirty_cube = np.real(np.fft.ifft2(dirty_fft)).astype(np.float32)[None, ...]
+
+    np.savez(temp_output_dir / "clean-cube_0.npz", clean_cube=model_cube)
+    np.savez(temp_output_dir / "dirty-cube_0.npz", dirty_cube=dirty_cube)
+    np.savez(temp_output_dir / "beam-cube_0.npz", beam_cube=beam_cube)
+
+    response = client.post(
+        "/api/v1/imaging/deconvolve",
+        json={
+            "directory": str(temp_output_dir),
+            "dirty_cube_path": "dirty-cube_0.npz",
+            "beam_cube_path": "beam-cube_0.npz",
+            "clean_cube_path": "clean-cube_0.npz",
+            "cycles": 120,
+            "gain": 0.12,
+            "method": "sum",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "dirty" in data
+    assert "deconvolved" in data
+    assert "residual" in data
+    assert data["reference_clean"] is not None
+    assert data["metadata"]["cycles_requested"] == 120
+

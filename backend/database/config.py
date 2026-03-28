@@ -28,11 +28,16 @@ def get_database_url() -> str:
 # Get database URL
 DATABASE_URL = get_database_url()
 
+_connect_args = {}
+if DATABASE_URL.startswith("postgresql"):
+    _connect_args["connect_timeout"] = 1
+
 # Create engine
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,  # Verify connections before using them
     echo=False,  # Set to True for SQL query logging
+    connect_args=_connect_args,
 )
 
 # Create session factory

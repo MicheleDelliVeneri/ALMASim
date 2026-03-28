@@ -17,6 +17,7 @@ _MODULES = {
     "download",
     "metadata",
     "observation_plan",
+    "imaging",
 }
 
 
@@ -36,4 +37,5 @@ __all__ = [
     "download",
     "metadata",
     "observation_plan",
+    "imaging",
 ]

@@ -41,12 +41,7 @@ def infer_antenna_diameter_m(array_type: str) -> float:
 
 
 def split_antenna_array_by_type(antenna_array: str) -> list[tuple[str, str]]:
-    """Split a raw ALMA antenna-array string into inferred INT array groups.
-
-    For now this only materializes configurations that ALMASim can simulate in
-    the P0 single-pointing fidelity path: 12 m and 7 m interferometric arrays.
-    TP/PM antennas are intentionally ignored until the dedicated TP path lands.
-    """
+    """Split a raw ALMA antenna-array string into inferred ALMA array groups."""
     tokens = [token for token in str(antenna_array or "").split() if token.strip()]
     groups: dict[str, list[str]] = {"12m": [], "7m": [], "TP": []}
     for token in tokens:
@@ -59,7 +54,7 @@ def split_antenna_array_by_type(antenna_array: str) -> list[tuple[str, str]]:
             groups["12m"].append(token)
 
     ordered_groups: list[tuple[str, str]] = []
-    for array_type in ("12m", "7m"):
+    for array_type in ("12m", "7m", "TP"):
         if groups[array_type]:
             ordered_groups.append((array_type, " ".join(groups[array_type])))
     return ordered_groups

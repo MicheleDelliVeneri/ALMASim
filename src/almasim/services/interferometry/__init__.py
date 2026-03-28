@@ -9,6 +9,11 @@ from .noise import (
     calibrate_noise_profile,
 )
 from .multiconfig import combine_interferometric_results
+from .total_power import (
+    estimate_tp_beam_fwhm_arcsec,
+    simulate_total_power_observation,
+    combine_total_power_results,
+)
 from .imaging import (
     prepare_2d_arrays,
     _grid_uv,
@@ -43,6 +48,9 @@ __all__ = [
     "compute_channel_noise",
     "calibrate_noise_profile",
     "combine_interferometric_results",
+    "estimate_tp_beam_fwhm_arcsec",
+    "simulate_total_power_observation",
+    "combine_total_power_results",
     "prepare_2d_arrays",
     "_grid_uv",
     "set_beam",

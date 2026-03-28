@@ -14,6 +14,8 @@ This directory contains runnable examples for the staged simulation API:
   Queries metadata or loads a CSV, then runs clean-cube generation, in-memory observation simulation, and ML shard export from the command line.
 - `staged_pipeline_notebook.ipynb`
   Notebook walkthrough of the same pipeline for interactive exploration and DDRM data preparation, starting from a live metadata query.
+- `imaging_cli.py`
+  Builds a synthetic clean/dirty/beam cube triplet, saves the products expected by the imaging page, runs iterative deconvolution, and checks that the restored cube is closer to the clean cube than the dirty cube.
 
 The examples use the in-process `sync` compute backend so they do not require Dask, process pools, or a running scheduler.
 
@@ -48,4 +50,13 @@ python examples/staged_pipeline_cli.py \
   --project-name ddrm_demo \
   --save-metadata-csv examples/output/staged_pipeline_metadata.csv \
   --ml-shard-path examples/output/ddrm_training_sample.h5
+```
+
+Imaging CLI usage:
+
+```bash
+python examples/imaging_cli.py \
+  --output-dir examples/output/imaging_demo \
+  --cycles 180 \
+  --gain 0.12
 ```

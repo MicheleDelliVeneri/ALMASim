@@ -80,6 +80,10 @@
 	});
 
 	function connectWebSocket(id: string) {
+		if (ws) {
+			ws.close();
+			ws = null;
+		}
 		const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
 		const socket = new WebSocket(`${wsUrl}/api/v1/simulations/${id}/ws`);
 
@@ -147,6 +151,11 @@
 		event.preventDefault();
 		loading = true;
 		message = '';
+		simulationStatus = null;
+		if (ws) {
+			ws.close();
+			ws = null;
+		}
 
 		logger.info(
 			{ sourceType, nPix, nChannels, numSimulations, selectedRowCount: selectedRowIndices.length },

@@ -46,7 +46,7 @@ export function splitAntennaArrayByType(antennaArray: string): Array<[Observatio
 	}
 
 	const ordered: Array<[ObservationConfigInput['array_type'], string]> = [];
-	for (const arrayType of ['12m', '7m'] as const) {
+	for (const arrayType of ['12m', '7m', 'TP'] as const) {
 		if (groups[arrayType].length > 0) {
 			ordered.push([arrayType, groups[arrayType].join(' ')]);
 		}

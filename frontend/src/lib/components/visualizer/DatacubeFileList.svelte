@@ -14,9 +14,23 @@
 		onRefresh: () => void;
 		onBrowseRequest: () => void;
 		disabled: boolean;
+		title?: string;
+		emptyMessage?: string;
+		actionLabel?: string;
 	}
 
-	let { files, loading, outputDir, onFileSelect, onRefresh, onBrowseRequest, disabled }: Props = $props();
+	let {
+		files,
+		loading,
+		outputDir,
+		onFileSelect,
+		onRefresh,
+		onBrowseRequest,
+		disabled,
+		title = 'Available Datacubes',
+		emptyMessage = 'No .npz files found in output directory',
+		actionLabel = 'Load'
+	}: Props = $props();
 
 	function formatFileSize(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
@@ -46,7 +60,7 @@
 	<!-- Available Files List -->
 	<div class="space-y-2">
 		<div class="flex items-center justify-between">
-			<span class="block text-sm font-medium text-gray-700">Available Datacubes</span>
+			<span class="block text-sm font-medium text-gray-700">{title}</span>
 			<button
 				onclick={onRefresh}
 				class="rounded-md bg-gray-100 px-2 py-1 text-xs transition-colors hover:bg-gray-200"
@@ -100,7 +114,7 @@
 										disabled={disabled}
 										class="rounded-md bg-blue-600 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
 									>
-										Load
+										{actionLabel}
 									</button>
 								</td>
 							</tr>
@@ -110,7 +124,7 @@
 			</div>
 		{:else}
 			<div class="rounded-md border border-gray-200 py-4 text-center text-sm text-gray-500">
-				{loading ? 'Loading files...' : 'No .npz files found in output directory'}
+				{loading ? 'Loading files...' : emptyMessage}
 			</div>
 		{/if}
 	</div>

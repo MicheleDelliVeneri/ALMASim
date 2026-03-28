@@ -456,6 +456,7 @@
 			// Resize selection
 			const selection = savedSelections.find((s) => s.id === selectedSelectionId);
 			if (selection) {
+				const activeResizeHandle = resizeHandle;
 				savedSelections = savedSelections.map((s) => {
 					if (s.id !== selectedSelectionId) return s;
 
@@ -464,23 +465,23 @@
 
 					if (s.type === 'rectangle') {
 						// Handle rectangle resize
-						if (resizeHandle.includes('n')) newStart.y = mouseY;
-						if (resizeHandle.includes('s')) newEnd.y = mouseY;
-						if (resizeHandle.includes('w')) newStart.x = mouseX;
-						if (resizeHandle.includes('e')) newEnd.x = mouseX;
-						if (resizeHandle === 'tl') {
+						if (activeResizeHandle.includes('n')) newStart.y = mouseY;
+						if (activeResizeHandle.includes('s')) newEnd.y = mouseY;
+						if (activeResizeHandle.includes('w')) newStart.x = mouseX;
+						if (activeResizeHandle.includes('e')) newEnd.x = mouseX;
+						if (activeResizeHandle === 'tl') {
 							newStart.x = mouseX;
 							newStart.y = mouseY;
 						}
-						if (resizeHandle === 'tr') {
+						if (activeResizeHandle === 'tr') {
 							newEnd.x = mouseX;
 							newStart.y = mouseY;
 						}
-						if (resizeHandle === 'bl') {
+						if (activeResizeHandle === 'bl') {
 							newStart.x = mouseX;
 							newEnd.y = mouseY;
 						}
-						if (resizeHandle === 'br') {
+						if (activeResizeHandle === 'br') {
 							newEnd.x = mouseX;
 							newEnd.y = mouseY;
 						}

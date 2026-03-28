@@ -12,7 +12,7 @@
 
 	let { metadata, selectedIndices, onSelect, getRowValue, getRowNumber }: Props = $props();
 
-	let isCollapsed = $state(false);
+	let isCollapsed = $state(true);
 
 	function toggleSelection(index: number) {
 		const currentIndices = [...selectedIndices];
@@ -95,7 +95,7 @@
 
 	{#if !isCollapsed}
 		{#if metadata?.data && metadata.data.length > 0}
-		<div class="overflow-x-auto">
+		<div class="max-h-[28rem] overflow-auto">
 			<table class="min-w-full divide-y divide-gray-200 text-sm">
 				<thead class="bg-gray-50">
 					<tr>

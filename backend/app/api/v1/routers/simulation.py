@@ -16,6 +16,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
@@ -31,6 +32,8 @@ from app.schemas.simulation import (
 )
 from app.services.simulation_service import SimulationService
 from app.services.status_store import status_store
+from database.config import get_db
+from database.service import DatabaseService
 
 router = APIRouter()
 
@@ -50,14 +53,30 @@ class DaskTestResponse(BaseModel):
 
 
 @router.get("/", response_model=SimulationListResponse)
-async def list_simulations() -> SimulationListResponse:
+async def list_simulations(db: Session = Depends(get_db)) -> SimulationListResponse:
     """List all simulations."""
     from app.schemas.simulation import SimulationSummary
 
-    all_simulations = status_store.list_all()
+    summaries_by_id: dict[str, SimulationSummary] = {}
 
-    summaries = [
-        SimulationSummary(
+    try:
+        for sim in DatabaseService(db).list_simulations(limit=500):
+            simulation_id = str(sim.simulation_id)
+            summaries_by_id[simulation_id] = SimulationSummary(
+                simulation_id=simulation_id,
+                status=sim.status,
+                progress=float(sim.progress or 0.0),
+                message=sim.message or "",
+                created_at=sim.created_at,
+                updated_at=sim.updated_at,
+                error=sim.error,
+                output_dir=sim.output_path,
+            )
+    except Exception:
+        pass
+
+    for sim in status_store.list_all():
+        summaries_by_id[sim.simulation_id] = SimulationSummary(
             simulation_id=sim.simulation_id,
             status=sim.status,
             progress=sim.progress,
@@ -67,8 +86,8 @@ async def list_simulations() -> SimulationListResponse:
             error=sim.error,
             output_dir=sim.output_dir,
         )
-        for sim in all_simulations
-    ]
+
+    summaries = list(summaries_by_id.values())
 
     # Sort by updated_at descending (most recent first)
     summaries.sort(key=lambda x: x.updated_at, reverse=True)
@@ -83,6 +102,7 @@ async def create_simulation(
     params: SimulationParamsCreate,
     background_tasks: BackgroundTasks,
     default_backend: ComputationBackend = Depends(get_compute_backend),
+    db: Session = Depends(get_db),
 ) -> SimulationResponse:
     """Create and start a new simulation."""
     try:
@@ -104,6 +124,34 @@ async def create_simulation(
             hubble_dir=settings.HUBBLE_DIR,
             compute_backend=compute_backend,
         )
+
+        try:
+            DatabaseService(db).create_simulation_job(
+                simulation_id=uuid.UUID(simulation_id),
+                source_name=params.source_name,
+                idx=params.idx,
+                project_name=params.project_name,
+                source_type=params.source_type,
+                n_pix=params.n_pix,
+                n_channels=params.n_channels,
+                rest_frequency=params.rest_frequency,
+                redshift=params.redshift,
+                lum_infrared=params.lum_infrared,
+                snr=params.snr,
+                n_lines=params.n_lines,
+                line_names=params.line_names,
+                save_mode=params.save_mode,
+                inject_serendipitous=params.inject_serendipitous,
+                ncpu=params.ncpu,
+                remote=False,
+                status="queued",
+                progress=0.0,
+                current_step="Initializing",
+                message="Simulation queued successfully",
+                output_path=params.output_dir or str(settings.OUTPUT_DIR),
+            )
+        except Exception:
+            pass
 
         # Create status entry
         status_store.create(simulation_id)
@@ -131,23 +179,46 @@ async def create_simulation(
 
 
 @router.get("/{simulation_id}/status", response_model=SimulationStatusSchema)
-async def get_simulation_status(simulation_id: str) -> SimulationStatusSchema:
+async def get_simulation_status(
+    simulation_id: str,
+    db: Session = Depends(get_db),
+) -> SimulationStatusSchema:
     """Get simulation status."""
     sim_status = status_store.get(simulation_id)
-    if not sim_status:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Simulation {simulation_id} not found",
+    if sim_status:
+        return SimulationStatusSchema(
+            simulation_id=sim_status.simulation_id,
+            status=sim_status.status,
+            progress=sim_status.progress,
+            message=sim_status.message,
+            current_step=sim_status.current_step,
+            logs=sim_status.logs[-100:],
+            error=sim_status.error,
         )
 
-    return SimulationStatusSchema(
-        simulation_id=sim_status.simulation_id,
-        status=sim_status.status,
-        progress=sim_status.progress,
-        message=sim_status.message,
-        current_step=sim_status.current_step,
-        logs=sim_status.logs[-100:],  # Return last 100 log entries
-        error=sim_status.error,
+    try:
+        db_service = DatabaseService(db)
+        job = db_service.get_simulation_by_id(uuid.UUID(simulation_id))
+        if job:
+            logs = [
+                f"[{log.timestamp.isoformat()}] {log.message}"
+                for log in reversed(db_service.get_simulation_logs(job.simulation_id, limit=100))
+            ]
+            return SimulationStatusSchema(
+                simulation_id=str(job.simulation_id),
+                status=job.status,
+                progress=float(job.progress or 0.0),
+                message=job.message,
+                current_step=job.current_step,
+                logs=logs,
+                error=job.error,
+            )
+    except Exception:
+        pass
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Simulation {simulation_id} not found",
     )
 
 

@@ -1,4 +1,5 @@
-import pino, { type Logger, type LoggerOptions } from 'pino/browser';
+import pino from 'pino/browser';
+import type { Logger, LoggerOptions } from 'pino';
 
 const level = import.meta.env.VITE_LOG_LEVEL ?? (import.meta.env.DEV ? 'debug' : 'info');
 
@@ -21,8 +22,9 @@ function makeWriter(levelName: string) {
 	const style = LEVEL_STYLES[levelName] ?? 'font-weight:bold';
 	const consoleFn = getConsoleFn(levelName);
 
-	return (obj: Record<string, unknown>) => {
-		const { msg, scope, level: _l, time: _t, ...rest } = obj;
+	return (obj: object) => {
+		const payload = obj as Record<string, unknown>;
+		const { msg, scope, level: _l, time: _t, ...rest } = payload;
 		const tag = levelName.toUpperCase().padEnd(5);
 		const scopeStr = typeof scope === 'string' ? scope : '';
 		const msgStr = typeof msg === 'string' ? msg : '';

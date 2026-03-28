@@ -784,6 +784,32 @@ def test_build_single_pointing_observation_plan_splits_mixed_metadata_antenna_ar
 
 
 @pytest.mark.unit
+def test_build_single_pointing_observation_plan_includes_tp_from_metadata(tmp_path, sample_metadata_row_dict):
+    """Mixed metadata antenna strings should include TP configs once P1 is enabled."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+    sample_metadata_row_dict["antenna_arrays"] = (
+        "A001:DA01 A002:DV02 A003:CM03 A004:CM04 A005:PM05 A006:PM06"
+    )
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+    )
+
+    plan = build_single_pointing_observation_plan(params)
+
+    assert [cfg.array_type for cfg in plan.configs] == ["12m", "7m", "TP"]
+    assert "PM05" in plan.configs[2].antenna_array
+
+
+@pytest.mark.unit
 def test_compute_channel_noise_increases_with_pwv():
     """PWV should materially increase the single-pointing thermal noise profile."""
     freqs_hz = np.linspace(220e9, 230e9, 8)
@@ -900,3 +926,108 @@ def test_run_simulation_multiconfig_single_pointing(
 
     assert result["combined_config_count"] == 2
     assert mock_interferometry_module.Interferometer.call_count == 2
+
+
+@pytest.mark.unit
+@patch('almasim.services.simulation.process_spectral_data')
+@patch('almasim.services.simulation.usm')
+@patch('almasim.services.simulation.uin')
+def test_run_simulation_p1_tp_and_reconstruction_outputs(
+    mock_interferometry_module,
+    mock_skymodels,
+    mock_process_spectral,
+    tmp_path,
+    sample_metadata_row_dict,
+    main_dir,
+):
+    """P1 runs should surface TP, INT image, and TP+INT image products."""
+    mock_process_spectral.return_value = (
+        np.ones(8) * 0.1,
+        np.array([1.0]),
+        ["CO(3-2)"],
+        0.5,
+        np.array([250.0]) * 1e9,
+        [2],
+        8,
+        1.875,
+        0.1,
+        np.array([250.0]) * 1e9,
+        [2.0],
+        1e10,
+    )
+
+    mock_datacube = Mock()
+    mock_datacube._array = Mock()
+    mock_datacube._array.to_value.return_value = np.random.rand(8, 8, 8) * 0.1
+    mock_datacube.wcs = Mock()
+    mock_datacube.wcs.sub.return_value.wcs_world2pix.return_value = (4, 4, 0)
+    mock_pointlike = Mock()
+    mock_pointlike.insert.return_value = mock_datacube
+    mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
+    mock_skymodels.DataCube.return_value = mock_datacube
+    mock_skymodels.get_datacube_header.return_value = Mock()
+
+    mock_interferometer = Mock()
+    mock_interferometer.run_interferometric_sim.return_value = {
+        "model_cube": np.ones((8, 8, 8), dtype=np.float32),
+        "dirty_cube": np.ones((8, 8, 8), dtype=np.float32),
+        "model_vis": np.ones((8, 8, 8), dtype=np.complex64),
+        "dirty_vis": np.ones((8, 8, 8), dtype=np.complex64),
+        "beam_cube": np.ones((8, 8, 8), dtype=np.float32),
+        "totsampling_cube": np.ones((8, 8, 8), dtype=np.float32),
+        "uv_mask_cube": np.ones((8, 8, 8), dtype=np.uint8),
+        "u_cube": np.ones((8, 2, 2), dtype=np.float32),
+        "v_cube": np.ones((8, 2, 2), dtype=np.float32),
+    }
+    mock_interferometry_module.Interferometer.return_value = mock_interferometer
+    mock_interferometry_module.compute_channel_noise = compute_channel_noise
+    mock_interferometry_module.NoiseModelConfig = NoiseModelConfig
+    mock_interferometry_module.calibrate_noise_profile.side_effect = (
+        lambda raw, reference_noise: raw * (reference_noise / np.median(raw))
+    )
+    mock_interferometry_module.combine_interferometric_results.side_effect = (
+        lambda results, config_weights=None: {
+            **results[0],
+            "per_config_results": results,
+            "combined_config_count": len(results),
+        }
+    )
+    mock_interferometry_module.simulate_total_power_observation.return_value = {
+        "tp_model_cube": np.ones((8, 8, 8), dtype=np.float32),
+        "tp_dirty_cube": np.ones((8, 8, 8), dtype=np.float32) * 2,
+        "tp_beam_cube": np.ones((8, 8, 8), dtype=np.float32),
+        "tp_sampling_cube": np.ones((8, 8, 8), dtype=np.float32),
+        "tp_beam_fwhm_arcsec": np.ones(8, dtype=np.float32),
+    }
+    mock_interferometry_module.combine_total_power_results.side_effect = (
+        lambda results, config_weights=None: {
+            **results[0],
+            "per_config_results": results,
+            "combined_config_count": len(results),
+        }
+    )
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        observation_configs=[
+            {"name": "alma12", "array_type": "12m", "antenna_array": "A001:DA01 A002:DV02", "total_time_s": 1800.0},
+            {"name": "tp", "array_type": "TP", "antenna_array": "A005:PM05 A006:PM06", "total_time_s": 1200.0},
+        ],
+        persist=False,
+        save_mode="memory",
+    )
+
+    result = run_simulation(params)
+
+    assert result["tp_results"] is not None
+    assert result["int_results"] is not None
+    assert result["int_image_cube"] is not None
+    assert result["tp_image_cube"] is not None
+    assert result["tp_int_image_cube"] is not None

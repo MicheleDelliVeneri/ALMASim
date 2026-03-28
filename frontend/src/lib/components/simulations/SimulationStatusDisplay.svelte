@@ -25,12 +25,10 @@
 
 	const SIMULATION_STEPS = [
 		'Initializing',
-		'Generating antenna configuration',
-		'Computing max baseline',
-		'Creating sky model',
+		'Generating clean cube',
 		'Running interferometric simulation',
-		'Processing results',
-		'Saving output'
+		'Reconstructing image products',
+		'Exporting results'
 	];
 
 	// Log meaningful status transitions
