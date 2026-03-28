@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from time import gmtime, strftime
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from dask.distributed import Client
 
 LogFn = Optional[Callable[[str], None]]
+StopFn = Union[bool, Callable[[], bool]]
 
 
 @dataclass
@@ -69,7 +70,7 @@ class SimulationParams:
     rest_frequency: Any
     redshift: Any
     lum_infrared: Any
-    snr: float
+    snr: Optional[float]
     n_lines: Any
     line_names: Any
     save_mode: str
@@ -81,6 +82,7 @@ class SimulationParams:
     ground_temperature_k: float = 270.0
     correlator: Optional[str] = None
     elevation_deg: Optional[float] = None
+    line_sens_10kms: Optional[float] = None
 
     @classmethod
     def from_metadata_row(
@@ -95,7 +97,7 @@ class SimulationParams:
         hubble_dir: Path | str,
         project_name: str,
         source_type: str = "point",
-        snr: float = 1.3,
+        snr: Optional[float] = None,
         save_mode: str = "npz",
         persist: bool = True,
         ml_dataset_path: Optional[Path | str] = None,
@@ -167,6 +169,7 @@ class SimulationParams:
         freq = _float(["Freq", "frequency"])
         freq_support = str(_get(["Freq.sup.", "frequency_support"]))
         cont_sens = _float(["Cont_sens_mJybeam", "cont_sens"])
+        line_sens_10kms = _get(["Line_sens_10kms_mJybeam", "line_sens_10kms"], required=False)
         antenna_array = str(_get(["antenna_arrays", "antenna_array"]))
 
         if rest_frequency is None:
@@ -204,6 +207,7 @@ class SimulationParams:
             freq=freq,
             freq_support=freq_support,
             cont_sens=cont_sens,
+            line_sens_10kms=(float(line_sens_10kms) if line_sens_10kms is not None else None),
             antenna_array=antenna_array,
             n_pix=n_pix,
             n_channels=n_channels,
@@ -314,6 +318,53 @@ def _count_antennas(antenna_array: str) -> int:
     return max(len(tokens), 2)
 
 
+def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
+    """Estimate cube dimensions and raw storage footprint before running a simulation."""
+    source_freq = params.freq * U.GHz
+    band_range, central_freq, t_channels, _delta_freq = freq_supp_extractor(
+        params.freq_support, source_freq
+    )
+    observation_plan = build_single_pointing_observation_plan(params)
+    max_baseline_km = max(
+        ual_antenna.get_max_baseline_from_antenna_array(
+            config.antenna_array,
+            params.main_dir,
+        )
+        for config in observation_plan.configs
+    )
+    max_baseline = max_baseline_km * U.km
+    fov = params.fov * 3600 * U.arcsec
+    beam_size = ual_antenna.estimate_alma_beam_size(
+        central_freq, max_baseline, return_value=False
+    )
+    cell_size = beam_size / 5
+
+    if params.n_pix is None:
+        n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
+    else:
+        n_pix = closest_power_of_2(int(params.n_pix))
+
+    n_channels = int(t_channels if params.n_channels is None else params.n_channels)
+    voxels = int(n_channels) * int(n_pix) * int(n_pix)
+    float32_gb = (voxels * np.dtype(np.float32).itemsize) / float(1024**3)
+    complex64_gb = (voxels * np.dtype(np.complex64).itemsize) / float(1024**3)
+    # Approximate raw footprint for the standard persisted image/cube products.
+    estimated_standard_output_gb = 6.0 * float32_gb + complex64_gb
+
+    return {
+        "n_pix": int(n_pix),
+        "n_channels": int(n_channels),
+        "cube_shape": [int(n_channels), int(n_pix), int(n_pix)],
+        "cube_voxels": voxels,
+        "cell_size_arcsec": float(cell_size.to(U.arcsec).value),
+        "beam_size_arcsec": float(beam_size.to(U.arcsec).value),
+        "raw_single_cube_gb": float(float32_gb),
+        "raw_complex_cube_gb": float(complex64_gb),
+        "estimated_standard_output_gb": float(estimated_standard_output_gb),
+        "note": "Raw uncompressed estimate. Actual NPZ/HDF5 output can be smaller due to compression.",
+    }
+
+
 def _create_sky_model(
     source_type: str,
     common_params: dict,
@@ -399,7 +450,7 @@ def generate_clean_cube(
     progress_emitter=None,
     compute_backend=None,
     terminal_logger=None,
-    stop_requested: bool = False,
+    stop_requested: StopFn = False,
 ) -> CleanCubeStage:
     """Generate the clean sky cube and derived observation metadata."""
     remote = bool(params.remote)
@@ -410,6 +461,11 @@ def generate_clean_cube(
     def status(message: str):
         if status_callback is not None:
             status_callback(message)
+
+    def is_stop_requested() -> bool:
+        if callable(stop_requested):
+            return bool(stop_requested())
+        return bool(stop_requested)
 
     def clean(value):
         if value is None:
@@ -453,6 +509,8 @@ def generate_clean_cube(
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
         params.freq_support, source_freq
     )
+    if is_stop_requested():
+        raise RuntimeError("Simulation cancelled")
     observation_plan = build_single_pointing_observation_plan(params)
     output_dir_abs = os.path.abspath(params.output_dir)
     persist_outputs = bool(params.persist and params.save_mode != "memory")
@@ -696,7 +754,7 @@ def generate_clean_cube(
     else:
         fwhm_x = fwhm_y = angle = None
 
-    if params.inject_serendipitous and not stop_requested:
+    if params.inject_serendipitous and not is_stop_requested():
         status("Inserting Serendipitous Sources")
         if params.source_type != "gaussian" or fwhm_x is None:
             fwhm_x = np.random.randint(3, 10)
@@ -813,7 +871,34 @@ def generate_clean_cube(
         "continuum": _json_safe(continum),
         "observation_plan": observation_plan.as_dict(),
     }
-    base_noise_reference = 0.1 * (min_line_flux / beam_area.value) / params.snr
+    effective_snr = params.snr
+    if effective_snr is None:
+        if (
+            params.line_sens_10kms is not None
+            and params.cont_sens is not None
+            and params.cont_sens > 0.0
+        ):
+            effective_snr = float(
+                np.clip(params.line_sens_10kms / params.cont_sens, 1.0, 100.0)
+            )
+            log(
+                "Auto-derived SNR from metadata sensitivities "
+                f"(line/continuum): {effective_snr:.3f}"
+            )
+        elif params.cont_sens is not None and params.cont_sens > 0.0:
+            effective_snr = 5.0
+            log(
+                "Auto-derived SNR fallback from metadata continuum sensitivity: 5.000"
+            )
+        else:
+            effective_snr = 1.3
+            log("Falling back to default SNR=1.3 because auto-derivation was not possible")
+    else:
+        effective_snr = float(effective_snr)
+
+    metadata["effective_snr"] = effective_snr
+    metadata["snr_mode"] = "auto" if params.snr is None else "manual"
+    base_noise_reference = 0.1 * (min_line_flux / beam_area.value) / effective_snr
     channel_width_hz = delta_freq.to(U.Hz).value
     channel_offsets = (
         np.arange(n_channels, dtype=float) - (float(n_channels) - 1.0) / 2.0
@@ -864,7 +949,7 @@ def generate_clean_cube(
                     "fov": fov.value,
                     "antenna_array": config.antenna_array,
                     "noise": noise_profile,
-                    "snr": params.snr,
+                    "snr": effective_snr,
                     "integration_time": config.total_time_s / 3600.0,
                     "observation_date": params.obs_date,
                     "header": header,
@@ -1162,7 +1247,7 @@ def run_simulation(
     terminal_logger=None,
     robust: float = 0.0,
     interferometer_progress_callback: Optional[Callable[[int], None]] = None,
-    stop_requested: bool = False,
+    stop_requested: StopFn = False,
 ):
     """Execute the full ALMA simulation workflow."""
     remote = bool(params.remote)
@@ -1170,7 +1255,14 @@ def run_simulation(
     def log(message: str):
         log_message(logger, message, remote=remote)
 
+    def is_stop_requested() -> bool:
+        if callable(stop_requested):
+            return bool(stop_requested())
+        return bool(stop_requested)
+
     start = time.time()
+    if is_stop_requested():
+        raise RuntimeError("Simulation cancelled")
     if status_callback is not None:
         status_callback("Generating clean cube")
     clean_cube_stage = generate_clean_cube(
@@ -1180,8 +1272,10 @@ def run_simulation(
         progress_emitter=progress_emitter,
         compute_backend=compute_backend,
         terminal_logger=terminal_logger,
-        stop_requested=stop_requested,
+        stop_requested=is_stop_requested,
     )
+    if is_stop_requested():
+        raise RuntimeError("Simulation cancelled")
     if status_callback is not None:
         status_callback("Running interferometric simulation")
     simulation_results = simulate_observation(
@@ -1191,9 +1285,13 @@ def run_simulation(
         terminal_logger=terminal_logger,
         interferometer_progress_callback=interferometer_progress_callback,
     )
+    if is_stop_requested():
+        raise RuntimeError("Simulation cancelled")
     if status_callback is not None:
         status_callback("Reconstructing image products")
     simulation_results = image_products(simulation_results)
+    if is_stop_requested():
+        raise RuntimeError("Simulation cancelled")
     exported_results = export_results(
         params,
         clean_cube_stage,
@@ -1201,6 +1299,8 @@ def run_simulation(
         logger=logger,
         status_callback=status_callback,
     )
+    if is_stop_requested():
+        raise RuntimeError("Simulation cancelled")
 
     if remote:
         print("Finished")

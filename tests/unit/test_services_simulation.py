@@ -254,7 +254,7 @@ def test_simulation_params_defaults(tmp_path, sample_metadata_row_dict):
     )
     
     assert params.source_type == "point"  # Default
-    assert params.snr == 1.3  # Default
+    assert params.snr is None  # Auto-derived by default
     assert params.save_mode == "npz"  # Default
     assert params.inject_serendipitous is False  # Default
     assert params.remote is False  # Default

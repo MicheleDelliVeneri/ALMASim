@@ -176,6 +176,40 @@ def _insert_shifted_kernel(
     )
 
 
+def _estimate_psf_padding(psf: np.ndarray, *, threshold_ratio: float = 1e-3) -> tuple[int, int]:
+    """Estimate a finite PSF support radius for edge-safe CLEAN padding."""
+    peak_y, peak_x = np.unravel_index(int(np.argmax(np.abs(psf))), psf.shape)
+    peak = float(np.max(np.abs(psf)))
+    if peak < 1e-12:
+        return 0, 0
+
+    support = np.abs(psf) >= peak * float(threshold_ratio)
+    if not np.any(support):
+        return 0, 0
+
+    ys, xs = np.where(support)
+    pad_y = max(int(peak_y - ys.min()), int(ys.max() - peak_y))
+    pad_x = max(int(peak_x - xs.min()), int(xs.max() - peak_x))
+    return pad_y, pad_x
+
+
+def _pad_channel(channel: np.ndarray, pad_y: int, pad_x: int) -> np.ndarray:
+    """Zero-pad a single 2D channel symmetrically."""
+    if pad_y <= 0 and pad_x <= 0:
+        return channel.copy()
+    return np.pad(channel, ((pad_y, pad_y), (pad_x, pad_x)), mode="constant")
+
+
+def _crop_channel(channel: np.ndarray, pad_y: int, pad_x: int) -> np.ndarray:
+    """Crop a padded 2D channel back to its original shape."""
+    if pad_y <= 0 and pad_x <= 0:
+        return channel.copy()
+
+    y_slice = slice(pad_y, -pad_y if pad_y > 0 else None)
+    x_slice = slice(pad_x, -pad_x if pad_x > 0 else None)
+    return channel[y_slice, x_slice].copy()
+
+
 def _build_clean_beam(psf: np.ndarray) -> np.ndarray:
     """Approximate the central clean beam as a Gaussian from PSF moments."""
     peak_y, peak_x = np.unravel_index(int(np.argmax(np.abs(psf))), psf.shape)
@@ -265,6 +299,8 @@ def clean_deconvolve_cube(
 
     for channel in range(dirty_cube.shape[0]):
         psf = np.asarray(beam_cube[channel], dtype=np.float32)
+        pad_y, pad_x = _estimate_psf_padding(psf)
+        psf = _pad_channel(psf, pad_y, pad_x)
         peak_y, peak_x = np.unravel_index(int(np.argmax(np.abs(psf))), psf.shape)
         psf_peak = float(psf[peak_y, peak_x])
         if abs(psf_peak) < 1e-12:
@@ -273,15 +309,14 @@ def clean_deconvolve_cube(
         else:
             psf_normalized = (psf / psf_peak).astype(np.float32)
 
-        clean_beam = (
-            clean_beam_cube[channel]
-            if np.max(np.abs(clean_beam_cube[channel])) > 0.0
-            else _build_clean_beam(psf_normalized)
-        )
-        clean_beam_cube[channel] = clean_beam
+        existing_clean_beam = np.asarray(clean_beam_cube[channel], dtype=np.float32)
+        if np.max(np.abs(existing_clean_beam)) > 0.0:
+            clean_beam = _pad_channel(existing_clean_beam, pad_y, pad_x)
+        else:
+            clean_beam = _build_clean_beam(psf_normalized)
 
-        residual = residual_cube[channel]
-        components = component_cube[channel]
+        residual = _pad_channel(residual_cube[channel], pad_y, pad_x)
+        components = _pad_channel(component_cube[channel], pad_y, pad_x)
         channel_cycles = 0
 
         for _ in range(int(n_cycles)):
@@ -308,7 +343,10 @@ def clean_deconvolve_cube(
         restored += residual
         if clip_negative:
             restored = np.clip(restored, 0.0, None)
-        restored_cube[channel] = restored
+        component_cube[channel] = _crop_channel(components, pad_y, pad_x)
+        residual_cube[channel] = _crop_channel(residual, pad_y, pad_x)
+        clean_beam_cube[channel] = _crop_channel(clean_beam, pad_y, pad_x)
+        restored_cube[channel] = _crop_channel(restored, pad_y, pad_x)
         cycles_added = max(cycles_added, channel_cycles)
 
     return {

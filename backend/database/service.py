@@ -388,7 +388,7 @@ class DatabaseService:
         # Update timestamps
         if status == "running" and not simulation.started_at:
             simulation.started_at = datetime.utcnow()
-        elif status in ("completed", "failed"):
+        elif status in ("completed", "failed", "cancelled"):
             simulation.completed_at = datetime.utcnow()
 
         self.db.commit()

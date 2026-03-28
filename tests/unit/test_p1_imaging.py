@@ -179,6 +179,32 @@ def test_clean_deconvolve_cube_can_resume_from_previous_state():
 
 
 @pytest.mark.unit
+def test_clean_deconvolve_cube_handles_corner_source_without_edge_dropout():
+    """CLEAN should still recover a source near the image edge."""
+    model_cube = np.zeros((1, 21, 21), dtype=np.float32)
+    model_cube[0, 3, 17] = 1.0
+
+    yy, xx = np.indices((21, 21), dtype=np.float32)
+    sigma = 1.8
+    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(np.float32)
+    beam /= np.max(beam)
+    beam_cube = beam[None, ...]
+
+    dirty_fft = np.fft.fft2(model_cube[0]) * np.fft.fft2(np.fft.ifftshift(beam))
+    dirty_cube = np.real(np.fft.ifft2(dirty_fft)).astype(np.float32)[None, ...]
+
+    result = clean_deconvolve_cube(dirty_cube, beam_cube, n_cycles=160, gain=0.12)
+    component_cube = result["component_cube"]
+    residual_cube = result["residual_cube"]
+
+    recovered_peak = np.unravel_index(int(np.argmax(component_cube[0])), component_cube[0].shape)
+
+    assert recovered_peak == (3, 17)
+    assert float(component_cube[0, 3, 17]) > 0.5
+    assert float(np.max(np.abs(residual_cube))) < float(np.max(np.abs(dirty_cube)))
+
+
+@pytest.mark.unit
 def test_convolve_cube_with_beam_matches_cube_shape():
     """Convolving a cube with a matched beam cube should preserve shape."""
     cube = np.zeros((2, 9, 9), dtype=np.float32)

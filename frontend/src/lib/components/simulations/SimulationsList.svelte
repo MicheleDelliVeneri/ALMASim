@@ -83,6 +83,8 @@
 				return 'bg-blue-100 text-blue-800';
 			case 'failed':
 				return 'bg-red-100 text-red-800';
+			case 'cancelled':
+				return 'bg-gray-100 text-gray-800';
 			case 'queued':
 				return 'bg-yellow-100 text-yellow-800';
 			default:
@@ -138,6 +140,29 @@
 		closeLogSocket();
 	}
 
+	async function cancelSimulation(sim: SimulationSummary) {
+		try {
+			await simulationApi.cancel(sim.simulation_id);
+			simulations = simulations.map((entry) =>
+				entry.simulation_id === sim.simulation_id
+					? { ...entry, status: 'cancelled', message: 'Cancellation requested' }
+					: entry
+			);
+			if (selectedLogSimulation?.simulation_id === sim.simulation_id && selectedSimulationStatus) {
+				selectedSimulationStatus = {
+					...selectedSimulationStatus,
+					status: 'cancelled',
+					current_step: 'Cancelled',
+					message: 'Cancellation requested'
+				};
+			}
+			await fetchSimulations();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to cancel simulation';
+			logger.error({ err, simulationId: sim.simulation_id }, 'Failed to cancel simulation');
+		}
+	}
+
 	function connectLogSocket(simulationId: string) {
 		closeLogSocket();
 		const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
@@ -175,7 +200,7 @@
 		try {
 			const status = await simulationApi.getStatus(sim.simulation_id);
 			selectedSimulationStatus = status;
-			if (status.status !== 'completed' && status.status !== 'failed') {
+			if (!['completed', 'failed', 'cancelled'].includes(status.status)) {
 				connectLogSocket(sim.simulation_id);
 			}
 		} catch (err) {
@@ -333,6 +358,17 @@
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+										</svg>
+									</button>
+									<button
+										type="button"
+										class="text-red-600 hover:text-red-800 disabled:text-gray-400"
+										onclick={() => cancelSimulation(sim)}
+										disabled={!['queued', 'running'].includes(sim.status)}
+										title="Cancel simulation"
+									>
+										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18" />
 										</svg>
 									</button>
 								</div>

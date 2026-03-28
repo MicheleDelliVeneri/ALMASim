@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict
 
+import almasim.services.simulation as sim_service
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -23,6 +24,7 @@ from almasim.services.compute.factory import create_backend
 from app.core.config import settings
 from app.core.dependencies import get_compute_backend
 from app.schemas.simulation import (
+    SimulationEstimate,
     SimulationListResponse,
     SimulationParamsCreate,
     SimulationResponse,
@@ -178,6 +180,66 @@ async def create_simulation(
         )
 
 
+@router.post("/estimate", response_model=SimulationEstimate)
+async def estimate_simulation(
+    params: SimulationParamsCreate,
+) -> SimulationEstimate:
+    """Estimate simulation cube dimensions and raw storage footprint."""
+    try:
+        sim_params = sim_service.SimulationParams(
+            idx=params.idx,
+            source_name=params.source_name,
+            member_ouid=params.member_ouid,
+            main_dir=str(settings.MAIN_DIR),
+            output_dir=params.output_dir or str(settings.OUTPUT_DIR),
+            tng_dir=str(settings.TNG_DIR),
+            galaxy_zoo_dir=str(settings.GALAXY_ZOO_DIR),
+            hubble_dir=str(settings.HUBBLE_DIR),
+            project_name=params.project_name,
+            ra=params.ra,
+            dec=params.dec,
+            band=params.band,
+            ang_res=params.ang_res,
+            vel_res=params.vel_res,
+            fov=params.fov,
+            obs_date=params.obs_date,
+            pwv=params.pwv,
+            int_time=params.int_time,
+            bandwidth=params.bandwidth,
+            freq=params.freq,
+            freq_support=params.freq_support,
+            cont_sens=params.cont_sens,
+            line_sens_10kms=params.line_sens_10kms,
+            antenna_array=params.antenna_array,
+            n_pix=params.n_pix,
+            n_channels=params.n_channels,
+            source_type=params.source_type,
+            tng_api_key=params.tng_api_key,
+            ncpu=params.ncpu,
+            rest_frequency=params.rest_frequency,
+            redshift=params.redshift,
+            lum_infrared=params.lum_infrared,
+            snr=params.snr,
+            n_lines=params.n_lines,
+            line_names=params.line_names,
+            save_mode=params.save_mode,
+            persist=params.persist,
+            ml_dataset_path=params.ml_dataset_path,
+            inject_serendipitous=params.inject_serendipitous,
+            remote=False,
+            observation_configs=params.observation_configs,
+            ground_temperature_k=params.ground_temperature_k,
+            correlator=params.correlator,
+            elevation_deg=params.elevation_deg,
+        )
+        return SimulationEstimate(**sim_service.estimate_simulation_footprint(sim_params))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to estimate simulation footprint: {str(e)}",
+        )
+
+
 @router.get("/{simulation_id}/status", response_model=SimulationStatusSchema)
 async def get_simulation_status(
     simulation_id: str,
@@ -222,6 +284,69 @@ async def get_simulation_status(
     )
 
 
+@router.post("/{simulation_id}/cancel", response_model=SimulationResponse)
+async def cancel_simulation(
+    simulation_id: str,
+    db: Session = Depends(get_db),
+) -> SimulationResponse:
+    """Request cancellation of a queued or running simulation."""
+    sim_status = status_store.get(simulation_id)
+    if sim_status is not None:
+        if sim_status.status in ("completed", "failed", "cancelled"):
+            return SimulationResponse(
+                simulation_id=simulation_id,
+                status=sim_status.status,
+                message=f"Simulation already {sim_status.status}",
+            )
+        status_store.cancel(simulation_id)
+        try:
+            DatabaseService(db).update_simulation_status(
+                uuid.UUID(simulation_id),
+                status="cancelled",
+                progress=sim_status.progress,
+                current_step="Cancelled",
+                message="Cancellation requested",
+            )
+        except Exception:
+            pass
+        return SimulationResponse(
+            simulation_id=simulation_id,
+            status="cancelled",
+            message="Cancellation requested",
+        )
+
+    try:
+        job = DatabaseService(db).get_simulation_by_id(uuid.UUID(simulation_id))
+    except Exception:
+        job = None
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Simulation {simulation_id} not found",
+        )
+
+    if job.status in ("completed", "failed", "cancelled"):
+        return SimulationResponse(
+            simulation_id=simulation_id,
+            status=job.status,
+            message=f"Simulation already {job.status}",
+        )
+
+    DatabaseService(db).update_simulation_status(
+        job.simulation_id,
+        status="cancelled",
+        progress=job.progress,
+        current_step="Cancelled",
+        message="Cancellation requested",
+    )
+    return SimulationResponse(
+        simulation_id=simulation_id,
+        status="cancelled",
+        message="Cancellation requested",
+    )
+
+
 @router.websocket("/{simulation_id}/ws")
 async def websocket_status(websocket: WebSocket, simulation_id: str):
     """WebSocket endpoint for real-time simulation status updates."""
@@ -250,7 +375,7 @@ async def websocket_status(websocket: WebSocket, simulation_id: str):
             )
 
             # If simulation is completed or failed, close connection
-            if sim_status.status in ("completed", "failed"):
+            if sim_status.status in ("completed", "failed", "cancelled"):
                 break
 
             # Wait a bit before next update

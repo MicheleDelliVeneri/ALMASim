@@ -9,13 +9,14 @@ import threading
 class SimulationStatus:
     """Simulation status information."""
     simulation_id: str
-    status: str = "queued"  # queued, running, completed, failed
+    status: str = "queued"  # queued, running, completed, failed, cancelled
     progress: float = 0.0
     current_step: str = ""
     message: str = ""
     logs: List[str] = field(default_factory=list)
     error: Optional[str] = None
     output_dir: Optional[str] = None
+    cancelled: bool = False
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
@@ -77,6 +78,24 @@ class StatusStore:
 
             sim_status.updated_at = datetime.now()
             return sim_status
+
+    def cancel(self, simulation_id: str) -> bool:
+        """Mark a simulation as cancelled."""
+        with self._lock:
+            sim_status = self._store.get(simulation_id)
+            if not sim_status:
+                return False
+            sim_status.cancelled = True
+            sim_status.status = "cancelled"
+            sim_status.message = "Cancellation requested"
+            sim_status.updated_at = datetime.now()
+            return True
+
+    def is_cancelled(self, simulation_id: str) -> bool:
+        """Check whether a simulation has been cancelled."""
+        with self._lock:
+            sim_status = self._store.get(simulation_id)
+            return bool(sim_status.cancelled) if sim_status else False
     
     def delete(self, simulation_id: str) -> bool:
         """Delete simulation status."""
@@ -204,4 +223,3 @@ class QueryStore:
 
 # Global query store instance
 query_store = QueryStore()
-

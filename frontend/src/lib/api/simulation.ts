@@ -26,6 +26,7 @@ export interface SimulationParams {
 	freq: number;
 	freq_support: string;
 	cont_sens: number;
+	line_sens_10kms?: number;
 	antenna_array: string;
 	observation_configs?: ObservationConfigInput[];
 	source_type?: string;
@@ -75,6 +76,19 @@ export interface SimulationStatus {
 	error?: string;
 }
 
+export interface SimulationEstimate {
+	n_pix: number;
+	n_channels: number;
+	cube_shape: number[];
+	cube_voxels: number;
+	cell_size_arcsec: number;
+	beam_size_arcsec: number;
+	raw_single_cube_gb: number;
+	raw_complex_cube_gb: number;
+	estimated_standard_output_gb: number;
+	note: string;
+}
+
 export interface DaskTestResult {
 	ok: boolean;
 	scheduler: string;
@@ -88,6 +102,14 @@ export interface DaskTestResult {
 export const simulationApi = {
 	create: async (params: SimulationParamsCreate): Promise<SimulationResponse> => {
 		return apiClient.post<SimulationResponse>('/api/v1/simulations/', params);
+	},
+
+	cancel: async (simulationId: string): Promise<SimulationResponse> => {
+		return apiClient.post<SimulationResponse>(`/api/v1/simulations/${simulationId}/cancel`, {});
+	},
+
+	estimate: async (params: SimulationParamsCreate): Promise<SimulationEstimate> => {
+		return apiClient.post<SimulationEstimate>('/api/v1/simulations/estimate', params);
 	},
 
 	getStatus: async (simulationId: string): Promise<SimulationStatus> => {

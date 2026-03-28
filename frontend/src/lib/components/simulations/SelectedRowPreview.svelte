@@ -1,22 +1,39 @@
 <script lang="ts">
 	import { deriveArrayType, inferObservationConfigsFromMetadataRow } from '$lib/utils/observationPlan';
+	import type { SimulationEstimate } from '$lib/api/simulation';
 
 	interface Props {
 		row: Record<string, unknown> | null;
 		getRowValue: (row: Record<string, unknown>, key: string) => string;
 		getRowNumber: (row: Record<string, unknown>, key: string) => number | null;
 		sourceType: string;
-		nPix: number;
-		nChannels: number;
+		nPix: number | null;
+		nChannels: number | null;
 		snr: number;
+		useMetadataSnr: boolean;
 		useMetadataPwv: boolean;
 		pwvOverride: number;
 		saveMode: string;
 		nLines: number;
 		robust: number;
+		estimate: SimulationEstimate | null;
+		estimating: boolean;
+		estimateError: string | null;
 	}
 
-	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataPwv, pwvOverride, saveMode, nLines, robust }: Props = $props();
+	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataSnr, useMetadataPwv, pwvOverride, saveMode, nLines, robust, estimate, estimating, estimateError }: Props = $props();
+
+	function derivePreviewSnr(targetRow: Record<string, unknown>): string {
+		if (!useMetadataSnr) return `${snr.toFixed(2)} (manual)`;
+		const contSens = getRowNumber(targetRow, 'Cont_sens_mJybeam') ?? getRowNumber(targetRow, 'Cont_sens') ?? getRowNumber(targetRow, 'cont_sens');
+		const lineSens = getRowNumber(targetRow, 'Line_sens_10kms_mJybeam');
+		if (contSens !== null && lineSens !== null && contSens > 0) {
+			const inferred = Math.max(1.0, Math.min(30.0, lineSens / contSens));
+			return `${inferred.toFixed(2)} (metadata heuristic)`;
+		}
+		if (contSens !== null) return 'Auto from metadata sensitivity';
+		return '1.30 (fallback)';
+	}
 </script>
 
 {#if row}
@@ -72,6 +89,10 @@
 				</p>
 			</div>
 			<div>
+				<span class="font-medium text-gray-700">SNR:</span>
+				<p class="mt-1 text-gray-900">{derivePreviewSnr(row)}</p>
+			</div>
+			<div>
 				<span class="font-medium text-gray-700">PWV:</span>
 				<p class="mt-1 text-gray-900">
 					{#if useMetadataPwv}
@@ -109,7 +130,39 @@
 			<div>
 				<span class="font-medium text-gray-700">Cube Size:</span>
 				<p class="mt-1 text-gray-900">
-					{nPix} × {nPix} × {nChannels}
+					{#if estimate}
+						{estimate.n_pix} × {estimate.n_pix} × {estimate.n_channels}
+					{:else if nPix !== null || nChannels !== null}
+						{nPix ?? 'auto'} × {nPix ?? 'auto'} × {nChannels ?? 'auto'}
+					{:else}
+						Auto from metadata-derived FOV and frequency support
+					{/if}
+				</p>
+			</div>
+			<div>
+				<span class="font-medium text-gray-700">Estimated Size:</span>
+				<p class="mt-1 text-gray-900">
+					{#if estimating}
+						Computing…
+					{:else if estimate}
+						{estimate.raw_single_cube_gb.toFixed(3)} GiB per float32 cube
+					{:else if estimateError}
+						Unavailable
+					{:else}
+						Select a row to estimate
+					{/if}
+				</p>
+			</div>
+			<div>
+				<span class="font-medium text-gray-700">Estimated Outputs:</span>
+				<p class="mt-1 text-gray-900">
+					{#if estimate}
+						~{estimate.estimated_standard_output_gb.toFixed(3)} GiB raw
+					{:else if estimateError}
+						{estimateError}
+					{:else}
+						Waiting for estimate
+					{/if}
 				</p>
 			</div>
 		</div>

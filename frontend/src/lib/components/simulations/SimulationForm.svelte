@@ -6,11 +6,12 @@
 
 	interface Props {
 		sourceType: string;
-		nPix: number;
-		nChannels: number;
+		nPix: number | null;
+		nChannels: number | null;
 		simulationName: string;
 		outputDir: string;
 		snr: number;
+		useMetadataSnr: boolean;
 		useMetadataPwv: boolean;
 		pwvOverride: number;
 		saveMode: string;
@@ -18,11 +19,12 @@
 		robust: number;
 		numSimulations: number;
 		onSourceTypeChange: (type: string) => void;
-		onNPixChange: (value: number) => void;
-		onNChannelsChange: (value: number) => void;
+		onNPixChange: (value: number | null) => void;
+		onNChannelsChange: (value: number | null) => void;
 		onSimulationNameChange: (value: string) => void;
 		onOutputDirChange: (value: string) => void;
 		onSnrChange: (value: number) => void;
+		onUseMetadataSnrChange: (value: boolean) => void;
 		onUseMetadataPwvChange: (value: boolean) => void;
 		onPwvOverrideChange: (value: number) => void;
 		onSaveModeChange: (value: string) => void;
@@ -38,6 +40,7 @@
 		simulationName,
 		outputDir,
 		snr,
+		useMetadataSnr,
 		useMetadataPwv,
 		pwvOverride,
 		saveMode,
@@ -50,6 +53,7 @@
 		onSimulationNameChange,
 		onOutputDirChange,
 		onSnrChange,
+		onUseMetadataSnrChange,
 		onUseMetadataPwvChange,
 		onPwvOverrideChange,
 		onSaveModeChange,
@@ -153,11 +157,26 @@
 				min="32"
 				max="2048"
 				step="32"
-				value={nPix}
-				oninput={(e) => onNPixChange(parseInt(e.currentTarget.value) || 256)}
+				value={nPix ?? ''}
+				placeholder="Auto from metadata"
+				oninput={(e) => {
+					const value = e.currentTarget.value.trim();
+					if (value === '') {
+						onNPixChange(null);
+						return;
+					}
+					const parsed = parseInt(value, 10);
+					onNPixChange(Number.isNaN(parsed) ? null : parsed);
+				}}
 				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
 			/>
-			<p class="mt-1 text-xs text-gray-500">Cube will be {nPix} × {nPix} × {nChannels}</p>
+			<p class="mt-1 text-xs text-gray-500">
+				{#if nPix !== null}
+					Override active: {nPix} × {nPix} pixels
+				{:else}
+					Leave blank to auto-compute from field of view and angular resolution
+				{/if}
+			</p>
 		</div>
 
 		<div>
@@ -170,11 +189,26 @@
 				min="16"
 				max="1024"
 				step="16"
-				value={nChannels}
-				oninput={(e) => onNChannelsChange(parseInt(e.currentTarget.value) || 128)}
+				value={nChannels ?? ''}
+				placeholder="Auto from metadata"
+				oninput={(e) => {
+					const value = e.currentTarget.value.trim();
+					if (value === '') {
+						onNChannelsChange(null);
+						return;
+					}
+					const parsed = parseInt(value, 10);
+					onNChannelsChange(Number.isNaN(parsed) ? null : parsed);
+				}}
 				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
 			/>
-			<p class="mt-1 text-xs text-gray-500">Total channels: {nChannels}</p>
+			<p class="mt-1 text-xs text-gray-500">
+				{#if nChannels !== null}
+					Override active: {nChannels} channels
+				{:else}
+					Leave blank to auto-compute from the metadata frequency support
+				{/if}
+			</p>
 		</div>
 	</div>
 
@@ -241,6 +275,22 @@
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-5">
 		<div>
+			<label for="use_metadata_snr" class="mb-1 block text-sm font-medium text-gray-700">
+				SNR Source
+			</label>
+			<select
+				id="use_metadata_snr"
+				value={useMetadataSnr ? 'metadata' : 'manual'}
+				onchange={(e) => onUseMetadataSnrChange(e.currentTarget.value === 'metadata')}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			>
+				<option value="metadata">Auto from Metadata</option>
+				<option value="manual">Manual Override</option>
+			</select>
+			<p class="mt-1 text-xs text-gray-500">Default: derive from metadata sensitivities</p>
+		</div>
+
+		<div>
 			<label for="snr" class="mb-1 block text-sm font-medium text-gray-700">
 				Signal-to-Noise Ratio (SNR)
 			</label>
@@ -251,10 +301,13 @@
 				max="100"
 				step="0.1"
 				value={snr}
+				disabled={useMetadataSnr}
 				oninput={(e) => onSnrChange(parseFloat(e.currentTarget.value) || 1.3)}
-				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
 			/>
-			<p class="mt-1 text-xs text-gray-500">Default: 1.3</p>
+			<p class="mt-1 text-xs text-gray-500">
+				{useMetadataSnr ? 'Disabled while using metadata-derived SNR' : 'Manual SNR override'}
+			</p>
 		</div>
 
 		<div>

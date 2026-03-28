@@ -82,6 +82,9 @@ class SimulationService:
         params: SimulationParamsCreate,
     ) -> None:
         """Run a simulation."""
+        class SimulationCancelledError(RuntimeError):
+            pass
+
         # Define simulation steps for progress tracking
         simulation_steps = [
             "Initializing",
@@ -94,8 +97,13 @@ class SimulationService:
         # Track current progress state
         current_progress = {"value": 0.0, "step_index": 0}
 
+        def check_cancelled() -> None:
+            if status_store.is_cancelled(simulation_id):
+                raise SimulationCancelledError("Simulation cancelled")
+
         def status_callback(message: str):
             """Callback to update simulation status."""
+            check_cancelled()
             # Try to match message to a simulation step
             step_index = next(
                 (
@@ -144,11 +152,13 @@ class SimulationService:
 
         def log_callback(message: str):
             """Callback to log messages."""
+            check_cancelled()
             status_store.update(simulation_id, log=message)
             self._persist_log(simulation_id, message)
 
         def progress_callback(progress: int):
             """Callback for fine-grained progress updates during simulation step."""
+            check_cancelled()
             # Only update progress if we're in the "Running interferometric simulation" step
             if current_progress["step_index"] == 2:
                 # Map 0-100 progress to 50-85% range
@@ -186,6 +196,7 @@ class SimulationService:
                 freq=params.freq,
                 freq_support=params.freq_support,
                 cont_sens=params.cont_sens,
+                line_sens_10kms=params.line_sens_10kms,
                 antenna_array=params.antenna_array,
                 n_pix=params.n_pix,
                 n_channels=params.n_channels,
@@ -232,6 +243,7 @@ class SimulationService:
                 status_callback=status_callback,
                 progress_emitter=progress_callback,
                 logger=log_callback,
+                stop_requested=lambda: status_store.is_cancelled(simulation_id),
             )
 
             # Mark as completed
@@ -249,6 +261,22 @@ class SimulationService:
                 current_step="Completed",
                 message="Simulation completed successfully",
             )
+        except SimulationCancelledError:
+            status_store.update(
+                simulation_id,
+                status="cancelled",
+                progress=current_progress["value"],
+                current_step="Cancelled",
+                message="Simulation cancelled",
+            )
+            self._persist_status(
+                simulation_id,
+                status="cancelled",
+                progress=current_progress["value"],
+                current_step="Cancelled",
+                message="Simulation cancelled",
+            )
+            self._persist_log(simulation_id, "Simulation cancelled", level="WARNING")
         except Exception as e:
             # Mark as failed
             error_msg = str(e)

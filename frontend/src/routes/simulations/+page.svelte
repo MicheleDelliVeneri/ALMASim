@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { simulationApi, type SimulationParamsCreate } from '$lib/api/simulation';
+	import {
+		simulationApi,
+		type SimulationEstimate,
+		type SimulationParamsCreate
+	} from '$lib/api/simulation';
 	import type { MetadataResponse } from '$lib/api/metadata';
 	import ComputeBackendConfig from '$lib/components/simulations/ComputeBackendConfig.svelte';
 	import SimulationForm from '$lib/components/simulations/SimulationForm.svelte';
@@ -43,15 +47,19 @@
 	let selectedRowIndices = $state<number[]>([]);
 
 	let simulationStatus = $state<SimulationStatus | null>(null);
+	let simulationEstimate = $state<SimulationEstimate | null>(null);
+	let estimating = $state(false);
+	let estimateError = $state<string | null>(null);
 	let ws: WebSocket | null = null;
 
 	// Simulation form state
-	let nPix = $state(256);
-	let nChannels = $state(128);
+	let nPix = $state<number | null>(null);
+	let nChannels = $state<number | null>(null);
 	let sourceType = $state('point');
 	let simulationName = $state('');
 	let outputDir = $state('/host_home');
 	let snr = $state(1.3);
+	let useMetadataSnr = $state(true);
 	let useMetadataPwv = $state(true);
 	let pwvOverride = $state(1.0);
 	let saveMode = $state('npz');
@@ -147,6 +155,149 @@
 		return null;
 	}
 
+	function getOptionalNumber(
+		row: Record<string, unknown>,
+		keys: string[]
+	): number | undefined {
+		for (const key of keys) {
+			const value = getRowNumber(row, key);
+			if (value !== null) return value;
+		}
+		return undefined;
+	}
+
+	async function cancelActiveSimulation() {
+		if (!simulationId || !simulationStatus) return;
+		try {
+			const response = await simulationApi.cancel(simulationId);
+			simulationStatus = {
+				...(simulationStatus ?? {
+					simulation_id: simulationId,
+					progress: 0,
+					current_step: 'Cancelled',
+					message: '',
+					logs: []
+				}),
+				status: response.status,
+				current_step: 'Cancelled',
+				message: response.message || 'Cancellation requested'
+			};
+			message = response.message || 'Cancellation requested';
+		} catch (error) {
+			message = `Error: ${error instanceof Error ? error.message : 'Failed to cancel simulation'}`;
+		}
+	}
+
+	function buildSimulationParamsFromRow(
+		row: Record<string, unknown>,
+		idx: number
+	): SimulationParamsCreate {
+		const getValue = (keys: string[], fallback: any = null) => {
+			for (const key of keys) {
+				const value = row[key];
+				if (value !== null && value !== undefined && value !== '') {
+					return value;
+				}
+			}
+			return fallback;
+		};
+
+		const getNumber = (keys: string[], fallback: number): number => {
+			const value = getValue(keys, fallback);
+			if (typeof value === 'number') {
+				if (isNaN(value)) return fallback;
+				return value;
+			}
+			if (typeof value === 'string') {
+				const parsed = parseFloat(value);
+				return isNaN(parsed) ? fallback : parsed;
+			}
+			return fallback;
+		};
+
+		const getString = (keys: string[], fallback: string): string => {
+			const value = getValue(keys, fallback);
+			return String(value ?? fallback);
+		};
+
+		return {
+			idx,
+			source_name: getString(['ALMA_source_name', 'source_name'], 'Unknown'),
+			member_ouid: getString(['member_ous_uid', 'member_ouid'], 'unknown'),
+			project_name: simulationName || getString(['proposal_id', 'project_name'], 'ALMASim'),
+			ra: getNumber(['RA', 'ra'], 0.0),
+			dec: getNumber(['Dec', 'dec'], 0.0),
+			band: getNumber(['Band', 'band'], 3),
+			ang_res: getNumber(['Ang.res.', 'Ang.res', 'ang_res'], 0.1),
+			vel_res: getNumber(['Vel.res.', 'Vel.res', 'vel_res'], 1.0),
+			fov: getNumber(['FOV', 'fov'], 10.0),
+			obs_date: getString(['Obs.date', 'obs_date'], new Date().toISOString().split('T')[0]),
+			pwv: useMetadataPwv ? getNumber(['PWV', 'pwv'], 1.0) : pwvOverride,
+			int_time: getNumber(['Int.Time', 'int_time'], 3600.0),
+			bandwidth: getNumber(['Bandwidth', 'bandwidth'], 2.0),
+			freq: getNumber(['Freq', 'freq'], 100.0),
+			freq_support: getString(['Freq.sup.', 'Freq.sup', 'freq_support'], '100.0-102.0'),
+			cont_sens: getNumber(['Cont_sens_mJybeam', 'Cont_sens', 'cont_sens'], 0.1),
+			line_sens_10kms: getOptionalNumber(row, ['Line_sens_10kms_mJybeam']),
+			antenna_array: getString(['antenna_arrays', 'antenna_array'], 'C43-1'),
+			observation_configs: inferObservationConfigsFromMetadataRow(
+				row,
+				getNumber(['Int.Time', 'int_time'], 3600.0)
+			),
+			source_type: sourceType,
+			n_pix: nPix ?? undefined,
+			n_channels: nChannels ?? undefined,
+			snr: useMetadataSnr ? undefined : snr,
+			save_mode: saveMode,
+			n_lines: nLines > 0 ? nLines : undefined,
+			robust,
+			main_dir: './src/almasim',
+			output_dir: outputDir || './outputs',
+			tng_dir: './data/TNG100-1',
+			galaxy_zoo_dir: './data/galaxy_zoo',
+			hubble_dir: './data/hubble',
+			compute_backend: computeBackend,
+			compute_backend_config: backendConfig
+		};
+	}
+
+	$effect(() => {
+		const row = selectedRow;
+		if (!row) {
+			simulationEstimate = null;
+			estimateError = null;
+			return;
+		}
+
+		let cancelled = false;
+		estimating = true;
+		estimateError = null;
+
+		void simulationApi
+			.estimate(buildSimulationParamsFromRow(row, 0))
+			.then((estimate) => {
+				if (!cancelled) {
+					simulationEstimate = estimate;
+				}
+			})
+			.catch((error) => {
+				if (!cancelled) {
+					simulationEstimate = null;
+					estimateError =
+						error instanceof Error ? error.message : 'Failed to estimate simulation size';
+				}
+			})
+			.finally(() => {
+				if (!cancelled) {
+					estimating = false;
+				}
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	async function handleSubmit(event: Event) {
 		event.preventDefault();
 		loading = true;
@@ -202,72 +353,7 @@
 		for (let i = 0; i < rowsToProcess.length; i++) {
 			const row = rowsToProcess[i];
 
-			const getValue = (keys: string[], fallback: any = null) => {
-				for (const key of keys) {
-					const value = row[key];
-					if (value !== null && value !== undefined && value !== '') {
-						return value;
-					}
-				}
-				return fallback;
-			};
-
-			const getNumber = (keys: string[], fallback: number): number => {
-				const value = getValue(keys, fallback);
-				if (typeof value === 'number') {
-					if (isNaN(value)) return fallback;
-					return value;
-				}
-				if (typeof value === 'string') {
-					const parsed = parseFloat(value);
-					return isNaN(parsed) ? fallback : parsed;
-				}
-				return fallback;
-			};
-
-			const getString = (keys: string[], fallback: string): string => {
-				const value = getValue(keys, fallback);
-				return String(value ?? fallback);
-			};
-
-			const simParams: SimulationParamsCreate = {
-				idx: i,
-				source_name: getString(['ALMA_source_name', 'source_name'], 'Unknown'),
-				member_ouid: getString(['member_ous_uid', 'member_ouid'], 'unknown'),
-				project_name: simulationName || getString(['proposal_id', 'project_name'], 'ALMASim'),
-				ra: getNumber(['RA', 'ra'], 0.0),
-				dec: getNumber(['Dec', 'dec'], 0.0),
-				band: getNumber(['Band', 'band'], 3),
-				ang_res: getNumber(['Ang.res.', 'Ang.res', 'ang_res'], 0.1),
-				vel_res: getNumber(['Vel.res.', 'Vel.res', 'vel_res'], 1.0),
-				fov: getNumber(['FOV', 'fov'], 10.0),
-				obs_date: getString(['Obs.date', 'obs_date'], new Date().toISOString().split('T')[0]),
-				pwv: useMetadataPwv ? getNumber(['PWV', 'pwv'], 1.0) : pwvOverride,
-				int_time: getNumber(['Int.Time', 'int_time'], 3600.0),
-				bandwidth: getNumber(['Bandwidth', 'bandwidth'], 2.0),
-				freq: getNumber(['Freq', 'freq'], 100.0),
-				freq_support: getString(['Freq.sup.', 'Freq.sup', 'freq_support'], '100.0-102.0'),
-				cont_sens: getNumber(['Cont_sens_mJybeam', 'Cont_sens', 'cont_sens'], 0.1),
-				antenna_array: getString(['antenna_arrays', 'antenna_array'], 'C43-1'),
-				observation_configs: inferObservationConfigsFromMetadataRow(
-					row,
-					getNumber(['Int.Time', 'int_time'], 3600.0)
-				),
-				source_type: sourceType,
-				n_pix: nPix,
-				n_channels: nChannels,
-				snr: snr,
-				save_mode: saveMode,
-				n_lines: nLines > 0 ? nLines : undefined,
-				robust: robust,
-				main_dir: './src/almasim',
-				output_dir: outputDir || './outputs',
-				tng_dir: './data/TNG100-1',
-				galaxy_zoo_dir: './data/galaxy_zoo',
-				hubble_dir: './data/hubble',
-				compute_backend: computeBackend,
-				compute_backend_config: backendConfig
-			};
+			const simParams = buildSimulationParamsFromRow(row, i);
 
 			try {
 				const response = await simulationApi.create(simParams);
@@ -336,6 +422,7 @@
 			{simulationName}
 			{outputDir}
 			{snr}
+			{useMetadataSnr}
 			{useMetadataPwv}
 			{pwvOverride}
 			{saveMode}
@@ -348,6 +435,7 @@
 			onSimulationNameChange={(value) => (simulationName = value)}
 			onOutputDirChange={(value) => (outputDir = value)}
 			onSnrChange={(value) => (snr = value)}
+			onUseMetadataSnrChange={(value) => (useMetadataSnr = value)}
 			onUseMetadataPwvChange={(value) => (useMetadataPwv = value)}
 			onPwvOverrideChange={(value) => (pwvOverride = value)}
 			onSaveModeChange={(value) => (saveMode = value)}
@@ -372,11 +460,15 @@
 			{nPix}
 			{nChannels}
 			{snr}
+			{useMetadataSnr}
 			{useMetadataPwv}
 			{pwvOverride}
 			{saveMode}
 			{nLines}
 			{robust}
+			estimate={simulationEstimate}
+			{estimating}
+			estimateError={estimateError}
 		/>
 
 		<form onsubmit={handleSubmit}>
@@ -390,12 +482,14 @@
 			<p class="mt-2 text-center text-xs text-gray-500">
 				{!selectedRow
 					? 'Please select a metadata row above'
-					: `Will create ${sourceType} simulation with ${nPix}×${nPix}×${nChannels} cube`}
+					: nPix !== null && nChannels !== null
+						? `Will create ${sourceType} simulation with ${nPix}×${nPix}×${nChannels} cube`
+						: 'Will auto-compute cube dimensions from the selected metadata row unless you set overrides above'}
 			</p>
 		</form>
 
 		{#if simulationId}
-			<SimulationStatusDisplay {simulationId} status={simulationStatus} />
+			<SimulationStatusDisplay {simulationId} status={simulationStatus} onCancel={cancelActiveSimulation} />
 		{/if}
 
 		<div class="mt-8">
