@@ -49,6 +49,7 @@ fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 httpx = "*"
 pydantic-settings = "*"
+ipykernel = "^7.2.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "*"
