@@ -63,3 +63,4 @@ backend/outputs
 !frontend/src/lib/
 !frontend/src/lib/**
 examples/output/ddrm_notebook_sample.h5
+.DS_Store

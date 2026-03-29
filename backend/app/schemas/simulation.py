@@ -100,6 +100,34 @@ class SimulationParamsBase(BaseModel):
         default=None,
         description="Optional random seed for reproducible background sky generation",
     )
+    external_skymodel_path: Optional[str] = Field(
+        default=None,
+        description="Optional path to an external FITS image or FITS cube sky model",
+    )
+    external_component_table_path: Optional[str] = Field(
+        default=None,
+        description="Optional path to a component-list-like source table for external-components mode",
+    )
+    external_alignment_mode: str = Field(
+        default="observation",
+        description="External model alignment mode: observation or preserve",
+    )
+    external_header_mode: str = Field(
+        default="observation",
+        description="External FITS header mode: observation or preserve",
+    )
+    external_header_overrides: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Optional FITS header keyword overrides applied to external models",
+    )
+    ms_export: bool = Field(
+        default=False,
+        description="Whether to generate a native MeasurementSet `.ms` export",
+    )
+    ms_export_dir: Optional[str] = Field(
+        default=None,
+        description="Optional target directory for the native MeasurementSet `.ms` export",
+    )
 
 
 class SimulationParamsCreate(SimulationParamsBase):

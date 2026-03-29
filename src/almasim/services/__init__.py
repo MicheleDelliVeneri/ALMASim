@@ -18,6 +18,8 @@ _MODULES = {
     "metadata",
     "observation_plan",
     "imaging",
+    "products",
+    "external_skymodel",
 }
 
 
@@ -38,4 +40,6 @@ __all__ = [
     "metadata",
     "observation_plan",
     "imaging",
+    "products",
+    "external_skymodel",
 ]

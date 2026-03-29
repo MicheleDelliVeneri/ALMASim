@@ -26,6 +26,7 @@ It is built around reusable Python services in [`src/almasim`](src/almasim), wit
 - Export image-domain products including interferometric, TP, and TP+INT combination cubes.
 - Run iterative CLEAN-style deconvolution with resumable state.
 - Export ML-ready HDF5 shards containing clean cube, dirty cube, dirty visibilities, UV mask cube, and metadata.
+- Export a native MeasurementSet `.ms` directory tree from the simulated visibility table.
 - Use local, synchronous, Dask, Slurm, or Kubernetes-oriented compute backends.
 - Run simulations from the frontend, CLI scripts, notebooks, or direct Python code.
 
@@ -35,6 +36,7 @@ It is built around reusable Python services in [`src/almasim`](src/almasim), wit
 - Simulation services: [`src/almasim/services/simulation.py`](src/almasim/services/simulation.py)
 - Interferometry services: [`src/almasim/services/interferometry`](src/almasim/services/interferometry)
 - Imaging services: [`src/almasim/services/imaging`](src/almasim/services/imaging)
+- Product writers: [`src/almasim/services/products`](src/almasim/services/products)
 - Metadata services: [`src/almasim/services/metadata`](src/almasim/services/metadata)
 - Download service: [`src/almasim/services/download.py`](src/almasim/services/download.py)
 - Frontend routes: [`frontend/src/routes`](frontend/src/routes)
@@ -80,6 +82,7 @@ Start the frontend/backend stack with Docker Compose or the repo’s local devel
 - [Frontend Workflows](docs/frontend.md)
 - [Examples](examples/README.md)
 - [SimALMA Fidelity Plan](docs/simalma_fidelity_plan.md)
+- [MSv2 Realism Plan](docs/msv2_realism_plan.md)
 
 ## Repository Layout
 

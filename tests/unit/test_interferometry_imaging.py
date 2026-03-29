@@ -354,7 +354,7 @@ def test_image_channel(sample_header, sample_wavelength):
     # Create sample image
     img = np.random.rand(Nphf, Nphf).astype(np.float32) * 0.1
     
-    modelim, dirtymap, modelvis, dirtyvis, u, v, beam, totsampling = image_channel(
+    modelim, dirtymap, modelvis, dirtyvis, u, v, beam, totsampling, raw_visibility = image_channel(
         img,
         sample_wavelength,
         Npix,
@@ -386,3 +386,5 @@ def test_image_channel(sample_header, sample_wavelength):
     assert v.shape[0] > 0
     assert beam.shape == (Npix, Npix)
     assert totsampling.shape == (Npix, Npix)
+    assert "data" in raw_visibility
+    assert raw_visibility["uvw_m"].shape[1] == 3

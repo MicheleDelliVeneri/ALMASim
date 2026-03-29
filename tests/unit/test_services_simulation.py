@@ -7,7 +7,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 from almasim.services.simulation import (
+    CleanCubeStage,
     SimulationParams,
+    export_results,
     generate_background_cube,
     resolve_source_pixel_position,
     run_simulation,
@@ -548,6 +550,12 @@ def test_simulation_params_dataclass_fields(tmp_path, sample_metadata_row_dict):
         'save_mode', 'persist', 'ml_dataset_path',
         'inject_serendipitous', 'remote', 'observation_configs',
         'ground_temperature_k', 'correlator', 'elevation_deg',
+        'line_sens_10kms', 'source_offset_x_arcsec', 'source_offset_y_arcsec',
+        'background_mode', 'background_level', 'background_seed',
+        'external_skymodel_path', 'external_component_table_path',
+        'external_alignment_mode', 'external_header_mode',
+        'external_header_overrides', 'ms_export',
+        'ms_export_dir',
     ]
     
     # Verify all fields exist and can be accessed
@@ -582,6 +590,103 @@ def test_write_ml_dataset_shard(tmp_path):
         assert np.array_equal(h5f["dirty_vis"][:], dirty_vis)
         assert np.array_equal(h5f["uv_mask_cube"][:], uv_mask_cube)
         assert "source_name" in h5f.attrs["metadata_json"]
+
+
+@pytest.mark.unit
+@patch("almasim.services.simulation.export_native_ms")
+def test_export_results_triggers_ms_export(mock_export_native_ms, tmp_path):
+    """Native MeasurementSet export should be triggered when requested."""
+    mock_export_native_ms.return_value = str(tmp_path / "demo.ms")
+    params = SimulationParams(
+        idx=1,
+        source_name="demo",
+        member_ouid="uid://demo",
+        main_dir=str(tmp_path),
+        output_dir=str(tmp_path / "out"),
+        tng_dir=str(tmp_path / "tng"),
+        galaxy_zoo_dir=str(tmp_path / "gz"),
+        hubble_dir=str(tmp_path / "hub"),
+        project_name="demo_project",
+        ra=1.0,
+        dec=2.0,
+        band=6.0,
+        ang_res=0.1,
+        vel_res=10.0,
+        fov=1.0,
+        obs_date="2020-01-01",
+        pwv=1.0,
+        int_time=10.0,
+        bandwidth=1.0,
+        freq=250.0,
+        freq_support="spec",
+        cont_sens=0.1,
+        antenna_array="A001:DA01 A002:DA02",
+        n_pix=16,
+        n_channels=4,
+        source_type="point",
+        tng_api_key=None,
+        ncpu=1,
+        rest_frequency=None,
+        redshift=0.0,
+        lum_infrared=None,
+        snr=5.0,
+        n_lines=None,
+        line_names=None,
+        save_mode="memory",
+        persist=False,
+        ml_dataset_path=None,
+        inject_serendipitous=False,
+        ms_export=True,
+        ms_export_dir=str(tmp_path / "demo.ms"),
+    )
+    stage = CleanCubeStage(
+        datacube=None,
+        model_cube=np.zeros((4, 16, 16), dtype=np.float32),
+        header=Mock(),
+        output_dir_abs=str(tmp_path / "out"),
+        sim_output_dir=None,
+        sim_params_payload={"sim_params_path": str(tmp_path / "params.txt")},
+        interferometer_kwargs={},
+        interferometer_runs=[],
+        total_power_runs=[],
+        metadata={"source_name": "demo"},
+        observation_plan={"configs": []},
+        channel_frequencies_hz=np.linspace(1.0, 2.0, 4),
+        channel_width_hz=1.0,
+        cell_size_arcsec=0.1,
+        background_cube=None,
+        external_input_metadata=None,
+    )
+    simulation_results = {
+        "dirty_cube": np.zeros((4, 16, 16), dtype=np.float32),
+        "dirty_vis": np.zeros((4, 16, 16), dtype=np.complex64),
+        "uv_mask_cube": np.zeros((4, 16, 16), dtype=np.uint8),
+        "visibility_table": {
+            "uvw_m": np.zeros((2, 3)),
+            "antenna1": np.array([0, 0], dtype=np.int32),
+            "antenna2": np.array([1, 1], dtype=np.int32),
+            "time_mjd_s": np.array([0.0, 1.0]),
+            "interval_s": np.array([1.0, 1.0]),
+            "exposure_s": np.array([1.0, 1.0]),
+            "data": np.zeros((2, 1, 4), dtype=np.complex64),
+            "model_data": np.zeros((2, 1, 4), dtype=np.complex64),
+            "flag": np.zeros((2, 1, 4), dtype=bool),
+            "weight": np.ones((2, 1), dtype=np.float32),
+            "sigma": np.ones((2, 1), dtype=np.float32),
+            "channel_freq_hz": np.linspace(1.0, 2.0, 4),
+            "antenna_names": ["DA01", "DA02"],
+            "antenna_positions_m": np.zeros((2, 3)),
+            "source_name": "demo",
+            "field_ra_rad": 0.0,
+            "field_dec_rad": 0.0,
+            "observation_date": "2020-01-01",
+        },
+    }
+
+    exported = export_results(params, stage, simulation_results)
+
+    assert exported["ms_path"] == str(tmp_path / "demo.ms")
+    mock_export_native_ms.assert_called_once()
 
 
 @pytest.mark.unit

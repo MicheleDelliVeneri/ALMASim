@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 
 from .utils import sampling_to_uv_mask
+from .visibility import concatenate_visibility_tables
 
 
 def _combine_baseline_cubes(cubes: list[np.ndarray]) -> np.ndarray:
@@ -80,4 +81,11 @@ def combine_interferometric_results(
             "combined_config_count": len(per_config_results),
         }
     )
+    visibility_tables = [
+        r["visibility_table"]
+        for r in per_config_results
+        if "visibility_table" in r and r["visibility_table"] is not None
+    ]
+    if visibility_tables:
+        combined["visibility_table"] = concatenate_visibility_tables(visibility_tables)
     return combined

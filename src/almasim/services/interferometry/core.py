@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Callable, Optional
 import os
 import time
-import h5py
 import numpy as np
 import pandas as pd
 import matplotlib.cm as cm
@@ -21,6 +20,8 @@ if TYPE_CHECKING:
 
 from .imaging import image_channel
 from .utils import sampling_to_uv_mask
+from .visibility import assemble_visibility_table
+from ..products.cube_export import write_interferometry_products
 
 LogFn = Optional[Callable[[str], None]]
 
@@ -280,6 +281,8 @@ class Interferometer:
             Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
         self.Xmax = Xmax
         self.antPos = antPos
+        self.antNames = list(obs_coordinates["name"].values)
+        self.antPos3D = obs_coordinates[["x", "y", "z"]].values.astype(np.float64)
 
         cosW = -np.tan(self.lat) * np.tan(self.dec)
         if np.abs(cosW) < 1.0:
@@ -395,6 +398,7 @@ class Interferometer:
                 self.zooming,
                 header_dict,  # Pass dict instead of Header object
                 self.robust,
+                self.scan_time,
             )
             delayed_results.append(delayed_result)
 
@@ -416,6 +420,7 @@ class Interferometer:
         v = [res[5] for res in results_per_channel]
         beam = [res[6] for res in results_per_channel]
         totsampling = [res[7] for res in results_per_channel]
+        raw_visibility_rows = [res[8] for res in results_per_channel]
 
         # Stack the results into 3D arrays
         modelCube = np.stack(modelcube, axis=0)
@@ -427,19 +432,46 @@ class Interferometer:
         beam = np.stack(beam, axis=0)
         totsampling = np.stack(totsampling, axis=0)
         uv_mask = sampling_to_uv_mask(totsampling)
+        visibility_table = assemble_visibility_table(
+            channel_rows=raw_visibility_rows,
+            channel_freq_hz=np.linspace(
+                self.central_freq - self.bandwidth / 2,
+                self.central_freq + self.bandwidth / 2,
+                self.Nchan,
+            ),
+            scan_time_s=float(self.scan_time),
+            observation_date=self.observation_date,
+            antenna_names=self.antNames,
+            antenna_positions_m=self.antPos3D,
+            source_name=str(self.header.get("OBJECT", "ALMASimSource")),
+            field_ra_rad=float(self.ra),
+            field_dec_rad=float(self.dec),
+            config_name=self.config_name,
+            array_type=self.array_type,
+        ).as_dict()
 
         # Save the results only when explicitly requested.
         if self.persist and self.save_mode != "memory":
-            self._savez_compressed_cubes(
-                modelCube,
-                modelVis,
-                dirtyCube,
-                dirtyVis,
-                beam,
-                totsampling,
-                uv_mask,
-                u,
-                v,
+            write_interferometry_products(
+                self.output_dir,
+                idx=self.idx,
+                save_mode=self.save_mode,
+                header=self.header if isinstance(self.header, fits.Header) else None,
+                model_cube=modelCube,
+                vis_cube=modelVis,
+                dirty_cube=dirtyCube,
+                dirty_vis_cube=dirtyVis,
+                beam_cube=beam,
+                totsampling_cube=totsampling,
+                uv_mask_cube=uv_mask,
+                u_cube=u,
+                v_cube=v,
+            )
+            self._log(
+                f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)} Jy"
+            )
+            self._log(
+                f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)} Jy"
             )
 
         # Get wavelength and format for middle channel
@@ -483,6 +515,7 @@ class Interferometer:
             "config_name": self.config_name,
             "array_type": self.array_type,
             "antenna_diameter_m": self.antenna_diameter_m,
+            "visibility_table": visibility_table,
         }
 
         # Clean up variables to free memory
@@ -516,145 +549,3 @@ class Interferometer:
             progress_value = int((completed_tasks / total_tasks) * 100)
             self.progress_signal.emit(progress_value)
             time.sleep(1)
-
-    def _savez_compressed_cubes(
-        self,
-        modelCube: np.ndarray,
-        visCube: np.ndarray,
-        dirtyCube: np.ndarray,
-        dirtyvisCube: np.ndarray,
-        beamCube: np.ndarray,
-        totsamplingCube: np.ndarray,
-        uvMaskCube: np.ndarray,
-        uCube: np.ndarray,
-        vCube: np.ndarray,
-    ) -> None:
-        """Save simulation results in various formats."""
-        if self.save_mode == "npz":
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"clean-cube_{self.idx}.npz"),
-                modelCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"dirty-cube_{self.idx}.npz"),
-                dirtyCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"dirty-vis-cube_{self.idx}.npz"),
-                dirtyvisCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"clean-vis-cube_{self.idx}.npz"),
-                visCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"beam-cube_{self.idx}.npz"),
-                beamCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"totsampling-cube_{self.idx}.npz"),
-                totsamplingCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"uv-mask-cube_{self.idx}.npz"),
-                uvMaskCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"u-cube_{self.idx}.npz"),
-                uCube,
-            )
-            np.savez_compressed(
-                os.path.join(self.output_dir, f"v-cube_{self.idx}.npz"),
-                vCube,
-            )
-        elif self.save_mode == "h5":
-            with h5py.File(
-                os.path.join(self.output_dir, f"clean-cube_{self.idx}.h5"), "w"
-            ) as f:
-                f.create_dataset("clean_cube", data=modelCube)
-            with h5py.File(
-                os.path.join(self.output_dir, f"dirty-cube_{self.idx}.h5"), "w"
-            ) as f:
-                f.create_dataset("dirty_cube", data=dirtyCube)
-            with h5py.File(
-                os.path.join(self.output_dir, f"dirty-vis-cube_{self.idx}.h5"), "w"
-            ) as f:
-                f.create_dataset("dirty_vis_cube", data=dirtyvisCube)
-            with h5py.File(
-                os.path.join(self.output_dir, f"clean-vis-cube_{self.idx}.h5"), "w"
-            ) as f:
-                f.create_dataset("clean_vis_cube", data=visCube)
-            with h5py.File(
-                os.path.join(self.output_dir, f"measurement-operator_{self.idx}.h5"), "w"
-            ) as f:
-                f.create_dataset("beam_cube", data=beamCube)
-                f.create_dataset("totsampling_cube", data=totsamplingCube)
-                f.create_dataset("uv_mask_cube", data=uvMaskCube)
-                f.create_dataset("u_cube", data=uCube)
-                f.create_dataset("v_cube", data=vCube)
-        elif self.save_mode == "fits":
-            self.clean_header = self.header.copy()
-            self.clean_header.append(("DATAMAX", np.max(modelCube)))
-            self.clean_header.append(("DATAMIN", np.min(modelCube)))
-            hdu = fits.PrimaryHDU(header=self.clean_header, data=modelCube)
-            hdu.writeto(
-                os.path.join(self.output_dir, f"clean-cube_{self.idx}.fits"),
-                overwrite=True,
-            )
-            self.dirty_header = self.header.copy()
-            self.dirty_header.append(("DATAMAX", np.max(dirtyCube)))
-            self.dirty_header.append(("DATAMIN", np.min(dirtyCube)))
-            hdu = fits.PrimaryHDU(header=self.dirty_header, data=dirtyCube)
-            hdu.writeto(
-                os.path.join(self.output_dir, f"dirty-cube_{self.idx}.fits"),
-                overwrite=True,
-            )
-            real_part = np.real(dirtyvisCube)
-            imag_part = np.imag(dirtyvisCube)
-            hdu_real = fits.PrimaryHDU(real_part)
-            hdu_imag = fits.PrimaryHDU(imag_part)
-            hdu_real.writeto(
-                os.path.join(self.output_dir, f"dirty-vis-cube_real{self.idx}.fits"),
-                overwrite=True,
-            )
-            hdu_imag.writeto(
-                os.path.join(self.output_dir, f"dirty-vis-cube_imag{self.idx}.fits"),
-                overwrite=True,
-            )
-            real_part = np.real(visCube)
-            imag_part = np.imag(visCube)
-            hdu_real = fits.PrimaryHDU(real_part)
-            hdu_imag = fits.PrimaryHDU(imag_part)
-            hdu_real.writeto(
-                os.path.join(self.output_dir, f"clean-vis-cube_real{self.idx}.fits"),
-                overwrite=True,
-            )
-            hdu_imag.writeto(
-                os.path.join(self.output_dir, f"clean-vis-cube_imag{self.idx}.fits"),
-                overwrite=True,
-            )
-            fits.PrimaryHDU(beamCube).writeto(
-                os.path.join(self.output_dir, f"beam-cube_{self.idx}.fits"),
-                overwrite=True,
-            )
-            fits.PrimaryHDU(totsamplingCube).writeto(
-                os.path.join(self.output_dir, f"totsampling-cube_{self.idx}.fits"),
-                overwrite=True,
-            )
-            fits.PrimaryHDU(uvMaskCube).writeto(
-                os.path.join(self.output_dir, f"uv-mask-cube_{self.idx}.fits"),
-                overwrite=True,
-            )
-            fits.PrimaryHDU(uCube).writeto(
-                os.path.join(self.output_dir, f"u-cube_{self.idx}.fits"),
-                overwrite=True,
-            )
-            fits.PrimaryHDU(vCube).writeto(
-                os.path.join(self.output_dir, f"v-cube_{self.idx}.fits"),
-                overwrite=True,
-            )
-            del real_part
-            del imag_part
-
-        self._log(f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)} Jy")
-        self._log(f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)} Jy")

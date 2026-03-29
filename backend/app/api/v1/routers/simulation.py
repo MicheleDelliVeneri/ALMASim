@@ -236,6 +236,13 @@ async def estimate_simulation(
             background_mode=params.background_mode,
             background_level=params.background_level,
             background_seed=params.background_seed,
+            external_skymodel_path=params.external_skymodel_path,
+            external_component_table_path=params.external_component_table_path,
+            external_alignment_mode=params.external_alignment_mode,
+            external_header_mode=params.external_header_mode,
+            external_header_overrides=params.external_header_overrides,
+            ms_export=params.ms_export,
+            ms_export_dir=params.ms_export_dir,
         )
         return SimulationEstimate(**sim_service.estimate_simulation_footprint(sim_params))
     except Exception as e:

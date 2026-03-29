@@ -15,6 +15,7 @@ This directory contains focused markdown documentation for the main ALMASim subs
 - [Compute Backends](compute.md)
 - [Frontend Workflows](frontend.md)
 - [SimALMA Fidelity Plan](simalma_fidelity_plan.md)
+- [MSv2 Realism Plan](msv2_realism_plan.md)
 
 ## Suggested Reading Order
 
@@ -28,8 +29,8 @@ This directory contains focused markdown documentation for the main ALMASim subs
 8. [Downloads](downloads.md)
 9. [Compute Backends](compute.md)
 10. [Frontend Workflows](frontend.md)
+11. [MSv2 Realism Plan](msv2_realism_plan.md)
 
 ## Scope
 
 These pages describe the current codebase, not an aspirational API. They focus on what ALMASim does today and how the main pieces fit together.
-

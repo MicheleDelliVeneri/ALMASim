@@ -13,12 +13,17 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 import astropy.units as U
-import h5py
-from astropy.io import fits
 
 from . import interferometry as uin
 from . import astro as uas
+from .external_skymodel import (
+    infer_external_cube_geometry,
+    is_external_source_type,
+    load_external_sky_model,
+)
 from .imaging import build_image_products
+from .products.cube_export import save_optional_cube, write_ml_dataset_shard
+from .products.ms_io import export_native_ms
 from .observation_plan import build_single_pointing_observation_plan
 from .interferometry import antenna as ual_antenna
 from .interferometry.frequency import freq_supp_extractor
@@ -87,6 +92,13 @@ class SimulationParams:
     background_mode: str = "none"
     background_level: float = 1.0
     background_seed: Optional[int] = None
+    external_skymodel_path: Optional[str] = None
+    external_component_table_path: Optional[str] = None
+    external_alignment_mode: str = "observation"
+    external_header_mode: str = "observation"
+    external_header_overrides: Optional[dict[str, Any]] = None
+    ms_export: bool = False
+    ms_export_dir: Optional[str] = None
 
     @classmethod
     def from_metadata_row(
@@ -125,6 +137,13 @@ class SimulationParams:
         background_mode: str = "none",
         background_level: float = 1.0,
         background_seed: Optional[int] = None,
+        external_skymodel_path: Optional[Path | str] = None,
+        external_component_table_path: Optional[Path | str] = None,
+        external_alignment_mode: str = "observation",
+        external_header_mode: str = "observation",
+        external_header_overrides: Optional[dict[str, Any]] = None,
+        ms_export: bool = False,
+        ms_export_dir: Optional[Path | str] = None,
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from a metadata row."""
 
@@ -249,6 +268,25 @@ class SimulationParams:
             background_seed=(
                 int(background_seed) if background_seed is not None else None
             ),
+            external_skymodel_path=(
+                _resolve_path(external_skymodel_path)
+                if external_skymodel_path is not None
+                else None
+            ),
+            external_component_table_path=(
+                _resolve_path(external_component_table_path)
+                if external_component_table_path is not None
+                else None
+            ),
+            external_alignment_mode=str(external_alignment_mode),
+            external_header_mode=str(external_header_mode),
+            external_header_overrides=external_header_overrides,
+            ms_export=bool(ms_export),
+            ms_export_dir=(
+                _resolve_path(ms_export_dir)
+                if ms_export_dir is not None
+                else None
+            ),
         )
 
 
@@ -271,6 +309,7 @@ class CleanCubeStage:
     channel_width_hz: float
     cell_size_arcsec: float
     background_cube: Optional[np.ndarray]
+    external_input_metadata: Optional[dict[str, Any]]
 
 
 def _json_safe(value: Any) -> Any:
@@ -288,30 +327,6 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     return value
-
-
-def write_ml_dataset_shard(
-    output_path: Path | str,
-    *,
-    clean_cube: np.ndarray,
-    dirty_cube: np.ndarray,
-    dirty_vis: np.ndarray,
-    uv_mask_cube: np.ndarray,
-    metadata: Mapping[str, Any],
-) -> str:
-    """Persist a simulation sample as a single HDF5 shard for ML workflows."""
-    output_path = Path(output_path).expanduser().resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with h5py.File(output_path, "w") as h5f:
-        h5f.create_dataset("clean_cube", data=clean_cube, compression="gzip")
-        h5f.create_dataset("dirty_cube", data=dirty_cube, compression="gzip")
-        h5f.create_dataset("dirty_vis", data=dirty_vis, compression="gzip")
-        h5f.create_dataset("uv_mask_cube", data=uv_mask_cube, compression="gzip")
-        h5f.attrs["metadata_json"] = json.dumps(_json_safe(dict(metadata)))
-
-    return str(output_path)
-
 
 # Progress emitter functions moved to services.utils
 
@@ -338,6 +353,19 @@ def _count_antennas(antenna_array: str) -> int:
 def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
     """Estimate cube dimensions and raw storage footprint before running a simulation."""
     source_freq = params.freq * U.GHz
+    external_geometry = None
+    if (
+        is_external_source_type(params.source_type)
+        and params.external_header_mode == "preserve"
+    ):
+        try:
+            external_geometry = infer_external_cube_geometry(
+                source_type=params.source_type,
+                skymodel_path=params.external_skymodel_path,
+                component_table_path=params.external_component_table_path,
+            )
+        except Exception:
+            external_geometry = None
     band_range, central_freq, t_channels, _delta_freq = freq_supp_extractor(
         params.freq_support, source_freq
     )
@@ -356,12 +384,17 @@ def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
     )
     cell_size = beam_size / 5
 
-    if params.n_pix is None:
+    if params.n_pix is None and external_geometry is not None:
+        n_pix = int(external_geometry["n_pix"])
+    elif params.n_pix is None:
         n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
     else:
         n_pix = closest_power_of_2(int(params.n_pix))
 
-    n_channels = int(t_channels if params.n_channels is None else params.n_channels)
+    if params.n_channels is None and external_geometry is not None:
+        n_channels = int(external_geometry["n_channels"])
+    else:
+        n_channels = int(t_channels if params.n_channels is None else params.n_channels)
     voxels = int(n_channels) * int(n_pix) * int(n_pix)
     float32_gb = (voxels * np.dtype(np.float32).itemsize) / float(1024**3)
     complex64_gb = (voxels * np.dtype(np.complex64).itemsize) / float(1024**3)
@@ -675,18 +708,35 @@ def generate_clean_cube(
         log(f"Minimum detectable continum: {cont_sens_jy}")
 
     cell_size = beam_size / 5
-    if n_pix is None:
+    external_geometry = None
+    if (
+        is_external_source_type(params.source_type)
+        and params.external_header_mode == "preserve"
+    ):
+        external_geometry = infer_external_cube_geometry(
+            source_type=params.source_type,
+            skymodel_path=params.external_skymodel_path,
+            component_table_path=params.external_component_table_path,
+        )
+
+    if n_pix is None and external_geometry is not None:
+        n_pix = int(external_geometry["n_pix"])
+    elif n_pix is None:
         n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
     else:
         n_pix = closest_power_of_2(int(n_pix))
         cell_size = fov / n_pix
 
-    if n_channels is None:
+    if n_channels is None and external_geometry is not None:
+        n_channels = int(external_geometry["n_channels"])
+    elif n_channels is None:
         n_channels = t_channels
     else:
         band_range = n_channels * delta_freq
 
-    if redshift is None:
+    is_external_model = is_external_source_type(params.source_type)
+
+    if not is_external_model and redshift is None:
         if rest_frequency is None:
             # For point sources, default to redshift=0 (local universe)
             # For other source types, this should be provided
@@ -707,7 +757,7 @@ def generate_clean_cube(
     
     # Compute rest_frequency from redshift if not already set
     # Check if rest_frequency is None or hasn't been converted to a Quantity yet
-    if not isinstance(rest_frequency, U.Quantity):
+    if not is_external_model and not isinstance(rest_frequency, U.Quantity):
         rest_frequency = (
             uas.compute_rest_frequency_from_redshift(
                 params.main_dir, source_freq.value, redshift
@@ -716,39 +766,55 @@ def generate_clean_cube(
         )
 
     status("Computing spectral lines and properties")
-    (
-        continum,
-        line_fluxes,
-        line_names,
-        redshift,
-        line_frequency,
-        source_channel_index,
-        n_channels_nw,
-        bandwidth,
-        freq_sup_nw,
-        cont_frequencies,
-        fwhm_z,
-        lum_infrared,
-    ) = process_spectral_data(
-        params.source_type,
-        params.main_dir,
-        redshift,
-        central_freq.value,
-        band_range.value,
-        source_freq.value,
-        n_channels,
-        lum_infrared,
-        cont_sens_jy.value,
-        line_names,
-        n_lines,
-        remote,
-    )
-    if n_channels_nw != n_channels:
-        freq_sup = freq_sup_nw * U.MHz
-        n_channels = n_channels_nw
-        band_range = n_channels * freq_sup
-    else:
+    if is_external_model:
+        continum = np.zeros(int(n_channels), dtype=float)
+        line_fluxes = np.array([], dtype=float)
+        line_names = None
+        line_frequency = []
+        source_channel_index = [int(n_channels // 2)]
+        n_channels_nw = n_channels
+        bandwidth = band_range.value
         freq_sup = delta_freq
+        cont_frequencies = []
+        fwhm_z = 1.0
+        if redshift is None:
+            redshift = 0.0
+        if not isinstance(rest_frequency, U.Quantity):
+            rest_frequency = central_freq
+    else:
+        (
+            continum,
+            line_fluxes,
+            line_names,
+            redshift,
+            line_frequency,
+            source_channel_index,
+            n_channels_nw,
+            bandwidth,
+            freq_sup_nw,
+            cont_frequencies,
+            fwhm_z,
+            lum_infrared,
+        ) = process_spectral_data(
+            params.source_type,
+            params.main_dir,
+            redshift,
+            central_freq.value,
+            band_range.value,
+            source_freq.value,
+            n_channels,
+            lum_infrared,
+            cont_sens_jy.value,
+            line_names,
+            n_lines,
+            remote,
+        )
+        if n_channels_nw != n_channels:
+            freq_sup = freq_sup_nw * U.MHz
+            n_channels = n_channels_nw
+            band_range = n_channels * freq_sup
+        else:
+            freq_sup = delta_freq
 
     if remote:
         print(f"Beam size: {round(beam_size.value, 4)} arcsec\n")
@@ -830,39 +896,67 @@ def generate_clean_cube(
         f"({params.source_offset_x_arcsec:.2f}\", {params.source_offset_y_arcsec:.2f}\")"
     )
 
-    # Common parameters for all sky models
-    common_params = {
-        "datacube": datacube,
-        "continuum": continum,
-        "line_fluxes": line_fluxes,
-        "pos_z": pos_z,
-        "fwhm_z": fwhm_z,
-        "n_chan": n_channels,
-        "update_progress": progress_adapter,
-    }
-
     # Get client from backend if available (for backward compatibility with skymodels)
     client_for_skymodel = _get_client_from_backend(compute_backend)
+    external_input_metadata = None
 
-    # Create and insert sky model
-    status("Creating sky model")
-    model = _create_sky_model(
-        source_type=params.source_type,
-        common_params=common_params,
-        params=params,
-        pos_x=pos_x,
-        pos_y=pos_y,
-        n_pix=n_pix,
-        snapshot=snapshot,
-        tng_subhaloid=tng_subhaloid,
-        redshift=redshift,
-        ra=ra,
-        dec=dec,
-        tng_api_key=tng_api_key,
-        terminal_logger=terminal_logger,
-        client=client_for_skymodel,
-    )
-    datacube = model.insert()
+    if is_external_model:
+        status("Loading external sky model")
+        external_payload = load_external_sky_model(
+            source_type=params.source_type,
+            skymodel_path=params.external_skymodel_path,
+            component_table_path=params.external_component_table_path,
+            target_npix=int(n_pix),
+            target_nchannels=int(n_channels),
+            alignment_mode=params.external_alignment_mode,
+            header_mode=params.external_header_mode,
+            header_overrides=params.external_header_overrides,
+            target_header=usm.get_datacube_header(datacube, params.obs_date),
+            target_wcs=wcs,
+            channel_frequencies_hz=(
+                central_freq.to(U.Hz).value
+                + (
+                    np.arange(n_channels, dtype=float)
+                    - (float(n_channels) - 1.0) / 2.0
+                )
+                * delta_freq.to(U.Hz).value
+            ),
+        )
+        datacube._array = external_payload.cube * U.Jy * U.pix**-2
+        header = external_payload.header
+        external_input_metadata = external_payload.metadata
+    else:
+        # Common parameters for all sky models
+        common_params = {
+            "datacube": datacube,
+            "continuum": continum,
+            "line_fluxes": line_fluxes,
+            "pos_z": pos_z,
+            "fwhm_z": fwhm_z,
+            "n_chan": n_channels,
+            "update_progress": progress_adapter,
+        }
+
+        # Create and insert sky model
+        status("Creating sky model")
+        model = _create_sky_model(
+            source_type=params.source_type,
+            common_params=common_params,
+            params=params,
+            pos_x=pos_x,
+            pos_y=pos_y,
+            n_pix=n_pix,
+            snapshot=snapshot,
+            tng_subhaloid=tng_subhaloid,
+            redshift=redshift,
+            ra=ra,
+            dec=dec,
+            tng_api_key=tng_api_key,
+            terminal_logger=terminal_logger,
+            client=client_for_skymodel,
+        )
+        datacube = model.insert()
+        header = usm.get_datacube_header(datacube, params.obs_date)
 
     channel_width_hz = delta_freq.to(U.Hz).value
     channel_offsets = (
@@ -925,7 +1019,8 @@ def generate_clean_cube(
             None,
         )
 
-    header = usm.get_datacube_header(datacube, params.obs_date)
+    if not is_external_model:
+        header = usm.get_datacube_header(datacube, params.obs_date)
     model = datacube._array.to_value(datacube._array.unit)
     if len(model.shape) == 4:
         model = model[0]
@@ -1024,6 +1119,7 @@ def generate_clean_cube(
         "background_level": params.background_level,
         "background_seed": params.background_seed,
         "background_total_flux_jy": float(np.sum(background_cube)),
+        "external_input": _json_safe(external_input_metadata),
     }
     effective_snr = params.snr
     if effective_snr is None:
@@ -1126,6 +1222,7 @@ def generate_clean_cube(
         channel_width_hz=channel_width_hz,
         cell_size_arcsec=cell_size.to(U.arcsec).value,
         background_cube=background_cube.astype(np.float32),
+        external_input_metadata=external_input_metadata,
     )
 
 
@@ -1234,31 +1331,6 @@ def image_products(
     simulation_results.update(products)
     return simulation_results
 
-
-def _save_optional_cube(
-    output_dir: str,
-    stem: str,
-    idx: int,
-    cube: np.ndarray | None,
-    save_mode: str,
-    header: Any,
-) -> None:
-    """Persist an optional cube using the repository's existing save formats."""
-    if cube is None:
-        return
-    cube = np.asarray(cube)
-    if save_mode == "npz":
-        np.savez_compressed(os.path.join(output_dir, f"{stem}_{idx}.npz"), cube)
-    elif save_mode == "h5":
-        with h5py.File(os.path.join(output_dir, f"{stem}_{idx}.h5"), "w") as handle:
-            handle.create_dataset(stem.replace("-", "_"), data=cube)
-    elif save_mode == "fits":
-        fits.PrimaryHDU(header=header.copy(), data=cube).writeto(
-            os.path.join(output_dir, f"{stem}_{idx}.fits"),
-            overwrite=True,
-        )
-
-
 def export_results(
     params: SimulationParams,
     clean_cube_stage: CleanCubeStage,
@@ -1304,7 +1376,7 @@ def export_results(
                 antenna_config_paths.append(os.path.join(output_dir, output_name))
             exported_results["antenna_config_path"] = antenna_config_paths[0]
             exported_results["antenna_config_paths"] = antenna_config_paths
-            _save_optional_cube(
+            save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "int-image-cube",
                 params.idx,
@@ -1312,7 +1384,7 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            _save_optional_cube(
+            save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "tp-image-cube",
                 params.idx,
@@ -1320,7 +1392,7 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            _save_optional_cube(
+            save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "tp-int-image-cube",
                 params.idx,
@@ -1328,7 +1400,7 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            _save_optional_cube(
+            save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "tp-dirty-cube",
                 params.idx,
@@ -1336,7 +1408,7 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            _save_optional_cube(
+            save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "background-cube",
                 params.idx,
@@ -1380,6 +1452,34 @@ def export_results(
         exported_results["sim_params_path"] = payload["sim_params_path"]
     else:
         log("Skipping on-disk simulation exports (pure Python mode)")
+
+    visibility_table = exported_results.get("visibility_table")
+    if params.ms_export:
+        if visibility_table is None:
+            raise RuntimeError(
+                "MeasurementSet export requested, but no visibility table is available"
+            )
+        ms_path = (
+            params.ms_export_dir
+            if params.ms_export_dir is not None
+            else (
+                os.path.join(
+                    clean_cube_stage.sim_output_dir,
+                    f"{params.project_name}_{params.idx}.ms",
+                )
+                if clean_cube_stage.sim_output_dir is not None
+                else os.path.join(
+                    clean_cube_stage.output_dir_abs,
+                    f"{params.project_name}_{params.idx}.ms",
+                )
+            )
+        )
+        exported_results["ms_path"] = export_native_ms(
+            ms_path=ms_path,
+            visibility_table=visibility_table,
+            project_name=params.project_name,
+            source_name=params.source_name,
+        )
 
     if params.ml_dataset_path:
         ml_dataset_path = write_ml_dataset_shard(

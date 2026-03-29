@@ -6,6 +6,7 @@ from scipy.ndimage import zoom
 from astropy.io import fits
 
 from .baselines import prepare_baselines, set_baselines, set_noise
+from .visibility import build_channel_visibility_rows
 
 
 def prepare_2d_arrays(Npix: int) -> tuple:
@@ -243,6 +244,7 @@ def image_channel(
     zooming: int,
     header: fits.Header | dict,
     robust: float,
+    scan_time_s: float | None = None,
 ) -> tuple:
     """Process a single channel through interferometric simulation."""
     # Convert header dict back to FITS Header if needed (for pickling compatibility)
@@ -303,12 +305,30 @@ def image_channel(
     modelfft, modelim = set_primary_beam(
         header, distmat, wavelength, Diameters, modelim, modelimTrue
     )
+    w = (
+        B[:, 0][:, None] * trdec[1] * H[1][None, :]
+        - B[:, 1][:, None] * trdec[1] * H[0][None, :]
+        + trdec[0] * B[:, 2][:, None]
+    )
+    raw_visibility = build_channel_visibility_rows(
+        modelfft=modelfft,
+        gains=Gains,
+        noise_samples=Noise,
+        u_waves=u,
+        v_waves=v,
+        w_waves=w,
+        antnum=antnum,
+        nH=nH,
+        Nphf=Nphf,
+        uv_pixsize=UVpixsize,
+        noise_std=float(noise),
+        mean_wavelength_m=float(wavelength[2] * 1e3),
+    )
     dirtymap, modelvis, dirtyvis = observe(
         dirtymap, GrobustNoise, modelfft, Grobustsamp, beamScale
     )
     del noisemap, robustsamp, Gsampling, Grobustsamp, GrobustNoise
     del Nbas, B, basnum, basidx, antnum, Gains, Noise, H, ravelDims
     del pixpos, baseline_phases, bas2change
-    return modelim[0], dirtymap, modelvis, dirtyvis, u, v, beam, totsampling
-
+    return modelim[0], dirtymap, modelvis, dirtyvis, u, v, beam, totsampling, raw_visibility
 
