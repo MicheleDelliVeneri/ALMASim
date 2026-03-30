@@ -1,0 +1,14 @@
+.git
+.gitignore
+frontend/node_modules
+frontend/.vinxi
+frontend/.output
+frontend/.vite
+frontend/dist
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.venv
+venv
+.DS_Store

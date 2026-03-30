@@ -3,13 +3,14 @@ name = "almasim"
 version = "2.1.10"
 description = "An ALMA Simulation package for a more civilized era."
 authors = ["Michele Delli Veneri <micheledelliveneri@gmail.com>"]
-readme = "README.rst"
+readme = "README.md"
 repository = "https://github.com/MicheleDelliVeneri/ALMASim"
 homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
 documentation = "https://almasim.readthedocs.io/en/latest"
+packages = [{include = "almasim", from = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.12.4"
+python = "^3.14"
 astropy = "*"
 asyncssh = "*"
 pyvo = "*"
@@ -17,8 +18,6 @@ numpy = "*"
 pandas = "*"
 matplotlib = "*"
 seaborn = "*"
-pyqt6 = "*"
-qtrageslider = "*"
 tqdm = "*"
 scipy = "*"
 h5py = "*"
@@ -32,7 +31,6 @@ Hdecompose = "*"
 paramiko = "*"
 pysftp = "*"
 tenacity = "*"
-threading = "*"
 nifty8 = "*"
 setuptools = "*"
 multiprocess = "*"
@@ -41,9 +39,22 @@ imagecodecs = "*"
 
 
 
-[tool.poetry.group.dev.dependencies]  # Optional: Development dependencies
+[tool.poetry.group.dev.dependencies]
 pytest = "*"
-pytest-qt = "*"
+pytest-cov = "*"
 flake8 = "*"
 mypy = "*"
 black = "*"
+fastapi = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+httpx = "*"
+pydantic-settings = "*"
+ipykernel = "^7.2.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = "*"
+pytest-cov = "*"
+fastapi = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+httpx = "*"
+pydantic-settings = "*"

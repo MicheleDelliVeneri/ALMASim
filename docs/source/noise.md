@@ -1,0 +1,4 @@
+# Noise
+
+```{include} ../noise.md
+```

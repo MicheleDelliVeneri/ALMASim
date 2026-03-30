@@ -1,14 +1,15 @@
 astropy
 asyncssh
 bokeh
+sphinx
+sphinx-rtd-theme
+myst-parser
 pyvo
 numpy
 pandas
 matplotlib
 memory_profiler
 seaborn
-pyQt6
-qtrangeslider
 tqdm
 scipy
 h5py

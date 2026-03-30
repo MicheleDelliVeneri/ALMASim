@@ -1,0 +1,37 @@
+# SvelteKit
+.svelte-kit
+build
+/.svelte-kit
+/build
+
+# Dependency directories
+node_modules
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Testing
+coverage
+
+# Temporary files
+*.log
+*.tmp
+*.temp

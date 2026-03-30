@@ -1,0 +1,4 @@
+# Skymodels
+
+```{include} ../skymodels.md
+```

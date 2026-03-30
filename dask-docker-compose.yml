@@ -1,0 +1,41 @@
+# Dask distributed cluster for ALMASim
+# Usage:
+#   docker compose -f dask-docker-compose.yml up -d --build
+#   docker compose -f dask-docker-compose.yml up -d --build --scale dask-worker=4
+#
+# Connect from ALMASim:
+#   DaskBackend(scheduler="tcp://dask-scheduler:8786")
+
+services:
+  dask-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.dask
+    image: almasim-dask:latest
+    container_name: almasim-dask-scheduler
+    command: dask scheduler
+    ports:
+      - "8786:8786"   # Scheduler RPC
+      - "8787:8787"   # Dashboard
+    networks:
+      - almasim-network
+
+  dask-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dask
+    image: almasim-dask:latest
+    command: dask worker dask-scheduler:8786 --nthreads 2 --memory-limit 2GB
+    depends_on:
+      - dask-scheduler
+    deploy:
+      replicas: 2
+    networks:
+      - almasim-network
+
+networks:
+  almasim-network:
+    # Re-use the network created by the main docker-compose.yml so the
+    # backend container can reach the scheduler at dask-scheduler:8786.
+    external: true
+    name: almasim_almasim-network

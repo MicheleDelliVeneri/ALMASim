@@ -1,5 +1,5 @@
 import pytest
-import almasim.astro as astro
+from almasim.services import astro
 from pathlib import Path
 import inspect
 import faulthandler
@@ -12,19 +12,15 @@ os.environ["LC_ALL"] = "C"
 
 
 def test_luminosity_functions():
-    main_path = os.path.sep + os.path.join(
-        *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
-            os.path.sep
-        )[:-2]
-    )
-    line_path = os.path.join(main_path, "almasim")
+    repo_root = Path(inspect.getfile(inspect.currentframe())).resolve().parents[1]
+    line_path = repo_root / "src" / "almasim"
     rest_freq, line_names = astro.get_line_info(line_path)
     assert len(rest_freq) > 0
     assert len(line_names) > 0
     rest_freq, line_names = astro.get_line_info(line_path, [0])
     assert len(rest_freq) > 0
     assert len(line_names) > 0
-    metadata_path = os.path.join(main_path, "almasim", "metadata", "qso_metadata.csv")
+    metadata_path = repo_root / "data" / "qso_metadata.csv"
     metadata = pd.read_csv(metadata_path).iloc[0]
     source_freq = metadata["Freq"]
     redshift = 0.01

@@ -1,0 +1,4 @@
+# Metadata
+
+```{include} ../metadata.md
+```

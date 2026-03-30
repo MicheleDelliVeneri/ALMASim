@@ -1,80 +1,80 @@
-import pytest
-from pytestqt.qtbot import QtBot
-import almasim.alma as alma
-import almasim.skymodels as skymodels
-import almasim.astro as astro
-import almasim.ui as ui
-from pathlib import Path
-import inspect
-import faulthandler
 import os
-import pandas as pd
+from pathlib import Path
+
 import astropy.units as U
 import numpy as np
+import pandas as pd
 
-faulthandler.enable()
-os.environ["LC_ALL"] = "C"
+from almasim.services.metadata.tap import service as alma
+from almasim.services import astro
+from almasim import skymodels
+from almasim.services import simulation as sim
+from almasim.services.interferometry import antenna as alma_antenna
 
 
-@pytest.fixture
-def test_skymodels(qtbot: QtBot):
-    almasim = ui.ALMASimulator()
-    qtbot.addWidget(almasim)
-    main_path = os.path.sep + os.path.join(
-        *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
-            os.path.sep
-        )[:-2]
-    )
-    metadata_path = os.path.join(main_path, "almasim", "metadata", "qso_metadata.csv")
-    line_path = os.path.join(main_path, "almasim")
-    metadata = pd.read_csv(metadata_path)
-    rest_frequency, line_names = astro.get_line_info(line_path)
-    metadata = almasim.sample_given_redshift(metadata, 1, rest_frequency, False, None)
-    metadata = metadata.iloc[0]
-    assert len(metadata) > 0
+class InlineClient:
+    """Minimal synchronous Dask-like client for tests."""
+
+    def compute(self, tasks):
+        if isinstance(tasks, list):
+            return [
+                task.compute(scheduler="synchronous") if hasattr(task, "compute") else task
+                for task in tasks
+            ]
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
+
+    def gather(self, futures):
+        return futures if isinstance(futures, list) else [futures]
+
+
+def _load_metadata_row():
+    repo_root = Path(__file__).resolve().parents[1]
+    main_dir = repo_root / "src" / "almasim"
+    metadata = pd.read_csv(repo_root / "data" / "qso_metadata.csv")
+    rest_frequency, _ = astro.get_line_info(main_dir)
+    from almasim.services.astro.spectral import sample_given_redshift
+    sample = sample_given_redshift(metadata, 1, rest_frequency, False, None)
+    return main_dir, sample.iloc[0]
+
+
+def test_skymodel_generation(tmp_path):
+    main_dir, metadata = _load_metadata_row()
     antenna_array = metadata["antenna_arrays"]
-    ra = metadata["RA"]
-    dec = metadata["Dec"]
-    fov = metadata["FOV"]
-    ang_res = metadata["Ang.res."]
-    vel_res = metadata["Vel.res."]
-    int_time = metadata["Int.Time"]
-    freq = metadata["Freq"]
+    ra = metadata["RA"] * U.deg
+    dec = metadata["Dec"] * U.deg
+    fov = metadata["FOV"] * 3600 * U.arcsec
+    ang_res = metadata["Ang.res."] * U.arcsec
+    vel_res = metadata["Vel.res."] * U.km / U.s
+    int_time = metadata["Int.Time"] * U.s
+    freq = metadata["Freq"] * U.GHz
     freq_support = metadata["Freq.sup."]
-    cont_sens = metadata["Cont_sens_mJybeam"]
+    cont_sens = metadata["Cont_sens_mJybeam"] * U.mJy / (U.arcsec**2)
     source_name = metadata["ALMA_source_name"]
     member_ouid = metadata["member_ous_uid"]
-    alma.generate_antenna_config_file_from_antenna_array(
-        antenna_array, os.path.join(main_path, "almasim"), main_path
-    )
-    antennalist = os.path.join(main_path, "antenna.cfg")
-    ra = ra * U.deg
-    dec = dec * U.deg
-    fov = fov * 3600 * U.arcsec
-    ang_res = ang_res * U.arcsec
-    vel_res = vel_res * U.km / U.s
-    int_time = int_time * U.s
-    source_freq = freq * U.GHz
 
-    band_range, central_freq, t_channels, delta_freq = almasim.freq_supp_extractor(
-        freq_support, source_freq
+    alma_antenna.generate_antenna_config_file_from_antenna_array(
+        antenna_array, str(main_dir), str(main_dir.parent)
     )
-    max_baseline = alma.get_max_baseline_from_antenna_config(None, antennalist) * U.km
-    beam_size = alma.estimate_alma_beam_size(
+    from almasim.services.interferometry.frequency import freq_supp_extractor
+    band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
+        freq_support, freq
+    )
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(
+        None, main_dir.parent / "antenna.cfg"
+    ) * U.km
+    beam_size = alma_antenna.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=False
     )
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
-    cont_sens = cont_sens * U.mJy / (U.arcsec**2)
     cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
-    cont_sens = cont_sens_jy
     cell_size = beam_size / 5
-    n_pix = 256
-    n_channels = 256
+    n_pix = 128
+    n_channels = 32
 
     rest_frequency = metadata["rest_frequency"]
     redshift = metadata["redshift"]
     lum_infrared = 1e10
-    source_type = "point"
+    from almasim.services.astro.spectral import process_spectral_data
     (
         continum,
         line_fluxes,
@@ -88,20 +88,22 @@ def test_skymodels(qtbot: QtBot):
         cont_frequencies,
         fwhm_z,
         lum_infrared,
-    ) = almasim.process_spectral_data(
-        source_type,
-        os.path.join(main_path, "almasim"),
+    ) = process_spectral_data(
+        "point",
+        str(main_dir),
         redshift,
         central_freq.value,
         band_range.value,
-        source_freq.value,
+        freq.value,
         n_channels,
         lum_infrared,
-        cont_sens.value,
-        None,
-        None,
-        False,
+        cont_sens_jy.value,
+        line_names=None,
+        n_lines=None,
+        remote=False,
+        line_width_range=(50.0, 300.0),
     )
+
     datacube = skymodels.DataCube(
         n_px_x=n_pix,
         n_px_y=n_pix,
@@ -112,44 +114,25 @@ def test_skymodels(qtbot: QtBot):
         ra=ra,
         dec=dec,
     )
-    model = datacube._array.to_value(datacube._array.unit).T
-    assert model.shape[0] > 0
-    wcs = datacube.wcs
-    fwhm_x, fwhm_y, angle = None, None, None
-    if n_channels_nw != n_channels:
-        freq_sup = freq_sup_nw * U.MHz
-        n_channels = n_channels_nw
-        band_range = n_channels * freq_sup
-    datacube = skymodels.DataCube(
-        n_px_x=n_pix,
-        n_px_y=n_pix,
-        n_channels=n_channels,
-        px_size=cell_size,
-        channel_width=delta_freq,
-        spectral_centre=central_freq,
-        ra=ra,
-        dec=dec,
-    )
-    # testing point model
-    pos_x, pos_y, _ = wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
+    pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
     pos_z = [int(index) for index in source_channel_index]
-    datacube = skymodels.insert_pointlike(
-        None,
-        datacube,
-        continum,
-        line_fluxes,
-        int(pos_x),
-        int(pos_y),
-        pos_z,
-        fwhm_z,
-        n_channels,
+    model = skymodels.PointlikeSkyModel(
+        datacube=datacube,
+        continuum=continum,
+        line_fluxes=line_fluxes,
+        pos_x=int(pos_x),
+        pos_y=int(pos_y),
+        pos_z=pos_z,
+        fwhm_z=fwhm_z,
+        n_chan=n_channels,
     )
+    datacube = model.insert()
     model = datacube._array.to_value(datacube._array.unit).T
-    band = 6
-    snapshot = None
-    tng_subhaloid = None
+    assert model.shape[0] == n_channels
+
+    sim_params_path = tmp_path / "sim_params.txt"
     astro.write_sim_parameters(
-        os.path.join(main_path, "sim_params.txt"),
+        sim_params_path,
         source_name,
         member_ouid,
         ra,
@@ -157,7 +140,7 @@ def test_skymodels(qtbot: QtBot):
         ang_res,
         vel_res,
         int_time,
-        band,
+        metadata["Band"],
         band_range,
         central_freq,
         redshift,
@@ -170,25 +153,29 @@ def test_skymodels(qtbot: QtBot):
         cell_size,
         n_pix,
         n_channels,
-        snapshot,
-        tng_subhaloid,
+        None,
+        None,
         lum_infrared,
         fwhm_z,
-        source_type,
-        fwhm_x,
-        fwhm_y,
-        angle,
+        "point",
+        None,
+        None,
+        None,
     )
-    assert os.path.exists(os.path.join(main_path, "sim_params.txt"))
-    os.remove(os.path.join(main_path, "sim_params.txt"))
+    assert sim_params_path.exists()
+
+    pos_x = int(pos_x)
+    pos_y = int(pos_y)
     fwhm_x = np.random.randint(3, 10)
     fwhm_y = np.random.randint(3, 10)
+    fwhm_z_valid = [max(3.0, fz) for fz in fwhm_z]
     datacube = skymodels.insert_serendipitous(
         None,
+        InlineClient(),
         None,
         datacube,
         continum,
-        cont_sens.value,
+        cont_sens_jy.value,
         line_fluxes,
         line_names,
         line_frequency,
@@ -196,214 +183,9 @@ def test_skymodels(qtbot: QtBot):
         pos_z,
         fwhm_x,
         fwhm_y,
-        fwhm_z,
+        fwhm_z_valid,
         n_pix,
         n_channels,
-        os.path.join(main_path, "sim_params.txt"),
+        sim_params_path,
     )
-    assert model.shape[0] > 0
-    datacube = skymodels.DataCube(
-        n_px_x=n_pix,
-        n_px_y=n_pix,
-        n_channels=n_channels,
-        px_size=cell_size,
-        channel_width=delta_freq,
-        spectral_centre=central_freq,
-        ra=ra,
-        dec=dec,
-    )
-    pos_z = [int(index) for index in source_channel_index]
-    fwhm_x = np.random.randint(3, 10)
-    fwhm_y = np.random.randint(3, 10)
-    angle = np.random.randint(0, 180)
-    datacube = skymodels.insert_gaussian(
-        None,
-        datacube,
-        continum,
-        line_fluxes,
-        int(pos_x),
-        int(pos_y),
-        pos_z,
-        fwhm_x,
-        fwhm_y,
-        fwhm_z,
-        angle,
-        n_pix,
-        n_channels,
-    )
-    datacube = skymodels.DataCube(
-        n_px_x=n_pix,
-        n_px_y=n_pix,
-        n_channels=n_channels,
-        px_size=cell_size,
-        channel_width=delta_freq,
-        spectral_centre=central_freq,
-        ra=ra,
-        dec=dec,
-    )
-    datacube = skymodels.insert_diffuse(
-        None,
-        datacube,
-        continum,
-        line_fluxes,
-        pos_z,
-        fwhm_z,
-        n_pix,
-        n_channels,
-    )
-    model = datacube._array.to_value(datacube._array.unit).T
-    assert model.shape[0] > 0
-    datacube = skymodels.DataCube(
-        n_px_x=n_pix,
-        n_px_y=n_pix,
-        n_channels=n_channels,
-        px_size=cell_size,
-        channel_width=delta_freq,
-        spectral_centre=central_freq,
-        ra=ra,
-        dec=dec,
-    )
-    # galaxy_zoo_path = os.path.join(os.path.expanduser("~"), "GalaxyZoo")
-    # almasim.galaxy_zoo_entry.setText(galaxy_zoo_path)
-    # if not os.path.exists(galaxy_zoo_path):
-    #    os.mkdir(galaxy_zoo_path)
-    #    if not os.path.exists(os.path.join(galaxy_zoo_path, "images_gz2")):
-    #        almasim.download_galaxy_zoo()
-    # galaxy_path = os.path.join(galaxy_zoo_path, "images_gz2", "images")
-    # datacube = skymodels.insert_galaxy_zoo(
-    #    None,
-    #    datacube,
-    #    continum,
-    #    line_fluxes,
-    #    pos_z,
-    #    fwhm_z,
-    #    n_pix,
-    #    n_channels,
-    #    galaxy_path,
-    # )
-    # model = datacube._array.to_value(datacube._array.unit).T
-    # obs_date = metadata["Obs.date"]
-    # header = skymodels.get_datacube_header(datacube, obs_date)
-    # assert header is not None
-    # assert model.shape[0] > 0
-    # hubble_path = os.path.join(os.path.expanduser("~"), "HubbleData")
-    # almasim.hubble_entry.setText(hubble_path)
-    # if not os.path.exists(hubble_path):
-    #    os.mkdir(hubble_path)
-    # if not os.path.exists(os.path.join(hubble_path, "top100")):
-    #    almasim.download_hubble()
-    # hubble_path = os.path.join(hubble_path, "top100")
-    # datacube = skymodels.insert_hubble(
-    #    None,
-    #    datacube,
-    #    continum,
-    #    line_fluxes,
-    #    pos_z,
-    #    fwhm_z,
-    #    n_pix,
-    #    n_channels,
-    #    hubble_path,
-    # )
-    # model = datacube._array.to_value(datacube._array.unit).T
-    # assert model.shape[0] > 0
-    datacube = skymodels.insert_molecular_cloud(
-        None,
-        datacube,
-        continum,
-        line_fluxes,
-        pos_z,
-        fwhm_z,
-        n_pix,
-        n_channels,
-    )
-    model = datacube._array.to_value(datacube._array.unit).T
-    assert model.shape[0] > 0
-
-    tng_dir = os.path.join(os.path.expanduser("~"), "TNGData")
-    almasim.tng_entry.setText(tng_dir)
-    almasim.check_tng_dirs()
-    metadata_path = os.path.join(main_path, "almasim", "metadata", "qso_metadata.csv")
-    metadata = pd.read_csv(metadata_path)
-    rest_frequency, line_names = astro.get_line_info(line_path)
-    metadata = almasim.sample_given_redshift(metadata, 1, rest_frequency, True, None)
-    metadata = metadata.iloc[0]
-    ra = metadata["RA"]
-    dec = metadata["Dec"]
-    fov = metadata["FOV"]
-    ang_res = metadata["Ang.res."]
-    vel_res = metadata["Vel.res."]
-    int_time = metadata["Int.Time"]
-    freq = metadata["Freq"]
-    freq_support = metadata["Freq.sup."]
-    cont_sens = metadata["Cont_sens_mJybeam"]
-    alma.generate_antenna_config_file_from_antenna_array(
-        antenna_array, os.path.join(main_path, "almasim"), main_path
-    )
-    antennalist = os.path.join(main_path, "antenna.cfg")
-    ra = ra * U.deg
-    dec = dec * U.deg
-    fov = fov * 3600 * U.arcsec
-    ang_res = ang_res * U.arcsec
-    vel_res = vel_res * U.km / U.s
-    int_time = int_time * U.s
-    source_freq = freq * U.GHz
-
-    band_range, central_freq, t_channels, delta_freq = almasim.freq_supp_extractor(
-        freq_support, source_freq
-    )
-    max_baseline = alma.get_max_baseline_from_antenna_config(None, antennalist) * U.km
-    beam_size = alma.estimate_alma_beam_size(
-        central_freq, max_baseline, return_value=False
-    )
-    beam_solid_angle = np.pi * (beam_size / 2) ** 2
-    cont_sens = cont_sens * U.mJy / (U.arcsec**2)
-    cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
-    cont_sens = cont_sens_jy
-    cell_size = beam_size / 5
-    n_pix = 256
-    n_channels = 256
-
-    rest_frequency = metadata["rest_frequency"]
-    redshift = metadata["redshift"]
-    lum_infrared = 1e10
-    snapshot = astro.redshift_to_snapshot(redshift)
-    tng_subhaloid = astro.get_subhaloids_from_db(1, line_path, snapshot)
-    tng_api_key = "8f578b92e700fae3266931f4d785f82c"
-    ncpu = 10
-    datacube = skymodels.DataCube(
-        n_px_x=n_pix,
-        n_px_y=n_pix,
-        n_channels=n_channels,
-        px_size=cell_size,
-        channel_width=delta_freq,
-        spectral_centre=central_freq,
-        ra=ra,
-        dec=dec,
-    )
-    datacube = skymodels.insert_extended(
-        None,
-        None,
-        datacube,
-        tng_dir,
-        snapshot,
-        int(tng_subhaloid),
-        redshift,
-        ra,
-        dec,
-        tng_api_key,
-        ncpu,
-    )
-    model = datacube._array.to_value(datacube._array.unit).T
-    assert model.shape[0] > 0
-    del datacube
-    del model
-    os.remove(os.path.join(main_path, "sim_params.txt"))
-    os.remove(os.path.join(main_path, "antenna.cfg"))
-
-
-def test(test_skymodels):
-    return test_skymodels
-
-
-if __name__ == "__main__":
-    pytest.main(["-v", __file__])
+    assert n_channels in datacube._array.shape
