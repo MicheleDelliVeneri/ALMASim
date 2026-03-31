@@ -6,7 +6,7 @@ from scipy.ndimage import zoom
 
 from .baselines import prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
-
+from scipy.constants import speed_of_light
 _rng = np.random.default_rng(0)
 
 
@@ -325,3 +325,56 @@ def image_channel(
         totsampling,
         raw_visibility,
     )
+
+# Lets keep it simple
+def get_n_threads():
+    import os
+    return os.environ.get("ALMASIM_NTHREADS", 10)
+
+def image_channel_ducc0(
+    img: np.ndarray,
+    wavelengths: list[float],
+    Npix: int,
+    Nant: int,
+    Hcov: list[float],
+    nH: int,
+    noise: float,
+    antPos: list,
+    robfac: float,
+    trlat: list[float],
+    trdec: list[float],
+    Diameters: list[float],
+    imsize: float,
+    Xmax: float,
+    lfac: float,
+    distmat: np.ndarray,
+    Nphf: int,
+    Np4: int,
+    zooming: int,
+    header: fits.Header | dict,
+    robust: float,
+    scan_time_s: float | None = None,):
+    # Convert header dict back to FITS Header if needed (for pickling compatibility)
+    if isinstance(header, dict):
+        header = fits.Header(header)
+
+    # TODO double check this computations
+    Nbas, B, basnum, basidx, antnum, Gains, Noise, H, u, v, ravelDims = (
+        prepare_baselines(Nant, nH, Hcov)
+    )
+    uvw = np.zeros((Nbas, 3), dtype=np.float32)
+
+    B, uvw[:, 0], uvw[:, 1] = set_baselines(Nbas, antnum, B, u, v, antPos, trlat, trdec, H, wavelength)
+    uvw[:, 2] = (
+        B[:, 0][:, None] * trdec[1] * H[1][None, :]
+        - B[:, 1][:, None] * trdec[1] * H[0][None, :]
+        + trdec[0] * B[:, 2][:, None]
+    )
+
+    for wavelength in wavelengths:
+        frequency = speed_of_light/wavelength
+        import ducc0
+        dirty = ducc0.dirty2vis(uvw, frequency, img, Npix, Npix, imsize, imsize, nthreads=get_n_threads())
+
+
+
