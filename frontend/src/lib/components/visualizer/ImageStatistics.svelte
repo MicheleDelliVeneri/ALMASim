@@ -2,12 +2,18 @@
 	interface Props {
 		stats: {
 			shape: number[];
+			window_shape: number[];
 			integrated_shape: number[];
 			min: number;
 			max: number;
 			mean: number;
 			std: number;
 			cube_name: string;
+			format: string;
+			integration_axis: number;
+			complex_component: string;
+			channel_start: number;
+			channel_end: number;
 		};
 		method: string;
 	}
@@ -16,12 +22,18 @@
 </script>
 
 <div class="space-y-2 rounded-md bg-gray-50 p-4">
-	<h3 class="text-sm font-semibold text-gray-900">Datacube Statistics</h3>
+	<h3 class="text-sm font-semibold text-gray-900">Product Statistics</h3>
 	<div class="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
 		<div>
 			<p class="text-gray-600">Original Shape</p>
 			<p class="font-mono text-gray-900">
 				{stats.shape.join(' × ')}
+			</p>
+		</div>
+		<div>
+			<p class="text-gray-600">Integrated Window</p>
+			<p class="font-mono text-gray-900">
+				{stats.window_shape.join(' × ')}
 			</p>
 		</div>
 		<div>
@@ -45,7 +57,7 @@
 	</div>
 	<div class="mt-2">
 		<p class="text-xs text-gray-500">
-			Cube: {stats.cube_name} | Method: {method}
+			Product: {stats.cube_name} | Format: {stats.format.toUpperCase()} | Component: {stats.complex_component} | Method: {method} | Axis: {stats.integration_axis} | Channels: {stats.channel_start}–{stats.channel_end}
 		</p>
 	</div>
 </div>

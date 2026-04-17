@@ -4,6 +4,7 @@
 		path: string;
 		size: number;
 		modified: number;
+		type: string;
 	}
 
 	interface Props {
@@ -27,8 +28,8 @@
 		onRefresh,
 		onBrowseRequest,
 		disabled,
-		title = 'Available Datacubes',
-		emptyMessage = 'No .npz files found in output directory',
+		title = 'Available Products',
+		emptyMessage = 'No .npz, FITS, or MSv2 files found in the selected directory',
 		actionLabel = 'Load'
 	}: Props = $props();
 
@@ -87,6 +88,11 @@
 							<th
 								class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
 							>
+								Type
+							</th>
+							<th
+								class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+							>
 								Modified
 							</th>
 							<th
@@ -104,6 +110,9 @@
 								</td>
 								<td class="px-4 py-2 text-sm text-gray-600">
 									{formatFileSize(file.size)}
+								</td>
+								<td class="px-4 py-2 text-sm text-gray-600 uppercase">
+									{file.type}
 								</td>
 								<td class="px-4 py-2 text-sm text-gray-600">
 									{formatDate(file.modified)}

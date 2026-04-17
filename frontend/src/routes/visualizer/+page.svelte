@@ -9,17 +9,26 @@
 
 	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 	const logger = createLogger('routes/visualizer');
+	const DEFAULT_PROCESS_TIMEOUT_MS = 10_000;
+	const FITS_PROCESS_TIMEOUT_MS = 20_000;
+	const MSV2_PROCESS_TIMEOUT_MS = 120_000;
 
 	interface ImageData {
 		image: number[][];
 		stats: {
 			shape: number[];
+			window_shape: number[];
 			integrated_shape: number[];
 			min: number;
 			max: number;
 			mean: number;
 			std: number;
 			cube_name: string;
+			format: string;
+			integration_axis: number;
+			complex_component: string;
+			channel_start: number;
+			channel_end: number;
 		};
 		method: string;
 	}
@@ -29,6 +38,7 @@
 		path: string;
 		size: number;
 		modified: number;
+		type: string;
 	}
 
 	interface FileListResponse {
@@ -47,7 +57,10 @@
 	let error = $state<string | null>(null);
 	let loadedImages = $state<LoadedImage[]>([]);
 	let integrationMethod = $state<'sum' | 'mean'>('sum');
+	let complexComponent = $state<'real' | 'imag' | 'magnitude' | 'phase'>('real');
 	let outputDir = $state<string>('');
+	let channelStart = $state('');
+	let channelEnd = $state('');
 
 	// File list
 	let fileList = $state<DatacubeFile[]>([]);
@@ -62,6 +75,15 @@
 	// View controls
 	let linkedView = $state(false);
 	let gridLayout = $state<'horizontal' | 'vertical'>('horizontal');
+
+	function getProcessingTimeoutMs(file: File | string): number {
+		const name = (typeof file === 'string' ? file : file.name).toLowerCase();
+		if (name.endsWith('.ms')) return MSV2_PROCESS_TIMEOUT_MS;
+		if (name.endsWith('.fits') || name.endsWith('.fit') || name.endsWith('.fts')) {
+			return FITS_PROCESS_TIMEOUT_MS;
+		}
+		return DEFAULT_PROCESS_TIMEOUT_MS;
+	}
 
 	async function loadFileList(dir?: string) {
 		const targetDir = dir || '/host_home';
@@ -138,45 +160,28 @@
 	// Process a file (either uploaded or from server)
 	async function processFile(file: File | string) {
 		const fileName = typeof file === 'string' ? file.split('/').pop() : file.name;
-		logger.info({ fileName, method: integrationMethod }, 'Processing datacube');
+		const timeoutMs = getProcessingTimeoutMs(file);
+		logger.info({ fileName, method: integrationMethod, timeoutMs }, 'Processing visualizer product');
 		loading = true;
 		error = null;
-		let fileTimeoutId: number | undefined;
 		let integrateTimeoutId: number | undefined;
 
 		try {
-			let formData: FormData;
-
+			const formData = new FormData();
 			if (typeof file === 'string') {
-				// Load file from server
-				const dirParam = outputDir ? `?dir=${encodeURIComponent(outputDir)}` : '';
-				const fileController = new AbortController();
-				fileTimeoutId = window.setTimeout(() => fileController.abort(), 5000);
-				const fileResponse = await fetch(
-					`${API_BASE_URL}/api/v1/visualizer/files/${encodeURIComponent(file)}${dirParam}`,
-					{
-						signal: fileController.signal
-					}
-				);
-				if (!fileResponse.ok) {
-					throw new Error(`Failed to load file: ${fileResponse.statusText}`);
-				}
-				const blob = await fileResponse.blob();
-				const serverFile = new File([blob], fileName ?? 'file.npz', {
-					type: 'application/octet-stream'
-				});
-				formData = new FormData();
-				formData.append('file', serverFile);
+				formData.append('server_path', file);
+				if (outputDir) formData.append('dir', outputDir);
 			} else {
-				// Use uploaded file
-				formData = new FormData();
 				formData.append('file', file);
 			}
-
 			formData.append('method', integrationMethod);
+			formData.append('complex_component', complexComponent);
+			formData.append('integration_axis', '0');
+			if (channelStart.trim().length > 0) formData.append('channel_start', channelStart.trim());
+			if (channelEnd.trim().length > 0) formData.append('channel_end', channelEnd.trim());
 
 			const integrateController = new AbortController();
-			integrateTimeoutId = window.setTimeout(() => integrateController.abort(), 10000);
+			integrateTimeoutId = window.setTimeout(() => integrateController.abort(), timeoutMs);
 			const response = await fetch(`${API_BASE_URL}/api/v1/visualizer/integrate`, {
 				method: 'POST',
 				body: formData,
@@ -207,15 +212,15 @@
 			loadedImages = [...loadedImages, newImage];
 		} catch (err) {
 			if (err instanceof DOMException && err.name === 'AbortError') {
-				error = 'Timed out while processing datacube';
+				error =
+					timeoutMs === MSV2_PROCESS_TIMEOUT_MS
+						? 'Timed out while processing MSv2 file after 2 minutes'
+						: 'Timed out while processing file';
 			} else {
-				error = err instanceof Error ? err.message : 'Failed to process datacube';
+				error = err instanceof Error ? err.message : 'Failed to process file';
 			}
 			logger.error({ fileName, err }, 'Failed to process datacube');
 		} finally {
-			if (fileTimeoutId !== undefined) {
-				window.clearTimeout(fileTimeoutId);
-			}
 			if (integrateTimeoutId !== undefined) {
 				window.clearTimeout(integrateTimeoutId);
 			}
@@ -241,9 +246,10 @@
 		const file = input.files?.[0];
 		if (!file) return;
 
-		if (!file.name.endsWith('.npz')) {
+		const lowerName = file.name.toLowerCase();
+		if (!lowerName.endsWith('.npz') && !lowerName.endsWith('.fits') && !lowerName.endsWith('.fit') && !lowerName.endsWith('.fts')) {
 			logger.warn({ name: file.name }, 'Invalid file type selected');
-			error = 'Please select a .npz file';
+			error = 'Please select a .npz or FITS file';
 			return;
 		}
 
@@ -305,7 +311,10 @@
 <div class="container mx-auto px-4 py-8">
 	<div class="mx-auto max-w-6xl space-y-6">
 		<div class="rounded-lg bg-white p-6 shadow-md">
-			<h1 class="mb-4 text-2xl font-bold text-gray-900">Datacube Visualizer</h1>
+			<h1 class="mb-4 text-2xl font-bold text-gray-900">Product Visualizer</h1>
+			<p class="mb-4 text-sm text-gray-600">
+				Load ALMASim `.npz`, FITS, or MSv2 (`.ms`) outputs for quick inspection.
+			</p>
 
 			<div class="space-y-4">
 				<DatacubeFileList
@@ -321,7 +330,13 @@
 				<DatacubeUpload
 					onFileUpload={handleFileUpload}
 					{integrationMethod}
+					{complexComponent}
+					{channelStart}
+					{channelEnd}
 					onMethodChange={(method) => (integrationMethod = method)}
+					onComplexComponentChange={(component) => (complexComponent = component)}
+					onChannelStartChange={(value) => (channelStart = value)}
+					onChannelEndChange={(value) => (channelEnd = value)}
 					{loading}
 				/>
 
@@ -333,7 +348,10 @@
 
 				{#if loading}
 					<div class="py-4 text-center">
-						<p class="text-gray-600">Processing datacube...</p>
+						<p class="text-gray-600">Processing file...</p>
+						<p class="mt-1 text-sm text-gray-500">
+							MSv2 products can take up to 2 minutes to open.
+						</p>
 					</div>
 				{/if}
 			</div>
