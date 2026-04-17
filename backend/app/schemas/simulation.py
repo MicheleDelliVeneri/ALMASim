@@ -48,7 +48,8 @@ class SimulationParamsBase(BaseModel):
     )
     n_lines: Optional[int] = Field(None, description="Number of spectral lines")
     line_names: Optional[Any] = Field(None, description="Line names")
-    save_mode: str = Field(default="npz", description="Save mode: npz, h5, fits, or memory")
+    save_mode: str = Field(default="fits", description="Image save mode: npz, fits, both, h5, or memory")
+    ms_save_mode: str = Field(default="msv2", description="MS/visibility save mode: npz, msv2, or both")
     persist: bool = Field(
         default=True,
         description="Whether to persist standard simulation outputs to disk",

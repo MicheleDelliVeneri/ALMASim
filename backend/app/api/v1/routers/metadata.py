@@ -174,7 +174,14 @@ async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
     try:
         destination = _resolve_metadata_path(payload.path)
         with destination.open("w", encoding="utf-8") as fp:
-            json.dump(payload.data, fp, indent=2)
+            json.dump(
+                {
+                    "count": len(payload.data),
+                    "data": payload.data,
+                },
+                fp,
+                indent=2,
+            )
         return MetadataSaveResponse(
             path=str(destination),
             count=len(payload.data),

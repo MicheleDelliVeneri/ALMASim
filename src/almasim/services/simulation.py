@@ -99,6 +99,7 @@ class SimulationParams:
     external_header_overrides: Optional[dict[str, Any]] = None
     ms_export: bool = False
     ms_export_dir: Optional[str] = None
+    ms_save_mode: str = "msv2"
 
     @classmethod
     def from_metadata_row(
@@ -114,7 +115,7 @@ class SimulationParams:
         project_name: str,
         source_type: str = "point",
         snr: Optional[float] = None,
-        save_mode: str = "npz",
+        save_mode: str = "fits",
         persist: bool = True,
         ml_dataset_path: Optional[Path | str] = None,
         n_pix: Optional[float] = None,
@@ -144,6 +145,7 @@ class SimulationParams:
         external_header_overrides: Optional[dict[str, Any]] = None,
         ms_export: bool = False,
         ms_export_dir: Optional[Path | str] = None,
+        ms_save_mode: str = "msv2",
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from a metadata row."""
 
@@ -287,6 +289,7 @@ class SimulationParams:
                 if ms_export_dir is not None
                 else None
             ),
+            ms_save_mode=str(ms_save_mode),
         )
 
 
@@ -1454,32 +1457,39 @@ def export_results(
         log("Skipping on-disk simulation exports (pure Python mode)")
 
     visibility_table = exported_results.get("visibility_table")
-    if params.ms_export:
+    _ms_mode = params.ms_save_mode if params.ms_save_mode != "none" else (
+        "msv2" if params.ms_export else "none"
+    )
+    if _ms_mode != "none":
         if visibility_table is None:
             raise RuntimeError(
-                "MeasurementSet export requested, but no visibility table is available"
+                "MS/visibility export requested, but no visibility table is available"
             )
-        ms_path = (
-            params.ms_export_dir
-            if params.ms_export_dir is not None
-            else (
-                os.path.join(
-                    clean_cube_stage.sim_output_dir,
-                    f"{params.project_name}_{params.idx}.ms",
-                )
-                if clean_cube_stage.sim_output_dir is not None
-                else os.path.join(
-                    clean_cube_stage.output_dir_abs,
-                    f"{params.project_name}_{params.idx}.ms",
-                )
+        _out_dir = (
+            clean_cube_stage.sim_output_dir
+            if clean_cube_stage.sim_output_dir is not None
+            else clean_cube_stage.output_dir_abs
+        )
+        _base = os.path.join(_out_dir, f"{params.project_name}_{params.idx}")
+        if _ms_mode in ("npz", "both"):
+            vis_npz_path = _base + "_vis.npz"
+            np.savez_compressed(vis_npz_path, **{
+                k: np.asarray(v) if hasattr(v, "__len__") else v
+                for k, v in visibility_table.items()
+            })
+            exported_results["vis_npz_path"] = vis_npz_path
+        if _ms_mode in ("msv2", "both"):
+            ms_path = (
+                params.ms_export_dir
+                if params.ms_export_dir is not None
+                else _base + ".ms"
             )
-        )
-        exported_results["ms_path"] = export_native_ms(
-            ms_path=ms_path,
-            visibility_table=visibility_table,
-            project_name=params.project_name,
-            source_name=params.source_name,
-        )
+            exported_results["ms_path"] = export_native_ms(
+                ms_path=ms_path,
+                visibility_table=visibility_table,
+                project_name=params.project_name,
+                source_name=params.source_name,
+            )
 
     if params.ml_dataset_path:
         ml_dataset_path = write_ml_dataset_shard(

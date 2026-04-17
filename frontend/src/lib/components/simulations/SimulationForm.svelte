@@ -15,6 +15,7 @@
 		useMetadataPwv: boolean;
 		pwvOverride: number;
 		saveMode: string;
+		msSaveMode: string;
 		nLines: number;
 		robust: number;
 		numSimulations: number;
@@ -33,6 +34,7 @@
 		onUseMetadataPwvChange: (value: boolean) => void;
 		onPwvOverrideChange: (value: number) => void;
 		onSaveModeChange: (value: string) => void;
+		onMsSaveModeChange: (value: string) => void;
 		onNLinesChange: (value: number) => void;
 		onRobustChange: (value: number) => void;
 		onNumSimulationsChange: (value: number) => void;
@@ -54,6 +56,7 @@
 		useMetadataPwv,
 		pwvOverride,
 		saveMode,
+		msSaveMode,
 		nLines,
 		robust,
 		numSimulations,
@@ -72,6 +75,7 @@
 		onUseMetadataPwvChange,
 		onPwvOverrideChange,
 		onSaveModeChange,
+		onMsSaveModeChange,
 		onNLinesChange,
 		onRobustChange,
 		onNumSimulationsChange,
@@ -368,7 +372,7 @@
 
 		<div>
 			<label for="save_mode" class="mb-1 block text-sm font-medium text-gray-700">
-				Save Mode
+				Image Save Mode
 			</label>
 			<select
 				id="save_mode"
@@ -380,7 +384,24 @@
 				<option value="fits">FITS</option>
 				<option value="both">Both</option>
 			</select>
-			<p class="mt-1 text-xs text-gray-500">Output format</p>
+			<p class="mt-1 text-xs text-gray-500">Output format for image cubes</p>
+		</div>
+
+		<div>
+			<label for="ms_save_mode" class="mb-1 block text-sm font-medium text-gray-700">
+				MS Save Mode
+			</label>
+			<select
+				id="ms_save_mode"
+				value={msSaveMode}
+				onchange={(e) => onMsSaveModeChange(e.currentTarget.value)}
+				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+			>
+				<option value="npz">NPZ (visibilities)</option>
+				<option value="msv2">MSv2 (CASA)</option>
+				<option value="both">Both</option>
+			</select>
+			<p class="mt-1 text-xs text-gray-500">Output format for visibility data</p>
 		</div>
 
 		<div>

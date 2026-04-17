@@ -41,6 +41,7 @@ export interface SimulationParams {
 	n_lines?: number;
 	line_names?: unknown;
 	save_mode?: string;
+	ms_save_mode?: string;
 	inject_serendipitous?: boolean;
 	robust?: number;
 	compute_backend?: string;

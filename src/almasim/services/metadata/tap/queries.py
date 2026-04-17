@@ -1,6 +1,7 @@
 """High-level query functions for ALMA metadata with normalization."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
@@ -196,7 +197,16 @@ def query_products(
 
 
 def load_metadata(metadata_path: Path | str) -> pd.DataFrame:
-    """Load a previously saved metadata CSV."""
+    """Load previously saved metadata from CSV or JSON."""
     path = Path(metadata_path).expanduser().resolve()
+    if path.suffix.lower() == ".json":
+        with path.open("r", encoding="utf-8") as fp:
+            payload = json.load(fp)
+        if isinstance(payload, dict):
+            records = payload.get("data", [])
+        elif isinstance(payload, list):
+            records = payload
+        else:
+            raise ValueError(f"Unsupported metadata JSON format: {path}")
+        return pd.DataFrame.from_records(records)
     return pd.read_csv(path)
-

@@ -230,6 +230,7 @@ class SimulationService:
                 external_header_overrides=params.external_header_overrides,
                 ms_export=params.ms_export,
                 ms_export_dir=params.ms_export_dir,
+                ms_save_mode=params.ms_save_mode,
             )
 
             status_store.update(

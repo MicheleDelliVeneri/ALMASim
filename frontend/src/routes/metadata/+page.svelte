@@ -61,9 +61,15 @@
 		}
 	};
 
+	const snapshotMetadata = (data: MetadataResponse): MetadataResponse => ({
+		count: typeof data.count === 'number' ? data.count : data.data.length,
+		data: data.data.map((row) => ({ ...row }))
+	});
+
 	const downloadMetadata = (data: MetadataResponse, path: string) => {
 		if (typeof window === 'undefined') return;
-		const blob = new Blob([JSON.stringify(data, null, 2)], {
+		const snapshot = snapshotMetadata(data);
+		const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
 			type: 'application/json'
 		});
 		const safePath = path.replace(/^[.@/\\]+/, '');
@@ -399,6 +405,7 @@
 			error = 'No metadata to save yet. Run a query or load data first.';
 			return;
 		}
+		const snapshot = snapshotMetadata(current);
 		const formElement = saveFormRef ?? (event.currentTarget as HTMLFormElement | undefined);
 		if (!formElement) return;
 		const formData = new FormData(formElement);
@@ -410,10 +417,10 @@
 		error = '';
 		let backendSucceeded = false;
 		try {
-			await metadataApi.save({ path: backendPath, data: current.data });
+			await metadataApi.save({ path: backendPath, data: snapshot.data });
 			backendSucceeded = true;
-			statusMessage = `Saved ${current.count ?? current.data.length} rows to backend path ${backendPath}`;
-			logger.info({ rowCount: current.count ?? current.data.length, backendPath }, 'Metadata saved to backend');
+			statusMessage = `Saved ${snapshot.count} rows to backend path ${backendPath}`;
+			logger.info({ rowCount: snapshot.count, backendPath }, 'Metadata saved to backend');
 		} catch (err) {
 			const message =
 				err instanceof Error
@@ -437,13 +444,13 @@
 			if (localSaveHandle) {
 				const writable = await localSaveHandle.createWritable();
 				await writable.write(
-					new Blob([JSON.stringify(current, null, 2)], { type: 'application/json' })
+					new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
 				);
 				await writable.close();
 				statusMessage = `Saved locally to ${localSaveFileName || localSaveHandle.name || 'metadata.json'}${backendSucceeded ? ' (backend copy updated too)' : ''}`;
 			} else if (needsLocalFallback) {
-				downloadMetadata(current, backendPath);
-				statusMessage = `Downloaded metadata snapshot (${current.count ?? current.data.length} rows)`;
+				downloadMetadata(snapshot, backendPath);
+				statusMessage = `Downloaded metadata snapshot (${snapshot.count} rows)`;
 			}
 		} catch (localError) {
 			logger.error({ err: localError }, 'Unable to write metadata locally');
