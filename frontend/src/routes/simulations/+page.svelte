@@ -62,7 +62,8 @@
 	let useMetadataSnr = $state(true);
 	let useMetadataPwv = $state(true);
 	let pwvOverride = $state(1.0);
-	let saveMode = $state('npz');
+	let saveMode = $state('fits');
+	let msSaveMode = $state('msv2');
 	let nLines = $state(0);
 	let robust = $state(0.0);
 	let numSimulations = $state(1);
@@ -254,6 +255,7 @@
 			n_channels: nChannels ?? undefined,
 			snr: useMetadataSnr ? undefined : snr,
 			save_mode: saveMode,
+				ms_save_mode: msSaveMode,
 			n_lines: nLines > 0 ? nLines : undefined,
 			robust,
 			source_offset_x_arcsec: sourceOffsetXArcsec,
@@ -436,6 +438,7 @@
 			{useMetadataPwv}
 			{pwvOverride}
 			{saveMode}
+			{msSaveMode}
 			{nLines}
 			{robust}
 			{numSimulations}
@@ -454,6 +457,7 @@
 			onUseMetadataPwvChange={(value) => (useMetadataPwv = value)}
 			onPwvOverrideChange={(value) => (pwvOverride = value)}
 			onSaveModeChange={(value) => (saveMode = value)}
+			onMsSaveModeChange={(value) => (msSaveMode = value)}
 			onNLinesChange={(value) => (nLines = value)}
 			onRobustChange={(value) => (robust = value)}
 			onNumSimulationsChange={(value) => (numSimulations = value)}

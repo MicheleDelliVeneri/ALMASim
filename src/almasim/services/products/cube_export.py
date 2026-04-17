@@ -63,12 +63,12 @@ def save_optional_cube(
         return
     output_dir = str(output_dir)
     cube = np.asarray(cube)
-    if save_mode == "npz":
+    if save_mode in ("npz", "both"):
         np.savez_compressed(Path(output_dir) / f"{stem}_{idx}.npz", cube)
-    elif save_mode == "h5":
+    if save_mode == "h5":
         with h5py.File(Path(output_dir) / f"{stem}_{idx}.h5", "w") as handle:
             handle.create_dataset(stem.replace("-", "_"), data=cube)
-    elif save_mode == "fits":
+    if save_mode in ("fits", "both"):
         fits.PrimaryHDU(header=header.copy(), data=cube).writeto(
             Path(output_dir) / f"{stem}_{idx}.fits",
             overwrite=True,
@@ -118,7 +118,7 @@ def write_interferometry_products(
     """Persist interferometric simulation products using ALMASim's standard formats."""
     output_dir = Path(output_dir)
 
-    if save_mode == "npz":
+    if save_mode in ("npz", "both"):
         np.savez_compressed(output_dir / f"clean-cube_{idx}.npz", model_cube)
         np.savez_compressed(output_dir / f"dirty-cube_{idx}.npz", dirty_cube)
         np.savez_compressed(output_dir / f"dirty-vis-cube_{idx}.npz", dirty_vis_cube)
@@ -128,7 +128,8 @@ def write_interferometry_products(
         np.savez_compressed(output_dir / f"uv-mask-cube_{idx}.npz", uv_mask_cube)
         np.savez_compressed(output_dir / f"u-cube_{idx}.npz", u_cube)
         np.savez_compressed(output_dir / f"v-cube_{idx}.npz", v_cube)
-        return
+        if save_mode == "npz":
+            return
 
     if save_mode == "h5":
         with h5py.File(output_dir / f"clean-cube_{idx}.h5", "w") as handle:
@@ -147,7 +148,7 @@ def write_interferometry_products(
             handle.create_dataset("v_cube", data=v_cube)
         return
 
-    if save_mode == "fits":
+    if save_mode in ("fits", "both"):
         _write_fits_cube(output_dir / f"clean-cube_{idx}.fits", model_cube, header)
         _write_fits_cube(output_dir / f"dirty-cube_{idx}.fits", dirty_cube, header)
         _write_fits_complex_cube(output_dir, "dirty-vis-cube", idx, dirty_vis_cube)
@@ -174,4 +175,5 @@ def write_interferometry_products(
         )
         return
 
-    raise ValueError(f"Unsupported save_mode for interferometry products: {save_mode}")
+    if save_mode not in ("h5",):
+        raise ValueError(f"Unsupported save_mode for interferometry products: {save_mode}")

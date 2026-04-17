@@ -1,4 +1,5 @@
 """Backend API integration tests."""
+import json
 import pytest
 from fastapi.testclient import TestClient
 from pathlib import Path
@@ -93,6 +94,48 @@ def test_load_metadata(client, test_data_dir):
     assert "count" in data
     assert "data" in data
     assert data["count"] > 0
+
+
+@pytest.mark.integration
+def test_save_and_load_metadata_json_round_trip(client, tmp_path):
+    """Test saving metadata as JSON and loading it back through the API."""
+    from backend.app.core.config import settings
+
+    original_data_dir = settings.DATA_DIR
+    settings.DATA_DIR = tmp_path
+    try:
+        payload = {
+            "path": "data/metadata-round-trip.json",
+            "data": [
+                {
+                    "proposal_id": "2023.1.00001.S",
+                    "member_ous_uid": "uid://A001/X123/X456",
+                    "ALMA_source_name": "Test Source",
+                    "Band": 6,
+                }
+            ],
+        }
+
+        save_response = client.post("/api/v1/metadata/save", json=payload)
+        assert save_response.status_code == 200
+        saved = save_response.json()
+        assert saved["count"] == 1
+
+        saved_path = Path(saved["path"])
+        assert saved_path.exists()
+
+        with saved_path.open("r", encoding="utf-8") as fp:
+            on_disk = json.load(fp)
+        assert on_disk["count"] == 1
+        assert on_disk["data"][0]["member_ous_uid"] == payload["data"][0]["member_ous_uid"]
+
+        load_response = client.get(f"/api/v1/metadata/load/{saved_path.as_posix()}")
+        assert load_response.status_code == 200
+        loaded = load_response.json()
+        assert loaded["count"] == 1
+        assert loaded["data"][0]["proposal_id"] == payload["data"][0]["proposal_id"]
+    finally:
+        settings.DATA_DIR = original_data_dir
 
 
 @pytest.mark.integration

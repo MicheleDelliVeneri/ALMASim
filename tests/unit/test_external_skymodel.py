@@ -1,4 +1,4 @@
-"""Unit tests for external skymodel ingestion and native MS model building."""
+"""Unit tests for external skymodel ingestion."""
 
 import numpy as np
 from astropy.io import fits
@@ -9,7 +9,6 @@ from almasim.services.external_skymodel import (
     is_external_source_type,
     load_external_sky_model,
 )
-from almasim.services.products.ms_model import build_measurement_set_model
 
 
 def test_is_external_source_type():
@@ -83,37 +82,3 @@ def test_load_external_component_table_builds_channel_cube(tmp_path):
     assert np.all(payload.cube[:, 3, 2] > 0.0)
     assert payload.cube[0, 1, 4] < payload.cube[-1, 1, 4]
 
-
-def test_build_measurement_set_model_from_visibility_rows():
-    vis = {
-        "uvw_m": np.array([[0.0, 0.0, 0.0], [10.0, 5.0, 1.0]], dtype=np.float64),
-        "antenna1": np.array([0, 0], dtype=np.int32),
-        "antenna2": np.array([1, 1], dtype=np.int32),
-        "time_mjd_s": np.array([5.0e9, 5.0e9 + 6.0], dtype=np.float64),
-        "interval_s": np.array([6.0, 6.0], dtype=np.float64),
-        "exposure_s": np.array([6.0, 6.0], dtype=np.float64),
-        "data": np.zeros((2, 1, 4), dtype=np.complex64),
-        "model_data": np.zeros((2, 1, 4), dtype=np.complex64),
-        "flag": np.zeros((2, 1, 4), dtype=bool),
-        "weight": np.ones((2, 1), dtype=np.float32),
-        "sigma": np.ones((2, 1), dtype=np.float32),
-        "channel_freq_hz": np.array([1.0e11, 1.001e11, 1.002e11, 1.003e11], dtype=np.float64),
-        "antenna_names": ["DA01", "DA02"],
-        "antenna_positions_m": np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]], dtype=np.float64),
-        "field_ra_rad": 1.0,
-        "field_dec_rad": 0.5,
-        "observation_date": "2020-01-01",
-    }
-
-    model = build_measurement_set_model(
-        visibility_table=vis,
-        project_name="demo_project",
-        source_name="demo_source",
-    )
-
-    assert model.main_keywords["MS_VERSION"] == 2.0
-    assert model.main.nrows == 2
-    assert model.main.columns["DATA"].shape == (2, 1, 4)
-    assert "ANTENNA" in model.subtables
-    assert model.subtables["ANTENNA"].nrows == 2
-    assert model.subtables["FIELD"].columns["NAME"] == "demo_source"

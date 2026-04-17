@@ -10,7 +10,7 @@ documentation = "https://almasim.readthedocs.io/en/latest"
 packages = [{include = "almasim", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.14"
+python = ">=3.12,<3.13"
 astropy = "*"
 asyncssh = "*"
 pyvo = "*"
@@ -36,6 +36,11 @@ setuptools = "*"
 multiprocess = "*"
 scikit-image = "*"
 imagecodecs = "*"
+casatools = "*"
+python-casacore = {version = "*", optional = true}
+
+[tool.poetry.extras]
+ms-casacore = ["python-casacore"]
 
 
 
