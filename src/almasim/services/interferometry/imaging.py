@@ -7,6 +7,14 @@ from scipy.ndimage import zoom
 from .baselines import prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
 from scipy.constants import speed_of_light
+import ducc0 as _ducc0
+
+import numbers
+
+
+import os
+ALMASIM_NTHREADS=os.environ.get("ALMASIM_NTHREADS", os.cpu_count())
+
 _rng = np.random.default_rng(0)
 
 
@@ -370,11 +378,61 @@ def image_channel_ducc0(
         - B[:, 1][:, None] * trdec[1] * H[0][None, :]
         + trdec[0] * B[:, 2][:, None]
     )
+    ### NOTE  NOT IMPLEMENTED USE FUNCTIONS AFTER
 
-    for wavelength in wavelengths:
-        frequency = speed_of_light/wavelength
-        import ducc0
-        dirty = ducc0.dirty2vis(uvw, frequency, img, Npix, Npix, imsize, imsize, nthreads=get_n_threads())
+def _get_xy_from_single_or_multi(couple_or_value):
+    if isinstance(couple_or_value, numbers.Number):
+        return couple_or_value, couple_or_value
+    elif hasattr(couple_or_value, "__iter__") and len(couple_or_value) == 2:
+        return couple_or_value
+    else:
+        raise ValueError(f"{couple_or_value} is neither a couple or a value")
 
+def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
+    """
+    Compute the most accurate weights possible for the problem
+    However this is expensive and an approximation should be used
+
+    ex. briggs or uniform weighting
+    """
+    # We assume here that the uvw first axis length
+    # is (n_baselines * n_times, 3)
+    n_pix_x, n_pix_y = _get_xy_from_single_or_multi(n_pix)
+    pixsize_x, pixsize_y = _get_xy_from_single_or_multi(pixsize)
+    n_times_baselines = uvw.shape[0]
+    n_frequencies = len(wavelengths)
+    n_polarizations = 1
+    frequencies = speed_of_light / wavelengths
+    ones_visibilities = np.ones((n_times_baselines, n_frequencies, n_polarizations),
+                            dtype=np.complex128)
+    
+    dirty_image = _ducc0.wgridder.vis2dirty(uvw, frequencies, ones_visibilities,
+                                            npix_x=n_pix_x, npix_y=n_pix_y,
+                                            pixsize_x=pixsize_x, pixsize_y=pixsize_y,
+                              epsilon=1.e-8, do_wgridding=True, nthreads=nthreads)
+    weights = _ducc0.wgridder.dirty2vis(uvw, frequencies, dirty_image,
+                                        pixsize_x=pixsize_x,
+                                        pixsize_y=pixsize_y,
+                                        epsilon=1.e-8,
+                                        do_wgridding=True,
+                                        nthreads=nthreads)
+    return weights
+
+def image_based_predict(uvw, pix_size, image, wavelenghts, weight_func=exact_weighs, n_threads=ALMASIM_NTHREADS):
+    n_pix = image.shape[:2]
+    pixsize_x, pixsize_y = _get_xy_from_single_or_multi(n_pix)
+
+    weights = weight_func(uvw, n_pix, pix_size, wavelenghts, n_threads=n_threads)
+    frequencies = speed_of_light / wavelenghts
+    visibilities = _ducc0.wgridder.dirty2vis(uvw, 
+                              frequencies,
+                              image, 
+                              wgt=weights,
+                              pixsize_x=pixsize_x,
+                              pixsize_y=pixsize_y,
+                              epsilon=1.e-8,
+                              do_wgridding=True,
+                              nthreads=n_threads)
+    return visibilities
 
 
