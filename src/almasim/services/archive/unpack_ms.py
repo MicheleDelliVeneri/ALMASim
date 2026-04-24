@@ -154,7 +154,9 @@ def create_measurement_set(
 
     output_ms = working_dir / f"{asdm_uid}.ms"
     if output_ms.exists() and not overwrite:
-        raise RuntimeError(f"MeasurementSet already exists: {output_ms}")
+        logger.info("MeasurementSet already exists, skipping import: %s", output_ms)
+        _emit(logger_fn, f"Raw MeasurementSet already exists, skipping import: {output_ms}")
+        return output_ms
 
     logger.info("Creating MeasurementSet from %s", raw_asdm_path)
     _emit(logger_fn, f"Creating raw MeasurementSet from {raw_asdm_path}")

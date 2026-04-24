@@ -8,6 +8,8 @@ This directory contains runnable examples for the staged simulation API:
   Notebook walkthrough for querying metadata, previewing results, and exporting CSV files for later simulation or download workflows.
 - `download_products_cli.py`
   Resolve DataLink products from `member_ous_uid` rows or a saved products CSV, then download them with a library-first Python API.
+- `archive_ms_cli.py`
+  Imports raw ALMA ASDMs into MeasurementSets, then applies delivered calibration products and writes calibrated science MSs.
 - `download_products_notebook.ipynb`
   Notebook walkthrough for resolving products from queried metadata and downloading them to disk.
 - `staged_pipeline_cli.py`
@@ -38,6 +40,14 @@ python examples/download_products_cli.py \
   --product-filter all \
   --save-products-csv examples/output/resolved_products.csv \
   --destination examples/output/downloads
+```
+
+Archive MS CLI usage:
+
+```bash
+python examples/archive_ms_cli.py \
+  --input-root /path/to/2023.1.01196.S \
+  --output-root examples/output/archive_ms
 ```
 
 Staged pipeline CLI usage:

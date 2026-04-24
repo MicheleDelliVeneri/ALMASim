@@ -361,6 +361,24 @@ files = [
 certifi = ">=2023.5.7"
 
 [[package]]
+name = "casatasks"
+version = "6.7.3.21"
+description = "the CASA tasks"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "casatasks-6.7.3.21-py3-none-any.whl", hash = "sha256:9b321d891071b60a1068a76aeac3ac190a344a88fe0647f28518e21f400d1804"},
+]
+
+[package.dependencies]
+casatools = "6.7.3.21"
+certifi = "*"
+matplotlib = "*"
+pyerfa = "*"
+scipy = "*"
+
+[[package]]
 name = "casatools"
 version = "6.7.3.21"
 description = "Astronomy data reduction library"
@@ -4344,4 +4362,4 @@ ms-casacore = ["python-casacore"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.13"
-content-hash = "8439a65f7b933a285c0d00587d01ac739cac9f408df7db9a2337a6c002682f92"
+content-hash = "50dd80f0894d75a3fcfdf4516266a4e487b8ebe86e4bd7b1dca386d5b2fec0ad"
