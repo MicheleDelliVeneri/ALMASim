@@ -250,20 +250,35 @@ def run_download_job(
         current_job = download_store.get(job_id)
         return current_job is None or current_job.status == "cancelled"
 
-    def on_update(_file_status: FileDownloadStatus) -> None:
-        current_job = download_store.get(job_id)
-        if not current_job:
-            return
-        current_job.bytes_downloaded = sum(
-            file_status.bytes_downloaded for file_status in current_job.files
-        )
-        current_job.files_completed = sum(
-            1 for file_status in current_job.files if file_status.status == "completed"
-        )
-        current_job.files_failed = sum(
-            1 for file_status in current_job.files if file_status.status == "failed"
-        )
-        current_job.updated_at = datetime.now()
+    file_positions = {
+        (file_status.filename, file_status.access_url): index
+        for index, file_status in enumerate(file_statuses)
+    }
+
+    def on_update(file_status: FileDownloadStatus) -> None:
+        with download_store._lock:
+            current_job = download_store._active.get(job_id)
+            if not current_job:
+                return
+
+            key = (file_status.filename, file_status.access_url)
+            index = file_positions.get(key)
+            if index is None:
+                file_positions[key] = len(current_job.files)
+                current_job.files.append(file_status)
+            else:
+                current_job.files[index] = file_status
+
+            current_job.bytes_downloaded = sum(
+                current_file.bytes_downloaded for current_file in current_job.files
+            )
+            current_job.files_completed = sum(
+                1 for current_file in current_job.files if current_file.status == "completed"
+            )
+            current_job.files_failed = sum(
+                1 for current_file in current_job.files if current_file.status == "failed"
+            )
+            current_job.updated_at = datetime.now()
 
     try:
         summary = download_products(

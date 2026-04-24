@@ -13,8 +13,9 @@
 	let error = $state('');
 	let cancelling = $state(false);
 
-	const progressPct = $derived(status ? Math.round(status.progress * 100) : 0);
-	const isRunning = $derived(status?.status === 'running' || status?.status === 'starting');
+	const ACTIVE_STATUSES = new Set(['pending', 'starting', 'running', 'downloading']);
+	const progressPct = $derived(status ? progressPercent(status.progress) : 0);
+	const isRunning = $derived(status ? ACTIVE_STATUSES.has(status.status) : false);
 	const isDone = $derived(
 		status?.status === 'completed' ||
 			status?.status === 'failed' ||
@@ -59,7 +60,7 @@
 				const s = await downloadApi.getJobStatus(jobId);
 				if (stopped) return;
 				status = s;
-				if (s.status === 'running') {
+				if (ACTIVE_STATUSES.has(s.status)) {
 					updateSpeedAndEta(s.bytes_downloaded, s.total_bytes);
 				}
 				if (s.status === 'completed' || s.status === 'failed' || s.status === 'cancelled') {
@@ -118,6 +119,11 @@
 		const h = Math.floor(seconds / 3600);
 		const m = Math.ceil((seconds % 3600) / 60);
 		return `${h}h ${m}m`;
+	}
+
+	function progressPercent(progress: number): number {
+		if (!Number.isFinite(progress)) return 0;
+		return Math.max(0, Math.min(100, Math.round(progress * 100)));
 	}
 </script>
 
@@ -219,7 +225,7 @@
 							{file.filename}
 						</span>
 						<span class="text-gray-400">
-							{Math.round(file.progress * 100)}%
+							{progressPercent(file.progress)}%
 						</span>
 					</div>
 				{/each}

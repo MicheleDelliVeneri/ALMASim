@@ -19,7 +19,8 @@
 	// Poll interval for active jobs
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
 
-	const activeJobs = $derived(jobs.filter((j) => j.status === 'running' || j.status === 'pending'));
+	const ACTIVE_STATUSES = new Set(['pending', 'starting', 'running', 'downloading']);
+	const activeJobs = $derived(jobs.filter((j) => ACTIVE_STATUSES.has(j.status)));
 	const hasActiveJobs = $derived(activeJobs.length > 0);
 
 	async function fetchJobs() {
@@ -109,6 +110,8 @@
 		switch (s) {
 			case 'running':
 			case 'pending':
+			case 'starting':
+			case 'downloading':
 				return 'bg-blue-100 text-blue-700';
 			case 'completed':
 				return 'bg-green-100 text-green-700';
@@ -119,6 +122,11 @@
 			default:
 				return 'bg-gray-100 text-gray-600';
 		}
+	}
+
+	function progressPercent(progress: number): number {
+		if (!Number.isFinite(progress)) return 0;
+		return Math.max(0, Math.min(100, Math.round(progress * 100)));
 	}
 </script>
 
@@ -191,8 +199,8 @@
 					</thead>
 					<tbody class="divide-y divide-gray-100">
 						{#each jobs as job (job.job_id)}
-							{@const pct = Math.round(job.progress * 100)}
-							{@const isActive = job.status === 'running' || job.status === 'pending'}
+							{@const pct = progressPercent(job.progress)}
+							{@const isActive = ACTIVE_STATUSES.has(job.status)}
 							<tr class="hover:bg-gray-50" class:bg-blue-50={isActive}>
 								<td class="whitespace-nowrap px-4 py-3 text-gray-600">
 									{formatDate(job.created_at)}
