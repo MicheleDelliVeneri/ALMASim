@@ -20,6 +20,7 @@ _MODULES = {
     "imaging",
     "products",
     "external_skymodel",
+    "archive",
 }
 
 
@@ -42,4 +43,5 @@ __all__ = [
     "imaging",
     "products",
     "external_skymodel",
+    "archive",
 ]

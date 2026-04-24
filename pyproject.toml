@@ -37,6 +37,7 @@ multiprocess = "*"
 scikit-image = "*"
 imagecodecs = "*"
 casatools = "*"
+casatasks = "*"
 python-casacore = {version = "*", optional = true}
 
 [tool.poetry.extras]
