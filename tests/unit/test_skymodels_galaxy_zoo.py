@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock, patch
 
 import astropy.units as U
@@ -11,7 +10,6 @@ import pytest
 from martini import DataCube
 
 from almasim.skymodels.galaxy_zoo import GalaxyZooSkyModel, galaxy_image
-
 
 # ===========================================================================
 # helpers

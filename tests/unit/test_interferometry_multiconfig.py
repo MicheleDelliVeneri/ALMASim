@@ -10,7 +10,6 @@ from almasim.services.interferometry.multiconfig import (
     combine_interferometric_results,
 )
 
-
 # ===========================================================================
 # helpers
 # ===========================================================================

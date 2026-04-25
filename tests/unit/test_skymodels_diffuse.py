@@ -11,7 +11,6 @@ from martini import DataCube
 
 from almasim.skymodels.diffuse import DiffuseSkyModel, diffuse_image
 
-
 # ===========================================================================
 # helpers
 # ===========================================================================

@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import sys
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from almasim.services.compute.local import DelayedTask, LocalBackend, _execute_task
 from almasim.services.compute.sync import SyncBackend
-
 
 # ===========================================================================
 # _execute_task (module-level helper in local.py)
@@ -378,8 +376,8 @@ def test_create_backend_local():
 @pytest.mark.unit
 def test_create_backend_dask_with_mock():
     """create_backend('dask') creates a DaskBackend (mocked)."""
-    from almasim.services.compute.factory import create_backend
     from almasim.services.compute.dask_backend import DaskBackend
+    from almasim.services.compute.factory import create_backend
 
     with patch.object(DaskBackend, "__init__", return_value=None):
         backend = create_backend("dask")

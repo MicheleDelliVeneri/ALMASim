@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,7 +20,6 @@ for _mod, _stub in _casa_stubs.items():
     sys.modules.setdefault(_mod, _stub)
 
 from almasim.services.archive.unpack_ms import (  # noqa: E402
-    LogFn,
     _emit,
     asdm_name,
     configure_casa_environment,
@@ -31,7 +30,6 @@ from almasim.services.archive.unpack_ms import (  # noqa: E402
     find_existing_casa_data,
     has_casa_runtime_data,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers

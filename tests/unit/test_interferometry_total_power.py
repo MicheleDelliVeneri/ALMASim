@@ -6,14 +6,12 @@ import numpy as np
 import pytest
 
 from almasim.services.interferometry.total_power import (
-    ARCSEC_PER_RAD,
     _fft_convolve2d,
     _gaussian_kernel,
     combine_total_power_results,
     estimate_tp_beam_fwhm_arcsec,
     simulate_total_power_observation,
 )
-
 
 # ===========================================================================
 # estimate_tp_beam_fwhm_arcsec

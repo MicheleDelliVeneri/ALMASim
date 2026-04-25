@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import astropy.units as U
 import numpy as np
@@ -15,7 +15,6 @@ from almasim.skymodels.molecular import (
     molecular_cloud,
     molecular_image,
 )
-
 
 # ===========================================================================
 # helpers

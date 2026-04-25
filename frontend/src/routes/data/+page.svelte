@@ -386,8 +386,8 @@
 			<div class="space-y-5 px-5 py-5">
 				<div>
 					<label class="block text-sm font-medium text-gray-300" for="redownload-parallel">Parallel streams</label>
-					<input id="redownload-parallel" type="range" min="1" max="8" bind:value={redownloadMaxParallel} class="mt-2 w-full" />
-					<p class="mt-1 text-xs text-gray-500">{redownloadMaxParallel} simultaneous files</p>
+					<input id="redownload-parallel" type="range" min="1" max="30" bind:value={redownloadMaxParallel} class="mt-2 w-full" />
+					<p class="mt-1 text-xs text-gray-500">{redownloadMaxParallel} simultaneous files (balanced across ESO, NRAO and NAOJ mirrors, capped at 10 per mirror)</p>
 				</div>
 
 				<div class="grid gap-3 rounded border border-gray-200 p-3">

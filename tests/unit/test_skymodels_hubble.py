@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import astropy.units as U
@@ -10,7 +11,6 @@ import pytest
 from martini import DataCube
 
 from almasim.skymodels.hubble import HubbleSkyModel, hubble_image
-
 
 # ===========================================================================
 # helpers
@@ -219,6 +219,3 @@ def test_hubble_insert_reads_image_with_skimage(tmp_path):
         mock_imread.return_value = fake_img
         model.insert()
     mock_imread.assert_called_once()
-
-
-import os

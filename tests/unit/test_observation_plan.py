@@ -19,7 +19,6 @@ from almasim.services.observation_plan import (
     split_antenna_array_by_type,
 )
 
-
 # ===========================================================================
 # derive_array_type
 # ===========================================================================

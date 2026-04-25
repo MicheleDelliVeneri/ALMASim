@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -16,7 +15,6 @@ from almasim.services.metadata.adapters import (
     observation_to_metadata_record,
     observations_to_metadata_records,
 )
-
 
 # ===========================================================================
 # derive_array_type
@@ -267,7 +265,6 @@ def test_observation_to_metadata_record_scientific_category_present():
 @pytest.mark.unit
 def test_apply_visible_columns_no_filter():
     """No visible_columns uses ALL_COLUMNS ordering, keeps matching keys."""
-    from almasim.services.metadata.tap.queries import ALL_COLUMNS
 
     records = [{"ALMA_source_name": "NGC1", "Band": 6, "extra": "drop"}]
     result = apply_visible_columns(records)

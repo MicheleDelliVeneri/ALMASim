@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -17,7 +17,6 @@ from almasim.services.metadata.tap.queries import (
     query_metadata_by_science,
     query_metadata_by_targets,
 )
-
 
 # ===========================================================================
 # _derive_array_type (local copy in queries module)

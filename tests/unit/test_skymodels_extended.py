@@ -10,11 +10,9 @@ import pytest
 
 from almasim.skymodels.extended import (
     ExtendedSkyModel,
-    MartiniMod,
     evaluate_pixel_spectrum,
     insert_pixel,
 )
-
 
 # ===========================================================================
 # insert_pixel (delayed helper)
@@ -34,7 +32,7 @@ def test_insert_pixel_mutates_array():
     else:
         import dask
 
-        result = dask.compute(insert_pixel(arr, insertion_slice, data))[0]
+        dask.compute(insert_pixel(arr, insertion_slice, data))
 
     # arr should now have the inserted values at [1,2,:]
     # Note: dask.delayed doesn't mutate in place from compute — verify the call pattern

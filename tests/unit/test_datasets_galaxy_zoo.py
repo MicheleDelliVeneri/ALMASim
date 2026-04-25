@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import locale
 import sys
-from functools import lru_cache
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -17,7 +16,6 @@ from almasim.skymodels.datasets.galaxy_zoo import (
     _run_with_c_locale,
     download_galaxy_zoo,
 )
-
 
 # ===========================================================================
 # _ensure_directory
@@ -205,9 +203,6 @@ def test_download_galaxy_zoo_uses_c_locale(tmp_path):
     """download_galaxy_zoo wraps the download in C locale."""
     dest = tmp_path / "gz"
     mock_api = MagicMock()
-    locale_calls = []
-
-    original_run = _run_with_c_locale.__module__
 
     with patch(
         "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",

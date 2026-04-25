@@ -11,7 +11,6 @@ from almasim.services.interferometry.visibility import (
     concatenate_visibility_tables,
 )
 
-
 # ===========================================================================
 # helpers
 # ===========================================================================

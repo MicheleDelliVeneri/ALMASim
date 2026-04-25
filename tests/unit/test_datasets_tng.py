@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -17,14 +16,13 @@ sys.modules.setdefault("pysftp", _mock_pysftp)
 sys.modules.setdefault("paramiko", _mock_paramiko)
 
 from almasim.skymodels.datasets.tng import (  # noqa: E402
-    RemoteMachine,
     TNG_SIMULATION_URL,
+    RemoteMachine,
     _ensure_directory,
     _require_pysftp,
     _wget_tng,
     download_tng_structure,
 )
-
 
 # ===========================================================================
 # _ensure_directory
@@ -118,7 +116,7 @@ def test_wget_tng_uses_check_true(tmp_path):
 def test_download_tng_structure_local_creates_dirs(tmp_path):
     """download_tng_structure creates the expected directory structure."""
     with patch("almasim.skymodels.datasets.tng._wget_tng") as mock_wget:
-        result = download_tng_structure("MY_KEY", tmp_path)
+        download_tng_structure("MY_KEY", tmp_path)
 
     assert (tmp_path / "TNG100-1").is_dir()
     assert (tmp_path / "TNG100-1" / "output").is_dir()
@@ -183,7 +181,7 @@ def test_download_tng_structure_remote_creates_dirs_via_sftp(tmp_path):
             mock_paramiko.RSAKey.from_private_key_file.return_value = MagicMock()
             mock_paramiko.SSHClient.return_value = mock_ssh
             mock_paramiko.AutoAddPolicy = MagicMock()
-            result = download_tng_structure("MY_KEY", tmp_path / "remote_dest", remote=remote)
+            download_tng_structure("MY_KEY", tmp_path / "remote_dest", remote=remote)
     finally:
         tng_mod.pysftp = original_pysftp
 
@@ -218,7 +216,7 @@ def test_download_tng_structure_remote_skips_ssh_if_file_exists(tmp_path):
         tng_mod.pysftp = mock_pysftp_mod
         with patch("almasim.skymodels.datasets.tng.paramiko") as mock_paramiko:
             mock_paramiko.RSAKey.from_private_key_file.return_value = MagicMock()
-            result = download_tng_structure("KEY", tmp_path / "dest", remote=remote)
+            download_tng_structure("KEY", tmp_path / "dest", remote=remote)
     finally:
         tng_mod.pysftp = original_pysftp
 

@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import astropy.units as U
 import numpy as np
 import pytest
 from martini import DataCube
 
 from almasim.skymodels.utils import gaussian, get_datacube_header, interpolate_array
-
 
 # ===========================================================================
 # interpolate_array

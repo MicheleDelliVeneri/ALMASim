@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pytest
 
@@ -15,7 +13,6 @@ from almasim.skymodels.serendipitous import (
     get_pos,
     sample_positions,
 )
-
 
 # ===========================================================================
 # distance_1d

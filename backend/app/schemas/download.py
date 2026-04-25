@@ -96,7 +96,7 @@ class StartDownloadRequest(BaseModel):
         3,
         description="Maximum parallel download threads",
         ge=1,
-        le=8,
+        le=30,
     )
     extract_tar: bool = Field(
         False,
@@ -144,7 +144,7 @@ class RedownloadRequest(BaseModel):
         None,
         description="Maximum parallel download threads",
         ge=1,
-        le=8,
+        le=30,
     )
     extract_tar: Optional[bool] = Field(
         None,

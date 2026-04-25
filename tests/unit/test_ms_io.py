@@ -1,7 +1,6 @@
 """Unit tests for MSv2 I/O utilities."""
 
-import os
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -25,7 +24,6 @@ from almasim.services.products.ms_io import (
     export_native_ms,
     read_native_ms,
 )
-
 
 # ---------------------------------------------------------------------------
 # Pure helpers
@@ -369,9 +367,6 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
         "TELESCOPE_NAME": "ALMA",
         "PROJECT": "2021.1.S",
     }[col]
-
-    open_call_count = [0]
-    subtables = [spw_tb, ant_tb, fld_tb, obs_tb]
 
     def fake_open(path, readonly=True):
         if path.endswith("SPECTRAL_WINDOW"):

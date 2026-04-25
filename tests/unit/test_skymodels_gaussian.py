@@ -11,7 +11,6 @@ from martini import DataCube
 
 from almasim.skymodels.gaussian import GaussianSkyModel, gaussian2d
 
-
 # ===========================================================================
 # helpers
 # ===========================================================================
