@@ -9,9 +9,14 @@ SolidStart frontend for ALMASim with TypeScript and Tailwind CSS.
 npm install
 ```
 
-2. Set environment variables (optional):
+2. Set the backend URL (optional, only needed if not using the default):
 ```bash
+# Dev: build-time fallback (Vite reads this and bakes it in only as a default)
 export VITE_API_URL=http://localhost:8000
+
+# Production / Docker: runtime override (read by hooks.server.ts on every
+# request and injected into the served HTML — no rebuild needed).
+export API_URL=http://backend:8000
 ```
 
 3. Run development server:

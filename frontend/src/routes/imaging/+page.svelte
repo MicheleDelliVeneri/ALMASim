@@ -6,8 +6,8 @@
 	import { createLogger } from '$lib/logger';
 	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
 	import { imagingApi, type DeconvolutionResponse, type ImagePreviewPayload } from '$lib/api/imaging';
+	import { API_BASE_URL } from '$lib/config';
 
-	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 	const logger = createLogger('routes/imaging');
 	const DIRTY_PREFIX = 'dirty-cube_';
 	const BEAM_PREFIX = 'beam-cube_';

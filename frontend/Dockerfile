@@ -33,6 +33,11 @@ COPY --from=builder /app/.svelte-kit ./.svelte-kit
 # Expose port
 EXPOSE 3000
 
+# Default backend URL — override at runtime with `-e API_URL=...`.
+# This is read by src/hooks.server.ts on every request and injected into the
+# served HTML, so the same image works against any backend without rebuilding.
+ENV API_URL=http://backend:8000
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000', (r) => {if(r.statusCode !== 200) throw new Error(r.statusCode)})"

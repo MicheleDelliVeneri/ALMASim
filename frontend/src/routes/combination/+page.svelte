@@ -5,8 +5,8 @@
 	import ImageStatistics from '$lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '$lib/logger';
 	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
+	import { API_BASE_URL } from '$lib/config';
 
-	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 	const logger = createLogger('routes/combination');
 	const PRODUCT_PREFIXES = ['int-image-cube_', 'tp-image-cube_', 'tp-int-image-cube_'] as const;
 	type ProductFilter = 'all' | 'int' | 'tp' | 'merged';

@@ -6,8 +6,8 @@
 	import ImageStatistics from '$lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '$lib/logger';
 	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
+	import { API_BASE_URL } from '$lib/config';
 
-	const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 	const logger = createLogger('routes/visualizer');
 	const DEFAULT_PROCESS_TIMEOUT_MS = 10_000;
 	const FITS_PROCESS_TIMEOUT_MS = 20_000;
