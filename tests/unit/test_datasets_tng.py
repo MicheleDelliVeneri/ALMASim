@@ -58,6 +58,7 @@ def test_ensure_directory_existing_is_noop(tmp_path):
 def test_require_pysftp_returns_module_when_available():
     """_require_pysftp returns the pysftp module when available."""
     import almasim.skymodels.datasets.tng as tng_mod
+
     original_pysftp = tng_mod.pysftp
     tng_mod.pysftp = _mock_pysftp
     try:
@@ -71,6 +72,7 @@ def test_require_pysftp_returns_module_when_available():
 def test_require_pysftp_raises_when_unavailable():
     """_require_pysftp raises RuntimeError when pysftp is None."""
     import almasim.skymodels.datasets.tng as tng_mod
+
     original = tng_mod.pysftp
     tng_mod.pysftp = None
     try:

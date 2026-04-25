@@ -560,9 +560,19 @@ async def redownload_job(
         else bool(rec.clean_intermediate_files)
     )
     extract_tar = (
-        body.extract_tar if body.extract_tar is not None else bool(rec.unpack_ms) or bool(rec.generate_calibrated_visibilities)
-    ) or unpack_ms or generate_calibrated
-    archive_output_root = body.archive_output_root if body.archive_output_root is not None else rec.archive_output_root
+        (
+            body.extract_tar
+            if body.extract_tar is not None
+            else bool(rec.unpack_ms) or bool(rec.generate_calibrated_visibilities)
+        )
+        or unpack_ms
+        or generate_calibrated
+    )
+    archive_output_root = (
+        body.archive_output_root
+        if body.archive_output_root is not None
+        else rec.archive_output_root
+    )
     casa_data_root = body.casa_data_root if body.casa_data_root is not None else rec.casa_data_root
     skip_casa_data_update = (
         body.skip_casa_data_update

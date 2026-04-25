@@ -26,10 +26,12 @@ def test_execute_task_callable():
 @pytest.mark.unit
 def test_execute_task_with_compute():
     """_execute_task calls .compute() on non-callable objects that have .compute()."""
+
     # Must be a non-callable object so the callable() check doesn't fire first.
     class HasCompute:
         def compute(self):
             return "computed"
+
     result = _execute_task(HasCompute())
     assert result == "computed"
 

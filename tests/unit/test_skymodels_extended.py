@@ -33,6 +33,7 @@ def test_insert_pixel_mutates_array():
         insert_pixel.__wrapped__(arr, insertion_slice, data)
     else:
         import dask
+
         result = dask.compute(insert_pixel(arr, insertion_slice, data))[0]
 
     # arr should now have the inserted values at [1,2,:]

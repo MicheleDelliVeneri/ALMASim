@@ -169,9 +169,9 @@ def test_sample_positions_empty_when_impossible():
         fwhm_xs=np.array([2, 2, 2, 2, 2]),
         fwhm_ys=np.array([2, 2, 2, 2, 2]),
         fwhm_zs=np.array([2.0, 2.0, 2.0, 2.0, 2.0]),
-        xy_radius=1,       # tiny radius
+        xy_radius=1,  # tiny radius
         z_radius=1,
-        sep_xy=200,        # huge separation — nothing passes
+        sep_xy=200,  # huge separation — nothing passes
         sep_z=200,
     )
     assert result == []

@@ -3,7 +3,10 @@
 import numpy as np
 import pytest
 
-casatools = pytest.importorskip("casatools", reason="casatools not installed")
+try:
+    import casatools
+except Exception:
+    pytest.skip("casatools not available or not functional", allow_module_level=True)
 
 from almasim.services.products.ms_io import (  # noqa: E402
     export_native_ms,

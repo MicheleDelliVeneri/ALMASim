@@ -37,6 +37,7 @@ from almasim.services.archive.unpack_ms import (  # noqa: E402
 # helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_asdm(tmp_path: Path, uid: str = "uid___A001_X1_X1") -> Path:
     """Create a fake ASDM directory."""
     asdm_dir = tmp_path / f"{uid}.asdm.sdm"
@@ -351,9 +352,7 @@ def test_create_measurement_set_emits_log_messages(tmp_path):
         Path(vis).mkdir(parents=True)
 
     messages = []
-    create_measurement_set(
-        fake_importasdm, asdm, output_root, logger_fn=messages.append
-    )
+    create_measurement_set(fake_importasdm, asdm, output_root, logger_fn=messages.append)
     assert any("Creating raw MeasurementSet" in m for m in messages)
     assert any("Created raw MeasurementSet" in m for m in messages)
 
@@ -367,9 +366,7 @@ def test_create_measurement_set_emits_log_messages(tmp_path):
 @patch("almasim.services.archive.unpack_ms.find_existing_casa_data")
 @patch("almasim.services.archive.unpack_ms.configure_casa_environment")
 @patch("almasim.services.archive.unpack_ms.ensure_casa_runtime_data")
-def test_create_measurement_sets_returns_list(
-    mock_ensure, mock_configure, mock_find, tmp_path
-):
+def test_create_measurement_sets_returns_list(mock_ensure, mock_configure, mock_find, tmp_path):
     """create_measurement_sets returns a list of MS paths."""
     asdm = _make_asdm(tmp_path / "input")
     output_root = tmp_path / "output"

@@ -67,9 +67,20 @@ def test_visibility_table_as_dict_keys():
     vt = _make_visibility_table()
     d = vt.as_dict()
     for key in (
-        "uvw_m", "antenna1", "antenna2", "time_mjd_s", "data",
-        "model_data", "flag", "weight", "sigma", "channel_freq_hz",
-        "antenna_names", "source_name", "field_ra_rad", "field_dec_rad",
+        "uvw_m",
+        "antenna1",
+        "antenna2",
+        "time_mjd_s",
+        "data",
+        "model_data",
+        "flag",
+        "weight",
+        "sigma",
+        "channel_freq_hz",
+        "antenna_names",
+        "source_name",
+        "field_ra_rad",
+        "field_dec_rad",
         "observation_date",
     ):
         assert key in d

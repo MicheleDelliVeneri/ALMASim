@@ -176,7 +176,11 @@ def test_molecular_image_scales_array():
     """molecular_image scales the input array by the amplitude."""
     arr = np.ones((8, 8))
     # Call the underlying function directly (bypassing @delayed)
-    result = molecular_image.__wrapped__(arr, 3.0) if hasattr(molecular_image, "__wrapped__") else molecular_image(arr, 3.0).compute()
+    result = (
+        molecular_image.__wrapped__(arr, 3.0)
+        if hasattr(molecular_image, "__wrapped__")
+        else molecular_image(arr, 3.0).compute()
+    )
     np.testing.assert_allclose(result, arr * 3.0)
 
 

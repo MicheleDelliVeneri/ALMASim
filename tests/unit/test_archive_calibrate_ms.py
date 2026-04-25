@@ -231,8 +231,7 @@ def test_parse_applycal_calls_multiple(tmp_path):
     """_parse_applycal_calls handles multiple applycal blocks."""
     calapply = tmp_path / "multi.calapply.txt"
     calapply.write_text(
-        'applycal(vis="a.ms", gaintable=["a.gcal"])\n'
-        'applycal(vis="b.ms", gaintable=["b.gcal"])\n'
+        'applycal(vis="a.ms", gaintable=["a.gcal"])\napplycal(vis="b.ms", gaintable=["b.gcal"])\n'
     )
     calls = _parse_applycal_calls(calapply)
     assert len(calls) == 2
@@ -251,10 +250,7 @@ def test_parse_applycal_calls_no_applycal_raises(tmp_path):
 def test_parse_applycal_calls_ignores_non_applycal(tmp_path):
     """Non-applycal function calls in file are ignored."""
     calapply = tmp_path / "mixed.calapply.txt"
-    calapply.write_text(
-        'flagcmd(vis="test.ms")\n'
-        'applycal(vis="test.ms", gaintable=["g.gcal"])\n'
-    )
+    calapply.write_text('flagcmd(vis="test.ms")\napplycal(vis="test.ms", gaintable=["g.gcal"])\n')
     calls = _parse_applycal_calls(calapply)
     assert len(calls) == 1
 
@@ -384,9 +380,7 @@ def test_apply_delivered_calibration_calls_applycal(tmp_path):
         "almasim.services.archive.calibrate_ms._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
-        result = apply_delivered_calibration(
-            mock_applycal, raw_ms, cal_dir, working_dir
-        )
+        result = apply_delivered_calibration(mock_applycal, raw_ms, cal_dir, working_dir)
 
     mock_applycal.assert_called_once()
     assert result.name == f"{uid}.ms"
@@ -479,12 +473,8 @@ def test_split_calibrated_science_ms_calls_mstransform_and_returns_path(tmp_path
     def fake_mstransform(vis, outputvis, spw, reindex):
         Path(outputvis).mkdir(parents=True)
 
-    with patch(
-        "almasim.services.archive.calibrate_ms.science_spws", return_value="0,1,2"
-    ):
-        result = split_calibrated_science_ms(
-            fake_mstransform, calibrated_ms, output_root
-        )
+    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0,1,2"):
+        result = split_calibrated_science_ms(fake_mstransform, calibrated_ms, output_root)
 
     expected = output_root / f"{uid}.ms.split.cal"
     assert result == expected
@@ -501,9 +491,7 @@ def test_split_calibrated_science_ms_raises_if_output_not_created(tmp_path):
     def bad_mstransform(vis, outputvis, spw, reindex):
         pass  # intentionally does NOT create outputvis
 
-    with patch(
-        "almasim.services.archive.calibrate_ms.science_spws", return_value="0,1"
-    ):
+    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0,1"):
         with pytest.raises(RuntimeError, match="Expected calibrated MS was not created"):
             split_calibrated_science_ms(bad_mstransform, calibrated_ms, output_root)
 
@@ -518,13 +506,9 @@ def test_split_calibrated_science_ms_raises_when_exists_no_overwrite(tmp_path):
     output_root.mkdir()
     (output_root / f"{uid}.ms.split.cal").mkdir()
 
-    with patch(
-        "almasim.services.archive.calibrate_ms.science_spws", return_value="0"
-    ):
+    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0"):
         with pytest.raises(RuntimeError, match="Calibrated output MS already exists"):
-            split_calibrated_science_ms(
-                MagicMock(), calibrated_ms, output_root, overwrite=False
-            )
+            split_calibrated_science_ms(MagicMock(), calibrated_ms, output_root, overwrite=False)
 
 
 @pytest.mark.unit
@@ -541,9 +525,7 @@ def test_split_calibrated_science_ms_overwrite_removes_old(tmp_path):
     def fake_mstransform(vis, outputvis, spw, reindex):
         Path(outputvis).mkdir(parents=True, exist_ok=True)
 
-    with patch(
-        "almasim.services.archive.calibrate_ms.science_spws", return_value="0"
-    ):
+    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0"):
         result = split_calibrated_science_ms(
             fake_mstransform, calibrated_ms, output_root, overwrite=True
         )

@@ -171,9 +171,7 @@ def test_observation_config_as_dict():
 @pytest.mark.unit
 def test_single_pointing_plan_as_dict():
     """as_dict() serializes plan including configs."""
-    cfg = ObservationConfig(
-        name="c0", array_type="12m", antenna_array="DA41", total_time_s=3600.0
-    )
+    cfg = ObservationConfig(name="c0", array_type="12m", antenna_array="DA41", total_time_s=3600.0)
     plan = SinglePointingObservationPlan(
         phase_center_ra_deg=10.0,
         phase_center_dec_deg=-23.0,
@@ -199,10 +197,10 @@ def test_single_pointing_plan_as_dict():
 @pytest.mark.unit
 def test_coerce_observation_config_passthrough():
     """ObservationConfig is returned unchanged."""
-    cfg = ObservationConfig(
-        name="c0", array_type="12m", antenna_array="DA41", total_time_s=3600.0
+    cfg = ObservationConfig(name="c0", array_type="12m", antenna_array="DA41", total_time_s=3600.0)
+    result = _coerce_observation_config(
+        cfg, default_time_s=1800.0, default_correlator=None, index=0
     )
-    result = _coerce_observation_config(cfg, default_time_s=1800.0, default_correlator=None, index=0)
     assert result is cfg
 
 
@@ -221,7 +219,9 @@ def test_coerce_observation_config_from_string():
 def test_coerce_observation_config_from_dict():
     """Dict config is coerced correctly."""
     raw = {"antenna_array": "CM01 CM02", "total_time_s": 1800.0}
-    result = _coerce_observation_config(raw, default_time_s=3600.0, default_correlator=None, index=1)
+    result = _coerce_observation_config(
+        raw, default_time_s=3600.0, default_correlator=None, index=1
+    )
     assert result.array_type == "7m"
     assert result.total_time_s == 1800.0
 
@@ -261,9 +261,7 @@ def test_normalize_configs_empty_splits_default():
 @pytest.mark.unit
 def test_normalize_configs_list_passthrough():
     """Existing ObservationConfig list is returned normalized."""
-    cfg = ObservationConfig(
-        name="c0", array_type="12m", antenna_array="DA41", total_time_s=3600.0
-    )
+    cfg = ObservationConfig(name="c0", array_type="12m", antenna_array="DA41", total_time_s=3600.0)
     result = normalize_observation_configs(
         [cfg], default_antenna_array="DA41", default_time_s=3600.0
     )
@@ -331,7 +329,10 @@ def test_build_plan_elevation_from_params():
 def test_build_plan_tp_excluded_from_primary_beam():
     """TP-only config does not contribute to primary_beam_reference_diameter_m."""
     cfg_tp = ObservationConfig(
-        name="tp", array_type="TP", antenna_array="PM01", total_time_s=3600.0,
+        name="tp",
+        array_type="TP",
+        antenna_array="PM01",
+        total_time_s=3600.0,
         antenna_diameter_m=12.0,
     )
     params = SimpleNamespace(

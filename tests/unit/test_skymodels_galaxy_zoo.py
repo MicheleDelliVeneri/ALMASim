@@ -53,6 +53,7 @@ def _make_model(
     for i in range(3):
         img = np.random.randint(0, 255, (32, 32, 3), dtype=np.uint8)
         import matplotlib.image as plimg
+
         plimg.imsave(str(data_path / f"galaxy_{i}.png"), img)
 
     datacube = _make_datacube(n_px, n_chan)
@@ -184,6 +185,7 @@ def test_galaxy_zoo_insert_handles_grayscale_image(tmp_path):
     # Create a 2-channel image (d3 = min(2, 2) = 2)
     img = np.random.rand(32, 32, 2).astype(np.float32)
     import matplotlib.image as plimg
+
     # Save with rgba as workaround
     img4 = np.concatenate([img, np.ones((32, 32, 1), dtype=np.float32)], axis=2)
     plimg.imsave(str(data_path / "g.png"), img4)
