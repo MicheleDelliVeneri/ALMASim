@@ -90,7 +90,7 @@ jobs:
           chmod 600 $HOME/.kaggle/kaggle.json
 
       - name: Run unit tests
-        uses: aganders3/headless-gui@v1
+        uses: aganders3/headless-gui@v2
         with:
           run: uv run pytest --ignore=illustris_python --rootdir ${{ github.workspace }}
 
@@ -129,7 +129,7 @@ jobs:
           chmod 600 /home/runner/.kaggle/kaggle.json
 
       - name: Run tests with coverage
-        uses: aganders3/headless-gui@v1
+        uses: aganders3/headless-gui@v2
         with:
           run: uv run pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
 
