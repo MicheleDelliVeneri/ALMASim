@@ -1,13 +1,21 @@
 import os
 import sys
+import tomllib
+from pathlib import Path
 
 sys.path.insert(0, os.path.abspath("../.."))
-import almasim  # noqa: E402
+
+# Read version from pyproject.toml without importing the package, so the
+# docs build doesn't require all of almasim's heavy scientific dependencies
+# (astromartini, nifty8, dask-expr, imagecodecs, ...) to be installable on
+# Read the Docs.
+_pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+with _pyproject.open("rb") as _f:
+    release = tomllib.load(_f)["project"]["version"]
 
 project = "ALMASim"
 copyright = "2024–2026, Michele Delli Veneri"
 author = "Michele Delli Veneri"
-release = almasim.__version__
 version = ".".join(release.split(".")[:2])
 
 extensions = [
@@ -21,11 +29,35 @@ extensions = [
     "sphinx_copybutton",
 ]
 
-# Mock heavy optional deps so autodoc works on ReadTheDocs without CASA
+# Mock heavy/optional deps so autodoc works on ReadTheDocs without having to
+# install the full almasim runtime stack.
 autodoc_mock_imports = [
-    "casatools",
-    "casatasks",
+    "astromartini",
+    "astropy",
     "casadata",
+    "casatasks",
+    "casatools",
+    "dask",
+    "dask_expr",
+    "dask_jobqueue",
+    "distributed",
+    "h5py",
+    "Hdecompose",
+    "imagecodecs",
+    "kaggle",
+    "matplotlib",
+    "multiprocess",
+    "nifty8",
+    "numpy",
+    "pandas",
+    "paramiko",
+    "pysftp",
+    "pyvo",
+    "scipy",
+    "seaborn",
+    "skimage",
+    "tenacity",
+    "tqdm",
 ]
 
 templates_path = ["_templates"]

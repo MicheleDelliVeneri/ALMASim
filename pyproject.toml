@@ -1,6 +1,6 @@
 [project]
 name = "almasim"
-version = "2.1.10"
+version = "2.1.11"
 description = "An ALMA Simulation package for a more civilized era."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -52,7 +52,7 @@ ms-casacore = ["python-casacore"]
 [project.urls]
 Repository = "https://github.com/MicheleDelliVeneri/ALMASim"
 Homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
-Documentation = "https://almasim.readthedocs.io/en/latest"
+Documentation = "https://michedelliveneri.github.io/ALMASim/"
 
 [dependency-groups]
 dev = [

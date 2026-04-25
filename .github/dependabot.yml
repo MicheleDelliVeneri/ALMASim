@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # Project Python deps (managed by uv via pyproject.toml + uv.lock).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Docs build deps (plain pip requirements file — uv can't lock this without
+  # a pyproject.toml, so we explicitly track it as pip to avoid the
+  # "No pyproject.toml found" error from the uv ecosystem updater).
+  - package-ecosystem: "pip"
+    directory: "/docs"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Frontend (npm) deps.
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions workflow dependencies.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
