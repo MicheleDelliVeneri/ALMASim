@@ -1,112 +1,134 @@
-import numpy as np
-import astropy.coordinates as coord
-from astropy.coordinates import EarthLocation
-import astropy.time
-import astropy.units as u
-from astropy.time import Time as _Time
 from pathlib import Path
 
-import numpy  as _np
+import astropy.coordinates as coord
+import astropy.units as u
+import numpy as np
+import pytest
+from astropy.coordinates import EarthLocation
+from astropy.time import Time
 
-def generate_via_astropy(antenna_positions, ra, dec, time: _Time):
-    n_antennas = antenna_positions.shape[0]
-    antenna_positions = EarthLocation(x=antenna_positions[:,0],
-                                      y=antenna_positions[:,1],
-                                      z=antenna_positions[:,2])
-    
-    alma_site = EarthLocation.of_site("ALMA")
-
-    # Convert antenna pos terrestrial to celestial.  For astropy use 
-    # get_gcrs_posvel(t)[0] rather than get_gcrs(t) because if a velocity 
-    # is attached to the coordinate astropy will not allow us to do additional 
-    # transformations with it (https://github.com/astropy/astropy/issues/6280)
-    alma_p, alma_v = alma_site.get_gcrs_posvel(time)
-    antenna_positions_gcrs = coord.GCRS(antenna_positions.get_gcrs_posvel(time)[0], 
-                                        obstime=time, obsgeoloc=alma_p, obsgeovel=alma_v)
-
-    # Define the UVW frame relative to a certain point on the sky.  There are
-    # two versions, depending on whether the sky offset is done in ICRS 
-    # or GCRS:
-    pnt = coord.SkyCoord(ra, dec, frame='icrs')
-    #frame_uvw = pnt.skyoffset_frame() # ICRS
-    frame_uvw = pnt.transform_to(antenna_positions_gcrs).skyoffset_frame() # GCRS
-
-    # Rotate antenna positions into UVW frame.
-    antenna_positions_uvw = antenna_positions_gcrs.transform_to(frame_uvw).cartesian
-
-    # Full set of baselines would be differences between all pairs of 
-    # antenna positions, but we'll just do relative to the first antenna
-    # for simplicity.
-    baselines = np.zeros((n_antennas * (n_antennas-1)//2, 3), dtype=np.float64)
-    count = 0
-    for i in range(n_antennas):
-        for j in range(i):
-            values =  (antenna_positions_uvw[i] - antenna_positions_uvw[j]).xyz
-            baselines[count, :] = values
-            count += 1
-    return baselines
+from almasim.services.interferometry.baselines import generate_via_astropy, pairwise_baselines
+from almasim.services.products.ms_io import export_native_ms
 
 
+ANTENNA_CONFIG = (
+    Path(__file__).parents[3] / "src" / "almasim" / "antenna_config" / "antenna_coordinates.csv"
+)
+OBS_TIME = Time("2024-01-01T00:00:00", scale="utc")
+RA_RAD = 3.26 * u.rad
+DEC_RAD = -1.05 * u.rad
 
-ANTENNA_CONFIG = Path(__file__).parents[3] / "src" / "almasim" / "antenna_config" / "antenna_coordinates.csv"
+
+def read_coordinates(coordinates_file: Path, n_antennas: int = 6) -> np.ndarray:
+    return np.loadtxt(
+        coordinates_file,
+        delimiter=",",
+        skiprows=1,
+        usecols=(1, 2, 3),
+        max_rows=n_antennas,
+    )
 
 
-def read_coordinates(coordinates_file):
-    coordinates = _np.loadtxt(coordinates_file, delimiter=",", skiprows=1, usecols=(1,2,3))
-    return coordinates
+def _casa_to_cartesian_m(casa_direction: dict) -> np.ndarray:
+    sph = coord.SphericalRepresentation(
+        lon=np.asarray(casa_direction["m0"]["value"]) * u.Unit(casa_direction["m0"]["unit"]),
+        lat=np.asarray(casa_direction["m1"]["value"]) * u.Unit(casa_direction["m1"]["unit"]),
+        distance=np.asarray(casa_direction["m2"]["value"]) * u.Unit(casa_direction["m2"]["unit"]),
+    )
+    return sph.represent_as(coord.CartesianRepresentation).xyz.to_value(u.m).T
 
-def test_uvw_casacore():
-    coordinates = read_coordinates(ANTENNA_CONFIG) * u.m
-    baselines = generate_via_astropy(coordinates, 3.26 * u.rad, -1.05 * u.rad, _Time.now())
-    
 
-"""
-# Rest of script does the same(?) thing in CASA for comparison.
-# Requires casatools from CASA 6 which can be installed via:
-# pip install --index-url https://casa-pip.nrao.edu/repository/pypi-casa-release/simple casatools==6.0.0.27
-try:
-    import casatools
-except ImportError:
-    casatools = None
+def generate_via_casa(antenna_positions_m: np.ndarray, ra: u.Quantity, dec: u.Quantity, time: Time) -> np.ndarray:
+    try:
+        import casatools
+    except ImportError:
+        pytest.skip("casatools not available")
 
-if casatools is not None:
-
-    def casa_to_astropy(c):
-        Convert CASA spherical coords to astropy CartesianRepresentation
-        sph = coord.SphericalRepresentation(
-                lon=c['m0']['value']*u.Unit(c['m0']['unit']), 
-                lat=c['m1']['value']*u.Unit(c['m1']['unit']), 
-                distance=c['m2']['value']*u.Unit(c['m2']['unit']))
-        return sph.represent_as(coord.CartesianRepresentation)
-
-    # The necessary interfaces:
     me = casatools.measures()
     qa = casatools.quanta()
     qq = qa.quantity
 
-    # Init CASA frame info:
-    me.doframe(me.observatory('VLA'))
-    me.doframe(me.epoch('UTC',qq(t.mjd,'d')))
-    me.doframe(me.direction('J2000',
-        qq(pnt.ra.to(u.rad).value, 'rad'),
-        qq(pnt.dec.to(u.rad).value, 'rad')))
+    me.doframe(me.observatory("ALMA"))
+    me.doframe(me.epoch("UTC", qq(float(time.mjd), "d")))
+    me.doframe(
+        me.direction(
+            "J2000",
+            qq(float(ra.to_value(u.rad)), "rad"),
+            qq(float(dec.to_value(u.rad)), "rad"),
+        )
+    )
 
-    # Format antenna positions for CASA:
-    antpos_casa = me.position('ITRF',
-            qq(antpos[:,0].to(u.m).value,'m'),
-            qq(antpos[:,1].to(u.m).value,'m'),
-            qq(antpos[:,2].to(u.m).value,'m'))
+    antpos_casa = me.position(
+        "ITRF",
+        qq(antenna_positions_m[:, 0], "m"),
+        qq(antenna_positions_m[:, 1], "m"),
+        qq(antenna_positions_m[:, 2], "m"),
+    )
+    antpos_baseline = me.asbaseline(antpos_casa)
+    antpos_uvw_casa = me.touvw(antpos_baseline)[0]
+    ant_xyz = _casa_to_cartesian_m(antpos_uvw_casa)
+    # CASA's Cartesian axis order for this conversion is rotated relative to
+    # Astropy's UVW convention, so rotate columns to compare like-for-like.
+    baselines = pairwise_baselines(ant_xyz - ant_xyz[0])
+    return np.roll(baselines, shift=1, axis=1)
 
-    # Converts from ITRF to "J2000":
-    antpos_c_casa = me.asbaseline(antpos_casa)
 
-    # Rotate into UVW frame
-    antpos_uvw_casa = me.touvw(antpos_c_casa)[0]
+@pytest.mark.component
+def test_uvw_astropy_matches_casa_reference():
+    coordinates_m = read_coordinates(ANTENNA_CONFIG)
+    baselines_astropy = generate_via_astropy(coordinates_m, RA_RAD, DEC_RAD, OBS_TIME)
+    baselines_casa = generate_via_casa(coordinates_m, RA_RAD, DEC_RAD, OBS_TIME)
 
-    # me.expand would compute all pairs of baselines but here we convert
-    # to astropy CartesianRepresentation, and only do baselines to the
-    # first antenna for easier comparison
-    bl_uvw_casa = casa_to_astropy(antpos_uvw_casa)
-    bl_uvw_casa -= bl_uvw_casa[0]
+    assert baselines_astropy.shape == baselines_casa.shape
+    np.testing.assert_allclose(baselines_astropy, baselines_casa, rtol=1e-5, atol=5e-2)
 
-"""
+
+@pytest.mark.component
+def test_uvw_roundtrip_read_with_python_casacore(tmp_path: Path):
+
+    coordinates_m = read_coordinates(ANTENNA_CONFIG)
+    baselines_astropy = generate_via_astropy(coordinates_m, RA_RAD, DEC_RAD, OBS_TIME)
+    nrows = baselines_astropy.shape[0]
+    n_antennas = coordinates_m.shape[0]
+
+    ms_path = tmp_path / "uvw_reference.ms"
+    visibility_table = {
+        "uvw_m": baselines_astropy,
+        "antenna1": np.zeros(nrows, dtype=np.int32),
+        "antenna2": np.ones(nrows, dtype=np.int32),
+        "time_mjd_s": np.full(nrows, OBS_TIME.mjd * 86400.0, dtype=np.float64),
+        "interval_s": np.full(nrows, 1.0, dtype=np.float64),
+        "exposure_s": np.full(nrows, 1.0, dtype=np.float64),
+        "data": np.zeros((nrows, 1, 1), dtype=np.complex64),
+        "model_data": np.zeros((nrows, 1, 1), dtype=np.complex64),
+        "flag": np.zeros((nrows, 1, 1), dtype=bool),
+        "weight": np.ones((nrows, 1), dtype=np.float32),
+        "sigma": np.ones((nrows, 1), dtype=np.float32),
+        "channel_freq_hz": np.array([230e9], dtype=np.float64),
+        "antenna_names": [f"ANT{i:02d}" for i in range(n_antennas)],
+        "antenna_positions_m": coordinates_m,
+        "field_ra_rad": float(RA_RAD.to_value(u.rad)),
+        "field_dec_rad": float(DEC_RAD.to_value(u.rad)),
+        "observation_date": "2024-01-01",
+    }
+    try: 
+        export_native_ms(
+            ms_path=ms_path,
+            visibility_table=visibility_table,
+            project_name="uvw-test",
+            source_name="uvw-test-source",
+            telescope_name="ALMA",
+        )
+    except ImportError as e:
+        pytest.skip(str(e))
+    try:
+        from casacore.tables import table
+    except ImportError:
+        pytest.skip("python-casacore not available")
+
+    tb = table(str(ms_path), readonly=True)
+    uvw_read = tb.getcol("UVW").T
+    tb.close()
+
+    assert uvw_read.shape == baselines_astropy.shape
+    np.testing.assert_allclose(uvw_read, baselines_astropy, rtol=1e-10, atol=1e-10)

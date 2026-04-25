@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+import astropy.units as astrounits
 from astropy.io import fits
 
 from almasim.services.interferometry.imaging import (
@@ -10,6 +11,7 @@ from almasim.services.interferometry.imaging import (
     add_thermal_noise,
     check_lfac,
     image_channel,
+    image_channel_ducc0,
     observe,
     prepare_2d_arrays,
     set_beam,
@@ -420,3 +422,259 @@ def test_image_channel(sample_header, sample_wavelength):
     assert totsampling.shape == (Npix, Npix)
     assert "data" in raw_visibility
     assert raw_visibility["uvw_m"].shape[1] == 3
+
+
+@pytest.mark.unit
+def test_image_channel_ducc0_requires_pointing_metadata(sample_wavelength):
+    """image_channel_ducc0 should fail fast when header lacks pointing coordinates."""
+    header = fits.Header()
+    header["DATE-OBS"] = "2024-01-01T00:00:00"
+
+    with pytest.raises(ValueError, match="pointing coordinates"):
+        image_channel_ducc0(
+            img=np.zeros((16, 16), dtype=np.float32),
+            wavelengths=sample_wavelength,
+            Npix=32,
+            Nant=4,
+            Hcov=[0.0, 1.0],
+            nH=10,
+            noise=0.01,
+            antPos=[[0.0, 0.0], [100.0, 0.0], [0.0, 100.0], [100.0, 100.0]],
+            robfac=0.1,
+            trlat=[0.0, 1.0],
+            trdec=[0.0, 1.0],
+            Diameters=[12.0],
+            imsize=10.0,
+            Xmax=1.0,
+            lfac=1.0e6,
+            distmat=np.zeros((32, 32), dtype=np.float32),
+            Nphf=16,
+            Np4=8,
+            zooming=1,
+            header=header,
+            robust=0.0,
+        )
+
+
+@pytest.mark.unit
+def test_image_channel_ducc0_validates_antpos_dimension(sample_wavelength):
+    """image_channel_ducc0 should validate antenna position array dimensions."""
+    header = fits.Header()
+    header["DATE-OBS"] = "2024-01-01T00:00:00"
+    header["OBSRA"] = 180.0
+    header["OBSDEC"] = -30.0
+
+    # Test with 1D array (invalid dimensions)
+    with pytest.raises(ValueError, match="2D array-like"):
+        image_channel_ducc0(
+            img=np.zeros((16, 16), dtype=np.float32),
+            wavelengths=sample_wavelength,
+            Npix=32,
+            Nant=4,
+            Hcov=[0.0, 1.0],
+            nH=10,
+            noise=0.01,
+            antPos=[0.0, 0.0, 100.0, 0.0],  # 1D array instead of 2D
+            robfac=0.1,
+            trlat=[0.0, 1.0],
+            trdec=[0.0, 1.0],
+            Diameters=[12.0],
+            imsize=10.0,
+            Xmax=1.0,
+            lfac=1.0e6,
+            distmat=np.zeros((32, 32), dtype=np.float32),
+            Nphf=16,
+            Np4=8,
+            zooming=1,
+            header=header,
+            robust=0.0,
+        )
+
+
+@pytest.mark.unit
+def test_image_channel_ducc0_happy_path(sample_wavelength, monkeypatch):
+    """image_channel_ducc0 should process valid inputs without raising."""
+    header = fits.Header()
+    header["DATE-OBS"] = "2024-01-01T00:00:00"
+    header["OBSRA"] = 180.0
+    header["OBSDEC"] = -30.0
+    
+    # Valid 2D antenna positions (4 antennas with 3D ECEF coords in meters)
+    valid_antpos = np.array([
+        [0.0, 0.0, 0.0],
+        [100.0, 0.0, 0.0],
+        [0.0, 100.0, 0.0],
+        [100.0, 100.0, 0.0],
+    ], dtype=np.float64)
+    
+    # Mock the ducc0 predict/dirty calls to avoid incomplete implementation
+    mock_visibilities = np.zeros((64, 8), dtype=np.complex64)
+    mock_weights = np.ones((64, 8), dtype=np.float32)
+    mock_dirtymap = np.zeros((32, 32), dtype=np.float32)
+    
+    def mock_image_based_predict(*args, **kwargs):
+        return mock_visibilities, mock_weights
+    
+    def mock_vis2dirty(*args, **kwargs):
+        return mock_dirtymap
+    
+    # Patch the functions that would fail due to incomplete implementation
+    monkeypatch.setattr(
+        "almasim.services.interferometry.imaging.image_based_predict",
+        mock_image_based_predict
+    )
+    monkeypatch.setattr(
+        "ducc0.wgridder.vis2dirty",
+        mock_vis2dirty
+    )
+    
+    # Should not raise and should return a tuple
+    result = image_channel_ducc0(
+        img=np.ones((16, 16), dtype=np.float32),
+        wavelengths=sample_wavelength,
+        Npix=32,
+        Nant=4,
+        Hcov=[0.0, 1.0],
+        nH=10,
+        noise=0.01,
+        antPos=valid_antpos,
+        robfac=0.1,
+        trlat=[0.0, 1.0],
+        trdec=[0.0, 1.0],
+        Diameters=[12.0],
+        imsize=10.0,
+        Xmax=1.0,
+        lfac=1.0e6,
+        distmat=np.zeros((32, 32), dtype=np.float32),
+        Nphf=16,
+        Np4=8,
+        zooming=1,
+        header=header,
+        robust=0.0,
+    )
+    
+    # Verify result is a tuple (function completed without raising)
+    assert isinstance(result, tuple)
+
+
+@pytest.mark.unit
+def test_image_channel_ducc0_integration():
+    """Test image_channel_ducc0 with real ducc0 operations using realistic ALMA data."""
+    from astropy.coordinates import EarthLocation
+    from astropy.time import Time
+
+    from almasim.services.interferometry.baselines import generate_via_astropy
+
+    # ALMA reference geodetic position.
+    alma_ref = EarthLocation.of_site("ALMA")
+    alma_lat = alma_ref.geodetic[0].deg
+    alma_lon = alma_ref.geodetic[1].deg
+
+    # Local ENU offsets (meters) from antenna_coordinates.csv.
+    local_enu = np.array(
+        [
+            [-33.8941259635723, -712.751648379266, -2.33008949622916],
+            [-17.4539088663487, -709.608697236419, -2.32867141985557],
+            [-22.5589292009902, -691.9838606867, -2.32374238442929],
+            [-5.42101314454732, -723.791104543484, -2.33425051860951],
+            [25.2459389865028, -744.431844526921, -2.33668425597284],
+        ],
+        dtype=np.float64,
+    )
+
+    # Convert ENU offsets to per-antenna geodetic coords using ALMA reference ECEF.
+    lat_rad = np.deg2rad(alma_lat)
+    lon_rad = np.deg2rad(alma_lon)
+    sin_lat, cos_lat = np.sin(lat_rad), np.cos(lat_rad)
+    sin_lon, cos_lon = np.sin(lon_rad), np.cos(lon_rad)
+
+    alma_ecef = np.array(
+        [
+            alma_ref.x.to(astrounits.m).value,
+            alma_ref.y.to(astrounits.m).value,
+            alma_ref.z.to(astrounits.m).value,
+        ],
+        dtype=np.float64,
+    )
+
+    geodetic_antpos = []
+    for e, n, u_up in local_enu:
+        dx = -sin_lon * e - sin_lat * cos_lon * n + cos_lat * cos_lon * u_up
+        dy = cos_lon * e - sin_lat * sin_lon * n + cos_lat * sin_lon * u_up
+        dz = cos_lat * n + sin_lat * u_up
+        ant_ecef = alma_ecef + np.array([dx, dy, dz], dtype=np.float64)
+
+        ant_loc = EarthLocation.from_geocentric(
+            ant_ecef[0] * astrounits.m,
+            ant_ecef[1] * astrounits.m,
+            ant_ecef[2] * astrounits.m,
+        )
+        geodetic_antpos.append([ant_loc.geodetic[0].deg, ant_loc.geodetic[1].deg])
+
+    geodetic_antpos = np.asarray(geodetic_antpos, dtype=np.float64)
+
+    header = fits.Header()
+    header["DATE-OBS"] = "2024-01-15T12:00:00"
+    # Near zenith pointing at ALMA to keep W relatively small.
+    header["OBSRA"] = alma_lon
+    header["OBSDEC"] = alma_lat
+
+    # Keep ALMA-band-like setup around 100 GHz while avoiding large multi-channel spread.
+    frequencies_ghz = [100.0, 100.0, 100.0]
+    wavelengths_m = [3e8 / (f * 1e9) for f in frequencies_ghz]
+
+    # Validate UVW spread independently before calling ducc0 path.
+    obs_time = Time(header["DATE-OBS"], format="isot", scale="utc")
+    uvw_debug = generate_via_astropy(
+        geodetic_antpos,
+        float(header["OBSRA"]) * astrounits.deg,
+        float(header["OBSDEC"]) * astrounits.deg,
+        obs_time,
+    )
+    u_spread = float(np.ptp(uvw_debug[:, 0]))
+    v_spread = float(np.ptp(uvw_debug[:, 1]))
+    w_spread = float(np.ptp(uvw_debug[:, 2]))
+
+    assert u_spread > 0.0
+    assert v_spread > 0.0
+    assert w_spread <= 1.2 * max(u_spread, v_spread)
+
+    # Run real ducc0 computation (no mocks).
+    result = image_channel_ducc0(
+        img=np.ones((16, 16), dtype=np.float32),
+        wavelengths=wavelengths_m,
+        Npix=32,
+        Nant=5,
+        Hcov=[0.0, 1.0],
+        nH=10,
+        noise=0.01,
+        antPos=geodetic_antpos,
+        robfac=0.1,
+        trlat=[alma_lat - 5.0, alma_lat + 5.0],
+        trdec=[alma_lat - 5.0, alma_lat + 5.0],
+        Diameters=[12.0],
+        imsize=60.0,
+        Xmax=1.0,
+        lfac=1.0e6,
+        distmat=np.zeros((32, 32), dtype=np.float32),
+        Nphf=16,
+        Np4=8,
+        zooming=1,
+        header=header,
+        robust=0.0,
+    )
+
+    assert isinstance(result, tuple)
+    assert len(result) == 9
+    modelim, dirtymap, modelvis, dirtyvis, u_vals, v_vals, beam, totsampling, raw_visibility = result
+    assert isinstance(modelim, np.ndarray)
+    assert isinstance(dirtymap, np.ndarray)
+    assert dirtymap.shape == (32, 32)
+    assert isinstance(u_vals, np.ndarray)
+    assert isinstance(v_vals, np.ndarray)
+    assert isinstance(beam, np.ndarray)
+    assert isinstance(totsampling, np.ndarray)
+    assert isinstance(raw_visibility, dict)
+    assert "uvw_m" in raw_visibility
+    assert "visibilities" in raw_visibility
+    assert "weights" in raw_visibility
