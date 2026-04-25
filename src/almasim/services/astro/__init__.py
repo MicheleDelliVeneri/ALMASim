@@ -1,4 +1,5 @@
 """Astronomical utility functions."""
+
 from .redshift import compute_redshift
 from .tng import redshift_to_snapshot, get_data_from_hdf, get_subhaloids_from_db
 from .lines import (
@@ -32,4 +33,3 @@ __all__ = [
     "find_compatible_lines",
     "process_spectral_data",
 ]
-

@@ -1,4 +1,5 @@
 """Galaxy Zoo sky model implementation."""
+
 import os
 import numpy as np
 import astropy.units as U
@@ -19,7 +20,7 @@ def galaxy_image(avgimg: np.ndarray, amp: float) -> np.ndarray:
 
 class GalaxyZooSkyModel(SkyModel):
     """Galaxy Zoo morphology sky model."""
-    
+
     def __init__(
         self,
         datacube: Any,
@@ -35,7 +36,7 @@ class GalaxyZooSkyModel(SkyModel):
     ):
         """
         Initialize Galaxy Zoo sky model.
-        
+
         Parameters
         ----------
         datacube : Any
@@ -71,7 +72,7 @@ class GalaxyZooSkyModel(SkyModel):
             update_progress=update_progress,
         )
         self.data_path = data_path
-    
+
     def insert(self) -> Any:
         """Insert Galaxy Zoo source into datacube."""
         files = np.array(os.listdir(self.data_path))
@@ -98,5 +99,3 @@ class GalaxyZooSkyModel(SkyModel):
         skymodel = self.client.gather(futures)
         self.datacube._array = skymodel * U.Jy * U.pix**-2
         return self.datacube
-
-

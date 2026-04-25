@@ -1,14 +1,14 @@
 """Simulation helpers decoupled from the legacy PyQt UI."""
+
 from __future__ import annotations
 
-import json
 import math
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from time import gmtime, strftime
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Mapping, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -199,7 +199,9 @@ class SimulationParams:
         freq = _float(["Freq", "frequency"])
         freq_support = str(_get(["Freq.sup.", "frequency_support"]))
         cont_sens = _float(["Cont_sens_mJybeam", "cont_sens"])
-        line_sens_10kms = _get(["Line_sens_10kms_mJybeam", "line_sens_10kms"], required=False)
+        line_sens_10kms = _get(
+            ["Line_sens_10kms_mJybeam", "line_sens_10kms"], required=False
+        )
         antenna_array = str(_get(["antenna_arrays", "antenna_array"]))
 
         if rest_frequency is None:
@@ -237,7 +239,9 @@ class SimulationParams:
             freq=freq,
             freq_support=freq_support,
             cont_sens=cont_sens,
-            line_sens_10kms=(float(line_sens_10kms) if line_sens_10kms is not None else None),
+            line_sens_10kms=(
+                float(line_sens_10kms) if line_sens_10kms is not None else None
+            ),
             antenna_array=antenna_array,
             n_pix=n_pix,
             n_channels=n_channels,
@@ -253,9 +257,7 @@ class SimulationParams:
             save_mode=save_mode,
             persist=bool(persist),
             ml_dataset_path=(
-                _resolve_path(ml_dataset_path)
-                if ml_dataset_path is not None
-                else None
+                _resolve_path(ml_dataset_path) if ml_dataset_path is not None else None
             ),
             inject_serendipitous=inject_serendipitous,
             remote=remote,
@@ -285,9 +287,7 @@ class SimulationParams:
             external_header_overrides=external_header_overrides,
             ms_export=bool(ms_export),
             ms_export_dir=(
-                _resolve_path(ms_export_dir)
-                if ms_export_dir is not None
-                else None
+                _resolve_path(ms_export_dir) if ms_export_dir is not None else None
             ),
             ms_save_mode=str(ms_save_mode),
         )
@@ -331,12 +331,15 @@ def _json_safe(value: Any) -> Any:
         return str(value)
     return value
 
+
 # Progress emitter functions moved to services.utils
 
 
-def _get_client_from_backend(compute_backend: Optional["ComputationBackend"]) -> Optional["Client"]:
+def _get_client_from_backend(
+    compute_backend: Optional["ComputationBackend"],
+) -> Optional["Client"]:
     """Extract Dask client from computation backend for backward compatibility.
-    
+
     TODO: Update skymodels to use ComputationBackend directly.
     """
     if compute_backend is None:
@@ -414,7 +417,10 @@ def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
         "raw_single_cube_gb": float(float32_gb),
         "raw_complex_cube_gb": float(complex64_gb),
         "estimated_standard_output_gb": float(estimated_standard_output_gb),
-        "note": "Raw uncompressed estimate. Actual NPZ/HDF5 output can be smaller due to compression.",
+        "note": (
+            "Raw uncompressed estimate. "
+            "Actual NPZ/HDF5 output can be smaller due to compression."
+        ),
     }
 
 
@@ -508,7 +514,9 @@ def generate_background_cube(
     return cube
 
 
-def _channel_first_to_datacube_layout(cube: np.ndarray, datacube_array: Any) -> np.ndarray:
+def _channel_first_to_datacube_layout(
+    cube: np.ndarray, datacube_array: Any
+) -> np.ndarray:
     """Match a channel-first cube to the current datacube array layout."""
     datacube_shape = tuple(datacube_array.shape)
     if datacube_shape[0] == cube.shape[0]:
@@ -589,7 +597,7 @@ def _create_sky_model(
     handler = source_type_handlers.get(source_type)
     if handler is None:
         raise ValueError(f"Unknown source type: {source_type}")
-    
+
     return handler()
 
 
@@ -745,19 +753,23 @@ def generate_clean_cube(
             # For other source types, this should be provided
             if params.source_type == "point":
                 redshift = 0.0
-                log("No redshift or rest_frequency provided, using default redshift=0 for point source")
+                log(
+                    "No redshift or rest_frequency provided, "
+                    "using default redshift=0 for point source"
+                )
             else:
                 raise ValueError(
                     "Either 'redshift' or 'rest_frequency' must be provided. "
-                    f"Cannot compute redshift without rest frequency for source type '{params.source_type}'."
+                    "Cannot compute redshift without rest frequency "
+                    f"for source type '{params.source_type}'."
                 )
-        
+
         if rest_frequency is not None:
             if isinstance(rest_frequency, (np.ndarray, list)):
                 rest_frequency = np.sort(np.array(rest_frequency))[0]
             rest_frequency = rest_frequency * U.GHz
             redshift = uas.compute_redshift(rest_frequency, source_freq)
-    
+
     # Compute rest_frequency from redshift if not already set
     # Check if rest_frequency is None or hasn't been converted to a Quantity yet
     if not is_external_model and not isinstance(rest_frequency, U.Quantity):
@@ -853,13 +865,9 @@ def generate_clean_cube(
 
     if isinstance(line_names, (list, np.ndarray)):
         for line_name, line_flux in zip(line_names, line_fluxes):
-            log(
-                f"Simulating Line {line_name} Flux: {line_flux:.3e} at z {redshift}"
-            )
+            log(f"Simulating Line {line_name} Flux: {line_flux:.3e} at z {redshift}")
     elif line_names is not None:
-        log(
-            f"Simulating Line {line_names} Flux: {line_fluxes[0]} at z {redshift}"
-        )
+        log(f"Simulating Line {line_names} Flux: {line_fluxes[0]} at z {redshift}")
 
     if remote:
         print(f"Simulating Continum Flux: {np.mean(continum):.2e}")
@@ -896,7 +904,7 @@ def generate_clean_cube(
     log(
         "Source Position (x, y): "
         f"({pos_x:.2f}, {pos_y:.2f}) with offsets "
-        f"({params.source_offset_x_arcsec:.2f}\", {params.source_offset_y_arcsec:.2f}\")"
+        f'({params.source_offset_x_arcsec:.2f}", {params.source_offset_y_arcsec:.2f}")'
     )
 
     # Get client from backend if available (for backward compatibility with skymodels)
@@ -918,10 +926,7 @@ def generate_clean_cube(
             target_wcs=wcs,
             channel_frequencies_hz=(
                 central_freq.to(U.Hz).value
-                + (
-                    np.arange(n_channels, dtype=float)
-                    - (float(n_channels) - 1.0) / 2.0
-                )
+                + (np.arange(n_channels, dtype=float) - (float(n_channels) - 1.0) / 2.0)
                 * delta_freq.to(U.Hz).value
             ),
         )
@@ -988,7 +993,7 @@ def generate_clean_cube(
             f"level={params.background_level:.2f}, "
             f"total_flux={float(np.sum(background_cube)):.3e} Jy"
         )
-    
+
     # Extract fwhm_x, fwhm_y, angle for parameter writing (if gaussian)
     if params.source_type == "gaussian":
         fwhm_x = getattr(model, "fwhm_x", None)
@@ -1043,9 +1048,7 @@ def generate_clean_cube(
     line_flux_magnitudes = np.abs(np.asarray(line_fluxes, dtype=float))
     nonzero_line_fluxes = line_flux_magnitudes[line_flux_magnitudes > 0]
     min_line_flux = (
-        float(np.min(nonzero_line_fluxes))
-        if nonzero_line_fluxes.size > 0
-        else 0.0
+        float(np.min(nonzero_line_fluxes)) if nonzero_line_fluxes.size > 0 else 0.0
     )
     sim_params_payload = {
         "sim_params_path": os.path.join(output_dir_abs, f"sim_params_{params.idx}.txt"),
@@ -1140,12 +1143,12 @@ def generate_clean_cube(
             )
         elif params.cont_sens is not None and params.cont_sens > 0.0:
             effective_snr = 5.0
-            log(
-                "Auto-derived SNR fallback from metadata continuum sensitivity: 5.000"
-            )
+            log("Auto-derived SNR fallback from metadata continuum sensitivity: 5.000")
         else:
             effective_snr = 1.3
-            log("Falling back to default SNR=1.3 because auto-derivation was not possible")
+            log(
+                "Falling back to default SNR=1.3 because auto-derivation was not possible"
+            )
     else:
         effective_snr = float(effective_snr)
 
@@ -1240,12 +1243,15 @@ def simulate_observation(
     """Run the interferometric observation stage from a prepared clean cube."""
     per_config_results = []
     total_configs = max(
-        len(clean_cube_stage.interferometer_runs) + len(clean_cube_stage.total_power_runs),
+        len(clean_cube_stage.interferometer_runs)
+        + len(clean_cube_stage.total_power_runs),
         1,
     )
     progress_index = 0
 
-    for config_index, interferometer_kwargs in enumerate(clean_cube_stage.interferometer_runs):
+    for config_index, interferometer_kwargs in enumerate(
+        clean_cube_stage.interferometer_runs
+    ):
         interferometer = uin.Interferometer(
             backend=compute_backend,
             robust=robust,
@@ -1253,10 +1259,12 @@ def simulate_observation(
             **interferometer_kwargs,
         )
         if interferometer_progress_callback is not None:
+
             def scaled_progress(progress: int, *, idx=progress_index):
                 base = idx / total_configs
                 scaled = int(round((base + (progress / 100.0) / total_configs) * 100))
                 interferometer_progress_callback(scaled)
+
             interferometer.progress_signal.connect(scaled_progress)
         config_result = interferometer.run_interferometric_sim()
         config_result["config_name"] = interferometer_kwargs.get("config_name")
@@ -1269,7 +1277,8 @@ def simulate_observation(
         int_results = uin.combine_interferometric_results(
             per_config_results,
             config_weights=[
-                max(float(run["integration_time"]), 0.0) for run in clean_cube_stage.interferometer_runs
+                max(float(run["integration_time"]), 0.0)
+                for run in clean_cube_stage.interferometer_runs
             ],
         )
 
@@ -1310,11 +1319,7 @@ def simulate_observation(
         measurement_results.update(int_results)
     if tp_results is not None:
         measurement_results.update(
-            {
-                key: value
-                for key, value in tp_results.items()
-                if key.startswith("tp_")
-            }
+            {key: value for key, value in tp_results.items() if key.startswith("tp_")}
         )
     return measurement_results
 
@@ -1333,6 +1338,7 @@ def image_products(
     )
     simulation_results.update(products)
     return simulation_results
+
 
 def export_results(
     params: SimulationParams,
@@ -1360,7 +1366,9 @@ def export_results(
     if persist_outputs:
         if clean_cube_stage.sim_output_dir is not None:
             antenna_config_paths = []
-            for index, observation_config in enumerate(clean_cube_stage.observation_plan["configs"]):
+            for index, observation_config in enumerate(
+                clean_cube_stage.observation_plan["configs"]
+            ):
                 if len(clean_cube_stage.observation_plan["configs"]) == 1:
                     output_dir = clean_cube_stage.sim_output_dir
                     output_name = "antenna.cfg"
@@ -1457,8 +1465,10 @@ def export_results(
         log("Skipping on-disk simulation exports (pure Python mode)")
 
     visibility_table = exported_results.get("visibility_table")
-    _ms_mode = params.ms_save_mode if params.ms_save_mode != "none" else (
-        "msv2" if params.ms_export else "none"
+    _ms_mode = (
+        params.ms_save_mode
+        if params.ms_save_mode != "none"
+        else ("msv2" if params.ms_export else "none")
     )
     if _ms_mode != "none":
         if visibility_table is None:
@@ -1473,10 +1483,13 @@ def export_results(
         _base = os.path.join(_out_dir, f"{params.project_name}_{params.idx}")
         if _ms_mode in ("npz", "both"):
             vis_npz_path = _base + "_vis.npz"
-            np.savez_compressed(vis_npz_path, **{
-                k: np.asarray(v) if hasattr(v, "__len__") else v
-                for k, v in visibility_table.items()
-            })
+            np.savez_compressed(
+                vis_npz_path,
+                **{
+                    k: np.asarray(v) if hasattr(v, "__len__") else v
+                    for k, v in visibility_table.items()
+                },
+            )
             exported_results["vis_npz_path"] = vis_npz_path
         if _ms_mode in ("msv2", "both"):
             ms_path = (
@@ -1575,9 +1588,5 @@ def run_simulation(
     else:
         log("Finished")
     stop = time.time()
-    log(
-        "Execution took {} seconds".format(
-            strftime("%H:%M:%S", gmtime(stop - start))
-        )
-    )
+    log("Execution took {} seconds".format(strftime("%H:%M:%S", gmtime(stop - start))))
     return exported_results

@@ -18,7 +18,7 @@ from app.core.config import settings
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from database.startup import initialize_database_on_startup
+from database.startup import initialize_database_on_startup  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

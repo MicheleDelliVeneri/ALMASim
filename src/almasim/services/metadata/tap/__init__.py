@@ -1,4 +1,5 @@
 """TAP (Table Access Protocol) service for ALMA metadata queries."""
+
 from .service import (
     get_tap_service,
     search_with_retry,
@@ -38,4 +39,3 @@ __all__ = [
     "query_products",
     "load_metadata",
 ]
-

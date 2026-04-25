@@ -1,4 +1,5 @@
 """Serendipitous sources utilities."""
+
 import math
 import numpy as np
 from typing import Optional, Any
@@ -244,7 +245,9 @@ def insert_serendipitous(
         datacube.ra, datacube.dec, datacube.spectral_centre, 0
     )
     # get a mininum separation based on spatial dimensions
-    sep_x, sep_z = np.random.randint(0, int(xy_radius)), np.random.randint(0, int(z_radius))
+    sep_x, sep_z = np.random.randint(0, int(xy_radius)), np.random.randint(
+        0, int(z_radius)
+    )
     # get the position of the first line of the central source
     pos_z = pos_zs[0]
     # get maximum continum value
@@ -281,7 +284,9 @@ def insert_serendipitous(
     params_handle = open(sim_params_path, "a") if sim_params_path is not None else None
     try:
         if params_handle is not None:
-            params_handle.write("\n Injected {} serendipitous sources\n".format(n_sources))
+            params_handle.write(
+                "\n Injected {} serendipitous sources\n".format(n_sources)
+            )
 
         for c_id, choords in enumerate(sample_coords):
             n_line = n_lines[c_id]
@@ -340,4 +345,3 @@ def insert_serendipitous(
         if params_handle is not None:
             params_handle.close()
     return datacube
-

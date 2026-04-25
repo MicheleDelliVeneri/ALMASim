@@ -1,9 +1,9 @@
 """Physically-motivated thermal noise helpers for ALMA simulations."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 import numpy as np
-
 
 K_B = 1.380649e-23
 JY = 1.0e-26
@@ -21,7 +21,9 @@ class NoiseModelConfig:
     n_polarizations: int = 2
 
 
-def estimate_receiver_temperature_k(freqs_hz: np.ndarray, receiver_model: str = "alma") -> np.ndarray:
+def estimate_receiver_temperature_k(
+    freqs_hz: np.ndarray, receiver_model: str = "alma"
+) -> np.ndarray:
     """Estimate receiver temperature with a coarse ALMA band approximation."""
     freqs_ghz = np.asarray(freqs_hz, dtype=float) / 1e9
     trx = np.full_like(freqs_ghz, 45.0, dtype=float)
@@ -81,7 +83,9 @@ def compute_channel_noise(
     area_m2 = np.pi * (antenna_diameter_m / 2.0) ** 2
     a_eff = max(area_m2 * config.aperture_efficiency, 1e-6)
     sefd_jy = (2.0 * K_B * tsys / a_eff) / JY
-    denominator = np.sqrt(config.n_polarizations * n_baselines * bandwidth_hz * integration_s)
+    denominator = np.sqrt(
+        config.n_polarizations * n_baselines * bandwidth_hz * integration_s
+    )
     return sefd_jy / np.clip(denominator, 1e-6, None)
 
 
@@ -90,7 +94,7 @@ def calibrate_noise_profile(
     *,
     reference_noise: float,
 ) -> np.ndarray:
-    """Scale a per-channel profile to preserve the repo's existing noise amplitude convention."""
+    """Scale a per-channel profile to preserve the existing noise amplitude convention."""
     raw_noise_profile = np.asarray(raw_noise_profile, dtype=float)
     reference_noise = max(float(reference_noise), 0.0)
     median = float(np.median(raw_noise_profile)) if raw_noise_profile.size else 0.0

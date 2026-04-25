@@ -1,5 +1,4 @@
 """Unit tests for TNG snapshot functions."""
-import pytest
 
 from almasim.services.astro.tng import redshift_to_snapshot
 
@@ -26,5 +25,3 @@ def test_redshift_to_snapshot_intermediate():
     """Test snapshot lookup for intermediate redshift."""
     snapshot = redshift_to_snapshot(0.5)
     assert snapshot in range(50, 99)  # Should be between z=1 and z=0
-
-

@@ -73,7 +73,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-improvement",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Fail with a non-zero exit code if the restored cube does not improve on the dirty cube.",
+        help=(
+            "Fail with a non-zero exit code if the restored cube does not "
+            "improve on the dirty cube."
+        ),
     )
     return parser
 
@@ -116,7 +119,9 @@ def convolve_cube_with_beam(
         )
         dirty = np.real(np.fft.ifft2(dirty_fft)).astype(np.float32)
         if noise_std > 0.0:
-            dirty = dirty + rng.normal(0.0, noise_std, size=dirty.shape).astype(np.float32)
+            dirty = dirty + rng.normal(0.0, noise_std, size=dirty.shape).astype(
+                np.float32
+            )
         dirty_cube[channel] = dirty
     return dirty_cube
 

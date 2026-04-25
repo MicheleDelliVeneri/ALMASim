@@ -1,4 +1,5 @@
 """Baseline preparation and management for interferometry."""
+
 from typing import Tuple
 import numpy as np
 
@@ -7,8 +8,19 @@ def prepare_baselines(
     Nant: int,
     nH: int,
     Hcov: list[float],
-) -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
-           np.ndarray, np.ndarray, list, np.ndarray, np.ndarray, Tuple[int, int]]:
+) -> Tuple[
+    int,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    list,
+    np.ndarray,
+    np.ndarray,
+    Tuple[int, int],
+]:
     """
     Prepare baselines for an interferometer array.
 
@@ -33,7 +45,7 @@ def prepare_baselines(
         raise ValueError("Number of hour angle samples must be at least 1")
     if len(Hcov) < 2:
         raise ValueError("Hour angle coverage must have [start, end]")
-    
+
     Nbas = Nant * (Nant - 1) // 2
     NBmax = Nbas
 
@@ -73,14 +85,14 @@ def prepare_baselines(
 def set_noise(noise: float, Noise: np.ndarray) -> np.ndarray:
     """
     Set noise values for baselines.
-    
+
     Parameters
     ----------
     noise : float
         Noise standard deviation
     Noise : np.ndarray
         Array to fill with noise values (complex)
-        
+
     Returns
     -------
     np.ndarray
@@ -89,10 +101,9 @@ def set_noise(noise: float, Noise: np.ndarray) -> np.ndarray:
     if noise < 0:
         raise ValueError("Noise must be non-negative")
     shape = Noise.shape
-    Noise[:] = (
-        np.random.normal(loc=0.0, scale=noise, size=shape)
-        + 1.0j * np.random.normal(loc=0.0, scale=noise, size=shape)
-    )
+    Noise[:] = np.random.normal(
+        loc=0.0, scale=noise, size=shape
+    ) + 1.0j * np.random.normal(loc=0.0, scale=noise, size=shape)
     return Noise
 
 
@@ -110,7 +121,7 @@ def set_baselines(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Set baseline vectors and u-v coordinates.
-    
+
     Parameters
     ----------
     Nbas : int
@@ -131,7 +142,7 @@ def set_baselines(
         Hour angle [sin(H), cos(H)]
     wavelength : list[float]
         Wavelengths [min, max, mean]
-        
+
     Returns
     -------
     tuple
@@ -141,20 +152,20 @@ def set_baselines(
         raise ValueError("wavelength must have at least 3 elements")
     if len(trlat) < 2 or len(trdec) < 2:
         raise ValueError("trlat and trdec must have at least 2 elements")
-    
+
     mean_wavelength = wavelength[2]
-    
+
     for currBas in range(Nbas):
         n1, n2 = antnum[currBas]
-        
+
         # Calculate baseline vector components
         dx = antPos[n2][0] - antPos[n1][0]
         dy = antPos[n2][1] - antPos[n1][1]
-        
+
         B[currBas, 0] = -dy * trlat[0] / mean_wavelength
         B[currBas, 1] = dx / mean_wavelength
         B[currBas, 2] = dy * trlat[1] / mean_wavelength
-        
+
         # Calculate UV coordinates
         u[currBas, :] = -(B[currBas, 0] * H[0] + B[currBas, 1] * H[1])
         v[currBas, :] = (
@@ -163,5 +174,3 @@ def set_baselines(
             + trdec[1] * B[currBas, 2]
         )
     return B, u, v
-
-

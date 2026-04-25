@@ -5,12 +5,12 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Observation, QueryResult, ScienceKeyword, ScientificCategory
+from .models import Observation, ScienceKeyword, ScientificCategory
 
 logger = logging.getLogger(__name__)
 
@@ -107,20 +107,24 @@ class CSVImporter:
                 band=band,
                 pwv=float(row["PWV"]) if row.get("PWV") else None,
                 schedblock_name=row.get("SB_name"),
-                velocity_resolution=float(row["Vel.res."])
-                if row.get("Vel.res.")
-                else None,
-                spatial_resolution=float(row["Ang.res."])
-                if row.get("Ang.res.")
-                else None,
+                velocity_resolution=(
+                    float(row["Vel.res."]) if row.get("Vel.res.") else None
+                ),
+                spatial_resolution=(
+                    float(row["Ang.res."]) if row.get("Ang.res.") else None
+                ),
                 s_fov=float(row["FOV"]) if row.get("FOV") else None,
                 t_resolution=None,  # Not in CSV
-                cont_sensitivity_bandwidth=float(row["Cont_sens_mJybeam"])
-                if row.get("Cont_sens_mJybeam")
-                else None,
-                sensitivity_10kms=float(row["Line_sens_10kms_mJybeam"])
-                if row.get("Line_sens_10kms_mJybeam")
-                else None,
+                cont_sensitivity_bandwidth=(
+                    float(row["Cont_sens_mJybeam"])
+                    if row.get("Cont_sens_mJybeam")
+                    else None
+                ),
+                sensitivity_10kms=(
+                    float(row["Line_sens_10kms_mJybeam"])
+                    if row.get("Line_sens_10kms_mJybeam")
+                    else None
+                ),
                 frequency=float(row["Freq"]) if row.get("Freq") else None,
                 bandwidth=float(row["Bandwidth"]) if row.get("Bandwidth") else None,
                 frequency_support=row.get("Freq.sup."),
@@ -167,7 +171,8 @@ class CSVImporter:
 
                 self.db.commit()
                 logger.info(
-                    f"Successfully imported {imported_count} observations from {csv_path.name}"
+                    "Successfully imported "
+                    f"{imported_count} observations from {csv_path.name}"
                 )
 
         except Exception as e:
@@ -209,7 +214,8 @@ class CSVImporter:
 
                 self.db.commit()
                 logger.info(
-                    f"Successfully imported {imported_count} observations from {json_path.name}"
+                    "Successfully imported "
+                    f"{imported_count} observations from {json_path.name}"
                 )
 
         except Exception as e:

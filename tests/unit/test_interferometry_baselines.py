@@ -1,4 +1,5 @@
 """Unit tests for interferometry baselines module."""
+
 import pytest
 import numpy as np
 
@@ -15,10 +16,10 @@ def test_prepare_baselines_basic():
     Nant = 4
     nH = 10
     Hcov = [0.0, 1.0]
-    
+
     result = prepare_baselines(Nant, nH, Hcov)
     Nbas, B, basnum, basidx, antnum, Gains, Noise, H, u, v, ravelDims = result
-    
+
     # Check number of baselines: Nant * (Nant - 1) / 2 = 4 * 3 / 2 = 6
     assert Nbas == 6
     assert B.shape == (6, 3)  # 3D baseline vector components (x, y, z)
@@ -41,11 +42,11 @@ def test_prepare_baselines_validation():
     # Too few antennas
     with pytest.raises(ValueError, match="at least 2"):
         prepare_baselines(1, 10, [0.0, 1.0])
-    
+
     # Too few hour angle samples
     with pytest.raises(ValueError, match="at least 1"):
         prepare_baselines(4, 0, [0.0, 1.0])
-    
+
     # Invalid hour angle coverage
     with pytest.raises(ValueError, match="must have"):
         prepare_baselines(4, 10, [0.0])
@@ -57,9 +58,9 @@ def test_prepare_baselines_antnum_pairs():
     Nant = 3
     nH = 5
     Hcov = [0.0, 1.0]
-    
+
     _, _, _, _, antnum, _, _, _, _, _, _ = prepare_baselines(Nant, nH, Hcov)
-    
+
     # For 3 antennas, we should have 3 baselines: (0,1), (0,2), (1,2)
     expected_pairs = {(0, 1), (0, 2), (1, 2)}
     actual_pairs = {tuple(antnum[i]) for i in range(3)}
@@ -72,9 +73,9 @@ def test_prepare_baselines_hour_angles():
     Nant = 2
     nH = 5
     Hcov = [0.0, 2.0]
-    
+
     _, _, _, _, _, _, _, H, _, _, _ = prepare_baselines(Nant, nH, Hcov)
-    
+
     # Check that H contains sin and cos
     assert len(H) == 2
     assert np.allclose(H[0], np.sin(np.linspace(0.0, 2.0, 5)))
@@ -86,9 +87,9 @@ def test_set_noise_basic():
     """Test setting noise values."""
     Noise = np.zeros((3, 5), dtype=np.complex64)
     noise_level = 0.1
-    
+
     result = set_noise(noise_level, Noise)
-    
+
     assert result is Noise  # Should modify in place
     assert np.std(Noise.real) > 0
     assert np.std(Noise.imag) > 0
@@ -100,7 +101,7 @@ def test_set_noise_basic():
 def test_set_noise_validation():
     """Test noise setting input validation."""
     Noise = np.zeros((3, 5), dtype=np.complex64)
-    
+
     with pytest.raises(ValueError, match="non-negative"):
         set_noise(-0.1, Noise)
 
@@ -119,13 +120,13 @@ def test_set_baselines_basic():
     trdec = [0.0, 1.0]
     H = [np.sin(np.linspace(0, 1, nH)), np.cos(np.linspace(0, 1, nH))]
     wavelength = [1.0, 1.1, 1.05]  # [min, max, mean]
-    
+
     # Fix B shape - it should be 2D, not 3D
     B = np.zeros((Nbas, 3), dtype=np.float32)
-    
+
     result = set_baselines(Nbas, antnum, B, u, v, antPos, trlat, trdec, H, wavelength)
     B_out, u_out, v_out = result
-    
+
     assert B_out is B
     assert u_out is u
     assert v_out is v
@@ -151,15 +152,15 @@ def test_set_baselines_validation():
     trlat = [0.0, 1.0]
     trdec = [0.0, 1.0]
     H = [np.sin(np.linspace(0, 1, nH)), np.cos(np.linspace(0, 1, nH))]
-    
+
     # Invalid wavelength
     with pytest.raises(ValueError, match="at least 3"):
         set_baselines(Nbas, antnum, B, u, v, antPos, trlat, trdec, H, [1.0, 1.1])
-    
+
     # Invalid trlat
     with pytest.raises(ValueError, match="at least 2"):
         set_baselines(Nbas, antnum, B, u, v, antPos, [0.0], trdec, H, [1.0, 1.1, 1.05])
-    
+
     # Invalid trdec
     with pytest.raises(ValueError, match="at least 2"):
         set_baselines(Nbas, antnum, B, u, v, antPos, trlat, [0.0], H, [1.0, 1.1, 1.05])
@@ -179,12 +180,11 @@ def test_set_baselines_uv_calculation():
     trdec = [0.0, 1.0]
     H = [np.array([0.0, 0.5, 1.0]), np.array([1.0, 0.866, 0.5])]  # sin, cos
     wavelength = [1.0, 1.1, 1.05]
-    
+
     set_baselines(Nbas, antnum, B, u, v, antPos, trlat, trdec, H, wavelength)
-    
+
     # B[0, 1] should be dx / wavelength = 100 / 1.05 ≈ 95.24
     assert np.isclose(B[0, 1], 100.0 / 1.05, rtol=1e-3)
     # u should depend on B and H
     assert u.shape == (1, 3)
     assert v.shape == (1, 3)
-

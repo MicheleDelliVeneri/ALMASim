@@ -5,34 +5,44 @@ import pytest
 
 casatools = pytest.importorskip("casatools", reason="casatools not installed")
 
-from almasim.services.products.ms_io import export_native_ms, read_native_ms
+from almasim.services.products.ms_io import (  # noqa: E402
+    export_native_ms,
+    read_native_ms,
+)
 
 # ---------------------------------------------------------------------------
 # Shared fixture — realistic, non-trivial sample data
 # ---------------------------------------------------------------------------
 
-NROWS = 6       # 3 baselines × 2 time samples
+NROWS = 6  # 3 baselines × 2 time samples
 NCORR = 1
 NCHAN = 8
 NANT = 3
 
 RNG = np.random.default_rng(42)
 
-_DATA = (RNG.standard_normal((NROWS, NCORR, NCHAN)) +
-         1j * RNG.standard_normal((NROWS, NCORR, NCHAN))).astype(np.complex64)
-_MODEL = (RNG.standard_normal((NROWS, NCORR, NCHAN)) +
-          1j * RNG.standard_normal((NROWS, NCORR, NCHAN))).astype(np.complex64)
+_DATA = (
+    RNG.standard_normal((NROWS, NCORR, NCHAN))
+    + 1j * RNG.standard_normal((NROWS, NCORR, NCHAN))
+).astype(np.complex64)
+_MODEL = (
+    RNG.standard_normal((NROWS, NCORR, NCHAN))
+    + 1j * RNG.standard_normal((NROWS, NCORR, NCHAN))
+).astype(np.complex64)
 _FLAG = RNG.integers(0, 2, (NROWS, NCORR, NCHAN), dtype=bool)
 _UVW = RNG.standard_normal((NROWS, 3))
 _TIME = np.linspace(5.0e9, 5.0e9 + 30.0, NROWS)
 _WEIGHT = np.abs(RNG.standard_normal((NROWS, NCORR))).astype(np.float32) + 0.1
 _SIGMA = (1.0 / np.sqrt(_WEIGHT)).astype(np.float32)
 _CHAN_FREQ = np.linspace(1.0e11, 1.007e11, NCHAN)
-_ANT_POS = np.array([
-    [0.0, 0.0, 0.0],
-    [200.0, 0.0, 0.0],
-    [100.0, 150.0, 0.0],
-], dtype=np.float64)
+_ANT_POS = np.array(
+    [
+        [0.0, 0.0, 0.0],
+        [200.0, 0.0, 0.0],
+        [100.0, 150.0, 0.0],
+    ],
+    dtype=np.float64,
+)
 _ANT_NAMES = ["DA41", "DA42", "DA43"]
 _RA = 1.2345
 _DEC = -0.6789
@@ -77,14 +87,25 @@ def ms(tmp_path_factory):
 # Directory structure
 # ---------------------------------------------------------------------------
 
+
 def test_ms_is_directory(ms):
     assert ms.is_dir()
 
 
-@pytest.mark.parametrize("subtable", [
-    "ANTENNA", "DATA_DESCRIPTION", "FIELD", "HISTORY",
-    "OBSERVATION", "POLARIZATION", "SOURCE", "SPECTRAL_WINDOW", "STATE",
-])
+@pytest.mark.parametrize(
+    "subtable",
+    [
+        "ANTENNA",
+        "DATA_DESCRIPTION",
+        "FIELD",
+        "HISTORY",
+        "OBSERVATION",
+        "POLARIZATION",
+        "SOURCE",
+        "SPECTRAL_WINDOW",
+        "STATE",
+    ],
+)
 def test_subtable_exists(ms, subtable):
     assert (ms / subtable).is_dir()
 
@@ -92,6 +113,7 @@ def test_subtable_exists(ms, subtable):
 # ---------------------------------------------------------------------------
 # Main table — row count, column presence, keywords
 # ---------------------------------------------------------------------------
+
 
 def test_main_nrows(ms):
     tb = casatools.table()
@@ -107,13 +129,33 @@ def test_main_ms_version_keyword(ms):
     tb.close()
 
 
-@pytest.mark.parametrize("col", [
-    "TIME", "TIME_CENTROID", "INTERVAL", "EXPOSURE",
-    "ANTENNA1", "ANTENNA2", "FEED1", "FEED2",
-    "DATA_DESC_ID", "FIELD_ID", "ARRAY_ID", "OBSERVATION_ID",
-    "PROCESSOR_ID", "SCAN_NUMBER", "STATE_ID", "FLAG_ROW",
-    "UVW", "DATA", "MODEL_DATA", "FLAG", "WEIGHT", "SIGMA",
-])
+@pytest.mark.parametrize(
+    "col",
+    [
+        "TIME",
+        "TIME_CENTROID",
+        "INTERVAL",
+        "EXPOSURE",
+        "ANTENNA1",
+        "ANTENNA2",
+        "FEED1",
+        "FEED2",
+        "DATA_DESC_ID",
+        "FIELD_ID",
+        "ARRAY_ID",
+        "OBSERVATION_ID",
+        "PROCESSOR_ID",
+        "SCAN_NUMBER",
+        "STATE_ID",
+        "FLAG_ROW",
+        "UVW",
+        "DATA",
+        "MODEL_DATA",
+        "FLAG",
+        "WEIGHT",
+        "SIGMA",
+    ],
+)
 def test_main_column_exists(ms, col):
     tb = casatools.table()
     tb.open(str(ms), nomodify=True)
@@ -124,6 +166,7 @@ def test_main_column_exists(ms, col):
 # ---------------------------------------------------------------------------
 # Main table — data round-trip fidelity
 # ---------------------------------------------------------------------------
+
 
 def test_main_time(ms):
     tb = casatools.table()
@@ -210,16 +253,31 @@ def test_main_interval_exposure(ms):
 def test_main_index_columns_zero(ms):
     tb = casatools.table()
     tb.open(str(ms), nomodify=True)
-    for col in ("FEED1", "FEED2", "DATA_DESC_ID", "FIELD_ID", "ARRAY_ID", "OBSERVATION_ID", "STATE_ID"):
-        np.testing.assert_array_equal(tb.getcol(col), np.zeros(NROWS, dtype=np.int32), err_msg=col)
-    np.testing.assert_array_equal(tb.getcol("SCAN_NUMBER"), np.ones(NROWS, dtype=np.int32))
-    np.testing.assert_array_equal(tb.getcol("PROCESSOR_ID"), np.full(NROWS, -1, dtype=np.int32))
+    for col in (
+        "FEED1",
+        "FEED2",
+        "DATA_DESC_ID",
+        "FIELD_ID",
+        "ARRAY_ID",
+        "OBSERVATION_ID",
+        "STATE_ID",
+    ):
+        np.testing.assert_array_equal(
+            tb.getcol(col), np.zeros(NROWS, dtype=np.int32), err_msg=col
+        )
+    np.testing.assert_array_equal(
+        tb.getcol("SCAN_NUMBER"), np.ones(NROWS, dtype=np.int32)
+    )
+    np.testing.assert_array_equal(
+        tb.getcol("PROCESSOR_ID"), np.full(NROWS, -1, dtype=np.int32)
+    )
     tb.close()
 
 
 # ---------------------------------------------------------------------------
 # ANTENNA subtable
 # ---------------------------------------------------------------------------
+
 
 def test_antenna_nrows(ms):
     tb = casatools.table()
@@ -256,6 +314,7 @@ def test_antenna_dish_diameter(ms):
 # SPECTRAL_WINDOW subtable
 # ---------------------------------------------------------------------------
 
+
 def test_spw_nchan(ms):
     tb = casatools.table()
     tb.open(str(ms / "SPECTRAL_WINDOW"), nomodify=True)
@@ -291,6 +350,7 @@ def test_spw_total_bandwidth(ms):
 # POLARIZATION subtable
 # ---------------------------------------------------------------------------
 
+
 def test_polarization(ms):
     tb = casatools.table()
     tb.open(str(ms / "POLARIZATION"), nomodify=True)
@@ -304,6 +364,7 @@ def test_polarization(ms):
 # DATA_DESCRIPTION subtable
 # ---------------------------------------------------------------------------
 
+
 def test_data_description(ms):
     tb = casatools.table()
     tb.open(str(ms / "DATA_DESCRIPTION"), nomodify=True)
@@ -316,6 +377,7 @@ def test_data_description(ms):
 # ---------------------------------------------------------------------------
 # FIELD subtable
 # ---------------------------------------------------------------------------
+
 
 def test_field(ms):
     tb = casatools.table()
@@ -331,6 +393,7 @@ def test_field(ms):
 # ---------------------------------------------------------------------------
 # OBSERVATION subtable
 # ---------------------------------------------------------------------------
+
 
 def test_observation(ms):
     tb = casatools.table()
@@ -348,6 +411,7 @@ def test_observation(ms):
 # SOURCE subtable
 # ---------------------------------------------------------------------------
 
+
 def test_source(ms):
     tb = casatools.table()
     tb.open(str(ms / "SOURCE"), nomodify=True)
@@ -363,6 +427,7 @@ def test_source(ms):
 # STATE subtable
 # ---------------------------------------------------------------------------
 
+
 def test_state(ms):
     tb = casatools.table()
     tb.open(str(ms / "STATE"), nomodify=True)
@@ -377,6 +442,7 @@ def test_state(ms):
 # HISTORY subtable
 # ---------------------------------------------------------------------------
 
+
 def test_history(ms):
     tb = casatools.table()
     tb.open(str(ms / "HISTORY"), nomodify=True)
@@ -389,6 +455,7 @@ def test_history(ms):
 # ---------------------------------------------------------------------------
 # read_native_ms round-trip — via ALMASim's own reader
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def vt_roundtrip(ms):
@@ -436,7 +503,9 @@ def test_roundtrip_antenna_names(vt_roundtrip):
 
 
 def test_roundtrip_antenna_positions(vt_roundtrip):
-    np.testing.assert_allclose(vt_roundtrip["antenna_positions_m"], _ANT_POS, rtol=1e-10)
+    np.testing.assert_allclose(
+        vt_roundtrip["antenna_positions_m"], _ANT_POS, rtol=1e-10
+    )
 
 
 def test_roundtrip_field_direction(vt_roundtrip):

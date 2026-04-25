@@ -1,5 +1,5 @@
 """Component tests for sky model integration."""
-import pytest
+
 import numpy as np
 from martini import DataCube
 import astropy.units as U
@@ -13,10 +13,18 @@ class InlineClient:
     def compute(self, tasks):
         if isinstance(tasks, list):
             return [
-                task.compute(scheduler="synchronous") if hasattr(task, "compute") else task
+                (
+                    task.compute(scheduler="synchronous")
+                    if hasattr(task, "compute")
+                    else task
+                )
                 for task in tasks
             ]
-        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
+        return (
+            tasks.compute(scheduler="synchronous")
+            if hasattr(tasks, "compute")
+            else tasks
+        )
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]
@@ -38,7 +46,7 @@ def test_pointlike_model_integration():
     line_fluxes = np.array([1.0, 0.5])
     pos_z = [10, 11]
     fwhm_z = [2.0, 2.0]
-    
+
     model = skymodels.PointlikeSkyModel(
         datacube=datacube,
         continuum=continuum,
@@ -49,7 +57,7 @@ def test_pointlike_model_integration():
         fwhm_z=fwhm_z,
         n_chan=32,
     )
-    
+
     result = model.insert()
     assert result is not None
     array = result._array.to_value(result._array.unit)
@@ -72,7 +80,7 @@ def test_gaussian_model_integration():
     line_fluxes = np.array([1.0])
     pos_z = [10]
     fwhm_z = [2.0]
-    
+
     model = skymodels.GaussianSkyModel(
         datacube=datacube,
         continuum=continuum,
@@ -88,6 +96,6 @@ def test_gaussian_model_integration():
         n_chan=32,
         client=InlineClient(),
     )
-    
+
     result = model.insert()
     assert result is not None

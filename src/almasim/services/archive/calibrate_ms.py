@@ -24,7 +24,6 @@ from .unpack_ms import (
     find_existing_casa_data,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -48,17 +47,24 @@ def _safe_extract_tar(tar_path: Path, destination: Path) -> list[Path]:
     return extracted
 
 
-def find_calibration_directory(input_root: str | os.PathLike[str], asdm_uid: str | None = None) -> Path:
+def find_calibration_directory(
+    input_root: str | os.PathLike[str], asdm_uid: str | None = None
+) -> Path:
     """Find the calibration directory matching the requested ALMA delivery."""
     input_path = Path(input_root).expanduser().resolve()
     candidates = [path for path in input_path.rglob("calibration") if path.is_dir()]
     if asdm_uid is not None:
-        candidates = [path for path in candidates if (path / f"{asdm_uid}.ms.calapply.txt").is_file()]
+        candidates = [
+            path
+            for path in candidates
+            if (path / f"{asdm_uid}.ms.calapply.txt").is_file()
+        ]
     if not candidates:
         raise RuntimeError(f"No calibration directory found under {input_path}")
     if len(candidates) > 1 and asdm_uid is None:
         raise RuntimeError(
-            "Found more than one calibration directory. Pass asdm_uid to select a specific execution block."
+            "Found more than one calibration directory. "
+            "Pass asdm_uid to select a specific execution block."
         )
     return sorted(candidates)[0]
 
@@ -91,14 +97,20 @@ def find_raw_ms_directories(
 def _parse_applycal_calls(calapply_path: Path) -> list[dict[str, Any]]:
     """Parse delivered ``applycal(...)`` lines into keyword dictionaries."""
     calls: list[dict[str, Any]] = []
-    tree = ast.parse(calapply_path.read_text(encoding="utf-8"), filename=str(calapply_path))
+    tree = ast.parse(
+        calapply_path.read_text(encoding="utf-8"), filename=str(calapply_path)
+    )
     for node in tree.body:
         if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
             continue
         call = node.value
         if not isinstance(call.func, ast.Name) or call.func.id != "applycal":
             continue
-        kwargs = {keyword.arg: ast.literal_eval(keyword.value) for keyword in call.keywords if keyword.arg}
+        kwargs = {
+            keyword.arg: ast.literal_eval(keyword.value)
+            for keyword in call.keywords
+            if keyword.arg
+        }
         calls.append(kwargs)
 
     if not calls:
@@ -179,19 +191,25 @@ def apply_delivered_calibration(
     logger_fn: LogFn = None,
 ) -> Path:
     """Run delivered ``applycal`` commands against one raw MS."""
-    working_ms = _prepare_working_directory(raw_ms, calibration_dir, working_dir, overwrite=overwrite)
+    working_ms = _prepare_working_directory(
+        raw_ms, calibration_dir, working_dir, overwrite=overwrite
+    )
     calapply_path = calibration_dir / f"{working_ms.name}.calapply.txt"
     if not calapply_path.is_file():
         raise RuntimeError(f"Cannot find calibration apply file: {calapply_path}")
 
     calls = _parse_applycal_calls(calapply_path)
-    _emit(logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}")
+    _emit(
+        logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}"
+    )
     current_dir = Path.cwd()
     try:
         os.chdir(working_dir)
         for kwargs in calls:
             kwargs["vis"] = working_ms.name
-            kwargs["intent"] = _normalize_intent(str(kwargs.get("intent", "")), working_ms)
+            kwargs["intent"] = _normalize_intent(
+                str(kwargs.get("intent", "")), working_ms
+            )
             applycal(**kwargs)
     finally:
         os.chdir(current_dir)
@@ -235,7 +253,10 @@ def split_calibrated_science_ms(
 
     spws = science_spws(calibrated_working_ms)
     logger.info("Splitting science SPWs for %s: %s", calibrated_working_ms, spws)
-    _emit(logger_fn, f"Splitting calibrated science SPWs for {calibrated_working_ms.name}: {spws}")
+    _emit(
+        logger_fn,
+        f"Splitting calibrated science SPWs for {calibrated_working_ms.name}: {spws}",
+    )
     mstransform(
         vis=str(calibrated_working_ms),
         outputvis=str(output_ms),
@@ -257,15 +278,25 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return False
 
 
-def _remove_tree_after_success(path: str | os.PathLike[str], protected: list[Path], logger_fn: LogFn = None) -> None:
+def _remove_tree_after_success(
+    path: str | os.PathLike[str], protected: list[Path], logger_fn: LogFn = None
+) -> None:
     target = Path(path).expanduser().resolve()
     if not target.exists():
         return
     for protected_path in protected:
         protected_path = protected_path.resolve()
         if target == protected_path or _is_relative_to(protected_path, target):
-            logger.warning("Skipping cleanup of %s because it contains protected output %s", target, protected_path)
-            _emit(logger_fn, f"Skipping cleanup of {target}; it contains protected output {protected_path}")
+            logger.warning(
+                "Skipping cleanup of %s because it contains protected output %s",
+                target,
+                protected_path,
+            )
+            _emit(
+                logger_fn,
+                f"Skipping cleanup of {target}; "
+                f"it contains protected output {protected_path}",
+            )
             return
     shutil.rmtree(target)
     _emit(logger_fn, f"Removed intermediate data: {target}")
@@ -290,7 +321,9 @@ def create_calibrated_measurement_sets(
 
     casa_data = find_existing_casa_data(input_path, output_path, casa_data_root)
     configure_casa_environment(output_path, casa_data)
-    ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
+    ensure_casa_runtime_data(
+        casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn
+    )
 
     from casatasks import applycal, mstransform
 
@@ -319,9 +352,13 @@ def create_calibrated_measurement_sets(
     if clean_intermediate:
         protected = [*calibrated_mss, output_path]
         _remove_tree_after_success(raw_ms_root, protected, logger_fn=logger_fn)
-        _remove_tree_after_success(output_path / "working", protected, logger_fn=logger_fn)
+        _remove_tree_after_success(
+            output_path / "working", protected, logger_fn=logger_fn
+        )
         if original_data_root is not None:
-            _remove_tree_after_success(original_data_root, protected, logger_fn=logger_fn)
+            _remove_tree_after_success(
+                original_data_root, protected, logger_fn=logger_fn
+            )
 
     return calibrated_mss
 
@@ -338,4 +375,6 @@ def restore_calibrated_measurement_sets(
     ``hifa_restoredata``. This wrapper therefore creates the calibrated MS by
     applying the delivered calibration tables and splitting science SPWs.
     """
-    return create_calibrated_measurement_sets(input_root, raw_ms_root, output_root, **kwargs)
+    return create_calibrated_measurement_sets(
+        input_root, raw_ms_root, output_root, **kwargs
+    )

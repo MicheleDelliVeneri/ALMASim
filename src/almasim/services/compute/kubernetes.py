@@ -1,10 +1,12 @@
 """Kubernetes computation backend using dask-kubernetes."""
+
 from typing import Any, Callable, List, Optional, Dict
 
 try:
     from dask_kubernetes import KubeCluster
     from dask.distributed import Client
     from dask import delayed as dask_delayed
+
     KUBERNETES_AVAILABLE = True
 except ImportError:
     KUBERNETES_AVAILABLE = False
@@ -27,7 +29,7 @@ class KubernetesBackend(ComputationBackend):
         **kwargs: Dict[str, Any],
     ):
         """Initialize Kubernetes backend.
-        
+
         Parameters
         ----------
         namespace : str, optional
@@ -43,7 +45,8 @@ class KubernetesBackend(ComputationBackend):
         """
         if not KUBERNETES_AVAILABLE:
             raise ImportError(
-                "dask-kubernetes is not installed. Install it with: pip install dask-kubernetes"
+                "dask-kubernetes is not installed. "
+                "Install it with: pip install dask-kubernetes"
             )
 
         self.namespace = namespace
@@ -116,4 +119,3 @@ class KubernetesBackend(ComputationBackend):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.close()
-

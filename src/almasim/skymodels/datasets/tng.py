@@ -1,4 +1,5 @@
 """TNG dataset download utilities."""
+
 from __future__ import annotations
 
 import os
@@ -26,6 +27,7 @@ TNG_SIMULATION_URL = "http://www.tng-project.org/api/TNG100-1/files/simulation.h
 @dataclass
 class RemoteMachine:
     """Configuration for remote machine access."""
+
     host: str
     username: str
     ssh_key: Path
@@ -107,9 +109,10 @@ def download_tng_structure(
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(remote.host, username=remote.username, pkey=ssh_key)
-            cmd = f"wget -nv --content-disposition --header=API-Key:{api_key} -O {remote_file} {TNG_SIMULATION_URL}"
+            cmd = (
+                f"wget -nv --content-disposition --header=API-Key:{api_key} "
+                f"-O {remote_file} {TNG_SIMULATION_URL}"
+            )
             ssh.exec_command(cmd)
             ssh.close()
         return Path(remote_file)
-
-

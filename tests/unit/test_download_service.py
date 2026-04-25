@@ -1,7 +1,5 @@
 """Unit tests for the library-first download service."""
 
-from pathlib import Path
-
 from almasim.services.download import (
     DataProduct,
     download_products,

@@ -1,4 +1,5 @@
 """TAP service functions for querying ALMA metadata."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -42,13 +43,13 @@ class InclusionFilters:
     frequency_range: Optional[Tuple[float, float]] = None
     source_name: Optional[str] = None
     antenna_arrays: Optional[str] = None
-    array_type: Optional[List[str]] = None          # e.g. ['12m', '7m', 'TP']
+    array_type: Optional[List[str]] = None  # e.g. ['12m', '7m', 'TP']
     array_configuration: Optional[List[str]] = None  # e.g. ['C-1', 'C-2']
     angular_resolution_range: Optional[Tuple[float, float]] = None
     observation_date_range: Optional[Tuple[str, str]] = None
     qa2_status: Optional[List[str]] = None
     obs_type: Optional[List[str]] = None
-    proposal_id_prefix: Optional[List[str]] = None   # e.g. ['2016.', '2017.']
+    proposal_id_prefix: Optional[List[str]] = None  # e.g. ['2016.', '2017.']
     public_only: bool = True  # default: only query non-proprietary data
     science_only: bool = True  # default: only science observations
     exclude_mosaic: bool = True  # default: exclude mosaic observations
@@ -207,7 +208,7 @@ def query_all_targets(targets):
     """Query observations for all predefined targets and compile the results.
 
     Parameters:
-    targets (list of tuples): A list where each tuple contains (target_name, member_ous_uid).
+    targets (list of tuples): A list of tuples ``(target_name, member_ous_uid)``.
 
     Returns:
     pandas.DataFrame: A DataFrame containing the results for all queried targets.
@@ -323,7 +324,9 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
         conds.append(f"t_resolution BETWEEN {lo} AND {hi}")
 
     if f.frequency_range:
-        conds.append(f"frequency BETWEEN {f.frequency_range[0]} AND {f.frequency_range[1]}")
+        conds.append(
+            f"frequency BETWEEN {f.frequency_range[0]} AND {f.frequency_range[1]}"
+        )
 
     if f.proposal_id_prefix:
         prefix_clauses = [f"proposal_id LIKE '{p}%'" for p in f.proposal_id_prefix]

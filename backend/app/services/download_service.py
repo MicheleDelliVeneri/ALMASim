@@ -3,10 +3,8 @@
 import json
 import logging
 import threading
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import List, Optional
 
 from almasim.services.download import (
@@ -125,9 +123,11 @@ class DownloadStore:
 
         db = self._get_db()
         try:
-            rec = db.query(DownloadJobRecord).filter(
-                DownloadJobRecord.job_id == job_id
-            ).first()
+            rec = (
+                db.query(DownloadJobRecord)
+                .filter(DownloadJobRecord.job_id == job_id)
+                .first()
+            )
             if not rec:
                 return
 
@@ -139,7 +139,9 @@ class DownloadStore:
             rec.status = job.status
             rec.error = job.error
             rec.raw_measurement_sets = json.dumps(job.raw_measurement_sets)
-            rec.calibrated_measurement_sets = json.dumps(job.calibrated_measurement_sets)
+            rec.calibrated_measurement_sets = json.dumps(
+                job.calibrated_measurement_sets
+            )
             rec.manifest_path = job.manifest_path
             rec.updated_at = datetime.now()
 
@@ -176,9 +178,11 @@ class DownloadStore:
 
         db = self._get_db()
         try:
-            return db.query(DownloadJobRecord).order_by(
-                DownloadJobRecord.created_at.desc()
-            ).all()
+            return (
+                db.query(DownloadJobRecord)
+                .order_by(DownloadJobRecord.created_at.desc())
+                .all()
+            )
         finally:
             db.close()
 
@@ -189,11 +193,12 @@ class DownloadStore:
 
         db = self._get_db()
         try:
-            return db.query(DownloadJobRecord).options(
-                joinedload(DownloadJobRecord.files)
-            ).filter(
-                DownloadJobRecord.job_id == job_id
-            ).first()
+            return (
+                db.query(DownloadJobRecord)
+                .options(joinedload(DownloadJobRecord.files))
+                .filter(DownloadJobRecord.job_id == job_id)
+                .first()
+            )
         finally:
             db.close()
 
@@ -203,9 +208,11 @@ class DownloadStore:
 
         db = self._get_db()
         try:
-            rec = db.query(DownloadJobRecord).filter(
-                DownloadJobRecord.job_id == job_id
-            ).first()
+            rec = (
+                db.query(DownloadJobRecord)
+                .filter(DownloadJobRecord.job_id == job_id)
+                .first()
+            )
             if not rec:
                 return False
             db.delete(rec)
@@ -220,9 +227,11 @@ class DownloadStore:
 
         db = self._get_db()
         try:
-            rec = db.query(DownloadJobRecord).filter(
-                DownloadJobRecord.job_id == job_id
-            ).first()
+            rec = (
+                db.query(DownloadJobRecord)
+                .filter(DownloadJobRecord.job_id == job_id)
+                .first()
+            )
             if not rec:
                 return False
             for key, value in kwargs.items():
@@ -302,10 +311,14 @@ def run_download_job(
                 current_file.bytes_downloaded for current_file in current_job.files
             )
             current_job.files_completed = sum(
-                1 for current_file in current_job.files if current_file.status == "completed"
+                1
+                for current_file in current_job.files
+                if current_file.status == "completed"
             )
             current_job.files_failed = sum(
-                1 for current_file in current_job.files if current_file.status == "failed"
+                1
+                for current_file in current_job.files
+                if current_file.status == "failed"
             )
             current_job.updated_at = datetime.now()
 

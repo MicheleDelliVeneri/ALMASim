@@ -1,13 +1,14 @@
 """Base computation backend interface."""
+
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, Optional, TypeVar, Generic
+from typing import Any, Callable, List, TypeVar
 
 T = TypeVar("T")
 
 
 class ComputationBackend(ABC):
     """Abstract base class for computation backends.
-    
+
     This interface allows services to be backend-agnostic, supporting
     different execution environments (local, Dask, Slurm, Kubernetes).
     """
@@ -15,14 +16,14 @@ class ComputationBackend(ABC):
     @abstractmethod
     def scatter(self, data: Any, broadcast: bool = False) -> Any:
         """Scatter data to workers.
-        
+
         Parameters
         ----------
         data : Any
             Data to scatter to workers
         broadcast : bool, optional
             Whether to broadcast data to all workers (default: False)
-            
+
         Returns
         -------
         Any
@@ -33,14 +34,14 @@ class ComputationBackend(ABC):
     @abstractmethod
     def compute(self, tasks: Any, sync: bool = True) -> Any:
         """Compute tasks.
-        
+
         Parameters
         ----------
         tasks : Any
             Tasks to compute (can be a single task or list of tasks)
         sync : bool, optional
             Whether to wait for completion (default: True)
-            
+
         Returns
         -------
         Any
@@ -51,12 +52,12 @@ class ComputationBackend(ABC):
     @abstractmethod
     def gather(self, futures: Any) -> List[Any]:
         """Gather results from futures.
-        
+
         Parameters
         ----------
         futures : Any
             Futures or task references to gather results from
-            
+
         Returns
         -------
         List[Any]
@@ -67,12 +68,12 @@ class ComputationBackend(ABC):
     @abstractmethod
     def delayed(self, func: Callable) -> Callable:
         """Create a delayed version of a function.
-        
+
         Parameters
         ----------
         func : Callable
             Function to make delayed
-            
+
         Returns
         -------
         Callable
@@ -94,4 +95,3 @@ class ComputationBackend(ABC):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         pass
-

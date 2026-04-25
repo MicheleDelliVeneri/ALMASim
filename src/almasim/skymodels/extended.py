@@ -1,4 +1,5 @@
 """Extended (TNG) sky model implementation."""
+
 import os
 import numpy as np
 import astropy.units as U
@@ -47,9 +48,7 @@ def evaluate_pixel_spectrum(
         result.append(
             (
                 insertion_slice,
-                (spectral_model_spectra[mask] * weights[..., np.newaxis]).sum(
-                    axis=-2
-                ),
+                (spectral_model_spectra[mask] * weights[..., np.newaxis]).sum(axis=-2),
             )
         )
     return result
@@ -210,7 +209,7 @@ def insert_tng(
 
 class ExtendedSkyModel:
     """Extended (TNG) sky model wrapper."""
-    
+
     def __init__(
         self,
         datacube: Any,
@@ -227,7 +226,7 @@ class ExtendedSkyModel:
     ):
         """
         Initialize Extended sky model.
-        
+
         Parameters
         ----------
         datacube : Any
@@ -264,7 +263,7 @@ class ExtendedSkyModel:
         self.client = client
         self.update_progress = update_progress
         self.terminal = terminal
-    
+
     def insert(self) -> Any:
         """Insert extended source into datacube."""
         x_rot = np.random.randint(0, 360) * U.deg
@@ -308,7 +307,9 @@ class ExtendedSkyModel:
             else:
                 distance = distance * 1.5
             if self.terminal is not None:
-                self.terminal.add_log("Injecting source at distance {}".format(distance))
+                self.terminal.add_log(
+                    "Injecting source at distance {}".format(distance)
+                )
             M = insert_tng(
                 self.client,
                 self.update_progress,
@@ -332,5 +333,3 @@ class ExtendedSkyModel:
         if self.terminal is not None:
             self.terminal.add_log("Datacube generated, inserting source")
         return M.datacube
-
-

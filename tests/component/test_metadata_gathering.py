@@ -1,7 +1,7 @@
 """Component tests for metadata gathering functionality."""
+
 import pytest
 import pandas as pd
-from pathlib import Path
 
 from almasim.services.metadata.tap.queries import (
     query_science_types,
@@ -55,7 +55,7 @@ def test_load_metadata(test_data_dir):
     metadata_path = test_data_dir / "qso_metadata.csv"
     if not metadata_path.exists():
         pytest.skip(f"Metadata file not found at {metadata_path}")
-    
+
     df = load_metadata(metadata_path)
     assert isinstance(df, pd.DataFrame)
     assert len(df) > 0
@@ -68,9 +68,9 @@ def test_metadata_normalization(test_data_dir, tmp_path):
     metadata_path = test_data_dir / "qso_metadata.csv"
     if not metadata_path.exists():
         pytest.skip(f"Metadata file not found at {metadata_path}")
-    
+
     df = load_metadata(metadata_path)
-    
+
     # Check for key columns that should be present
     expected_columns = [
         "ALMA_source_name",
@@ -80,7 +80,6 @@ def test_metadata_normalization(test_data_dir, tmp_path):
         "Freq",
         "antenna_arrays",
     ]
-    
+
     for col in expected_columns:
         assert col in df.columns, f"Missing expected column: {col}"
-

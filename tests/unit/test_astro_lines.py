@@ -1,6 +1,6 @@
 """Unit tests for line emission functions."""
+
 import pytest
-from pathlib import Path
 
 from almasim.services.astro.lines import (
     read_line_emission_csv,
@@ -14,7 +14,7 @@ def test_read_line_emission_csv(main_dir):
     csv_path = main_dir / "brightnes" / "calibrated_lines.csv"
     if not csv_path.exists():
         pytest.skip(f"Line emission CSV not found at {csv_path}")
-    
+
     db = read_line_emission_csv(csv_path, sep=",")
     assert "Line" in db.columns
     assert "freq(GHz)" in db.columns
@@ -44,5 +44,3 @@ def test_compute_rest_frequency_from_redshift(main_dir):
     assert rest_freq > 0
     # Rest frequency should be higher than observed
     assert rest_freq > source_freq
-
-

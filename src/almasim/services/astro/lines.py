@@ -1,4 +1,5 @@
 """Line emission functions."""
+
 import os
 import numpy as np
 import pandas as pd
@@ -47,5 +48,3 @@ def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     line_name = freq_names[np.where(source_freqs == closest_freq)][0]
     rest_frequency = db_line[db_line["Line"] == line_name]["freq(GHz)"].values[0]
     return rest_frequency
-
-

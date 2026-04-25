@@ -1,4 +1,5 @@
 """Pointlike sky model implementation."""
+
 import numpy as np
 import astropy.units as U
 from typing import Optional, Any
@@ -9,7 +10,7 @@ from .utils import gaussian
 
 class PointlikeSkyModel(SkyModel):
     """Point source sky model."""
-    
+
     def __init__(
         self,
         datacube: Any,
@@ -24,7 +25,7 @@ class PointlikeSkyModel(SkyModel):
     ):
         """
         Initialize pointlike sky model.
-        
+
         Parameters
         ----------
         datacube : Any
@@ -59,7 +60,7 @@ class PointlikeSkyModel(SkyModel):
         )
         self.pos_x = pos_x
         self.pos_y = pos_y
-    
+
     def insert(self) -> Any:
         """Insert point source into datacube."""
         z_idxs = np.arange(0, self.n_chan)
@@ -68,7 +69,7 @@ class PointlikeSkyModel(SkyModel):
             gs += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
             if self.update_progress is not None:
                 self.update_progress.emit(i / len(self.line_fluxes) * 100)
-        
+
         self.datacube._array[
             self.pos_x,
             self.pos_y,
@@ -77,5 +78,3 @@ class PointlikeSkyModel(SkyModel):
             (self.continuum + gs) * U.Jy * U.pix**-2
         )
         return self.datacube
-
-

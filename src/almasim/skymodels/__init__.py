@@ -1,4 +1,5 @@
 """Sky model classes for ALMA simulations."""
+
 from martini import DataCube
 from .base import SkyModel
 from .pointlike import PointlikeSkyModel
@@ -43,4 +44,3 @@ __all__ = [
     "download_tng_structure",
     "RemoteMachine",
 ]
-

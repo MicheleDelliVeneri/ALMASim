@@ -1,4 +1,5 @@
 """Galaxy Zoo dataset download utilities."""
+
 from __future__ import annotations
 
 import locale
@@ -7,7 +8,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from kaggle import api as _kaggle_api
+    from kaggle import api as _kaggle_api  # noqa: F401
 
 DEFAULT_GALAXY_ZOO_DATASET = "jaimetrickz/galaxy-zoo-2-images"
 
@@ -22,6 +23,7 @@ def _ensure_directory(path: Path) -> Path:
 def _load_kaggle_api():
     """Load Kaggle API (lazy import)."""
     from kaggle import api as kaggle_api  # local import to avoid side effects
+
     return kaggle_api
 
 
@@ -51,5 +53,3 @@ def download_galaxy_zoo(destination: Optional[Path | str] = None) -> Path:
 
     _run_with_c_locale(_download)
     return base_path
-
-

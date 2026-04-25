@@ -1,7 +1,7 @@
 """Component tests for metadata query integration."""
+
 import pytest
 import pandas as pd
-from pathlib import Path
 
 from almasim.services.metadata.tap.queries import (
     query_science_types,
@@ -52,9 +52,8 @@ def test_load_metadata(test_data_dir):
     metadata_path = test_data_dir / "qso_metadata.csv"
     if not metadata_path.exists():
         pytest.skip(f"Metadata file not found at {metadata_path}")
-    
+
     df = load_metadata(metadata_path)
     assert isinstance(df, pd.DataFrame)
     assert len(df) > 0
     assert "ALMA_source_name" in df.columns or "target_name" in df.columns
-

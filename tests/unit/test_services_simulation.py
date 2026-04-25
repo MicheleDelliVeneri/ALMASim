@@ -1,4 +1,5 @@
 """Unit tests for simulation service functions."""
+
 import pytest
 import pandas as pd
 import numpy as np
@@ -40,7 +41,10 @@ def sample_metadata_row_dict():
         "Int.Time": 3600.0,
         "Bandwidth": 1.875,
         "Freq": 250.0,
-        "Freq.sup.": "[250.0..252.0GHz,31250.00kHz,2mJy/beam@10km/s,78.5uJy/beam@native, XX YY]",
+        "Freq.sup.": (
+            "[250.0..252.0GHz,31250.00kHz,2mJy/beam@10km/s,"
+            "78.5uJy/beam@native, XX YY]"
+        ),
         "Cont_sens_mJybeam": 0.1,
         "antenna_arrays": "A001:DA01 A002:DA02",
         "redshift": 0.5,
@@ -60,7 +64,7 @@ def test_simulation_params_from_dict(tmp_path, sample_metadata_row_dict):
     """Test creating SimulationParams from dictionary."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -71,7 +75,7 @@ def test_simulation_params_from_dict(tmp_path, sample_metadata_row_dict):
         hubble_dir=tmp_path / "hubble",
         project_name="test",
     )
-    
+
     assert params.idx == 0
     assert params.source_name == "J1234+5678"
     assert params.member_ouid == "uid://A001/X123/X456"
@@ -86,7 +90,7 @@ def test_simulation_params_from_series(tmp_path, sample_metadata_row_series):
     """Test creating SimulationParams from pandas Series."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_series,
         idx=1,
@@ -97,7 +101,7 @@ def test_simulation_params_from_series(tmp_path, sample_metadata_row_series):
         hubble_dir=tmp_path / "hubble",
         project_name="test",
     )
-    
+
     assert params.idx == 1
     assert params.source_name == "J1234+5678"
     assert isinstance(params.main_dir, str)
@@ -109,10 +113,10 @@ def test_simulation_params_missing_required_field(tmp_path, sample_metadata_row_
     """Test that missing required fields raise KeyError."""
     # Remove required field
     del sample_metadata_row_dict["RA"]
-    
+
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     with pytest.raises(KeyError, match="Missing required metadata column"):
         SimulationParams.from_metadata_row(
             sample_metadata_row_dict,
@@ -147,10 +151,10 @@ def test_simulation_params_alternative_column_names(tmp_path):
         "cont_sens": 0.1,
         "antenna_array": "A001:DA01",
     }
-    
+
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         row,
         idx=0,
@@ -161,7 +165,7 @@ def test_simulation_params_alternative_column_names(tmp_path):
         hubble_dir=tmp_path / "hubble",
         project_name="test",
     )
-    
+
     assert params.source_name == "J1234+5678"
     assert params.band == 6.0
     assert params.freq == 250.0
@@ -172,10 +176,10 @@ def test_simulation_params_nan_handling(tmp_path, sample_metadata_row_dict):
     """Test that NaN values are handled correctly."""
     sample_metadata_row_dict["n_pix"] = np.nan
     sample_metadata_row_dict["n_channels"] = np.nan
-    
+
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -186,7 +190,7 @@ def test_simulation_params_nan_handling(tmp_path, sample_metadata_row_dict):
         hubble_dir=tmp_path / "hubble",
         project_name="test",
     )
-    
+
     assert params.n_pix is None
     assert params.n_channels is None
     assert params.source_offset_x_arcsec == 0.0
@@ -199,7 +203,7 @@ def test_simulation_params_path_resolution(tmp_path, sample_metadata_row_dict):
     """Test that paths are properly resolved."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     # Use relative paths
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
@@ -211,7 +215,7 @@ def test_simulation_params_path_resolution(tmp_path, sample_metadata_row_dict):
         hubble_dir="./hubble",
         project_name="test",
     )
-    
+
     # Paths should be resolved to absolute
     assert Path(params.main_dir).is_absolute()
     assert Path(params.output_dir).is_absolute()
@@ -223,10 +227,10 @@ def test_simulation_params_line_names_string(tmp_path, sample_metadata_row_dict)
     # line_names parsing happens in run_simulation, not in from_metadata_row
     # So we just test that it's stored as-is
     sample_metadata_row_dict["line_names"] = '["CO(3-2)", "CII"]'
-    
+
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -238,7 +242,7 @@ def test_simulation_params_line_names_string(tmp_path, sample_metadata_row_dict)
         project_name="test",
         line_names=sample_metadata_row_dict["line_names"],
     )
-    
+
     # Should be stored as string (parsing happens in run_simulation)
     assert isinstance(params.line_names, str) or params.line_names is None
 
@@ -248,7 +252,7 @@ def test_simulation_params_defaults(tmp_path, sample_metadata_row_dict):
     """Test that default values are applied correctly."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -259,7 +263,7 @@ def test_simulation_params_defaults(tmp_path, sample_metadata_row_dict):
         hubble_dir=tmp_path / "hubble",
         project_name="test",
     )
-    
+
     assert params.source_type == "point"  # Default
     assert params.snr is None  # Auto-derived by default
     assert params.save_mode == "npz"  # Default
@@ -270,7 +274,7 @@ def test_simulation_params_defaults(tmp_path, sample_metadata_row_dict):
 
 @pytest.mark.unit
 def test_generate_background_cube_combined_mode_returns_positive_cube():
-    """Background generation should produce a non-empty additive cube for combined mode."""
+    """Background generation should produce a non-empty additive cube."""
     cube = generate_background_cube(
         mode="combined",
         n_pix=32,
@@ -289,7 +293,7 @@ def test_generate_background_cube_combined_mode_returns_positive_cube():
 
 @pytest.mark.unit
 def test_resolve_source_pixel_position_applies_explicit_offsets():
-    """Source position should stay centered by default and move only by explicit offsets."""
+    """Source position stays centered by default and moves only by explicit offsets."""
     wcs = MagicMock()
     sub_wcs = MagicMock()
     sub_wcs.wcs_world2pix.return_value = (32.0, 32.0, 0.0)
@@ -315,7 +319,7 @@ def test_simulation_params_overrides(tmp_path, sample_metadata_row_dict):
     """Test that parameter overrides work correctly."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -333,7 +337,7 @@ def test_simulation_params_overrides(tmp_path, sample_metadata_row_dict):
         inject_serendipitous=True,
         remote=True,
     )
-    
+
     assert params.source_type == "gaussian"
     assert params.snr == 2.5
     assert params.save_mode == "fits"
@@ -344,9 +348,9 @@ def test_simulation_params_overrides(tmp_path, sample_metadata_row_dict):
 
 
 @pytest.mark.unit
-@patch('almasim.services.simulation.process_spectral_data')
-@patch('almasim.services.simulation.usm')
-@patch('almasim.services.simulation.uin')
+@patch("almasim.services.simulation.process_spectral_data")
+@patch("almasim.services.simulation.usm")
+@patch("almasim.services.simulation.uin")
 def test_run_simulation_point_source(
     mock_interferometry,
     mock_skymodels,
@@ -371,7 +375,7 @@ def test_run_simulation_point_source(
         [2.0, 2.0],  # fwhm_z
         1e10,  # lum_infrared
     )
-    
+
     mock_datacube = Mock()
     mock_datacube._array = Mock()
     mock_datacube._array.to_value.return_value = np.random.rand(32, 32, 32) * 0.1
@@ -379,24 +383,24 @@ def test_run_simulation_point_source(
     mock_datacube.wcs.sub.return_value.wcs_world2pix.return_value = (16, 16, 0)
     mock_datacube.n_px_x = 32
     mock_datacube.n_channels = 32
-    
+
     mock_pointlike = Mock()
     mock_pointlike.insert.return_value = mock_datacube
     mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
     mock_skymodels.DataCube.return_value = mock_datacube
     mock_skymodels.get_datacube_header.return_value = Mock()
-    
+
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
-        'model_cube': np.random.rand(32, 32, 32),
-        'dirty_cube': np.random.rand(32, 32, 32),
-        'model_vis': np.random.rand(32, 32, 32),
-        'dirty_vis': np.random.rand(32, 32, 32),
-        'beam_cube': np.random.rand(32, 32, 32),
-        'totsampling_cube': np.random.rand(32, 32, 32),
-        'uv_mask_cube': np.ones((32, 32, 32), dtype=np.uint8),
-        'u_cube': np.random.rand(32, 2, 2),
-        'v_cube': np.random.rand(32, 2, 2),
+        "model_cube": np.random.rand(32, 32, 32),
+        "dirty_cube": np.random.rand(32, 32, 32),
+        "model_vis": np.random.rand(32, 32, 32),
+        "dirty_vis": np.random.rand(32, 32, 32),
+        "beam_cube": np.random.rand(32, 32, 32),
+        "totsampling_cube": np.random.rand(32, 32, 32),
+        "uv_mask_cube": np.ones((32, 32, 32), dtype=np.uint8),
+        "u_cube": np.random.rand(32, 2, 2),
+        "v_cube": np.random.rand(32, 2, 2),
     }
     mock_interferometry.Interferometer.return_value = mock_interferometer
     mock_interferometry.compute_channel_noise = compute_channel_noise
@@ -409,7 +413,7 @@ def test_run_simulation_point_source(
             "combined_config_count": len(results),
         }
     )
-    
+
     # Create params
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
@@ -422,21 +426,21 @@ def test_run_simulation_point_source(
         project_name="test",
         source_type="point",
     )
-    
+
     results = run_simulation(
         params,
         logger=print,
     )
-    
+
     assert results is not None
-    assert 'model_cube' in results or 'dirty_cube' in results
+    assert "model_cube" in results or "dirty_cube" in results
     mock_pointlike.insert.assert_called_once()
 
 
 @pytest.mark.unit
-@patch('almasim.services.simulation.process_spectral_data')
-@patch('almasim.services.simulation.usm')
-@patch('almasim.services.simulation.uin')
+@patch("almasim.services.simulation.process_spectral_data")
+@patch("almasim.services.simulation.usm")
+@patch("almasim.services.simulation.uin")
 def test_run_simulation_gaussian_source(
     mock_interferometry,
     mock_skymodels,
@@ -461,7 +465,7 @@ def test_run_simulation_gaussian_source(
         [2.0],
         1e10,
     )
-    
+
     mock_datacube = Mock()
     mock_datacube._array = Mock()
     mock_datacube._array.to_value.return_value = np.random.rand(32, 32, 32) * 0.1
@@ -469,24 +473,24 @@ def test_run_simulation_gaussian_source(
     mock_datacube.wcs.sub.return_value.wcs_world2pix.return_value = (16, 16, 0)
     mock_datacube.n_px_x = 32
     mock_datacube.n_channels = 32
-    
+
     mock_gaussian = Mock()
     mock_gaussian.insert.return_value = mock_datacube
     mock_skymodels.GaussianSkyModel.return_value = mock_gaussian
     mock_skymodels.DataCube.return_value = mock_datacube
     mock_skymodels.get_datacube_header.return_value = Mock()
-    
+
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
-        'model_cube': np.random.rand(32, 32, 32),
-        'dirty_cube': np.random.rand(32, 32, 32),
-        'model_vis': np.random.rand(32, 32, 32),
-        'dirty_vis': np.random.rand(32, 32, 32),
-        'beam_cube': np.random.rand(32, 32, 32),
-        'totsampling_cube': np.random.rand(32, 32, 32),
-        'uv_mask_cube': np.ones((32, 32, 32), dtype=np.uint8),
-        'u_cube': np.random.rand(32, 2, 2),
-        'v_cube': np.random.rand(32, 2, 2),
+        "model_cube": np.random.rand(32, 32, 32),
+        "dirty_cube": np.random.rand(32, 32, 32),
+        "model_vis": np.random.rand(32, 32, 32),
+        "dirty_vis": np.random.rand(32, 32, 32),
+        "beam_cube": np.random.rand(32, 32, 32),
+        "totsampling_cube": np.random.rand(32, 32, 32),
+        "uv_mask_cube": np.ones((32, 32, 32), dtype=np.uint8),
+        "u_cube": np.random.rand(32, 2, 2),
+        "v_cube": np.random.rand(32, 2, 2),
     }
     mock_interferometry.Interferometer.return_value = mock_interferometer
     mock_interferometry.compute_channel_noise = compute_channel_noise
@@ -499,7 +503,7 @@ def test_run_simulation_gaussian_source(
             "combined_config_count": len(results),
         }
     )
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -511,12 +515,12 @@ def test_run_simulation_gaussian_source(
         project_name="test",
         source_type="gaussian",
     )
-    
+
     results = run_simulation(
         params,
         logger=print,
     )
-    
+
     assert results is not None
     mock_gaussian.insert.assert_called_once()
 
@@ -526,7 +530,7 @@ def test_simulation_params_dataclass_fields(tmp_path, sample_metadata_row_dict):
     """Test that SimulationParams has all required fields."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -537,27 +541,67 @@ def test_simulation_params_dataclass_fields(tmp_path, sample_metadata_row_dict):
         hubble_dir=tmp_path / "hubble",
         project_name="test",
     )
-    
+
     # Check that all expected fields exist and are accessible
     required_fields = [
-        'idx', 'source_name', 'member_ouid', 'main_dir', 'output_dir',
-        'tng_dir', 'galaxy_zoo_dir', 'hubble_dir', 'project_name',
-        'ra', 'dec', 'band', 'ang_res', 'vel_res', 'fov', 'obs_date',
-        'pwv', 'int_time', 'bandwidth', 'freq', 'freq_support',
-        'cont_sens', 'antenna_array', 'n_pix', 'n_channels',
-        'source_type', 'tng_api_key', 'ncpu', 'rest_frequency',
-        'redshift', 'lum_infrared', 'snr', 'n_lines', 'line_names',
-        'save_mode', 'persist', 'ml_dataset_path',
-        'inject_serendipitous', 'remote', 'observation_configs',
-        'ground_temperature_k', 'correlator', 'elevation_deg',
-        'line_sens_10kms', 'source_offset_x_arcsec', 'source_offset_y_arcsec',
-        'background_mode', 'background_level', 'background_seed',
-        'external_skymodel_path', 'external_component_table_path',
-        'external_alignment_mode', 'external_header_mode',
-        'external_header_overrides', 'ms_export',
-        'ms_export_dir',
+        "idx",
+        "source_name",
+        "member_ouid",
+        "main_dir",
+        "output_dir",
+        "tng_dir",
+        "galaxy_zoo_dir",
+        "hubble_dir",
+        "project_name",
+        "ra",
+        "dec",
+        "band",
+        "ang_res",
+        "vel_res",
+        "fov",
+        "obs_date",
+        "pwv",
+        "int_time",
+        "bandwidth",
+        "freq",
+        "freq_support",
+        "cont_sens",
+        "antenna_array",
+        "n_pix",
+        "n_channels",
+        "source_type",
+        "tng_api_key",
+        "ncpu",
+        "rest_frequency",
+        "redshift",
+        "lum_infrared",
+        "snr",
+        "n_lines",
+        "line_names",
+        "save_mode",
+        "persist",
+        "ml_dataset_path",
+        "inject_serendipitous",
+        "remote",
+        "observation_configs",
+        "ground_temperature_k",
+        "correlator",
+        "elevation_deg",
+        "line_sens_10kms",
+        "source_offset_x_arcsec",
+        "source_offset_y_arcsec",
+        "background_mode",
+        "background_level",
+        "background_seed",
+        "external_skymodel_path",
+        "external_component_table_path",
+        "external_alignment_mode",
+        "external_header_mode",
+        "external_header_overrides",
+        "ms_export",
+        "ms_export_dir",
     ]
-    
+
     # Verify all fields exist and can be accessed
     for field in required_fields:
         assert hasattr(params, field), f"Missing field: {field}"
@@ -690,9 +734,9 @@ def test_export_results_triggers_ms_export(mock_export_native_ms, tmp_path):
 
 
 @pytest.mark.unit
-@patch('almasim.services.simulation.export_results')
-@patch('almasim.services.simulation.simulate_observation')
-@patch('almasim.services.simulation.generate_clean_cube')
+@patch("almasim.services.simulation.export_results")
+@patch("almasim.services.simulation.simulate_observation")
+@patch("almasim.services.simulation.generate_clean_cube")
 def test_run_simulation_memory_mode(
     mock_generate_clean_cube,
     mock_simulate_observation,
@@ -734,9 +778,9 @@ def test_run_simulation_memory_mode(
 
 
 @pytest.mark.unit
-@patch('almasim.services.simulation.process_spectral_data')
-@patch('almasim.services.simulation.usm')
-@patch('almasim.services.simulation.uin')
+@patch("almasim.services.simulation.process_spectral_data")
+@patch("almasim.services.simulation.usm")
+@patch("almasim.services.simulation.uin")
 def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
     mock_interferometry,
     mock_skymodels,
@@ -775,15 +819,15 @@ def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
 
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
-        'model_cube': np.random.rand(32, 32, 32),
-        'dirty_cube': np.random.rand(32, 32, 32),
-        'dirty_vis': np.random.rand(32, 32, 32),
-        'model_vis': np.random.rand(32, 32, 32),
-        'beam_cube': np.random.rand(32, 32, 32),
-        'totsampling_cube': np.random.rand(32, 32, 32),
-        'uv_mask_cube': np.ones((32, 32, 32), dtype=np.uint8),
-        'u_cube': np.random.rand(32, 2, 2),
-        'v_cube': np.random.rand(32, 2, 2),
+        "model_cube": np.random.rand(32, 32, 32),
+        "dirty_cube": np.random.rand(32, 32, 32),
+        "dirty_vis": np.random.rand(32, 32, 32),
+        "model_vis": np.random.rand(32, 32, 32),
+        "beam_cube": np.random.rand(32, 32, 32),
+        "totsampling_cube": np.random.rand(32, 32, 32),
+        "uv_mask_cube": np.ones((32, 32, 32), dtype=np.uint8),
+        "u_cube": np.random.rand(32, 2, 2),
+        "v_cube": np.random.rand(32, 2, 2),
     }
     mock_interferometry.Interferometer.return_value = mock_interferometer
     mock_interferometry.compute_channel_noise = compute_channel_noise
@@ -824,10 +868,10 @@ def test_simulation_params_clean_function(tmp_path, sample_metadata_row_dict):
     """Test the clean function handles None and NaN correctly."""
     sample_metadata_row_dict["n_pix"] = None
     sample_metadata_row_dict["n_channels"] = np.nan
-    
+
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    
+
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
         idx=0,
@@ -838,14 +882,16 @@ def test_simulation_params_clean_function(tmp_path, sample_metadata_row_dict):
         hubble_dir=tmp_path / "hubble",
         project_name="test",
     )
-    
+
     # Clean function should convert None/NaN to None
     assert params.n_pix is None
     assert params.n_channels is None
 
 
 @pytest.mark.unit
-def test_build_single_pointing_observation_plan_defaults(tmp_path, sample_metadata_row_dict):
+def test_build_single_pointing_observation_plan_defaults(
+    tmp_path, sample_metadata_row_dict
+):
     """Single-config simulations should still produce an explicit observation plan."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
@@ -870,7 +916,9 @@ def test_build_single_pointing_observation_plan_defaults(tmp_path, sample_metada
 
 
 @pytest.mark.unit
-def test_build_single_pointing_observation_plan_multiple_configs(tmp_path, sample_metadata_row_dict):
+def test_build_single_pointing_observation_plan_multiple_configs(
+    tmp_path, sample_metadata_row_dict
+):
     """P0 should support multi-config single-pointing plans."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
@@ -908,11 +956,15 @@ def test_build_single_pointing_observation_plan_multiple_configs(tmp_path, sampl
 
 
 @pytest.mark.unit
-def test_build_single_pointing_observation_plan_splits_mixed_metadata_antenna_arrays(tmp_path, sample_metadata_row_dict):
+def test_build_single_pointing_observation_plan_splits_mixed_metadata_antenna_arrays(
+    tmp_path, sample_metadata_row_dict
+):
     """Mixed metadata antenna strings should auto-split into 12m and 7m configs."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    sample_metadata_row_dict["antenna_arrays"] = "A001:DA01 A002:DV02 A003:CM03 A004:CM04"
+    sample_metadata_row_dict["antenna_arrays"] = (
+        "A001:DA01 A002:DV02 A003:CM03 A004:CM04"
+    )
 
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
@@ -936,7 +988,9 @@ def test_build_single_pointing_observation_plan_splits_mixed_metadata_antenna_ar
 
 
 @pytest.mark.unit
-def test_build_single_pointing_observation_plan_includes_tp_from_metadata(tmp_path, sample_metadata_row_dict):
+def test_build_single_pointing_observation_plan_includes_tp_from_metadata(
+    tmp_path, sample_metadata_row_dict
+):
     """Mixed metadata antenna strings should include TP configs once P1 is enabled."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
@@ -988,10 +1042,10 @@ def test_compute_channel_noise_increases_with_pwv():
 
 
 @pytest.mark.unit
-@patch('almasim.services.simulation.uin.combine_interferometric_results')
-@patch('almasim.services.simulation.process_spectral_data')
-@patch('almasim.services.simulation.usm')
-@patch('almasim.services.simulation.uin')
+@patch("almasim.services.simulation.uin.combine_interferometric_results")
+@patch("almasim.services.simulation.process_spectral_data")
+@patch("almasim.services.simulation.usm")
+@patch("almasim.services.simulation.uin")
 def test_run_simulation_multiconfig_single_pointing(
     mock_interferometry_module,
     mock_skymodels,
@@ -1056,8 +1110,13 @@ def test_run_simulation_multiconfig_single_pointing(
     mock_interferometry_module.Interferometer.return_value = mock_interferometer
     mock_interferometry_module.compute_channel_noise = compute_channel_noise
     mock_interferometry_module.NoiseModelConfig = NoiseModelConfig
-    mock_interferometry_module.calibrate_noise_profile.side_effect = lambda raw, reference_noise: raw * (reference_noise / np.median(raw))
-    mock_combine_results.return_value = {"combined_config_count": 2, "dirty_cube": np.ones((8, 8, 8), dtype=np.float32)}
+    mock_interferometry_module.calibrate_noise_profile.side_effect = (
+        lambda raw, reference_noise: raw * (reference_noise / np.median(raw))
+    )
+    mock_combine_results.return_value = {
+        "combined_config_count": 2,
+        "dirty_cube": np.ones((8, 8, 8), dtype=np.float32),
+    }
 
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
@@ -1069,8 +1128,18 @@ def test_run_simulation_multiconfig_single_pointing(
         hubble_dir=tmp_path / "hubble",
         project_name="test",
         observation_configs=[
-            {"name": "alma12", "array_type": "12m", "antenna_array": "A001:DA01 A002:DV02", "total_time_s": 1800.0},
-            {"name": "aca7", "array_type": "7m", "antenna_array": "A001:CM01 A002:CM02", "total_time_s": 2400.0},
+            {
+                "name": "alma12",
+                "array_type": "12m",
+                "antenna_array": "A001:DA01 A002:DV02",
+                "total_time_s": 1800.0,
+            },
+            {
+                "name": "aca7",
+                "array_type": "7m",
+                "antenna_array": "A001:CM01 A002:CM02",
+                "total_time_s": 2400.0,
+            },
         ],
     )
 
@@ -1081,9 +1150,9 @@ def test_run_simulation_multiconfig_single_pointing(
 
 
 @pytest.mark.unit
-@patch('almasim.services.simulation.process_spectral_data')
-@patch('almasim.services.simulation.usm')
-@patch('almasim.services.simulation.uin')
+@patch("almasim.services.simulation.process_spectral_data")
+@patch("almasim.services.simulation.usm")
+@patch("almasim.services.simulation.uin")
 def test_run_simulation_p1_tp_and_reconstruction_outputs(
     mock_interferometry_module,
     mock_skymodels,
@@ -1169,8 +1238,18 @@ def test_run_simulation_p1_tp_and_reconstruction_outputs(
         hubble_dir=tmp_path / "hubble",
         project_name="test",
         observation_configs=[
-            {"name": "alma12", "array_type": "12m", "antenna_array": "A001:DA01 A002:DV02", "total_time_s": 1800.0},
-            {"name": "tp", "array_type": "TP", "antenna_array": "A005:PM05 A006:PM06", "total_time_s": 1200.0},
+            {
+                "name": "alma12",
+                "array_type": "12m",
+                "antenna_array": "A001:DA01 A002:DV02",
+                "total_time_s": 1800.0,
+            },
+            {
+                "name": "tp",
+                "array_type": "TP",
+                "antenna_array": "A005:PM05 A006:PM06",
+                "total_time_s": 1200.0,
+            },
         ],
         persist=False,
         save_mode="memory",

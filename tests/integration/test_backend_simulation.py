@@ -1,4 +1,5 @@
 """Backend simulation service integration tests."""
+
 import pytest
 from pathlib import Path
 import tempfile
@@ -8,6 +9,7 @@ import pandas as pd
 try:
     from backend.app.services.simulation_service import SimulationService
     from backend.app.schemas.simulation import SimulationParamsCreate
+
     BACKEND_AVAILABLE = True
 except ImportError:
     BACKEND_AVAILABLE = False
@@ -23,20 +25,18 @@ def temp_output_dir():
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_simulation_service_run_point_source(
-    temp_output_dir, main_dir, test_data_dir
-):
+def test_simulation_service_run_point_source(temp_output_dir, main_dir, test_data_dir):
     """Test running a point source simulation through the service."""
     if not BACKEND_AVAILABLE:
         pytest.skip("Backend not available for testing")
-    
+
     # Load sample metadata
     metadata = pd.read_csv(test_data_dir / "qso_metadata.csv")
     if len(metadata) == 0:
         pytest.skip("No metadata available for testing")
-    
+
     row = metadata.iloc[0]
-    
+
     # Create simulation parameters
     params = SimulationParamsCreate(
         idx=0,
@@ -68,7 +68,7 @@ def test_simulation_service_run_point_source(
         snr=1.3,
         save_mode="npz",
     )
-    
+
     # Create service (without Dask client for simple test)
     service = SimulationService(
         main_dir=Path(params.main_dir),
@@ -78,12 +78,12 @@ def test_simulation_service_run_point_source(
         hubble_dir=Path(params.hubble_dir),
         compute_backend=None,
     )
-    
+
     # This is a long-running test, so we'll just verify the service can be created
     # and the parameters are valid
     assert service.main_dir == Path(params.main_dir)
     assert service.output_dir == Path(params.output_dir)
-    
+
     # In a real test, you would run the simulation:
     # service.run_simulation(simulation_id="test-123", params=params)
     # But this takes too long for CI, so we skip the actual execution

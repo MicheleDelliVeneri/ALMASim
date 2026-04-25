@@ -7,7 +7,6 @@ from sqlalchemy import text
 
 from .config import SessionLocal, engine, init_db
 from .csv_importer import initialize_database_from_csv
-from .models import Observation
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,8 @@ def initialize_database_on_startup(data_dir: Path) -> None:
 
             total_imported = sum(results.values())
             logger.info(
-                f"Database initialization complete. Imported {total_imported} total observations"
+                "Database initialization complete. "
+                f"Imported {total_imported} total observations"
             )
 
             for filename, count in results.items():

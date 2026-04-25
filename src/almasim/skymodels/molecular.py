@@ -1,10 +1,10 @@
 """Molecular cloud sky model implementation."""
+
 import random
 import numpy as np
 import astropy.units as U
-from typing import Optional, Any
+from typing import Any
 from dask import delayed
-from dask.distributed import Client
 from astropy.utils import NumpyRNGContext
 
 from .base import SkyModel
@@ -155,7 +155,7 @@ def molecular_image(molecular_cld: np.ndarray, amp: float) -> np.ndarray:
 
 class MolecularCloudSkyModel(SkyModel):
     """Molecular cloud sky model."""
-    
+
     def insert(self) -> Any:
         """Insert molecular cloud source into datacube."""
         im = molecular_cloud(self.n_px)
@@ -175,5 +175,3 @@ class MolecularCloudSkyModel(SkyModel):
         skymodel = self.client.gather(futures)
         self.datacube._array = skymodel * U.Jy * U.pix**-2
         return self.datacube
-
-

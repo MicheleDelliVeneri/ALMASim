@@ -1,4 +1,5 @@
 """MSv2 writer/reader backed by casatools or python-casacore (fallback)."""
+
 from __future__ import annotations
 
 import os
@@ -22,6 +23,7 @@ _SUBTABLE_NAMES = (
 # ---------------------------------------------------------------------------
 # Value-type helper
 # ---------------------------------------------------------------------------
+
 
 def _vtype(value) -> str:
     if isinstance(value, bool):
@@ -49,7 +51,9 @@ def _sca_desc(name: str, value) -> tuple[str, dict]:
     }
 
 
-def _arr_desc(name: str, value, ndim: int, shape: list | None = None) -> tuple[str, dict]:
+def _arr_desc(
+    name: str, value, ndim: int, shape: list | None = None
+) -> tuple[str, dict]:
     d: dict = {
         "valueType": _vtype(value),
         "dataManagerType": "StandardStMan",
@@ -67,7 +71,11 @@ def _arr_desc(name: str, value, ndim: int, shape: list | None = None) -> tuple[s
 
 
 def _make_tabledesc(coldesc_list: list[tuple[str, dict]]) -> dict:
-    desc: dict = {"_define_hypercolumn_": {}, "_keywords_": {}, "_private_keywords_": {}}
+    desc: dict = {
+        "_define_hypercolumn_": {},
+        "_keywords_": {},
+        "_private_keywords_": {},
+    }
     for name, col_desc in coldesc_list:
         desc[name] = col_desc
     return desc
@@ -77,9 +85,11 @@ def _make_tabledesc(coldesc_list: list[tuple[str, dict]]) -> dict:
 # Backend abstraction
 # ---------------------------------------------------------------------------
 
+
 class _CasatoolsBackend:
     def __init__(self):
         import casatools as _ct
+
         self._ct = _ct
 
     def create(self, path: str, coldesc_list: list, nrow: int):
@@ -108,11 +118,13 @@ class _CasacoreBackend:
 
     def create(self, path: str, coldesc_list: list, nrow: int):
         from casacore.tables import table
+
         desc = _make_tabledesc(coldesc_list)
         return table(path, tabledesc=desc, nrow=nrow, readonly=False)
 
     def open(self, path: str, readonly: bool = True):
         from casacore.tables import table
+
         return table(path, readonly=readonly)
 
     @staticmethod
@@ -141,6 +153,7 @@ def _get_backend():
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def export_native_ms(
     *,
@@ -175,7 +188,9 @@ def export_native_ms(
     _write_data_description(backend, ms_path)
     _write_field(backend, ms_path, source_name, field_ra_rad, field_dec_rad, time_range)
     _write_observation(backend, ms_path, telescope_name, project_name, time_range)
-    _write_source(backend, ms_path, source_name, field_ra_rad, field_dec_rad, time_range)
+    _write_source(
+        backend, ms_path, source_name, field_ra_rad, field_dec_rad, time_range
+    )
     _write_state(backend, ms_path)
     _write_history(backend, ms_path, project_name, time_range)
     return ms_path
@@ -249,24 +264,29 @@ def read_native_ms(ms_path: str | Path) -> dict[str, Any]:
 # Subtable writers
 # ---------------------------------------------------------------------------
 
+
 def _write_antenna(backend, ms_path, antenna_names, antenna_positions_m, nant):
-    tb = backend.create(os.path.join(ms_path, "ANTENNA"), [
-        backend.sca("NAME", ""),
-        backend.sca("STATION", ""),
-        backend.sca("TYPE", ""),
-        backend.sca("MOUNT", ""),
-        backend.sca("DISH_DIAMETER", 0.0),
-        backend.sca("FLAG_ROW", False),
-        backend.arr("POSITION", 0.0, 1, shape=[3]),
-        backend.arr("OFFSET", 0.0, 1, shape=[3]),
-    ], nrow=nant)
+    tb = backend.create(
+        os.path.join(ms_path, "ANTENNA"),
+        [
+            backend.sca("NAME", ""),
+            backend.sca("STATION", ""),
+            backend.sca("TYPE", ""),
+            backend.sca("MOUNT", ""),
+            backend.sca("DISH_DIAMETER", 0.0),
+            backend.sca("FLAG_ROW", False),
+            backend.arr("POSITION", 0.0, 1, shape=[3]),
+            backend.arr("OFFSET", 0.0, 1, shape=[3]),
+        ],
+        nrow=nant,
+    )
     tb.putcol("NAME", list(antenna_names))
     tb.putcol("STATION", list(antenna_names))
     tb.putcol("TYPE", ["GROUND-BASED"] * nant)
     tb.putcol("MOUNT", ["alt-az"] * nant)
     tb.putcol("DISH_DIAMETER", np.full(nant, 12.0))
     tb.putcol("FLAG_ROW", np.zeros(nant, dtype=bool))
-    tb.putcol("POSITION", antenna_positions_m.T)   # (3, nant)
+    tb.putcol("POSITION", antenna_positions_m.T)  # (3, nant)
     tb.putcol("OFFSET", np.zeros((3, nant)))
     tb.flush()
     tb.close()
@@ -278,19 +298,23 @@ def _write_spectral_window(backend, ms_path, channel_freq_hz, nchan):
         if nchan > 1
         else np.array([1.0])
     )
-    tb = backend.create(os.path.join(ms_path, "SPECTRAL_WINDOW"), [
-        backend.sca("NUM_CHAN", 0),
-        backend.sca("REF_FREQUENCY", 0.0),
-        backend.sca("TOTAL_BANDWIDTH", 0.0),
-        backend.sca("NET_SIDEBAND", 0),
-        backend.sca("MEAS_FREQ_REF", 0),
-        backend.sca("FLAG_ROW", False),
-        backend.sca("NAME", ""),
-        backend.arr("CHAN_FREQ", 0.0, 1),
-        backend.arr("CHAN_WIDTH", 0.0, 1),
-        backend.arr("EFFECTIVE_BW", 0.0, 1),
-        backend.arr("RESOLUTION", 0.0, 1),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "SPECTRAL_WINDOW"),
+        [
+            backend.sca("NUM_CHAN", 0),
+            backend.sca("REF_FREQUENCY", 0.0),
+            backend.sca("TOTAL_BANDWIDTH", 0.0),
+            backend.sca("NET_SIDEBAND", 0),
+            backend.sca("MEAS_FREQ_REF", 0),
+            backend.sca("FLAG_ROW", False),
+            backend.sca("NAME", ""),
+            backend.arr("CHAN_FREQ", 0.0, 1),
+            backend.arr("CHAN_WIDTH", 0.0, 1),
+            backend.arr("EFFECTIVE_BW", 0.0, 1),
+            backend.arr("RESOLUTION", 0.0, 1),
+        ],
+        nrow=1,
+    )
     tb.putcell("NUM_CHAN", 0, int(nchan))
     tb.putcell("CHAN_FREQ", 0, channel_freq_hz)
     tb.putcell("CHAN_WIDTH", 0, chan_width)
@@ -307,12 +331,16 @@ def _write_spectral_window(backend, ms_path, channel_freq_hz, nchan):
 
 
 def _write_polarization(backend, ms_path, ncorr):
-    tb = backend.create(os.path.join(ms_path, "POLARIZATION"), [
-        backend.sca("NUM_CORR", 0),
-        backend.sca("FLAG_ROW", False),
-        backend.arr("CORR_TYPE", 0, 1),
-        backend.arr("CORR_PRODUCT", 0, 2),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "POLARIZATION"),
+        [
+            backend.sca("NUM_CORR", 0),
+            backend.sca("FLAG_ROW", False),
+            backend.arr("CORR_TYPE", 0, 1),
+            backend.arr("CORR_PRODUCT", 0, 2),
+        ],
+        nrow=1,
+    )
     tb.putcell("NUM_CORR", 0, int(ncorr))
     tb.putcell("CORR_TYPE", 0, np.array([9], dtype=np.int32))  # Stokes I
     tb.putcell("CORR_PRODUCT", 0, np.array([[0], [0]], dtype=np.int32))
@@ -322,11 +350,15 @@ def _write_polarization(backend, ms_path, ncorr):
 
 
 def _write_data_description(backend, ms_path):
-    tb = backend.create(os.path.join(ms_path, "DATA_DESCRIPTION"), [
-        backend.sca("SPECTRAL_WINDOW_ID", 0),
-        backend.sca("POLARIZATION_ID", 0),
-        backend.sca("FLAG_ROW", False),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "DATA_DESCRIPTION"),
+        [
+            backend.sca("SPECTRAL_WINDOW_ID", 0),
+            backend.sca("POLARIZATION_ID", 0),
+            backend.sca("FLAG_ROW", False),
+        ],
+        nrow=1,
+    )
     tb.putcell("SPECTRAL_WINDOW_ID", 0, 0)
     tb.putcell("POLARIZATION_ID", 0, 0)
     tb.putcell("FLAG_ROW", 0, False)
@@ -336,17 +368,21 @@ def _write_data_description(backend, ms_path):
 
 def _write_field(backend, ms_path, source_name, ra_rad, dec_rad, time_range):
     direction_3d = np.array([[ra_rad, dec_rad]])  # shape (1, 2): one polynomial term
-    tb = backend.create(os.path.join(ms_path, "FIELD"), [
-        backend.sca("NAME", ""),
-        backend.sca("CODE", ""),
-        backend.sca("NUM_POLY", 0),
-        backend.sca("SOURCE_ID", 0),
-        backend.sca("TIME", 0.0),
-        backend.sca("FLAG_ROW", False),
-        backend.arr("DELAY_DIR", 0.0, 2),
-        backend.arr("PHASE_DIR", 0.0, 2),
-        backend.arr("REFERENCE_DIR", 0.0, 2),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "FIELD"),
+        [
+            backend.sca("NAME", ""),
+            backend.sca("CODE", ""),
+            backend.sca("NUM_POLY", 0),
+            backend.sca("SOURCE_ID", 0),
+            backend.sca("TIME", 0.0),
+            backend.sca("FLAG_ROW", False),
+            backend.arr("DELAY_DIR", 0.0, 2),
+            backend.arr("PHASE_DIR", 0.0, 2),
+            backend.arr("REFERENCE_DIR", 0.0, 2),
+        ],
+        nrow=1,
+    )
     tb.putcell("NAME", 0, source_name)
     tb.putcell("CODE", 0, "")
     tb.putcell("NUM_POLY", 0, 0)
@@ -361,15 +397,19 @@ def _write_field(backend, ms_path, source_name, ra_rad, dec_rad, time_range):
 
 
 def _write_observation(backend, ms_path, telescope_name, project_name, time_range):
-    tb = backend.create(os.path.join(ms_path, "OBSERVATION"), [
-        backend.sca("TELESCOPE_NAME", ""),
-        backend.sca("OBSERVER", ""),
-        backend.sca("PROJECT", ""),
-        backend.sca("SCHEDULE_TYPE", ""),
-        backend.sca("RELEASE_DATE", 0.0),
-        backend.sca("FLAG_ROW", False),
-        backend.arr("TIME_RANGE", 0.0, 1, shape=[2]),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "OBSERVATION"),
+        [
+            backend.sca("TELESCOPE_NAME", ""),
+            backend.sca("OBSERVER", ""),
+            backend.sca("PROJECT", ""),
+            backend.sca("SCHEDULE_TYPE", ""),
+            backend.sca("RELEASE_DATE", 0.0),
+            backend.sca("FLAG_ROW", False),
+            backend.arr("TIME_RANGE", 0.0, 1, shape=[2]),
+        ],
+        nrow=1,
+    )
     tb.putcell("TELESCOPE_NAME", 0, telescope_name)
     tb.putcell("OBSERVER", 0, "ALMASim")
     tb.putcell("PROJECT", 0, project_name)
@@ -382,17 +422,21 @@ def _write_observation(backend, ms_path, telescope_name, project_name, time_rang
 
 
 def _write_source(backend, ms_path, source_name, ra_rad, dec_rad, time_range):
-    tb = backend.create(os.path.join(ms_path, "SOURCE"), [
-        backend.sca("SOURCE_ID", 0),
-        backend.sca("TIME", 0.0),
-        backend.sca("INTERVAL", 0.0),
-        backend.sca("SPECTRAL_WINDOW_ID", 0),
-        backend.sca("NUM_LINES", 0),
-        backend.sca("NAME", ""),
-        backend.sca("CODE", ""),
-        backend.sca("CALIBRATION_GROUP", 0),
-        backend.arr("DIRECTION", 0.0, 1, shape=[2]),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "SOURCE"),
+        [
+            backend.sca("SOURCE_ID", 0),
+            backend.sca("TIME", 0.0),
+            backend.sca("INTERVAL", 0.0),
+            backend.sca("SPECTRAL_WINDOW_ID", 0),
+            backend.sca("NUM_LINES", 0),
+            backend.sca("NAME", ""),
+            backend.sca("CODE", ""),
+            backend.sca("CALIBRATION_GROUP", 0),
+            backend.arr("DIRECTION", 0.0, 1, shape=[2]),
+        ],
+        nrow=1,
+    )
     tb.putcell("SOURCE_ID", 0, 0)
     tb.putcell("TIME", 0, float(np.mean(time_range)))
     tb.putcell("INTERVAL", 0, float(time_range[1] - time_range[0]))
@@ -407,15 +451,19 @@ def _write_source(backend, ms_path, source_name, ra_rad, dec_rad, time_range):
 
 
 def _write_state(backend, ms_path):
-    tb = backend.create(os.path.join(ms_path, "STATE"), [
-        backend.sca("SIG", True),
-        backend.sca("REF", False),
-        backend.sca("CAL", 0.0),
-        backend.sca("LOAD", 0.0),
-        backend.sca("SUB_SCAN", 0),
-        backend.sca("OBS_MODE", ""),
-        backend.sca("FLAG_ROW", False),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "STATE"),
+        [
+            backend.sca("SIG", True),
+            backend.sca("REF", False),
+            backend.sca("CAL", 0.0),
+            backend.sca("LOAD", 0.0),
+            backend.sca("SUB_SCAN", 0),
+            backend.sca("OBS_MODE", ""),
+            backend.sca("FLAG_ROW", False),
+        ],
+        nrow=1,
+    )
     tb.putcell("SIG", 0, True)
     tb.putcell("REF", 0, False)
     tb.putcell("CAL", 0, 0.0)
@@ -428,17 +476,21 @@ def _write_state(backend, ms_path):
 
 
 def _write_history(backend, ms_path, project_name, time_range):
-    tb = backend.create(os.path.join(ms_path, "HISTORY"), [
-        backend.sca("TIME", 0.0),
-        backend.sca("OBSERVATION_ID", 0),
-        backend.sca("MESSAGE", ""),
-        backend.sca("PRIORITY", ""),
-        backend.sca("ORIGIN", ""),
-        backend.sca("OBJECT_ID", 0),
-        backend.sca("APPLICATION", ""),
-        backend.arr("CLI_COMMAND", "", 1),
-        backend.arr("APP_PARAMS", "", 1),
-    ], nrow=1)
+    tb = backend.create(
+        os.path.join(ms_path, "HISTORY"),
+        [
+            backend.sca("TIME", 0.0),
+            backend.sca("OBSERVATION_ID", 0),
+            backend.sca("MESSAGE", ""),
+            backend.sca("PRIORITY", ""),
+            backend.sca("ORIGIN", ""),
+            backend.sca("OBJECT_ID", 0),
+            backend.sca("APPLICATION", ""),
+            backend.arr("CLI_COMMAND", "", 1),
+            backend.arr("APP_PARAMS", "", 1),
+        ],
+        nrow=1,
+    )
     tb.putcell("TIME", 0, float(np.mean(time_range)))
     tb.putcell("OBSERVATION_ID", 0, 0)
     tb.putcell("MESSAGE", 0, "ALMASim MSv2 export")
@@ -465,30 +517,34 @@ def _write_main(backend, ms_path, nrows, vt):
     weight = np.asarray(vt["weight"], dtype=np.float32)
     sigma = np.asarray(vt["sigma"], dtype=np.float32)
 
-    tb = backend.create(ms_path, [
-        backend.sca("TIME", 0.0),
-        backend.sca("TIME_CENTROID", 0.0),
-        backend.sca("INTERVAL", 0.0),
-        backend.sca("EXPOSURE", 0.0),
-        backend.sca("ANTENNA1", 0),
-        backend.sca("ANTENNA2", 0),
-        backend.sca("FEED1", 0),
-        backend.sca("FEED2", 0),
-        backend.sca("DATA_DESC_ID", 0),
-        backend.sca("FIELD_ID", 0),
-        backend.sca("ARRAY_ID", 0),
-        backend.sca("OBSERVATION_ID", 0),
-        backend.sca("PROCESSOR_ID", 0),
-        backend.sca("SCAN_NUMBER", 0),
-        backend.sca("STATE_ID", 0),
-        backend.sca("FLAG_ROW", False),
-        backend.arr("UVW", 0.0, 1, shape=[3]),
-        backend.arr("DATA", np.complex64(0), 2),
-        backend.arr("MODEL_DATA", np.complex64(0), 2),
-        backend.arr("FLAG", False, 2),
-        backend.arr("WEIGHT", np.float32(0), 1),
-        backend.arr("SIGMA", np.float32(0), 1),
-    ], nrow=nrows)
+    tb = backend.create(
+        ms_path,
+        [
+            backend.sca("TIME", 0.0),
+            backend.sca("TIME_CENTROID", 0.0),
+            backend.sca("INTERVAL", 0.0),
+            backend.sca("EXPOSURE", 0.0),
+            backend.sca("ANTENNA1", 0),
+            backend.sca("ANTENNA2", 0),
+            backend.sca("FEED1", 0),
+            backend.sca("FEED2", 0),
+            backend.sca("DATA_DESC_ID", 0),
+            backend.sca("FIELD_ID", 0),
+            backend.sca("ARRAY_ID", 0),
+            backend.sca("OBSERVATION_ID", 0),
+            backend.sca("PROCESSOR_ID", 0),
+            backend.sca("SCAN_NUMBER", 0),
+            backend.sca("STATE_ID", 0),
+            backend.sca("FLAG_ROW", False),
+            backend.arr("UVW", 0.0, 1, shape=[3]),
+            backend.arr("DATA", np.complex64(0), 2),
+            backend.arr("MODEL_DATA", np.complex64(0), 2),
+            backend.arr("FLAG", False, 2),
+            backend.arr("WEIGHT", np.float32(0), 1),
+            backend.arr("SIGMA", np.float32(0), 1),
+        ],
+        nrow=nrows,
+    )
 
     # Scalar columns: (nrows,)
     tb.putcol("TIME", time_mjd_s)
@@ -509,11 +565,11 @@ def _write_main(backend, ms_path, nrows, vt):
     tb.putcol("FLAG_ROW", np.all(flag, axis=(1, 2)))
 
     # Array columns: CASA convention is (col_shape..., nrows)
-    tb.putcol("UVW", uvw_m.T)                            # (3, nrows)
-    tb.putcol("DATA", data.transpose(1, 2, 0))           # (ncorr, nchan, nrows)
+    tb.putcol("UVW", uvw_m.T)  # (3, nrows)
+    tb.putcol("DATA", data.transpose(1, 2, 0))  # (ncorr, nchan, nrows)
     tb.putcol("MODEL_DATA", model_data.transpose(1, 2, 0))
     tb.putcol("FLAG", flag.transpose(1, 2, 0))
-    tb.putcol("WEIGHT", weight.T)                        # (ncorr, nrows)
+    tb.putcol("WEIGHT", weight.T)  # (ncorr, nrows)
     tb.putcol("SIGMA", sigma.T)
 
     tb.putkeyword("MS_VERSION", 2.0)

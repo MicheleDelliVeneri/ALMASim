@@ -1,5 +1,4 @@
 """Redshift calculation functions."""
-import astropy.units as U
 
 
 def compute_redshift(rest_frequency, observed_frequency):
@@ -27,5 +26,3 @@ def compute_redshift(rest_frequency, observed_frequency):
         rest_frequency.value - observed_frequency.value
     ) / observed_frequency.value
     return redshift
-
-

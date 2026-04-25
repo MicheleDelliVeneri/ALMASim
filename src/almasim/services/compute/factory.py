@@ -1,5 +1,6 @@
 """Factory for creating computation backends."""
-from typing import Any, Dict, Optional
+
+from typing import Any, Dict
 
 from .base import ComputationBackend
 from .sync import SyncBackend
@@ -14,19 +15,19 @@ def create_backend(
     **kwargs: Dict[str, Any],
 ) -> ComputationBackend:
     """Create a computation backend.
-    
+
     Parameters
     ----------
     backend_type : str
         Backend type: "sync", "local", "dask", "slurm", or "kubernetes"
     **kwargs
         Backend-specific configuration parameters
-        
+
     Returns
     -------
     ComputationBackend
         Configured computation backend
-        
+
     Examples
     --------
     >>> # Synchronous backend
@@ -34,13 +35,13 @@ def create_backend(
 
     >>> # Local backend
     >>> backend = create_backend("local", n_workers=4)
-    
+
     >>> # Dask backend
     >>> backend = create_backend("dask", scheduler="tcp://localhost:8786")
-    
+
     >>> # Slurm backend
     >>> backend = create_backend("slurm", queue="normal", n_workers=8)
-    
+
     >>> # Kubernetes backend
     >>> backend = create_backend("kubernetes", n_workers=4, namespace="default")
     """

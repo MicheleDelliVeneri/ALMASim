@@ -1,4 +1,5 @@
 """Unit tests for frequency utilities."""
+
 import pytest
 import astropy.units as U
 
@@ -38,4 +39,3 @@ def test_freq_supp_extractor_multiple_windows():
         freq_sup, obs_freq
     )
     assert central_freq.value == pytest.approx(250.0, rel=1e-1)
-

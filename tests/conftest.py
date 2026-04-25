@@ -1,4 +1,5 @@
 """Pytest configuration and shared fixtures."""
+
 import os
 import faulthandler
 import warnings
@@ -10,21 +11,26 @@ import pytest
 # This must be done before importing astropy
 import sys
 
+
 # Monkey-patch astropy logger to handle pytest conflicts
 def _patch_astropy_logger():
     """Patch astropy logger to avoid conflicts with pytest."""
     try:
         import astropy.logger
+
         # Override the disable_warnings_logging method to be a no-op
         original_disable = astropy.logger.disable_warnings_logging
+
         def safe_disable(*args, **kwargs):
             try:
                 return original_disable(*args, **kwargs)
             except Exception:
                 pass  # Ignore errors when disabling warnings
+
         astropy.logger.disable_warnings_logging = safe_disable
     except (ImportError, AttributeError):
         pass  # astropy not available or already configured
+
 
 # Apply patch if astropy hasn't been imported yet
 if "astropy" not in sys.modules:
@@ -74,6 +80,6 @@ def test_data_dir(repo_root):
 def sample_metadata_row(test_data_dir):
     """Load a sample metadata row for testing."""
     import pandas as pd
+
     metadata = pd.read_csv(test_data_dir / "qso_metadata.csv")
     return metadata.iloc[0]
-

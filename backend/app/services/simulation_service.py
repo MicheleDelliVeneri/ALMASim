@@ -2,7 +2,7 @@
 
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import almasim.services.simulation as sim_service
 from almasim.services.compute.base import ComputationBackend
@@ -82,6 +82,7 @@ class SimulationService:
         params: SimulationParamsCreate,
     ) -> None:
         """Run a simulation."""
+
         class SimulationCancelledError(RuntimeError):
             pass
 
@@ -159,7 +160,8 @@ class SimulationService:
         def progress_callback(progress: int):
             """Callback for fine-grained progress updates during simulation step."""
             check_cancelled()
-            # Only update progress if we're in the "Running interferometric simulation" step
+            # Only update progress if we're in the
+            # "Running interferometric simulation" step
             if current_progress["step_index"] == 2:
                 # Map 0-100 progress to 50-85% range
                 overall_progress = 50 + (progress * 0.35)

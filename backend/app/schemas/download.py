@@ -1,4 +1,5 @@
 """Download-related schemas."""
+
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
@@ -14,7 +15,10 @@ class DataProductInfo(BaseModel):
     content_type: str = ""
     product_type: str = Field(
         ...,
-        description="Classified type: all, raw, calibration, scripts, weblog, qa_reports, auxiliary, cubes, continuum, fits, other",
+        description=(
+            "Classified type: all, raw, calibration, scripts, weblog, qa_reports, "
+            "auxiliary, cubes, continuum, fits, other"
+        ),
     )
     size_mb: float = Field(..., description="Size in MB")
 
@@ -81,16 +85,15 @@ class CheckDiskSpaceRequest(BaseModel):
 class StartDownloadRequest(BaseModel):
     """Request to start downloading selected products."""
 
-    member_ous_uids: List[str] = Field(
-        ..., description="List of member_ous_uid values"
-    )
+    member_ous_uids: List[str] = Field(..., description="List of member_ous_uid values")
     product_filter: str = Field(
         "all",
-        description="Product type filter: all, raw, calibration, scripts, weblog, qa_reports, auxiliary, cubes, continuum, fits, other",
+        description=(
+            "Product type filter: all, raw, calibration, scripts, weblog, qa_reports, "
+            "auxiliary, cubes, continuum, fits, other"
+        ),
     )
-    destination: str = Field(
-        ..., description="Local directory to save files"
-    )
+    destination: str = Field(..., description="Local directory to save files")
     max_parallel: int = Field(
         3,
         description="Maximum parallel download threads",
@@ -103,15 +106,23 @@ class StartDownloadRequest(BaseModel):
     )
     unpack_ms: bool = Field(
         False,
-        description="Create raw MeasurementSets from downloaded/extracted ALMA ASDM products",
+        description=(
+            "Create raw MeasurementSets from downloaded/extracted ALMA ASDM products"
+        ),
     )
     generate_calibrated_visibilities: bool = Field(
         False,
-        description="Create calibrated split MeasurementSets from raw MS and delivered calibration scripts",
+        description=(
+            "Create calibrated split MeasurementSets from raw MS "
+            "and delivered calibration scripts"
+        ),
     )
     clean_intermediate_files: bool = Field(
         False,
-        description="After calibrated MS creation, delete downloaded originals and intermediate raw MS products",
+        description=(
+            "After calibrated MS creation, delete downloaded originals "
+            "and intermediate raw MS products"
+        ),
     )
     archive_output_root: Optional[str] = Field(
         None,
@@ -150,9 +161,7 @@ class FileStatus(BaseModel):
     bytes_downloaded: int
     status: str
     error: Optional[str] = None
-    progress: float = Field(
-        ..., description="Download progress 0.0 to 1.0"
-    )
+    progress: float = Field(..., description="Download progress 0.0 to 1.0")
 
 
 class DownloadJobStatus(BaseModel):

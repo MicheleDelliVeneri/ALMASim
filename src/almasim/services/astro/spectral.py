@@ -1,4 +1,5 @@
 """Spectral line and SED processing functions."""
+
 from __future__ import annotations
 
 from math import ceil, pi
@@ -87,16 +88,15 @@ def sample_given_redshift(
     if z_save != zmax:
         _log(
             logger,
-            f"Max redshift has been adjusted fit metadata, new max redshift: {round(zmax, 3)}",
+            "Max redshift has been adjusted fit metadata, "
+            f"new max redshift: {round(zmax, 3)}",
         )
     _log(logger, f"Remaining metadata: {len(metadata)}")
     metadata["snapshot"] = [
         redshift_to_snapshot(redshift) for redshift in metadata["redshift"].values
     ]
     if extended:
-        metadata = metadata[
-            (metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)
-        ]
+        metadata = metadata[(metadata["snapshot"] == 99) | (metadata["snapshot"] == 95)]
     if len(metadata) == n:
         return metadata
     if len(metadata) < n:
@@ -255,9 +255,10 @@ def find_compatible_lines(
         lines_redshifts = [first_line["redshift"]]
         found_lines = 1
         for j in range(1, len(db)):
-            if db.iloc[j]["shifted_freq(GHz)"] >= freq_min and db.iloc[j][
-                "shifted_freq(GHz)"
-            ] <= freq_max:
+            if (
+                db.iloc[j]["shifted_freq(GHz)"] >= freq_min
+                and db.iloc[j]["shifted_freq(GHz)"] <= freq_max
+            ):
                 if (
                     db.iloc[j]["shifted_freq(GHz)"] + db.iloc[j]["fwhm_GHz"] / 2
                     <= freq_max
@@ -411,5 +412,3 @@ def process_spectral_data(
         fwhms,
         lum_infrared,
     )
-
-

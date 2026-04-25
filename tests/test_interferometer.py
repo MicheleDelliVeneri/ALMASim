@@ -1,16 +1,13 @@
-import os
 from pathlib import Path
 
 import astropy.units as U
 import numpy as np
 import pandas as pd
 
-from almasim.services.metadata.tap import service as alma
 from almasim.services import astro
 from almasim.services import interferometry as interferometer
 from almasim.services.interferometry import antenna as alma_antenna
 from almasim import skymodels
-from almasim.services import simulation as sim
 from almasim.services.astro.spectral import sample_given_redshift
 
 
@@ -23,10 +20,18 @@ class InlineBackend:
     def compute(self, tasks, sync: bool = True):
         if isinstance(tasks, list):
             return [
-                task() if callable(task) else task.compute() if hasattr(task, "compute") else task
+                (
+                    task()
+                    if callable(task)
+                    else task.compute() if hasattr(task, "compute") else task
+                )
                 for task in tasks
             ]
-        return tasks() if callable(tasks) else tasks.compute() if hasattr(tasks, "compute") else tasks
+        return (
+            tasks()
+            if callable(tasks)
+            else tasks.compute() if hasattr(tasks, "compute") else tasks
+        )
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]
@@ -34,6 +39,7 @@ class InlineBackend:
     def delayed(self, func):
         def delayed_decorator(*args, **kwargs):
             return lambda: func(*args, **kwargs)
+
         return delayed_decorator
 
     def close(self):
@@ -61,8 +67,6 @@ def test_interferometer_runs(tmp_path):
     ra = metadata["RA"] * U.deg
     dec = metadata["Dec"] * U.deg
     fov = metadata["FOV"] * 3600 * U.arcsec
-    ang_res = metadata["Ang.res."] * U.arcsec
-    vel_res = metadata["Vel.res."] * U.km / U.s
     int_time = metadata["Int.Time"] * U.s
     freq = metadata["Freq"] * U.GHz
     freq_support = metadata["Freq.sup."]
@@ -74,10 +78,13 @@ def test_interferometer_runs(tmp_path):
     antennalist = main_dir.parent / "antenna.cfg"
 
     from almasim.services.interferometry.frequency import freq_supp_extractor
+
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
         freq_support, freq
     )
-    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    max_baseline = (
+        alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    )
     beam_size = alma_antenna.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=False
     )
@@ -87,11 +94,11 @@ def test_interferometer_runs(tmp_path):
     n_pix = 128
     n_channels = 64
 
-    rest_frequency = metadata["rest_frequency"]
     redshift = metadata["redshift"]
     lum_infrared = 1e10
     source_type = "point"
     from almasim.services.astro.spectral import process_spectral_data
+
     (
         continum,
         line_fluxes,

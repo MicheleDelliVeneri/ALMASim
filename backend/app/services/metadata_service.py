@@ -25,8 +25,8 @@ from app.schemas.metadata import ScienceQueryParams
 backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from database.models import Observation
-from database.service import DatabaseService
+from database.models import Observation  # noqa: E402
+from database.service import DatabaseService  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,8 @@ class MetadataService:
 
                 if keywords or categories:
                     logger.info(
-                        f"Retrieved science types from database: {len(keywords)} keywords, {len(categories)} categories"
+                        "Retrieved science types from database: "
+                        f"{len(keywords)} keywords, {len(categories)} categories"
                     )
                     return keywords, categories
             except Exception as e:
@@ -80,7 +81,8 @@ class MetadataService:
 
                 self.db.commit()
                 logger.info(
-                    f"Cached {len(keywords)} keywords and {len(categories)} categories in database"
+                    f"Cached {len(keywords)} keywords "
+                    f"and {len(categories)} categories in database"
                 )
             except Exception as e:
                 logger.error(f"Failed to cache science types in database: {e}")
@@ -121,7 +123,9 @@ class MetadataService:
             return None
         try:
             if self.db_service.count_observations_with_keywords() == 0:
-                logger.info("No keyword-annotated observations in cache, querying ALMA TAP")
+                logger.info(
+                    "No keyword-annotated observations in cache, querying ALMA TAP"
+                )
                 return None
             observations = self.db_service.query_observations(
                 target_name=params.source_name,
@@ -145,7 +149,9 @@ class MetadataService:
                 exclude_obs_types=params.exclude_obs_type,
                 exclude_solar=params.exclude_solar,
             )
-            logger.info(f"Retrieved {len(observations)} observations from database cache")
+            logger.info(
+                f"Retrieved {len(observations)} observations from database cache"
+            )
             records = observations_to_metadata_records(
                 observations,
                 visible_columns=params.visible_columns,
@@ -196,9 +202,15 @@ class MetadataService:
                 visible_columns=None,
             )
             if query_store.is_cancelled(query_id):
-                logger.info(f"Background query {query_id} was cancelled; discarding results")
+                logger.info(
+                    f"Background query {query_id} was cancelled; discarding results"
+                )
                 return
-            rows = result_df.to_dict("records") if result_df is not None and not result_df.empty else []
+            rows = (
+                result_df.to_dict("records")
+                if result_df is not None and not result_df.empty
+                else []
+            )
             query_store.append_rows(query_id, rows)
             query_store.complete(query_id)
             logger.info(f"Background query {query_id} completed: {len(rows)} rows")
@@ -248,20 +260,27 @@ class MetadataService:
 
         try:
             importer = CSVImporter(self.db)
-            seen: set = set()  # deduplicate within the batch (TAP can return duplicate UIDs)
+            seen: set = (
+                set()
+            )  # deduplicate within the batch (TAP can return duplicate UIDs)
             cached_count = sum(
                 self._upsert_row(importer, row.to_dict(), seen)
                 for _, row in result_df.iterrows()
             )
             self.db.commit()
-            logger.info(f"Successfully cached {cached_count} new observations from TAP query")
+            logger.info(
+                f"Successfully cached {cached_count} new observations from TAP query"
+            )
         except Exception as e:
             logger.error(f"Error caching TAP results: {e}", exc_info=True)
             self.db.rollback()
             raise
 
     def _upsert_row(self, importer, row_dict: Dict[str, Any], seen: set) -> int:
-        """Insert or update one TAP row in the database. Returns 1 if written, 0 otherwise."""
+        """Insert or update one TAP row in the database.
+
+        Returns 1 if written, 0 otherwise.
+        """
         member_ous_uid = row_dict.get("member_ous_uid")
         if not member_ous_uid or member_ous_uid in seen:
             return 0
@@ -286,7 +305,9 @@ class MetadataService:
             if cat:
                 existing.scientific_category = importer.get_or_create_category(cat)
 
-    def _insert_new(self, importer, row_dict: Dict[str, Any], kw_str: str, cat_str: str) -> int:
+    def _insert_new(
+        self, importer, row_dict: Dict[str, Any], kw_str: str, cat_str: str
+    ) -> int:
         """Parse and insert a brand-new observation. Returns 1 on success, 0 on skip."""
         observation = importer.parse_csv_row(row_dict, "tap_query")
         if not observation:

@@ -1,4 +1,5 @@
 """In-memory store for simulation status and logs."""
+
 from datetime import datetime
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
@@ -8,6 +9,7 @@ import threading
 @dataclass
 class SimulationStatus:
     """Simulation status information."""
+
     simulation_id: str
     status: str = "queued"  # queued, running, completed, failed, cancelled
     progress: float = 0.0
@@ -23,23 +25,23 @@ class SimulationStatus:
 
 class StatusStore:
     """Thread-safe in-memory store for simulation status."""
-    
+
     def __init__(self):
         self._store: Dict[str, SimulationStatus] = {}
         self._lock = threading.Lock()
-    
+
     def create(self, simulation_id: str) -> SimulationStatus:
         """Create a new simulation status entry."""
         with self._lock:
             status = SimulationStatus(simulation_id=simulation_id)
             self._store[simulation_id] = status
             return status
-    
+
     def get(self, simulation_id: str) -> Optional[SimulationStatus]:
         """Get simulation status by ID."""
         with self._lock:
             return self._store.get(simulation_id)
-    
+
     def update(
         self,
         simulation_id: str,
@@ -56,7 +58,7 @@ class StatusStore:
             sim_status = self._store.get(simulation_id)
             if not sim_status:
                 return None
-            
+
             if status is not None:
                 sim_status.status = status
             if progress is not None:
@@ -96,12 +98,12 @@ class StatusStore:
         with self._lock:
             sim_status = self._store.get(simulation_id)
             return bool(sim_status.cancelled) if sim_status else False
-    
+
     def delete(self, simulation_id: str) -> bool:
         """Delete simulation status."""
         with self._lock:
             return self._store.pop(simulation_id, None) is not None
-    
+
     def list_all(self) -> List[SimulationStatus]:
         """List all simulation statuses."""
         with self._lock:
@@ -116,11 +118,13 @@ status_store = StatusStore()
 # Query store — holds results of background TAP query jobs
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class QueryJobStatus:
     """Status and accumulated rows for a background TAP query job."""
+
     query_id: str
-    status: str = "running"   # running | completed | failed | cancelled
+    status: str = "running"  # running | completed | failed | cancelled
     rows: List[dict] = field(default_factory=list)
     total: int = 0
     error: Optional[str] = None
@@ -201,11 +205,19 @@ class QueryStore:
         with self._lock:
             job = self._store.get(query_id)
             if not job:
-                return {"rows": [], "done": True, "total_fetched": 0, "page": page, "error": "Job not found"}
+                return {
+                    "rows": [],
+                    "done": True,
+                    "total_fetched": 0,
+                    "page": page,
+                    "error": "Job not found",
+                }
             start = page * page_size
             end = start + page_size
             rows = job.rows[start:end]
-            done = job.status in ("completed", "failed", "cancelled") and end >= len(job.rows)
+            done = job.status in ("completed", "failed", "cancelled") and end >= len(
+                job.rows
+            )
             return {
                 "query_id": query_id,
                 "page": page,

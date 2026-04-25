@@ -1,4 +1,5 @@
 """Gaussian sky model implementation."""
+
 import numpy as np
 import math
 import astropy.units as U
@@ -14,7 +15,7 @@ from .utils import track_progress, gaussian
 def gaussian2d(amp, x, y, n_px, cen_x, cen_y, fwhm_x, fwhm_y, angle):
     """
     Generates a 2D Gaussian given the following input parameters:
-    
+
     Parameters
     ----------
     x, y : np.ndarray
@@ -47,7 +48,7 @@ def gaussian2d(amp, x, y, n_px, cen_x, cen_y, fwhm_x, fwhm_y, angle):
 
 class GaussianSkyModel(SkyModel):
     """2D Gaussian sky model."""
-    
+
     def __init__(
         self,
         datacube: Any,
@@ -67,7 +68,7 @@ class GaussianSkyModel(SkyModel):
     ):
         """
         Initialize Gaussian sky model.
-        
+
         Parameters
         ----------
         datacube : Any
@@ -115,7 +116,7 @@ class GaussianSkyModel(SkyModel):
         self.fwhm_x = fwhm_x
         self.fwhm_y = fwhm_y
         self.angle = angle
-    
+
     def insert(self) -> Any:
         """Insert Gaussian source into datacube."""
         z_idxs = np.arange(0, self.n_chan)
@@ -143,5 +144,3 @@ class GaussianSkyModel(SkyModel):
         skymodel = self.client.gather(futures)
         self.datacube._array = skymodel * U.Jy * U.pix**-2
         return self.datacube
-
-

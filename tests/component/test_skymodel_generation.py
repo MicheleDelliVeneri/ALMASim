@@ -1,12 +1,10 @@
 """Component tests for sky model generation."""
+
 import pytest
-import numpy as np
 import astropy.units as U
-from pathlib import Path
 
 from almasim import skymodels
 from almasim.services.astro.spectral import process_spectral_data
-from almasim.services.interferometry.frequency import freq_supp_extractor
 
 
 class InlineClient:
@@ -15,10 +13,18 @@ class InlineClient:
     def compute(self, tasks):
         if isinstance(tasks, list):
             return [
-                task.compute(scheduler="synchronous") if hasattr(task, "compute") else task
+                (
+                    task.compute(scheduler="synchronous")
+                    if hasattr(task, "compute")
+                    else task
+                )
                 for task in tasks
             ]
-        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
+        return (
+            tasks.compute(scheduler="synchronous")
+            if hasattr(tasks, "compute")
+            else tasks
+        )
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]
@@ -49,7 +55,7 @@ def sample_spectral_data(main_dir):
     n_channels = 32
     lum_infrared = 1e10
     cont_sens = 0.1  # Jy
-    
+
     result = process_spectral_data(
         source_type="point",
         master_path=main_dir,
@@ -64,7 +70,7 @@ def sample_spectral_data(main_dir):
         n_lines=1,
         remote=False,
     )
-    
+
     return result
 
 
@@ -85,12 +91,12 @@ def test_pointlike_skymodel_generation(sample_datacube, sample_spectral_data):
         fwhm_z,
         lum_infrared,
     ) = sample_spectral_data
-    
+
     pos_x, pos_y, _ = sample_datacube.wcs.sub(3).wcs_world2pix(
         0.0 * U.deg, 0.0 * U.deg, 100.0 * U.GHz, 0
     )
     pos_z = [int(idx) for idx in source_channel_index]
-    
+
     model = skymodels.PointlikeSkyModel(
         datacube=sample_datacube,
         continuum=continum,
@@ -101,10 +107,10 @@ def test_pointlike_skymodel_generation(sample_datacube, sample_spectral_data):
         fwhm_z=fwhm_z,
         n_chan=32,
     )
-    
+
     result = model.insert()
     assert result is not None
-    assert hasattr(result, '_array')
+    assert hasattr(result, "_array")
     array = result._array.to_value(result._array.unit)
     assert array.shape[0] == 32 or array.shape[2] == 32
 
@@ -126,12 +132,12 @@ def test_gaussian_skymodel_generation(sample_datacube, sample_spectral_data):
         fwhm_z,
         lum_infrared,
     ) = sample_spectral_data
-    
+
     pos_x, pos_y, _ = sample_datacube.wcs.sub(3).wcs_world2pix(
         0.0 * U.deg, 0.0 * U.deg, 100.0 * U.GHz, 0
     )
     pos_z = [int(idx) for idx in source_channel_index]
-    
+
     model = skymodels.GaussianSkyModel(
         datacube=sample_datacube,
         continuum=continum,
@@ -147,10 +153,10 @@ def test_gaussian_skymodel_generation(sample_datacube, sample_spectral_data):
         n_chan=32,
         client=InlineClient(),
     )
-    
+
     result = model.insert()
     assert result is not None
-    assert hasattr(result, '_array')
+    assert hasattr(result, "_array")
 
 
 @pytest.mark.component
@@ -170,9 +176,9 @@ def test_diffuse_skymodel_generation(sample_datacube, sample_spectral_data):
         fwhm_z,
         lum_infrared,
     ) = sample_spectral_data
-    
+
     pos_z = [int(idx) for idx in source_channel_index]
-    
+
     model = skymodels.DiffuseSkyModel(
         datacube=sample_datacube,
         continuum=continum,
@@ -183,15 +189,17 @@ def test_diffuse_skymodel_generation(sample_datacube, sample_spectral_data):
         n_chan=32,
         client=InlineClient(),
     )
-    
+
     result = model.insert()
     assert result is not None
-    assert hasattr(result, '_array')
+    assert hasattr(result, "_array")
 
 
 @pytest.mark.component
 @pytest.mark.slow
-def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, tmp_path):
+def test_serendipitous_sources_insertion(
+    sample_datacube, sample_spectral_data, tmp_path
+):
     """Test inserting serendipitous sources into a datacube."""
     (
         continum,
@@ -207,18 +215,18 @@ def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, 
         fwhm_z,
         lum_infrared,
     ) = sample_spectral_data
-    
+
     pos_z = [int(idx) for idx in source_channel_index]
-    
+
     # Ensure fwhm_z values are valid (> 2) for serendipitous insertion
     # The function requires fwhm_zs[0] > 2 for np.random.randint(2, int(fwhm_zs[0]), ...)
     fwhm_z_valid = [max(3.0, fz) for fz in fwhm_z]
-    
+
     # First create a base model
     pos_x, pos_y, _ = sample_datacube.wcs.sub(3).wcs_world2pix(
         0.0 * U.deg, 0.0 * U.deg, 100.0 * U.GHz, 0
     )
-    
+
     base_model = skymodels.PointlikeSkyModel(
         datacube=sample_datacube,
         continuum=continum,
@@ -230,11 +238,11 @@ def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, 
         n_chan=32,
     )
     datacube = base_model.insert()
-    
+
     # Now add serendipitous sources (requires Dask client)
     sim_params_path = tmp_path / "sim_params.txt"
     sim_params_path.write_text("test")
-    
+
     result = skymodels.insert_serendipitous(
         terminal=None,
         client=InlineClient(),
@@ -254,9 +262,9 @@ def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, 
         n_chan=32,  # Note: n_chan not n_channels
         sim_params_path=str(sim_params_path),
     )
-    
+
     assert result is not None
-    assert hasattr(result, '_array')
+    assert hasattr(result, "_array")
 
 
 @pytest.mark.component
@@ -272,13 +280,13 @@ def test_datacube_creation():
         ra=10.0 * U.deg,
         dec=-20.0 * U.deg,
     )
-    
+
     assert datacube.n_px_x == 128
     assert datacube.n_px_y == 128
     assert datacube.n_channels == 64
     assert datacube.px_size == 0.05 * U.arcsec
-    assert hasattr(datacube, 'wcs')
-    assert hasattr(datacube, '_array')
+    assert hasattr(datacube, "wcs")
+    assert hasattr(datacube, "_array")
 
 
 @pytest.mark.component
@@ -286,8 +294,8 @@ def test_datacube_header_generation(sample_datacube):
     """Test generating FITS header from datacube."""
     obs_date = "2020-01-01"
     header = skymodels.get_datacube_header(sample_datacube, obs_date)
-    
+
     assert header is not None
-    assert 'NAXIS' in header
+    assert "NAXIS" in header
     # Check for date-related fields (MJD-OBS is used instead of DATE-OBS)
-    assert 'MJD-OBS' in header or 'DATE-OBS' in header or 'DATE' in header
+    assert "MJD-OBS" in header or "DATE-OBS" in header or "DATE" in header

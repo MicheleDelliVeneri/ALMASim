@@ -44,12 +44,19 @@ class SimulationParamsBase(BaseModel):
     lum_infrared: Optional[float] = Field(None, description="Infrared luminosity")
     snr: Optional[float] = Field(
         default=None,
-        description="Optional manual signal-to-noise ratio override; leave null to auto-derive",
+        description=(
+            "Optional manual signal-to-noise ratio override; "
+            "leave null to auto-derive"
+        ),
     )
     n_lines: Optional[int] = Field(None, description="Number of spectral lines")
     line_names: Optional[Any] = Field(None, description="Line names")
-    save_mode: str = Field(default="fits", description="Image save mode: npz, fits, both, h5, or memory")
-    ms_save_mode: str = Field(default="msv2", description="MS/visibility save mode: npz, msv2, or both")
+    save_mode: str = Field(
+        default="fits", description="Image save mode: npz, fits, both, h5, or memory"
+    )
+    ms_save_mode: str = Field(
+        default="msv2", description="MS/visibility save mode: npz, msv2, or both"
+    )
     persist: bool = Field(
         default=True,
         description="Whether to persist standard simulation outputs to disk",
@@ -64,7 +71,7 @@ class SimulationParamsBase(BaseModel):
     robust: float = Field(default=0.0, description="Robustness parameter")
     compute_backend: Optional[str] = Field(
         default="local",
-        description="Computation backend type: local, dask, slurm, or kubernetes",
+        description=("Computation backend type: local, dask, slurm, or kubernetes"),
     )
     compute_backend_config: Optional[dict] = Field(
         default_factory=dict, description="Backend-specific configuration"
@@ -83,15 +90,21 @@ class SimulationParamsBase(BaseModel):
     )
     source_offset_x_arcsec: float = Field(
         default=0.0,
-        description="Optional source offset along x in arcsec relative to phase center",
+        description=(
+            "Optional source offset along x in arcsec relative to phase center"
+        ),
     )
     source_offset_y_arcsec: float = Field(
         default=0.0,
-        description="Optional source offset along y in arcsec relative to phase center",
+        description=(
+            "Optional source offset along y in arcsec relative to phase center"
+        ),
     )
     background_mode: str = Field(
         default="none",
-        description="Background sky mode: none, blank_field_dsfg, dusty_diffuse, or combined",
+        description=(
+            "Background sky mode: none, blank_field_dsfg, dusty_diffuse, or combined"
+        ),
     )
     background_level: float = Field(
         default=1.0,
@@ -107,7 +120,10 @@ class SimulationParamsBase(BaseModel):
     )
     external_component_table_path: Optional[str] = Field(
         default=None,
-        description="Optional path to a component-list-like source table for external-components mode",
+        description=(
+            "Optional path to a component-list-like source table "
+            "for external-components mode"
+        ),
     )
     external_alignment_mode: str = Field(
         default="observation",
@@ -127,7 +143,9 @@ class SimulationParamsBase(BaseModel):
     )
     ms_export_dir: Optional[str] = Field(
         default=None,
-        description="Optional target directory for the native MeasurementSet `.ms` export",
+        description=(
+            "Optional target directory for the native MeasurementSet `.ms` export"
+        ),
     )
 
 
@@ -181,9 +199,15 @@ class SimulationEstimate(BaseModel):
     cube_shape: list[int] = Field(..., description="Cube shape [channels, y, x]")
     cube_voxels: int = Field(..., description="Total number of voxels")
     cell_size_arcsec: float = Field(..., description="Estimated cell size in arcsec")
-    beam_size_arcsec: float = Field(..., description="Estimated synthesized beam size in arcsec")
-    raw_single_cube_gb: float = Field(..., description="Raw float32 size of one cube in GiB")
-    raw_complex_cube_gb: float = Field(..., description="Raw complex64 size of one cube in GiB")
+    beam_size_arcsec: float = Field(
+        ..., description="Estimated synthesized beam size in arcsec"
+    )
+    raw_single_cube_gb: float = Field(
+        ..., description="Raw float32 size of one cube in GiB"
+    )
+    raw_complex_cube_gb: float = Field(
+        ..., description="Raw complex64 size of one cube in GiB"
+    )
     estimated_standard_output_gb: float = Field(
         ...,
         description="Approximate raw GiB footprint of the standard output products",

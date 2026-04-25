@@ -107,7 +107,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-type",
         type=str,
         default="point",
-        choices=["point", "gaussian", "diffuse", "galaxy-zoo", "molecular", "hubble-100"],
+        choices=[
+            "point",
+            "gaussian",
+            "diffuse",
+            "galaxy-zoo",
+            "molecular",
+            "hubble-100",
+        ],
         help="Sky model family for clean cube generation.",
     )
     parser.add_argument(
@@ -253,7 +260,13 @@ def main() -> None:
     print(f"ML shard written to: {exported_results.get('ml_dataset_path')}")
     print(
         "Exported keys: "
-        + ", ".join(sorted(key for key in exported_results.keys() if key.endswith("_cube") or key.endswith("_path")))
+        + ", ".join(
+            sorted(
+                key
+                for key in exported_results.keys()
+                if key.endswith("_cube") or key.endswith("_path")
+            )
+        )
     )
 
 

@@ -1,11 +1,9 @@
 """Utility functions for sky model generation."""
+
 import numpy as np
-import math
 import time
 from scipy.ndimage import zoom
 from astropy.io import fits
-from astropy.units import Quantity
-from dask.distributed import Client
 
 
 def interpolate_array(arr: np.ndarray, n_px: int) -> np.ndarray:
@@ -31,7 +29,7 @@ def track_progress(update_progress, futures):
 def gaussian(x: np.ndarray, amp: float, cen: float, fwhm: float) -> np.ndarray:
     """
     Generates a 1D Gaussian given the following input parameters:
-    
+
     Parameters
     ----------
     x : np.ndarray
@@ -42,7 +40,7 @@ def gaussian(x: np.ndarray, amp: float, cen: float, fwhm: float) -> np.ndarray:
         Center position
     fwhm : float
         Full width at half maximum
-        
+
     Returns
     -------
     np.ndarray
@@ -99,5 +97,3 @@ def get_datacube_header(datacube, obs_date: str) -> fits.Header:
     header.append(("BMIN", abs(wcs_header["CDELT1"]) * 5))
     header.append(("BMAJ", abs(wcs_header["CDELT2"]) * 5))
     return header
-
-

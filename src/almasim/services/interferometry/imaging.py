@@ -1,12 +1,13 @@
 """Image processing functions for interferometry."""
-import numpy as np
 
-_rng = np.random.default_rng(0)
+import numpy as np
 from scipy.ndimage import zoom
 from astropy.io import fits
 
 from .baselines import prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
+
+_rng = np.random.default_rng(0)
 
 
 def prepare_2d_arrays(Npix: int) -> tuple:
@@ -250,7 +251,7 @@ def image_channel(
     # Convert header dict back to FITS Header if needed (for pickling compatibility)
     if isinstance(header, dict):
         header = fits.Header(header)
-    
+
     (
         beam,
         totsampling,
@@ -330,5 +331,14 @@ def image_channel(
     del noisemap, robustsamp, Gsampling, Grobustsamp, GrobustNoise
     del Nbas, B, basnum, basidx, antnum, Gains, Noise, H, ravelDims
     del pixpos, baseline_phases, bas2change
-    return modelim[0], dirtymap, modelvis, dirtyvis, u, v, beam, totsampling, raw_visibility
-
+    return (
+        modelim[0],
+        dirtymap,
+        modelvis,
+        dirtyvis,
+        u,
+        v,
+        beam,
+        totsampling,
+        raw_visibility,
+    )

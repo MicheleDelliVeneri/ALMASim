@@ -1,4 +1,5 @@
 """Utility functions for services."""
+
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -32,5 +33,3 @@ def as_progress_emitter(callback):
     if hasattr(callback, "emit"):
         return callback
     return ProgressEmitterAdapter(callback)
-
-

@@ -1,7 +1,7 @@
 """Unit tests for antenna functions."""
+
 import pytest
 import astropy.units as U
-from pathlib import Path
 
 from almasim.services.interferometry.antenna import (
     estimate_alma_beam_size,
@@ -32,7 +32,7 @@ def test_estimate_alma_beam_size_invalid():
     """Test that invalid inputs raise ValueError."""
     with pytest.raises(ValueError):
         estimate_alma_beam_size(-100.0 * U.GHz, 1.0 * U.km)
-    
+
     with pytest.raises(ValueError):
         estimate_alma_beam_size(100.0 * U.GHz, -1.0 * U.km)
 
@@ -56,8 +56,6 @@ def test_compute_distance():
     """Test 3D distance calculation."""
     dist = compute_distance(0, 0, 0, 1, 1, 1)
     assert dist == pytest.approx(1.732, rel=1e-2)  # sqrt(3)
-    
+
     dist = compute_distance(0, 0, 0, 3, 4, 0)
     assert dist == pytest.approx(5.0, rel=1e-2)  # 3-4-5 triangle
-
-

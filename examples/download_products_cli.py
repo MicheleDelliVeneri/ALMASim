@@ -89,12 +89,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--generate-calibrated-visibilities",
         action="store_true",
-        help="After raw MS import, apply delivered calibration products and write calibrated MSs.",
+        help=(
+            "After raw MS import, apply delivered calibration products "
+            "and write calibrated MSs."
+        ),
     )
     parser.add_argument(
         "--clean-intermediate-files",
         action="store_true",
-        help="After calibrated MSs are created, remove downloaded/intermediate raw products when safe.",
+        help=(
+            "After calibrated MSs are created, remove downloaded/intermediate "
+            "raw products when safe."
+        ),
     )
     parser.add_argument(
         "--archive-output-root",
@@ -136,7 +142,9 @@ def _load_or_resolve_products(args: argparse.Namespace):
 
     member_uids = list(args.member_ous_uid)
     if args.metadata_csv is not None:
-        member_uids.extend(_member_uids_from_metadata(args.metadata_csv, args.member_limit))
+        member_uids.extend(
+            _member_uids_from_metadata(args.metadata_csv, args.member_limit)
+        )
 
     member_uids = [uid for uid in member_uids if uid]
     if not member_uids:
@@ -146,7 +154,9 @@ def _load_or_resolve_products(args: argparse.Namespace):
 
     products = resolve_products(member_uids)
     if not products:
-        raise SystemExit("No products were resolved for the requested member_ous_uid values")
+        raise SystemExit(
+            "No products were resolved for the requested member_ous_uid values"
+        )
 
     saved_path = save_products_csv(products, args.save_products_csv)
     print(f"Saved resolved products CSV: {saved_path}")

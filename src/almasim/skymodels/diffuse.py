@@ -1,10 +1,10 @@
 """Diffuse sky model implementation."""
+
 import random
 import numpy as np
 import astropy.units as U
-from typing import Optional, Any
+from typing import Any
 from dask import delayed
-from dask.distributed import Client
 import nifty8 as ift
 
 from .base import SkyModel
@@ -41,7 +41,7 @@ def diffuse_image(diffuse_signal: np.ndarray, amp: float) -> np.ndarray:
 
 class DiffuseSkyModel(SkyModel):
     """Diffuse sky model using NIFTY."""
-    
+
     def insert(self) -> Any:
         """Insert diffuse source into datacube."""
         ts = diffuse_signal(self.n_px)
@@ -62,5 +62,3 @@ class DiffuseSkyModel(SkyModel):
         skymodel = self.client.gather(futures)
         self.datacube._array = skymodel * U.Jy * U.pix**-2
         return self.datacube
-
-

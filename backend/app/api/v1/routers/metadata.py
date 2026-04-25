@@ -16,7 +16,6 @@ from app.schemas.metadata import (
     MetadataResponse,
     MetadataSaveRequest,
     MetadataSaveResponse,
-    ScienceQueryParams,
 )
 from app.services.metadata_service import MetadataService
 from app.services.status_store import query_store
@@ -25,7 +24,7 @@ from app.services.status_store import query_store
 backend_dir = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from database.config import get_db
+from database.config import get_db  # noqa: E402
 
 router = APIRouter()
 

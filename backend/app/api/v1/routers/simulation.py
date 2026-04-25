@@ -1,10 +1,7 @@
 """Simulation API endpoints."""
 
 import asyncio
-import json
 import uuid
-from pathlib import Path
-from typing import Any, Dict
 
 import almasim.services.simulation as sim_service
 from fastapi import (
@@ -244,7 +241,9 @@ async def estimate_simulation(
             ms_export=params.ms_export,
             ms_export_dir=params.ms_export_dir,
         )
-        return SimulationEstimate(**sim_service.estimate_simulation_footprint(sim_params))
+        return SimulationEstimate(
+            **sim_service.estimate_simulation_footprint(sim_params)
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -276,7 +275,9 @@ async def get_simulation_status(
         if job:
             logs = [
                 f"[{log.timestamp.isoformat()}] {log.message}"
-                for log in reversed(db_service.get_simulation_logs(job.simulation_id, limit=100))
+                for log in reversed(
+                    db_service.get_simulation_logs(job.simulation_id, limit=100)
+                )
             ]
             return SimulationStatusSchema(
                 simulation_id=str(job.simulation_id),

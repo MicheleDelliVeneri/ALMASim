@@ -1,8 +1,8 @@
 """Base class for sky model generation."""
+
 from abc import ABC, abstractmethod
 from typing import Optional, Any
 import numpy as np
-import astropy.units as U
 from dask.distributed import Client
 
 from .utils import gaussian
@@ -10,7 +10,7 @@ from .utils import gaussian
 
 class SkyModel(ABC):
     """Base class for all sky model types."""
-    
+
     def __init__(
         self,
         datacube: Any,
@@ -25,7 +25,7 @@ class SkyModel(ABC):
     ):
         """
         Initialize base sky model.
-        
+
         Parameters
         ----------
         datacube : Any
@@ -56,11 +56,11 @@ class SkyModel(ABC):
         self.n_chan = n_chan
         self.client = client
         self.update_progress = update_progress
-    
+
     def _compute_spectral_profile(self) -> np.ndarray:
         """
         Compute the spectral profile from continuum and line fluxes.
-        
+
         Returns
         -------
         np.ndarray
@@ -71,17 +71,15 @@ class SkyModel(ABC):
         for i in range(len(self.line_fluxes)):
             gs += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
         return gs
-    
+
     @abstractmethod
     def insert(self) -> Any:
         """
         Insert the sky model into the datacube.
-        
+
         Returns
         -------
         Any
             Modified datacube object
         """
         pass
-
-

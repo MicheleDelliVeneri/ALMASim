@@ -1,4 +1,5 @@
 """On-disk exporters for cube-shaped ALMASim products."""
+
 from __future__ import annotations
 
 import json
@@ -87,7 +88,9 @@ def _write_fits_cube(
     fits.PrimaryHDU(header=fits_header, data=cube).writeto(path, overwrite=True)
 
 
-def _write_fits_complex_cube(output_dir: Path, stem: str, idx: int, cube: np.ndarray) -> None:
+def _write_fits_complex_cube(
+    output_dir: Path, stem: str, idx: int, cube: np.ndarray
+) -> None:
     cube = np.asarray(cube)
     fits.PrimaryHDU(np.real(cube)).writeto(
         output_dir / f"{stem}_real{idx}.fits",
@@ -124,7 +127,9 @@ def write_interferometry_products(
         np.savez_compressed(output_dir / f"dirty-vis-cube_{idx}.npz", dirty_vis_cube)
         np.savez_compressed(output_dir / f"clean-vis-cube_{idx}.npz", vis_cube)
         np.savez_compressed(output_dir / f"beam-cube_{idx}.npz", beam_cube)
-        np.savez_compressed(output_dir / f"totsampling-cube_{idx}.npz", totsampling_cube)
+        np.savez_compressed(
+            output_dir / f"totsampling-cube_{idx}.npz", totsampling_cube
+        )
         np.savez_compressed(output_dir / f"uv-mask-cube_{idx}.npz", uv_mask_cube)
         np.savez_compressed(output_dir / f"u-cube_{idx}.npz", u_cube)
         np.savez_compressed(output_dir / f"v-cube_{idx}.npz", v_cube)
@@ -176,4 +181,6 @@ def write_interferometry_products(
         return
 
     if save_mode not in ("h5",):
-        raise ValueError(f"Unsupported save_mode for interferometry products: {save_mode}")
+        raise ValueError(
+            f"Unsupported save_mode for interferometry products: {save_mode}"
+        )

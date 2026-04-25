@@ -1,10 +1,10 @@
 """Single-dish total-power simulation helpers."""
+
 from __future__ import annotations
 
 from typing import Any
 
 import numpy as np
-
 
 ARCSEC_PER_RAD = 206264.80624709636
 

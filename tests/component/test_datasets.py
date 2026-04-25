@@ -1,4 +1,5 @@
 """Component tests for dataset gathering functionality."""
+
 import pytest
 from pathlib import Path
 import tempfile
@@ -36,7 +37,11 @@ def test_download_galaxy_zoo_structure(temp_data_dir):
     except (FileNotFoundError, OSError, ValueError) as e:
         # These are expected errors (missing API key, network issues)
         # Verify the function at least tried to create the directory
-        assert temp_data_dir.exists() or "galaxy_zoo" in str(e).lower() or "kaggle" in str(e).lower()
+        assert (
+            temp_data_dir.exists()
+            or "galaxy_zoo" in str(e).lower()
+            or "kaggle" in str(e).lower()
+        )
     except Exception as e:
         # Any other exception should be a valid error type
         assert len(str(e)) > 0  # Error message exists
@@ -57,7 +62,11 @@ def test_download_hubble_top100_structure(temp_data_dir):
     except (FileNotFoundError, OSError, ValueError) as e:
         # These are expected errors (missing API key, network issues)
         # Verify the function at least tried to create the directory
-        assert temp_data_dir.exists() or "hubble" in str(e).lower() or "kaggle" in str(e).lower()
+        assert (
+            temp_data_dir.exists()
+            or "hubble" in str(e).lower()
+            or "kaggle" in str(e).lower()
+        )
     except Exception as e:
         # Any other exception should be a valid error type
         assert len(str(e)) > 0  # Error message exists
@@ -69,7 +78,7 @@ def test_download_tng_structure_local(temp_data_dir):
     """Test TNG structure download (local, requires API key)."""
     # Test that function exists and handles API key properly
     api_key = "test_key"  # Invalid key for testing error handling
-    
+
     try:
         result_path = download_tng_structure(
             api_key=api_key,
@@ -85,7 +94,12 @@ def test_download_tng_structure_local(temp_data_dir):
         # These are expected errors (invalid API key, network issues, wget failure)
         # Verify the function at least tried to create the directory structure
         tng_dir = temp_data_dir / "TNG100-1"
-        assert tng_dir.exists() or "tng" in str(e).lower() or "wget" in str(e).lower() or "api" in str(e).lower()
+        assert (
+            tng_dir.exists()
+            or "tng" in str(e).lower()
+            or "wget" in str(e).lower()
+            or "api" in str(e).lower()
+        )
     except Exception as e:
         # Any other exception should be a valid error type
         assert len(str(e)) > 0  # Error message exists
@@ -101,7 +115,7 @@ def test_remote_machine_dataclass():
         ssh_key=ssh_key,
         ssh_key_passphrase="passphrase",
     )
-    
+
     assert remote.host == "example.com"
     assert remote.username == "user"
     assert remote.ssh_key == ssh_key
@@ -115,15 +129,13 @@ def test_dataset_directories_created(temp_data_dir):
     galaxy_zoo_path = temp_data_dir / "galaxy_zoo"
     hubble_path = temp_data_dir / "hubble"
     tng_path = temp_data_dir / "tng"
-    
+
     # These should be created by the download functions
     # We test the structure without actually downloading
     galaxy_zoo_path.mkdir(parents=True, exist_ok=True)
     hubble_path.mkdir(parents=True, exist_ok=True)
     tng_path.mkdir(parents=True, exist_ok=True)
-    
+
     assert galaxy_zoo_path.exists()
     assert hubble_path.exists()
     assert tng_path.exists()
-
-

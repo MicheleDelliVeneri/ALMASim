@@ -1,4 +1,5 @@
 """Core interferometry classes and functionality."""
+
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -15,7 +16,6 @@ from astropy.constants import c
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from dask.distributed import Client
     from ..compute.base import ComputationBackend
 
 from .imaging import image_channel
@@ -257,10 +257,14 @@ class Interferometer:
             self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
             if self.nH > 200:
                 self.scan_time = 18.144
-                self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+                self.nH = int(
+                    self.integration_time / (self.scan_time * self.second2hour)
+                )
                 if self.nH > 200:
                     self.scan_time = 30.24
-                    self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+                    self.nH = int(
+                        self.integration_time / (self.scan_time * self.second2hour)
+                    )
         self.header.append(("EPOCH", self.nH))
 
     def _read_antennas(self) -> None:
@@ -335,7 +339,8 @@ class Interferometer:
         """Run interferometric simulation."""
         # Scatter input data to workers
         scattered_channels = [
-            self.backend.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
+            self.backend.scatter(self.skymodel[i])
+            for i in range(self.skymodel.shape[0])
         ]
 
         # Convert FITS header to dict for pickling (header contains thread locks)
@@ -357,8 +362,14 @@ class Interferometer:
                         header_dict[key] = str(v)
             elif isinstance(self.header, dict):
                 # Already a dict, but ensure it's a plain dict with basic types
-                header_dict = {str(k): (str(v) if not isinstance(v, (int, float, bool, type(None))) else v) 
-                              for k, v in self.header.items()}
+                header_dict = {
+                    str(k): (
+                        str(v)
+                        if not isinstance(v, (int, float, bool, type(None)))
+                        else v
+                    )
+                    for k, v in self.header.items()
+                }
             else:
                 header_dict = {}
         except Exception:
@@ -403,7 +414,9 @@ class Interferometer:
             delayed_results.append(delayed_result)
 
         # Compute per-channel futures
-        futures_per_channel = [self.backend.compute(dr, sync=False) for dr in delayed_results]
+        futures_per_channel = [
+            self.backend.compute(dr, sync=False) for dr in delayed_results
+        ]
 
         # Start tracking progress of the per-channel computations
         self.track_progress(futures_per_channel)

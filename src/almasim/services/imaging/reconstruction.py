@@ -1,4 +1,5 @@
 """Deterministic image reconstruction and TP/INT merge helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +8,9 @@ from typing import Any
 import numpy as np
 
 
-def regrid_cube_to_match(cube: np.ndarray, target_shape: tuple[int, int, int]) -> np.ndarray:
+def regrid_cube_to_match(
+    cube: np.ndarray, target_shape: tuple[int, int, int]
+) -> np.ndarray:
     """Nearest-neighbor regrid of a cube onto a target `(chan, y, x)` shape."""
     cube = np.asarray(cube)
     if cube.shape == target_shape:
@@ -63,7 +66,8 @@ def convolve_cube_with_beam(
     for channel in range(cube.shape[0]):
         convolved[channel] = np.real(
             np.fft.ifft2(
-                np.fft.fft2(cube[channel]) * np.fft.fft2(np.fft.ifftshift(beam_cube[channel]))
+                np.fft.fft2(cube[channel])
+                * np.fft.fft2(np.fft.ifftshift(beam_cube[channel]))
             )
         ).astype(np.float32)
     return convolved
@@ -126,7 +130,9 @@ def integrate_cube_preview(
     integrated = np.nan_to_num(integrated, nan=0.0, posinf=0.0, neginf=0.0)
     if integrated.max() > integrated.min():
         normalized = (
-            (integrated - integrated.min()) / (integrated.max() - integrated.min()) * 255.0
+            (integrated - integrated.min())
+            / (integrated.max() - integrated.min())
+            * 255.0
         ).astype(np.uint8)
     else:
         normalized = np.zeros_like(integrated, dtype=np.uint8)
@@ -176,7 +182,9 @@ def _insert_shifted_kernel(
     )
 
 
-def _estimate_psf_padding(psf: np.ndarray, *, threshold_ratio: float = 1e-3) -> tuple[int, int]:
+def _estimate_psf_padding(
+    psf: np.ndarray, *, threshold_ratio: float = 1e-3
+) -> tuple[int, int]:
     """Estimate a finite PSF support radius for edge-safe CLEAN padding."""
     peak_y, peak_x = np.unravel_index(int(np.argmax(np.abs(psf))), psf.shape)
     peak = float(np.max(np.abs(psf)))
@@ -266,7 +274,9 @@ def clean_deconvolve_cube(
     if dirty_cube.shape != beam_cube.shape:
         raise ValueError("dirty_cube and beam_cube must have the same shape")
     if dirty_cube.ndim != 3:
-        raise ValueError("dirty_cube and beam_cube must have shape (n_channels, ny, nx)")
+        raise ValueError(
+            "dirty_cube and beam_cube must have shape (n_channels, ny, nx)"
+        )
     if n_cycles < 0:
         raise ValueError("n_cycles must be non-negative")
     if not 0.0 < gain <= 1.0:
@@ -320,7 +330,9 @@ def clean_deconvolve_cube(
         channel_cycles = 0
 
         for _ in range(int(n_cycles)):
-            peak_index = np.unravel_index(int(np.argmax(np.abs(residual))), residual.shape)
+            peak_index = np.unravel_index(
+                int(np.argmax(np.abs(residual))), residual.shape
+            )
             peak_value = float(residual[peak_index])
             if threshold is not None and abs(peak_value) < float(threshold):
                 break
@@ -338,7 +350,9 @@ def clean_deconvolve_cube(
             channel_cycles += 1
 
         restored = np.real(
-            np.fft.ifft2(np.fft.fft2(components) * np.fft.fft2(np.fft.ifftshift(clean_beam)))
+            np.fft.ifft2(
+                np.fft.fft2(components) * np.fft.fft2(np.fft.ifftshift(clean_beam))
+            )
         ).astype(np.float32)
         restored += residual
         if clip_negative:

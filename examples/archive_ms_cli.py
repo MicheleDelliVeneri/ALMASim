@@ -13,9 +13,9 @@ import argparse
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -23,7 +23,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--input-root",
         type=Path,
         required=True,
-        help="ALMA delivery root or member directory containing raw/ and calibration/ products.",
+        help=(
+            "ALMA delivery root or member directory containing "
+            "raw/ and calibration/ products."
+        ),
     )
     parser.add_argument(
         "--output-root",
@@ -34,7 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--asdm",
         default=None,
-        help="Optional ASDM UID without .asdm.sdm suffix. If omitted, all ASDMs are processed.",
+        help=(
+            "Optional ASDM UID without .asdm.sdm suffix. "
+            "If omitted, all ASDMs are processed."
+        ),
     )
     parser.add_argument(
         "--casa-data-root",
@@ -45,7 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-casa-data-update",
         action="store_true",
-        help="Do not download CASA runtime data if the selected data directory is empty.",
+        help=(
+            "Do not download CASA runtime data "
+            "if the selected data directory is empty."
+        ),
     )
     parser.add_argument(
         "--overwrite",
@@ -65,12 +74,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--clean-intermediate",
         action="store_true",
-        help="After calibrated MSs are created, remove raw_ms and calibration working data.",
+        help=(
+            "After calibrated MSs are created, remove raw_ms "
+            "and calibration working data."
+        ),
     )
     parser.add_argument(
         "--delete-input-root",
         action="store_true",
-        help="With --clean-intermediate, also remove the input delivery tree if it does not contain calibrated output.",
+        help=(
+            "With --clean-intermediate, also remove the input delivery tree "
+            "if it does not contain calibrated output."
+        ),
     )
     return parser
 

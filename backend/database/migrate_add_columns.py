@@ -1,4 +1,4 @@
-"""One-time migration: add proposal_abstract, qa2_passed, obs_type to observations table."""
+"""One-time migration: add proposal_abstract, qa2_passed, obs_type to observations."""
 
 import logging
 import sys

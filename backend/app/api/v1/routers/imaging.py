@@ -19,7 +19,11 @@ router = APIRouter()
 def _resolve_cube_path(base_dir: Path, file_path: str) -> Path:
     """Resolve an absolute or relative file path under a base directory."""
     candidate = Path(file_path)
-    resolved = candidate.resolve() if candidate.is_absolute() else (base_dir / candidate).resolve()
+    resolved = (
+        candidate.resolve()
+        if candidate.is_absolute()
+        else (base_dir / candidate).resolve()
+    )
     try:
         resolved.relative_to(base_dir.resolve())
     except ValueError as exc:
@@ -41,7 +45,7 @@ def _resolve_cube_path(base_dir: Path, file_path: str) -> Path:
 
 
 def _derive_output_paths(base_dir: Path, dirty_path: Path) -> dict[str, Path]:
-    """Derive deterministic state and preview cube output paths from the dirty cube name."""
+    """Derive deterministic state and preview output paths from the dirty cube name."""
     suffix = dirty_path.stem
     if suffix.startswith("dirty-cube_"):
         suffix = suffix[len("dirty-cube_") :]
@@ -60,7 +64,9 @@ def _derive_output_paths(base_dir: Path, dirty_path: Path) -> dict[str, Path]:
 
 
 @router.post("/deconvolve", response_model=DeconvolutionResponse)
-async def deconvolve_saved_products(body: DeconvolutionRequest) -> DeconvolutionResponse:
+async def deconvolve_saved_products(
+    body: DeconvolutionRequest,
+) -> DeconvolutionResponse:
     """Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews."""
     base_dir = Path(body.directory).resolve()
     if not base_dir.exists() or not base_dir.is_dir():
@@ -71,8 +77,14 @@ async def deconvolve_saved_products(body: DeconvolutionRequest) -> Deconvolution
 
     dirty_path = _resolve_cube_path(base_dir, body.dirty_cube_path)
     beam_path = _resolve_cube_path(base_dir, body.beam_cube_path)
-    clean_path = _resolve_cube_path(base_dir, body.clean_cube_path) if body.clean_cube_path else None
-    state_path = _resolve_cube_path(base_dir, body.state_path) if body.state_path else None
+    clean_path = (
+        _resolve_cube_path(base_dir, body.clean_cube_path)
+        if body.clean_cube_path
+        else None
+    )
+    state_path = (
+        _resolve_cube_path(base_dir, body.state_path) if body.state_path else None
+    )
     output_paths = _derive_output_paths(base_dir, dirty_path)
 
     try:
@@ -96,9 +108,15 @@ async def deconvolve_saved_products(body: DeconvolutionRequest) -> Deconvolution
         resumed = False
         if state_path is not None:
             with np.load(state_path) as state_data:
-                initial_component_cube = np.asarray(state_data["component_cube"], dtype=np.float32)
-                initial_residual_cube = np.asarray(state_data["residual_cube"], dtype=np.float32)
-                initial_clean_beam_cube = np.asarray(state_data["clean_beam_cube"], dtype=np.float32)
+                initial_component_cube = np.asarray(
+                    state_data["component_cube"], dtype=np.float32
+                )
+                initial_residual_cube = np.asarray(
+                    state_data["residual_cube"], dtype=np.float32
+                )
+                initial_clean_beam_cube = np.asarray(
+                    state_data["clean_beam_cube"], dtype=np.float32
+                )
                 initial_cycles_completed = int(state_data.get("cycles_completed", 0))
             resumed = True
 
@@ -133,9 +151,15 @@ async def deconvolve_saved_products(body: DeconvolutionRequest) -> Deconvolution
             clean_beam_cube=result["clean_beam_cube"],
             cycles_completed=result["cycles_completed"],
         )
-        np.savez_compressed(output_paths["component"], component_cube=result["component_cube"])
-        np.savez_compressed(output_paths["restored"], restored_cube=result["restored_cube"])
-        np.savez_compressed(output_paths["residual"], residual_cube=result["residual_cube"])
+        np.savez_compressed(
+            output_paths["component"], component_cube=result["component_cube"]
+        )
+        np.savez_compressed(
+            output_paths["restored"], restored_cube=result["restored_cube"]
+        )
+        np.savez_compressed(
+            output_paths["residual"], residual_cube=result["residual_cube"]
+        )
         if convolved_reference_cube is not None:
             np.savez_compressed(
                 output_paths["convolved_reference"],
@@ -153,7 +177,9 @@ async def deconvolve_saved_products(body: DeconvolutionRequest) -> Deconvolution
         ) from exc
 
     return DeconvolutionResponse(
-        dirty=integrate_cube_preview(dirty_cube, method=body.method, cube_name=dirty_name),
+        dirty=integrate_cube_preview(
+            dirty_cube, method=body.method, cube_name=dirty_name
+        ),
         component_model=integrate_cube_preview(
             result["component_cube"],
             method=body.method,
@@ -185,9 +211,11 @@ async def deconvolve_saved_products(body: DeconvolutionRequest) -> Deconvolution
             "component_cube_path": str(output_paths["component"]),
             "restored_cube_path": str(output_paths["restored"]),
             "residual_cube_path": str(output_paths["residual"]),
-            "convolved_reference_path": None
-            if convolved_reference_cube is None
-            else str(output_paths["convolved_reference"]),
+            "convolved_reference_path": (
+                None
+                if convolved_reference_cube is None
+                else str(output_paths["convolved_reference"])
+            ),
             "resumed": resumed,
         },
     )

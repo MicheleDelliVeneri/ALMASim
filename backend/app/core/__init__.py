@@ -1,3 +1,1 @@
 """Core configuration and utilities."""
-
-

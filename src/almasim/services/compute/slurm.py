@@ -1,10 +1,12 @@
 """Slurm computation backend using dask-jobqueue."""
+
 from typing import Any, Callable, List, Optional, Dict
 
 try:
     from dask_jobqueue import SLURMCluster
     from dask.distributed import Client
     from dask import delayed as dask_delayed
+
     SLURM_AVAILABLE = True
 except ImportError:
     SLURM_AVAILABLE = False
@@ -29,7 +31,7 @@ class SlurmBackend(ComputationBackend):
         **kwargs: Dict[str, Any],
     ):
         """Initialize Slurm backend.
-        
+
         Parameters
         ----------
         queue : str
@@ -49,7 +51,8 @@ class SlurmBackend(ComputationBackend):
         """
         if not SLURM_AVAILABLE:
             raise ImportError(
-                "dask-jobqueue is not installed. Install it with: pip install dask-jobqueue"
+                "dask-jobqueue is not installed. "
+                "Install it with: pip install dask-jobqueue"
             )
 
         self.queue = queue
@@ -123,4 +126,3 @@ class SlurmBackend(ComputationBackend):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.close()
-

@@ -2,7 +2,6 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     JSON,
@@ -26,7 +25,7 @@ class Base(DeclarativeBase):
     pass
 
 
-# Association table for many-to-many relationship between observations and science keywords
+# Association table for many-to-many between observations and science keywords
 observation_keywords = Table(
     "observation_keywords",
     Base.metadata,
@@ -121,7 +120,9 @@ class Observation(Base):
     # Proposal and quality
     proposal_abstract = Column(Text)
     qa2_passed = Column(String(10))  # 'T', 'F', or other values from TAP
-    obs_type = Column(String(100))  # TAP 'type' field (renamed to avoid Python keyword conflict)
+    obs_type = Column(
+        String(100)
+    )  # TAP 'type' field (renamed to avoid Python keyword conflict)
 
     # Metadata
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -264,8 +265,12 @@ class DownloadJobRecord(Base):
     archive_output_root = Column(Text, nullable=True)
     casa_data_root = Column(Text, nullable=True)
     skip_casa_data_update = Column(Boolean, nullable=False, default=False)
-    raw_measurement_sets = Column(Text, nullable=False, default="[]")  # JSON array string
-    calibrated_measurement_sets = Column(Text, nullable=False, default="[]")  # JSON array string
+    raw_measurement_sets = Column(
+        Text, nullable=False, default="[]"
+    )  # JSON array string
+    calibrated_measurement_sets = Column(
+        Text, nullable=False, default="[]"
+    )  # JSON array string
     manifest_path = Column(Text, nullable=True)
     total_files = Column(Integer, nullable=False, default=0)
     total_bytes = Column(Float, nullable=False, default=0)
@@ -277,7 +282,9 @@ class DownloadJobRecord(Base):
     )  # pending, running, completed, failed, cancelled
     error = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     # Relationships
     files = relationship(

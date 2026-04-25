@@ -1,9 +1,9 @@
 """Observation planning helpers for single-pointing ALMA simulations."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from typing import Any, Iterable, Mapping, Optional
-
 
 ALMA_LATITUDE_DEG = -23.028
 
@@ -60,7 +60,9 @@ def split_antenna_array_by_type(antenna_array: str) -> list[tuple[str, str]]:
     return ordered_groups
 
 
-def estimate_transit_elevation(dec_deg: float, site_latitude_deg: float = ALMA_LATITUDE_DEG) -> float:
+def estimate_transit_elevation(
+    dec_deg: float, site_latitude_deg: float = ALMA_LATITUDE_DEG
+) -> float:
     """Estimate source elevation at transit for a single-pointing plan."""
     elevation = 90.0 - abs(site_latitude_deg - dec_deg)
     return max(5.0, min(90.0, elevation))
@@ -125,9 +127,14 @@ def _coerce_observation_config(
         )
 
     if not isinstance(raw_config, Mapping):
-        raise TypeError("Observation config entries must be dict-like, strings, or ObservationConfig objects")
+        raise TypeError(
+            "Observation config entries must be dict-like, strings, "
+            "or ObservationConfig objects"
+        )
 
-    antenna_array = str(raw_config.get("antenna_array") or raw_config.get("antennalist") or "")
+    antenna_array = str(
+        raw_config.get("antenna_array") or raw_config.get("antennalist") or ""
+    )
     if not antenna_array:
         raise ValueError("Observation config is missing 'antenna_array'")
 
@@ -181,7 +188,9 @@ def normalize_observation_configs(
     ]
 
 
-def build_single_pointing_observation_plan(params: Any) -> SinglePointingObservationPlan:
+def build_single_pointing_observation_plan(
+    params: Any,
+) -> SinglePointingObservationPlan:
     """Construct an explicit single-pointing observation plan from simulation params."""
     configs = normalize_observation_configs(
         getattr(params, "observation_configs", None),

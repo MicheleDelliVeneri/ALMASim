@@ -1,4 +1,5 @@
 """Antenna configuration and baseline calculation functions."""
+
 import math
 import os
 import numpy as np
@@ -121,13 +122,11 @@ def generate_antenna_config_file_from_antenna_array(
     with open(os.path.join(output_dir, "antenna.cfg"), "w") as f:
         f.write(intro_string)
         for i in range(len(obs_coordinates)):
-            f.write(
-                f"{
+            f.write(f"{
                     obs_coordinates['x'].values[i]} {
                     obs_coordinates['y'].values[i]} {
                     obs_coordinates['z'].values[i]} 12. {
-                    obs_coordinates['name'].values[i]}\n"
-            )
+                    obs_coordinates['name'].values[i]}\n")
     f.close()
 
 
@@ -183,5 +182,3 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
             if dist > max_baseline:
                 max_baseline = dist
     return max_baseline
-
-

@@ -1,4 +1,5 @@
 """Dask computation backend."""
+
 import io
 import logging
 import os
@@ -9,6 +10,7 @@ from typing import Any, Callable, List, Optional
 try:
     from dask.distributed import Client, LocalCluster
     from dask import delayed as dask_delayed
+
     DASK_AVAILABLE = True
 except ImportError:
     DASK_AVAILABLE = False
@@ -110,7 +112,10 @@ class DaskBackend(ComputationBackend):
         }
 
         def _install_missing(pkg_map: "dict[str, str]") -> str:
-            import importlib.util as _ilu, subprocess, sys
+            import importlib.util as _ilu
+            import subprocess
+            import sys
+
             missing = [
                 pip_name
                 for pip_name, mod_name in pkg_map.items()
@@ -177,7 +182,7 @@ class DaskBackend(ComputationBackend):
 
     def delayed(self, func: Callable) -> Callable:
         """Create a Dask delayed version of a function.
-        
+
         Returns a decorator that can be used to wrap function calls.
         """
         if dask_delayed is None:
@@ -203,4 +208,3 @@ class DaskBackend(ComputationBackend):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.close()
-

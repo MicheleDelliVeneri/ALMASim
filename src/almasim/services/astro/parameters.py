@@ -1,4 +1,5 @@
 """Simulation parameter writing functions."""
+
 from pathlib import Path
 from typing import Optional, Union
 import numpy as np
@@ -37,7 +38,7 @@ def write_sim_parameters(
 ) -> None:
     """
     Write simulation parameters to a text file.
-    
+
     Parameters
     ----------
     path : str or Path
@@ -87,7 +88,7 @@ def write_sim_parameters(
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(path, "w") as f:
         f.write("Simulation Parameters:\n")
         f.write(f"Source Name: {source_name}\n")
@@ -107,25 +108,25 @@ def write_sim_parameters(
         f.write(f"Cube Size: {n_pix} x {n_pix} x {n_channels} pixels\n")
         f.write(f"Mean Continum Flux: {np.mean(continum)}\n")
         f.write(f"Infrared Luminosity: {lum_infrared}\n")
-        
+
         if source_type == "gaussian":
             if fwhm_x is not None:
                 f.write(f"FWHM_x (pixels): {fwhm_x}\n")
             if fwhm_y is not None:
                 f.write(f"FWHM_y (pixels): {fwhm_y}\n")
-        
+
         if source_type in ("gaussian", "extended") and angle is not None:
             f.write(f"Projection Angle: {angle}\n")
-        
-        for i, (line_name, line_freq, line_flux) in enumerate(zip(line_names, line_frequencies, line_fluxes)):
+
+        for i, (line_name, line_freq, line_flux) in enumerate(
+            zip(line_names, line_frequencies, line_fluxes)
+        ):
             f.write(
                 f"Line: {line_name} - Frequency: {line_freq} GHz "
                 f"- Flux: {line_flux} Jy  - Width (Channels): {fwhm_z[i]}\n"
             )
-        
+
         if snapshot is not None:
             f.write(f"TNG Snapshot ID: {snapshot}\n")
         if subhalo is not None:
             f.write(f"TNG Subhalo ID: {subhalo}\n")
-
-

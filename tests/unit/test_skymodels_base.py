@@ -1,5 +1,5 @@
 """Unit tests for sky model base class."""
-import pytest
+
 import numpy as np
 from martini import DataCube
 import astropy.units as U
@@ -9,7 +9,7 @@ from almasim.skymodels.base import SkyModel
 
 class ConcreteSkyModel(SkyModel):
     """Concrete implementation for testing."""
-    
+
     def insert(self):
         return self.datacube
 
@@ -30,7 +30,7 @@ def test_skymodel_initialization():
     line_fluxes = np.ones(5)
     pos_z = [10, 11, 12, 13, 14]
     fwhm_z = [1.0, 1.0, 1.0, 1.0, 1.0]
-    
+
     model = ConcreteSkyModel(
         datacube=datacube,
         continuum=continuum,
@@ -40,7 +40,7 @@ def test_skymodel_initialization():
         n_px=64,
         n_chan=32,
     )
-    
+
     assert model.datacube is datacube
     assert np.array_equal(model.continuum, continuum)
     assert np.array_equal(model.line_fluxes, line_fluxes)
@@ -48,5 +48,3 @@ def test_skymodel_initialization():
     assert model.fwhm_z == fwhm_z
     assert model.n_px == 64
     assert model.n_chan == 32
-
-

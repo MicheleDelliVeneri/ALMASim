@@ -1,5 +1,5 @@
 """Unit tests for pointlike sky model."""
-import pytest
+
 import numpy as np
 from martini import DataCube
 import astropy.units as U
@@ -23,7 +23,7 @@ def test_pointlike_sky_model_insert():
     line_fluxes = np.array([1.0, 0.5, 0.3])
     pos_z = [10, 11, 12]
     fwhm_z = [2.0, 2.0, 2.0]
-    
+
     model = PointlikeSkyModel(
         datacube=datacube,
         continuum=continuum,
@@ -34,9 +34,7 @@ def test_pointlike_sky_model_insert():
         fwhm_z=fwhm_z,
         n_chan=32,
     )
-    
+
     result = model.insert()
     assert result is not None
-    assert hasattr(result, '_array')
-
-
+    assert hasattr(result, "_array")

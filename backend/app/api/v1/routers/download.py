@@ -54,10 +54,14 @@ def _browse_path(resolved_path) -> BrowseDirectoryResponse:
     """Build a BrowseDirectoryResponse for an existing directory path."""
     import os
 
-    parent = str(resolved_path.parent) if resolved_path != resolved_path.parent else None
+    parent = (
+        str(resolved_path.parent) if resolved_path != resolved_path.parent else None
+    )
     entries: list[BrowseDirectoryEntry] = []
     try:
-        for entry in sorted(os.scandir(str(resolved_path)), key=lambda e: e.name.lower()):
+        for entry in sorted(
+            os.scandir(str(resolved_path)), key=lambda e: e.name.lower()
+        ):
             if entry.name.startswith("."):
                 continue
             try:
@@ -77,7 +81,9 @@ def _browse_path(resolved_path) -> BrowseDirectoryResponse:
             detail=f"Permission denied: {resolved_path}",
         )
 
-    return BrowseDirectoryResponse(current=str(resolved_path), parent=parent, entries=entries)
+    return BrowseDirectoryResponse(
+        current=str(resolved_path), parent=parent, entries=entries
+    )
 
 
 @router.get("/browse", response_model=BrowseDirectoryResponse)
@@ -258,7 +264,9 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
         products=products,
         destination=body.destination,
         max_parallel=body.max_parallel,
-        extract_tar=body.extract_tar or body.unpack_ms or body.generate_calibrated_visibilities,
+        extract_tar=body.extract_tar
+        or body.unpack_ms
+        or body.generate_calibrated_visibilities,
         unpack_ms=body.unpack_ms or body.generate_calibrated_visibilities,
         generate_calibrated_visibilities=body.generate_calibrated_visibilities,
         clean_intermediate_files=body.clean_intermediate_files,
@@ -288,54 +296,61 @@ async def list_download_jobs():
         active = download_store.get(job_id_str)
         if active:
             total = active.total_bytes or 1
-            result.append(DownloadJobSummary(
-                job_id=active.job_id,
-                status=active.status,
-                destination=active.destination,
-                total_files=active.total_files,
-                files_completed=active.files_completed,
-                files_failed=active.files_failed,
-                progress=active.bytes_downloaded / total if total > 0 else 0,
-                created_at=active.created_at.isoformat(),
-                member_ous_uids=active.member_ous_uids,
-                product_filter=active.product_filter,
-                total_bytes=active.total_bytes,
-                bytes_downloaded=active.bytes_downloaded,
-                error=active.error,
-                raw_measurement_sets=active.raw_measurement_sets,
-                calibrated_measurement_sets=active.calibrated_measurement_sets,
-                manifest_path=active.manifest_path,
-                has_metadata=bool(active.metadata_rows),
-                metadata_count=len(active.metadata_rows),
-            ))
+            result.append(
+                DownloadJobSummary(
+                    job_id=active.job_id,
+                    status=active.status,
+                    destination=active.destination,
+                    total_files=active.total_files,
+                    files_completed=active.files_completed,
+                    files_failed=active.files_failed,
+                    progress=active.bytes_downloaded / total if total > 0 else 0,
+                    created_at=active.created_at.isoformat(),
+                    member_ous_uids=active.member_ous_uids,
+                    product_filter=active.product_filter,
+                    total_bytes=active.total_bytes,
+                    bytes_downloaded=active.bytes_downloaded,
+                    error=active.error,
+                    raw_measurement_sets=active.raw_measurement_sets,
+                    calibrated_measurement_sets=active.calibrated_measurement_sets,
+                    manifest_path=active.manifest_path,
+                    has_metadata=bool(active.metadata_rows),
+                    metadata_count=len(active.metadata_rows),
+                )
+            )
         else:
             import json
+
             total = rec.total_bytes or 1
             try:
                 uids = json.loads(rec.member_ous_uids) if rec.member_ous_uids else []
             except (json.JSONDecodeError, TypeError):
                 uids = []
             has_metadata, metadata_count = _metadata_stats(rec.metadata_json)
-            result.append(DownloadJobSummary(
-                job_id=str(rec.job_id),
-                status=rec.status,
-                destination=rec.destination,
-                total_files=rec.total_files,
-                files_completed=rec.files_completed,
-                files_failed=rec.files_failed,
-                progress=rec.bytes_downloaded / total if total > 0 else 0,
-                created_at=rec.created_at.isoformat(),
-                member_ous_uids=uids,
-                product_filter=rec.product_filter or "all",
-                total_bytes=int(rec.total_bytes),
-                bytes_downloaded=int(rec.bytes_downloaded),
-                error=rec.error,
-                raw_measurement_sets=_json_list(rec.raw_measurement_sets),
-                calibrated_measurement_sets=_json_list(rec.calibrated_measurement_sets),
-                manifest_path=rec.manifest_path,
-                has_metadata=has_metadata,
-                metadata_count=metadata_count,
-            ))
+            result.append(
+                DownloadJobSummary(
+                    job_id=str(rec.job_id),
+                    status=rec.status,
+                    destination=rec.destination,
+                    total_files=rec.total_files,
+                    files_completed=rec.files_completed,
+                    files_failed=rec.files_failed,
+                    progress=rec.bytes_downloaded / total if total > 0 else 0,
+                    created_at=rec.created_at.isoformat(),
+                    member_ous_uids=uids,
+                    product_filter=rec.product_filter or "all",
+                    total_bytes=int(rec.total_bytes),
+                    bytes_downloaded=int(rec.bytes_downloaded),
+                    error=rec.error,
+                    raw_measurement_sets=_json_list(rec.raw_measurement_sets),
+                    calibrated_measurement_sets=_json_list(
+                        rec.calibrated_measurement_sets
+                    ),
+                    manifest_path=rec.manifest_path,
+                    has_metadata=has_metadata,
+                    metadata_count=metadata_count,
+                )
+            )
     return result
 
 
@@ -354,7 +369,9 @@ async def get_download_job(job_id: str):
             files_failed=job.files_failed,
             total_bytes=job.total_bytes,
             bytes_downloaded=job.bytes_downloaded,
-            progress=(job.bytes_downloaded / job.total_bytes) if job.total_bytes > 0 else 0,
+            progress=(
+                (job.bytes_downloaded / job.total_bytes) if job.total_bytes > 0 else 0
+            ),
             error=job.error,
             raw_measurement_sets=job.raw_measurement_sets,
             calibrated_measurement_sets=job.calibrated_measurement_sets,
@@ -368,7 +385,11 @@ async def get_download_job(job_id: str):
                     bytes_downloaded=f.bytes_downloaded,
                     status=f.status,
                     error=f.error,
-                    progress=(f.bytes_downloaded / f.content_length) if f.content_length > 0 else 0,
+                    progress=(
+                        (f.bytes_downloaded / f.content_length)
+                        if f.content_length > 0
+                        else 0
+                    ),
                 )
                 for f in job.files
             ],
@@ -405,7 +426,11 @@ async def get_download_job(job_id: str):
                 bytes_downloaded=int(f.bytes_downloaded),
                 status=f.status,
                 error=f.error,
-                progress=(f.bytes_downloaded / f.content_length) if f.content_length > 0 else 0,
+                progress=(
+                    (f.bytes_downloaded / f.content_length)
+                    if f.content_length > 0
+                    else 0
+                ),
             )
             for f in rec.files
         ],
@@ -486,6 +511,7 @@ async def redownload_job(
         )
 
     import json
+
     try:
         uids = json.loads(rec.member_ous_uids) if rec.member_ous_uids else []
     except (json.JSONDecodeError, TypeError):

@@ -81,4 +81,3 @@ def test_load_external_component_table_builds_channel_cube(tmp_path):
     assert payload.cube.shape == (4, 8, 8)
     assert np.all(payload.cube[:, 3, 2] > 0.0)
     assert payload.cube[0, 1, 4] < payload.cube[-1, 1, 4]
-

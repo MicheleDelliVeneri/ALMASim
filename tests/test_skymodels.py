@@ -1,14 +1,11 @@
-import os
 from pathlib import Path
 
 import astropy.units as U
 import numpy as np
 import pandas as pd
 
-from almasim.services.metadata.tap import service as alma
 from almasim.services import astro
 from almasim import skymodels
-from almasim.services import simulation as sim
 from almasim.services.interferometry import antenna as alma_antenna
 
 
@@ -18,10 +15,18 @@ class InlineClient:
     def compute(self, tasks):
         if isinstance(tasks, list):
             return [
-                task.compute(scheduler="synchronous") if hasattr(task, "compute") else task
+                (
+                    task.compute(scheduler="synchronous")
+                    if hasattr(task, "compute")
+                    else task
+                )
                 for task in tasks
             ]
-        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
+        return (
+            tasks.compute(scheduler="synchronous")
+            if hasattr(tasks, "compute")
+            else tasks
+        )
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]
@@ -33,6 +38,7 @@ def _load_metadata_row():
     metadata = pd.read_csv(repo_root / "data" / "qso_metadata.csv")
     rest_frequency, _ = astro.get_line_info(main_dir)
     from almasim.services.astro.spectral import sample_given_redshift
+
     sample = sample_given_redshift(metadata, 1, rest_frequency, False, None)
     return main_dir, sample.iloc[0]
 
@@ -56,12 +62,16 @@ def test_skymodel_generation(tmp_path):
         antenna_array, str(main_dir), str(main_dir.parent)
     )
     from almasim.services.interferometry.frequency import freq_supp_extractor
+
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
         freq_support, freq
     )
-    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(
-        None, main_dir.parent / "antenna.cfg"
-    ) * U.km
+    max_baseline = (
+        alma_antenna.get_max_baseline_from_antenna_config(
+            None, main_dir.parent / "antenna.cfg"
+        )
+        * U.km
+    )
     beam_size = alma_antenna.estimate_alma_beam_size(
         central_freq, max_baseline, return_value=False
     )
@@ -71,10 +81,10 @@ def test_skymodel_generation(tmp_path):
     n_pix = 128
     n_channels = 32
 
-    rest_frequency = metadata["rest_frequency"]
     redshift = metadata["redshift"]
     lum_infrared = 1e10
     from almasim.services.astro.spectral import process_spectral_data
+
     (
         continum,
         line_fluxes,

@@ -206,7 +206,11 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
             size_str = tds[i_size].text if i_size >= 0 and i_size < len(tds) else "0"
             ctype = tds[i_type].text if i_type >= 0 and i_type < len(tds) else ""
             row_uid = tds[i_id].text if i_id >= 0 and i_id < len(tds) else uid
-            semantics = (tds[i_sem].text or "").strip() if i_sem >= 0 and i_sem < len(tds) else ""
+            semantics = (
+                (tds[i_sem].text or "").strip()
+                if i_sem >= 0 and i_sem < len(tds)
+                else ""
+            )
 
             try:
                 content_length = int(size_str or 0)
@@ -231,7 +235,9 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def _fetch_datalink(uid: str, mirror_base: str = _DATALINK_MIRRORS[0]) -> List[DataProduct]:
+def _fetch_datalink(
+    uid: str, mirror_base: str = _DATALINK_MIRRORS[0]
+) -> List[DataProduct]:
     """Fetch DataLink results for a single member OUS UID."""
     url = f"{mirror_base}/datalink/sync?ID={uid}"
     with httpx.Client(timeout=60, follow_redirects=True) as client:
@@ -249,12 +255,16 @@ def resolve_products(
     member_uids = [str(uid) for uid in member_ous_uids]
     for uid in member_uids:
         last_error: Optional[Exception] = None
-        for base in [mirror] + [candidate for candidate in _DATALINK_MIRRORS if candidate != mirror]:
+        for base in [mirror] + [
+            candidate for candidate in _DATALINK_MIRRORS if candidate != mirror
+        ]:
             try:
                 products.extend(_fetch_datalink(uid, base))
                 last_error = None
                 break
-            except Exception as exc:  # pragma: no cover - exercised in integration/network use
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - exercised in integration/network use
                 last_error = exc
                 logger.warning("DataLink fetch failed for %s on %s: %s", uid, base, exc)
         if last_error:
@@ -262,7 +272,9 @@ def resolve_products(
     return products
 
 
-def filter_products(products: List[DataProduct], product_filter: str = "all") -> List[DataProduct]:
+def filter_products(
+    products: List[DataProduct], product_filter: str = "all"
+) -> List[DataProduct]:
     """Return products matching the requested product type."""
     if product_filter == "all":
         return list(products)
@@ -373,7 +385,10 @@ def _download_single_file(
 
     if destination_path.exists():
         existing_size = destination_path.stat().st_size
-        if file_status.content_length <= 0 or existing_size >= file_status.content_length:
+        if (
+            file_status.content_length <= 0
+            or existing_size >= file_status.content_length
+        ):
             file_status.bytes_downloaded = existing_size
             file_status.status = "completed"
             try:
@@ -482,10 +497,15 @@ def _cleanup_download_inputs(
 
     def is_protected(path: Path) -> bool:
         resolved = path.resolve()
-        return any(resolved == root or _is_relative_to(resolved, root) for root in protected)
+        return any(
+            resolved == root or _is_relative_to(resolved, root) for root in protected
+        )
 
     for status in statuses:
-        for path in (destination / status.filename, destination / (status.filename + ".part")):
+        for path in (
+            destination / status.filename,
+            destination / (status.filename + ".part"),
+        ):
             if is_protected(path):
                 continue
             try:
@@ -624,16 +644,25 @@ def download_products(
         for status in statuses:
             if status.status != "completed":
                 continue
-            if not (status.filename.endswith(".tar") or status.filename.endswith(".tgz")):
+            if not (
+                status.filename.endswith(".tar") or status.filename.endswith(".tgz")
+            ):
                 continue
             tar_path = destination_path / status.filename
             if tar_path.exists():
                 extracted_files.extend(_extract_tar(tar_path, destination_path))
 
     if unpack_ms or generate_calibrated_visibilities:
-        from almasim.services.archive import create_calibrated_measurement_sets, create_measurement_sets
+        from almasim.services.archive import (
+            create_calibrated_measurement_sets,
+            create_measurement_sets,
+        )
 
-        archive_root = Path(archive_output_root).expanduser().resolve() if archive_output_root else destination_path / "archive_ms"
+        archive_root = (
+            Path(archive_output_root).expanduser().resolve()
+            if archive_output_root
+            else destination_path / "archive_ms"
+        )
         raw_ms_root = archive_root / "raw_ms"
         calibrated_ms_root = archive_root / "calibrated_ms"
 
@@ -683,7 +712,10 @@ def download_products(
             destination_path,
             statuses,
             extracted_files,
-            protected_roots=[archive_root, *(Path(path) for path in calibrated_measurement_sets)],
+            protected_roots=[
+                archive_root,
+                *(Path(path) for path in calibrated_measurement_sets),
+            ],
         )
 
     if logger_fn is not None:

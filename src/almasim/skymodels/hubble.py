@@ -1,4 +1,5 @@
 """Hubble sky model implementation."""
+
 import os
 import numpy as np
 import astropy.units as U
@@ -19,7 +20,7 @@ def hubble_image(hubble: np.ndarray, amp: float) -> np.ndarray:
 
 class HubbleSkyModel(SkyModel):
     """Hubble Top 100 sky model."""
-    
+
     def __init__(
         self,
         datacube: Any,
@@ -35,7 +36,7 @@ class HubbleSkyModel(SkyModel):
     ):
         """
         Initialize Hubble sky model.
-        
+
         Parameters
         ----------
         datacube : Any
@@ -71,7 +72,7 @@ class HubbleSkyModel(SkyModel):
             update_progress=update_progress,
         )
         self.data_path = data_path
-    
+
     def insert(self) -> Any:
         """Insert Hubble source into datacube."""
         files = np.array(
@@ -100,5 +101,3 @@ class HubbleSkyModel(SkyModel):
         skymodel = self.client.gather(futures)
         self.datacube._array = skymodel * U.Jy * U.pix**-2
         return self.datacube
-
-

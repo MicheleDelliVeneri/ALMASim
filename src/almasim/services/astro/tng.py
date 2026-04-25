@@ -1,4 +1,5 @@
 """TNG (The Next Generation) simulation auxiliary functions."""
+
 import h5py
 from random import choices
 import os
@@ -175,5 +176,3 @@ def get_subhaloids_from_db(n, main_path, snapshot):
     if len(ids) == 1:
         return ids[0]
     return ids
-
-

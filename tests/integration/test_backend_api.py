@@ -1,4 +1,5 @@
 """Backend API integration tests."""
+
 import json
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ import shutil
 # You may need to adjust the import path based on your setup
 try:
     from backend.app.main import app
+
     BACKEND_AVAILABLE = True
 except ImportError:
     BACKEND_AVAILABLE = False
@@ -85,7 +87,7 @@ def test_load_metadata(client, test_data_dir):
     metadata_path = test_data_dir / "qso_metadata.csv"
     if not metadata_path.exists():
         pytest.skip(f"Metadata file not found at {metadata_path}")
-    
+
     # URL encode the path
     file_path = str(metadata_path).replace("\\", "/")
     response = client.get(f"/api/v1/metadata/load/{file_path}")
@@ -127,7 +129,9 @@ def test_save_and_load_metadata_json_round_trip(client, tmp_path):
         with saved_path.open("r", encoding="utf-8") as fp:
             on_disk = json.load(fp)
         assert on_disk["count"] == 1
-        assert on_disk["data"][0]["member_ous_uid"] == payload["data"][0]["member_ous_uid"]
+        assert (
+            on_disk["data"][0]["member_ous_uid"] == payload["data"][0]["member_ous_uid"]
+        )
 
         load_response = client.get(f"/api/v1/metadata/load/{saved_path.as_posix()}")
         assert load_response.status_code == 200
@@ -143,14 +147,14 @@ def test_save_and_load_metadata_json_round_trip(client, tmp_path):
 def test_create_simulation(client, temp_output_dir, main_dir, test_data_dir):
     """Test creating a simulation."""
     import pandas as pd
-    
+
     # Load sample metadata
     metadata = pd.read_csv(test_data_dir / "qso_metadata.csv")
     if len(metadata) == 0:
         pytest.skip("No metadata available for testing")
-    
+
     row = metadata.iloc[0]
-    
+
     # Create simulation parameters
     sim_params = {
         "main_dir": str(main_dir),
@@ -181,11 +185,11 @@ def test_create_simulation(client, temp_output_dir, main_dir, test_data_dir):
         "snr": 1.3,
         "save_mode": "npz",
     }
-    
+
     response = client.post("/api/v1/simulation/", json=sim_params)
     # May return 201 (created) or 500 (error)
     assert response.status_code in [201, 500]
-    
+
     if response.status_code == 201:
         data = response.json()
         assert "simulation_id" in data
@@ -214,7 +218,9 @@ def test_imaging_deconvolution_endpoint(client, temp_output_dir):
     model_cube[0, 8, 8] = 1.0
 
     yy, xx = np.indices((17, 17), dtype=np.float32)
-    beam = np.exp(-0.5 * (((yy - 8) / 1.5) ** 2 + ((xx - 8) / 1.5) ** 2)).astype(np.float32)
+    beam = np.exp(-0.5 * (((yy - 8) / 1.5) ** 2 + ((xx - 8) / 1.5) ** 2)).astype(
+        np.float32
+    )
     beam /= np.max(beam)
     beam_cube = beam[None, ...]
 

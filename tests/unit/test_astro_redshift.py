@@ -1,4 +1,5 @@
 """Unit tests for redshift calculations."""
+
 import pytest
 import astropy.units as U
 
@@ -24,7 +25,7 @@ def test_compute_redshift_negative_raises():
     """Test that negative frequencies raise ValueError."""
     with pytest.raises(ValueError, match="positive values"):
         compute_redshift(-100.0 * U.GHz, 90.0 * U.GHz)
-    
+
     with pytest.raises(ValueError, match="positive values"):
         compute_redshift(100.0 * U.GHz, -90.0 * U.GHz)
 
@@ -33,5 +34,3 @@ def test_compute_redshift_observed_greater_than_rest_raises():
     """Test that observed frequency greater than rest frequency raises ValueError."""
     with pytest.raises(ValueError, match="lower than the rest frequency"):
         compute_redshift(90.0 * U.GHz, 100.0 * U.GHz)
-
-

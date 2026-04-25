@@ -1,8 +1,8 @@
 """Database service layer for querying and managing data."""
 
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import and_, func, or_, select
@@ -94,15 +94,21 @@ class DatabaseService:
         into an ObservationQueryParams so existing call-sites continue working.
         """
         if include is None:
-            include = ObservationQueryParams(**{
-                k: v for k, v in kwargs.items()
-                if k in ObservationQueryParams.__dataclass_fields__
-            })
+            include = ObservationQueryParams(
+                **{
+                    k: v
+                    for k, v in kwargs.items()
+                    if k in ObservationQueryParams.__dataclass_fields__
+                }
+            )
         if exclude is None:
-            exclude = ObservationExclusionParams(**{
-                k: v for k, v in kwargs.items()
-                if k in ObservationExclusionParams.__dataclass_fields__
-            })
+            exclude = ObservationExclusionParams(
+                **{
+                    k: v
+                    for k, v in kwargs.items()
+                    if k in ObservationExclusionParams.__dataclass_fields__
+                }
+            )
 
         stmt = select(Observation).options(
             joinedload(Observation.scientific_category),
@@ -146,16 +152,25 @@ class DatabaseService:
         if p.qa2_status:
             filters.append(Observation.qa2_passed.in_(p.qa2_status))
         if p.obs_type:
-            filters.append(or_(*(Observation.obs_type.ilike(f"%{t}%") for t in p.obs_type)))
+            filters.append(
+                or_(*(Observation.obs_type.ilike(f"%{t}%") for t in p.obs_type))
+            )
         if p.antenna_arrays:
             filters.append(Observation.antenna_arrays.ilike(f"%{p.antenna_arrays}%"))
         if p.proposal_id_prefix:
-            filters.append(or_(*(Observation.proposal_id.ilike(f"{prefix}%") for prefix in p.proposal_id_prefix)))
+            filters.append(
+                or_(
+                    *(
+                        Observation.proposal_id.ilike(f"{prefix}%")
+                        for prefix in p.proposal_id_prefix
+                    )
+                )
+            )
         return filters
 
     @staticmethod
     def _array_filters(p: ObservationQueryParams) -> list:
-        """Filters for array_type (antenna prefix) and array_configuration (schedblock_name)."""
+        """Filters for array_type (antenna prefix) and array_configuration."""
         filters = []
         if p.array_type:
             clauses = [
@@ -166,9 +181,14 @@ class DatabaseService:
             if clauses:
                 filters.append(or_(*clauses))
         if p.array_configuration:
-            filters.append(or_(*(
-                Observation.schedblock_name.ilike(f"%{c}%") for c in p.array_configuration
-            )))
+            filters.append(
+                or_(
+                    *(
+                        Observation.schedblock_name.ilike(f"%{c}%")
+                        for c in p.array_configuration
+                    )
+                )
+            )
         return filters
 
     @staticmethod
@@ -190,9 +210,13 @@ class DatabaseService:
         if p.observation_date_range:
             lo_str, hi_str = p.observation_date_range
             if lo_str:
-                filters.append(Observation.obs_release_date >= datetime.fromisoformat(lo_str))
+                filters.append(
+                    Observation.obs_release_date >= datetime.fromisoformat(lo_str)
+                )
             if hi_str:
-                filters.append(Observation.obs_release_date <= datetime.fromisoformat(hi_str))
+                filters.append(
+                    Observation.obs_release_date <= datetime.fromisoformat(hi_str)
+                )
         return filters
 
     @staticmethod
@@ -229,7 +253,10 @@ class DatabaseService:
             for kw in e.science_keywords:
                 kw_subq = (
                     select(observation_keywords.c.observation_id)
-                    .join(ScienceKeyword, ScienceKeyword.id == observation_keywords.c.keyword_id)
+                    .join(
+                        ScienceKeyword,
+                        ScienceKeyword.id == observation_keywords.c.keyword_id,
+                    )
                     .where(ScienceKeyword.keyword.ilike(f"%{kw}%"))
                 )
                 filters.append(~Observation.id.in_(kw_subq))
@@ -256,6 +283,7 @@ class DatabaseService:
         """Count observations that have at least one science keyword associated."""
         from sqlalchemy import exists
         from .models import observation_keywords
+
         stmt = select(func.count(Observation.id)).where(
             exists().where(observation_keywords.c.observation_id == Observation.id)
         )

@@ -1,12 +1,8 @@
 """Component tests for spectral data processing."""
-import pytest
-import numpy as np
-from pathlib import Path
 
 from almasim.services.astro.spectral import (
     sample_given_redshift,
     process_spectral_data,
-    find_compatible_lines,
     sed_reading,
 )
 
@@ -15,15 +11,17 @@ def test_sample_given_redshift(test_data_dir, main_dir):
     """Test sampling metadata by redshift."""
     import pandas as pd
     from almasim.services.astro.lines import get_line_info
-    
+
     metadata = pd.read_csv(test_data_dir / "qso_metadata.csv")
     # Get actual rest frequencies from the calibrated lines file
     # These should be higher than observed frequencies (which are ~250-500 GHz)
     rest_frequency, _ = get_line_info(main_dir)
     # Use a subset of rest frequencies that are higher than typical observed frequencies
     # CO lines are typically 100-500 GHz rest, so use those
-    rest_frequency = rest_frequency[rest_frequency > 100.0][:3]  # Get 3 frequencies > 100 GHz
-    
+    rest_frequency = rest_frequency[rest_frequency > 100.0][
+        :3
+    ]  # Get 3 frequencies > 100 GHz
+
     sample = sample_given_redshift(
         metadata,
         n=5,
@@ -31,7 +29,7 @@ def test_sample_given_redshift(test_data_dir, main_dir):
         extended=False,
         zmax=2.0,
     )
-    
+
     assert len(sample) <= 5
     assert "redshift" in sample.columns
     assert "rest_frequency" in sample.columns
@@ -48,7 +46,7 @@ def test_process_spectral_data(main_dir):
     n_channels = 32
     lum_infrared = 1e10
     cont_sens = 0.1  # Jy
-    
+
     result = process_spectral_data(
         source_type,
         main_dir,
@@ -63,7 +61,7 @@ def test_process_spectral_data(main_dir):
         n_lines=1,
         remote=False,
     )
-    
+
     (
         continum,
         line_fluxes,
@@ -78,7 +76,7 @@ def test_process_spectral_data(main_dir):
         fwhms,
         lum_infrared_out,
     ) = result
-    
+
     assert len(continum) == n_channels
     assert len(line_fluxes) > 0
     assert redshift_out == redshift
@@ -98,10 +96,8 @@ def test_sed_reading(main_dir):
         lum_infrared=1e10,
         redshift=0.1,
     )
-    
+
     assert "GHz" in sed.columns
     assert "Jy" in sed.columns
     assert flux_infrared > 0
     assert lum_infrared > 0
-
-

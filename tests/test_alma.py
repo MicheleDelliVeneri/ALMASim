@@ -43,7 +43,9 @@ def test_alma_functions():
     )
     antennalist = repo_root / "antenna.cfg"
     assert os.path.isfile(antennalist)
-    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    max_baseline = (
+        alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    )
     assert max_baseline > 0
     max_baseline = alma_antenna.get_max_baseline_from_antenna_array(
         antenna_array, str(main_dir)

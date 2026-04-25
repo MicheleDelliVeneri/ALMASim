@@ -1,4 +1,5 @@
 """High-level query functions for ALMA metadata with normalization."""
+
 from __future__ import annotations
 
 import json
