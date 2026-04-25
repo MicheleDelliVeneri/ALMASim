@@ -1,4 +1,4 @@
 sphinx>=7.3
 sphinx-rtd-theme>=2.0
 myst-parser>=3.0
-sphinx-copybutton>=0.5
+sphinx-copybutton>=0.5.2
