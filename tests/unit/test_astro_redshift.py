@@ -1,7 +1,7 @@
 """Unit tests for redshift calculations."""
 
-import pytest
 import astropy.units as U
+import pytest
 
 from almasim.services.astro.redshift import compute_redshift
 

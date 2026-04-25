@@ -1,11 +1,12 @@
 """Backend API integration tests."""
 
 import json
+import shutil
+import tempfile
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
-from pathlib import Path
-import tempfile
-import shutil
 
 # Note: This requires the backend to be importable
 # You may need to adjust the import path based on your setup
@@ -129,9 +130,7 @@ def test_save_and_load_metadata_json_round_trip(client, tmp_path):
         with saved_path.open("r", encoding="utf-8") as fp:
             on_disk = json.load(fp)
         assert on_disk["count"] == 1
-        assert (
-            on_disk["data"][0]["member_ous_uid"] == payload["data"][0]["member_ous_uid"]
-        )
+        assert on_disk["data"][0]["member_ous_uid"] == payload["data"][0]["member_ous_uid"]
 
         load_response = client.get(f"/api/v1/metadata/load/{saved_path.as_posix()}")
         assert load_response.status_code == 200
@@ -218,9 +217,7 @@ def test_imaging_deconvolution_endpoint(client, temp_output_dir):
     model_cube[0, 8, 8] = 1.0
 
     yy, xx = np.indices((17, 17), dtype=np.float32)
-    beam = np.exp(-0.5 * (((yy - 8) / 1.5) ** 2 + ((xx - 8) / 1.5) ** 2)).astype(
-        np.float32
-    )
+    beam = np.exp(-0.5 * (((yy - 8) / 1.5) ** 2 + ((xx - 8) / 1.5) ** 2)).astype(np.float32)
     beam /= np.max(beam)
     beam_cube = beam[None, ...]
 

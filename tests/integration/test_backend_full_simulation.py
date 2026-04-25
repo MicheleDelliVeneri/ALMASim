@@ -1,21 +1,22 @@
 """Full backend simulation integration tests."""
 
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
-import pandas as pd
 import sys
+import tempfile
+from pathlib import Path
+
+import pandas as pd
+import pytest
 
 # Add backend to path for imports
 backend_path = Path(__file__).parent.parent.parent / "backend"
 sys.path.insert(0, str(backend_path))
 
 try:
-    from fastapi.testclient import TestClient
     from app.main import app
-    from app.services.simulation_service import SimulationService
     from app.schemas.simulation import SimulationParamsCreate
+    from app.services.simulation_service import SimulationService
+    from fastapi.testclient import TestClient
 
     BACKEND_AVAILABLE = True
     IMPORT_ERROR = None
@@ -139,9 +140,7 @@ def test_simulation_params_creation(sample_simulation_params):
 
 
 @pytest.mark.integration
-def test_simulation_service_params_conversion(
-    main_dir, temp_output_dir, sample_simulation_params
-):
+def test_simulation_service_params_conversion(main_dir, temp_output_dir, sample_simulation_params):
     """Test that SimulationService correctly converts API params to internal params."""
     if not BACKEND_AVAILABLE:
         pytest.skip(f"Backend not available: {IMPORT_ERROR}")

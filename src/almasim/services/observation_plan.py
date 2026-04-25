@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping, Optional
 
 ALMA_LATITUDE_DEG = -23.028
@@ -128,13 +128,10 @@ def _coerce_observation_config(
 
     if not isinstance(raw_config, Mapping):
         raise TypeError(
-            "Observation config entries must be dict-like, strings, "
-            "or ObservationConfig objects"
+            "Observation config entries must be dict-like, strings, or ObservationConfig objects"
         )
 
-    antenna_array = str(
-        raw_config.get("antenna_array") or raw_config.get("antennalist") or ""
-    )
+    antenna_array = str(raw_config.get("antenna_array") or raw_config.get("antennalist") or "")
     if not antenna_array:
         raise ValueError("Observation config is missing 'antenna_array'")
 
@@ -210,8 +207,7 @@ def build_single_pointing_observation_plan(
         obs_date=str(params.obs_date),
         pwv_mm=float(params.pwv),
         elevation_deg=float(
-            getattr(params, "elevation_deg", None)
-            or estimate_transit_elevation(float(params.dec))
+            getattr(params, "elevation_deg", None) or estimate_transit_elevation(float(params.dec))
         ),
         primary_beam_model="gaussian",
         primary_beam_reference_diameter_m=float(primary_beam_diameter_m),

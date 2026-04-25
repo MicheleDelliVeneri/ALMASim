@@ -103,17 +103,11 @@ def main() -> None:
         if col in metadata.columns
     ]
     if display_columns:
-        print(
-            metadata[display_columns].head(min(5, len(metadata))).to_string(index=False)
-        )
+        print(metadata[display_columns].head(min(5, len(metadata))).to_string(index=False))
 
     if args.save_products_csv is not None:
         member_uids = (
-            metadata["member_ous_uid"]
-            .dropna()
-            .astype(str)
-            .head(args.product_member_limit)
-            .tolist()
+            metadata["member_ous_uid"].dropna().astype(str).head(args.product_member_limit).tolist()
         )
         if not member_uids:
             raise SystemExit("Queried metadata does not include member_ous_uid values")

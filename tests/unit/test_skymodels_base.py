@@ -1,8 +1,8 @@
 """Unit tests for sky model base class."""
 
+import astropy.units as U
 import numpy as np
 from martini import DataCube
-import astropy.units as U
 
 from almasim.skymodels.base import SkyModel
 

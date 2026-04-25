@@ -1,8 +1,8 @@
 """Component tests for sky model integration."""
 
+import astropy.units as U
 import numpy as np
 from martini import DataCube
-import astropy.units as U
 
 from almasim import skymodels
 
@@ -13,18 +13,10 @@ class InlineClient:
     def compute(self, tasks):
         if isinstance(tasks, list):
             return [
-                (
-                    task.compute(scheduler="synchronous")
-                    if hasattr(task, "compute")
-                    else task
-                )
+                (task.compute(scheduler="synchronous") if hasattr(task, "compute") else task)
                 for task in tasks
             ]
-        return (
-            tasks.compute(scheduler="synchronous")
-            if hasattr(tasks, "compute")
-            else tasks
-        )
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]

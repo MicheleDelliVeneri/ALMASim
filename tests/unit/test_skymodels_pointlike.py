@@ -1,8 +1,8 @@
 """Unit tests for pointlike sky model."""
 
+import astropy.units as U
 import numpy as np
 from martini import DataCube
-import astropy.units as U
 
 from almasim.skymodels.pointlike import PointlikeSkyModel
 

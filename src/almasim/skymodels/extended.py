@@ -1,16 +1,17 @@
 """Extended (TNG) sky model implementation."""
 
 import os
-import numpy as np
-import astropy.units as U
-import astropy.cosmology.units as cu
-from astropy.cosmology import WMAP9
-from typing import Optional, Any
 from itertools import product
+from typing import Any, Optional
+
+import astropy.cosmology.units as cu
+import astropy.units as U
+import numpy as np
+from astropy.cosmology import WMAP9
 from dask import delayed
 from dask.distributed import Client
-from martini.sources import TNGSource
 from martini import DataCube, Martini
+from martini.sources import TNGSource
 from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import WendlandC2Kernel
 
@@ -128,9 +129,7 @@ class MartiniMod(Martini):
                 .sum((0, 1))
                 .squeeze()
                 .to_value(U.Jy)
-                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(
-                    U.km / U.s
-                )
+                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(U.km / U.s)
             )
         )
         self.inserted_mass = inserted_mass
@@ -307,9 +306,7 @@ class ExtendedSkyModel:
             else:
                 distance = distance * 1.5
             if self.terminal is not None:
-                self.terminal.add_log(
-                    "Injecting source at distance {}".format(distance)
-                )
+                self.terminal.add_log("Injecting source at distance {}".format(distance))
             M = insert_tng(
                 self.client,
                 self.update_progress,

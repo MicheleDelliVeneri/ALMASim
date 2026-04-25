@@ -9,19 +9,13 @@ class DeconvolutionRequest(BaseModel):
     """Request body for iterative deconvolution from saved cube products."""
 
     directory: str = Field(..., description="Base directory for relative file paths")
-    dirty_cube_path: str = Field(
-        ..., description="Relative or absolute path to the dirty cube"
-    )
-    beam_cube_path: str = Field(
-        ..., description="Relative or absolute path to the beam cube"
-    )
+    dirty_cube_path: str = Field(..., description="Relative or absolute path to the dirty cube")
+    beam_cube_path: str = Field(..., description="Relative or absolute path to the beam cube")
     clean_cube_path: str | None = Field(
         default=None,
         description="Optional reference clean/model cube for visual comparison",
     )
-    cycles: int = Field(
-        default=100, ge=0, le=5000, description="Number of CLEAN cycles"
-    )
+    cycles: int = Field(default=100, ge=0, le=5000, description="Number of CLEAN cycles")
     gain: float = Field(default=0.1, gt=0.0, le=1.0, description="Loop gain")
     threshold: float | None = Field(
         default=None,
@@ -30,10 +24,7 @@ class DeconvolutionRequest(BaseModel):
     )
     state_path: str | None = Field(
         default=None,
-        description=(
-            "Optional deconvolution state NPZ path "
-            "for resuming with additional cycles"
-        ),
+        description=("Optional deconvolution state NPZ path for resuming with additional cycles"),
     )
     method: Literal["sum", "mean"] = Field(
         default="sum",

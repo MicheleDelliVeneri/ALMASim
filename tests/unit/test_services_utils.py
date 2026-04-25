@@ -1,9 +1,9 @@
 """Unit tests for service utilities."""
 
 from almasim.services.utils import (
-    log_message,
-    as_progress_emitter,
     ProgressEmitterAdapter,
+    as_progress_emitter,
+    log_message,
 )
 
 

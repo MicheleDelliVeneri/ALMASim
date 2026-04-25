@@ -3,11 +3,11 @@
 from typing import Any, Dict
 
 from .base import ComputationBackend
-from .sync import SyncBackend
-from .local import LocalBackend
 from .dask_backend import DaskBackend
-from .slurm import SlurmBackend
 from .kubernetes import KubernetesBackend
+from .local import LocalBackend
+from .slurm import SlurmBackend
+from .sync import SyncBackend
 
 
 def create_backend(

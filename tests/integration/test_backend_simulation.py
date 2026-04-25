@@ -1,14 +1,15 @@
 """Backend simulation service integration tests."""
 
-import pytest
-from pathlib import Path
-import tempfile
 import shutil
+import tempfile
+from pathlib import Path
+
 import pandas as pd
+import pytest
 
 try:
-    from backend.app.services.simulation_service import SimulationService
     from backend.app.schemas.simulation import SimulationParamsCreate
+    from backend.app.services.simulation_service import SimulationService
 
     BACKEND_AVAILABLE = True
 except ImportError:

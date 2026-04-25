@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
 import numpy as np
+from fastapi import APIRouter, HTTPException, status
 
 from almasim.services.imaging import (
     clean_deconvolve_cube,
@@ -19,11 +19,7 @@ router = APIRouter()
 def _resolve_cube_path(base_dir: Path, file_path: str) -> Path:
     """Resolve an absolute or relative file path under a base directory."""
     candidate = Path(file_path)
-    resolved = (
-        candidate.resolve()
-        if candidate.is_absolute()
-        else (base_dir / candidate).resolve()
-    )
+    resolved = candidate.resolve() if candidate.is_absolute() else (base_dir / candidate).resolve()
     try:
         resolved.relative_to(base_dir.resolve())
     except ValueError as exc:
@@ -78,13 +74,9 @@ async def deconvolve_saved_products(
     dirty_path = _resolve_cube_path(base_dir, body.dirty_cube_path)
     beam_path = _resolve_cube_path(base_dir, body.beam_cube_path)
     clean_path = (
-        _resolve_cube_path(base_dir, body.clean_cube_path)
-        if body.clean_cube_path
-        else None
+        _resolve_cube_path(base_dir, body.clean_cube_path) if body.clean_cube_path else None
     )
-    state_path = (
-        _resolve_cube_path(base_dir, body.state_path) if body.state_path else None
-    )
+    state_path = _resolve_cube_path(base_dir, body.state_path) if body.state_path else None
     output_paths = _derive_output_paths(base_dir, dirty_path)
 
     try:
@@ -108,12 +100,8 @@ async def deconvolve_saved_products(
         resumed = False
         if state_path is not None:
             with np.load(state_path) as state_data:
-                initial_component_cube = np.asarray(
-                    state_data["component_cube"], dtype=np.float32
-                )
-                initial_residual_cube = np.asarray(
-                    state_data["residual_cube"], dtype=np.float32
-                )
+                initial_component_cube = np.asarray(state_data["component_cube"], dtype=np.float32)
+                initial_residual_cube = np.asarray(state_data["residual_cube"], dtype=np.float32)
                 initial_clean_beam_cube = np.asarray(
                     state_data["clean_beam_cube"], dtype=np.float32
                 )
@@ -151,15 +139,9 @@ async def deconvolve_saved_products(
             clean_beam_cube=result["clean_beam_cube"],
             cycles_completed=result["cycles_completed"],
         )
-        np.savez_compressed(
-            output_paths["component"], component_cube=result["component_cube"]
-        )
-        np.savez_compressed(
-            output_paths["restored"], restored_cube=result["restored_cube"]
-        )
-        np.savez_compressed(
-            output_paths["residual"], residual_cube=result["residual_cube"]
-        )
+        np.savez_compressed(output_paths["component"], component_cube=result["component_cube"])
+        np.savez_compressed(output_paths["restored"], restored_cube=result["restored_cube"])
+        np.savez_compressed(output_paths["residual"], residual_cube=result["residual_cube"])
         if convolved_reference_cube is not None:
             np.savez_compressed(
                 output_paths["convolved_reference"],
@@ -177,9 +159,7 @@ async def deconvolve_saved_products(
         ) from exc
 
     return DeconvolutionResponse(
-        dirty=integrate_cube_preview(
-            dirty_cube, method=body.method, cube_name=dirty_name
-        ),
+        dirty=integrate_cube_preview(dirty_cube, method=body.method, cube_name=dirty_name),
         component_model=integrate_cube_preview(
             result["component_cube"],
             method=body.method,

@@ -35,11 +35,7 @@ def _classify_visualizer_path(path: Path) -> str | None:
 
 def _resolve_visualizer_path(raw_path: str, base_dir: Path) -> Path:
     candidate = Path(raw_path).expanduser()
-    resolved = (
-        candidate.resolve()
-        if candidate.is_absolute()
-        else (base_dir / candidate).resolve()
-    )
+    resolved = candidate.resolve() if candidate.is_absolute() else (base_dir / candidate).resolve()
     try:
         resolved.relative_to(base_dir.resolve())
     except ValueError as exc:
@@ -162,25 +158,20 @@ def _grid_visibility_table(
     data = np.asarray(visibility_table[data_key])
     if data.ndim != 3:
         raise ValueError(
-            "Expected visibility table data with shape (nrows, ncorr, nchan), "
-            f"got {data.shape}"
+            f"Expected visibility table data with shape (nrows, ncorr, nchan), got {data.shape}"
         )
 
     nrows, _ncorr, nchan = data.shape
     cube = np.zeros((nchan, grid_size, grid_size), dtype=np.complex64)
 
-    freqs_hz = _frequency_to_hz(
-        np.asarray(visibility_table["channel_freq_hz"], dtype=np.float64)
-    )
+    freqs_hz = _frequency_to_hz(np.asarray(visibility_table["channel_freq_hz"], dtype=np.float64))
     c_m_s = 299_792_458.0
 
     for chan_idx in range(nchan):
         wavelength_m = c_m_s / max(float(freqs_hz[chan_idx]), 1.0)
         u_waves = uvw_m[:, 0] / wavelength_m
         v_waves = uvw_m[:, 1] / wavelength_m
-        max_extent = max(
-            float(np.max(np.abs(u_waves))), float(np.max(np.abs(v_waves))), 1.0
-        )
+        max_extent = max(float(np.max(np.abs(u_waves))), float(np.max(np.abs(v_waves))), 1.0)
         uv_pixsize = max_extent / max(nphf - 1, 1)
 
         pix_u = np.rint(u_waves / uv_pixsize).astype(np.int32)
@@ -224,16 +215,12 @@ def _load_visualizer_cube(path: Path) -> tuple[np.ndarray, str, str]:
     return cube, cube_name, file_type
 
 
-def _resolve_integration_axis(
-    cube: np.ndarray, requested_axis: str | int | None
-) -> int:
+def _resolve_integration_axis(cube: np.ndarray, requested_axis: str | int | None) -> int:
     if requested_axis is None or requested_axis == "auto":
         return 0
     axis = int(requested_axis)
     if axis < 0 or axis >= cube.ndim:
-        raise ValueError(
-            f"Integration axis {axis} is out of bounds for shape {cube.shape}"
-        )
+        raise ValueError(f"Integration axis {axis} is out of bounds for shape {cube.shape}")
     return axis
 
 
@@ -249,8 +236,7 @@ def _slice_integration_window(
     end = axis_length - 1 if channel_end is None else int(channel_end)
     if start < 0 or end < 0 or start >= axis_length or end >= axis_length:
         raise ValueError(
-            f"Channel range [{start}, {end}] is out of bounds "
-            f"for axis length {axis_length}"
+            f"Channel range [{start}, {end}] is out of bounds for axis length {axis_length}"
         )
     if start > end:
         raise ValueError("channel_start must be less than or equal to channel_end")
@@ -265,9 +251,7 @@ def _project_complex_component(
     complex_component: str,
 ) -> np.ndarray:
     if complex_component not in {"real", "imag", "magnitude", "phase"}:
-        raise ValueError(
-            "complex_component must be one of: real, imag, magnitude, phase"
-        )
+        raise ValueError("complex_component must be one of: real, imag, magnitude, phase")
     if not np.iscomplexobj(cube):
         return np.asarray(cube, dtype=np.float32)
     if complex_component == "real":

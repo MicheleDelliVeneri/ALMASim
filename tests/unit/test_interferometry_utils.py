@@ -1,11 +1,11 @@
 """Unit tests for interferometry utilities."""
 
-import pytest
 import numpy as np
+import pytest
 
 from almasim.services.interferometry.utils import (
-    get_channel_wavelength,
     closest_power_of_2,
+    get_channel_wavelength,
     sampling_to_uv_mask,
 )
 
@@ -13,9 +13,7 @@ from almasim.services.interferometry.utils import (
 def test_get_channel_wavelength():
     """Test getting channel wavelength."""
     # Wavelengths are in mm, function returns in meters (converts by * 1e-3)
-    obs_wavelengths = np.array(
-        [[1000.0, 1100.0], [1100.0, 1200.0], [1200.0, 1300.0]]
-    )  # in mm
+    obs_wavelengths = np.array([[1000.0, 1100.0], [1100.0, 1200.0], [1200.0, 1300.0]])  # in mm
     wavelength = get_channel_wavelength(obs_wavelengths, 0)
     assert len(wavelength) == 3
     assert wavelength[0] == pytest.approx(1.0, rel=1e-3)  # 1000mm = 1.0m

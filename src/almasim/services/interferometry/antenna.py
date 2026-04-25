@@ -2,11 +2,12 @@
 
 import math
 import os
+
+import astropy.units as U
 import numpy as np
 import pandas as pd
 from astropy.constants import c
 from astropy.units import Quantity
-import astropy.units as U
 
 
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
@@ -31,9 +32,7 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
     """
     # Input validation
     if central_frequency_ghz <= 0 or max_baseline_km <= 0:
-        raise ValueError(
-            "Central frequency and maximum baseline must be positive values."
-        )
+        raise ValueError("Central frequency and maximum baseline must be positive values.")
 
     if not isinstance(central_frequency_ghz, Quantity):
         central_frequency_ghz = central_frequency_ghz * U.GHz
@@ -104,29 +103,23 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
         return fov
 
 
-def generate_antenna_config_file_from_antenna_array(
-    antenna_array, master_path, output_dir
-):
+def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, output_dir):
     """Generate antenna configuration file from antenna array string."""
     antenna_coordinates = pd.read_csv(
         os.path.join(master_path, "antenna_config", "antenna_coordinates.csv")
     )
     obs_antennas = antenna_array.split(" ")
     obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[
-        antenna_coordinates["name"].isin(obs_antennas)
-    ]
-    intro_string = (
-        "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
-    )
+    obs_coordinates = antenna_coordinates[antenna_coordinates["name"].isin(obs_antennas)]
+    intro_string = "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
     with open(os.path.join(output_dir, "antenna.cfg"), "w") as f:
         f.write(intro_string)
         for i in range(len(obs_coordinates)):
-            f.write(f"{
-                    obs_coordinates['x'].values[i]} {
-                    obs_coordinates['y'].values[i]} {
-                    obs_coordinates['z'].values[i]} 12. {
-                    obs_coordinates['name'].values[i]}\n")
+            f.write(
+                f"{obs_coordinates['x'].values[i]} {obs_coordinates['y'].values[i]} {
+                    obs_coordinates['z'].values[i]
+                } 12. {obs_coordinates['name'].values[i]}\n"
+            )
     f.close()
 
 
@@ -170,9 +163,7 @@ def get_max_baseline_from_antenna_array(antenna_array, master_path):
     )
     obs_antennas = antenna_array.split(" ")
     obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[
-        antenna_coordinates["name"].isin(obs_antennas)
-    ].values
+    obs_coordinates = antenna_coordinates[antenna_coordinates["name"].isin(obs_antennas)].values
     max_baseline = 0
     for i in range(len(obs_coordinates)):
         name, x1, y1, z1 = obs_coordinates[i]

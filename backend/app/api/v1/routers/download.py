@@ -5,7 +5,6 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
-from app.schemas.metadata import MetadataResponse
 from app.schemas.download import (
     BrowseDirectoryEntry,
     BrowseDirectoryResponse,
@@ -20,6 +19,7 @@ from app.schemas.download import (
     StartDownloadRequest,
     StartDownloadResponse,
 )
+from app.schemas.metadata import MetadataResponse
 from app.services.download_service import (
     DataProduct,
     DownloadJob,
@@ -54,14 +54,10 @@ def _browse_path(resolved_path) -> BrowseDirectoryResponse:
     """Build a BrowseDirectoryResponse for an existing directory path."""
     import os
 
-    parent = (
-        str(resolved_path.parent) if resolved_path != resolved_path.parent else None
-    )
+    parent = str(resolved_path.parent) if resolved_path != resolved_path.parent else None
     entries: list[BrowseDirectoryEntry] = []
     try:
-        for entry in sorted(
-            os.scandir(str(resolved_path)), key=lambda e: e.name.lower()
-        ):
+        for entry in sorted(os.scandir(str(resolved_path)), key=lambda e: e.name.lower()):
             if entry.name.startswith("."):
                 continue
             try:
@@ -81,9 +77,7 @@ def _browse_path(resolved_path) -> BrowseDirectoryResponse:
             detail=f"Permission denied: {resolved_path}",
         )
 
-    return BrowseDirectoryResponse(
-        current=str(resolved_path), parent=parent, entries=entries
-    )
+    return BrowseDirectoryResponse(current=str(resolved_path), parent=parent, entries=entries)
 
 
 @router.get("/browse", response_model=BrowseDirectoryResponse)
@@ -264,9 +258,7 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
         products=products,
         destination=body.destination,
         max_parallel=body.max_parallel,
-        extract_tar=body.extract_tar
-        or body.unpack_ms
-        or body.generate_calibrated_visibilities,
+        extract_tar=body.extract_tar or body.unpack_ms or body.generate_calibrated_visibilities,
         unpack_ms=body.unpack_ms or body.generate_calibrated_visibilities,
         generate_calibrated_visibilities=body.generate_calibrated_visibilities,
         clean_intermediate_files=body.clean_intermediate_files,
@@ -343,9 +335,7 @@ async def list_download_jobs():
                     bytes_downloaded=int(rec.bytes_downloaded),
                     error=rec.error,
                     raw_measurement_sets=_json_list(rec.raw_measurement_sets),
-                    calibrated_measurement_sets=_json_list(
-                        rec.calibrated_measurement_sets
-                    ),
+                    calibrated_measurement_sets=_json_list(rec.calibrated_measurement_sets),
                     manifest_path=rec.manifest_path,
                     has_metadata=has_metadata,
                     metadata_count=metadata_count,
@@ -369,9 +359,7 @@ async def get_download_job(job_id: str):
             files_failed=job.files_failed,
             total_bytes=job.total_bytes,
             bytes_downloaded=job.bytes_downloaded,
-            progress=(
-                (job.bytes_downloaded / job.total_bytes) if job.total_bytes > 0 else 0
-            ),
+            progress=((job.bytes_downloaded / job.total_bytes) if job.total_bytes > 0 else 0),
             error=job.error,
             raw_measurement_sets=job.raw_measurement_sets,
             calibrated_measurement_sets=job.calibrated_measurement_sets,
@@ -386,9 +374,7 @@ async def get_download_job(job_id: str):
                     status=f.status,
                     error=f.error,
                     progress=(
-                        (f.bytes_downloaded / f.content_length)
-                        if f.content_length > 0
-                        else 0
+                        (f.bytes_downloaded / f.content_length) if f.content_length > 0 else 0
                     ),
                 )
                 for f in job.files
@@ -426,11 +412,7 @@ async def get_download_job(job_id: str):
                 bytes_downloaded=int(f.bytes_downloaded),
                 status=f.status,
                 error=f.error,
-                progress=(
-                    (f.bytes_downloaded / f.content_length)
-                    if f.content_length > 0
-                    else 0
-                ),
+                progress=((f.bytes_downloaded / f.content_length) if f.content_length > 0 else 0),
             )
             for f in rec.files
         ],

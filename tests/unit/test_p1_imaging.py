@@ -43,9 +43,7 @@ def test_simulate_total_power_observation_smooths_point_source():
 @pytest.mark.unit
 def test_estimate_tp_beam_fwhm_arcsec_decreases_with_frequency():
     """Higher-frequency TP channels should have smaller beams."""
-    beam_fwhm = estimate_tp_beam_fwhm_arcsec(
-        np.array([90e9, 230e9]), antenna_diameter_m=12.0
-    )
+    beam_fwhm = estimate_tp_beam_fwhm_arcsec(np.array([90e9, 230e9]), antenna_diameter_m=12.0)
     assert beam_fwhm[1] < beam_fwhm[0]
 
 
@@ -126,9 +124,7 @@ def test_clean_deconvolve_cube_improves_blurred_point_source():
 
     yy, xx = np.indices((21, 21), dtype=np.float32)
     sigma = 1.8
-    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(
-        np.float32
-    )
+    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(np.float32)
     beam /= np.max(beam)
     beam_cube = beam[None, ...]
 
@@ -156,9 +152,7 @@ def test_clean_deconvolve_cube_can_resume_from_previous_state():
 
     yy, xx = np.indices((21, 21), dtype=np.float32)
     sigma = 1.8
-    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(
-        np.float32
-    )
+    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(np.float32)
     beam /= np.max(beam)
     beam_cube = beam[None, ...]
 
@@ -192,9 +186,7 @@ def test_clean_deconvolve_cube_handles_corner_source_without_edge_dropout():
 
     yy, xx = np.indices((21, 21), dtype=np.float32)
     sigma = 1.8
-    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(
-        np.float32
-    )
+    beam = np.exp(-0.5 * (((yy - 10) / sigma) ** 2 + ((xx - 10) / sigma) ** 2)).astype(np.float32)
     beam /= np.max(beam)
     beam_cube = beam[None, ...]
 
@@ -205,9 +197,7 @@ def test_clean_deconvolve_cube_handles_corner_source_without_edge_dropout():
     component_cube = result["component_cube"]
     residual_cube = result["residual_cube"]
 
-    recovered_peak = np.unravel_index(
-        int(np.argmax(component_cube[0])), component_cube[0].shape
-    )
+    recovered_peak = np.unravel_index(int(np.argmax(component_cube[0])), component_cube[0].shape)
 
     assert recovered_peak == (3, 17)
     assert float(component_cube[0, 3, 17]) > 0.5

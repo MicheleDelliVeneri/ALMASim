@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
+
 from pydantic import BaseModel, Field
 
 
@@ -59,15 +60,13 @@ class MetadataQuery(BaseModel):
     array_type: Optional[Sequence[str]] = Field(
         None,
         description=(
-            "Array type(s) to include: '12m', '7m', 'TP' "
-            "(matched via antenna prefix patterns)"
+            "Array type(s) to include: '12m', '7m', 'TP' (matched via antenna prefix patterns)"
         ),
     )
     array_configuration: Optional[Sequence[str]] = Field(
         None,
         description=(
-            "Array configuration(s) to include, e.g. 'C-1', 'C-2' "
-            "(matched in schedblock_name)"
+            "Array configuration(s) to include, e.g. 'C-1', 'C-2' (matched in schedblock_name)"
         ),
     )
     angular_resolution_range: Optional[tuple[float, float]] = Field(
@@ -87,9 +86,7 @@ class MetadataQuery(BaseModel):
     time_resolution_range: Optional[tuple[float, float]] = Field(
         None, description="Time resolution range"
     )
-    frequency_range: Optional[tuple[float, float]] = Field(
-        None, description="Frequency range"
-    )
+    frequency_range: Optional[tuple[float, float]] = Field(None, description="Frequency range")
 
     # --- Exclusion filters ---
     exclude_science_keyword: Optional[Sequence[str]] = Field(
@@ -121,9 +118,7 @@ class MetadataQuery(BaseModel):
     )
 
     # --- Data rights ---
-    public_only: bool = Field(
-        True, description="Only query non-proprietary (public) data"
-    )
+    public_only: bool = Field(True, description="Only query non-proprietary (public) data")
 
     # --- Observation type ---
     science_only: bool = Field(True, description="Only query science observations")
@@ -132,19 +127,14 @@ class MetadataQuery(BaseModel):
     # --- Output control ---
     visible_columns: Optional[List[str]] = Field(
         None,
-        description=(
-            "Ordered subset of result columns to return. "
-            "Pass null/omit for all columns."
-        ),
+        description=("Ordered subset of result columns to return. Pass null/omit for all columns."),
     )
 
     def to_params(self) -> ScienceQueryParams:
         """Convert to the internal ScienceQueryParams dataclass."""
         return ScienceQueryParams(
             source_name=self.source_name,
-            science_keyword=(
-                list(self.science_keyword) if self.science_keyword else None
-            ),
+            science_keyword=(list(self.science_keyword) if self.science_keyword else None),
             scientific_category=(
                 list(self.scientific_category) if self.scientific_category else None
             ),
@@ -162,25 +152,17 @@ class MetadataQuery(BaseModel):
             time_resolution_range=self.time_resolution_range,
             frequency_range=self.frequency_range,
             exclude_science_keyword=(
-                list(self.exclude_science_keyword)
-                if self.exclude_science_keyword
-                else None
+                list(self.exclude_science_keyword) if self.exclude_science_keyword else None
             ),
             exclude_scientific_category=(
-                list(self.exclude_scientific_category)
-                if self.exclude_scientific_category
-                else None
+                list(self.exclude_scientific_category) if self.exclude_scientific_category else None
             ),
             exclude_source_name=(
                 list(self.exclude_source_name) if self.exclude_source_name else None
             ),
-            exclude_obs_type=(
-                list(self.exclude_obs_type) if self.exclude_obs_type else None
-            ),
+            exclude_obs_type=(list(self.exclude_obs_type) if self.exclude_obs_type else None),
             exclude_solar=self.exclude_solar,
-            proposal_id_prefix=(
-                [f"{2012 + c}." for c in self.cycles] if self.cycles else None
-            ),
+            proposal_id_prefix=([f"{2012 + c}." for c in self.cycles] if self.cycles else None),
             public_only=self.public_only,
             science_only=self.science_only,
             exclude_mosaic=self.exclude_mosaic,
@@ -199,9 +181,7 @@ class MetadataQueryStartResponse(BaseModel):
     """Response from starting a background TAP query job."""
 
     query_id: str
-    status: str = Field(
-        "running", description="Job status: running | completed | failed"
-    )
+    status: str = Field("running", description="Job status: running | completed | failed")
 
 
 class MetadataPageResponse(BaseModel):
@@ -219,9 +199,7 @@ class MetadataPageResponse(BaseModel):
 class MetadataSaveRequest(BaseModel):
     """Request payload for saving metadata on the backend."""
 
-    path: str = Field(
-        ..., description="Target path relative to the ALMASim metadata directory"
-    )
+    path: str = Field(..., description="Target path relative to the ALMASim metadata directory")
     data: list[dict] = Field(..., description="Metadata records to persist")
 
 

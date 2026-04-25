@@ -12,8 +12,14 @@ from .service import (
     ExclusionFilters,
     InclusionFilters,
     get_science_types,
-    query_by_science_type as _query_by_science_type,
+)
+from .service import (
     query_all_targets as _query_all_targets,
+)
+from .service import (
+    query_by_science_type as _query_by_science_type,
+)
+from .service import (
     query_products_for_members as _query_products_for_members,
 )
 

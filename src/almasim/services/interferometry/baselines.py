@@ -1,6 +1,7 @@
 """Baseline preparation and management for interferometry."""
 
 from typing import Tuple
+
 import numpy as np
 
 
@@ -101,9 +102,9 @@ def set_noise(noise: float, Noise: np.ndarray) -> np.ndarray:
     if noise < 0:
         raise ValueError("Noise must be non-negative")
     shape = Noise.shape
-    Noise[:] = np.random.normal(
+    Noise[:] = np.random.normal(loc=0.0, scale=noise, size=shape) + 1.0j * np.random.normal(
         loc=0.0, scale=noise, size=shape
-    ) + 1.0j * np.random.normal(loc=0.0, scale=noise, size=shape)
+    )
     return Noise
 
 

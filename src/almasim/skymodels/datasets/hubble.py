@@ -5,7 +5,7 @@ from __future__ import annotations
 import locale
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from kaggle import api as _kaggle_api  # noqa: F401
@@ -39,9 +39,7 @@ def _run_with_c_locale(func):
 
 def download_hubble_top100(destination: Optional[Path | str] = None) -> Path:
     """Download the Hubble Top-100 dataset via Kaggle."""
-    base_path = (
-        Path(destination or Path.cwd() / "hubble" / "top100").expanduser().resolve()
-    )
+    base_path = Path(destination or Path.cwd() / "hubble" / "top100").expanduser().resolve()
     _ensure_directory(base_path)
 
     def _download():

@@ -119,9 +119,7 @@ def convolve_cube_with_beam(
         )
         dirty = np.real(np.fft.ifft2(dirty_fft)).astype(np.float32)
         if noise_std > 0.0:
-            dirty = dirty + rng.normal(0.0, noise_std, size=dirty.shape).astype(
-                np.float32
-            )
+            dirty = dirty + rng.normal(0.0, noise_std, size=dirty.shape).astype(np.float32)
         dirty_cube[channel] = dirty
     return dirty_cube
 

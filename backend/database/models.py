@@ -105,9 +105,7 @@ class Observation(Base):
     # Spectral information
     frequency = Column(Float)  # GHz
     bandwidth = Column(Float)  # GHz
-    frequency_support = Column(
-        Text
-    )  # Complex frequency range string (can be very long)
+    frequency_support = Column(Text)  # Complex frequency range string (can be very long)
 
     # Timing
     obs_release_date = Column(DateTime)
@@ -120,24 +118,18 @@ class Observation(Base):
     # Proposal and quality
     proposal_abstract = Column(Text)
     qa2_passed = Column(String(10))  # 'T', 'F', or other values from TAP
-    obs_type = Column(
-        String(100)
-    )  # TAP 'type' field (renamed to avoid Python keyword conflict)
+    obs_type = Column(String(100))  # TAP 'type' field (renamed to avoid Python keyword conflict)
 
     # Metadata
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     source_file = Column(String(255))  # CSV file that imported this record
 
     # Foreign keys
     scientific_category_id = Column(Integer, ForeignKey("scientific_categories.id"))
 
     # Relationships
-    scientific_category = relationship(
-        "ScientificCategory", back_populates="observations"
-    )
+    scientific_category = relationship("ScientificCategory", back_populates="observations")
     science_keywords = relationship(
         "ScienceKeyword", secondary=observation_keywords, back_populates="observations"
     )
@@ -212,17 +204,13 @@ class SimulationJob(Base):
 
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
 
     # Relationships
     observation = relationship("Observation", back_populates="simulations")
-    logs = relationship(
-        "SimulationLog", back_populates="simulation", cascade="all, delete-orphan"
-    )
+    logs = relationship("SimulationLog", back_populates="simulation", cascade="all, delete-orphan")
 
 
 class SimulationLog(Base):
@@ -252,9 +240,7 @@ class DownloadJobRecord(Base):
     __tablename__ = "download_jobs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    job_id = Column(
-        UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4, index=True
-    )
+    job_id = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4, index=True)
     destination = Column(Text, nullable=False)
     member_ous_uids = Column(Text, nullable=False, default="")  # JSON array string
     metadata_json = Column(Text, nullable=False, default="[]")  # JSON array string
@@ -265,12 +251,8 @@ class DownloadJobRecord(Base):
     archive_output_root = Column(Text, nullable=True)
     casa_data_root = Column(Text, nullable=True)
     skip_casa_data_update = Column(Boolean, nullable=False, default=False)
-    raw_measurement_sets = Column(
-        Text, nullable=False, default="[]"
-    )  # JSON array string
-    calibrated_measurement_sets = Column(
-        Text, nullable=False, default="[]"
-    )  # JSON array string
+    raw_measurement_sets = Column(Text, nullable=False, default="[]")  # JSON array string
+    calibrated_measurement_sets = Column(Text, nullable=False, default="[]")  # JSON array string
     manifest_path = Column(Text, nullable=True)
     total_files = Column(Integer, nullable=False, default=0)
     total_bytes = Column(Float, nullable=False, default=0)
@@ -282,14 +264,10 @@ class DownloadJobRecord(Base):
     )  # pending, running, completed, failed, cancelled
     error = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    files = relationship(
-        "DownloadFileRecord", back_populates="job", cascade="all, delete-orphan"
-    )
+    files = relationship("DownloadFileRecord", back_populates="job", cascade="all, delete-orphan")
 
 
 class DownloadFileRecord(Base):

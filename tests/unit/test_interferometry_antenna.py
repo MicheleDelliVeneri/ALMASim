@@ -1,12 +1,12 @@
 """Unit tests for antenna functions."""
 
-import pytest
 import astropy.units as U
+import pytest
 
 from almasim.services.interferometry.antenna import (
+    compute_distance,
     estimate_alma_beam_size,
     get_fov_from_band,
-    compute_distance,
 )
 
 

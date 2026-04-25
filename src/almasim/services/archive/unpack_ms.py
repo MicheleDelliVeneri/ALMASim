@@ -66,9 +66,9 @@ def configure_casa_environment(
     casa_config_dir.mkdir(parents=True, exist_ok=True)
 
     casa_site_config.write_text(
-        "measurespath = {0!r}\n"
-        "data_auto_update = False\n"
-        "measures_auto_update = False\n".format(str(casa_data_path)),
+        "measurespath = {0!r}\ndata_auto_update = False\nmeasures_auto_update = False\n".format(
+            str(casa_data_path)
+        ),
         encoding="utf-8",
     )
 
@@ -110,9 +110,7 @@ def find_asdm_directories(
     """Find ASDM directories below ``input_root``."""
     input_path = Path(input_root).expanduser().resolve()
     if not input_path.is_dir():
-        raise RuntimeError(
-            f"Input root does not exist or is not a directory: {input_path}"
-        )
+        raise RuntimeError(f"Input root does not exist or is not a directory: {input_path}")
 
     asdm_dirs = []
     for candidate in input_path.rglob("*.asdm.sdm"):
@@ -125,9 +123,7 @@ def find_asdm_directories(
     if not asdm_dirs:
         if asdm_uid is None:
             raise RuntimeError(f"No *.asdm.sdm directories found under {input_path}")
-        raise RuntimeError(
-            f"No ASDM named {asdm_uid}.asdm.sdm found under {input_path}"
-        )
+        raise RuntimeError(f"No ASDM named {asdm_uid}.asdm.sdm found under {input_path}")
 
     return sorted(asdm_dirs)
 
@@ -198,9 +194,7 @@ def create_measurement_sets(
     asdm_dirs = find_asdm_directories(input_root, asdm_uid)
     casa_data = find_existing_casa_data(input_root, output_root, casa_data_root)
     configure_casa_environment(output_root, casa_data)
-    ensure_casa_runtime_data(
-        casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn
-    )
+    ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
     from casatasks import importasdm
 

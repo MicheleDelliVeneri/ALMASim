@@ -2,7 +2,7 @@
 
 from .galaxy_zoo import download_galaxy_zoo
 from .hubble import download_hubble_top100
-from .tng import download_tng_structure, RemoteMachine
+from .tng import RemoteMachine, download_tng_structure
 
 __all__ = [
     "download_galaxy_zoo",

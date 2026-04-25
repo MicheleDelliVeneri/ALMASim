@@ -1,14 +1,15 @@
 """Diffuse sky model implementation."""
 
 import random
-import numpy as np
-import astropy.units as U
 from typing import Any
-from dask import delayed
+
+import astropy.units as U
 import nifty8 as ift
+import numpy as np
+from dask import delayed
 
 from .base import SkyModel
-from .utils import track_progress, gaussian
+from .utils import gaussian, track_progress
 
 
 def diffuse_signal(n_px: int) -> np.ndarray:

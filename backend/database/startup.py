@@ -33,9 +33,7 @@ def _drop_not_null_if_exists(columns: list) -> None:
     try:
         with engine.connect() as conn:
             for col in columns:
-                conn.execute(
-                    text(f"ALTER TABLE observations ALTER COLUMN {col} DROP NOT NULL")
-                )
+                conn.execute(text(f"ALTER TABLE observations ALTER COLUMN {col} DROP NOT NULL"))
             conn.commit()
     except Exception as e:
         logger.warning(f"Could not drop NOT NULL constraints (may not exist): {e}")
@@ -82,8 +80,7 @@ def initialize_database_on_startup(data_dir: Path) -> None:
 
             total_imported = sum(results.values())
             logger.info(
-                "Database initialization complete. "
-                f"Imported {total_imported} total observations"
+                f"Database initialization complete. Imported {total_imported} total observations"
             )
 
             for filename, count in results.items():

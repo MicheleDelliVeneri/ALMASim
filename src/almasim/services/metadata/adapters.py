@@ -67,18 +67,12 @@ def observation_to_metadata_record(observation: Any) -> dict[str, Any]:
         "antenna_arrays": observation.antenna_arrays,
         "Ang.res.": observation.spatial_resolution,
         "Obs.date": (
-            observation.obs_release_date.isoformat()
-            if observation.obs_release_date
-            else None
+            observation.obs_release_date.isoformat() if observation.obs_release_date else None
         ),
         "Project_abstract": observation.proposal_abstract,
-        "science_keyword": ", ".join(
-            keyword.keyword for keyword in observation.science_keywords
-        ),
+        "science_keyword": ", ".join(keyword.keyword for keyword in observation.science_keywords),
         "scientific_category": (
-            observation.scientific_category.category
-            if observation.scientific_category
-            else None
+            observation.scientific_category.category if observation.scientific_category else None
         ),
         "QA2_status": observation.qa2_passed,
         "Type": observation.obs_type,
@@ -123,9 +117,7 @@ def observations_to_metadata_records(
     visible_columns: Optional[Sequence[str]] = None,
 ) -> list[dict[str, Any]]:
     """Serialize many observations to canonical metadata records."""
-    records = [
-        observation_to_metadata_record(observation) for observation in observations
-    ]
+    records = [observation_to_metadata_record(observation) for observation in observations]
     return apply_visible_columns(records, visible_columns=visible_columns)
 
 

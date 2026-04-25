@@ -1,14 +1,15 @@
 """Molecular cloud sky model implementation."""
 
 import random
-import numpy as np
-import astropy.units as U
 from typing import Any
-from dask import delayed
+
+import astropy.units as U
+import numpy as np
 from astropy.utils import NumpyRNGContext
+from dask import delayed
 
 from .base import SkyModel
-from .utils import track_progress, gaussian
+from .utils import gaussian, track_progress
 
 
 def make_extended(
@@ -122,8 +123,9 @@ def make_extended(
 
         if not full_powermap.shape[1] == imsize:
             raise ValueError(
-                "The full output should have a square shape."
-                " Instead has {}".format(full_powermap.shape)
+                "The full output should have a square shape. Instead has {}".format(
+                    full_powermap.shape
+                )
             )
 
         return np.fft.fftshift(full_powermap)

@@ -1,23 +1,23 @@
 """TAP (Table Access Protocol) service for ALMA metadata queries."""
 
-from .service import (
-    get_tap_service,
-    search_with_retry,
-    get_science_types,
-    query_observations,
-    query_all_targets,
-    query_by_science_type,
-    query_products_for_members,
-    InclusionFilters,
-    ExclusionFilters,
-)
 from .queries import (
     ALL_COLUMNS,
-    query_science_types,
+    load_metadata,
     query_metadata_by_science,
     query_metadata_by_targets,
     query_products,
-    load_metadata,
+    query_science_types,
+)
+from .service import (
+    ExclusionFilters,
+    InclusionFilters,
+    get_science_types,
+    get_tap_service,
+    query_all_targets,
+    query_by_science_type,
+    query_observations,
+    query_products_for_members,
+    search_with_retry,
 )
 
 __all__ = [

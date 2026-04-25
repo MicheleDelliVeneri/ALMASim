@@ -3,9 +3,9 @@
 import pytest
 
 from almasim.services.astro.lines import (
-    read_line_emission_csv,
-    get_line_info,
     compute_rest_frequency_from_redshift,
+    get_line_info,
+    read_line_emission_csv,
 )
 
 

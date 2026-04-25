@@ -51,9 +51,7 @@ def _sca_desc(name: str, value) -> tuple[str, dict]:
     }
 
 
-def _arr_desc(
-    name: str, value, ndim: int, shape: list | None = None
-) -> tuple[str, dict]:
+def _arr_desc(name: str, value, ndim: int, shape: list | None = None) -> tuple[str, dict]:
     d: dict = {
         "valueType": _vtype(value),
         "dataManagerType": "StandardStMan",
@@ -188,9 +186,7 @@ def export_native_ms(
     _write_data_description(backend, ms_path)
     _write_field(backend, ms_path, source_name, field_ra_rad, field_dec_rad, time_range)
     _write_observation(backend, ms_path, telescope_name, project_name, time_range)
-    _write_source(
-        backend, ms_path, source_name, field_ra_rad, field_dec_rad, time_range
-    )
+    _write_source(backend, ms_path, source_name, field_ra_rad, field_dec_rad, time_range)
     _write_state(backend, ms_path)
     _write_history(backend, ms_path, project_name, time_range)
     return ms_path
@@ -293,11 +289,7 @@ def _write_antenna(backend, ms_path, antenna_names, antenna_positions_m, nant):
 
 
 def _write_spectral_window(backend, ms_path, channel_freq_hz, nchan):
-    chan_width = (
-        np.gradient(channel_freq_hz).astype(np.float64)
-        if nchan > 1
-        else np.array([1.0])
-    )
+    chan_width = np.gradient(channel_freq_hz).astype(np.float64) if nchan > 1 else np.array([1.0])
     tb = backend.create(
         os.path.join(ms_path, "SPECTRAL_WINDOW"),
         [

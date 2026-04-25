@@ -1,9 +1,10 @@
 """Utility functions for sky model generation."""
 
-import numpy as np
 import time
-from scipy.ndimage import zoom
+
+import numpy as np
 from astropy.io import fits
+from scipy.ndimage import zoom
 
 
 def interpolate_array(arr: np.ndarray, n_px: int) -> np.ndarray:

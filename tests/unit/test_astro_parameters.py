@@ -1,7 +1,7 @@
 """Unit tests for astro parameters module."""
 
-import pytest
 import numpy as np
+import pytest
 
 from almasim.services.astro.parameters import write_sim_parameters
 

@@ -1,14 +1,15 @@
 """Gaussian sky model implementation."""
 
-import numpy as np
 import math
+from typing import Any, Optional
+
 import astropy.units as U
-from typing import Optional, Any
+import numpy as np
 from dask import delayed
 from dask.distributed import Client
 
 from .base import SkyModel
-from .utils import track_progress, gaussian
+from .utils import gaussian, track_progress
 
 
 @delayed

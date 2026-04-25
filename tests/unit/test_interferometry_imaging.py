@@ -1,19 +1,19 @@
 """Unit tests for interferometry imaging functions."""
 
-import pytest
 import numpy as np
+import pytest
 from astropy.io import fits
 
 from almasim.services.interferometry.imaging import (
-    prepare_2d_arrays,
     _grid_uv,
-    set_beam,
-    check_lfac,
     _prepare_model,
     add_thermal_noise,
-    set_primary_beam,
-    observe,
+    check_lfac,
     image_channel,
+    observe,
+    prepare_2d_arrays,
+    set_beam,
+    set_primary_beam,
 )
 
 
@@ -386,30 +386,28 @@ def test_image_channel(sample_header, sample_wavelength):
     # Create sample image
     img = np.random.rand(Nphf, Nphf).astype(np.float32) * 0.1
 
-    modelim, dirtymap, modelvis, dirtyvis, u, v, beam, totsampling, raw_visibility = (
-        image_channel(
-            img,
-            sample_wavelength,
-            Npix,
-            Nant,
-            Hcov,
-            nH,
-            noise,
-            antPos,
-            robfac,
-            trlat,
-            trdec,
-            Diameters,
-            imsize,
-            Xmax,
-            lfac,
-            distmat,
-            Nphf,
-            Np4,
-            zooming,
-            sample_header,
-            robust,
-        )
+    modelim, dirtymap, modelvis, dirtyvis, u, v, beam, totsampling, raw_visibility = image_channel(
+        img,
+        sample_wavelength,
+        Npix,
+        Nant,
+        Hcov,
+        nH,
+        noise,
+        antPos,
+        robfac,
+        trlat,
+        trdec,
+        Diameters,
+        imsize,
+        Xmax,
+        lfac,
+        distmat,
+        Nphf,
+        Np4,
+        zooming,
+        sample_header,
+        robust,
     )
 
     assert modelim.shape == (Npix, Npix)

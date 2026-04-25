@@ -5,7 +5,7 @@ from __future__ import annotations
 import locale
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from kaggle import api as _kaggle_api  # noqa: F401

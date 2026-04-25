@@ -1,8 +1,8 @@
 """Component tests for spectral data processing."""
 
 from almasim.services.astro.spectral import (
-    sample_given_redshift,
     process_spectral_data,
+    sample_given_redshift,
     sed_reading,
 )
 
@@ -10,6 +10,7 @@ from almasim.services.astro.spectral import (
 def test_sample_given_redshift(test_data_dir, main_dir):
     """Test sampling metadata by redshift."""
     import pandas as pd
+
     from almasim.services.astro.lines import get_line_info
 
     metadata = pd.read_csv(test_data_dir / "qso_metadata.csv")
@@ -18,9 +19,7 @@ def test_sample_given_redshift(test_data_dir, main_dir):
     rest_frequency, _ = get_line_info(main_dir)
     # Use a subset of rest frequencies that are higher than typical observed frequencies
     # CO lines are typically 100-500 GHz rest, so use those
-    rest_frequency = rest_frequency[rest_frequency > 100.0][
-        :3
-    ]  # Get 3 frequencies > 100 GHz
+    rest_frequency = rest_frequency[rest_frequency > 100.0][:3]  # Get 3 frequencies > 100 GHz
 
     sample = sample_given_redshift(
         metadata,

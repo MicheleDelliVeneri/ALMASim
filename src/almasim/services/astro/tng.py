@@ -1,8 +1,9 @@
 """TNG (The Next Generation) simulation auxiliary functions."""
 
-import h5py
-from random import choices
 import os
+from random import choices
+
+import h5py
 import numpy as np
 import pandas as pd
 
@@ -142,19 +143,13 @@ def get_subhaloids_from_db(n, main_path, snapshot):
     catalogue = db[["SubhaloID", "P_Late", "P_S0", "P_Sab"]]
     catalogue = catalogue.sort_values(by=["P_Late"], ascending=False)
     ellipticals = catalogue[
-        (catalogue["P_Late"] > 0.6)
-        & (catalogue["P_S0"] < 0.5)
-        & (catalogue["P_Sab"] < 0.5)
+        (catalogue["P_Late"] > 0.6) & (catalogue["P_S0"] < 0.5) & (catalogue["P_Sab"] < 0.5)
     ]
     lenticulars = catalogue[
-        (catalogue["P_S0"] > 0.6)
-        & (catalogue["P_Late"] < 0.5)
-        & (catalogue["P_Sab"] < 0.5)
+        (catalogue["P_S0"] > 0.6) & (catalogue["P_Late"] < 0.5) & (catalogue["P_Sab"] < 0.5)
     ]
     spirals = catalogue[
-        (catalogue["P_Sab"] > 0.6)
-        & (catalogue["P_Late"] < 0.5)
-        & (catalogue["P_S0"] < 0.5)
+        (catalogue["P_Sab"] > 0.6) & (catalogue["P_Late"] < 0.5) & (catalogue["P_S0"] < 0.5)
     ]
 
     ellipticals["sum"] = ellipticals["P_S0"] + ellipticals["P_Sab"]

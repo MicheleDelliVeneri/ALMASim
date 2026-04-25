@@ -1,9 +1,9 @@
 """Component tests for interferometric simulation."""
 
-import pytest
-import numpy as np
 import astropy.units as U
+import numpy as np
 import pandas as pd
+import pytest
 
 from almasim.services import interferometry
 
@@ -17,17 +17,11 @@ class InlineBackend:
     def compute(self, tasks, sync: bool = True):
         if isinstance(tasks, list):
             return [
-                (
-                    task()
-                    if callable(task)
-                    else task.compute() if hasattr(task, "compute") else task
-                )
+                (task() if callable(task) else task.compute() if hasattr(task, "compute") else task)
                 for task in tasks
             ]
         return (
-            tasks()
-            if callable(tasks)
-            else tasks.compute() if hasattr(tasks, "compute") else tasks
+            tasks() if callable(tasks) else tasks.compute() if hasattr(tasks, "compute") else tasks
         )
 
     def gather(self, futures):

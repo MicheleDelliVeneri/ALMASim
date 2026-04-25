@@ -1,7 +1,7 @@
 """Component tests for sky model generation."""
 
-import pytest
 import astropy.units as U
+import pytest
 
 from almasim import skymodels
 from almasim.services.astro.spectral import process_spectral_data
@@ -13,18 +13,10 @@ class InlineClient:
     def compute(self, tasks):
         if isinstance(tasks, list):
             return [
-                (
-                    task.compute(scheduler="synchronous")
-                    if hasattr(task, "compute")
-                    else task
-                )
+                (task.compute(scheduler="synchronous") if hasattr(task, "compute") else task)
                 for task in tasks
             ]
-        return (
-            tasks.compute(scheduler="synchronous")
-            if hasattr(tasks, "compute")
-            else tasks
-        )
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]
@@ -197,9 +189,7 @@ def test_diffuse_skymodel_generation(sample_datacube, sample_spectral_data):
 
 @pytest.mark.component
 @pytest.mark.slow
-def test_serendipitous_sources_insertion(
-    sample_datacube, sample_spectral_data, tmp_path
-):
+def test_serendipitous_sources_insertion(sample_datacube, sample_spectral_data, tmp_path):
     """Test inserting serendipitous sources into a datacube."""
     (
         continum,

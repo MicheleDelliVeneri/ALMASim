@@ -1,8 +1,9 @@
 """Pointlike sky model implementation."""
 
-import numpy as np
+from typing import Any, Optional
+
 import astropy.units as U
-from typing import Optional, Any
+import numpy as np
 
 from .base import SkyModel
 from .utils import gaussian
@@ -74,7 +75,5 @@ class PointlikeSkyModel(SkyModel):
             self.pos_x,
             self.pos_y,
             :,
-        ] = (
-            (self.continuum + gs) * U.Jy * U.pix**-2
-        )
+        ] = (self.continuum + gs) * U.Jy * U.pix**-2
         return self.datacube

@@ -4,11 +4,11 @@ import astropy.units as U
 import numpy as np
 import pandas as pd
 
+from almasim import skymodels
 from almasim.services import astro
 from almasim.services import interferometry as interferometer
-from almasim.services.interferometry import antenna as alma_antenna
-from almasim import skymodels
 from almasim.services.astro.spectral import sample_given_redshift
+from almasim.services.interferometry import antenna as alma_antenna
 
 
 class InlineBackend:
@@ -20,17 +20,11 @@ class InlineBackend:
     def compute(self, tasks, sync: bool = True):
         if isinstance(tasks, list):
             return [
-                (
-                    task()
-                    if callable(task)
-                    else task.compute() if hasattr(task, "compute") else task
-                )
+                (task() if callable(task) else task.compute() if hasattr(task, "compute") else task)
                 for task in tasks
             ]
         return (
-            tasks()
-            if callable(tasks)
-            else tasks.compute() if hasattr(tasks, "compute") else tasks
+            tasks() if callable(tasks) else tasks.compute() if hasattr(tasks, "compute") else tasks
         )
 
     def gather(self, futures):
@@ -79,15 +73,9 @@ def test_interferometer_runs(tmp_path):
 
     from almasim.services.interferometry.frequency import freq_supp_extractor
 
-    band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
-        freq_support, freq
-    )
-    max_baseline = (
-        alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
-    )
-    beam_size = alma_antenna.estimate_alma_beam_size(
-        central_freq, max_baseline, return_value=False
-    )
+    band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(freq_support, freq)
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    beam_size = alma_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     beam_area = 1.1331 * beam_size**2
     cont_sens_jy = (cont_sens * (np.pi * (beam_size / 2) ** 2)).to(U.Jy)
     cell_size = beam_size / 5

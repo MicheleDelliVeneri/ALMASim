@@ -1,66 +1,93 @@
-[tool.poetry]
+[project]
 name = "almasim"
 version = "2.1.10"
 description = "An ALMA Simulation package for a more civilized era."
-authors = ["Michele Delli Veneri <micheledelliveneri@gmail.com>"]
 readme = "README.md"
-repository = "https://github.com/MicheleDelliVeneri/ALMASim"
-homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
-documentation = "https://almasim.readthedocs.io/en/latest"
-packages = [{include = "almasim", from = "src"}]
+requires-python = ">=3.12,<3.13"
+authors = [
+    {name = "Michele Delli Veneri", email = "micheledelliveneri@gmail.com"},
+]
+dependencies = [
+    "astropy",
+    "asyncssh",
+    "pyvo",
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "tqdm",
+    "scipy",
+    "h5py",
+    "kaggle",
+    "dask",
+    "dask-expr",
+    "dask-jobqueue",
+    "distributed",
+    "astromartini",
+    "Hdecompose",
+    "paramiko",
+    "pysftp",
+    "tenacity",
+    "nifty8",
+    "setuptools",
+    "multiprocess",
+    "scikit-image",
+    "imagecodecs",
+    "casatools",
+    "casatasks",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.12,<3.13"
-astropy = "*"
-asyncssh = "*"
-pyvo = "*"
-numpy = "*"
-pandas = "*"
-matplotlib = "*"
-seaborn = "*"
-tqdm = "*"
-scipy = "*"
-h5py = "*"
-kaggle = "*"
-dask = "*"
-dask-expr = "*"
-dask-jobqueue = "*"
-distributed = "*"
-astromartini = "*"
-Hdecompose = "*"
-paramiko = "*"
-pysftp = "*"
-tenacity = "*"
-nifty8 = "*"
-setuptools = "*"
-multiprocess = "*"
-scikit-image = "*"
-imagecodecs = "*"
-casatools = "*"
-casatasks = "*"
-python-casacore = {version = "*", optional = true}
-
-[tool.poetry.extras]
+[project.optional-dependencies]
 ms-casacore = ["python-casacore"]
 
+[project.urls]
+Repository = "https://github.com/MicheleDelliVeneri/ALMASim"
+Homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
+Documentation = "https://almasim.readthedocs.io/en/latest"
 
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "pydantic-settings",
+    "ipykernel>=7.2.0",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "pydantic-settings",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "*"
-pytest-cov = "*"
-flake8 = "*"
-mypy = "*"
-black = "*"
-fastapi = "*"
-uvicorn = {extras = ["standard"], version = "*"}
-httpx = "*"
-pydantic-settings = "*"
-ipykernel = "^7.2.0"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry.group.test.dependencies]
-pytest = "*"
-pytest-cov = "*"
-fastapi = "*"
-uvicorn = {extras = ["standard"], version = "*"}
-httpx = "*"
-pydantic-settings = "*"
+[tool.hatch.build.targets.wheel]
+packages = ["src/almasim"]
+
+[tool.ruff]
+line-length = 100
+exclude = ["experimental", "illustris_python", "node_modules", ".venv", "build", "htmlcov", "frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"*.ipynb" = ["E501"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.uv]
+package = true
+
+[tool.uv.workspace]
+members = ["backend"]

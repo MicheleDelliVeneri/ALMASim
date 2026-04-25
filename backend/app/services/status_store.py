@@ -1,9 +1,9 @@
 """In-memory store for simulation status and logs."""
 
+import threading
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field
-import threading
 
 
 @dataclass
@@ -215,9 +215,7 @@ class QueryStore:
             start = page * page_size
             end = start + page_size
             rows = job.rows[start:end]
-            done = job.status in ("completed", "failed", "cancelled") and end >= len(
-                job.rows
-            )
+            done = job.status in ("completed", "failed", "cancelled") and end >= len(job.rows)
             return {
                 "query_id": query_id,
                 "page": page,

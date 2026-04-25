@@ -6,15 +6,15 @@ from math import ceil, pi
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
+import astropy.units as U
 import numpy as np
 import pandas as pd
-import astropy.units as U
 from astropy.constants import c
 from astropy.cosmology import FlatLambdaCDM
 
+from .lines import read_line_emission_csv
 from .redshift import compute_redshift
 from .tng import redshift_to_snapshot
-from .lines import read_line_emission_csv
 
 LogFn = Optional[Callable[[str], None]]
 
@@ -71,25 +71,20 @@ def sample_given_redshift(
     while n_metadata < ceil(n / 10):
         s_metadata = n_metadata
         if zmax is not None:
-            f_metadata = metadata[
-                (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
-            ]
+            f_metadata = metadata[(metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)]
         else:
             f_metadata = metadata[metadata["redshift"] >= 0]
         n_metadata = len(f_metadata)
         if n_metadata == s_metadata and zmax is not None:
             zmax += 0.1
     if zmax is not None:
-        metadata = metadata[
-            (metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)
-        ]
+        metadata = metadata[(metadata["redshift"] <= zmax) & (metadata["redshift"] >= 0)]
     else:
         metadata = metadata[metadata["redshift"] >= 0]
     if z_save != zmax:
         _log(
             logger,
-            "Max redshift has been adjusted fit metadata, "
-            f"new max redshift: {round(zmax, 3)}",
+            f"Max redshift has been adjusted fit metadata, new max redshift: {round(zmax, 3)}",
         )
     _log(logger, f"Remaining metadata: {len(metadata)}")
     metadata["snapshot"] = [
@@ -101,17 +96,13 @@ def sample_given_redshift(
         return metadata
     if len(metadata) < n:
         a_n = n - len(metadata)
-        return pd.concat(
-            [metadata, metadata.sample(a_n, replace=True)], ignore_index=True
-        )
+        return pd.concat([metadata, metadata.sample(a_n, replace=True)], ignore_index=True)
     return metadata.sample(n, replace=False)
 
 
 def cont_finder(cont_frequencies, line_frequency):
     """Return the index of the closest continuum frequency to a given line."""
-    distances = np.abs(
-        cont_frequencies - np.ones(len(cont_frequencies)) * line_frequency
-    )
+    distances = np.abs(cont_frequencies - np.ones(len(cont_frequencies)) * line_frequency)
     return int(np.argmin(distances))
 
 
@@ -194,9 +185,7 @@ def sed_reading(
     distance_cm = distance_Mpc * 3.086e24
     solid_angle = 4 * pi * distance_cm**2
     sed = pd.read_csv(file_path, sep=r"\s+")
-    sed["GHz"] = sed["um"].apply(
-        lambda x: (x * U.um).to(U.GHz, equivalencies=U.spectral()).value
-    )
+    sed["GHz"] = sed["um"].apply(lambda x: (x * U.um).to(U.GHz, equivalencies=U.spectral()).value)
     sed, lum_infrared_erg_s, lum_infrared = normalize_sed(
         sed,
         lum_infrared,
@@ -232,9 +221,7 @@ def find_compatible_lines(
     db_line = db_line.loc[~((db_line["redshift"] < 0) | (db_line["redshift"] > 20))]
     delta_v = np.random.uniform(min_delta_v, max_delta_v, len(db_line)) * U.km / U.s
     db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + db_line["redshift"])
-    fwhms = (
-        0.84 * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9) * U.Hz
-    )
+    fwhms = 0.84 * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9) * U.Hz
     db_line["delta_v"] = delta_v.value
     fwhms_GHz = fwhms.to(U.GHz).value
     db_line["fwhm_GHz"] = fwhms_GHz
@@ -247,9 +234,7 @@ def find_compatible_lines(
         db = db_line.copy()
         first_line = db.iloc[i]
         db["shifted_freq(GHz)"] = db["freq(GHz)"] / (1 + first_line["redshift"])
-        db["distance(GHz)"] = abs(
-            db["shifted_freq(GHz)"] - first_line["shifted_freq(GHz)"]
-        )
+        db["distance(GHz)"] = abs(db["shifted_freq(GHz)"] - first_line["shifted_freq(GHz)"])
         db = db.sort_values(by="distance(GHz)")
         lines = [first_line]
         lines_redshifts = [first_line["redshift"]]
@@ -260,10 +245,8 @@ def find_compatible_lines(
                 and db.iloc[j]["shifted_freq(GHz)"] <= freq_max
             ):
                 if (
-                    db.iloc[j]["shifted_freq(GHz)"] + db.iloc[j]["fwhm_GHz"] / 2
-                    <= freq_max
-                    and db.iloc[j]["shifted_freq(GHz)"] - db.iloc[j]["fwhm_GHz"] / 2
-                    >= freq_min
+                    db.iloc[j]["shifted_freq(GHz)"] + db.iloc[j]["fwhm_GHz"] / 2 <= freq_max
+                    and db.iloc[j]["shifted_freq(GHz)"] - db.iloc[j]["fwhm_GHz"] / 2 >= freq_min
                 ):
                     lines.append(db.iloc[j])
                     lines_redshifts.append(db.iloc[j]["redshift"])
@@ -276,18 +259,12 @@ def find_compatible_lines(
     compatible_lines = pd.DataFrame(lines_fitted)
     if found_lines < n:
         if line_names is not None and len(line_names) > 0:
-            raise ValueError(
-                "Not enough lines available to fit the requested configuration."
-            )
+            raise ValueError("Not enough lines available to fit the requested configuration.")
         df_line = db_line.sample(n - found_lines, replace=True)
-        df_line["shifted_freq(GHz)"] = np.random.uniform(
-            freq_min, freq_max, len(df_line)
-        )
+        df_line["shifted_freq(GHz)"] = np.random.uniform(freq_min, freq_max, len(df_line))
         df_line["fwhm_GHz"] = (band_range / n) / 10
         df_line["Line"] = ["Unknown"] * len(df_line)
-        compatible_lines = pd.concat(
-            (compatible_lines, df_line), ignore_index=True, sort=False
-        )
+        compatible_lines = pd.concat((compatible_lines, df_line), ignore_index=True, sort=False)
     compatible_lines = compatible_lines.reset_index(drop=True)
     for index, row in compatible_lines.iterrows():
         lower_bound = row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2

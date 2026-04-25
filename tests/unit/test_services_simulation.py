@@ -1,12 +1,19 @@
 """Unit tests for simulation service functions."""
 
-import pytest
-import pandas as pd
-import numpy as np
-import h5py
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
+import h5py
+import numpy as np
+import pandas as pd
+import pytest
+
+from almasim.services.interferometry.noise import (
+    NoiseModelConfig,
+    calibrate_noise_profile,
+    compute_channel_noise,
+)
+from almasim.services.observation_plan import build_single_pointing_observation_plan
 from almasim.services.simulation import (
     CleanCubeStage,
     SimulationParams,
@@ -15,12 +22,6 @@ from almasim.services.simulation import (
     resolve_source_pixel_position,
     run_simulation,
     write_ml_dataset_shard,
-)
-from almasim.services.observation_plan import build_single_pointing_observation_plan
-from almasim.services.interferometry.noise import (
-    NoiseModelConfig,
-    compute_channel_noise,
-    calibrate_noise_profile,
 )
 
 
@@ -41,10 +42,7 @@ def sample_metadata_row_dict():
         "Int.Time": 3600.0,
         "Bandwidth": 1.875,
         "Freq": 250.0,
-        "Freq.sup.": (
-            "[250.0..252.0GHz,31250.00kHz,2mJy/beam@10km/s,"
-            "78.5uJy/beam@native, XX YY]"
-        ),
+        "Freq.sup.": ("[250.0..252.0GHz,31250.00kHz,2mJy/beam@10km/s,78.5uJy/beam@native, XX YY]"),
         "Cont_sens_mJybeam": 0.1,
         "antenna_arrays": "A001:DA01 A002:DA02",
         "redshift": 0.5,
@@ -889,9 +887,7 @@ def test_simulation_params_clean_function(tmp_path, sample_metadata_row_dict):
 
 
 @pytest.mark.unit
-def test_build_single_pointing_observation_plan_defaults(
-    tmp_path, sample_metadata_row_dict
-):
+def test_build_single_pointing_observation_plan_defaults(tmp_path, sample_metadata_row_dict):
     """Single-config simulations should still produce an explicit observation plan."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
@@ -962,9 +958,7 @@ def test_build_single_pointing_observation_plan_splits_mixed_metadata_antenna_ar
     """Mixed metadata antenna strings should auto-split into 12m and 7m configs."""
     main_dir = tmp_path / "main"
     main_dir.mkdir()
-    sample_metadata_row_dict["antenna_arrays"] = (
-        "A001:DA01 A002:DV02 A003:CM03 A004:CM04"
-    )
+    sample_metadata_row_dict["antenna_arrays"] = "A001:DA01 A002:DV02 A003:CM03 A004:CM04"
 
     params = SimulationParams.from_metadata_row(
         sample_metadata_row_dict,
@@ -1110,8 +1104,8 @@ def test_run_simulation_multiconfig_single_pointing(
     mock_interferometry_module.Interferometer.return_value = mock_interferometer
     mock_interferometry_module.compute_channel_noise = compute_channel_noise
     mock_interferometry_module.NoiseModelConfig = NoiseModelConfig
-    mock_interferometry_module.calibrate_noise_profile.side_effect = (
-        lambda raw, reference_noise: raw * (reference_noise / np.median(raw))
+    mock_interferometry_module.calibrate_noise_profile.side_effect = lambda raw, reference_noise: (
+        raw * (reference_noise / np.median(raw))
     )
     mock_combine_results.return_value = {
         "combined_config_count": 2,
@@ -1203,8 +1197,8 @@ def test_run_simulation_p1_tp_and_reconstruction_outputs(
     mock_interferometry_module.Interferometer.return_value = mock_interferometer
     mock_interferometry_module.compute_channel_noise = compute_channel_noise
     mock_interferometry_module.NoiseModelConfig = NoiseModelConfig
-    mock_interferometry_module.calibrate_noise_profile.side_effect = (
-        lambda raw, reference_noise: raw * (reference_noise / np.median(raw))
+    mock_interferometry_module.calibrate_noise_profile.side_effect = lambda raw, reference_noise: (
+        raw * (reference_noise / np.median(raw))
     )
     mock_interferometry_module.combine_interferometric_results.side_effect = (
         lambda results, config_weights=None: {

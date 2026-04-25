@@ -1,15 +1,15 @@
 """Pytest configuration and shared fixtures."""
 
-import os
 import faulthandler
-import warnings
-from pathlib import Path
-
-import pytest
+import os
 
 # Fix astropy logging conflict with pytest
 # This must be done before importing astropy
 import sys
+import warnings
+from pathlib import Path
+
+import pytest
 
 
 # Monkey-patch astropy logger to handle pytest conflicts

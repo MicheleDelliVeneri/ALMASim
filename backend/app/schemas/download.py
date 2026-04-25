@@ -35,9 +35,7 @@ class BrowseDirectoryResponse(BaseModel):
     """Response for browsing server-side directories."""
 
     current: str = Field(..., description="Resolved absolute path of the directory")
-    parent: Optional[str] = Field(
-        None, description="Parent directory path, None if at root"
-    )
+    parent: Optional[str] = Field(None, description="Parent directory path, None if at root")
     entries: List[BrowseDirectoryEntry]
 
 
@@ -106,15 +104,12 @@ class StartDownloadRequest(BaseModel):
     )
     unpack_ms: bool = Field(
         False,
-        description=(
-            "Create raw MeasurementSets from downloaded/extracted ALMA ASDM products"
-        ),
+        description=("Create raw MeasurementSets from downloaded/extracted ALMA ASDM products"),
     )
     generate_calibrated_visibilities: bool = Field(
         False,
         description=(
-            "Create calibrated split MeasurementSets from raw MS "
-            "and delivered calibration scripts"
+            "Create calibrated split MeasurementSets from raw MS and delivered calibration scripts"
         ),
     )
     clean_intermediate_files: bool = Field(

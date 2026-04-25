@@ -1,8 +1,7 @@
 """FastAPI dependencies."""
 
-from almasim.services.compute.factory import create_backend
 from almasim.services.compute.base import ComputationBackend
-
+from almasim.services.compute.factory import create_backend
 from app.core.config import settings
 
 

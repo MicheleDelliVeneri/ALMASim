@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
 import os
 import time
+from typing import TYPE_CHECKING, Callable, Optional
+
+import astropy.units as U
+import matplotlib.cm as cm
 import numpy as np
 import pandas as pd
-import matplotlib.cm as cm
+from astropy.constants import c
+from astropy.coordinates import AltAz, EarthLocation, SkyCoord
 from astropy.io import fits
 from astropy.time import Time
-from astropy.coordinates import EarthLocation, SkyCoord, AltAz
-import astropy.units as U
-from astropy.constants import c
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
 
+from ..products.cube_export import write_interferometry_products
 from .imaging import image_channel
 from .utils import sampling_to_uv_mask
 from .visibility import assemble_visibility_table
-from ..products.cube_export import write_interferometry_products
 
 LogFn = Optional[Callable[[str], None]]
 
@@ -216,9 +216,7 @@ class Interferometer:
     def _get_Hcov(self) -> None:
         """Calculate hour angle coverage."""
         self.integration_time = self.integration_time * U.s
-        start_time = Time(
-            self.observation_date + "T00:00:00", format="isot", scale="utc"
-        )
+        start_time = Time(self.observation_date + "T00:00:00", format="isot", scale="utc")
         middle_time = start_time + self.integration_time / 2
         end_time = start_time + self.integration_time
         ha_start = self._get_hour_angle(start_time)
@@ -240,9 +238,7 @@ class Interferometer:
         """Calculate azimuth and elevation."""
         self._get_observing_location()
         self._get_middle_time()
-        sky_coords = SkyCoord(
-            ra=self.ra * self.rad2deg, dec=self.dec * self.rad2deg, unit="deg"
-        )
+        sky_coords = SkyCoord(ra=self.ra * self.rad2deg, dec=self.dec * self.rad2deg, unit="deg")
         aa = AltAz(location=self.observing_location, obstime=self.middle_time)
         sky_coords.transform_to(aa)
         self.az = sky_coords.az
@@ -257,14 +253,10 @@ class Interferometer:
             self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
             if self.nH > 200:
                 self.scan_time = 18.144
-                self.nH = int(
-                    self.integration_time / (self.scan_time * self.second2hour)
-                )
+                self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
                 if self.nH > 200:
                     self.scan_time = 30.24
-                    self.nH = int(
-                        self.integration_time / (self.scan_time * self.second2hour)
-                    )
+                    self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
         self.header.append(("EPOCH", self.nH))
 
     def _read_antennas(self) -> None:
@@ -274,9 +266,7 @@ class Interferometer:
         )
         obs_antennas = self.antenna_array.split(" ")
         obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
-        obs_coordinates = antenna_coordinates[
-            antenna_coordinates["name"].isin(obs_antennas)
-        ]
+        obs_coordinates = antenna_coordinates[antenna_coordinates["name"].isin(obs_antennas)]
         antenna_coordinates = obs_coordinates[["x", "y"]].values
         antPos = []
         Xmax = 0.0
@@ -316,9 +306,7 @@ class Interferometer:
             ]
         ]
         waves = np.linspace(self.w_min, self.w_max, self.Nchan + 1)
-        obs_wavelengths = np.array(
-            [[waves[i], waves[i + 1]] for i in range(len(waves) - 1)]
-        )
+        obs_wavelengths = np.array([[waves[i], waves[i + 1]] for i in range(len(waves) - 1)])
         self.obs_wavelengths = obs_wavelengths
 
     def get_channel_wavelength(self, channel: int) -> tuple:
@@ -339,8 +327,7 @@ class Interferometer:
         """Run interferometric simulation."""
         # Scatter input data to workers
         scattered_channels = [
-            self.backend.scatter(self.skymodel[i])
-            for i in range(self.skymodel.shape[0])
+            self.backend.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
         ]
 
         # Convert FITS header to dict for pickling (header contains thread locks)
@@ -363,11 +350,7 @@ class Interferometer:
             elif isinstance(self.header, dict):
                 # Already a dict, but ensure it's a plain dict with basic types
                 header_dict = {
-                    str(k): (
-                        str(v)
-                        if not isinstance(v, (int, float, bool, type(None)))
-                        else v
-                    )
+                    str(k): (str(v) if not isinstance(v, (int, float, bool, type(None))) else v)
                     for k, v in self.header.items()
                 }
             else:
@@ -414,9 +397,7 @@ class Interferometer:
             delayed_results.append(delayed_result)
 
         # Compute per-channel futures
-        futures_per_channel = [
-            self.backend.compute(dr, sync=False) for dr in delayed_results
-        ]
+        futures_per_channel = [self.backend.compute(dr, sync=False) for dr in delayed_results]
 
         # Start tracking progress of the per-channel computations
         self.track_progress(futures_per_channel)
@@ -480,12 +461,8 @@ class Interferometer:
                 u_cube=u,
                 v_cube=v,
             )
-            self._log(
-                f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)} Jy"
-            )
-            self._log(
-                f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)} Jy"
-            )
+            self._log(f"Total Flux detected in model cube: {round(np.sum(modelCube), 2)} Jy")
+            self._log(f"Total Flux detected in dirty cube: {round(np.sum(dirtyCube), 2)} Jy")
 
         # Get wavelength and format for middle channel
         self.s_wavelength, self.s_fmtB = self.get_channel_wavelength(self.Nchan // 2)
@@ -556,9 +533,7 @@ class Interferometer:
         completed_tasks = 0
         while completed_tasks < total_tasks:
             # Check if futures have a done() method (Dask futures) or are already results
-            completed_tasks = sum(
-                f.done() if hasattr(f, "done") else True for f in futures
-            )
+            completed_tasks = sum(f.done() if hasattr(f, "done") else True for f in futures)
             progress_value = int((completed_tasks / total_tasks) * 100)
             self.progress_signal.emit(progress_value)
             time.sleep(1)

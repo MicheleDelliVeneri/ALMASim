@@ -1,8 +1,9 @@
 """Frequency support and utility functions for interferometry."""
 
 from typing import Tuple
-import numpy as np
+
 import astropy.units as U
+import numpy as np
 
 
 def remove_non_numeric(text: str) -> str:

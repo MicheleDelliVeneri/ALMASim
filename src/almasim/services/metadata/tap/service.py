@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import pyvo
 import pandas as pd
+import pyvo
+import requests
 from astropy.time import Time
 from tenacity import retry, stop_after_attempt, wait_exponential
-import requests
 
 # Map human-friendly QA2 labels to ALMA TAP stored values
 _QA2_STATUS_MAP = {
@@ -324,9 +324,7 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
         conds.append(f"t_resolution BETWEEN {lo} AND {hi}")
 
     if f.frequency_range:
-        conds.append(
-            f"frequency BETWEEN {f.frequency_range[0]} AND {f.frequency_range[1]}"
-        )
+        conds.append(f"frequency BETWEEN {f.frequency_range[0]} AND {f.frequency_range[1]}")
 
     if f.proposal_id_prefix:
         prefix_clauses = [f"proposal_id LIKE '{p}%'" for p in f.proposal_id_prefix]

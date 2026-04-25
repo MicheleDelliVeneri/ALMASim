@@ -81,8 +81,7 @@ class MetadataService:
 
                 self.db.commit()
                 logger.info(
-                    f"Cached {len(keywords)} keywords "
-                    f"and {len(categories)} categories in database"
+                    f"Cached {len(keywords)} keywords and {len(categories)} categories in database"
                 )
             except Exception as e:
                 logger.error(f"Failed to cache science types in database: {e}")
@@ -102,9 +101,7 @@ class MetadataService:
         """
         # Map QA2 human-friendly labels to TAP stored values for the DB cache path
         mapped_qa2 = (
-            [_QA2_STATUS_MAP.get(s, s) for s in params.qa2_status]
-            if params.qa2_status
-            else None
+            [_QA2_STATUS_MAP.get(s, s) for s in params.qa2_status] if params.qa2_status else None
         )
 
         db_result = self._try_cache_query(params, mapped_qa2)
@@ -123,9 +120,7 @@ class MetadataService:
             return None
         try:
             if self.db_service.count_observations_with_keywords() == 0:
-                logger.info(
-                    "No keyword-annotated observations in cache, querying ALMA TAP"
-                )
+                logger.info("No keyword-annotated observations in cache, querying ALMA TAP")
                 return None
             observations = self.db_service.query_observations(
                 target_name=params.source_name,
@@ -149,9 +144,7 @@ class MetadataService:
                 exclude_obs_types=params.exclude_obs_type,
                 exclude_solar=params.exclude_solar,
             )
-            logger.info(
-                f"Retrieved {len(observations)} observations from database cache"
-            )
+            logger.info(f"Retrieved {len(observations)} observations from database cache")
             records = observations_to_metadata_records(
                 observations,
                 visible_columns=params.visible_columns,
@@ -202,9 +195,7 @@ class MetadataService:
                 visible_columns=None,
             )
             if query_store.is_cancelled(query_id):
-                logger.info(
-                    f"Background query {query_id} was cancelled; discarding results"
-                )
+                logger.info(f"Background query {query_id} was cancelled; discarding results")
                 return
             rows = (
                 result_df.to_dict("records")
@@ -235,17 +226,13 @@ class MetadataService:
         if self.db_service and result_df is not None and not result_df.empty:
             try:
                 self._cache_tap_results_in_db(result_df)
-                logger.info(
-                    f"Cached {len(result_df)} observations from CSV in database"
-                )
+                logger.info(f"Cached {len(result_df)} observations from CSV in database")
             except Exception as e:
                 logger.error(f"Failed to cache CSV results in database: {e}")
 
         return result_df.to_dict("records") if result_df is not None else []
 
-    def _observations_to_dict(
-        self, observations: List[Observation]
-    ) -> List[Dict[str, Any]]:
+    def _observations_to_dict(self, observations: List[Observation]) -> List[Dict[str, Any]]:
         """Convert Observation objects to dict format matching TAP output."""
         return observations_to_metadata_records(
             observations,
@@ -260,17 +247,12 @@ class MetadataService:
 
         try:
             importer = CSVImporter(self.db)
-            seen: set = (
-                set()
-            )  # deduplicate within the batch (TAP can return duplicate UIDs)
+            seen: set = set()  # deduplicate within the batch (TAP can return duplicate UIDs)
             cached_count = sum(
-                self._upsert_row(importer, row.to_dict(), seen)
-                for _, row in result_df.iterrows()
+                self._upsert_row(importer, row.to_dict(), seen) for _, row in result_df.iterrows()
             )
             self.db.commit()
-            logger.info(
-                f"Successfully cached {cached_count} new observations from TAP query"
-            )
+            logger.info(f"Successfully cached {cached_count} new observations from TAP query")
         except Exception as e:
             logger.error(f"Error caching TAP results: {e}", exc_info=True)
             self.db.rollback()
@@ -305,9 +287,7 @@ class MetadataService:
             if cat:
                 existing.scientific_category = importer.get_or_create_category(cat)
 
-    def _insert_new(
-        self, importer, row_dict: Dict[str, Any], kw_str: str, cat_str: str
-    ) -> int:
+    def _insert_new(self, importer, row_dict: Dict[str, Any], kw_str: str, cat_str: str) -> int:
         """Parse and insert a brand-new observation. Returns 1 on success, 0 on skip."""
         observation = importer.parse_csv_row(row_dict, "tap_query")
         if not observation:

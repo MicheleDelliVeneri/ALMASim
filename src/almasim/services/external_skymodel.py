@@ -41,9 +41,7 @@ def infer_external_cube_geometry(
     source_type = str(source_type).lower()
     if source_type == "external-components":
         if component_table_path is None:
-            raise ValueError(
-                "external_component_table_path is required for external-components"
-            )
+            raise ValueError("external_component_table_path is required for external-components")
         return None
 
     if skymodel_path is None:
@@ -102,13 +100,9 @@ def load_external_sky_model(
         }
     else:
         if skymodel_path is None:
-            raise ValueError(
-                "external_skymodel_path is required for external FITS inputs"
-            )
+            raise ValueError("external_skymodel_path is required for external FITS inputs")
         raw_data, input_header = fits.getdata(skymodel_path, header=True)
-        cube = _coerce_fits_to_channel_first(
-            np.asarray(raw_data), source_type=source_type
-        )
+        cube = _coerce_fits_to_channel_first(np.asarray(raw_data), source_type=source_type)
         metadata = {
             "input_kind": "fits",
             "input_path": str(skymodel_path),
@@ -165,25 +159,18 @@ def _resolve_target_shape(
 ) -> tuple[int, int, int]:
     """Resolve the aligned cube shape."""
     if alignment_mode == "preserve":
-        nchan = (
-            int(target_nchannels)
-            if target_nchannels is not None
-            else int(cube_shape[0])
-        )
+        nchan = int(target_nchannels) if target_nchannels is not None else int(cube_shape[0])
         ny = int(target_npix) if target_npix is not None else int(cube_shape[1])
         nx = int(target_npix) if target_npix is not None else int(cube_shape[2])
         return (nchan, ny, nx)
     if target_npix is None or target_nchannels is None:
         raise ValueError(
-            "target_npix and target_nchannels are required "
-            "when alignment_mode='observation'"
+            "target_npix and target_nchannels are required when alignment_mode='observation'"
         )
     return (int(target_nchannels), int(target_npix), int(target_npix))
 
 
-def _align_cube_to_shape(
-    cube: np.ndarray, target_shape: tuple[int, int, int]
-) -> np.ndarray:
+def _align_cube_to_shape(cube: np.ndarray, target_shape: tuple[int, int, int]) -> np.ndarray:
     """Resize or crop/pad an external cube to the requested target shape."""
     if tuple(cube.shape) == tuple(target_shape):
         return cube.astype(np.float32, copy=False)
@@ -197,9 +184,7 @@ def _align_cube_to_shape(
     return _crop_or_pad_cube(resized, target_shape)
 
 
-def _crop_or_pad_cube(
-    cube: np.ndarray, target_shape: tuple[int, int, int]
-) -> np.ndarray:
+def _crop_or_pad_cube(cube: np.ndarray, target_shape: tuple[int, int, int]) -> np.ndarray:
     """Center-crop or zero-pad a cube to the exact target shape."""
     out = np.zeros(target_shape, dtype=np.float32)
     src_slices = []
@@ -227,9 +212,7 @@ def _load_component_table(
 ) -> np.ndarray:
     """Build a cube from a simple component-list-like table."""
     if component_table_path is None:
-        raise ValueError(
-            "external_component_table_path is required for external-components"
-        )
+        raise ValueError("external_component_table_path is required for external-components")
 
     table = Table.read(component_table_path)
     rows = table.to_pandas()
@@ -243,15 +226,11 @@ def _load_component_table(
 
     for _, row in rows.iterrows():
         x_pix, y_pix = _resolve_component_position(row, columns, target_wcs)
-        flux = float(
-            _row_value(row, columns, ["flux_jy", "flux", "intensity"], default=0.0)
-        )
+        flux = float(_row_value(row, columns, ["flux_jy", "flux", "intensity"], default=0.0))
         if flux == 0.0:
             continue
 
-        alpha = float(
-            _row_value(row, columns, ["spectral_index", "alpha"], default=0.0)
-        )
+        alpha = float(_row_value(row, columns, ["spectral_index", "alpha"], default=0.0))
         ref_freq = float(
             _row_value(
                 row,
@@ -276,9 +255,9 @@ def _load_component_table(
         else:
             nu = np.asarray(channel_frequencies_hz, dtype=float)
             spectrum = flux * (nu / max(ref_freq, 1e-12)) ** alpha
-        cube[
-            :, np.clip(y_pix, 0, target_npix - 1), np.clip(x_pix, 0, target_npix - 1)
-        ] += spectrum.astype(np.float32)
+        cube[:, np.clip(y_pix, 0, target_npix - 1), np.clip(x_pix, 0, target_npix - 1)] += (
+            spectrum.astype(np.float32)
+        )
 
     return cube
 
@@ -298,9 +277,7 @@ def _resolve_component_position(
         x_pix, y_pix, _ = target_wcs.sub(3).wcs_world2pix(ra, dec, 1.0, 0)
         return int(round(float(x_pix))), int(round(float(y_pix)))
 
-    raise ValueError(
-        "Component rows must provide either x_pix/y_pix or ra_deg/dec_deg columns"
-    )
+    raise ValueError("Component rows must provide either x_pix/y_pix or ra_deg/dec_deg columns")
 
 
 def _row_value(row, columns: dict[str, str], keys: list[str], *, default: Any) -> Any:

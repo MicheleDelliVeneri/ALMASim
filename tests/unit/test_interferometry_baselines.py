@@ -1,12 +1,12 @@
 """Unit tests for interferometry baselines module."""
 
-import pytest
 import numpy as np
+import pytest
 
 from almasim.services.interferometry.baselines import (
     prepare_baselines,
-    set_noise,
     set_baselines,
+    set_noise,
 )
 
 

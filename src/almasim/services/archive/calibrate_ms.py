@@ -55,9 +55,7 @@ def find_calibration_directory(
     candidates = [path for path in input_path.rglob("calibration") if path.is_dir()]
     if asdm_uid is not None:
         candidates = [
-            path
-            for path in candidates
-            if (path / f"{asdm_uid}.ms.calapply.txt").is_file()
+            path for path in candidates if (path / f"{asdm_uid}.ms.calapply.txt").is_file()
         ]
     if not candidates:
         raise RuntimeError(f"No calibration directory found under {input_path}")
@@ -97,9 +95,7 @@ def find_raw_ms_directories(
 def _parse_applycal_calls(calapply_path: Path) -> list[dict[str, Any]]:
     """Parse delivered ``applycal(...)`` lines into keyword dictionaries."""
     calls: list[dict[str, Any]] = []
-    tree = ast.parse(
-        calapply_path.read_text(encoding="utf-8"), filename=str(calapply_path)
-    )
+    tree = ast.parse(calapply_path.read_text(encoding="utf-8"), filename=str(calapply_path))
     for node in tree.body:
         if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
             continue
@@ -107,9 +103,7 @@ def _parse_applycal_calls(calapply_path: Path) -> list[dict[str, Any]]:
         if not isinstance(call.func, ast.Name) or call.func.id != "applycal":
             continue
         kwargs = {
-            keyword.arg: ast.literal_eval(keyword.value)
-            for keyword in call.keywords
-            if keyword.arg
+            keyword.arg: ast.literal_eval(keyword.value) for keyword in call.keywords if keyword.arg
         }
         calls.append(kwargs)
 
@@ -199,17 +193,13 @@ def apply_delivered_calibration(
         raise RuntimeError(f"Cannot find calibration apply file: {calapply_path}")
 
     calls = _parse_applycal_calls(calapply_path)
-    _emit(
-        logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}"
-    )
+    _emit(logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}")
     current_dir = Path.cwd()
     try:
         os.chdir(working_dir)
         for kwargs in calls:
             kwargs["vis"] = working_ms.name
-            kwargs["intent"] = _normalize_intent(
-                str(kwargs.get("intent", "")), working_ms
-            )
+            kwargs["intent"] = _normalize_intent(str(kwargs.get("intent", "")), working_ms)
             applycal(**kwargs)
     finally:
         os.chdir(current_dir)
@@ -294,8 +284,7 @@ def _remove_tree_after_success(
             )
             _emit(
                 logger_fn,
-                f"Skipping cleanup of {target}; "
-                f"it contains protected output {protected_path}",
+                f"Skipping cleanup of {target}; it contains protected output {protected_path}",
             )
             return
     shutil.rmtree(target)
@@ -321,9 +310,7 @@ def create_calibrated_measurement_sets(
 
     casa_data = find_existing_casa_data(input_path, output_path, casa_data_root)
     configure_casa_environment(output_path, casa_data)
-    ensure_casa_runtime_data(
-        casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn
-    )
+    ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
     from casatasks import applycal, mstransform
 
@@ -352,13 +339,9 @@ def create_calibrated_measurement_sets(
     if clean_intermediate:
         protected = [*calibrated_mss, output_path]
         _remove_tree_after_success(raw_ms_root, protected, logger_fn=logger_fn)
-        _remove_tree_after_success(
-            output_path / "working", protected, logger_fn=logger_fn
-        )
+        _remove_tree_after_success(output_path / "working", protected, logger_fn=logger_fn)
         if original_data_root is not None:
-            _remove_tree_after_success(
-                original_data_root, protected, logger_fn=logger_fn
-            )
+            _remove_tree_after_success(original_data_root, protected, logger_fn=logger_fn)
 
     return calibrated_mss
 
@@ -375,6 +358,4 @@ def restore_calibrated_measurement_sets(
     ``hifa_restoredata``. This wrapper therefore creates the calibrated MS by
     applying the delivered calibration tables and splitting science SPWs.
     """
-    return create_calibrated_measurement_sets(
-        input_root, raw_ms_root, output_root, **kwargs
-    )
+    return create_calibrated_measurement_sets(input_root, raw_ms_root, output_root, **kwargs)

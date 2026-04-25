@@ -1,13 +1,13 @@
 """Component tests for metadata gathering functionality."""
 
-import pytest
 import pandas as pd
+import pytest
 
 from almasim.services.metadata.tap.queries import (
-    query_science_types,
+    load_metadata,
     query_metadata_by_science,
     query_metadata_by_targets,
-    load_metadata,
+    query_science_types,
 )
 
 

@@ -55,9 +55,7 @@ class CSVImporter:
         self.category_cache[category] = cat_obj
         return cat_obj
 
-    def parse_csv_row(
-        self, row: Dict[str, str], source_file: str
-    ) -> Optional[Observation]:
+    def parse_csv_row(self, row: Dict[str, str], source_file: str) -> Optional[Observation]:
         """Parse a CSV row into an Observation object."""
         try:
             # Check if observation already exists
@@ -66,9 +64,7 @@ class CSVImporter:
                 logger.warning(f"Skipping row without member_ous_uid: {row}")
                 return None
 
-            stmt = select(Observation).where(
-                Observation.member_ous_uid == member_ous_uid
-            )
+            stmt = select(Observation).where(Observation.member_ous_uid == member_ous_uid)
             existing = self.db.execute(stmt).scalar_one_or_none()
 
             if existing:
@@ -90,9 +86,7 @@ class CSVImporter:
             obs_date_str = row.get("Obs.date", "")
             if obs_date_str:
                 try:
-                    obs_date = datetime.fromisoformat(
-                        obs_date_str.replace("Z", "+00:00")
-                    )
+                    obs_date = datetime.fromisoformat(obs_date_str.replace("Z", "+00:00"))
                 except (ValueError, AttributeError):
                     logger.warning(f"Could not parse date: {obs_date_str}")
 
@@ -107,18 +101,12 @@ class CSVImporter:
                 band=band,
                 pwv=float(row["PWV"]) if row.get("PWV") else None,
                 schedblock_name=row.get("SB_name"),
-                velocity_resolution=(
-                    float(row["Vel.res."]) if row.get("Vel.res.") else None
-                ),
-                spatial_resolution=(
-                    float(row["Ang.res."]) if row.get("Ang.res.") else None
-                ),
+                velocity_resolution=(float(row["Vel.res."]) if row.get("Vel.res.") else None),
+                spatial_resolution=(float(row["Ang.res."]) if row.get("Ang.res.") else None),
                 s_fov=float(row["FOV"]) if row.get("FOV") else None,
                 t_resolution=None,  # Not in CSV
                 cont_sensitivity_bandwidth=(
-                    float(row["Cont_sens_mJybeam"])
-                    if row.get("Cont_sens_mJybeam")
-                    else None
+                    float(row["Cont_sens_mJybeam"]) if row.get("Cont_sens_mJybeam") else None
                 ),
                 sensitivity_10kms=(
                     float(row["Line_sens_10kms_mJybeam"])
@@ -171,8 +159,7 @@ class CSVImporter:
 
                 self.db.commit()
                 logger.info(
-                    "Successfully imported "
-                    f"{imported_count} observations from {csv_path.name}"
+                    f"Successfully imported {imported_count} observations from {csv_path.name}"
                 )
 
         except Exception as e:
@@ -214,8 +201,7 @@ class CSVImporter:
 
                 self.db.commit()
                 logger.info(
-                    "Successfully imported "
-                    f"{imported_count} observations from {json_path.name}"
+                    f"Successfully imported {imported_count} observations from {json_path.name}"
                 )
 
         except Exception as e:

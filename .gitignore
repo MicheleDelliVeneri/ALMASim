@@ -27,8 +27,8 @@ venv/
 ENV/
 env/
 
-# Poetry
-poetry.lock
+# uv — commit uv.lock to track reproducible builds
+# uv.lock
 
 # IDE
 .vscode/

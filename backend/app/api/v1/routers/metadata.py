@@ -47,9 +47,7 @@ async def get_science_types(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/query", response_model=MetadataResponse)
-async def query_metadata(
-    query: MetadataQuery, db: Session = Depends(get_db)
-) -> MetadataResponse:
+async def query_metadata(query: MetadataQuery, db: Session = Depends(get_db)) -> MetadataResponse:
     """Query ALMA metadata from database cache or TAP archive."""
     try:
         service = MetadataService(db=db)
@@ -115,9 +113,7 @@ async def cancel_query(query_id: str) -> None:
 
 
 @router.get("/load/{file_path:path}", response_model=MetadataResponse)
-async def load_metadata(
-    file_path: str, db: Session = Depends(get_db)
-) -> MetadataResponse:
+async def load_metadata(file_path: str, db: Session = Depends(get_db)) -> MetadataResponse:
     """Load metadata from a CSV file and cache in database."""
     try:
         service = MetadataService(db=db)

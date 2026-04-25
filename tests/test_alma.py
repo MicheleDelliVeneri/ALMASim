@@ -1,12 +1,14 @@
-import pytest
-from almasim.services.metadata.tap import service as alma
-from almasim.services.interferometry import antenna as alma_antenna
-from pathlib import Path
-import inspect
 import faulthandler
+import inspect
 import os
-import pandas as pd
+from pathlib import Path
+
 import astropy.units as U
+import pandas as pd
+import pytest
+
+from almasim.services.interferometry import antenna as alma_antenna
+from almasim.services.metadata.tap import service as alma
 
 faulthandler.enable()
 os.environ["LC_ALL"] = "C"
@@ -16,16 +18,12 @@ os.environ["LC_ALL"] = "C"
 @pytest.mark.network
 def test_query():
     main_path = os.path.sep + os.path.join(
-        *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(
-            os.path.sep
-        )[:-2]
+        *str(Path(inspect.getfile(inspect.currentframe())).resolve()).split(os.path.sep)[:-2]
     )
     science_keywods, _ = alma.get_science_types()
     science_keyword = science_keywods[0]
     results = alma.query_by_science_type(science_keyword, band=[6])
-    target_list = pd.read_csv(
-        os.path.join(main_path, "data", "targets_qso.csv")
-    ).values.tolist()
+    target_list = pd.read_csv(os.path.join(main_path, "data", "targets_qso.csv")).values.tolist()
     data = alma.query_all_targets(target_list)
     assert not data.empty
     assert not results.empty
@@ -43,21 +41,13 @@ def test_alma_functions():
     )
     antennalist = repo_root / "antenna.cfg"
     assert os.path.isfile(antennalist)
-    max_baseline = (
-        alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
-    )
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
     assert max_baseline > 0
-    max_baseline = alma_antenna.get_max_baseline_from_antenna_array(
-        antenna_array, str(main_dir)
-    )
+    max_baseline = alma_antenna.get_max_baseline_from_antenna_array(antenna_array, str(main_dir))
     assert max_baseline > 0
-    beam_size = alma_antenna.estimate_alma_beam_size(
-        central_freq, max_baseline, return_value=False
-    )
+    beam_size = alma_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     assert beam_size > 0
-    beam_size = alma_antenna.estimate_alma_beam_size(
-        central_freq, max_baseline, return_value=True
-    )
+    beam_size = alma_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=True)
     assert beam_size > 0
     os.remove(antennalist)
 

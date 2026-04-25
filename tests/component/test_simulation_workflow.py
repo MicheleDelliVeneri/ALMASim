@@ -2,9 +2,9 @@
 
 import pandas as pd
 
-from almasim.services.simulation import SimulationParams
-from almasim.services.astro.spectral import sample_given_redshift
 from almasim.services import astro
+from almasim.services.astro.spectral import sample_given_redshift
+from almasim.services.simulation import SimulationParams
 
 
 def test_simulation_params_from_metadata_row(tmp_path, main_dir, test_data_dir):

@@ -1,16 +1,17 @@
 """Component tests for dataset gathering functionality."""
 
-import pytest
-from pathlib import Path
-import tempfile
 import shutil
 import subprocess
+import tempfile
+from pathlib import Path
+
+import pytest
 
 from almasim.skymodels.datasets import (
+    RemoteMachine,
     download_galaxy_zoo,
     download_hubble_top100,
     download_tng_structure,
-    RemoteMachine,
 )
 
 
@@ -38,9 +39,7 @@ def test_download_galaxy_zoo_structure(temp_data_dir):
         # These are expected errors (missing API key, network issues)
         # Verify the function at least tried to create the directory
         assert (
-            temp_data_dir.exists()
-            or "galaxy_zoo" in str(e).lower()
-            or "kaggle" in str(e).lower()
+            temp_data_dir.exists() or "galaxy_zoo" in str(e).lower() or "kaggle" in str(e).lower()
         )
     except Exception as e:
         # Any other exception should be a valid error type
@@ -62,11 +61,7 @@ def test_download_hubble_top100_structure(temp_data_dir):
     except (FileNotFoundError, OSError, ValueError) as e:
         # These are expected errors (missing API key, network issues)
         # Verify the function at least tried to create the directory
-        assert (
-            temp_data_dir.exists()
-            or "hubble" in str(e).lower()
-            or "kaggle" in str(e).lower()
-        )
+        assert temp_data_dir.exists() or "hubble" in str(e).lower() or "kaggle" in str(e).lower()
     except Exception as e:
         # Any other exception should be a valid error type
         assert len(str(e)) > 0  # Error message exists

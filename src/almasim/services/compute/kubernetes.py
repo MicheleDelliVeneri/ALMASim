@@ -1,11 +1,11 @@
 """Kubernetes computation backend using dask-kubernetes."""
 
-from typing import Any, Callable, List, Optional, Dict
+from typing import Any, Callable, Dict, List, Optional
 
 try:
-    from dask_kubernetes import KubeCluster
-    from dask.distributed import Client
     from dask import delayed as dask_delayed
+    from dask.distributed import Client
+    from dask_kubernetes import KubeCluster
 
     KUBERNETES_AVAILABLE = True
 except ImportError:
@@ -45,8 +45,7 @@ class KubernetesBackend(ComputationBackend):
         """
         if not KUBERNETES_AVAILABLE:
             raise ImportError(
-                "dask-kubernetes is not installed. "
-                "Install it with: pip install dask-kubernetes"
+                "dask-kubernetes is not installed. Install it with: pip install dask-kubernetes"
             )
 
         self.namespace = namespace

@@ -1,8 +1,8 @@
 """Image processing functions for interferometry."""
 
 import numpy as np
-from scipy.ndimage import zoom
 from astropy.io import fits
+from scipy.ndimage import zoom
 
 from .baselines import prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
@@ -87,9 +87,7 @@ def _grid_uv(
             noisemap[pVi, mUi] += Noise[nb, gp] * gabs
             noisemap[mVi, pUi] += np.conjugate(Noise[nb, gp]) * gabs
 
-    robfac = (
-        (5.0 * 10.0 ** (-robust)) ** 2.0 * (2.0 * Nbas * nH) / np.sum(totsampling**2.0)
-    )
+    robfac = (5.0 * 10.0 ** (-robust)) ** 2.0 * (2.0 * Nbas * nH) / np.sum(totsampling**2.0)
     return (
         pixpos,
         totsampling,
@@ -136,9 +134,7 @@ def check_lfac(Xmax: float, wavelength: list[float], lfac: float) -> tuple:
     return lfac, ulab, vlab
 
 
-def _prepare_model(
-    Npix: int, img: np.ndarray, Nphf: int, Np4: int, zooming: int
-) -> tuple:
+def _prepare_model(Npix: int, img: np.ndarray, Nphf: int, Np4: int, zooming: int) -> tuple:
     """Prepare model image for processing."""
     modelim = [np.zeros((Npix, Npix), dtype=np.float32) for i in [0, 1]]
     modelimTrue = np.zeros((Npix, Npix), dtype=np.float32)
@@ -181,17 +177,9 @@ def set_primary_beam(
     modelimTrue: np.ndarray,
 ) -> tuple:
     """Set primary beam and calculate model FFT."""
-    PB = (
-        2.0
-        * (1220.0 * 180.0 / np.pi * 3600.0 * wavelength[2] / Diameters[0] / 2.3548)
-        ** 2.0
-    )
-    header.append(
-        ("BMAJ", 180.0 * np.sqrt(PB) / np.pi, "Beam FWHM along major axis [deg]")
-    )
-    header.append(
-        ("BMIN", 180.0 * np.sqrt(PB) / np.pi, "Beam FWHM along minor axis [deg]")
-    )
+    PB = 2.0 * (1220.0 * 180.0 / np.pi * 3600.0 * wavelength[2] / Diameters[0] / 2.3548) ** 2.0
+    header.append(("BMAJ", 180.0 * np.sqrt(PB) / np.pi, "Beam FWHM along major axis [deg]"))
+    header.append(("BMIN", 180.0 * np.sqrt(PB) / np.pi, "Beam FWHM along minor axis [deg]"))
     header.append(("BPA", 0.0, "Beam position angle [deg]"))
     beamImg = np.exp(distmat / PB)
     modelim[0][:] = modelimTrue * beamImg
@@ -209,10 +197,7 @@ def observe(
     """Observe model through interferometer and create dirty map."""
     dirtymap[:] = (
         np.fft.fftshift(
-            np.fft.ifft2(
-                np.fft.ifftshift(GrobustNoise)
-                + modelfft * np.fft.ifftshift(Grobustsamp)
-            )
+            np.fft.ifft2(np.fft.ifftshift(GrobustNoise) + modelfft * np.fft.ifftshift(Grobustsamp))
         )
     ).real
     dirtymap /= beamScale
@@ -262,8 +247,8 @@ def image_channel(
         Grobustsamp,
         GrobustNoise,
     ) = prepare_2d_arrays(Npix)
-    Nbas, B, basnum, basidx, antnum, Gains, Noise, H, u, v, ravelDims = (
-        prepare_baselines(Nant, nH, Hcov)
+    Nbas, B, basnum, basidx, antnum, Gains, Noise, H, u, v, ravelDims = prepare_baselines(
+        Nant, nH, Hcov
     )
     Noise = set_noise(noise, Noise)
     B, u, v = set_baselines(Nbas, antnum, B, u, v, antPos, trlat, trdec, H, wavelength)
@@ -325,9 +310,7 @@ def image_channel(
         noise_std=float(noise),
         mean_wavelength_m=float(wavelength[2] * 1e3),
     )
-    dirtymap, modelvis, dirtyvis = observe(
-        dirtymap, GrobustNoise, modelfft, Grobustsamp, beamScale
-    )
+    dirtymap, modelvis, dirtyvis = observe(dirtymap, GrobustNoise, modelfft, Grobustsamp, beamScale)
     del noisemap, robustsamp, Gsampling, Grobustsamp, GrobustNoise
     del Nbas, B, basnum, basidx, antnum, Gains, Noise, H, ravelDims
     del pixpos, baseline_phases, bas2change

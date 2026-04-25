@@ -8,8 +8,8 @@ import zipfile
 from typing import Any, Callable, List, Optional
 
 try:
-    from dask.distributed import Client, LocalCluster
     from dask import delayed as dask_delayed
+    from dask.distributed import Client, LocalCluster
 
     DASK_AVAILABLE = True
 except ImportError:

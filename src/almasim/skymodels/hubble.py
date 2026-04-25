@@ -1,15 +1,16 @@
 """Hubble sky model implementation."""
 
 import os
-import numpy as np
+from typing import Any, Optional
+
 import astropy.units as U
-from skimage import io
-from typing import Optional, Any
+import numpy as np
 from dask import delayed
 from dask.distributed import Client
+from skimage import io
 
 from .base import SkyModel
-from .utils import interpolate_array, track_progress, gaussian
+from .utils import gaussian, interpolate_array, track_progress
 
 
 @delayed
@@ -75,9 +76,7 @@ class HubbleSkyModel(SkyModel):
 
     def insert(self) -> Any:
         """Insert Hubble source into datacube."""
-        files = np.array(
-            [file for file in os.listdir(self.data_path) if not file.startswith(".")]
-        )
+        files = np.array([file for file in os.listdir(self.data_path) if not file.startswith(".")])
         imfile = os.path.join(self.data_path, np.random.choice(files))
         img = io.imread(imfile).astype(np.float32)
         dims = np.shape(img)

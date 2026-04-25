@@ -98,15 +98,9 @@ def init_db():
                     )
                 )
             if "archive_output_root" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs ADD COLUMN archive_output_root TEXT"
-                    )
-                )
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN archive_output_root TEXT"))
             if "casa_data_root" not in cols:
-                conn.execute(
-                    text("ALTER TABLE download_jobs ADD COLUMN casa_data_root TEXT")
-                )
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN casa_data_root TEXT"))
             if "skip_casa_data_update" not in cols:
                 conn.execute(
                     text(
@@ -131,9 +125,7 @@ def init_db():
                     )
                 )
             if "manifest_path" not in cols:
-                conn.execute(
-                    text("ALTER TABLE download_jobs ADD COLUMN manifest_path TEXT")
-                )
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN manifest_path TEXT"))
 
 
 def get_db() -> Generator[Session, None, None]:

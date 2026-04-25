@@ -3,7 +3,8 @@
 import asyncio
 import uuid
 
-import almasim.services.simulation as sim_service
+from database.config import get_db
+from database.service import DatabaseService
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -16,6 +17,7 @@ from fastapi import (
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import almasim.services.simulation as sim_service
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
 from app.core.config import settings
@@ -31,8 +33,6 @@ from app.schemas.simulation import (
 )
 from app.services.simulation_service import SimulationService
 from app.services.status_store import status_store
-from database.config import get_db
-from database.service import DatabaseService
 
 router = APIRouter()
 
@@ -94,9 +94,7 @@ async def list_simulations(db: Session = Depends(get_db)) -> SimulationListRespo
     return SimulationListResponse(simulations=summaries, total=len(summaries))
 
 
-@router.post(
-    "/", response_model=SimulationResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=SimulationResponse, status_code=status.HTTP_201_CREATED)
 async def create_simulation(
     params: SimulationParamsCreate,
     background_tasks: BackgroundTasks,
@@ -241,9 +239,7 @@ async def estimate_simulation(
             ms_export=params.ms_export,
             ms_export_dir=params.ms_export_dir,
         )
-        return SimulationEstimate(
-            **sim_service.estimate_simulation_footprint(sim_params)
-        )
+        return SimulationEstimate(**sim_service.estimate_simulation_footprint(sim_params))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -275,9 +271,7 @@ async def get_simulation_status(
         if job:
             logs = [
                 f"[{log.timestamp.isoformat()}] {log.message}"
-                for log in reversed(
-                    db_service.get_simulation_logs(job.simulation_id, limit=100)
-                )
+                for log in reversed(db_service.get_simulation_logs(job.simulation_id, limit=100))
             ]
             return SimulationStatusSchema(
                 simulation_id=str(job.simulation_id),
@@ -369,9 +363,7 @@ async def websocket_status(websocket: WebSocket, simulation_id: str):
         while True:
             sim_status = status_store.get(simulation_id)
             if not sim_status:
-                await websocket.send_json(
-                    {"error": f"Simulation {simulation_id} not found"}
-                )
+                await websocket.send_json({"error": f"Simulation {simulation_id} not found"})
                 break
 
             # Send current status

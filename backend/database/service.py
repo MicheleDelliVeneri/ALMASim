@@ -152,9 +152,7 @@ class DatabaseService:
         if p.qa2_status:
             filters.append(Observation.qa2_passed.in_(p.qa2_status))
         if p.obs_type:
-            filters.append(
-                or_(*(Observation.obs_type.ilike(f"%{t}%") for t in p.obs_type))
-            )
+            filters.append(or_(*(Observation.obs_type.ilike(f"%{t}%") for t in p.obs_type)))
         if p.antenna_arrays:
             filters.append(Observation.antenna_arrays.ilike(f"%{p.antenna_arrays}%"))
         if p.proposal_id_prefix:
@@ -182,12 +180,7 @@ class DatabaseService:
                 filters.append(or_(*clauses))
         if p.array_configuration:
             filters.append(
-                or_(
-                    *(
-                        Observation.schedblock_name.ilike(f"%{c}%")
-                        for c in p.array_configuration
-                    )
-                )
+                or_(*(Observation.schedblock_name.ilike(f"%{c}%") for c in p.array_configuration))
             )
         return filters
 
@@ -210,13 +203,9 @@ class DatabaseService:
         if p.observation_date_range:
             lo_str, hi_str = p.observation_date_range
             if lo_str:
-                filters.append(
-                    Observation.obs_release_date >= datetime.fromisoformat(lo_str)
-                )
+                filters.append(Observation.obs_release_date >= datetime.fromisoformat(lo_str))
             if hi_str:
-                filters.append(
-                    Observation.obs_release_date <= datetime.fromisoformat(hi_str)
-                )
+                filters.append(Observation.obs_release_date <= datetime.fromisoformat(hi_str))
         return filters
 
     @staticmethod
@@ -272,9 +261,7 @@ class DatabaseService:
 
         return filters
 
-    def get_observation_by_member_uid(
-        self, member_ous_uid: str
-    ) -> Optional[Observation]:
+    def get_observation_by_member_uid(self, member_ous_uid: str) -> Optional[Observation]:
         """Get a single observation by member OUS UID."""
         stmt = select(Observation).where(Observation.member_ous_uid == member_ous_uid)
         return self.db.execute(stmt).scalar_one_or_none()
@@ -282,6 +269,7 @@ class DatabaseService:
     def count_observations_with_keywords(self) -> int:
         """Count observations that have at least one science keyword associated."""
         from sqlalchemy import exists
+
         from .models import observation_keywords
 
         stmt = select(func.count(Observation.id)).where(
@@ -376,9 +364,7 @@ class DatabaseService:
         self, source_name: str, observation_id: Optional[int] = None, **kwargs
     ) -> SimulationJob:
         """Create a new simulation job."""
-        simulation = SimulationJob(
-            source_name=source_name, observation_id=observation_id, **kwargs
-        )
+        simulation = SimulationJob(source_name=source_name, observation_id=observation_id, **kwargs)
         self.db.add(simulation)
         self.db.commit()
         self.db.refresh(simulation)

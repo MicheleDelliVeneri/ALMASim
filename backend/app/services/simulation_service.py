@@ -4,13 +4,14 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+from database.config import get_db_context
+from database.service import DatabaseService
+
 import almasim.services.simulation as sim_service
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.simulation import SimulationParams
 from app.schemas.simulation import SimulationParamsCreate
 from app.services.status_store import status_store
-from database.config import get_db_context
-from database.service import DatabaseService
 
 
 class SimulationService:
@@ -107,11 +108,7 @@ class SimulationService:
             check_cancelled()
             # Try to match message to a simulation step
             step_index = next(
-                (
-                    i
-                    for i, s in enumerate(simulation_steps)
-                    if s.lower() in message.lower()
-                ),
+                (i for i, s in enumerate(simulation_steps) if s.lower() in message.lower()),
                 None,
             )
 

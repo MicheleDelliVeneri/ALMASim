@@ -1,11 +1,11 @@
 """Slurm computation backend using dask-jobqueue."""
 
-from typing import Any, Callable, List, Optional, Dict
+from typing import Any, Callable, Dict, List, Optional
 
 try:
-    from dask_jobqueue import SLURMCluster
-    from dask.distributed import Client
     from dask import delayed as dask_delayed
+    from dask.distributed import Client
+    from dask_jobqueue import SLURMCluster
 
     SLURM_AVAILABLE = True
 except ImportError:
@@ -51,8 +51,7 @@ class SlurmBackend(ComputationBackend):
         """
         if not SLURM_AVAILABLE:
             raise ImportError(
-                "dask-jobqueue is not installed. "
-                "Install it with: pip install dask-jobqueue"
+                "dask-jobqueue is not installed. Install it with: pip install dask-jobqueue"
             )
 
         self.queue = queue

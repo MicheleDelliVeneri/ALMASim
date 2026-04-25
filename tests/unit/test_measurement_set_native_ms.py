@@ -22,12 +22,10 @@ NANT = 3
 RNG = np.random.default_rng(42)
 
 _DATA = (
-    RNG.standard_normal((NROWS, NCORR, NCHAN))
-    + 1j * RNG.standard_normal((NROWS, NCORR, NCHAN))
+    RNG.standard_normal((NROWS, NCORR, NCHAN)) + 1j * RNG.standard_normal((NROWS, NCORR, NCHAN))
 ).astype(np.complex64)
 _MODEL = (
-    RNG.standard_normal((NROWS, NCORR, NCHAN))
-    + 1j * RNG.standard_normal((NROWS, NCORR, NCHAN))
+    RNG.standard_normal((NROWS, NCORR, NCHAN)) + 1j * RNG.standard_normal((NROWS, NCORR, NCHAN))
 ).astype(np.complex64)
 _FLAG = RNG.integers(0, 2, (NROWS, NCORR, NCHAN), dtype=bool)
 _UVW = RNG.standard_normal((NROWS, 3))
@@ -262,15 +260,9 @@ def test_main_index_columns_zero(ms):
         "OBSERVATION_ID",
         "STATE_ID",
     ):
-        np.testing.assert_array_equal(
-            tb.getcol(col), np.zeros(NROWS, dtype=np.int32), err_msg=col
-        )
-    np.testing.assert_array_equal(
-        tb.getcol("SCAN_NUMBER"), np.ones(NROWS, dtype=np.int32)
-    )
-    np.testing.assert_array_equal(
-        tb.getcol("PROCESSOR_ID"), np.full(NROWS, -1, dtype=np.int32)
-    )
+        np.testing.assert_array_equal(tb.getcol(col), np.zeros(NROWS, dtype=np.int32), err_msg=col)
+    np.testing.assert_array_equal(tb.getcol("SCAN_NUMBER"), np.ones(NROWS, dtype=np.int32))
+    np.testing.assert_array_equal(tb.getcol("PROCESSOR_ID"), np.full(NROWS, -1, dtype=np.int32))
     tb.close()
 
 
@@ -503,9 +495,7 @@ def test_roundtrip_antenna_names(vt_roundtrip):
 
 
 def test_roundtrip_antenna_positions(vt_roundtrip):
-    np.testing.assert_allclose(
-        vt_roundtrip["antenna_positions_m"], _ANT_POS, rtol=1e-10
-    )
+    np.testing.assert_allclose(vt_roundtrip["antenna_positions_m"], _ANT_POS, rtol=1e-10)
 
 
 def test_roundtrip_field_direction(vt_roundtrip):

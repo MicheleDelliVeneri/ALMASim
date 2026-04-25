@@ -1,7 +1,8 @@
 """Base class for sky model generation."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Any, Optional
+
 import numpy as np
 from dask.distributed import Client
 

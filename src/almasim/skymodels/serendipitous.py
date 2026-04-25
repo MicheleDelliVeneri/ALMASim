@@ -1,8 +1,9 @@
 """Serendipitous sources utilities."""
 
 import math
+from typing import Any, Optional
+
 import numpy as np
-from typing import Optional, Any
 from dask.distributed import Client
 
 from .gaussian import GaussianSkyModel
@@ -151,9 +152,7 @@ def sample_positions(
                     if terminal is not None:
                         terminal.add_log("Found {}st component".format(len(sample)))
         else:
-            spatial_distances = [
-                distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample
-            ]
+            spatial_distances = [distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample]
             freq_distances = [distance_1d(new_p[2], p[2]) for p in sample]
             checks = [
                 spatial_dist < sep_xy or freq_dist < sep_z
@@ -245,9 +244,7 @@ def insert_serendipitous(
         datacube.ra, datacube.dec, datacube.spectral_centre, 0
     )
     # get a mininum separation based on spatial dimensions
-    sep_x, sep_z = np.random.randint(0, int(xy_radius)), np.random.randint(
-        0, int(z_radius)
-    )
+    sep_x, sep_z = np.random.randint(0, int(xy_radius)), np.random.randint(0, int(z_radius))
     # get the position of the first line of the central source
     pos_z = pos_zs[0]
     # get maximum continum value
@@ -256,10 +253,7 @@ def insert_serendipitous(
     serendipitous_norms = np.random.uniform(cont_sens, cont_peak, n_sources)
     # normalize continum to each serendipitous continum maximum
     serendipitous_conts = np.array(
-        [
-            continum * serendipitous_norm / cont_peak
-            for serendipitous_norm in serendipitous_norms
-        ]
+        [continum * serendipitous_norm / cont_peak for serendipitous_norm in serendipitous_norms]
     )
     # sample coordinates of the first line
     sample_coords = sample_positions(
@@ -284,17 +278,13 @@ def insert_serendipitous(
     params_handle = open(sim_params_path, "a") if sim_params_path is not None else None
     try:
         if params_handle is not None:
-            params_handle.write(
-                "\n Injected {} serendipitous sources\n".format(n_sources)
-            )
+            params_handle.write("\n Injected {} serendipitous sources\n".format(n_sources))
 
         for c_id, choords in enumerate(sample_coords):
             n_line = n_lines[c_id]
             if terminal is not None:
                 terminal.add_log(
-                    "Simulating serendipitous source {} with {} lines".format(
-                        c_id + 1, n_line
-                    )
+                    "Simulating serendipitous source {} with {} lines".format(c_id + 1, n_line)
                 )
             s_line_fluxes = np.random.uniform(cont_sens, np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
@@ -305,9 +295,9 @@ def insert_serendipitous(
             delta = pos_z - pos_zs[0]
             pos_z = np.array([pos + delta for pos in pos_zs])[:n_line]
             s_ra, s_dec, _ = wcs.sub(3).wcs_pix2world(pos_x, pos_y, 0, 0)
-            s_freq = np.array(
-                [line_freq + delta * freq_sup for line_freq in line_frequencies]
-            )[:n_line]
+            s_freq = np.array([line_freq + delta * freq_sup for line_freq in line_frequencies])[
+                :n_line
+            ]
             fwhmsz = [s_fwhm_zs[0]]
             for _ in range(n_line - 1):
                 fwhmsz.append(np.random.randint(2, np.random.choice(fwhm_zs, 1))[0])

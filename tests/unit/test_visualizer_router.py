@@ -15,9 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-_VISUALIZER_PATH = (
-    REPO_ROOT / "backend" / "app" / "api" / "v1" / "routers" / "visualizer.py"
-)
+_VISUALIZER_PATH = REPO_ROOT / "backend" / "app" / "api" / "v1" / "routers" / "visualizer.py"
 _VISUALIZER_SPEC = importlib.util.spec_from_file_location(
     "visualizer_router_test_module", _VISUALIZER_PATH
 )
@@ -29,9 +27,7 @@ _VISUALIZER_SPEC.loader.exec_module(visualizer)
 
 def test_list_visualizer_files_includes_npz_fits_and_msv2(tmp_path):
     np.savez(tmp_path / "cube.npz", clean_cube=np.ones((2, 3, 4), dtype=np.float32))
-    fits.PrimaryHDU(np.ones((2, 3, 4), dtype=np.float32)).writeto(
-        tmp_path / "cube.fits"
-    )
+    fits.PrimaryHDU(np.ones((2, 3, 4), dtype=np.float32)).writeto(tmp_path / "cube.fits")
     (tmp_path / "example.ms").mkdir()
 
     listed = visualizer._iter_supported_paths(tmp_path)

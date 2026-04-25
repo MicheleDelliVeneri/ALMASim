@@ -4,8 +4,8 @@ import astropy.units as U
 import numpy as np
 import pandas as pd
 
-from almasim.services import astro
 from almasim import skymodels
+from almasim.services import astro
 from almasim.services.interferometry import antenna as alma_antenna
 
 
@@ -15,18 +15,10 @@ class InlineClient:
     def compute(self, tasks):
         if isinstance(tasks, list):
             return [
-                (
-                    task.compute(scheduler="synchronous")
-                    if hasattr(task, "compute")
-                    else task
-                )
+                (task.compute(scheduler="synchronous") if hasattr(task, "compute") else task)
                 for task in tasks
             ]
-        return (
-            tasks.compute(scheduler="synchronous")
-            if hasattr(tasks, "compute")
-            else tasks
-        )
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]
@@ -63,18 +55,12 @@ def test_skymodel_generation(tmp_path):
     )
     from almasim.services.interferometry.frequency import freq_supp_extractor
 
-    band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
-        freq_support, freq
-    )
+    band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(freq_support, freq)
     max_baseline = (
-        alma_antenna.get_max_baseline_from_antenna_config(
-            None, main_dir.parent / "antenna.cfg"
-        )
+        alma_antenna.get_max_baseline_from_antenna_config(None, main_dir.parent / "antenna.cfg")
         * U.km
     )
-    beam_size = alma_antenna.estimate_alma_beam_size(
-        central_freq, max_baseline, return_value=False
-    )
+    beam_size = alma_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
     cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
     cell_size = beam_size / 5

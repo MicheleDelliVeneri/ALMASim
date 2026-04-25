@@ -44,10 +44,7 @@ class SimulationParamsBase(BaseModel):
     lum_infrared: Optional[float] = Field(None, description="Infrared luminosity")
     snr: Optional[float] = Field(
         default=None,
-        description=(
-            "Optional manual signal-to-noise ratio override; "
-            "leave null to auto-derive"
-        ),
+        description=("Optional manual signal-to-noise ratio override; leave null to auto-derive"),
     )
     n_lines: Optional[int] = Field(None, description="Number of spectral lines")
     line_names: Optional[Any] = Field(None, description="Line names")
@@ -65,9 +62,7 @@ class SimulationParamsBase(BaseModel):
         default=None,
         description="Optional HDF5 shard path for ML dataset export",
     )
-    inject_serendipitous: bool = Field(
-        default=False, description="Inject serendipitous sources"
-    )
+    inject_serendipitous: bool = Field(default=False, description="Inject serendipitous sources")
     robust: float = Field(default=0.0, description="Robustness parameter")
     compute_backend: Optional[str] = Field(
         default="local",
@@ -90,21 +85,15 @@ class SimulationParamsBase(BaseModel):
     )
     source_offset_x_arcsec: float = Field(
         default=0.0,
-        description=(
-            "Optional source offset along x in arcsec relative to phase center"
-        ),
+        description=("Optional source offset along x in arcsec relative to phase center"),
     )
     source_offset_y_arcsec: float = Field(
         default=0.0,
-        description=(
-            "Optional source offset along y in arcsec relative to phase center"
-        ),
+        description=("Optional source offset along y in arcsec relative to phase center"),
     )
     background_mode: str = Field(
         default="none",
-        description=(
-            "Background sky mode: none, blank_field_dsfg, dusty_diffuse, or combined"
-        ),
+        description=("Background sky mode: none, blank_field_dsfg, dusty_diffuse, or combined"),
     )
     background_level: float = Field(
         default=1.0,
@@ -121,8 +110,7 @@ class SimulationParamsBase(BaseModel):
     external_component_table_path: Optional[str] = Field(
         default=None,
         description=(
-            "Optional path to a component-list-like source table "
-            "for external-components mode"
+            "Optional path to a component-list-like source table for external-components mode"
         ),
     )
     external_alignment_mode: str = Field(
@@ -143,9 +131,7 @@ class SimulationParamsBase(BaseModel):
     )
     ms_export_dir: Optional[str] = Field(
         default=None,
-        description=(
-            "Optional target directory for the native MeasurementSet `.ms` export"
-        ),
+        description=("Optional target directory for the native MeasurementSet `.ms` export"),
     )
 
 
@@ -199,15 +185,9 @@ class SimulationEstimate(BaseModel):
     cube_shape: list[int] = Field(..., description="Cube shape [channels, y, x]")
     cube_voxels: int = Field(..., description="Total number of voxels")
     cell_size_arcsec: float = Field(..., description="Estimated cell size in arcsec")
-    beam_size_arcsec: float = Field(
-        ..., description="Estimated synthesized beam size in arcsec"
-    )
-    raw_single_cube_gb: float = Field(
-        ..., description="Raw float32 size of one cube in GiB"
-    )
-    raw_complex_cube_gb: float = Field(
-        ..., description="Raw complex64 size of one cube in GiB"
-    )
+    beam_size_arcsec: float = Field(..., description="Estimated synthesized beam size in arcsec")
+    raw_single_cube_gb: float = Field(..., description="Raw float32 size of one cube in GiB")
+    raw_complex_cube_gb: float = Field(..., description="Raw complex64 size of one cube in GiB")
     estimated_standard_output_gb: float = Field(
         ...,
         description="Approximate raw GiB footprint of the standard output products",

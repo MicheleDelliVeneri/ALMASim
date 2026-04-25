@@ -1,6 +1,7 @@
 """Line emission functions."""
 
 import os
+
 import numpy as np
 import pandas as pd
 
@@ -22,12 +23,8 @@ def read_line_emission_csv(path_line_emission_csv, sep=";"):
 
 def get_line_info(main_path, idxs=None):
     """Get line emission information from CSV file."""
-    path_line_emission_csv = os.path.join(
-        main_path, "brightnes", "calibrated_lines.csv"
-    )
-    db_line = read_line_emission_csv(path_line_emission_csv, sep=",").sort_values(
-        by="Line"
-    )
+    path_line_emission_csv = os.path.join(main_path, "brightnes", "calibrated_lines.csv")
+    db_line = read_line_emission_csv(path_line_emission_csv, sep=",").sort_values(by="Line")
     rest_frequencies = db_line["freq(GHz)"].values
     line_names = db_line["Line"].values
     if idxs is not None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 import numpy as np
 
 K_B = 1.380649e-23
@@ -83,9 +84,7 @@ def compute_channel_noise(
     area_m2 = np.pi * (antenna_diameter_m / 2.0) ** 2
     a_eff = max(area_m2 * config.aperture_efficiency, 1e-6)
     sefd_jy = (2.0 * K_B * tsys / a_eff) / JY
-    denominator = np.sqrt(
-        config.n_polarizations * n_baselines * bandwidth_hz * integration_s
-    )
+    denominator = np.sqrt(config.n_polarizations * n_baselines * bandwidth_hz * integration_s)
     return sefd_jy / np.clip(denominator, 1e-6, None)
 
 

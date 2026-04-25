@@ -100,9 +100,7 @@ def build_channel_visibility_rows(
         model_vis_grid = np.fft.fftshift(modelfft)
         sampled = model_vis_grid[p_v, m_u].astype(np.complex64)
         model_data[valid] = sampled
-        data[valid] = sampled * gains_flat[valid] + noise_flat[valid] * np.abs(
-            gains_flat[valid]
-        )
+        data[valid] = sampled * gains_flat[valid] + noise_flat[valid] * np.abs(gains_flat[valid])
 
     sigma = np.full(nrows, max(float(noise_std), 1e-12), dtype=np.float32)
     weight = np.full(nrows, 1.0 / np.square(sigma[0]), dtype=np.float32)
@@ -209,19 +207,11 @@ def concatenate_visibility_tables(tables: list[Mapping[str, Any]]) -> dict[str, 
         "uvw_m": np.concatenate([np.asarray(t["uvw_m"]) for t in tables], axis=0),
         "antenna1": np.concatenate([np.asarray(t["antenna1"]) for t in tables], axis=0),
         "antenna2": np.concatenate([np.asarray(t["antenna2"]) for t in tables], axis=0),
-        "time_mjd_s": np.concatenate(
-            [np.asarray(t["time_mjd_s"]) for t in tables], axis=0
-        ),
-        "interval_s": np.concatenate(
-            [np.asarray(t["interval_s"]) for t in tables], axis=0
-        ),
-        "exposure_s": np.concatenate(
-            [np.asarray(t["exposure_s"]) for t in tables], axis=0
-        ),
+        "time_mjd_s": np.concatenate([np.asarray(t["time_mjd_s"]) for t in tables], axis=0),
+        "interval_s": np.concatenate([np.asarray(t["interval_s"]) for t in tables], axis=0),
+        "exposure_s": np.concatenate([np.asarray(t["exposure_s"]) for t in tables], axis=0),
         "data": np.concatenate([np.asarray(t["data"]) for t in tables], axis=0),
-        "model_data": np.concatenate(
-            [np.asarray(t["model_data"]) for t in tables], axis=0
-        ),
+        "model_data": np.concatenate([np.asarray(t["model_data"]) for t in tables], axis=0),
         "flag": np.concatenate([np.asarray(t["flag"]) for t in tables], axis=0),
         "weight": np.concatenate([np.asarray(t["weight"]) for t in tables], axis=0),
         "sigma": np.concatenate([np.asarray(t["sigma"]) for t in tables], axis=0),
