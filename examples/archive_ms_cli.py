@@ -62,6 +62,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only import raw ASDMs; do not create calibrated MSs.",
     )
+    parser.add_argument(
+        "--clean-intermediate",
+        action="store_true",
+        help="After calibrated MSs are created, remove raw_ms and calibration working data.",
+    )
+    parser.add_argument(
+        "--delete-input-root",
+        action="store_true",
+        help="With --clean-intermediate, also remove the input delivery tree if it does not contain calibrated output.",
+    )
     return parser
 
 
@@ -109,6 +119,8 @@ def main() -> None:
         casa_data_root=args.casa_data_root,
         skip_casa_data_update=args.skip_casa_data_update,
         overwrite=args.overwrite,
+        clean_intermediate=args.clean_intermediate,
+        original_data_root=args.input_root if args.delete_input_root else None,
         logger_fn=print,
     )
     print("Calibrated MS products:")

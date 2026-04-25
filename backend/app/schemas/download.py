@@ -1,5 +1,5 @@
 """Download-related schemas."""
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -101,6 +101,34 @@ class StartDownloadRequest(BaseModel):
         False,
         description="Extract tar archives after download and remove the archives",
     )
+    unpack_ms: bool = Field(
+        False,
+        description="Create raw MeasurementSets from downloaded/extracted ALMA ASDM products",
+    )
+    generate_calibrated_visibilities: bool = Field(
+        False,
+        description="Create calibrated split MeasurementSets from raw MS and delivered calibration scripts",
+    )
+    clean_intermediate_files: bool = Field(
+        False,
+        description="After calibrated MS creation, delete downloaded originals and intermediate raw MS products",
+    )
+    archive_output_root: Optional[str] = Field(
+        None,
+        description="Optional root directory for raw_ms and calibrated_ms outputs",
+    )
+    casa_data_root: Optional[str] = Field(
+        None,
+        description="Optional CASA runtime data directory",
+    )
+    skip_casa_data_update: bool = Field(
+        False,
+        description="Skip CASA runtime data updates",
+    )
+    selected_metadata: Optional[List[dict[str, Any]]] = Field(
+        None,
+        description="Metadata rows associated with this download job",
+    )
 
 
 class StartDownloadResponse(BaseModel):
@@ -141,6 +169,11 @@ class DownloadJobStatus(BaseModel):
     progress: float = Field(..., description="Overall progress 0.0 to 1.0")
     error: Optional[str] = None
     files: List[FileStatus] = []
+    raw_measurement_sets: List[str] = []
+    calibrated_measurement_sets: List[str] = []
+    manifest_path: Optional[str] = None
+    has_metadata: bool = False
+    metadata_count: int = 0
 
 
 class DownloadJobSummary(BaseModel):
@@ -159,3 +192,8 @@ class DownloadJobSummary(BaseModel):
     total_bytes: int = 0
     bytes_downloaded: int = 0
     error: Optional[str] = None
+    raw_measurement_sets: List[str] = []
+    calibrated_measurement_sets: List[str] = []
+    manifest_path: Optional[str] = None
+    has_metadata: bool = False
+    metadata_count: int = 0

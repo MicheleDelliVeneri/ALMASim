@@ -8,6 +8,8 @@ from pathlib import Path
 import pandas as pd
 
 from almasim.services.download import (
+    MAX_PARALLEL_PER_MIRROR,
+    MAX_PARALLEL_TOTAL,
     PRODUCT_TYPES,
     download_products,
     filter_products,
@@ -68,12 +70,48 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-parallel",
         type=int,
         default=3,
-        help="Maximum number of concurrent downloads.",
+        help=(
+            "Maximum number of concurrent downloads across all ALMA mirrors "
+            f"(ESO, NRAO, NAOJ). Capped at {MAX_PARALLEL_TOTAL} "
+            f"({MAX_PARALLEL_PER_MIRROR} per mirror)."
+        ),
     )
     parser.add_argument(
         "--extract-tar",
         action="store_true",
         help="Extract downloaded tar/tgz archives after download.",
+    )
+    parser.add_argument(
+        "--unpack-ms",
+        action="store_true",
+        help="After download/extract, import ASDMs into raw MeasurementSets.",
+    )
+    parser.add_argument(
+        "--generate-calibrated-visibilities",
+        action="store_true",
+        help="After raw MS import, apply delivered calibration products and write calibrated MSs.",
+    )
+    parser.add_argument(
+        "--clean-intermediate-files",
+        action="store_true",
+        help="After calibrated MSs are created, remove downloaded/intermediate raw products when safe.",
+    )
+    parser.add_argument(
+        "--archive-output-root",
+        type=Path,
+        default=None,
+        help="Optional output root for archive_ms raw_ms/calibrated_ms products.",
+    )
+    parser.add_argument(
+        "--casa-data-root",
+        type=Path,
+        default=None,
+        help="Optional populated CASA runtime data directory.",
+    )
+    parser.add_argument(
+        "--skip-casa-data-update",
+        action="store_true",
+        help="Do not download CASA runtime data if the selected data directory is empty.",
     )
     parser.add_argument(
         "--resolve-only",
@@ -117,6 +155,16 @@ def _load_or_resolve_products(args: argparse.Namespace):
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.max_parallel < 1:
+        raise SystemExit("--max-parallel must be at least 1")
+    if args.max_parallel > MAX_PARALLEL_TOTAL:
+        print(
+            f"Requested --max-parallel={args.max_parallel} exceeds the "
+            f"per-archive cap; clamping to {MAX_PARALLEL_TOTAL} "
+            f"({MAX_PARALLEL_PER_MIRROR} per ALMA mirror)."
+        )
+        args.max_parallel = MAX_PARALLEL_TOTAL
+
     products = _load_or_resolve_products(args)
     filtered = filter_products(products, args.product_filter)
     if not filtered:
@@ -134,11 +182,27 @@ def main() -> None:
         args.destination,
         max_parallel=args.max_parallel,
         extract_tar=args.extract_tar,
+        unpack_ms=args.unpack_ms,
+        generate_calibrated_visibilities=args.generate_calibrated_visibilities,
+        clean_intermediate_files=args.clean_intermediate_files,
+        archive_output_root=args.archive_output_root,
+        casa_data_root=args.casa_data_root,
+        skip_casa_data_update=args.skip_casa_data_update,
         logger_fn=print,
     )
     print(f"Destination: {summary.destination}")
     print(f"Completed: {summary.files_completed}")
     print(f"Failed: {summary.files_failed}")
+    if summary.manifest_path:
+        print(f"Manifest: {summary.manifest_path}")
+    if summary.raw_measurement_sets:
+        print("Raw MS products:")
+        for raw_ms in summary.raw_measurement_sets:
+            print(f"  {raw_ms}")
+    if summary.calibrated_measurement_sets:
+        print("Calibrated MS products:")
+        for calibrated_ms in summary.calibrated_measurement_sets:
+            print(f"  {calibrated_ms}")
 
 
 if __name__ == "__main__":

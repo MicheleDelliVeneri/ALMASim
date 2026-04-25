@@ -256,7 +256,17 @@ class DownloadJobRecord(Base):
     )
     destination = Column(Text, nullable=False)
     member_ous_uids = Column(Text, nullable=False, default="")  # JSON array string
+    metadata_json = Column(Text, nullable=False, default="[]")  # JSON array string
     product_filter = Column(String(20), nullable=False, default="all")
+    unpack_ms = Column(Boolean, nullable=False, default=False)
+    generate_calibrated_visibilities = Column(Boolean, nullable=False, default=False)
+    clean_intermediate_files = Column(Boolean, nullable=False, default=False)
+    archive_output_root = Column(Text, nullable=True)
+    casa_data_root = Column(Text, nullable=True)
+    skip_casa_data_update = Column(Boolean, nullable=False, default=False)
+    raw_measurement_sets = Column(Text, nullable=False, default="[]")  # JSON array string
+    calibrated_measurement_sets = Column(Text, nullable=False, default="[]")  # JSON array string
+    manifest_path = Column(Text, nullable=True)
     total_files = Column(Integer, nullable=False, default=0)
     total_bytes = Column(Float, nullable=False, default=0)
     bytes_downloaded = Column(Float, nullable=False, default=0)

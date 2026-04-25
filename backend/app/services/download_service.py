@@ -27,7 +27,17 @@ class DownloadJob:
     job_id: str
     destination: str
     member_ous_uids: List[str] = field(default_factory=list)
+    metadata_rows: List[dict] = field(default_factory=list)
     product_filter: str = "all"
+    unpack_ms: bool = False
+    generate_calibrated_visibilities: bool = False
+    clean_intermediate_files: bool = False
+    archive_output_root: Optional[str] = None
+    casa_data_root: Optional[str] = None
+    skip_casa_data_update: bool = False
+    raw_measurement_sets: List[str] = field(default_factory=list)
+    calibrated_measurement_sets: List[str] = field(default_factory=list)
+    manifest_path: Optional[str] = None
     total_files: int = 0
     total_bytes: int = 0
     bytes_downloaded: int = 0
@@ -66,7 +76,17 @@ class DownloadStore:
                 job_id=job.job_id,
                 destination=job.destination,
                 member_ous_uids=json.dumps(job.member_ous_uids),
+                metadata_json=json.dumps(job.metadata_rows),
                 product_filter=job.product_filter,
+                unpack_ms=job.unpack_ms,
+                generate_calibrated_visibilities=job.generate_calibrated_visibilities,
+                clean_intermediate_files=job.clean_intermediate_files,
+                archive_output_root=job.archive_output_root,
+                casa_data_root=job.casa_data_root,
+                skip_casa_data_update=job.skip_casa_data_update,
+                raw_measurement_sets=json.dumps(job.raw_measurement_sets),
+                calibrated_measurement_sets=json.dumps(job.calibrated_measurement_sets),
+                manifest_path=job.manifest_path,
                 total_files=job.total_files,
                 total_bytes=job.total_bytes,
                 status=job.status,
@@ -118,6 +138,9 @@ class DownloadStore:
             rec.files_failed = job.files_failed
             rec.status = job.status
             rec.error = job.error
+            rec.raw_measurement_sets = json.dumps(job.raw_measurement_sets)
+            rec.calibrated_measurement_sets = json.dumps(job.calibrated_measurement_sets)
+            rec.manifest_path = job.manifest_path
             rec.updated_at = datetime.now()
 
             if job.files:
@@ -222,6 +245,12 @@ def run_download_job(
     max_parallel: int = 3,
     rate_limit_sec: float = 0.5,
     extract_tar: bool = False,
+    unpack_ms: bool = False,
+    generate_calibrated_visibilities: bool = False,
+    clean_intermediate_files: bool = False,
+    archive_output_root: Optional[str] = None,
+    casa_data_root: Optional[str] = None,
+    skip_casa_data_update: bool = False,
 ) -> None:
     """Run a download job by delegating transfer work to shared services."""
     job = download_store.get(job_id)
@@ -287,6 +316,12 @@ def run_download_job(
             max_parallel=max_parallel,
             rate_limit_sec=rate_limit_sec,
             extract_tar=extract_tar,
+            unpack_ms=unpack_ms,
+            generate_calibrated_visibilities=generate_calibrated_visibilities,
+            clean_intermediate_files=clean_intermediate_files,
+            archive_output_root=archive_output_root,
+            casa_data_root=casa_data_root,
+            skip_casa_data_update=skip_casa_data_update,
             should_cancel=should_cancel,
             update_callback=on_update,
         )
@@ -300,6 +335,9 @@ def run_download_job(
         )
         current_job.files_completed = summary.files_completed
         current_job.files_failed = summary.files_failed
+        current_job.raw_measurement_sets = summary.raw_measurement_sets
+        current_job.calibrated_measurement_sets = summary.calibrated_measurement_sets
+        current_job.manifest_path = summary.manifest_path
 
         if current_job.status == "cancelled":
             pass

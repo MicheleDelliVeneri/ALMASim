@@ -1,5 +1,6 @@
 /** Download API types and functions */
 import { apiClient } from './client';
+import type { MetadataResponse } from './metadata';
 
 export interface DataProductInfo {
 	access_url: string;
@@ -60,6 +61,11 @@ export interface DownloadJobStatus {
 	progress: number;
 	error: string | null;
 	files: FileStatus[];
+	raw_measurement_sets: string[];
+	calibrated_measurement_sets: string[];
+	manifest_path: string | null;
+	has_metadata: boolean;
+	metadata_count: number;
 }
 
 export interface DownloadJobSummary {
@@ -76,6 +82,11 @@ export interface DownloadJobSummary {
 	total_bytes: number;
 	bytes_downloaded: number;
 	error: string | null;
+	raw_measurement_sets: string[];
+	calibrated_measurement_sets: string[];
+	manifest_path: string | null;
+	has_metadata: boolean;
+	metadata_count: number;
 }
 
 export interface BrowseDirectoryEntry {
@@ -127,13 +138,27 @@ export const downloadApi = {
 		destination: string;
 		maxParallel?: number;
 		extractTar?: boolean;
+		unpackMs?: boolean;
+		generateCalibratedVisibilities?: boolean;
+		cleanIntermediateFiles?: boolean;
+		archiveOutputRoot?: string;
+		casaDataRoot?: string;
+		skipCasaDataUpdate?: boolean;
+		selectedMetadata?: Record<string, unknown>[];
 	}): Promise<StartDownloadResponse> {
 		return apiClient.post<StartDownloadResponse>('/api/v1/downloads/start', {
 			member_ous_uids: params.memberOusUids,
 			product_filter: params.productFilter ?? 'all',
 			destination: params.destination,
 			max_parallel: params.maxParallel ?? 3,
-			extract_tar: params.extractTar ?? false
+			extract_tar: params.extractTar ?? false,
+			unpack_ms: params.unpackMs ?? false,
+			generate_calibrated_visibilities: params.generateCalibratedVisibilities ?? false,
+			clean_intermediate_files: params.cleanIntermediateFiles ?? false,
+			archive_output_root: params.archiveOutputRoot || null,
+			casa_data_root: params.casaDataRoot || null,
+			skip_casa_data_update: params.skipCasaDataUpdate ?? false,
+			selected_metadata: params.selectedMetadata ?? []
 		});
 	},
 
@@ -145,6 +170,13 @@ export const downloadApi = {
 	/** Get detailed status for a specific job */
 	getJobStatus(jobId: string): Promise<DownloadJobStatus> {
 		return apiClient.get<DownloadJobStatus>(`/api/v1/downloads/jobs/${encodeURIComponent(jobId)}`);
+	},
+
+	/** Load metadata rows associated with a downloaded data product */
+	loadJobMetadata(jobId: string): Promise<MetadataResponse> {
+		return apiClient.get<MetadataResponse>(
+			`/api/v1/downloads/jobs/${encodeURIComponent(jobId)}/metadata`
+		);
 	},
 
 	/** Cancel a download job */

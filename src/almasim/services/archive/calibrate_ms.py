@@ -249,6 +249,28 @@ def split_calibrated_science_ms(
     return output_ms
 
 
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _remove_tree_after_success(path: str | os.PathLike[str], protected: list[Path], logger_fn: LogFn = None) -> None:
+    target = Path(path).expanduser().resolve()
+    if not target.exists():
+        return
+    for protected_path in protected:
+        protected_path = protected_path.resolve()
+        if target == protected_path or _is_relative_to(protected_path, target):
+            logger.warning("Skipping cleanup of %s because it contains protected output %s", target, protected_path)
+            _emit(logger_fn, f"Skipping cleanup of {target}; it contains protected output {protected_path}")
+            return
+    shutil.rmtree(target)
+    _emit(logger_fn, f"Removed intermediate data: {target}")
+
+
 def create_calibrated_measurement_sets(
     input_root: str | os.PathLike[str],
     raw_ms_root: str | os.PathLike[str],
@@ -257,6 +279,8 @@ def create_calibrated_measurement_sets(
     casa_data_root: str | os.PathLike[str] | None = None,
     skip_casa_data_update: bool = False,
     overwrite: bool = False,
+    clean_intermediate: bool = False,
+    original_data_root: str | os.PathLike[str] | None = None,
     logger_fn: LogFn = None,
 ) -> list[Path]:
     """Create calibrated science MS products from raw MS and ALMA calibration products."""
@@ -291,6 +315,13 @@ def create_calibrated_measurement_sets(
                 logger_fn=logger_fn,
             )
         )
+
+    if clean_intermediate:
+        protected = [*calibrated_mss, output_path]
+        _remove_tree_after_success(raw_ms_root, protected, logger_fn=logger_fn)
+        _remove_tree_after_success(output_path / "working", protected, logger_fn=logger_fn)
+        if original_data_root is not None:
+            _remove_tree_after_success(original_data_root, protected, logger_fn=logger_fn)
 
     return calibrated_mss
 

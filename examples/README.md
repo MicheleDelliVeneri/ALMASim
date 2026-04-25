@@ -39,7 +39,20 @@ python examples/download_products_cli.py \
   --member-limit 1 \
   --product-filter all \
   --save-products-csv examples/output/resolved_products.csv \
-  --destination examples/output/downloads
+  --destination examples/output/downloads \
+  --extract-tar
+```
+
+Download, unpack raw MSs, and generate calibrated visibilities:
+
+```bash
+python examples/download_products_cli.py \
+  --products-csv examples/output/resolved_products.csv \
+  --destination examples/output/downloads \
+  --extract-tar \
+  --unpack-ms \
+  --generate-calibrated-visibilities \
+  --archive-output-root examples/output/archive_ms
 ```
 
 Archive MS CLI usage:

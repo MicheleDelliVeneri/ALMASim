@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import shutil
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
+from urllib.parse import urlsplit, urlunsplit
 from xml.etree import ElementTree
 
 import httpx
@@ -24,6 +27,9 @@ _DATALINK_MIRRORS = [
     "https://almascience.nrao.edu",
     "https://almascience.nao.ac.jp",
 ]
+# ALMA recommends limiting concurrent downloads per TAP/DataLink mirror.
+MAX_PARALLEL_PER_MIRROR = 10
+MAX_PARALLEL_TOTAL = MAX_PARALLEL_PER_MIRROR * len(_DATALINK_MIRRORS)
 _VOT_NS = "http://www.ivoa.net/xml/VOTable/v1.3"
 _RATE_LIMIT_SEC = 0.5
 _MAX_FILE_ATTEMPTS = 3
@@ -72,6 +78,9 @@ class DownloadSummary:
     files_failed: int
     files: List[FileDownloadStatus] = field(default_factory=list)
     extracted_files: List[str] = field(default_factory=list)
+    raw_measurement_sets: List[str] = field(default_factory=list)
+    calibrated_measurement_sets: List[str] = field(default_factory=list)
+    manifest_path: Optional[str] = None
 
 
 PRODUCT_TYPES = {
@@ -357,6 +366,7 @@ def _download_single_file(
     *,
     should_cancel: Optional[Callable[[], bool]] = None,
     update_callback: Optional[Callable[[FileDownloadStatus], None]] = None,
+    host_semaphores: Optional[Dict[str, threading.BoundedSemaphore]] = None,
 ) -> None:
     destination_path = destination / file_status.filename
     part_path = destination_path.with_suffix(destination_path.suffix + ".part")
@@ -378,22 +388,30 @@ def _download_single_file(
     if update_callback is not None:
         update_callback(file_status)
     last_error: Optional[Exception] = None
-    for attempt in range(1, _MAX_FILE_ATTEMPTS + 1):
-        try:
-            completed = _download_single_attempt(
-                file_status,
-                part_path,
-                should_cancel=should_cancel,
-                update_callback=update_callback,
-            )
-            if not completed:
-                return
-            last_error = None
-            break
-        except Exception as exc:
-            last_error = exc
-            if attempt < _MAX_FILE_ATTEMPTS:
-                time.sleep(_RETRY_BACKOFF_BASE ** (attempt - 1))
+    host = urlsplit(file_status.access_url).netloc
+    semaphore = host_semaphores.get(host) if host_semaphores else None
+    if semaphore is not None:
+        semaphore.acquire()
+    try:
+        for attempt in range(1, _MAX_FILE_ATTEMPTS + 1):
+            try:
+                completed = _download_single_attempt(
+                    file_status,
+                    part_path,
+                    should_cancel=should_cancel,
+                    update_callback=update_callback,
+                )
+                if not completed:
+                    return
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt < _MAX_FILE_ATTEMPTS:
+                    time.sleep(_RETRY_BACKOFF_BASE ** (attempt - 1))
+    finally:
+        if semaphore is not None:
+            semaphore.release()
 
     if last_error is not None:
         file_status.status = "failed"
@@ -444,6 +462,98 @@ def _extract_tar(tar_path: Path, destination: Path) -> List[str]:
     return extracted
 
 
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _cleanup_download_inputs(
+    destination: Path,
+    statuses: Iterable[FileDownloadStatus],
+    extracted_files: Iterable[str],
+    *,
+    protected_roots: Iterable[Path],
+) -> None:
+    """Remove downloaded archive/source products while preserving generated outputs."""
+    protected = [root.resolve() for root in protected_roots if root.exists()]
+
+    def is_protected(path: Path) -> bool:
+        resolved = path.resolve()
+        return any(resolved == root or _is_relative_to(resolved, root) for root in protected)
+
+    for status in statuses:
+        for path in (destination / status.filename, destination / (status.filename + ".part")):
+            if is_protected(path):
+                continue
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                elif path.is_file():
+                    path.unlink()
+            except OSError:
+                logger.warning("Failed to remove downloaded input %s", path)
+
+    extracted_paths = sorted(
+        ((destination / relative).resolve() for relative in extracted_files),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    for path in extracted_paths:
+        if is_protected(path):
+            continue
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            elif path.exists():
+                path.unlink()
+        except OSError:
+            logger.warning("Failed to remove extracted input %s", path)
+
+    for path in extracted_paths:
+        parent = path.parent
+        while parent != destination and _is_relative_to(parent, destination):
+            if is_protected(parent):
+                break
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
+
+
+def _mirror_hosts() -> List[str]:
+    """Return the netloc of each known DataLink/TAP mirror."""
+    return [urlsplit(base).netloc for base in _DATALINK_MIRRORS]
+
+
+def _distribute_across_mirrors(
+    statuses: List[FileDownloadStatus],
+) -> None:
+    """Round-robin rewrite each ``access_url`` host across the known ALMA mirrors.
+
+    The ALMA archive is replicated on three DataLink/TAP mirrors (ESO, NRAO and
+    NAOJ). Rewriting hostnames lets us spread concurrent transfers across all
+    three endpoints instead of hammering whichever mirror DataLink originally
+    pointed at.
+    """
+    hosts = _mirror_hosts()
+    if not hosts:
+        return
+    for index, status in enumerate(statuses):
+        parts = urlsplit(status.access_url)
+        if not parts.netloc:
+            continue
+        new_host = hosts[index % len(hosts)]
+        if parts.netloc == new_host:
+            continue
+        status.access_url = urlunsplit(
+            (parts.scheme or "https", new_host, parts.path, parts.query, parts.fragment)
+        )
+
+
 def download_products(
     products: List[DataProduct],
     destination: Path | str,
@@ -451,6 +561,12 @@ def download_products(
     max_parallel: int = 3,
     rate_limit_sec: float = _RATE_LIMIT_SEC,
     extract_tar: bool = False,
+    unpack_ms: bool = False,
+    generate_calibrated_visibilities: bool = False,
+    clean_intermediate_files: bool = False,
+    archive_output_root: Optional[Path | str] = None,
+    casa_data_root: Optional[Path | str] = None,
+    skip_casa_data_update: bool = False,
     logger_fn: Optional[Callable[[str], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
     update_callback: Optional[Callable[[FileDownloadStatus], None]] = None,
@@ -467,9 +583,20 @@ def download_products(
         )
         for product in products
     ]
+    _distribute_across_mirrors(statuses)
     extracted_files: List[str] = []
+    raw_measurement_sets: List[str] = []
+    calibrated_measurement_sets: List[str] = []
 
-    with ThreadPoolExecutor(max_workers=max_parallel) as pool:
+    # Spread requests across the ALMA mirrors but never exceed the per-mirror
+    # cap recommended by the archive (10 concurrent transfers per TAP host).
+    effective_parallel = max(1, min(int(max_parallel), MAX_PARALLEL_TOTAL))
+    host_semaphores: Dict[str, threading.BoundedSemaphore] = {
+        host: threading.BoundedSemaphore(MAX_PARALLEL_PER_MIRROR)
+        for host in _mirror_hosts()
+    }
+
+    with ThreadPoolExecutor(max_workers=effective_parallel) as pool:
         futures = []
         for index, status in enumerate(statuses):
             if should_cancel is not None and should_cancel():
@@ -484,6 +611,7 @@ def download_products(
                     destination_path,
                     should_cancel=should_cancel,
                     update_callback=update_callback,
+                    host_semaphores=host_semaphores,
                 )
             )
             if index < len(statuses) - 1 and rate_limit_sec > 0:
@@ -502,9 +630,61 @@ def download_products(
             if tar_path.exists():
                 extracted_files.extend(_extract_tar(tar_path, destination_path))
 
+    if unpack_ms or generate_calibrated_visibilities:
+        from almasim.services.archive import create_calibrated_measurement_sets, create_measurement_sets
+
+        archive_root = Path(archive_output_root).expanduser().resolve() if archive_output_root else destination_path / "archive_ms"
+        raw_ms_root = archive_root / "raw_ms"
+        calibrated_ms_root = archive_root / "calibrated_ms"
+
+        raw_paths = create_measurement_sets(
+            input_root=destination_path,
+            output_root=raw_ms_root,
+            casa_data_root=casa_data_root,
+            skip_casa_data_update=skip_casa_data_update,
+            logger_fn=logger_fn,
+        )
+        raw_measurement_sets = [str(path) for path in raw_paths]
+
+        if generate_calibrated_visibilities:
+            calibrated_paths = create_calibrated_measurement_sets(
+                input_root=destination_path,
+                raw_ms_root=raw_ms_root,
+                output_root=calibrated_ms_root,
+                casa_data_root=casa_data_root,
+                skip_casa_data_update=skip_casa_data_update,
+                clean_intermediate=clean_intermediate_files,
+                logger_fn=logger_fn,
+            )
+            calibrated_measurement_sets = [str(path) for path in calibrated_paths]
+
     files_completed = sum(1 for status in statuses if status.status == "completed")
     files_failed = sum(1 for status in statuses if status.status == "failed")
     total_bytes = sum(product.content_length for product in products)
+    manifest_path = destination_path / "download_manifest.json"
+
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "destination": str(destination_path),
+                "products": [asdict(product) for product in products],
+                "files": [asdict(status) for status in statuses],
+                "extracted_files": extracted_files,
+                "raw_measurement_sets": raw_measurement_sets,
+                "calibrated_measurement_sets": calibrated_measurement_sets,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    if clean_intermediate_files and generate_calibrated_visibilities:
+        _cleanup_download_inputs(
+            destination_path,
+            statuses,
+            extracted_files,
+            protected_roots=[archive_root, *(Path(path) for path in calibrated_measurement_sets)],
+        )
 
     if logger_fn is not None:
         logger_fn(
@@ -520,6 +700,9 @@ def download_products(
         files_failed=files_failed,
         files=statuses,
         extracted_files=extracted_files,
+        raw_measurement_sets=raw_measurement_sets,
+        calibrated_measurement_sets=calibrated_measurement_sets,
+        manifest_path=str(manifest_path),
     )
 
 

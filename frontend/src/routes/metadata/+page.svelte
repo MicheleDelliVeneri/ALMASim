@@ -204,6 +204,7 @@
 	// Download state
 	let downloadDialogOpen = $state(false);
 	let downloadMemberOusUids = $state<string[]>([]);
+	let downloadMetadataRows = $state<Record<string, unknown>[]>([]);
 
 	let selectedJobId = $state<string | null>(null);
 
@@ -510,9 +511,10 @@
 		}
 	}
 
-	function handleDownload(memberOusUids: string[]) {
+	function handleDownload(memberOusUids: string[], metadataRows: Record<string, unknown>[]) {
 		logger.info({ count: memberOusUids.length }, 'Download dialog opened');
 		downloadMemberOusUids = memberOusUids;
+		downloadMetadataRows = metadataRows;
 		downloadDialogOpen = true;
 	}
 
@@ -639,6 +641,7 @@
 		<DownloadDialog
 			open={downloadDialogOpen}
 			memberOusUids={downloadMemberOusUids}
+			metadataRows={downloadMetadataRows}
 			onClose={() => (downloadDialogOpen = false)}
 			onStarted={handleDownloadStarted}
 		/>

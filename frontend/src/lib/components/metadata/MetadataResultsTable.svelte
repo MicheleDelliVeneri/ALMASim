@@ -13,7 +13,7 @@
 		onLoad: () => void;
 		onSave: () => void;
 		saving: boolean;
-		onDownload: (memberOusUids: string[]) => void;
+		onDownload: (memberOusUids: string[], metadataRows: Record<string, unknown>[]) => void;
 	}
 
 	let { results, loading, fetching, onClear, onLoad, onSave, saving, onDownload }: Props = $props();
@@ -186,6 +186,13 @@
 		const unique = [...new Set(uids)];
 		logger.info({ selectedRows: selectedRowIndices.size, uniqueUids: unique.length }, 'Download initiated from table');
 		return unique;
+	}
+
+	function getSelectedMetadataRows(): Record<string, unknown>[] {
+		return [...selectedRowIndices]
+			.map((idx) => filteredData[idx])
+			.filter((row): row is Record<string, unknown> => Boolean(row))
+			.map((row) => ({ ...row }));
 	}
 
 	// --- Compute total size of selected observations ---
@@ -643,7 +650,7 @@
 				<button
 					type="button"
 					class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-					onclick={() => onDownload(getSelectedMemberOusUids())}
+					onclick={() => onDownload(getSelectedMemberOusUids(), getSelectedMetadataRows())}
 				>
 					Download ({selectedCount})
 				</button>

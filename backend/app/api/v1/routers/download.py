@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
+from app.schemas.metadata import MetadataResponse
 from app.schemas.download import (
     BrowseDirectoryEntry,
     BrowseDirectoryResponse,
@@ -29,6 +30,24 @@ from app.services.download_service import (
 )
 
 router = APIRouter()
+
+
+def _json_list(value) -> list:
+    """Decode a JSON list from DB text fields."""
+    import json
+
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _metadata_stats(value) -> tuple[bool, int]:
+    rows = _json_list(value)
+    return bool(rows), len(rows)
 
 
 def _browse_path(resolved_path) -> BrowseDirectoryResponse:
@@ -219,7 +238,14 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
         job_id=job_id,
         destination=body.destination,
         member_ous_uids=body.member_ous_uids,
+        metadata_rows=body.selected_metadata or [],
         product_filter=body.product_filter,
+        unpack_ms=body.unpack_ms or body.generate_calibrated_visibilities,
+        generate_calibrated_visibilities=body.generate_calibrated_visibilities,
+        clean_intermediate_files=body.clean_intermediate_files,
+        archive_output_root=body.archive_output_root,
+        casa_data_root=body.casa_data_root,
+        skip_casa_data_update=body.skip_casa_data_update,
         total_files=len(products),
         total_bytes=total_bytes,
     )
@@ -232,7 +258,13 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
         products=products,
         destination=body.destination,
         max_parallel=body.max_parallel,
-        extract_tar=body.extract_tar,
+        extract_tar=body.extract_tar or body.unpack_ms or body.generate_calibrated_visibilities,
+        unpack_ms=body.unpack_ms or body.generate_calibrated_visibilities,
+        generate_calibrated_visibilities=body.generate_calibrated_visibilities,
+        clean_intermediate_files=body.clean_intermediate_files,
+        archive_output_root=body.archive_output_root,
+        casa_data_root=body.casa_data_root,
+        skip_casa_data_update=body.skip_casa_data_update,
     )
 
     return StartDownloadResponse(
@@ -270,6 +302,11 @@ async def list_download_jobs():
                 total_bytes=active.total_bytes,
                 bytes_downloaded=active.bytes_downloaded,
                 error=active.error,
+                raw_measurement_sets=active.raw_measurement_sets,
+                calibrated_measurement_sets=active.calibrated_measurement_sets,
+                manifest_path=active.manifest_path,
+                has_metadata=bool(active.metadata_rows),
+                metadata_count=len(active.metadata_rows),
             ))
         else:
             import json
@@ -278,6 +315,7 @@ async def list_download_jobs():
                 uids = json.loads(rec.member_ous_uids) if rec.member_ous_uids else []
             except (json.JSONDecodeError, TypeError):
                 uids = []
+            has_metadata, metadata_count = _metadata_stats(rec.metadata_json)
             result.append(DownloadJobSummary(
                 job_id=str(rec.job_id),
                 status=rec.status,
@@ -292,6 +330,11 @@ async def list_download_jobs():
                 total_bytes=int(rec.total_bytes),
                 bytes_downloaded=int(rec.bytes_downloaded),
                 error=rec.error,
+                raw_measurement_sets=_json_list(rec.raw_measurement_sets),
+                calibrated_measurement_sets=_json_list(rec.calibrated_measurement_sets),
+                manifest_path=rec.manifest_path,
+                has_metadata=has_metadata,
+                metadata_count=metadata_count,
             ))
     return result
 
@@ -313,6 +356,11 @@ async def get_download_job(job_id: str):
             bytes_downloaded=job.bytes_downloaded,
             progress=(job.bytes_downloaded / job.total_bytes) if job.total_bytes > 0 else 0,
             error=job.error,
+            raw_measurement_sets=job.raw_measurement_sets,
+            calibrated_measurement_sets=job.calibrated_measurement_sets,
+            manifest_path=job.manifest_path,
+            has_metadata=bool(job.metadata_rows),
+            metadata_count=len(job.metadata_rows),
             files=[
                 FileStatus(
                     filename=f.filename,
@@ -345,6 +393,11 @@ async def get_download_job(job_id: str):
         bytes_downloaded=int(rec.bytes_downloaded),
         progress=(rec.bytes_downloaded / rec.total_bytes) if rec.total_bytes > 0 else 0,
         error=rec.error,
+        raw_measurement_sets=_json_list(rec.raw_measurement_sets),
+        calibrated_measurement_sets=_json_list(rec.calibrated_measurement_sets),
+        manifest_path=rec.manifest_path,
+        has_metadata=_metadata_stats(rec.metadata_json)[0],
+        metadata_count=_metadata_stats(rec.metadata_json)[1],
         files=[
             FileStatus(
                 filename=f.filename,
@@ -357,6 +410,30 @@ async def get_download_job(job_id: str):
             for f in rec.files
         ],
     )
+
+
+@router.get("/jobs/{job_id}/metadata", response_model=MetadataResponse)
+async def get_download_job_metadata(job_id: str):
+    """Load the metadata rows associated with a downloaded data product."""
+    job = download_store.get(job_id)
+    if job:
+        rows = job.metadata_rows
+    else:
+        rec = download_store.get_from_db(job_id)
+        if not rec:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Download job {job_id} not found",
+            )
+        rows = _json_list(rec.metadata_json)
+
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No metadata stored for download job {job_id}",
+        )
+
+    return MetadataResponse(count=len(rows), data=rows)
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -454,7 +531,14 @@ async def redownload_job(
         job_id=new_job_id,
         destination=rec.destination,
         member_ous_uids=uids,
+        metadata_rows=_json_list(rec.metadata_json),
         product_filter=rec.product_filter or "all",
+        unpack_ms=bool(rec.unpack_ms),
+        generate_calibrated_visibilities=bool(rec.generate_calibrated_visibilities),
+        clean_intermediate_files=bool(rec.clean_intermediate_files),
+        archive_output_root=rec.archive_output_root,
+        casa_data_root=rec.casa_data_root,
+        skip_casa_data_update=bool(rec.skip_casa_data_update),
         total_files=len(products),
         total_bytes=total_bytes,
     )
@@ -466,6 +550,13 @@ async def redownload_job(
         products=products,
         destination=rec.destination,
         max_parallel=3,
+        extract_tar=bool(rec.unpack_ms) or bool(rec.generate_calibrated_visibilities),
+        unpack_ms=bool(rec.unpack_ms),
+        generate_calibrated_visibilities=bool(rec.generate_calibrated_visibilities),
+        clean_intermediate_files=bool(rec.clean_intermediate_files),
+        archive_output_root=rec.archive_output_root,
+        casa_data_root=rec.casa_data_root,
+        skip_casa_data_update=bool(rec.skip_casa_data_update),
     )
 
     return StartDownloadResponse(
@@ -512,6 +603,24 @@ async def delete_download_job(job_id: str):
                     files_deleted += 1
             except OSError:
                 pass  # best-effort; don't fail the delete if a file is gone
+
+    generated_paths = [
+        *(_json_list(rec.raw_measurement_sets)),
+        *(_json_list(rec.calibrated_measurement_sets)),
+    ]
+    if rec.manifest_path:
+        generated_paths.append(rec.manifest_path)
+    for generated in generated_paths:
+        path = Path(generated)
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+                files_deleted += 1
+            elif path.is_file():
+                path.unlink()
+                files_deleted += 1
+        except OSError:
+            pass
 
     deleted = download_store.delete_from_db(job_id)
     if not deleted:

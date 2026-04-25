@@ -8,11 +8,12 @@
 	interface Props {
 		open: boolean;
 		memberOusUids: string[];
+		metadataRows?: Record<string, unknown>[];
 		onClose: () => void;
 		onStarted: (jobId: string) => void;
 	}
 
-	let { open, memberOusUids, onClose, onStarted }: Props = $props();
+	let { open, memberOusUids, metadataRows = [], onClose, onStarted }: Props = $props();
 
 	// State
 	let resolving = $state(false);
@@ -23,6 +24,12 @@
 	let destination = $state('/host_home/Downloads');
 	let maxParallel = $state(3);
 	let extractTar = $state(false);
+	let unpackMs = $state(false);
+	let generateCalibratedVisibilities = $state(false);
+	let cleanIntermediateFiles = $state(false);
+	let archiveOutputRoot = $state('');
+	let casaDataRoot = $state('');
+	let skipCasaDataUpdate = $state(false);
 
 	let diskSpace = $state<DiskSpaceInfo | null>(null);
 	let diskSpaceLoading = $state(false);
@@ -33,6 +40,20 @@
 
 	$effect(() => {
 		logger.debug({ productFilter }, 'Product filter changed');
+	});
+
+	$effect(() => {
+		if (generateCalibratedVisibilities) {
+			unpackMs = true;
+			extractTar = true;
+			productFilter = 'all';
+		}
+		if (unpackMs) {
+			extractTar = true;
+		}
+		if (!generateCalibratedVisibilities) {
+			cleanIntermediateFiles = false;
+		}
 	});
 
 	// Directory browser state
@@ -104,6 +125,12 @@
 			startError = '';
 			productFilter = 'all';
 			extractTar = false;
+			unpackMs = false;
+			generateCalibratedVisibilities = false;
+			cleanIntermediateFiles = false;
+			archiveOutputRoot = '';
+			casaDataRoot = '';
+			skipCasaDataUpdate = false;
 			browserOpen = false;
 			browseResult = null;
 			browseError = '';
@@ -139,7 +166,18 @@
 	}
 
 	async function startDownload() {
-		logger.info({ productFilter, destination, maxParallel, extractTar, fileCount: filteredInfo.count }, 'Starting download');
+		logger.info(
+			{
+				productFilter,
+				destination,
+				maxParallel,
+				extractTar,
+				unpackMs,
+				generateCalibratedVisibilities,
+				fileCount: filteredInfo.count
+			},
+			'Starting download'
+		);
 		starting = true;
 		startError = '';
 		try {
@@ -148,7 +186,14 @@
 				productFilter,
 				destination,
 				maxParallel,
-				extractTar
+				extractTar,
+				unpackMs,
+				generateCalibratedVisibilities,
+				cleanIntermediateFiles,
+				archiveOutputRoot,
+				casaDataRoot,
+				skipCasaDataUpdate,
+				selectedMetadata: metadataRows
 			});
 			logger.info({ jobId: resp.job_id }, 'Download job created');
 			onStarted(resp.job_id);
@@ -305,11 +350,14 @@
 							type="range"
 							id="max-parallel"
 							min="1"
-							max="8"
+							max="30"
 							bind:value={maxParallel}
 							class="w-full"
 						/>
-						<p class="text-xs text-gray-500">{maxParallel} simultaneous files</p>
+						<p class="text-xs text-gray-500">
+							{maxParallel} simultaneous files (load is balanced across the ESO, NRAO and NAOJ
+							ALMA mirrors, capped at 10 per mirror)
+						</p>
 					</div>
 
 					<!-- Extract tar archives -->
@@ -317,6 +365,7 @@
 						<input
 							type="checkbox"
 							bind:checked={extractTar}
+							disabled={unpackMs || generateCalibratedVisibilities}
 							class="rounded border-gray-300"
 						/>
 						<span class="text-sm text-gray-700">Extract tar archives after download</span>
@@ -324,6 +373,58 @@
 					<p class="text-xs text-gray-500 -mt-3 ml-6">
 						ALMA delivers data as .tar bundles. Enable this to automatically extract FITS files and remove the archives.
 					</p>
+
+					<div class="space-y-3 rounded-md border border-gray-200 p-3">
+						<p class="text-sm font-medium text-gray-800">MeasurementSet products</p>
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input
+								type="checkbox"
+								bind:checked={unpackMs}
+								disabled={generateCalibratedVisibilities}
+								class="rounded border-gray-300"
+							/>
+							<span class="text-sm text-gray-700">Create raw MeasurementSets</span>
+						</label>
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input
+								type="checkbox"
+								bind:checked={generateCalibratedVisibilities}
+								class="rounded border-gray-300"
+							/>
+							<span class="text-sm text-gray-700">Create calibrated visibilities</span>
+						</label>
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input
+								type="checkbox"
+								bind:checked={cleanIntermediateFiles}
+								disabled={!generateCalibratedVisibilities}
+								class="rounded border-gray-300"
+							/>
+							<span class="text-sm text-gray-700">Keep only split calibrated MS products</span>
+						</label>
+						<div class="grid gap-3 sm:grid-cols-2">
+							<input
+								type="text"
+								bind:value={archiveOutputRoot}
+								class="rounded-md border border-gray-300 px-3 py-2 text-sm"
+								placeholder="Archive output root (optional)"
+							/>
+							<input
+								type="text"
+								bind:value={casaDataRoot}
+								class="rounded-md border border-gray-300 px-3 py-2 text-sm"
+								placeholder="CASA data root (optional)"
+							/>
+						</div>
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input
+								type="checkbox"
+								bind:checked={skipCasaDataUpdate}
+								class="rounded border-gray-300"
+							/>
+							<span class="text-sm text-gray-700">Skip CASA runtime data update</span>
+						</label>
+					</div>
 
 					<!-- Errors -->
 					{#if startError}

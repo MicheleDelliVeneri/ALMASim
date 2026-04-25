@@ -57,6 +57,26 @@ def init_db():
                 conn.execute(text("ALTER TABLE download_jobs ADD COLUMN member_ous_uids TEXT NOT NULL DEFAULT ''"))
             if "product_filter" not in cols:
                 conn.execute(text("ALTER TABLE download_jobs ADD COLUMN product_filter VARCHAR(20) NOT NULL DEFAULT 'all'"))
+            if "metadata_json" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '[]'"))
+            if "unpack_ms" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN unpack_ms BOOLEAN NOT NULL DEFAULT FALSE"))
+            if "generate_calibrated_visibilities" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN generate_calibrated_visibilities BOOLEAN NOT NULL DEFAULT FALSE"))
+            if "clean_intermediate_files" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN clean_intermediate_files BOOLEAN NOT NULL DEFAULT FALSE"))
+            if "archive_output_root" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN archive_output_root TEXT"))
+            if "casa_data_root" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN casa_data_root TEXT"))
+            if "skip_casa_data_update" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN skip_casa_data_update BOOLEAN NOT NULL DEFAULT FALSE"))
+            if "raw_measurement_sets" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN raw_measurement_sets TEXT NOT NULL DEFAULT '[]'"))
+            if "calibrated_measurement_sets" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN calibrated_measurement_sets TEXT NOT NULL DEFAULT '[]'"))
+            if "manifest_path" not in cols:
+                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN manifest_path TEXT"))
 
 
 def get_db() -> Generator[Session, None, None]:

@@ -1,10 +1,11 @@
 <script lang="ts">
-	import type { DownloadJobSummary, DownloadJobStatus } from '$lib/api/download';
+	import type { DownloadJobSummary } from '$lib/api/download';
 	import { downloadApi } from '$lib/api/download';
 	import DownloadProgress from '$lib/components/metadata/DownloadProgress.svelte';
 	import { createLogger } from '$lib/logger';
 
 	const logger = createLogger('routes/data');
+	const RESULTS_CACHE_KEY = 'almasim:metadata-results';
 
 	let jobs = $state<DownloadJobSummary[]>([]);
 	let loading = $state(true);
@@ -15,6 +16,7 @@
 
 	// Re-download state
 	let redownloading = $state<Set<string>>(new Set());
+	let loadingMetadata = $state<Set<string>>(new Set());
 
 	// Poll interval for active jobs
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -88,6 +90,27 @@
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to delete job';
 			logger.error({ err: e, jobId }, 'Failed to delete job');
+		}
+	}
+
+	async function loadMetadata(job: DownloadJobSummary) {
+		logger.info({ jobId: job.job_id }, 'Load stored metadata requested');
+		const next = new Set(loadingMetadata);
+		next.add(job.job_id);
+		loadingMetadata = next;
+		try {
+			const metadata = await downloadApi.loadJobMetadata(job.job_id);
+			if (typeof window !== 'undefined') {
+				window.localStorage.setItem(RESULTS_CACHE_KEY, JSON.stringify(metadata));
+				window.location.href = '/metadata';
+			}
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load metadata for this download';
+			logger.error({ err: e, jobId: job.job_id }, 'Failed to load stored metadata');
+		} finally {
+			const updated = new Set(loadingMetadata);
+			updated.delete(job.job_id);
+			loadingMetadata = updated;
 		}
 	}
 
@@ -267,6 +290,17 @@
 											>
 												{redownloading.has(job.job_id) ? 'Starting…' : 'Re-download'}
 											</button>
+											{#if job.has_metadata}
+												<button
+													type="button"
+													class="rounded-md border border-indigo-300 px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+													disabled={loadingMetadata.has(job.job_id)}
+													title="Load the metadata associated with this download"
+													onclick={() => loadMetadata(job)}
+												>
+													{loadingMetadata.has(job.job_id) ? 'Loading…' : `Metadata (${job.metadata_count})`}
+												</button>
+											{/if}
 											<button
 												type="button"
 												class="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
