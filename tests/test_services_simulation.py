@@ -39,7 +39,7 @@ def test_from_metadata_row_populates_required_fields(tmp_path):
     assert params.rest_frequency == row["rest_frequency"]
     assert params.n_pix is None
     assert params.n_channels is None
-    assert params.save_mode == "npz"
+    assert params.save_mode == "fits"
     assert params.ncpu >= 1
     assert params.main_dir == str(main_dir.resolve())
     assert params.output_dir == str(tmp_path.resolve())

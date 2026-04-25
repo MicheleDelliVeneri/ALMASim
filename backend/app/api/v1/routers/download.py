@@ -15,6 +15,7 @@ from app.schemas.download import (
     DownloadJobSummary,
     FileStatus,
     ResolveProductsRequest,
+    RedownloadRequest,
     ResolveProductsResponse,
     StartDownloadRequest,
     StartDownloadResponse,
@@ -366,6 +367,12 @@ async def get_download_job(job_id: str):
             manifest_path=job.manifest_path,
             has_metadata=bool(job.metadata_rows),
             metadata_count=len(job.metadata_rows),
+            unpack_ms=job.unpack_ms,
+            generate_calibrated_visibilities=job.generate_calibrated_visibilities,
+            clean_intermediate_files=job.clean_intermediate_files,
+            archive_output_root=job.archive_output_root,
+            casa_data_root=job.casa_data_root,
+            skip_casa_data_update=job.skip_casa_data_update,
             files=[
                 FileStatus(
                     filename=f.filename,
@@ -405,6 +412,12 @@ async def get_download_job(job_id: str):
         manifest_path=rec.manifest_path,
         has_metadata=_metadata_stats(rec.metadata_json)[0],
         metadata_count=_metadata_stats(rec.metadata_json)[1],
+        unpack_ms=bool(rec.unpack_ms),
+        generate_calibrated_visibilities=bool(rec.generate_calibrated_visibilities),
+        clean_intermediate_files=bool(rec.clean_intermediate_files),
+        archive_output_root=rec.archive_output_root,
+        casa_data_root=rec.casa_data_root,
+        skip_casa_data_update=bool(rec.skip_casa_data_update),
         files=[
             FileStatus(
                 filename=f.filename,
@@ -479,6 +492,7 @@ async def cancel_download_job(job_id: str):
 async def redownload_job(
     job_id: str,
     background_tasks: BackgroundTasks,
+    body: RedownloadRequest = RedownloadRequest(),
 ):
     """Re-download a previous job using the stored file records.
 
@@ -533,6 +547,29 @@ async def redownload_job(
             detail="No file records or UIDs stored for this job – cannot re-download",
         )
 
+    max_parallel = body.max_parallel if body.max_parallel is not None else 3
+    unpack_ms = body.unpack_ms if body.unpack_ms is not None else bool(rec.unpack_ms)
+    generate_calibrated = (
+        body.generate_calibrated_visibilities
+        if body.generate_calibrated_visibilities is not None
+        else bool(rec.generate_calibrated_visibilities)
+    )
+    clean_intermediate = (
+        body.clean_intermediate_files
+        if body.clean_intermediate_files is not None
+        else bool(rec.clean_intermediate_files)
+    )
+    extract_tar = (
+        body.extract_tar if body.extract_tar is not None else bool(rec.unpack_ms) or bool(rec.generate_calibrated_visibilities)
+    ) or unpack_ms or generate_calibrated
+    archive_output_root = body.archive_output_root if body.archive_output_root is not None else rec.archive_output_root
+    casa_data_root = body.casa_data_root if body.casa_data_root is not None else rec.casa_data_root
+    skip_casa_data_update = (
+        body.skip_casa_data_update
+        if body.skip_casa_data_update is not None
+        else bool(rec.skip_casa_data_update)
+    )
+
     total_bytes = sum(p.content_length for p in products)
     new_job_id = str(uuid.uuid4())
     job = DownloadJob(
@@ -541,12 +578,12 @@ async def redownload_job(
         member_ous_uids=uids,
         metadata_rows=_json_list(rec.metadata_json),
         product_filter=rec.product_filter or "all",
-        unpack_ms=bool(rec.unpack_ms),
-        generate_calibrated_visibilities=bool(rec.generate_calibrated_visibilities),
-        clean_intermediate_files=bool(rec.clean_intermediate_files),
-        archive_output_root=rec.archive_output_root,
-        casa_data_root=rec.casa_data_root,
-        skip_casa_data_update=bool(rec.skip_casa_data_update),
+        unpack_ms=unpack_ms or generate_calibrated,
+        generate_calibrated_visibilities=generate_calibrated,
+        clean_intermediate_files=clean_intermediate,
+        archive_output_root=archive_output_root,
+        casa_data_root=casa_data_root,
+        skip_casa_data_update=skip_casa_data_update,
         total_files=len(products),
         total_bytes=total_bytes,
     )
@@ -557,14 +594,14 @@ async def redownload_job(
         job_id=new_job_id,
         products=products,
         destination=rec.destination,
-        max_parallel=3,
-        extract_tar=bool(rec.unpack_ms) or bool(rec.generate_calibrated_visibilities),
-        unpack_ms=bool(rec.unpack_ms),
-        generate_calibrated_visibilities=bool(rec.generate_calibrated_visibilities),
-        clean_intermediate_files=bool(rec.clean_intermediate_files),
-        archive_output_root=rec.archive_output_root,
-        casa_data_root=rec.casa_data_root,
-        skip_casa_data_update=bool(rec.skip_casa_data_update),
+        max_parallel=max_parallel,
+        extract_tar=extract_tar,
+        unpack_ms=unpack_ms or generate_calibrated,
+        generate_calibrated_visibilities=generate_calibrated,
+        clean_intermediate_files=clean_intermediate,
+        archive_output_root=archive_output_root,
+        casa_data_root=casa_data_root,
+        skip_casa_data_update=skip_casa_data_update,
     )
 
     return StartDownloadResponse(

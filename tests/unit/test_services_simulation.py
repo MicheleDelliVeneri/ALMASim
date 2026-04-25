@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import astropy.io.fits as fits
 import h5py
 import numpy as np
 import pandas as pd
@@ -264,7 +265,7 @@ def test_simulation_params_defaults(tmp_path, sample_metadata_row_dict):
 
     assert params.source_type == "point"  # Default
     assert params.snr is None  # Auto-derived by default
-    assert params.save_mode == "npz"  # Default
+    assert params.save_mode == "fits"  # Default
     assert params.inject_serendipitous is False  # Default
     assert params.remote is False  # Default
     assert params.ncpu >= 1  # Should use CPU count or 1
@@ -386,7 +387,7 @@ def test_run_simulation_point_source(
     mock_pointlike.insert.return_value = mock_datacube
     mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
     mock_skymodels.DataCube.return_value = mock_datacube
-    mock_skymodels.get_datacube_header.return_value = Mock()
+    mock_skymodels.get_datacube_header.return_value = fits.Header()
 
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
@@ -423,6 +424,7 @@ def test_run_simulation_point_source(
         hubble_dir=tmp_path / "hubble",
         project_name="test",
         source_type="point",
+        ms_save_mode="none",
     )
 
     results = run_simulation(
@@ -476,7 +478,7 @@ def test_run_simulation_gaussian_source(
     mock_gaussian.insert.return_value = mock_datacube
     mock_skymodels.GaussianSkyModel.return_value = mock_gaussian
     mock_skymodels.DataCube.return_value = mock_datacube
-    mock_skymodels.get_datacube_header.return_value = Mock()
+    mock_skymodels.get_datacube_header.return_value = fits.Header()
 
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
@@ -512,6 +514,7 @@ def test_run_simulation_gaussian_source(
         hubble_dir=tmp_path / "hubble",
         project_name="test",
         source_type="gaussian",
+        ms_save_mode="none",
     )
 
     results = run_simulation(
@@ -813,7 +816,7 @@ def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
     mock_pointlike.insert.return_value = mock_datacube
     mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
     mock_skymodels.DataCube.return_value = mock_datacube
-    mock_skymodels.get_datacube_header.return_value = Mock()
+    mock_skymodels.get_datacube_header.return_value = fits.Header()
 
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
@@ -849,6 +852,7 @@ def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
         hubble_dir=tmp_path / "hubble",
         project_name="test",
         source_type="point",
+        ms_save_mode="none",
     )
 
     run_simulation(
@@ -1074,7 +1078,7 @@ def test_run_simulation_multiconfig_single_pointing(
     mock_pointlike.insert.return_value = mock_datacube
     mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
     mock_skymodels.DataCube.return_value = mock_datacube
-    mock_skymodels.get_datacube_header.return_value = Mock()
+    mock_skymodels.get_datacube_header.return_value = fits.Header()
 
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.side_effect = [
@@ -1135,6 +1139,7 @@ def test_run_simulation_multiconfig_single_pointing(
                 "total_time_s": 2400.0,
             },
         ],
+        ms_save_mode="none",
     )
 
     result = run_simulation(params)
@@ -1180,7 +1185,7 @@ def test_run_simulation_p1_tp_and_reconstruction_outputs(
     mock_pointlike.insert.return_value = mock_datacube
     mock_skymodels.PointlikeSkyModel.return_value = mock_pointlike
     mock_skymodels.DataCube.return_value = mock_datacube
-    mock_skymodels.get_datacube_header.return_value = Mock()
+    mock_skymodels.get_datacube_header.return_value = fits.Header()
 
     mock_interferometer = Mock()
     mock_interferometer.run_interferometric_sim.return_value = {
@@ -1247,6 +1252,7 @@ def test_run_simulation_p1_tp_and_reconstruction_outputs(
         ],
         persist=False,
         save_mode="memory",
+        ms_save_mode="none",
     )
 
     result = run_simulation(params)
@@ -1256,3 +1262,297 @@ def test_run_simulation_p1_tp_and_reconstruction_outputs(
     assert result["int_image_cube"] is not None
     assert result["tp_image_cube"] is not None
     assert result["tp_int_image_cube"] is not None
+
+
+# ===========================================================================
+# Additional tests for uncovered branches in simulation.py
+# ===========================================================================
+
+
+@pytest.mark.unit
+def test_generate_background_cube_none_mode_returns_zeros():
+    """Background cube in 'none' mode should be all zeros."""
+    cube = generate_background_cube(
+        mode="none",
+        n_pix=16,
+        n_channels=4,
+        cell_size_arcsec=0.1,
+        channel_frequencies_hz=np.linspace(240e9, 250e9, 4),
+        cont_sens_jy=1e-4,
+    )
+    assert cube.shape == (4, 16, 16)
+    assert np.all(cube == 0.0)
+
+
+@pytest.mark.unit
+def test_generate_background_cube_zero_level_returns_zeros():
+    """Background cube with level=0 should return zeros regardless of mode."""
+    cube = generate_background_cube(
+        mode="combined",
+        n_pix=16,
+        n_channels=4,
+        cell_size_arcsec=0.1,
+        channel_frequencies_hz=np.linspace(240e9, 250e9, 4),
+        cont_sens_jy=1e-4,
+        level=0.0,
+    )
+    assert np.all(cube == 0.0)
+
+
+@pytest.mark.unit
+def test_generate_background_cube_dusty_diffuse_mode():
+    """Background cube in 'dusty_diffuse' mode has non-zero values."""
+    cube = generate_background_cube(
+        mode="dusty_diffuse",
+        n_pix=16,
+        n_channels=4,
+        cell_size_arcsec=0.1,
+        channel_frequencies_hz=np.linspace(240e9, 250e9, 4),
+        cont_sens_jy=1e-4,
+        level=1.0,
+        seed=42,
+    )
+    assert cube.shape == (4, 16, 16)
+    assert float(np.sum(cube)) > 0.0
+
+
+@pytest.mark.unit
+def test_generate_background_cube_blank_field_dsfg_mode():
+    """Background cube in 'blank_field_dsfg' mode has non-zero values."""
+    cube = generate_background_cube(
+        mode="blank_field_dsfg",
+        n_pix=16,
+        n_channels=4,
+        cell_size_arcsec=0.1,
+        channel_frequencies_hz=np.linspace(240e9, 250e9, 4),
+        cont_sens_jy=1e-4,
+        level=1.0,
+        seed=7,
+    )
+    assert cube.shape == (4, 16, 16)
+    assert float(np.sum(cube)) >= 0.0
+
+
+@pytest.mark.unit
+def test_resolve_source_pixel_position_clips_to_bounds():
+    """Pixel position is clipped within [0, n_pix-1]."""
+    wcs = MagicMock()
+    sub_wcs = MagicMock()
+    # Return positions that exceed bounds
+    sub_wcs.wcs_world2pix.return_value = (-100.0, 200.0, 0.0)
+    wcs.sub.return_value = sub_wcs
+
+    pos_x, pos_y = resolve_source_pixel_position(
+        wcs=wcs,
+        ra=0.0,
+        dec=0.0,
+        central_freq=0.0,
+        n_pix=64,
+        cell_size_arcsec=0.1,
+    )
+
+    assert pos_x == pytest.approx(0.0)  # clipped from -100
+    assert pos_y == pytest.approx(63.0)  # clipped from 200
+
+
+@pytest.mark.unit
+def test_simulation_params_with_line_sens_10kms(tmp_path, sample_metadata_row_dict):
+    """SimulationParams stores line_sens_10kms when present in metadata."""
+    sample_metadata_row_dict["Line_sens_10kms_mJybeam"] = 0.05
+
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+    )
+
+    assert params.line_sens_10kms == pytest.approx(0.05)
+
+
+@pytest.mark.unit
+def test_simulation_params_with_background_params(tmp_path, sample_metadata_row_dict):
+    """SimulationParams correctly stores background configuration."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        background_mode="combined",
+        background_level=2.5,
+        background_seed=99,
+    )
+
+    assert params.background_mode == "combined"
+    assert params.background_level == pytest.approx(2.5)
+    assert params.background_seed == 99
+
+
+@pytest.mark.unit
+def test_simulation_params_external_skymodel_paths(tmp_path, sample_metadata_row_dict):
+    """SimulationParams resolves external skymodel paths to absolute paths."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        external_skymodel_path=tmp_path / "model.fits",
+        external_component_table_path=tmp_path / "table.csv",
+        external_alignment_mode="observation",
+        external_header_mode="preserve",
+    )
+
+    assert params.external_skymodel_path is not None
+    assert Path(params.external_skymodel_path).is_absolute()
+    assert params.external_alignment_mode == "observation"
+    assert params.external_header_mode == "preserve"
+
+
+@pytest.mark.unit
+def test_simulation_params_ms_export_config(tmp_path, sample_metadata_row_dict):
+    """SimulationParams stores MS export configuration."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        ms_export=True,
+        ms_export_dir=tmp_path / "ms_exports",
+        ms_save_mode="msv2",
+    )
+
+    assert params.ms_export is True
+    assert params.ms_export_dir is not None
+    assert Path(params.ms_export_dir).is_absolute()
+    assert params.ms_save_mode == "msv2"
+
+
+@pytest.mark.unit
+def test_write_ml_dataset_shard_creates_parent_dirs(tmp_path):
+    """write_ml_dataset_shard creates parent directories if needed."""
+    output_path = tmp_path / "deep" / "nested" / "sample_0001.h5"
+    clean_cube = np.ones((2, 4, 4), dtype=np.float32)
+    dirty_cube = np.zeros((2, 4, 4), dtype=np.float32)
+    dirty_vis = np.zeros((2, 4, 4), dtype=np.complex64)
+    uv_mask_cube = np.ones((2, 4, 4), dtype=np.uint8)
+
+    result = write_ml_dataset_shard(
+        output_path,
+        clean_cube=clean_cube,
+        dirty_cube=dirty_cube,
+        dirty_vis=dirty_vis,
+        uv_mask_cube=uv_mask_cube,
+        metadata={"source_name": "test"},
+    )
+    assert Path(result).exists()
+
+
+@pytest.mark.unit
+@patch("almasim.services.simulation.export_results")
+@patch("almasim.services.simulation.simulate_observation")
+@patch("almasim.services.simulation.generate_clean_cube")
+def test_run_simulation_with_background_mode(
+    mock_generate_clean_cube,
+    mock_simulate_observation,
+    mock_export_results,
+    tmp_path,
+    sample_metadata_row_dict,
+    main_dir,
+):
+    """run_simulation handles background_mode='combined' without error."""
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        save_mode="memory",
+        persist=False,
+        background_mode="combined",
+        background_level=1.0,
+    )
+
+    mock_generate_clean_cube.return_value = Mock()
+    mock_simulate_observation.return_value = {
+        "model_cube": np.ones((2, 2, 2), dtype=np.float32),
+        "dirty_cube": np.zeros((2, 2, 2), dtype=np.float32),
+        "dirty_vis": np.zeros((2, 2, 2), dtype=np.complex64),
+        "uv_mask_cube": np.ones((2, 2, 2), dtype=np.uint8),
+    }
+    mock_export_results.return_value = {"status": "ok"}
+
+    result = run_simulation(params)
+    assert result == {"status": "ok"}
+
+
+@pytest.mark.unit
+def test_simulation_params_ncpu_explicit(tmp_path, sample_metadata_row_dict):
+    """Explicit ncpu overrides the cpu_count default."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        ncpu=4,
+    )
+
+    assert params.ncpu == 4
+
+
+@pytest.mark.unit
+def test_simulation_params_ground_temperature(tmp_path, sample_metadata_row_dict):
+    """SimulationParams stores custom ground_temperature_k."""
+    main_dir = tmp_path / "main"
+    main_dir.mkdir()
+
+    params = SimulationParams.from_metadata_row(
+        sample_metadata_row_dict,
+        idx=0,
+        main_dir=main_dir,
+        output_dir=tmp_path / "output",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "galaxy_zoo",
+        hubble_dir=tmp_path / "hubble",
+        project_name="test",
+        ground_temperature_k=280.0,
+    )
+
+    assert params.ground_temperature_k == pytest.approx(280.0)

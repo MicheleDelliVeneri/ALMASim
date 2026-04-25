@@ -245,8 +245,11 @@
 					break;
 				}
 				const result = await downloadApi.resolveProducts([uids[i]]);
-				sizeTotalBytes += result.total_size_bytes;
-				sizeTotalFiles += result.total_count;
+				sizeTotalBytes += result.products.reduce(
+					(total, product) => total + (product.content_length || 0),
+					0
+				);
+				sizeTotalFiles += result.products.length;
 				sizeResolved = i + 1;
 			}
 			if (!sizeCancelled) {

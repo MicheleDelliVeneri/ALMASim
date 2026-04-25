@@ -137,6 +137,45 @@ class StartDownloadRequest(BaseModel):
     )
 
 
+class RedownloadRequest(BaseModel):
+    """Request to re-download a previous job with new execution options."""
+
+    max_parallel: Optional[int] = Field(
+        None,
+        description="Maximum parallel download threads",
+        ge=1,
+        le=8,
+    )
+    extract_tar: Optional[bool] = Field(
+        None,
+        description="Extract tar archives after download and remove the archives",
+    )
+    unpack_ms: Optional[bool] = Field(
+        None,
+        description="Create raw MeasurementSets after re-download",
+    )
+    generate_calibrated_visibilities: Optional[bool] = Field(
+        None,
+        description="Create calibrated split MeasurementSets after re-download",
+    )
+    clean_intermediate_files: Optional[bool] = Field(
+        None,
+        description="After calibrated MS creation, keep only split calibrated products",
+    )
+    archive_output_root: Optional[str] = Field(
+        None,
+        description="Optional root directory for raw_ms and calibrated_ms outputs",
+    )
+    casa_data_root: Optional[str] = Field(
+        None,
+        description="Optional CASA runtime data directory",
+    )
+    skip_casa_data_update: Optional[bool] = Field(
+        None,
+        description="Skip CASA runtime data updates",
+    )
+
+
 class StartDownloadResponse(BaseModel):
     """Response after initiating a download job."""
 
@@ -178,6 +217,12 @@ class DownloadJobStatus(BaseModel):
     manifest_path: Optional[str] = None
     has_metadata: bool = False
     metadata_count: int = 0
+    unpack_ms: bool = False
+    generate_calibrated_visibilities: bool = False
+    clean_intermediate_files: bool = False
+    archive_output_root: Optional[str] = None
+    casa_data_root: Optional[str] = None
+    skip_casa_data_update: bool = False
 
 
 class DownloadJobSummary(BaseModel):
@@ -201,3 +246,9 @@ class DownloadJobSummary(BaseModel):
     manifest_path: Optional[str] = None
     has_metadata: bool = False
     metadata_count: int = 0
+    unpack_ms: bool = False
+    generate_calibrated_visibilities: bool = False
+    clean_intermediate_files: bool = False
+    archive_output_root: Optional[str] = None
+    casa_data_root: Optional[str] = None
+    skip_casa_data_update: bool = False

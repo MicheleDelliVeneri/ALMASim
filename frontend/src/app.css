@@ -1,3 +1,300 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+	:root {
+		color-scheme: dark;
+		--alma-bg: #0a0c10;
+		--alma-surface: #111318;
+		--alma-surface-mid: #1e2024;
+		--alma-border: #343946;
+		--alma-text: #e2e2e8;
+		--alma-text-muted: #c3c6d3;
+		--alma-text-dim: #8d909c;
+		--alma-primary: #acc7ff;
+		--alma-primary-strong: #00418c;
+		--alma-cyan: #3cd7ff;
+		--alma-red: #ff9479;
+		--alma-green: #8ff0b1;
+	}
+
+	html {
+		background: var(--alma-bg);
+	}
+
+	body {
+		min-height: 100vh;
+		background:
+			radial-gradient(circle at 18% 12%, rgba(46, 93, 169, 0.28), transparent 28rem),
+			radial-gradient(circle at 86% 6%, rgba(60, 215, 255, 0.12), transparent 24rem),
+			linear-gradient(180deg, #0a0c10 0%, #111318 48%, #0c0e12 100%);
+		color: var(--alma-text);
+		font-family:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	}
+
+	h1,
+	h2,
+	h3,
+	.font-semibold,
+	.font-bold {
+		font-family:
+			"Space Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+			"Segoe UI", sans-serif;
+		letter-spacing: 0;
+	}
+}
+
+@layer components {
+	.alma-shell {
+		background:
+			linear-gradient(rgba(172, 199, 255, 0.03) 1px, transparent 1px),
+			linear-gradient(90deg, rgba(172, 199, 255, 0.03) 1px, transparent 1px);
+		background-size: 32px 32px;
+	}
+
+	.alma-glass {
+		border: 1px solid rgba(141, 144, 156, 0.22);
+		background: rgba(17, 19, 24, 0.82);
+		backdrop-filter: blur(14px);
+	}
+
+	.alma-panel {
+		border: 1px solid var(--alma-border);
+		background: linear-gradient(180deg, rgba(30, 32, 36, 0.96), rgba(17, 19, 24, 0.96));
+	}
+
+	.alma-kicker {
+		color: var(--alma-cyan);
+		font-family:
+			"Space Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+			"Segoe UI", sans-serif;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+
+	.alma-chip {
+		border: 1px solid rgba(60, 215, 255, 0.28);
+		background: rgba(0, 65, 140, 0.26);
+		color: var(--alma-primary);
+	}
+
+	.alma-progress {
+		height: 3px;
+		background: rgba(141, 144, 156, 0.2);
+	}
+
+	.alma-progress > span {
+		display: block;
+		height: 100%;
+		background: linear-gradient(90deg, var(--alma-primary-strong), var(--alma-cyan));
+		box-shadow: 0 0 16px rgba(60, 215, 255, 0.45);
+	}
+}
+
+@layer utilities {
+	.bg-gray-50,
+	.bg-gray-100,
+	.bg-white {
+		background-color: var(--alma-surface-mid);
+	}
+
+	.bg-slate-900 {
+		background-color: rgba(12, 14, 18, 0.92);
+	}
+
+	.text-gray-900,
+	.text-gray-800,
+	.text-slate-900 {
+		color: var(--alma-text);
+	}
+
+	.text-gray-700,
+	.text-gray-600,
+	.text-slate-200 {
+		color: var(--alma-text-muted);
+	}
+
+	.text-gray-500,
+	.text-gray-400,
+	.text-slate-400 {
+		color: var(--alma-text-dim);
+	}
+
+	.border-gray-100,
+	.border-gray-200,
+	.border-gray-300,
+	.divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+	.divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+		border-color: var(--alma-border);
+	}
+
+	.shadow-sm,
+	.shadow-md,
+	.shadow-lg,
+	.shadow-xl,
+	.shadow-2xl {
+		box-shadow: 0 0 0 1px rgba(172, 199, 255, 0.04), 0 18px 42px rgba(0, 0, 0, 0.22);
+	}
+
+	input,
+	select,
+	textarea {
+		background-color: rgba(12, 14, 18, 0.72);
+		border-color: var(--alma-border);
+		color: var(--alma-text);
+	}
+
+	input:focus,
+	select:focus,
+	textarea:focus,
+	button:focus-visible,
+	a:focus-visible {
+		outline: 1px solid var(--alma-cyan);
+		outline-offset: 2px;
+		box-shadow: 0 0 0 3px rgba(60, 215, 255, 0.16);
+	}
+
+	table thead,
+	.bg-blue-50,
+	.bg-indigo-50 {
+		background-color: rgba(0, 65, 140, 0.18);
+	}
+
+	.hover\:bg-gray-50:hover,
+	.hover\:bg-white\/10:hover {
+		background-color: rgba(60, 215, 255, 0.08);
+	}
+
+	.bg-green-600,
+	.bg-blue-600,
+	.bg-indigo-600 {
+		background-color: var(--alma-primary-strong);
+	}
+
+	.hover\:bg-green-700:hover,
+	.hover\:bg-blue-700:hover,
+	.hover\:bg-indigo-700:hover {
+		background-color: #0b58ad;
+	}
+
+	.text-blue-600,
+	.text-blue-700,
+	.text-indigo-600,
+	.text-indigo-700 {
+		color: var(--alma-primary);
+	}
+
+	.bg-green-100 {
+		background-color: rgba(143, 240, 177, 0.12);
+	}
+
+	.text-green-700 {
+		color: var(--alma-green);
+	}
+
+	.bg-red-50,
+	.bg-red-100 {
+		background-color: rgba(147, 0, 10, 0.18);
+	}
+
+	.text-red-500,
+	.text-red-600,
+	.text-red-700,
+	.text-red-800 {
+		color: var(--alma-red);
+	}
+}
+
+@layer utilities {
+	.text-blue-500,
+	.text-blue-600,
+	.text-blue-700,
+	.text-blue-800,
+	.text-blue-900,
+	.text-indigo-500,
+	.text-indigo-600,
+	.text-indigo-700,
+	.text-indigo-800,
+	.text-indigo-900,
+	.hover\:text-blue-700:hover,
+	.hover\:text-blue-800:hover,
+	.hover\:text-blue-900:hover,
+	.hover\:text-indigo-700:hover,
+	.hover\:text-indigo-800:hover,
+	.hover\:text-indigo-900:hover,
+	.file\:text-blue-700::file-selector-button {
+		color: var(--alma-cyan);
+	}
+
+	.text-green-500,
+	.text-green-600,
+	.text-green-700,
+	.text-green-800,
+	.text-green-900,
+	.hover\:text-green-700:hover,
+	.hover\:text-green-800:hover,
+	.hover\:text-green-900:hover {
+		color: var(--alma-green);
+	}
+
+	.text-red-500,
+	.text-red-600,
+	.text-red-700,
+	.text-red-800,
+	.text-red-900,
+	.hover\:text-red-600:hover,
+	.hover\:text-red-700:hover,
+	.hover\:text-red-800:hover,
+	.hover\:text-red-900:hover {
+		color: var(--alma-red);
+	}
+
+	.bg-blue-50,
+	.bg-blue-100,
+	.bg-indigo-50,
+	.bg-indigo-100,
+	.hover\:bg-blue-50:hover,
+	.hover\:bg-blue-100:hover,
+	.hover\:bg-indigo-50:hover,
+	.hover\:bg-indigo-100:hover,
+	.file\:bg-blue-50::file-selector-button,
+	.hover\:file\:bg-blue-100:hover::file-selector-button {
+		background-color: rgba(60, 215, 255, 0.1);
+	}
+
+	.bg-green-50,
+	.bg-green-100 {
+		background-color: rgba(143, 240, 177, 0.1);
+	}
+
+	.bg-red-50,
+	.bg-red-100,
+	.hover\:bg-red-50:hover,
+	.hover\:bg-red-100:hover {
+		background-color: rgba(255, 148, 121, 0.11);
+	}
+
+	.border-blue-200,
+	.border-blue-300,
+	.border-indigo-200,
+	.border-indigo-300,
+	.ring-indigo-300,
+	.ring-indigo-600 {
+		border-color: rgba(60, 215, 255, 0.32);
+	}
+
+	.border-green-200,
+	.border-green-300 {
+		border-color: rgba(143, 240, 177, 0.32);
+	}
+
+	.border-red-200,
+	.border-red-300,
+	.hover\:border-red-300:hover {
+		border-color: rgba(255, 148, 121, 0.34);
+	}
+}

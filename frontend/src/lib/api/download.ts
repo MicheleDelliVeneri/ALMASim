@@ -66,6 +66,12 @@ export interface DownloadJobStatus {
 	manifest_path: string | null;
 	has_metadata: boolean;
 	metadata_count: number;
+	unpack_ms: boolean;
+	generate_calibrated_visibilities: boolean;
+	clean_intermediate_files: boolean;
+	archive_output_root: string | null;
+	casa_data_root: string | null;
+	skip_casa_data_update: boolean;
 }
 
 export interface DownloadJobSummary {
@@ -87,6 +93,12 @@ export interface DownloadJobSummary {
 	manifest_path: string | null;
 	has_metadata: boolean;
 	metadata_count: number;
+	unpack_ms: boolean;
+	generate_calibrated_visibilities: boolean;
+	clean_intermediate_files: boolean;
+	archive_output_root: string | null;
+	casa_data_root: string | null;
+	skip_casa_data_update: boolean;
 }
 
 export interface BrowseDirectoryEntry {
@@ -187,9 +199,31 @@ export const downloadApi = {
 	},
 
 	/** Re-download a previous job using stored file records */
-	redownloadJob(jobId: string): Promise<StartDownloadResponse> {
+	redownloadJob(
+		jobId: string,
+		params: {
+			maxParallel?: number;
+			extractTar?: boolean;
+			unpackMs?: boolean;
+			generateCalibratedVisibilities?: boolean;
+			cleanIntermediateFiles?: boolean;
+			archiveOutputRoot?: string;
+			casaDataRoot?: string;
+			skipCasaDataUpdate?: boolean;
+		} = {}
+	): Promise<StartDownloadResponse> {
 		return apiClient.post<StartDownloadResponse>(
-			`/api/v1/downloads/jobs/${encodeURIComponent(jobId)}/redownload`
+			`/api/v1/downloads/jobs/${encodeURIComponent(jobId)}/redownload`,
+			{
+				max_parallel: params.maxParallel,
+				extract_tar: params.extractTar,
+				unpack_ms: params.unpackMs,
+				generate_calibrated_visibilities: params.generateCalibratedVisibilities,
+				clean_intermediate_files: params.cleanIntermediateFiles,
+				archive_output_root: params.archiveOutputRoot || null,
+				casa_data_root: params.casaDataRoot || null,
+				skip_casa_data_update: params.skipCasaDataUpdate
+			}
 		);
 	},
 

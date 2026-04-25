@@ -16,6 +16,16 @@
 
 	// Re-download state
 	let redownloading = $state<Set<string>>(new Set());
+	let redownloadOptionsOpen = $state(false);
+	let redownloadTarget = $state<DownloadJobSummary | null>(null);
+	let redownloadMaxParallel = $state(3);
+	let redownloadExtractTar = $state(false);
+	let redownloadUnpackMs = $state(false);
+	let redownloadCalibrated = $state(false);
+	let redownloadCleanIntermediate = $state(false);
+	let redownloadArchiveOutputRoot = $state('');
+	let redownloadCasaDataRoot = $state('');
+	let redownloadSkipCasaDataUpdate = $state(false);
 	let loadingMetadata = $state<Set<string>>(new Set());
 
 	// Poll interval for active jobs
@@ -50,14 +60,54 @@
 		};
 	});
 
-	async function redownload(job: DownloadJobSummary) {
+	function openRedownloadOptions(job: DownloadJobSummary) {
+		logger.info({ jobId: job.job_id }, 'Re-download options opened');
+		redownloadTarget = job;
+		redownloadMaxParallel = 3;
+		redownloadUnpackMs = Boolean(job.unpack_ms || job.generate_calibrated_visibilities);
+		redownloadCalibrated = Boolean(job.generate_calibrated_visibilities);
+		redownloadExtractTar = redownloadUnpackMs || redownloadCalibrated;
+		redownloadCleanIntermediate = Boolean(job.clean_intermediate_files);
+		redownloadArchiveOutputRoot = job.archive_output_root ?? '';
+		redownloadCasaDataRoot = job.casa_data_root ?? '';
+		redownloadSkipCasaDataUpdate = Boolean(job.skip_casa_data_update);
+		redownloadOptionsOpen = true;
+	}
+
+	$effect(() => {
+		if (redownloadCalibrated) {
+			redownloadUnpackMs = true;
+			redownloadExtractTar = true;
+		}
+		if (redownloadUnpackMs) {
+			redownloadExtractTar = true;
+		}
+		if (!redownloadCalibrated) {
+			redownloadCleanIntermediate = false;
+		}
+	});
+
+	async function redownload() {
+		const job = redownloadTarget;
+		if (!job) return;
 		logger.info({ jobId: job.job_id }, 'Re-download requested');
 		const newSet = new Set(redownloading);
 		newSet.add(job.job_id);
 		redownloading = newSet;
 		try {
-			await downloadApi.redownloadJob(job.job_id);
+			await downloadApi.redownloadJob(job.job_id, {
+				maxParallel: redownloadMaxParallel,
+				extractTar: redownloadExtractTar,
+				unpackMs: redownloadUnpackMs,
+				generateCalibratedVisibilities: redownloadCalibrated,
+				cleanIntermediateFiles: redownloadCleanIntermediate,
+				archiveOutputRoot: redownloadArchiveOutputRoot,
+				casaDataRoot: redownloadCasaDataRoot,
+				skipCasaDataUpdate: redownloadSkipCasaDataUpdate
+			});
 			logger.info({ jobId: job.job_id }, 'Re-download job started');
+			redownloadOptionsOpen = false;
+			redownloadTarget = null;
 			await fetchJobs();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to start re-download';
@@ -286,7 +336,7 @@
 												class="rounded-md border border-blue-300 px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
 												disabled={redownloading.has(job.job_id)}
 												title="Download these products again (overwrites existing files)"
-												onclick={() => redownload(job)}
+												onclick={() => openRedownloadOptions(job)}
 											>
 												{redownloading.has(job.job_id) ? 'Starting…' : 'Re-download'}
 											</button>
@@ -320,3 +370,62 @@
 		{/if}
 	</div>
 </div>
+
+
+{#if redownloadOptionsOpen && redownloadTarget}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+		<div class="alma-panel w-full max-w-xl rounded-lg shadow-xl">
+			<header class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+				<div>
+					<h2 class="text-lg font-semibold text-gray-100">Re-download products</h2>
+					<p class="mt-1 text-xs text-gray-400">{redownloadTarget.total_files} files to {redownloadTarget.destination}</p>
+				</div>
+				<button type="button" class="text-gray-400 hover:text-gray-100" aria-label="Close" onclick={() => (redownloadOptionsOpen = false)}>✕</button>
+			</header>
+
+			<div class="space-y-5 px-5 py-5">
+				<div>
+					<label class="block text-sm font-medium text-gray-300" for="redownload-parallel">Parallel streams</label>
+					<input id="redownload-parallel" type="range" min="1" max="8" bind:value={redownloadMaxParallel} class="mt-2 w-full" />
+					<p class="mt-1 text-xs text-gray-500">{redownloadMaxParallel} simultaneous files</p>
+				</div>
+
+				<div class="grid gap-3 rounded border border-gray-200 p-3">
+					<label class="flex items-center gap-2 text-sm text-gray-300">
+						<input type="checkbox" bind:checked={redownloadExtractTar} disabled={redownloadUnpackMs || redownloadCalibrated} />
+						Extract tar archives
+					</label>
+					<label class="flex items-center gap-2 text-sm text-gray-300">
+						<input type="checkbox" bind:checked={redownloadUnpackMs} disabled={redownloadCalibrated} />
+						Create raw MeasurementSets
+					</label>
+					<label class="flex items-center gap-2 text-sm text-gray-300">
+						<input type="checkbox" bind:checked={redownloadCalibrated} />
+						Restore calibration and create calibrated visibilities
+					</label>
+					<label class="flex items-center gap-2 text-sm text-gray-300">
+						<input type="checkbox" bind:checked={redownloadCleanIntermediate} disabled={!redownloadCalibrated} />
+						Keep only split calibrated products
+					</label>
+				</div>
+
+				<div class="grid gap-3 sm:grid-cols-2">
+					<input type="text" bind:value={redownloadArchiveOutputRoot} class="rounded border border-gray-300 px-3 py-2 text-sm" placeholder="Archive output root (optional)" />
+					<input type="text" bind:value={redownloadCasaDataRoot} class="rounded border border-gray-300 px-3 py-2 text-sm" placeholder="CASA data root (optional)" />
+				</div>
+
+				<label class="flex items-center gap-2 text-sm text-gray-300">
+					<input type="checkbox" bind:checked={redownloadSkipCasaDataUpdate} />
+					Skip CASA runtime data update
+				</label>
+			</div>
+
+			<footer class="flex justify-end gap-3 border-t border-gray-200 px-5 py-4">
+				<button type="button" class="rounded border border-gray-300 px-4 py-2 text-sm text-gray-300 hover:bg-gray-50" onclick={() => (redownloadOptionsOpen = false)}>Cancel</button>
+				<button type="button" class="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50" disabled={redownloading.has(redownloadTarget.job_id)} onclick={redownload}>
+					{redownloading.has(redownloadTarget.job_id) ? 'Starting…' : 'Start re-download'}
+				</button>
+			</footer>
+		</div>
+	</div>
+{/if}
