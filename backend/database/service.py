@@ -358,6 +358,20 @@ class DatabaseService:
         stmt = select(QueryResult).order_by(QueryResult.created_at.desc()).limit(limit)
         return list(self.db.execute(stmt).scalars().all())
 
+    def delete_query_result(self, query_name: str) -> bool:
+        """Delete a saved query result by name. Returns True if deleted."""
+        stmt = (
+            select(QueryResult)
+            .where(QueryResult.query_name == query_name)
+            .order_by(QueryResult.created_at.desc())
+        )
+        row = self.db.execute(stmt).scalar_one_or_none()
+        if row is None:
+            return False
+        self.db.delete(row)
+        self.db.commit()
+        return True
+
     # Simulation Jobs
 
     def create_simulation_job(

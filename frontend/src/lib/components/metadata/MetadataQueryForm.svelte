@@ -226,13 +226,6 @@
 <form onsubmit={handleSubmit} class="space-y-4 rounded-lg bg-white p-6 shadow">
 	<div class="flex items-center justify-between">
 		<h2 class="text-xl font-semibold text-gray-900">Query Builder</h2>
-		<button
-			type="submit"
-			disabled={loading}
-			class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
-		>
-			{loading ? 'Running...' : 'Run Query'}
-		</button>
 	</div>
 
 	<!-- Quick-filter toggles -->
@@ -262,17 +255,6 @@
 		<!-- Science Keywords multi-select -->
 		<div data-dropdown="keyword">
 			<span class="text-sm font-medium text-gray-700">Science Keywords</span>
-			{#if selectedKeywords.length > 0}
-				<div class="mt-1 flex flex-wrap gap-1">
-					{#each selectedKeywords as kw}
-						<span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
-							{kw}
-							<button type="button" onclick={() => toggleKeyword(kw)} class="ml-0.5 text-blue-500 hover:text-blue-700" aria-label="Remove {kw}">✕</button>
-						</span>
-					{/each}
-					<button type="button" onclick={() => (selectedKeywords = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
-				</div>
-			{/if}
 			<div class="relative mt-1">
 				<input
 					type="text"
@@ -297,23 +279,24 @@
 					</div>
 				{/if}
 			</div>
-			<p class="mt-0.5 text-xs text-gray-400">{selectedKeywords.length} selected</p>
+			{#if selectedKeywords.length > 0}
+				<div class="mt-1 flex flex-wrap gap-1">
+					{#each selectedKeywords as kw}
+						<span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+							{kw}
+							<button type="button" onclick={() => toggleKeyword(kw)} class="ml-0.5 text-blue-500 hover:text-blue-700" aria-label="Remove {kw}">✕</button>
+						</span>
+					{/each}
+					<button type="button" onclick={() => (selectedKeywords = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+				</div>
+			{:else}
+				<p class="mt-0.5 text-xs text-gray-400">0 selected</p>
+			{/if}
 		</div>
 
 		<!-- Science Categories multi-select -->
 		<div data-dropdown="category">
 			<span class="text-sm font-medium text-gray-700">Science Category</span>
-			{#if selectedCategories.length > 0}
-				<div class="mt-1 flex flex-wrap gap-1">
-					{#each selectedCategories as cat}
-						<span class="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-800">
-							{cat}
-							<button type="button" onclick={() => toggleCategory(cat)} class="ml-0.5 text-purple-500 hover:text-purple-700" aria-label="Remove {cat}">✕</button>
-						</span>
-					{/each}
-					<button type="button" onclick={() => (selectedCategories = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
-				</div>
-			{/if}
 			<div class="relative mt-1">
 				<input
 					type="text"
@@ -338,7 +321,19 @@
 					</div>
 				{/if}
 			</div>
-			<p class="mt-0.5 text-xs text-gray-400">{selectedCategories.length} selected</p>
+			{#if selectedCategories.length > 0}
+				<div class="mt-1 flex flex-wrap gap-1">
+					{#each selectedCategories as cat}
+						<span class="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-800">
+							{cat}
+							<button type="button" onclick={() => toggleCategory(cat)} class="ml-0.5 text-purple-500 hover:text-purple-700" aria-label="Remove {cat}">✕</button>
+						</span>
+					{/each}
+					<button type="button" onclick={() => (selectedCategories = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+				</div>
+			{:else}
+				<p class="mt-0.5 text-xs text-gray-400">0 selected</p>
+			{/if}
 		</div>
 	</div>
 
@@ -529,17 +524,6 @@
 					<!-- Exclude Keywords -->
 					<div data-dropdown="ex-keyword">
 						<span class="text-sm font-medium text-gray-700">Exclude Science Keywords</span>
-						{#if excludeSelectedKeywords.length > 0}
-							<div class="mt-1 flex flex-wrap gap-1">
-								{#each excludeSelectedKeywords as kw}
-									<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
-										{kw}
-										<button type="button" onclick={() => toggleExcludeKeyword(kw)} class="ml-0.5 text-red-500 hover:text-red-700" aria-label="Remove {kw}">✕</button>
-									</span>
-								{/each}
-								<button type="button" onclick={() => (excludeSelectedKeywords = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
-							</div>
-						{/if}
 						<div class="relative mt-1">
 							<input
 								type="text"
@@ -564,23 +548,24 @@
 								</div>
 							{/if}
 						</div>
-						<p class="mt-0.5 text-xs text-gray-400">{excludeSelectedKeywords.length} excluded</p>
+						{#if excludeSelectedKeywords.length > 0}
+							<div class="mt-1 flex flex-wrap gap-1">
+								{#each excludeSelectedKeywords as kw}
+									<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
+										{kw}
+										<button type="button" onclick={() => toggleExcludeKeyword(kw)} class="ml-0.5 text-red-500 hover:text-red-700" aria-label="Remove {kw}">✕</button>
+									</span>
+								{/each}
+								<button type="button" onclick={() => (excludeSelectedKeywords = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+							</div>
+						{:else}
+							<p class="mt-0.5 text-xs text-gray-400">0 excluded</p>
+						{/if}
 					</div>
 
 					<!-- Exclude Categories -->
 					<div data-dropdown="ex-category">
 						<span class="text-sm font-medium text-gray-700">Exclude Science Categories</span>
-						{#if excludeSelectedCategories.length > 0}
-							<div class="mt-1 flex flex-wrap gap-1">
-								{#each excludeSelectedCategories as cat}
-									<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
-										{cat}
-										<button type="button" onclick={() => toggleExcludeCategory(cat)} class="ml-0.5 text-red-500 hover:text-red-700" aria-label="Remove {cat}">✕</button>
-									</span>
-								{/each}
-								<button type="button" onclick={() => (excludeSelectedCategories = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
-							</div>
-						{/if}
 						<div class="relative mt-1">
 							<input
 								type="text"
@@ -605,7 +590,19 @@
 								</div>
 							{/if}
 						</div>
-						<p class="mt-0.5 text-xs text-gray-400">{excludeSelectedCategories.length} excluded</p>
+						{#if excludeSelectedCategories.length > 0}
+							<div class="mt-1 flex flex-wrap gap-1">
+								{#each excludeSelectedCategories as cat}
+									<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
+										{cat}
+										<button type="button" onclick={() => toggleExcludeCategory(cat)} class="ml-0.5 text-red-500 hover:text-red-700" aria-label="Remove {cat}">✕</button>
+									</span>
+								{/each}
+								<button type="button" onclick={() => (excludeSelectedCategories = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+							</div>
+						{:else}
+							<p class="mt-0.5 text-xs text-gray-400">0 excluded</p>
+						{/if}
 					</div>
 				</div>
 
@@ -636,5 +633,15 @@
 				</div>
 			</div>
 		{/if}
+	</div>
+
+	<div class="flex justify-end pt-2">
+		<button
+			type="submit"
+			disabled={loading}
+			class="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+		>
+			{loading ? 'Running...' : 'Run Query'}
+		</button>
 	</div>
 </form>

@@ -40,6 +40,35 @@
 					<code class="rounded bg-gray-100 px-1 py-0.5 text-xs text-gray-800">{defaultPath}</code
 					>) or pick a local destination on your machine.
 				</p>
+
+				<fieldset class="space-y-2">
+					<legend class="text-sm font-medium text-gray-700">Format</legend>
+					<div class="flex items-center gap-4">
+						<label class="flex items-center gap-2 text-sm text-gray-700">
+							<input
+								type="radio"
+								name="save_format"
+								value="json"
+								checked
+								class="h-4 w-4 border-gray-300 text-gray-900 focus:ring-gray-900"
+							/>
+							JSON
+						</label>
+						<label class="flex items-center gap-2 text-sm text-gray-700">
+							<input
+								type="radio"
+								name="save_format"
+								value="csv"
+								class="h-4 w-4 border-gray-300 text-gray-900 focus:ring-gray-900"
+							/>
+							CSV
+						</label>
+					</div>
+					<p class="text-xs text-gray-500">
+						The file extension is set automatically from the chosen format.
+					</p>
+				</fieldset>
+
 				<label class="block text-sm font-medium text-gray-700" for="save_path">
 					Destination path
 					<input

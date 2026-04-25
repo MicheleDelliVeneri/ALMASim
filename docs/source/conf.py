@@ -1,53 +1,34 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# This file only contains a selection of the most common options. For a full
-# list see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Path setup --------------------------------------------------------------
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
 import os
 import sys
 
 sys.path.insert(0, os.path.abspath("../.."))
 import almasim  # noqa: E402
 
-# -- Project information -----------------------------------------------------
-
 project = "ALMASim"
-copyright = "2024, Michele Delli Veneri"
+copyright = "2024–2026, Michele Delli Veneri"
 author = "Michele Delli Veneri"
-
-# The full version, including alpha/beta/rc tags
 release = almasim.__version__
+version = ".".join(release.split(".")[:2])
 
-
-# -- General configuration ---------------------------------------------------
-
-# Add any Sphinx extension module names here, as strings. They can be
-# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
-# ones.
 extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
-    "sphinx.ext.doctest",
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
+    "sphinx_copybutton",
 ]
 
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+# Mock heavy optional deps so autodoc works on ReadTheDocs without CASA
+autodoc_mock_imports = [
+    "casatools",
+    "casatasks",
+    "casadata",
+]
 
-# List of patterns, relative to source directory, that match files and
-# directories to ignore when looking for source files.
-# This pattern also affects html_static_path and html_extra_path.
+templates_path = ["_templates"]
 exclude_patterns = []
 
 source_suffix = {
@@ -60,37 +41,35 @@ root_doc = "index"
 myst_enable_extensions = [
     "deflist",
     "fieldlist",
+    "colon_fence",
 ]
 
 suppress_warnings = [
     "myst.xref_missing",
 ]
 
-
-# -- Options for HTML output -------------------------------------------------
-
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-#
 html_theme = "sphinx_rtd_theme"
+html_static_path = ["_static"]
+html_theme_options = {
+    "navigation_depth": 3,
+    "collapse_navigation": False,
+    "sticky_navigation": True,
+    "includehidden": True,
+    "titles_only": False,
+}
+
+copybutton_prompt_text = r">>> |\.\.\. |\$ "
+copybutton_prompt_is_regexp = True
 
 
 def setup(app):
     app.add_css_file("custom.css")
 
 
-# Add any paths that contain custom static files (such as style sheets) here,
-# relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
-
 intersphinx_mapping = dict(
-    multiprocess=("https://multiprocess.readthedocs.io/en/latest/", None),
     h5py=("https://docs.h5py.org/en/stable/", None),
     scipy=("https://docs.scipy.org/doc/scipy/", None),
     numpy=("https://numpy.org/doc/stable/", None),
     matplotlib=("https://matplotlib.org/stable/", None),
     astropy=("https://docs.astropy.org/en/stable/", None),
-    swiftgalaxy=("https://swiftgalaxy.readthedocs.io/en/latest", None),
-    swiftsimio=("https://swiftsimio.readthedocs.io/en/latest", None),
 )

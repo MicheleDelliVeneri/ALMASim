@@ -140,6 +140,12 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        # Roll back any in-flight transaction so the connection is returned
+        # to the pool clean and Postgres does not log
+        # "unexpected EOF on client connection with an open transaction".
+        db.rollback()
+        raise
     finally:
         db.close()
 

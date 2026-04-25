@@ -1,0 +1,240 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.3",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "acda62bb747cbcc466e6dda29ed001ff",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"almasim-end-to-end-archive-pipeline\">ALMASim End-to-End Archive Pipeline</h1>\n<span class=\"paragraph\">This notebook walks through the full workflow:</span>\n<ol>\n<li><strong>Query</strong> ALMA metadata via TAP</li>\n<li><strong>Resolve</strong> DataLink product URLs for selected observations</li>\n<li><strong>Download</strong> raw data products (parallel, multi-mirror)</li>\n<li><strong>Unpack</strong> ASDM archives into raw MeasurementSets</li>\n<li><strong>Calibrate</strong> raw MSs using delivered calibration scripts</li>\n</ol>\n<blockquote>\n<span class=\"paragraph\"><strong>Note:</strong> Steps 4 and 5 require <code>casatools</code> and <code>casatasks</code>\n(<code>pip install \"almasim[casa]\"</code>), which are Linux-only packages.\nSteps 1\u20133 run on any platform.</span>\n</blockquote></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "020dba89b4556be6abadfe3e3ca36fc3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"configuration\">Configuration</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "ed825be6159c16450ea39007f3ceb8f5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"query-filters\">Query filters</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-0' random-id='de824104-7223-eeda-2ce0-55c16d3ddd26'><marimo-text data-initial-value='&quot;Galaxies&quot;' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Science keyword&lt;/span&gt;&lt;/span&gt;&quot;' data-placeholder='&quot;e.g. Galaxies, ISM, Star formation&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element><marimo-ui-element object-id='vblA-1' random-id='3e6cf2db-a355-81b8-2df1-972ecbb4dd65'><marimo-dropdown data-initial-value='[&quot;Band 6&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;ALMA band&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;Band 3&quot;,&quot;Band 4&quot;,&quot;Band 6&quot;,&quot;Band 7&quot;,&quot;Band 9&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='vblA-2' random-id='f0f89418-5146-b9de-1d68-9e6ca90faf46'><marimo-slider data-initial-value='10' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Metadata rows to fetch&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='50' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"download-settings\">Download settings</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-3' random-id='ea11705e-4205-a9b8-34ea-ea04e63e70a2'><marimo-slider data-initial-value='1' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Members to resolve &amp;amp; download&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='5' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='vblA-5' random-id='00a56f2b-9165-6e3c-f1b4-e90dff82d45e'><marimo-slider data-initial-value='3' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Max parallel downloads&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='6' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='vblA-4' random-id='da2f74fc-c723-02c9-7563-6d1968359c50'><marimo-text data-initial-value='&quot;examples/output/archive_pipeline&quot;' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Output directory&lt;/span&gt;&lt;/span&gt;&quot;' data-placeholder='&quot;&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element></div></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "4b23e698730b197a41de96a901e465c0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"step-1-query-alma-metadata\">Step 1 \u2014 Query ALMA Metadata</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "a931b194ca60f06890cadfd0960b5015",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Fetched 10 metadata rows.</strong></span></span>"
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Connected successfully to https://almascience.eso.org/tap\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "PKri",
+      "code_hash": "52d42b25bfc543d1b5581b37e3f48775",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='PKri-0' random-id='0af6d2a8-5575-602c-b9ff-da5125ef74ae'><marimo-table data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Metadata results&lt;/span&gt;&lt;/span&gt;&quot;' data-data='&quot;[{&#92;&quot;_marimo_row_id&#92;&quot;:0,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;MACS0429-Z1&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:246.83432745817913,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X146a/X30e&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:1,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;UVISTA-Y-002&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:212.05585702669612,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X146a/X2a6&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:2,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;XMM1-Z-151269&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:237.70831609859778,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X14d7/X1ae&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:3,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;UVISTA-J-1212&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:226.2563143303477,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X15a9/X1351&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:4,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;UVISTA-Y-879&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:223.79644071991558,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X146a/X29e&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:5,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;UVISTA-J-1212&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:220.88066715431586,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X15a9/X134d&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:6,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;XMM1-1591&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:257.93765841979416,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X146a/X2c2&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:7,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;UVISTA-Z-011&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:245.6280219006518,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X146a/X27e&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:8,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;UVISTA-Y-001&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:220.88098333327883,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X146a/X2b2&#92;&quot;},{&#92;&quot;_marimo_row_id&#92;&quot;:9,&#92;&quot;ALMA_source_name&#92;&quot;:&#92;&quot;UVISTA-Y-003&#92;&quot;,&#92;&quot;Band&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;Freq&#92;&quot;:225.34435072653707,&#92;&quot;member_ous_uid&#92;&quot;:&#92;&quot;uid://A001/X146a/X2b6&#92;&quot;}]&quot;' data-total-rows='10' data-total-columns='4' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;ALMA_source_name&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;Band&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;Freq&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;member_ous_uid&quot;,[&quot;string&quot;,&quot;str&quot;]]]' data-selection='&quot;single&quot;' data-show-filters='true' data-show-download='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-has-stable-row-id='true' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "cc3d6ff5091f6da99c68fc0a08eef0ed",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Saved: &lt;code&gt;/Users/michele.delliveneri/Documents/GitHub/ALMASim/examples/output/archive_pipeline/metadata.csv&lt;/code&gt;&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;success&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "2d386d813346d0af9308440387bec97f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"step-2-resolve-datalink-products\">Step 2 \u2014 Resolve DataLink Products</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "6e11d88255bb6e5ddd4e0524cad5a850",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Resolved <strong>4 products</strong> across 1 member OUS(s).</span>\n<span class=\"paragraph\">Saved: <code>/Users/michele.delliveneri/Documents/GitHub/ALMASim/examples/output/archive_pipeline/resolved_products.csv</code></span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "189b0e8a798a7e97b7ba7f3b3e270712",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "'DataProduct' object has no attribute 'member_ous_uid'",
+          "traceback": null
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "[DataProduct(access_url='https://almascience.eso.org/dataPortal/member.uid___A001_X146a_X30e.README.txt', uid='uid://A001/X146a/X30e', filename='member.uid___A001_X146a_X30e.README.txt', content_length=3524, content_type='text/plain', product_type='auxiliary', semantics='#documentation'), DataProduct(access_url='https://almascience.eso.org/dataPortal/2019.1.01634.L_uid___A001_X146a_X30e_001_of_001.tar', uid='uid://A001/X146a/X30e', filename='2019.1.01634.L_uid___A001_X146a_X30e_001_of_001.tar', content_length=159732736, content_type='application/x-tar', product_type='fits', semantics='#this'), DataProduct(access_url='https://almascience.eso.org/dataPortal/2019.1.01634.L_uid___A001_X146a_X30e_auxiliary.tar', uid='uid://A001/X146a/X30e', filename='2019.1.01634.L_uid___A001_X146a_X30e_auxiliary.tar', content_length=134747136, content_type='application/x-tar', product_type='auxiliary', semantics='#auxiliary'), DataProduct(access_url='https://almascience.eso.org/dataPortal/2019.1.01634.L_uid___A002_Xe407cf_X11388.asdm.sdm.tar', uid='uid://A001/X146a/X30e', filename='2019.1.01634.L_uid___A002_Xe407cf_X11388.asdm.sdm.tar', content_length=2782884864, content_type='application/x-tar', product_type='raw', semantics='#progenitor')]\n",
+          "mimetype": "text/plain"
+        },
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/jl/v5d563c1273bsr3kwg7x45006gcnmm/T/marimo_34681/__marimo__cell_RGSE_.py&quot;</span>, line <span class=\"m\">5</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"s2\">&quot;uid&quot;</span><span class=\"p\">:</span> <span class=\"n\">p</span><span class=\"o\">.</span><span class=\"n\">member_ous_uid</span><span class=\"p\">,</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">AttributeError</span>: <span class=\"n\">&#39;DataProduct&#39; object has no attribute &#39;member_ous_uid&#39;</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "1a5c5bad537a6f38eb1b9f187c01eb35",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"step-3-download-products\">Step 3 \u2014 Download Products</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "bd9a5a834f8a0e431b43918d0bed8f24",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "d3ad6e4c7d56ce5e1b631d2e3b427307",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "c91313b9ff3ccf77cc64f7b4f902804e",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "08f320fd2a6752868b49e65e27a4da73",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"step-4-unpack-asdms-into-raw-measurementsets\">Step 4 \u2014 Unpack ASDMs into Raw MeasurementSets</h2>\n<blockquote>\n<span class=\"paragraph\">Requires <code>casatools</code> + <code>casatasks</code> (<code>pip install \"almasim[casa]\"</code>).\nLinux x86-64 only.</span>\n</blockquote></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "47745726605b773c9279970f7f424800",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "620fe439d882730160f1e2d6573006a2",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "36177d4102bbf0181690821aa6b63c62",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"step-5-apply-delivered-calibration\">Step 5 \u2014 Apply Delivered Calibration</h2>\n<span class=\"paragraph\">Runs the <code>scriptForPI.py</code> calibration script delivered with the data\nand extracts the calibrated science SPWs into separate MSs.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "f69f8a6ce7f2a40d5fbfb768c852d865",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "ae68262b870b0d4145d16f911b5c062b",
+      "outputs": [],
+      "console": []
+    }
+  ]
+}

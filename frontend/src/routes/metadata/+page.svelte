@@ -4,6 +4,7 @@
 		metadataApi,
 		type MetadataQuery,
 		type MetadataResponse,
+		type QueryPreset,
 	} from '$lib/api/metadata';
 	import MetadataQueryForm from '$lib/components/metadata/MetadataQueryForm.svelte';
 	import MetadataResultsTable from '$lib/components/metadata/MetadataResultsTable.svelte';
@@ -66,12 +67,38 @@
 		data: data.data.map((row) => ({ ...row }))
 	});
 
-	const downloadMetadata = (data: MetadataResponse, path: string) => {
+	const rowsToCsv = (rows: Record<string, unknown>[]): string => {
+		if (!rows.length) return '';
+		const columnsSet = new Set<string>();
+		const columns: string[] = [];
+		for (const row of rows) {
+			for (const key of Object.keys(row)) {
+				if (!columnsSet.has(key)) {
+					columnsSet.add(key);
+					columns.push(key);
+				}
+			}
+		}
+		const escape = (val: unknown): string => {
+			if (val === null || val === undefined) return '';
+			const s = typeof val === 'string' ? val : JSON.stringify(val);
+			return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+		};
+		const header = columns.map(escape).join(',');
+		const body = rows.map((r) => columns.map((c) => escape(r[c])).join(',')).join('\n');
+		return `${header}\n${body}\n`;
+	};
+
+	const downloadMetadata = (data: MetadataResponse, path: string, format: 'json' | 'csv' = 'json') => {
 		if (typeof window === 'undefined') return;
 		const snapshot = snapshotMetadata(data);
-		const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-			type: 'application/json'
-		});
+		const extension = format === 'csv' ? '.csv' : '.json';
+		const body =
+			format === 'csv'
+				? rowsToCsv(snapshot.data)
+				: JSON.stringify(snapshot, null, 2);
+		const mime = format === 'csv' ? 'text/csv' : 'application/json';
+		const blob = new Blob([body], { type: mime });
 		const safePath = path.replace(/^[.@/\\]+/, '');
 		const sanitized =
 			safePath.length > 0 ? safePath.replace(/\s+/g, '-').replace(/[^\w./-]/g, '_') : '';
@@ -79,7 +106,8 @@
 		let fileName = segments.length
 			? segments.join('_')
 			: `metadata-results-${formatDateStamp()}`;
-		if (!fileName.endsWith('.json')) fileName += '.json';
+		fileName = fileName.replace(/\.(json|csv)$/i, '');
+		fileName += extension;
 		const link = document.createElement('a');
 		link.href = URL.createObjectURL(blob);
 		link.download = fileName;
@@ -89,10 +117,17 @@
 		URL.revokeObjectURL(link.href);
 	};
 
-	const normalizeBackendPath = (input: string) => {
+	const normalizeBackendPath = (input: string, format: 'json' | 'csv' = 'json') => {
+		const extension = format === 'csv' ? '.csv' : '.json';
 		const cleaned = input.replace(/^[./\\]+/, '').trim() || DEFAULT_METADATA_PATH;
-		if (cleaned.endsWith('.json')) return cleaned;
-		return `${cleaned.replace(/\/$/, '')}/metadata-results.json`;
+		// Strip any existing json/csv extension so the format selector wins.
+		const withoutExt = cleaned.replace(/\.(json|csv)$/i, '');
+		// If the user provided no leaf filename (just a directory), append the default name.
+		const hasFileLeaf = /[^/]+$/.test(withoutExt) && !withoutExt.endsWith('/');
+		const base = hasFileLeaf
+			? withoutExt
+			: `${withoutExt.replace(/\/$/, '')}/metadata-results`;
+		return `${base}${extension}`;
 	};
 
 	const parseCsv = (input: string): Array<Record<string, string>> => {
@@ -182,6 +217,7 @@
 		error: string;
 		pollTimer: ReturnType<typeof setTimeout> | null;
 		page: number;
+		query: MetadataQuery;
 	};
 
 	let scienceTypes = $state<{ keywords: string[]; categories: string[] } | null>(null);
@@ -200,6 +236,15 @@
 	let saveFormRef = $state<HTMLFormElement>();
 	let localSaveHandle: FileSystemFileHandle | null = null;
 	let initialLoading = $state(true);
+
+	// Query presets
+	let presets = $state<QueryPreset[]>([]);
+	let presetsLoading = $state(false);
+	let presetSaveOpen = $state(false);
+	let presetSaveName = $state('');
+	let presetSaveDesc = $state('');
+	let presetSaving = $state(false);
+	let presetSaveForJobId = $state<string | null>(null);
 
 	// Download state
 	let downloadDialogOpen = $state(false);
@@ -248,7 +293,67 @@
 			statusMessage = `Loaded cached metadata (${cached.count ?? cached.data.length} rows)`;
 			logger.debug({ rowCount: cached.count ?? cached.data.length }, 'Restored metadata from cache');
 		}
+
+		await loadPresets();
 	});
+
+	async function loadPresets() {
+		presetsLoading = true;
+		try {
+			const resp = await metadataApi.listPresets();
+			presets = resp.presets;
+		} catch (err) {
+			logger.error({ err }, 'Failed to load query presets');
+		} finally {
+			presetsLoading = false;
+		}
+	}
+
+	function openPresetSave(jobId: string) {
+		presetSaveForJobId = jobId;
+		presetSaveName = '';
+		presetSaveDesc = '';
+		presetSaveOpen = true;
+	}
+
+	async function handleSavePreset() {
+		if (!presetSaveName.trim()) return;
+		const job = jobs.find((j) => j.id === presetSaveForJobId);
+		if (!job) return;
+		presetSaving = true;
+		try {
+			const saved = await metadataApi.savePreset({
+				name: presetSaveName.trim(),
+				description: presetSaveDesc.trim(),
+				filters: job.query,
+				result_count: job.rows.length,
+			});
+			presets = [saved, ...presets.filter((p) => p.name !== saved.name)];
+			statusMessage = `Preset "${saved.name}" saved.`;
+			presetSaveOpen = false;
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to save preset';
+			logger.error({ err }, 'Failed to save query preset');
+		} finally {
+			presetSaving = false;
+		}
+	}
+
+	function applyPreset(preset: QueryPreset) {
+		runQuery(preset.filters);
+		statusMessage = `Running preset "${preset.name}"…`;
+	}
+
+	async function handleDeletePreset(name: string) {
+		try {
+			await metadataApi.deletePreset(name);
+			presets = presets.filter((p) => p.name !== name);
+			statusMessage = `Preset "${name}" deleted.`;
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to delete preset';
+			logger.error({ err, name }, 'Failed to delete query preset');
+		}
+	}
 
 	async function runQuery(query: MetadataQuery) {
 		starting = true;
@@ -275,11 +380,23 @@
 			error: '',
 			pollTimer: null,
 			page: 0,
+			// Use $state.snapshot to get a plain object — structuredClone trips on
+			// Svelte 5 reactive proxies in some cases.
+			query: $state.snapshot(query) as MetadataQuery,
 		};
 		jobs = [...jobs, job];
 		starting = false;
 
 		const PAGE_SIZE = 500;
+		// Poll cadence — fast while rows are streaming, slow while waiting on TAP.
+		const FAST_DELAY = 250;
+		const IDLE_BASE_DELAY = 1500;
+		const IDLE_MAX_DELAY = 8000;
+		// Stop polling if TAP gives us no new rows for this long (10 minutes).
+		const HANG_TIMEOUT_MS = 10 * 60 * 1000;
+
+		let idlePolls = 0;
+		let lastProgressAt = Date.now();
 
 		async function pollNext() {
 			// Read latest job state
@@ -297,9 +414,27 @@
 
 				const newRows = current.rows.concat(pageData.rows);
 				const newPage = pageData.rows.length > 0 ? current.page + 1 : current.page;
-				const msg = pageData.done
-					? `Done — ${newRows.length} rows`
-					: `Fetching… ${newRows.length} rows`;
+				const totalKnown = pageData.total_fetched ?? newRows.length;
+				const phase = pageData.status ?? 'running';
+
+				// Reset / advance the hang detector based on row progress.
+				if (pageData.rows.length > 0) {
+					idlePolls = 0;
+					lastProgressAt = Date.now();
+				} else {
+					idlePolls += 1;
+				}
+
+				let msg: string;
+				if (pageData.done) {
+					msg = `Done — ${newRows.length} rows`;
+				} else if (phase === 'running' && totalKnown === 0) {
+					msg = 'Querying ALMA TAP…';
+				} else if (idlePolls > 2 && phase === 'running') {
+					msg = `Waiting on ALMA TAP… ${newRows.length} of ${totalKnown} rows so far`;
+				} else {
+					msg = `Fetching… ${newRows.length} of ${totalKnown} rows`;
+				}
 
 				if (pageData.done) {
 					updateJob(queryId, { rows: newRows, page: newPage, status: 'done', message: msg, pollTimer: null });
@@ -311,10 +446,35 @@
 					return;
 				}
 
-				const delay = pageData.rows.length >= PAGE_SIZE ? 200 : 1500;
+				// Safety net: stop polling if we've made no progress for too long.
+				if (Date.now() - lastProgressAt > HANG_TIMEOUT_MS) {
+					updateJob(queryId, {
+						status: 'error',
+						error: 'TAP query timed out (no new rows for over 10 minutes).',
+						pollTimer: null,
+					});
+					logger.warn(
+						{ queryId, totalKnown, idlePolls },
+						'Stopping poll loop after hang timeout'
+					);
+					return;
+				}
+
+				// Backoff: fast while rows are flowing, exponential while waiting on TAP.
+				let delay: number;
+				if (pageData.rows.length >= PAGE_SIZE) {
+					delay = FAST_DELAY;
+				} else if (pageData.rows.length > 0) {
+					delay = IDLE_BASE_DELAY;
+				} else {
+					delay = Math.min(IDLE_BASE_DELAY * Math.pow(1.5, idlePolls - 1), IDLE_MAX_DELAY);
+				}
 				const timer = setTimeout(pollNext, delay);
 				updateJob(queryId, { rows: newRows, page: newPage, message: msg, pollTimer: timer });
-				logger.debug({ queryId, page: newPage, rowsSoFar: newRows.length }, 'Polling next page');
+				logger.debug(
+					{ queryId, page: newPage, rowsSoFar: newRows.length, phase, totalKnown, idlePolls, delay },
+					'Polling next page'
+				);
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : 'Polling failed';
 				updateJob(queryId, { status: 'error', error: msg, pollTimer: null });
@@ -410,25 +570,31 @@
 		const formElement = saveFormRef ?? (event.currentTarget as HTMLFormElement | undefined);
 		if (!formElement) return;
 		const formData = new FormData(formElement);
+		const rawFormat = (formData.get('save_format') as string) || 'json';
+		const format: 'json' | 'csv' = rawFormat === 'csv' ? 'csv' : 'json';
 		const backendPath = normalizeBackendPath(
-			(formData.get('save_path') as string) || DEFAULT_METADATA_PATH
+			(formData.get('save_path') as string) || DEFAULT_METADATA_PATH,
+			format
 		);
 
 		saving = true;
 		error = '';
 		let backendSucceeded = false;
 		try {
-			await metadataApi.save({ path: backendPath, data: snapshot.data });
+			await metadataApi.save({ path: backendPath, data: snapshot.data, format });
 			backendSucceeded = true;
 			statusMessage = `Saved ${snapshot.count} rows to backend path ${backendPath}`;
-			logger.info({ rowCount: snapshot.count, backendPath }, 'Metadata saved to backend');
+			logger.info(
+				{ rowCount: snapshot.count, backendPath, format },
+				'Metadata saved to backend'
+			);
 		} catch (err) {
 			const message =
 				err instanceof Error
 					? err.message
 					: "Unable to save metadata via API. We'll keep working on a local copy.";
 			error = message;
-			logger.error({ err, backendPath }, 'Failed to save metadata to backend');
+			logger.error({ err, backendPath, format }, 'Failed to save metadata to backend');
 		} finally {
 			saving = false;
 		}
@@ -444,14 +610,17 @@
 		try {
 			if (localSaveHandle) {
 				const writable = await localSaveHandle.createWritable();
-				await writable.write(
-					new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
-				);
+				const body =
+					format === 'csv'
+						? rowsToCsv(snapshot.data)
+						: JSON.stringify(snapshot, null, 2);
+				const mime = format === 'csv' ? 'text/csv' : 'application/json';
+				await writable.write(new Blob([body], { type: mime }));
 				await writable.close();
-				statusMessage = `Saved locally to ${localSaveFileName || localSaveHandle.name || 'metadata.json'}${backendSucceeded ? ' (backend copy updated too)' : ''}`;
+				statusMessage = `Saved locally to ${localSaveFileName || localSaveHandle.name || `metadata.${format}`}${backendSucceeded ? ' (backend copy updated too)' : ''}`;
 			} else if (needsLocalFallback) {
-				downloadMetadata(snapshot, backendPath);
-				statusMessage = `Downloaded metadata snapshot (${snapshot.count} rows)`;
+				downloadMetadata(snapshot, backendPath, format);
+				statusMessage = `Downloaded metadata snapshot (${snapshot.count} rows, ${format.toUpperCase()})`;
 			}
 		} catch (localError) {
 			logger.error({ err: localError }, 'Unable to write metadata locally');
@@ -534,7 +703,37 @@
 			<p class="mt-2 text-gray-600">Query ALMA observation metadata or load a precomputed dataset.</p>
 		</header>
 
-		<MetadataQueryForm {scienceTypes} loading={starting} onSubmit={runQuery} />
+		<!-- Query Presets panel -->
+	{#if presets.length > 0}
+		<div class="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
+			<h2 class="mb-3 text-sm font-semibold text-indigo-800">Saved Query Presets</h2>
+			<div class="space-y-2">
+				{#each presets as preset (preset.name)}
+					<div class="flex items-center justify-between rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm">
+						<div class="min-w-0">
+							<span class="font-medium text-gray-900">{preset.name}</span>
+							{#if preset.description}
+								<span class="ml-2 text-xs text-gray-500">{preset.description}</span>
+							{/if}
+							<span class="ml-2 text-xs text-gray-400">({preset.result_count} rows)</span>
+						</div>
+						<div class="ml-4 flex shrink-0 gap-2">
+							<button
+								onclick={() => applyPreset(preset)}
+								class="rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+							>Apply & Run</button>
+							<button
+								onclick={() => handleDeletePreset(preset.name)}
+								class="rounded-md bg-white px-2 py-1 text-xs font-medium text-red-600 ring-1 ring-red-200 hover:bg-red-50"
+							>Delete</button>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	<MetadataQueryForm {scienceTypes} loading={starting} onSubmit={runQuery} />
 
 		{#if error}
 			<div class="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -595,6 +794,10 @@
 										onclick={() => saveJob(job.id)}
 										class="rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50"
 									>Save</button>
+									<button
+										onclick={() => openPresetSave(job.id)}
+										class="rounded-md bg-white px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-indigo-300 hover:bg-indigo-50"
+									>Save as Preset</button>
 								{/if}
 								<button
 									onclick={() => dismissJob(job.id)}
@@ -625,6 +828,12 @@
 			onClose={() => (loadModalOpen = false)}
 			onSubmit={handleLoadFile}
 			bind:formRef={loadFormRef}
+			{presets}
+			{presetsLoading}
+			onApplyPreset={(preset) => {
+				loadModalOpen = false;
+				applyPreset(preset);
+			}}
 		/>
 
 		<MetadataSaveModal
@@ -647,3 +856,43 @@
 		/>
 	</div>
 </div>
+
+<!-- Preset save modal -->
+{#if presetSaveOpen}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+		<div class="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+			<h3 class="mb-4 text-base font-semibold text-gray-900">Save Query as Preset</h3>
+			<div class="space-y-3">
+				<label class="block">
+					<span class="text-sm font-medium text-gray-700">Preset name <span class="text-red-500">*</span></span>
+					<input
+						type="text"
+						bind:value={presetSaveName}
+						placeholder="e.g. galaxies_band6"
+						class="mt-1 w-full rounded-md border border-gray-300 p-2 text-sm"
+					/>
+				</label>
+				<label class="block">
+					<span class="text-sm font-medium text-gray-700">Description</span>
+					<input
+						type="text"
+						bind:value={presetSaveDesc}
+						placeholder="Optional description"
+						class="mt-1 w-full rounded-md border border-gray-300 p-2 text-sm"
+					/>
+				</label>
+			</div>
+			<div class="mt-5 flex justify-end gap-2">
+				<button
+					onclick={() => (presetSaveOpen = false)}
+					class="rounded-md px-3 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"
+				>Cancel</button>
+				<button
+					onclick={handleSavePreset}
+					disabled={presetSaving || !presetSaveName.trim()}
+					class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:bg-gray-400"
+				>{presetSaving ? 'Saving…' : 'Save'}</button>
+			</div>
+		</div>
+	</div>
+{/if}

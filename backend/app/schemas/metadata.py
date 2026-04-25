@@ -193,6 +193,7 @@ class MetadataPageResponse(BaseModel):
     page_size: int
     total_fetched: int
     done: bool
+    status: str = "running"
     error: Optional[str] = None
 
 
@@ -201,6 +202,10 @@ class MetadataSaveRequest(BaseModel):
 
     path: str = Field(..., description="Target path relative to the ALMASim metadata directory")
     data: list[dict] = Field(..., description="Metadata records to persist")
+    format: str = Field(
+        default="json",
+        description="Output format: 'json' or 'csv'.",
+    )
 
 
 class MetadataSaveResponse(BaseModel):
@@ -209,3 +214,28 @@ class MetadataSaveResponse(BaseModel):
     path: str = Field(..., description="Resolved path where the data was stored")
     count: int = Field(..., description="Number of records saved")
     message: Optional[str] = Field(default=None, description="Optional status message")
+
+
+class QueryPresetCreate(BaseModel):
+    """Request to save a named query preset."""
+
+    name: str = Field(..., description="Unique preset name")
+    description: str = Field("", description="Human-readable description")
+    filters: dict = Field(..., description="MetadataQuery-compatible filter dict")
+    result_count: int = Field(0, description="Number of results returned by this query")
+
+
+class QueryPresetResponse(BaseModel):
+    """A saved query preset."""
+
+    name: str
+    description: str
+    filters: dict
+    result_count: int
+    created_at: str
+
+
+class QueryPresetsResponse(BaseModel):
+    """List of saved query presets."""
+
+    presets: List[QueryPresetResponse]

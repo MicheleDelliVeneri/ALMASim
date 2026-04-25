@@ -87,7 +87,7 @@
 	</div>
 
 	<div class="space-y-2">
-		<label class="block text-sm font-medium text-gray-700">Channel Range (inclusive)</label>
+		<span class="block text-sm font-medium text-gray-700">Channel Range (inclusive)</span>
 		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 			<input
 				type="number"

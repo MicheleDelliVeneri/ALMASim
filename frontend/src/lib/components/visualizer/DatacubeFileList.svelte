@@ -4,7 +4,7 @@
 		path: string;
 		size: number;
 		modified: number;
-		type: string;
+		type?: string;
 	}
 
 	interface Props {
@@ -112,7 +112,7 @@
 									{formatFileSize(file.size)}
 								</td>
 								<td class="px-4 py-2 text-sm text-gray-600 uppercase">
-									{file.type}
+									{file.type ?? file.name.split('.').pop() ?? 'file'}
 								</td>
 								<td class="px-4 py-2 text-sm text-gray-600">
 									{formatDate(file.modified)}

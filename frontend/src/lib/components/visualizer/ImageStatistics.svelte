@@ -2,18 +2,18 @@
 	interface Props {
 		stats: {
 			shape: number[];
-			window_shape: number[];
+			window_shape?: number[];
 			integrated_shape: number[];
 			min: number;
 			max: number;
 			mean: number;
 			std: number;
 			cube_name: string;
-			format: string;
-			integration_axis: number;
-			complex_component: string;
-			channel_start: number;
-			channel_end: number;
+			format?: string;
+			integration_axis?: number;
+			complex_component?: string;
+			channel_start?: number;
+			channel_end?: number;
 		};
 		method: string;
 	}
@@ -33,7 +33,7 @@
 		<div>
 			<p class="text-gray-600">Integrated Window</p>
 			<p class="font-mono text-gray-900">
-				{stats.window_shape.join(' × ')}
+				{(stats.window_shape ?? stats.integrated_shape).join(' × ')}
 			</p>
 		</div>
 		<div>
@@ -57,7 +57,7 @@
 	</div>
 	<div class="mt-2">
 		<p class="text-xs text-gray-500">
-			Product: {stats.cube_name} | Format: {stats.format.toUpperCase()} | Component: {stats.complex_component} | Method: {method} | Axis: {stats.integration_axis} | Channels: {stats.channel_start}–{stats.channel_end}
+			Product: {stats.cube_name} | Format: {(stats.format ?? 'array').toUpperCase()} | Component: {stats.complex_component ?? 'n/a'} | Method: {method} | Axis: {stats.integration_axis ?? 'n/a'} | Channels: {stats.channel_start ?? 'n/a'}–{stats.channel_end ?? 'n/a'}
 		</p>
 	</div>
 </div>

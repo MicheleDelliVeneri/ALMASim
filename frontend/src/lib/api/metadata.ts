@@ -57,18 +57,39 @@ export interface MetadataPageResponse {
 	page_size: number;
 	total_fetched: number;
 	done: boolean;
+	status?: string;
 	error?: string;
 }
 
 export interface MetadataSaveRequest {
 	path: string;
 	data: Record<string, unknown>[];
+	format?: 'json' | 'csv';
 }
 
 export interface MetadataSaveResponse {
 	path: string;
 	count: number;
 	message?: string;
+}
+
+export interface QueryPresetCreate {
+	name: string;
+	description?: string;
+	filters: MetadataQuery;
+	result_count?: number;
+}
+
+export interface QueryPreset {
+	name: string;
+	description: string;
+	filters: MetadataQuery;
+	result_count: number;
+	created_at: string;
+}
+
+export interface QueryPresetsResponse {
+	presets: QueryPreset[];
 }
 
 const SCIENCE_TYPES_CACHE_KEY = 'almasim:science-types';
@@ -155,5 +176,21 @@ export const metadataApi = {
 
 	save: async (payload: MetadataSaveRequest): Promise<MetadataSaveResponse> => {
 		return apiClient.post<MetadataSaveResponse>('/api/v1/metadata/save', payload);
-	}
+	},
+
+	listPresets: async (): Promise<QueryPresetsResponse> => {
+		return apiClient.get<QueryPresetsResponse>('/api/v1/metadata/presets');
+	},
+
+	savePreset: async (payload: QueryPresetCreate): Promise<QueryPreset> => {
+		return apiClient.post<QueryPreset>('/api/v1/metadata/presets', payload);
+	},
+
+	getPreset: async (name: string): Promise<QueryPreset> => {
+		return apiClient.get<QueryPreset>(`/api/v1/metadata/presets/${encodeURIComponent(name)}`);
+	},
+
+	deletePreset: async (name: string): Promise<void> => {
+		return apiClient.delete(`/api/v1/metadata/presets/${encodeURIComponent(name)}`);
+	},
 };

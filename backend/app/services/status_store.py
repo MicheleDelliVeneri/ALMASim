@@ -210,6 +210,7 @@ class QueryStore:
                     "done": True,
                     "total_fetched": 0,
                     "page": page,
+                    "status": "failed",
                     "error": "Job not found",
                 }
             start = page * page_size
@@ -223,6 +224,7 @@ class QueryStore:
                 "page_size": page_size,
                 "total_fetched": len(job.rows),
                 "done": done,
+                "status": job.status,
                 "error": job.error,
             }
 
