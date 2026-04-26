@@ -205,6 +205,9 @@ def query_products(
 
 def load_metadata(metadata_path: Path | str) -> pd.DataFrame:
     """Load previously saved metadata from CSV or JSON."""
+    raw = str(metadata_path)
+    if "\x00" in raw or ".." in raw:
+        raise ValueError(f"Invalid metadata path: {metadata_path!r}")
     path = Path(metadata_path).expanduser().resolve()
     if path.suffix.lower() == ".json":
         with path.open("r", encoding="utf-8") as fp:

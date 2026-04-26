@@ -11,6 +11,7 @@ from almasim.services.imaging import (
     integrate_cube_preview,
     load_cube_from_npz,
 )
+from app.core.path_utils import validate_user_path
 from app.schemas.imaging import DeconvolutionRequest, DeconvolutionResponse
 
 router = APIRouter()
@@ -18,8 +19,8 @@ router = APIRouter()
 
 def _resolve_cube_path(base_dir: Path, file_path: str) -> Path:
     """Resolve an absolute or relative file path under a base directory."""
-    candidate = Path(file_path)
-    resolved = candidate.resolve() if candidate.is_absolute() else (base_dir / candidate).resolve()
+    validate_user_path(file_path, detail="Invalid file path")
+    resolved = (base_dir / file_path).resolve()
     try:
         resolved.relative_to(base_dir.resolve())
     except ValueError as exc:
@@ -40,16 +41,15 @@ def _resolve_cube_path(base_dir: Path, file_path: str) -> Path:
     return resolved
 
 
-def _derive_output_paths(base_dir: Path, dirty_path: Path) -> dict[str, Path]:
+def _derive_output_paths(dirty_path: Path) -> dict[str, Path]:
     """Derive deterministic state and preview output paths from the dirty cube name."""
     suffix = dirty_path.stem
     if suffix.startswith("dirty-cube_"):
         suffix = suffix[len("dirty-cube_") :]
     else:
         suffix = dirty_path.stem
+    # dirty_path was resolved by _resolve_cube_path so parent is always absolute
     parent = dirty_path.parent
-    if not parent.is_absolute():
-        parent = (base_dir / parent).resolve()
     return {
         "state": parent / f"deconvolution-state_{suffix}.npz",
         "component": parent / f"component-cube_{suffix}.npz",
@@ -64,6 +64,7 @@ async def deconvolve_saved_products(
     body: DeconvolutionRequest,
 ) -> DeconvolutionResponse:
     """Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews."""
+    validate_user_path(body.directory, allow_absolute=True, detail="Invalid base directory")
     base_dir = Path(body.directory).resolve()
     if not base_dir.exists() or not base_dir.is_dir():
         raise HTTPException(
@@ -77,7 +78,7 @@ async def deconvolve_saved_products(
         _resolve_cube_path(base_dir, body.clean_cube_path) if body.clean_cube_path else None
     )
     state_path = _resolve_cube_path(base_dir, body.state_path) if body.state_path else None
-    output_paths = _derive_output_paths(base_dir, dirty_path)
+    output_paths = _derive_output_paths(dirty_path)
 
     try:
         dirty_cube, dirty_name = load_cube_from_npz(dirty_path)

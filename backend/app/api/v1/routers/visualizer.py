@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from almasim.services.interferometry.utils import closest_power_of_2
 from app.core.config import settings
+from app.core.path_utils import validate_user_path
 
 router = APIRouter()
 
@@ -34,8 +35,8 @@ def _classify_visualizer_path(path: Path) -> str | None:
 
 
 def _resolve_visualizer_path(raw_path: str, base_dir: Path) -> Path:
-    candidate = Path(raw_path).expanduser()
-    resolved = candidate.resolve() if candidate.is_absolute() else (base_dir / candidate).resolve()
+    validate_user_path(raw_path, detail="Invalid file path")
+    resolved = (base_dir.resolve() / raw_path).resolve()
     try:
         resolved.relative_to(base_dir.resolve())
     except ValueError as exc:

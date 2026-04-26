@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.path_utils import validate_user_path
 from app.schemas.metadata import (
     MetadataPageResponse,
     MetadataQuery,
@@ -118,16 +119,38 @@ async def cancel_query(query_id: str) -> None:
         )
 
 
+def _path_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
 @router.get("/load/{file_path:path}", response_model=MetadataResponse)
 async def load_metadata(file_path: str, db: Session = Depends(get_db)) -> MetadataResponse:
     """Load metadata from a CSV file and cache in database."""
     try:
+        validate_user_path(file_path, allow_absolute=True)
+        candidate = Path(file_path)
+        if candidate.is_absolute():
+            resolved = candidate.resolve()
+        else:
+            resolved = (settings.DATA_DIR / candidate).resolve()
+        allowed = [settings.DATA_DIR.resolve(), settings.OUTPUT_DIR.resolve()]
+        if not any(_path_within(resolved, r) for r in allowed):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Path outside allowed directories",
+            )
         service = MetadataService(db=db)
-        data = service.load_metadata(Path(file_path))
+        data = service.load_metadata(resolved)
         return MetadataResponse(
             count=len(data),
             data=data,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -143,17 +166,27 @@ def _resolve_metadata_path(raw_path: str, fmt: str = "json") -> Path:
 
     sanitized = (raw_path or "").strip()
     suffix = ".csv" if fmt.lower() == "csv" else ".json"
-    candidate = Path(sanitized) if sanitized else Path(f"metadata-results{suffix}")
 
+    # Reject traversal and null bytes before any Path construction.
+    validate_user_path(sanitized, detail="Path must be within the outputs/query_results directory.")
+
+    if not sanitized:
+        return base_dir / f"metadata-results{suffix}"
+
+    # Only relative paths are accepted — absolute paths are rejected.
+    candidate = Path(sanitized)
     if candidate.is_absolute():
-        resolved = candidate.resolve()
-    else:
-        parts = list(candidate.parts)
-        # Remove common prefixes if present
-        if parts and parts[0] in ("data", "metadata", "query_results", "outputs"):
-            parts = parts[1:]
-        relative = Path(*parts) if parts else Path(f"metadata-results{suffix}")
-        resolved = (base_dir / relative).resolve()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Path must be within the outputs/query_results directory.",
+        )
+
+    parts = list(candidate.parts)
+    # Remove common prefixes if present
+    if parts and parts[0] in ("data", "metadata", "query_results", "outputs"):
+        parts = parts[1:]
+    relative = Path(*parts) if parts else Path(f"metadata-results{suffix}")
+    resolved = (base_dir / relative).resolve()
 
     if resolved.suffix.lower() not in (".json", ".csv"):
         resolved = resolved.with_suffix(suffix)
