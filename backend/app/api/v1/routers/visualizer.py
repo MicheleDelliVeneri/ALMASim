@@ -325,7 +325,8 @@ def _build_integrated_response(
 @router.get("/files")
 async def list_datacube_files(dir: Optional[str] = None) -> JSONResponse:
     """List supported visualizer products in the given directory."""
-    output_dir = Path(dir) if dir else Path(settings.OUTPUT_DIR)
+    base_output_dir = Path(settings.OUTPUT_DIR).resolve()
+    output_dir = _resolve_visualizer_path(dir, base_output_dir) if dir else base_output_dir
 
     if not output_dir.exists():
         return JSONResponse(
