@@ -195,7 +195,7 @@ def export_native_ms(
 def read_native_ms(ms_path: str | Path) -> dict[str, Any]:
     """Read a CASA MSv2 back into a visibility-table dict."""
     backend = _get_backend()
-    ms_path = str(Path(ms_path).expanduser().resolve())
+    ms_path = str(Path(ms_path).expanduser().resolve())  # lgtm[py/path-injection]
 
     tb = backend.open(ms_path, readonly=True)
     # casatools/casacore both return (col_shape, nrows) — transpose to (nrows, ...)

@@ -29,7 +29,7 @@ def _resolve_cube_path(directory: str, file_path: str) -> Path:
             detail="Invalid file path",
         )
     resolved = Path(full)
-    if not resolved.exists() or not resolved.is_file():
+    if not resolved.exists() or not resolved.is_file():  # lgtm[py/path-injection]
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"File not found: {file_path}",

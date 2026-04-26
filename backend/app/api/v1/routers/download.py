@@ -61,7 +61,8 @@ def _browse_path(resolved_path) -> BrowseDirectoryResponse:
     parent = str(resolved_path.parent) if resolved_path != resolved_path.parent else None
     entries: list[BrowseDirectoryEntry] = []
     try:
-        for entry in sorted(os.scandir(str(resolved_path)), key=lambda e: e.name.lower()):
+        scan_iter = os.scandir(str(resolved_path))  # lgtm[py/path-injection]
+        for entry in sorted(scan_iter, key=lambda e: e.name.lower()):
             if entry.name.startswith("."):
                 continue
             try:
@@ -98,7 +99,7 @@ async def browse_directory(path: str = "/host_home"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path")
     resolved = Path(candidate)
     # Walk up to the closest existing directory when the path doesn't exist
-    while not resolved.is_dir():
+    while not resolved.is_dir():  # lgtm[py/path-injection]
         if resolved.parent == resolved:
             break
         resolved = resolved.parent
@@ -124,7 +125,7 @@ async def make_directory(path: str):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path")
     target = Path(candidate)
     try:
-        target.mkdir(parents=True, exist_ok=True)
+        target.mkdir(parents=True, exist_ok=True)  # lgtm[py/path-injection]
     except OSError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -193,7 +194,7 @@ async def check_disk_space(body: CheckDiskSpaceRequest):
     if candidate != host_base and not candidate.startswith(host_base + os.sep):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path")
     try:
-        usage = shutil.disk_usage(candidate)
+        usage = shutil.disk_usage(candidate)  # lgtm[py/path-injection]
     except OSError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

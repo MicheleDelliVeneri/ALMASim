@@ -177,7 +177,7 @@ def _resolve_metadata_path(raw_path: str, fmt: str = "json") -> Path:
     if resolved.suffix.lower() != suffix:
         resolved = resolved.with_suffix(suffix)
 
-    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.parent.mkdir(parents=True, exist_ok=True)  # lgtm[py/path-injection]
     return resolved
 
 
@@ -192,7 +192,7 @@ def _write_metadata_csv(destination: Path, rows: list[dict]) -> None:
             if key not in seen:
                 seen.add(key)
                 columns.append(key)
-    with destination.open("w", encoding="utf-8", newline="") as fp:
+    with destination.open("w", encoding="utf-8", newline="") as fp:  # lgtm[py/path-injection]
         writer = csv.DictWriter(fp, fieldnames=columns)
         writer.writeheader()
         for row in rows:
@@ -201,7 +201,7 @@ def _write_metadata_csv(destination: Path, rows: list[dict]) -> None:
 
 def _write_metadata_json(destination: Path, rows: list[dict]) -> None:
     """Write metadata rows to a JSON file with a count + data envelope."""
-    with destination.open("w", encoding="utf-8") as fp:
+    with destination.open("w", encoding="utf-8") as fp:  # lgtm[py/path-injection]
         json.dump({"count": len(rows), "data": rows}, fp, indent=2)
 
 

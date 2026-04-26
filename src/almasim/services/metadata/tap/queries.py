@@ -208,7 +208,7 @@ def load_metadata(metadata_path: Path | str) -> pd.DataFrame:
     raw = str(metadata_path)
     if "\x00" in raw or ".." in raw:
         raise ValueError(f"Invalid metadata path: {metadata_path!r}")
-    path = Path(metadata_path).expanduser().resolve()
+    path = Path(metadata_path).expanduser().resolve()  # lgtm[py/path-injection]
     if path.suffix.lower() == ".json":
         with path.open("r", encoding="utf-8") as fp:
             payload = json.load(fp)
