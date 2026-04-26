@@ -98,8 +98,7 @@ def get_tap_service(max_rounds: int = 2) -> pyvo.dal.TAPService:
                 errors.append(msg)
                 print(f"Failed to connect to {msg}")
     raise RuntimeError(
-        f"All ALMA TAP mirrors unreachable after {max_rounds} rounds. Errors:\n"
-        + "\n".join(errors)
+        f"All ALMA TAP mirrors unreachable after {max_rounds} rounds. Errors:\n" + "\n".join(errors)
     )
 
 
