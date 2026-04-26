@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/almasim.svg)](https://pypi.org/project/almasim/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
-[![Documentation](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/docs.yml/badge.svg)](https://michedelliveneri.github.io/ALMASim/)
+[![Documentation](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/docs.yml/badge.svg)](https://micheledelliveneri.github.io/ALMASim/)
 [![CI](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml/badge.svg)](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml)
 [![codecov](https://codecov.io/gh/MicheleDelliVeneri/ALMASim/branch/main/graph/badge.svg)](https://codecov.io/gh/MicheleDelliVeneri/ALMASim)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -207,7 +207,7 @@ The pipeline is split into four composable stages:
 
 `estimate_simulation_footprint()` returns resolved pixel count, channel count, cell size, beam size, and raw output size in GiB — useful for pre-run capacity checks.
 
-Full reference: [Simulation docs](https://michedelliveneri.github.io/ALMASim/simulation.html)
+Full reference: [Simulation docs](https://micheledelliveneri.github.io/ALMASim/simulation.html)
 
 ---
 
@@ -233,7 +233,7 @@ All skymodels accept explicit `source_offset_x_arcsec` / `source_offset_y_arcsec
 | `dusty_diffuse` | Correlated low-spatial-frequency dusty background |
 | `combined` | Both of the above |
 
-Full reference: [Skymodels docs](https://michedelliveneri.github.io/ALMASim/skymodels.html)
+Full reference: [Skymodels docs](https://micheledelliveneri.github.io/ALMASim/skymodels.html)
 
 ---
 
@@ -249,7 +249,7 @@ Select via `SimulationParams.compute_backend`:
 | `slurm` | HPC job submission |
 | `kubernetes` | Cluster-native environments |
 
-Full reference: [Compute docs](https://michedelliveneri.github.io/ALMASim/compute.html)
+Full reference: [Compute docs](https://micheledelliveneri.github.io/ALMASim/compute.html)
 
 ---
 
@@ -284,7 +284,7 @@ products = resolve_products(df["member_ous_uid"].tolist())
 run_download_job(products, destination=Path("downloads"), extract_tar=True)
 ```
 
-Full reference: [Metadata docs](https://michedelliveneri.github.io/ALMASim/metadata.html) · [Downloads docs](https://michedelliveneri.github.io/ALMASim/downloads.html)
+Full reference: [Metadata docs](https://micheledelliveneri.github.io/ALMASim/metadata.html) · [Downloads docs](https://micheledelliveneri.github.io/ALMASim/downloads.html)
 
 ---
 
@@ -309,7 +309,7 @@ cd backend
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Full reference: [Frontend docs](https://michedelliveneri.github.io/ALMASim/frontend.html)
+Full reference: [Frontend docs](https://micheledelliveneri.github.io/ALMASim/frontend.html)
 
 ---
 
@@ -371,21 +371,21 @@ The notebook saves query filter presets as `.query.json` files so they can be re
 
 ## Documentation
 
-Full documentation: **[michedelliveneri.github.io/ALMASim](https://michedelliveneri.github.io/ALMASim/)**
+Full documentation: **[micheledelliveneri.github.io/ALMASim](https://micheledelliveneri.github.io/ALMASim/)**
 
 | Section | Topics |
 |---|---|
-| [Quick Start](https://michedelliveneri.github.io/ALMASim/quickstart.html) | Installation, first simulation |
-| [Simulation](https://michedelliveneri.github.io/ALMASim/simulation.html) | Staged API, SimulationParams, outputs |
-| [Interferometry](https://michedelliveneri.github.io/ALMASim/interferometry.html) | UV sampling, baselines, multi-config |
-| [Noise](https://michedelliveneri.github.io/ALMASim/noise.html) | PWV-aware noise model |
-| [Background Sky](https://michedelliveneri.github.io/ALMASim/background.html) | Additive astrophysical background |
-| [Skymodels](https://michedelliveneri.github.io/ALMASim/skymodels.html) | Source models reference |
-| [Imaging](https://michedelliveneri.github.io/ALMASim/imaging.html) | Deconvolution, TP+INT combination |
-| [Metadata](https://michedelliveneri.github.io/ALMASim/metadata.html) | TAP queries, filters |
-| [Downloads](https://michedelliveneri.github.io/ALMASim/downloads.html) | Product download workflow |
-| [Compute Backends](https://michedelliveneri.github.io/ALMASim/compute.html) | Sync, Dask, Slurm, Kubernetes |
-| [Frontend](https://michedelliveneri.github.io/ALMASim/frontend.html) | Svelte UI workflows |
+| [Quick Start](https://micheledelliveneri.github.io/ALMASim/quickstart.html) | Installation, first simulation |
+| [Simulation](https://micheledelliveneri.github.io/ALMASim/simulation.html) | Staged API, SimulationParams, outputs |
+| [Interferometry](https://micheledelliveneri.github.io/ALMASim/interferometry.html) | UV sampling, baselines, multi-config |
+| [Noise](https://micheledelliveneri.github.io/ALMASim/noise.html) | PWV-aware noise model |
+| [Background Sky](https://micheledelliveneri.github.io/ALMASim/background.html) | Additive astrophysical background |
+| [Skymodels](https://micheledelliveneri.github.io/ALMASim/skymodels.html) | Source models reference |
+| [Imaging](https://micheledelliveneri.github.io/ALMASim/imaging.html) | Deconvolution, TP+INT combination |
+| [Metadata](https://micheledelliveneri.github.io/ALMASim/metadata.html) | TAP queries, filters |
+| [Downloads](https://micheledelliveneri.github.io/ALMASim/downloads.html) | Product download workflow |
+| [Compute Backends](https://micheledelliveneri.github.io/ALMASim/compute.html) | Sync, Dask, Slurm, Kubernetes |
+| [Frontend](https://micheledelliveneri.github.io/ALMASim/frontend.html) | Svelte UI workflows |
 
 Build docs locally:
 

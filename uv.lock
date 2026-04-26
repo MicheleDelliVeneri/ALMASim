@@ -38,7 +38,7 @@ wheels = [
 
 [[package]]
 name = "almasim"
-version = "2.1.10"
+version = "2.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "astromartini" },
@@ -143,13 +143,13 @@ dev = [
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "marimo", specifier = ">=0.10" },
     { name = "mypy" },
-    { name = "myst-parser", specifier = ">=3.0" },
+    { name = "myst-parser", specifier = ">=5.0.0" },
     { name = "pydantic-settings" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "sphinx", specifier = ">=7.3" },
-    { name = "sphinx-copybutton", specifier = ">=0.5" },
+    { name = "sphinx", specifier = ">=9.1.0" },
+    { name = "sphinx-copybutton", specifier = ">=0.5.2" },
     { name = "sphinx-rtd-theme", specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"] },
 ]

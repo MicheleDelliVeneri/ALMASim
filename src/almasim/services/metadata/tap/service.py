@@ -66,42 +66,41 @@ class ExclusionFilters:
     solar: bool = False  # exclude observations related to the Sun
 
 
-def get_tap_service():
-    """Establishes a connection to a TAP service for astronomical data access.
+_TAP_URLS = [
+    "https://almascience.eso.org/tap",
+    "https://almascience.nao.ac.jp/tap",
+    "https://almascience.nrao.edu/tap",
+]
 
-    This function attempts to connect to multiple TAP service endpoints until
-    a successful connection is established. It also performs a simple test query
-    to verify that the service is responding.
+_TAP_TEST_TIMEOUT = 30  # seconds for the connectivity test query
 
-    Returns:
-        pyvo.dal.TAPService: A TAP service object if a successful connection is made,
-                             otherwise None.
 
-    Notes:
-        - The function uses an infinite loop to retry connections indefinitely.
-        - It prints messages to the console indicating connection status and errors.
-        - If all URLs fail, it restarts the loop to try again from the beginning.
+def get_tap_service(max_rounds: int = 2) -> pyvo.dal.TAPService:
+    """Return a connected ALMA TAP service, trying each mirror in turn.
 
-    Dependencies:
-        - pyvo: The Python library for Virtual Observatory data access.
+    Tries each mirror URL up to *max_rounds* times total.  Raises
+    ``RuntimeError`` if every attempt fails so callers can handle the
+    failure rather than blocking forever.
     """
-    urls = [
-        "https://almascience.eso.org/tap",
-        "https://almascience.nao.ac.jp/tap",
-        "https://almascience.nrao.edu/tap",
-    ]
-    while True:  # Infinite loop to keep trying until successful
-        for url in urls:
+    errors: list[str] = []
+    for _ in range(max_rounds):
+        for url in _TAP_URLS:
             try:
                 service = pyvo.dal.TAPService(url)
-                # Test the connection with a simple query to ensure the service is working
-                service.search("SELECT TOP 1 * FROM ivoa.obscore")
+                service.search(
+                    "SELECT TOP 1 * FROM ivoa.obscore",
+                    response_timeout=_TAP_TEST_TIMEOUT,
+                )
                 print(f"Connected successfully to {url}")
                 return service
-            except Exception as e:
-                print("Failed to connect to {}: {}".format(url, e))
-                print("Retrying other servers...")
-        print("All URLs attempted and failed, retrying...")
+            except Exception as exc:
+                msg = f"{url}: {exc}"
+                errors.append(msg)
+                print(f"Failed to connect to {msg}")
+    raise RuntimeError(
+        f"All ALMA TAP mirrors unreachable after {max_rounds} rounds. Errors:\n"
+        + "\n".join(errors)
+    )
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
