@@ -163,3 +163,123 @@ def test_list_datacube_files_nonexistent_dir_returns_empty(monkeypatch, tmp_path
     payload = json.loads(response.body)
     assert payload["files"] == []
     assert "does not exist" in payload["message"]
+
+
+# ---------------------------------------------------------------------------
+# Tests for get_datacube_file endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_get_datacube_file_returns_fits(monkeypatch, tmp_path):
+    cube = np.ones((2, 3, 4), dtype=np.float32)
+    fits_path = tmp_path / "cube.fits"
+    fits.PrimaryHDU(cube).writeto(fits_path)
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    response = asyncio.run(visualizer.get_datacube_file("cube.fits"))
+    assert response.path == str(fits_path)
+
+
+def test_get_datacube_file_rejects_traversal(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(visualizer.get_datacube_file("../../etc/passwd"))
+    assert exc_info.value.status_code == 400
+
+
+def test_get_datacube_file_not_found(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(visualizer.get_datacube_file("nonexistent.fits"))
+    assert exc_info.value.status_code == 404
+
+
+def test_get_datacube_file_with_subdir(monkeypatch, tmp_path):
+    subdir = tmp_path / "sub"
+    subdir.mkdir()
+    cube = np.ones((2, 3, 4), dtype=np.float32)
+    fits_path = subdir / "cube.fits"
+    fits.PrimaryHDU(cube).writeto(fits_path)
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    response = asyncio.run(visualizer.get_datacube_file("cube.fits", dir="sub"))
+    assert response.path == str(fits_path)
+
+
+# ---------------------------------------------------------------------------
+# Tests for integrate_datacube endpoint (server_path branch)
+# ---------------------------------------------------------------------------
+
+
+def test_integrate_datacube_server_path_npz(monkeypatch, tmp_path):
+    cube = np.ones((2, 3, 4), dtype=np.float32)
+    npz_path = tmp_path / "cube.npz"
+    np.savez(npz_path, clean_cube=cube)
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    response = asyncio.run(
+        visualizer.integrate_datacube(
+            method="sum",
+            integration_axis="auto",
+            complex_component="real",
+            channel_start=None,
+            channel_end=None,
+            file=None,
+            server_path="cube.npz",
+            dir=None,
+        )
+    )
+    payload = json.loads(response.body)
+    assert payload["stats"]["format"] == "npz"
+    assert payload["method"] == "sum"
+
+
+def test_integrate_datacube_server_path_traversal_rejected(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            visualizer.integrate_datacube(
+                method="sum",
+                integration_axis="auto",
+                complex_component="real",
+                channel_start=None,
+                channel_end=None,
+                file=None,
+                server_path="../../etc/passwd",
+                dir=None,
+            )
+        )
+    assert exc_info.value.status_code == 400
+
+
+def test_integrate_datacube_server_path_with_dir(monkeypatch, tmp_path):
+    subdir = tmp_path / "sub"
+    subdir.mkdir()
+    cube = np.ones((2, 3, 4), dtype=np.float32)
+    np.savez(subdir / "cube.npz", clean_cube=cube)
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    response = asyncio.run(
+        visualizer.integrate_datacube(
+            method="mean",
+            integration_axis="auto",
+            complex_component="real",
+            channel_start=None,
+            channel_end=None,
+            file=None,
+            server_path="cube.npz",
+            dir="sub",
+        )
+    )
+    payload = json.loads(response.body)
+    assert payload["stats"]["format"] == "npz"
+    assert payload["method"] == "mean"
