@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 from astropy.io import fits
 from fastapi.dependencies import utils as fastapi_dependency_utils
 
@@ -80,3 +82,84 @@ def test_complex_component_projection_uses_imaginary_part():
     cube = np.array([[[1 + 2j, 3 + 4j], [5 + 6j, 7 + 8j]]], dtype=np.complex64)
     projected = visualizer._project_complex_component(cube, complex_component="imag")
     assert projected.tolist() == [[[2.0, 4.0], [6.0, 8.0]]]
+
+
+# ---------------------------------------------------------------------------
+# Tests for _resolve_visualizer_path (path-traversal guard)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_visualizer_path_valid_relative(tmp_path):
+    sub = tmp_path / "subdir"
+    sub.mkdir()
+    result = visualizer._resolve_visualizer_path("subdir", tmp_path)
+    assert result == sub.resolve()
+
+
+def test_resolve_visualizer_path_valid_absolute_inside_base(tmp_path):
+    sub = tmp_path / "inside"
+    sub.mkdir()
+    result = visualizer._resolve_visualizer_path(str(sub), tmp_path)
+    assert result == sub.resolve()
+
+
+def test_resolve_visualizer_path_rejects_traversal(tmp_path):
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        visualizer._resolve_visualizer_path("../../etc/passwd", tmp_path)
+    assert exc_info.value.status_code == 400
+
+
+def test_resolve_visualizer_path_rejects_absolute_outside_base(tmp_path):
+    from fastapi import HTTPException
+
+    outside = tmp_path.parent / "outside"
+    with pytest.raises(HTTPException) as exc_info:
+        visualizer._resolve_visualizer_path(str(outside), tmp_path)
+    assert exc_info.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Tests for list_datacube_files endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_list_datacube_files_no_dir_uses_output_dir(monkeypatch, tmp_path):
+    np.savez(tmp_path / "cube.npz", clean_cube=np.ones((2, 3, 4), dtype=np.float32))
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    response = asyncio.run(visualizer.list_datacube_files(dir=None))
+    payload = json.loads(response.body)
+    assert payload["output_dir"] == str(tmp_path.resolve())
+    assert any(f["name"] == "cube.npz" for f in payload["files"])
+
+
+def test_list_datacube_files_with_valid_subdir(monkeypatch, tmp_path):
+    subdir = tmp_path / "sub"
+    subdir.mkdir()
+    np.savez(subdir / "cube.npz", clean_cube=np.ones((2, 3, 4), dtype=np.float32))
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    response = asyncio.run(visualizer.list_datacube_files(dir="sub"))
+    payload = json.loads(response.body)
+    assert any(f["name"] == "cube.npz" for f in payload["files"])
+
+
+def test_list_datacube_files_traversal_dir_rejected(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(visualizer.list_datacube_files(dir="../../etc"))
+    assert exc_info.value.status_code == 400
+
+
+def test_list_datacube_files_nonexistent_dir_returns_empty(monkeypatch, tmp_path):
+    monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path / "nonexistent")
+
+    response = asyncio.run(visualizer.list_datacube_files(dir=None))
+    payload = json.loads(response.body)
+    assert payload["files"] == []
+    assert "does not exist" in payload["message"]
