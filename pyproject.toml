@@ -52,7 +52,7 @@ ms-casacore = ["python-casacore"]
 [project.urls]
 Repository = "https://github.com/MicheleDelliVeneri/ALMASim"
 Homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
-Documentation = "https://michedelliveneri.github.io/ALMASim/"
+Documentation = "https://micheledelliveneri.github.io/ALMASim/"
 
 [dependency-groups]
 dev = [
