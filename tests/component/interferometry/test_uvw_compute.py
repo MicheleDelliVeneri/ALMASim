@@ -38,7 +38,9 @@ def _casa_to_cartesian_m(casa_direction: dict) -> np.ndarray:
     return sph.represent_as(coord.CartesianRepresentation).xyz.to_value(u.m).T
 
 
-def generate_via_casa(antenna_positions_m: np.ndarray, ra: u.Quantity, dec: u.Quantity, time: Time) -> np.ndarray:
+def generate_via_casa(
+    antenna_positions_m: np.ndarray, ra: u.Quantity, dec: u.Quantity, time: Time
+) -> np.ndarray:
     try:
         import casatools
     except ImportError:
@@ -111,7 +113,7 @@ def test_uvw_roundtrip_read_with_python_casacore(tmp_path: Path):
         "field_dec_rad": float(DEC_RAD.to_value(u.rad)),
         "observation_date": "2024-01-01",
     }
-    try: 
+    try:
         export_native_ms(
             ms_path=ms_path,
             visibility_table=visibility_table,

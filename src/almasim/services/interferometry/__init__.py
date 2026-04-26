@@ -8,7 +8,13 @@ from .antenna import (
     get_max_baseline_from_antenna_array,
     get_max_baseline_from_antenna_config,
 )
-from .baselines import generate_via_astropy, pairwise_baselines, prepare_baselines, set_baselines, set_noise
+from .baselines import (
+    generate_via_astropy,
+    pairwise_baselines,
+    prepare_baselines,
+    set_baselines,
+    set_noise,
+)
 from .core import Interferometer, ProgressSignal
 from .frequency import freq_supp_extractor, remove_non_numeric
 from .imaging import (

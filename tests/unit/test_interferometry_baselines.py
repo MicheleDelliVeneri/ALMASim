@@ -233,4 +233,6 @@ def test_generate_via_astropy_accepts_geodetic_lat_lon():
 def test_generate_via_astropy_rejects_invalid_shape():
     """Invalid antenna position shape should raise a clear error."""
     with pytest.raises(ValueError, match=r"shape \(N, 3\) or \(N, 2\)"):
-        generate_via_astropy(np.ones((3, 4), dtype=np.float64), 3.26 * u.rad, -1.05 * u.rad, Time.now())
+        generate_via_astropy(
+            np.ones((3, 4), dtype=np.float64), 3.26 * u.rad, -1.05 * u.rad, Time.now()
+        )

@@ -15,7 +15,8 @@ import numbers
 
 
 import os
-ALMASIM_NTHREADS=os.environ.get("ALMASIM_NTHREADS", os.cpu_count())
+
+ALMASIM_NTHREADS = os.environ.get("ALMASIM_NTHREADS", os.cpu_count())
 
 _rng = np.random.default_rng(0)
 
@@ -336,9 +337,11 @@ def image_channel(
         raw_visibility,
     )
 
+
 # Lets keep it simple
 def get_n_threads():
     import os
+
     return os.environ.get("ALMASIM_NTHREADS", 10)
 
 
@@ -349,6 +352,7 @@ def _get_xy_from_single_or_multi(couple_or_value):
         return couple_or_value
     else:
         raise ValueError(f"{couple_or_value} is neither a couple or a value")
+
 
 def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
     """
@@ -369,19 +373,29 @@ def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
     freq_sort_idx = np.argsort(frequencies)
     frequencies = frequencies[freq_sort_idx]
     ones_visibilities = np.ones((n_times_baselines, n_frequencies), dtype=np.complex128)
-    
+
     dirty_image = _ducc0.wgridder.vis2dirty(
-        uvw=uvw, freq=frequencies, vis=ones_visibilities,
-        npix_x=n_pix_x, npix_y=n_pix_y,
-        pixsize_x=pixsize_x, pixsize_y=pixsize_y,
-        epsilon=1.e-8, do_wgridding=True, nthreads=nthreads)
-    weights = _ducc0.wgridder.dirty2vis(
-        uvw=uvw, freq=frequencies, dirty=dirty_image,
+        uvw=uvw,
+        freq=frequencies,
+        vis=ones_visibilities,
+        npix_x=n_pix_x,
+        npix_y=n_pix_y,
         pixsize_x=pixsize_x,
         pixsize_y=pixsize_y,
-        epsilon=1.e-8,
+        epsilon=1.0e-8,
         do_wgridding=True,
-        nthreads=nthreads)
+        nthreads=nthreads,
+    )
+    weights = _ducc0.wgridder.dirty2vis(
+        uvw=uvw,
+        freq=frequencies,
+        dirty=dirty_image,
+        pixsize_x=pixsize_x,
+        pixsize_y=pixsize_y,
+        epsilon=1.0e-8,
+        do_wgridding=True,
+        nthreads=nthreads,
+    )
     # Convert to float if it's complex (take magnitude)
     if np.iscomplexobj(weights):
         weights = np.abs(weights).astype(np.float32)
@@ -389,7 +403,10 @@ def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
         weights = weights.astype(np.float32)
     return weights
 
-def image_based_predict(uvw, pix_size, image, wavelenghts, weight_func=exact_weighs, n_threads=ALMASIM_NTHREADS):
+
+def image_based_predict(
+    uvw, pix_size, image, wavelenghts, weight_func=exact_weighs, n_threads=ALMASIM_NTHREADS
+):
     n_pix = image.shape[:2]
     pixsize_x, pixsize_y = _get_xy_from_single_or_multi(pix_size)
 
@@ -400,17 +417,17 @@ def image_based_predict(uvw, pix_size, image, wavelenghts, weight_func=exact_wei
     freq_sort_idx = np.argsort(frequencies)
     frequencies = frequencies[freq_sort_idx]
     visibilities = _ducc0.wgridder.dirty2vis(
-        uvw=uvw, 
+        uvw=uvw,
         freq=frequencies,
-        dirty=image, 
+        dirty=image,
         wgt=weights,
         pixsize_x=pixsize_x,
         pixsize_y=pixsize_y,
-        epsilon=1.e-6,
+        epsilon=1.0e-6,
         do_wgridding=True,
-        nthreads=n_threads)
+        nthreads=n_threads,
+    )
     return visibilities, weights
-
 
 
 def image_channel_ducc0(
@@ -435,7 +452,8 @@ def image_channel_ducc0(
     zooming: int,
     header: fits.Header | dict,
     robust: float,
-    scan_time_s: float | None = None,):
+    scan_time_s: float | None = None,
+):
     """Process a single channel through interferometric simulation."""
     # Convert header dict back to FITS Header if needed (for pickling compatibility)
     if isinstance(header, dict):
@@ -446,12 +464,14 @@ def image_channel_ducc0(
     ra_deg = header.get("OBSRA", header.get("CRVAL1", header.get("RA")))
     dec_deg = header.get("OBSDEC", header.get("CRVAL2", header.get("DEC")))
     if ra_deg is None or dec_deg is None:
-        raise ValueError("Header must contain pointing coordinates in OBSRA/OBSDEC or CRVAL1/CRVAL2")
+        raise ValueError(
+            "Header must contain pointing coordinates in OBSRA/OBSDEC or CRVAL1/CRVAL2"
+        )
 
     antenna_positions = np.asarray(antPos, dtype=np.float64)
     if antenna_positions.ndim != 2 or antenna_positions.shape[1] not in (2, 3):
         raise ValueError("antPos must be a 2D array-like with shape (N, 2) or (N, 3)")
-    
+
     uvw = generate_via_astropy(
         antenna_positions,
         float(ra_deg) * u.deg,
@@ -468,27 +488,37 @@ def image_channel_ducc0(
     pixsize_y = pixel_scale_rad
     frequencies = speed_of_light / np.asarray(wavelengths, dtype=np.float64)
     nthreads = int(ALMASIM_NTHREADS)
-    
-    visibilities, weights = image_based_predict(uvw, 
-        (pixsize_x, pixsize_y), 
-        modelim[0], 
-        wavelengths, weight_func=exact_weighs, n_threads=nthreads)
+
+    visibilities, weights = image_based_predict(
+        uvw,
+        (pixsize_x, pixsize_y),
+        modelim[0],
+        wavelengths,
+        weight_func=exact_weighs,
+        n_threads=nthreads,
+    )
 
     dirtymap = _ducc0.wgridder.vis2dirty(
-        uvw=uvw, freq=frequencies, vis=visibilities,
-        npix_x=Npix, npix_y=Npix,
-        pixsize_x=pixsize_x, pixsize_y=pixsize_y,
-        epsilon=1.e-6, do_wgridding=True, nthreads=nthreads
+        uvw=uvw,
+        freq=frequencies,
+        vis=visibilities,
+        npix_x=Npix,
+        npix_y=Npix,
+        pixsize_x=pixsize_x,
+        pixsize_y=pixsize_y,
+        epsilon=1.0e-6,
+        do_wgridding=True,
+        nthreads=nthreads,
     )
 
     # Extract u, v from uvw (ducc0 path doesn't compute these separately in classic way)
     u_vals = uvw[:, 0]
     v_vals = uvw[:, 1]
-    
+
     # Initialize standard output arrays to match image_channel signature
     beam = np.zeros((Npix, Npix), dtype=np.float32)
     totsampling = np.ones((Npix, Npix), dtype=np.float32)
-    
+
     # Placeholder visibilities and raw data (ducc0 path produces different outputs)
     modelvis = visibilities
     dirtyvis = np.fft.fft2(dirtymap)

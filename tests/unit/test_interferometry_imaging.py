@@ -498,36 +498,35 @@ def test_image_channel_ducc0_happy_path(sample_wavelength, monkeypatch):
     header["DATE-OBS"] = "2024-01-01T00:00:00"
     header["OBSRA"] = 180.0
     header["OBSDEC"] = -30.0
-    
+
     # Valid 2D antenna positions (4 antennas with 3D ECEF coords in meters)
-    valid_antpos = np.array([
-        [0.0, 0.0, 0.0],
-        [100.0, 0.0, 0.0],
-        [0.0, 100.0, 0.0],
-        [100.0, 100.0, 0.0],
-    ], dtype=np.float64)
-    
+    valid_antpos = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0],
+            [100.0, 100.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
     # Mock the ducc0 predict/dirty calls to avoid incomplete implementation
     mock_visibilities = np.zeros((64, 8), dtype=np.complex64)
     mock_weights = np.ones((64, 8), dtype=np.float32)
     mock_dirtymap = np.zeros((32, 32), dtype=np.float32)
-    
+
     def mock_image_based_predict(*args, **kwargs):
         return mock_visibilities, mock_weights
-    
+
     def mock_vis2dirty(*args, **kwargs):
         return mock_dirtymap
-    
+
     # Patch the functions that would fail due to incomplete implementation
     monkeypatch.setattr(
-        "almasim.services.interferometry.imaging.image_based_predict",
-        mock_image_based_predict
+        "almasim.services.interferometry.imaging.image_based_predict", mock_image_based_predict
     )
-    monkeypatch.setattr(
-        "ducc0.wgridder.vis2dirty",
-        mock_vis2dirty
-    )
-    
+    monkeypatch.setattr("ducc0.wgridder.vis2dirty", mock_vis2dirty)
+
     # Should not raise and should return a tuple
     result = image_channel_ducc0(
         img=np.ones((16, 16), dtype=np.float32),
@@ -552,7 +551,7 @@ def test_image_channel_ducc0_happy_path(sample_wavelength, monkeypatch):
         header=header,
         robust=0.0,
     )
-    
+
     # Verify result is a tuple (function completed without raising)
     assert isinstance(result, tuple)
 
@@ -666,7 +665,9 @@ def test_image_channel_ducc0_integration():
 
     assert isinstance(result, tuple)
     assert len(result) == 9
-    modelim, dirtymap, modelvis, dirtyvis, u_vals, v_vals, beam, totsampling, raw_visibility = result
+    modelim, dirtymap, modelvis, dirtyvis, u_vals, v_vals, beam, totsampling, raw_visibility = (
+        result
+    )
     assert isinstance(modelim, np.ndarray)
     assert isinstance(dirtymap, np.ndarray)
     assert dirtymap.shape == (32, 32)
