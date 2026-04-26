@@ -1,5 +1,6 @@
 """Imaging API endpoints for iterative deconvolution previews."""
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -12,15 +13,22 @@ from almasim.services.imaging import (
     load_cube_from_npz,
 )
 from app.core.config import settings
-from app.core.path_utils import resolve_safe_path
 from app.schemas.imaging import DeconvolutionRequest, DeconvolutionResponse
 
 router = APIRouter()
 
 
-def _resolve_cube_path(base_dir: Path, file_path: str) -> Path:
-    """Resolve an absolute or relative file path under a base directory."""
-    resolved = resolve_safe_path(file_path, base_dir, detail="Invalid file path")
+def _resolve_cube_path(directory: str, file_path: str) -> Path:
+    """Resolve an .npz cube file under OUTPUT_DIR, guarding against traversal."""
+    base = os.path.realpath(str(settings.OUTPUT_DIR))
+    sub = os.path.join(directory, file_path) if directory else file_path
+    full = os.path.realpath(os.path.join(base, sub))
+    if full != base and not full.startswith(base + os.sep):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file path",
+        )
+    resolved = Path(full)
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -57,21 +65,13 @@ async def deconvolve_saved_products(
     body: DeconvolutionRequest,
 ) -> DeconvolutionResponse:
     """Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews."""
-    base_dir = resolve_safe_path(
-        body.directory, settings.OUTPUT_DIR, detail="Invalid base directory"
-    )
-    if not base_dir.exists() or not base_dir.is_dir():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid base directory",
-        )
-
-    dirty_path = _resolve_cube_path(base_dir, body.dirty_cube_path)
-    beam_path = _resolve_cube_path(base_dir, body.beam_cube_path)
+    directory = body.directory or ""
+    dirty_path = _resolve_cube_path(directory, body.dirty_cube_path)
+    beam_path = _resolve_cube_path(directory, body.beam_cube_path)
     clean_path = (
-        _resolve_cube_path(base_dir, body.clean_cube_path) if body.clean_cube_path else None
+        _resolve_cube_path(directory, body.clean_cube_path) if body.clean_cube_path else None
     )
-    state_path = _resolve_cube_path(base_dir, body.state_path) if body.state_path else None
+    state_path = _resolve_cube_path(directory, body.state_path) if body.state_path else None
     output_paths = _derive_output_paths(dirty_path)
 
     try:

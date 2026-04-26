@@ -1,12 +1,13 @@
 """Download API endpoints for fetching ALMA data products."""
 
+import os
 import shutil
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from app.core.config import settings
-from app.core.path_utils import resolve_safe_path
 from app.schemas.download import (
     BrowseDirectoryEntry,
     BrowseDirectoryResponse,
@@ -91,7 +92,11 @@ async def browse_directory(path: str = "/host_home"):
     with '.') are excluded for clarity.  The host home directory is mounted
     at /host_home so users can browse and download to their real filesystem.
     """
-    resolved = resolve_safe_path(path, settings.HOST_DIR)
+    host_base = os.path.realpath(str(settings.HOST_DIR))
+    candidate = os.path.realpath(os.path.join(host_base, path))
+    if candidate != host_base and not candidate.startswith(host_base + os.sep):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path")
+    resolved = Path(candidate)
     # Walk up to the closest existing directory when the path doesn't exist
     while not resolved.is_dir():
         if resolved.parent == resolved:
@@ -113,7 +118,11 @@ def _format_bytes(size: int) -> str:
 @router.post("/mkdir", response_model=BrowseDirectoryResponse)
 async def make_directory(path: str):
     """Create a new directory and return a browse result for it."""
-    target = resolve_safe_path(path, settings.HOST_DIR)
+    host_base = os.path.realpath(str(settings.HOST_DIR))
+    candidate = os.path.realpath(os.path.join(host_base, path))
+    if candidate != host_base and not candidate.startswith(host_base + os.sep):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path")
+    target = Path(candidate)
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError as e:
@@ -179,9 +188,12 @@ async def resolve_download_products(body: ResolveProductsRequest):
 @router.post("/disk-space", response_model=DiskSpaceInfo)
 async def check_disk_space(body: CheckDiskSpaceRequest):
     """Check available disk space at a given path."""
-    safe_path = resolve_safe_path(body.path, settings.HOST_DIR)
+    host_base = os.path.realpath(str(settings.HOST_DIR))
+    candidate = os.path.realpath(os.path.join(host_base, body.path))
+    if candidate != host_base and not candidate.startswith(host_base + os.sep):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path")
     try:
-        usage = shutil.disk_usage(safe_path)
+        usage = shutil.disk_usage(candidate)
     except OSError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

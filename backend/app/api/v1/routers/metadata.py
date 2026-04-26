@@ -1,6 +1,7 @@
 """Metadata API endpoints."""
 
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -151,14 +152,14 @@ _SAVE_DETAIL = "Path must be within the outputs/query_results directory."
 def _resolve_metadata_path(raw_path: str, fmt: str = "json") -> Path:
     """Resolve and validate metadata save path within a writable directory."""
     # OUTPUT_DIR is writable in deployments (DATA_DIR is mounted read-only).
-    base_dir = (settings.OUTPUT_DIR / "query_results").resolve()
-    base_dir.mkdir(parents=True, exist_ok=True)
+    base = os.path.realpath(str(settings.OUTPUT_DIR / "query_results"))
+    Path(base).mkdir(parents=True, exist_ok=True)
 
     sanitized = (raw_path or "").strip()
     suffix = ".csv" if fmt.lower() == "csv" else ".json"
 
     if not sanitized:
-        return base_dir / f"metadata-results{suffix}"
+        return Path(base) / f"metadata-results{suffix}"
 
     # Strip common directory prefixes users may include from the UI.
     parts = [p for p in sanitized.replace("\\", "/").split("/") if p]
@@ -166,8 +167,11 @@ def _resolve_metadata_path(raw_path: str, fmt: str = "json") -> Path:
         parts = parts[1:]
     relative = "/".join(parts) if parts else f"metadata-results{suffix}"
 
-    resolved = resolve_safe_path(relative, base_dir, detail=_SAVE_DETAIL)
+    full = os.path.realpath(os.path.join(base, relative))
+    if full != base and not full.startswith(base + os.sep):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_SAVE_DETAIL)
 
+    resolved = Path(full)
     if resolved.suffix.lower() not in (".json", ".csv"):
         resolved = resolved.with_suffix(suffix)
     if resolved.suffix.lower() != suffix:

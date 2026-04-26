@@ -13,7 +13,6 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from almasim.services.interferometry.utils import closest_power_of_2
 from app.core.config import settings
-from app.core.path_utils import resolve_safe_path
 
 router = APIRouter()
 
@@ -32,10 +31,6 @@ def _classify_visualizer_path(path: Path) -> str | None:
         if lower.endswith(_FITS_SUFFIXES):
             return "fits"
     return None
-
-
-def _resolve_visualizer_path(raw_path: str, base_dir: Path) -> Path:
-    return resolve_safe_path(raw_path, base_dir, detail="Invalid file path")
 
 
 def _iter_supported_paths(base_dir: Path) -> list[Path]:
@@ -317,8 +312,17 @@ def _build_integrated_response(
 @router.get("/files")
 async def list_datacube_files(dir: Optional[str] = None) -> JSONResponse:
     """List supported visualizer products in the given directory."""
-    base_output_dir = Path(settings.OUTPUT_DIR).resolve()
-    output_dir = _resolve_visualizer_path(dir, base_output_dir) if dir else base_output_dir
+    base = os.path.realpath(str(settings.OUTPUT_DIR))
+    if dir:
+        full = os.path.realpath(os.path.join(base, dir))
+        if full != base and not full.startswith(base + os.sep):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid directory",
+            )
+        output_dir = Path(full)
+    else:
+        output_dir = Path(base)
 
     if not output_dir.exists():
         return JSONResponse(
@@ -359,8 +363,15 @@ async def list_datacube_files(dir: Optional[str] = None) -> JSONResponse:
 @router.get("/files/{file_path:path}")
 async def get_datacube_file(file_path: str, dir: Optional[str] = None) -> FileResponse:
     """Get a visualizer file from the output directory."""
-    output_dir = Path(dir) if dir else Path(settings.OUTPUT_DIR)
-    resolved = _resolve_visualizer_path(file_path, output_dir)
+    base = os.path.realpath(str(settings.OUTPUT_DIR))
+    sub = os.path.join(dir, file_path) if dir else file_path
+    full = os.path.realpath(os.path.join(base, sub))
+    if full != base and not full.startswith(base + os.sep):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file path",
+        )
+    resolved = Path(full)
 
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(
@@ -413,8 +424,15 @@ async def integrate_datacube(
     tmp_path: str | None = None
     try:
         if server_path:
-            base_dir = Path(dir) if dir else Path(settings.OUTPUT_DIR)
-            resolved = _resolve_visualizer_path(server_path, base_dir)
+            base = os.path.realpath(str(settings.OUTPUT_DIR))
+            sub = os.path.join(dir, server_path) if dir else server_path
+            full = os.path.realpath(os.path.join(base, sub))
+            if full != base and not full.startswith(base + os.sep):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid file path",
+                )
+            resolved = Path(full)
             if not resolved.exists():
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
