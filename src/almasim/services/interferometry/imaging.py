@@ -1,20 +1,18 @@
 """Image processing functions for interferometry."""
 
+import numbers
+import os
+
+import astropy.units as u
+import ducc0 as _ducc0
 import numpy as np
 from astropy.io import fits
 from astropy.time import Time
-import astropy.units as u
+from scipy.constants import speed_of_light
 from scipy.ndimage import zoom
 
-from .baselines import prepare_baselines, set_baselines, set_noise, generate_via_astropy
+from .baselines import generate_via_astropy, prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
-from scipy.constants import speed_of_light
-import ducc0 as _ducc0
-
-import numbers
-
-
-import os
 
 ALMASIM_NTHREADS = os.environ.get("ALMASIM_NTHREADS", os.cpu_count())
 

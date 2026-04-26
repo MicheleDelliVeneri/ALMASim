@@ -1,8 +1,8 @@
 """Unit tests for interferometry imaging functions."""
 
+import astropy.units as astrounits
 import numpy as np
 import pytest
-import astropy.units as astrounits
 from astropy.io import fits
 
 from almasim.services.interferometry.imaging import (

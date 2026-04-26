@@ -1,8 +1,8 @@
 """Unit tests for interferometry baselines module."""
 
+import astropy.units as u
 import numpy as np
 import pytest
-import astropy.units as u
 from astropy.coordinates import EarthLocation
 from astropy.time import Time
 

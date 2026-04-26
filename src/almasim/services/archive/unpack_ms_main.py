@@ -1,7 +1,7 @@
-from .unpack_ms import create_measurement_sets
-from argparse import ArgumentParser
 import logging
+from argparse import ArgumentParser
 
+from .unpack_ms import create_measurement_sets
 
 logger = logging.getLogger(__name__)
 

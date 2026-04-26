@@ -4,12 +4,10 @@ import astropy.coordinates as coord
 import astropy.units as u
 import numpy as np
 import pytest
-from astropy.coordinates import EarthLocation
 from astropy.time import Time
 
 from almasim.services.interferometry.baselines import generate_via_astropy, pairwise_baselines
 from almasim.services.products.ms_io import export_native_ms
-
 
 ANTENNA_CONFIG = (
     Path(__file__).parents[3] / "src" / "almasim" / "antenna_config" / "antenna_coordinates.csv"
