@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from almasim.services.interferometry.utils import closest_power_of_2
 from app.core.config import settings
-from app.core.path_utils import validate_user_path
+from app.core.path_utils import resolve_safe_path
 
 router = APIRouter()
 
@@ -35,16 +35,7 @@ def _classify_visualizer_path(path: Path) -> str | None:
 
 
 def _resolve_visualizer_path(raw_path: str, base_dir: Path) -> Path:
-    validate_user_path(raw_path, detail="Invalid file path")
-    resolved = (base_dir.resolve() / raw_path).resolve()
-    try:
-        resolved.relative_to(base_dir.resolve())
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file path",
-        ) from exc
-    return resolved
+    return resolve_safe_path(raw_path, base_dir, detail="Invalid file path")
 
 
 def _iter_supported_paths(base_dir: Path) -> list[Path]:

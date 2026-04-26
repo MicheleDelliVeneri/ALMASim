@@ -11,7 +11,8 @@ from almasim.services.imaging import (
     integrate_cube_preview,
     load_cube_from_npz,
 )
-from app.core.path_utils import validate_user_path
+from app.core.config import settings
+from app.core.path_utils import resolve_safe_path
 from app.schemas.imaging import DeconvolutionRequest, DeconvolutionResponse
 
 router = APIRouter()
@@ -19,15 +20,7 @@ router = APIRouter()
 
 def _resolve_cube_path(base_dir: Path, file_path: str) -> Path:
     """Resolve an absolute or relative file path under a base directory."""
-    validate_user_path(file_path, detail="Invalid file path")
-    resolved = (base_dir / file_path).resolve()
-    try:
-        resolved.relative_to(base_dir.resolve())
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file path",
-        ) from exc
+    resolved = resolve_safe_path(file_path, base_dir, detail="Invalid file path")
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -64,8 +57,9 @@ async def deconvolve_saved_products(
     body: DeconvolutionRequest,
 ) -> DeconvolutionResponse:
     """Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews."""
-    validate_user_path(body.directory, allow_absolute=True, detail="Invalid base directory")
-    base_dir = Path(body.directory).resolve()
+    base_dir = resolve_safe_path(
+        body.directory, settings.OUTPUT_DIR, detail="Invalid base directory"
+    )
     if not base_dir.exists() or not base_dir.is_dir():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

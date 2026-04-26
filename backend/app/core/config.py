@@ -39,6 +39,10 @@ class Settings(BaseSettings):
         default=Path("outputs"),
         description="Default output directory for simulations",
     )
+    HOST_DIR: Path = Field(
+        default=Path("/host_home"),
+        description="Host filesystem mount point exposed for file browsing and downloads",
+    )
     TNG_DIR: Path = Field(
         default=Path("/data/TNG100-1"),
         description="TNG simulation data directory",

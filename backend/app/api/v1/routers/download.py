@@ -5,7 +5,8 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
-from app.core.path_utils import validate_user_path
+from app.core.config import settings
+from app.core.path_utils import resolve_safe_path
 from app.schemas.download import (
     BrowseDirectoryEntry,
     BrowseDirectoryResponse,
@@ -90,10 +91,7 @@ async def browse_directory(path: str = "/host_home"):
     with '.') are excluded for clarity.  The host home directory is mounted
     at /host_home so users can browse and download to their real filesystem.
     """
-    from pathlib import Path
-
-    validate_user_path(path, allow_absolute=True)
-    resolved = Path(path).expanduser().resolve()
+    resolved = resolve_safe_path(path, settings.HOST_DIR)
     # Walk up to the closest existing directory when the path doesn't exist
     while not resolved.is_dir():
         if resolved.parent == resolved:
@@ -115,10 +113,7 @@ def _format_bytes(size: int) -> str:
 @router.post("/mkdir", response_model=BrowseDirectoryResponse)
 async def make_directory(path: str):
     """Create a new directory and return a browse result for it."""
-    from pathlib import Path
-
-    validate_user_path(path, allow_absolute=True)
-    target = Path(path)
+    target = resolve_safe_path(path, settings.HOST_DIR)
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError as e:
@@ -184,9 +179,9 @@ async def resolve_download_products(body: ResolveProductsRequest):
 @router.post("/disk-space", response_model=DiskSpaceInfo)
 async def check_disk_space(body: CheckDiskSpaceRequest):
     """Check available disk space at a given path."""
-    validate_user_path(body.path, allow_absolute=True)
+    safe_path = resolve_safe_path(body.path, settings.HOST_DIR)
     try:
-        usage = shutil.disk_usage(body.path)
+        usage = shutil.disk_usage(safe_path)
     except OSError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

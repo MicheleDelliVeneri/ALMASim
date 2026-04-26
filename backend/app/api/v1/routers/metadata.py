@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.path_utils import validate_user_path
+from app.core.path_utils import resolve_safe_path
 from app.schemas.metadata import (
     MetadataPageResponse,
     MetadataQuery,
@@ -119,29 +119,16 @@ async def cancel_query(query_id: str) -> None:
         )
 
 
-def _path_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
 @router.get("/load/{file_path:path}", response_model=MetadataResponse)
 async def load_metadata(file_path: str, db: Session = Depends(get_db)) -> MetadataResponse:
     """Load metadata from a CSV file and cache in database."""
     try:
-        validate_user_path(file_path, allow_absolute=True)
-        candidate = Path(file_path)
-        if candidate.is_absolute():
-            resolved = candidate.resolve()
-        else:
-            resolved = (settings.DATA_DIR / candidate).resolve()
-        allowed = [settings.DATA_DIR.resolve(), settings.OUTPUT_DIR.resolve()]
-        if not any(_path_within(resolved, r) for r in allowed):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Path outside allowed directories",
+        # Try DATA_DIR first, fall back to OUTPUT_DIR.
+        try:
+            resolved = resolve_safe_path(file_path, settings.DATA_DIR)
+        except HTTPException:
+            resolved = resolve_safe_path(
+                file_path, settings.OUTPUT_DIR, detail="Path outside allowed directories"
             )
         service = MetadataService(db=db)
         data = service.load_metadata(resolved)
@@ -158,6 +145,9 @@ async def load_metadata(file_path: str, db: Session = Depends(get_db)) -> Metada
         )
 
 
+_SAVE_DETAIL = "Path must be within the outputs/query_results directory."
+
+
 def _resolve_metadata_path(raw_path: str, fmt: str = "json") -> Path:
     """Resolve and validate metadata save path within a writable directory."""
     # OUTPUT_DIR is writable in deployments (DATA_DIR is mounted read-only).
@@ -167,40 +157,21 @@ def _resolve_metadata_path(raw_path: str, fmt: str = "json") -> Path:
     sanitized = (raw_path or "").strip()
     suffix = ".csv" if fmt.lower() == "csv" else ".json"
 
-    # Reject traversal and null bytes before any Path construction.
-    validate_user_path(sanitized, detail="Path must be within the outputs/query_results directory.")
-
     if not sanitized:
         return base_dir / f"metadata-results{suffix}"
 
-    # Only relative paths are accepted — absolute paths are rejected.
-    candidate = Path(sanitized)
-    if candidate.is_absolute():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Path must be within the outputs/query_results directory.",
-        )
-
-    parts = list(candidate.parts)
-    # Remove common prefixes if present
+    # Strip common directory prefixes users may include from the UI.
+    parts = [p for p in sanitized.replace("\\", "/").split("/") if p]
     if parts and parts[0] in ("data", "metadata", "query_results", "outputs"):
         parts = parts[1:]
-    relative = Path(*parts) if parts else Path(f"metadata-results{suffix}")
-    resolved = (base_dir / relative).resolve()
+    relative = "/".join(parts) if parts else f"metadata-results{suffix}"
+
+    resolved = resolve_safe_path(relative, base_dir, detail=_SAVE_DETAIL)
 
     if resolved.suffix.lower() not in (".json", ".csv"):
         resolved = resolved.with_suffix(suffix)
-    # Re-align extension with requested format if they disagree.
     if resolved.suffix.lower() != suffix:
         resolved = resolved.with_suffix(suffix)
-
-    try:
-        resolved.relative_to(base_dir)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Path must be within the outputs/query_results directory.",
-        )
 
     resolved.parent.mkdir(parents=True, exist_ok=True)
     return resolved

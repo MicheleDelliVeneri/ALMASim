@@ -180,13 +180,14 @@ def test_download_tng_structure_remote_creates_dirs_via_sftp(tmp_path):
         with patch("almasim.skymodels.datasets.tng.paramiko") as mock_paramiko:
             mock_paramiko.RSAKey.from_private_key_file.return_value = MagicMock()
             mock_paramiko.SSHClient.return_value = mock_ssh
-            mock_paramiko.AutoAddPolicy = MagicMock()
             download_tng_structure("MY_KEY", tmp_path / "remote_dest", remote=remote)
     finally:
         tng_mod.pysftp = original_pysftp
 
     # SFTP Connection should have been used
     assert mock_pysftp_mod.Connection.called
+    mock_ssh.load_system_host_keys.assert_called_once_with()
+    mock_ssh.set_missing_host_key_policy.assert_not_called()
 
 
 @pytest.mark.unit
