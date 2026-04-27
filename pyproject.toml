@@ -43,6 +43,7 @@ dependencies = [
     "multiprocess",
     "scikit-image",
     "imagecodecs",
+    "ducc0"
 ]
 
 [project.optional-dependencies]

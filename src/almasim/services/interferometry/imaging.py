@@ -1,11 +1,20 @@
 """Image processing functions for interferometry."""
 
+import numbers
+import os
+
+import astropy.units as u
+import ducc0 as _ducc0
 import numpy as np
 from astropy.io import fits
+from astropy.time import Time
+from scipy.constants import speed_of_light
 from scipy.ndimage import zoom
 
-from .baselines import prepare_baselines, set_baselines, set_noise
+from .baselines import generate_via_astropy, prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
+
+ALMASIM_NTHREADS = os.environ.get("ALMASIM_NTHREADS", os.cpu_count())
 
 _rng = np.random.default_rng(0)
 
@@ -321,6 +330,209 @@ def image_channel(
         dirtyvis,
         u,
         v,
+        beam,
+        totsampling,
+        raw_visibility,
+    )
+
+
+# Lets keep it simple
+def get_n_threads():
+    import os
+
+    return os.environ.get("ALMASIM_NTHREADS", 10)
+
+
+def _get_xy_from_single_or_multi(couple_or_value):
+    if isinstance(couple_or_value, numbers.Number):
+        return couple_or_value, couple_or_value
+    elif hasattr(couple_or_value, "__iter__") and len(couple_or_value) == 2:
+        return couple_or_value
+    else:
+        raise ValueError(f"{couple_or_value} is neither a couple or a value")
+
+
+def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
+    """
+    Compute the most accurate weights possible for the problem
+    However this is expensive and an approximation should be used
+
+    ex. briggs or uniform weighting
+    """
+    # We assume here that the uvw first axis length
+    # is (n_baselines * n_times, 3)
+    wavelengths = np.asarray(wavelengths, dtype=np.float64)
+    n_pix_x, n_pix_y = _get_xy_from_single_or_multi(n_pix)
+    pixsize_x, pixsize_y = _get_xy_from_single_or_multi(pixsize)
+    n_times_baselines = uvw.shape[0]
+    n_frequencies = len(wavelengths)
+    frequencies = speed_of_light / wavelengths
+    # Sort frequencies in ascending order as required by ducc0
+    freq_sort_idx = np.argsort(frequencies)
+    frequencies = frequencies[freq_sort_idx]
+    ones_visibilities = np.ones((n_times_baselines, n_frequencies), dtype=np.complex128)
+
+    dirty_image = _ducc0.wgridder.vis2dirty(
+        uvw=uvw,
+        freq=frequencies,
+        vis=ones_visibilities,
+        npix_x=n_pix_x,
+        npix_y=n_pix_y,
+        pixsize_x=pixsize_x,
+        pixsize_y=pixsize_y,
+        epsilon=1.0e-8,
+        do_wgridding=True,
+        nthreads=nthreads,
+    )
+    weights = _ducc0.wgridder.dirty2vis(
+        uvw=uvw,
+        freq=frequencies,
+        dirty=dirty_image,
+        pixsize_x=pixsize_x,
+        pixsize_y=pixsize_y,
+        epsilon=1.0e-8,
+        do_wgridding=True,
+        nthreads=nthreads,
+    )
+    # Convert to float if it's complex (take magnitude)
+    if np.iscomplexobj(weights):
+        weights = np.abs(weights).astype(np.float32)
+    else:
+        weights = weights.astype(np.float32)
+    return weights
+
+
+def image_based_predict(
+    uvw, pix_size, image, wavelenghts, weight_func=exact_weighs, n_threads=ALMASIM_NTHREADS
+):
+    n_pix = image.shape[:2]
+    pixsize_x, pixsize_y = _get_xy_from_single_or_multi(pix_size)
+
+    weights = weight_func(uvw, n_pix, pix_size, wavelenghts, nthreads=n_threads)
+    wavelenghts = np.asarray(wavelenghts, dtype=np.float64)
+    frequencies = speed_of_light / wavelenghts
+    # Sort frequencies in ascending order as required by ducc0
+    freq_sort_idx = np.argsort(frequencies)
+    frequencies = frequencies[freq_sort_idx]
+    visibilities = _ducc0.wgridder.dirty2vis(
+        uvw=uvw,
+        freq=frequencies,
+        dirty=image,
+        wgt=weights,
+        pixsize_x=pixsize_x,
+        pixsize_y=pixsize_y,
+        epsilon=1.0e-6,
+        do_wgridding=True,
+        nthreads=n_threads,
+    )
+    return visibilities, weights
+
+
+def image_channel_ducc0(
+    img: np.ndarray,
+    wavelengths: list[float],
+    Npix: int,
+    Nant: int,
+    Hcov: list[float],
+    nH: int,
+    noise: float,
+    antPos: list,
+    robfac: float,
+    trlat: list[float],
+    trdec: list[float],
+    Diameters: list[float],
+    imsize: float,
+    Xmax: float,
+    lfac: float,
+    distmat: np.ndarray,
+    Nphf: int,
+    Np4: int,
+    zooming: int,
+    header: fits.Header | dict,
+    robust: float,
+    scan_time_s: float | None = None,
+):
+    """Process a single channel through interferometric simulation."""
+    # Convert header dict back to FITS Header if needed (for pickling compatibility)
+    if isinstance(header, dict):
+        header = fits.Header(header)
+    date_obs = header.get("DATE-OBS", header.get("DATEOBS"))
+    obs_time = Time(date_obs, format="isot", scale="utc") if date_obs else Time.now()
+
+    ra_deg = header.get("OBSRA", header.get("CRVAL1", header.get("RA")))
+    dec_deg = header.get("OBSDEC", header.get("CRVAL2", header.get("DEC")))
+    if ra_deg is None or dec_deg is None:
+        raise ValueError(
+            "Header must contain pointing coordinates in OBSRA/OBSDEC or CRVAL1/CRVAL2"
+        )
+
+    antenna_positions = np.asarray(antPos, dtype=np.float64)
+    if antenna_positions.ndim != 2 or antenna_positions.shape[1] not in (2, 3):
+        raise ValueError("antPos must be a 2D array-like with shape (N, 2) or (N, 3)")
+
+    uvw = generate_via_astropy(
+        antenna_positions,
+        float(ra_deg) * u.deg,
+        float(dec_deg) * u.deg,
+        obs_time,
+    )
+    modelim, modelimTrue = _prepare_model(Npix, img, Nphf, Np4, zooming)
+    modelfft, modelim = set_primary_beam(
+        header, distmat, wavelengths, Diameters, modelim, modelimTrue
+    )
+    pixel_scale_arcsec = float(imsize) / float(Npix)
+    pixel_scale_rad = np.deg2rad(pixel_scale_arcsec / 3600.0)
+    pixsize_x = pixel_scale_rad
+    pixsize_y = pixel_scale_rad
+    frequencies = speed_of_light / np.asarray(wavelengths, dtype=np.float64)
+    nthreads = int(ALMASIM_NTHREADS)
+
+    visibilities, weights = image_based_predict(
+        uvw,
+        (pixsize_x, pixsize_y),
+        modelim[0],
+        wavelengths,
+        weight_func=exact_weighs,
+        n_threads=nthreads,
+    )
+
+    dirtymap = _ducc0.wgridder.vis2dirty(
+        uvw=uvw,
+        freq=frequencies,
+        vis=visibilities,
+        npix_x=Npix,
+        npix_y=Npix,
+        pixsize_x=pixsize_x,
+        pixsize_y=pixsize_y,
+        epsilon=1.0e-6,
+        do_wgridding=True,
+        nthreads=nthreads,
+    )
+
+    # Extract u, v from uvw (ducc0 path doesn't compute these separately in classic way)
+    u_vals = uvw[:, 0]
+    v_vals = uvw[:, 1]
+
+    # Initialize standard output arrays to match image_channel signature
+    beam = np.zeros((Npix, Npix), dtype=np.float32)
+    totsampling = np.ones((Npix, Npix), dtype=np.float32)
+
+    # Placeholder visibilities and raw data (ducc0 path produces different outputs)
+    modelvis = visibilities
+    dirtyvis = np.fft.fft2(dirtymap)
+    raw_visibility = {
+        "uvw_m": uvw,
+        "visibilities": visibilities,
+        "weights": weights,
+    }
+
+    return (
+        modelim[0],
+        dirtymap,
+        modelvis,
+        dirtyvis,
+        u_vals,
+        v_vals,
         beam,
         totsampling,
         raw_visibility,
