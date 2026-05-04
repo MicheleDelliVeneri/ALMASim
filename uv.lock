@@ -152,7 +152,7 @@ dev = [
     { name = "ruff" },
     { name = "sphinx", specifier = ">=9.1.0" },
     { name = "sphinx-copybutton", specifier = ">=0.5.2" },
-    { name = "sphinx-rtd-theme", specifier = ">=2.0" },
+    { name = "sphinx-rtd-theme", specifier = ">=3.1.0" },
     { name = "uvicorn", extras = ["standard"] },
 ]
 test = [
@@ -402,7 +402,7 @@ wheels = [
 
 [[package]]
 name = "casatasks"
-version = "6.7.3.21"
+version = "6.7.5.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "casatools" },
@@ -412,21 +412,22 @@ dependencies = [
     { name = "scipy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/81/575bd0088ad1b1f4cc7ac80e2fb61b3a4e08d3b4b2b81d550302243327e1/casatasks-6.7.3.21-py3-none-any.whl", hash = "sha256:9b321d891071b60a1068a76aeac3ac190a344a88fe0647f28518e21f400d1804", size = 1885298, upload-time = "2026-01-27T14:46:11.063Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/63/74235c25eb20757bc6273987a0a19371f03f5278b4d9c25e03dcf90d0327/casatasks-6.7.5.18-py3-none-any.whl", hash = "sha256:3a5df58162c1fb8a527afe6a875c4699379716c0bb3a1e7e16f2b22468e716d4", size = 1901528, upload-time = "2026-04-27T20:32:50.393Z" },
 ]
 
 [[package]]
 name = "casatools"
-version = "6.7.3.21"
+version = "6.7.5.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "casaconfig" },
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/90/a3/eb525afb824c99ba3b673985a48d3154ee82825f9933ce5847d5e18b8afc/casatools-6.7.3.21-cp312-cp312-macosx_15_0_arm64.whl", hash = "sha256:8b5638d221a5a7b81d1eaf1d16534207fa135d1a8173579b2b55b888d5e0541f", size = 71881329, upload-time = "2026-01-27T14:46:32.295Z" },
-    { url = "https://files.pythonhosted.org/packages/f0/6e/97e9a392fb1aa0514f43ab58639f0e4ab3e8ffb790583816c93bd23e0a09/casatools-6.7.3.21-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:e564fbbb8b9b50d748d81bf7fe5d01af7817de4d28d72b5647bfe0d74c460b6a", size = 78551046, upload-time = "2026-01-27T14:46:54.093Z" },
-    { url = "https://files.pythonhosted.org/packages/22/91/b55dc0ee74081b76ed3c1a83f8635af906e98f0a901b9c7ea04bfc83b66c/casatools-6.7.3.21-cp312-cp312-manylinux_2_34_x86_64.whl", hash = "sha256:402df479ccab6e9b8a5edc73af05fae0cd4df06a9be6281e538c085f6fedb840", size = 87493101, upload-time = "2026-01-27T14:47:17.293Z" },
+    { url = "https://files.pythonhosted.org/packages/26/43/cf0b94ce501ec2cec8a1966c1a973aaaa8c6e20a4d813e96d7187c124bb7/casatools-6.7.5.18-cp312-cp312-macosx_15_0_arm64.whl", hash = "sha256:135bffdfbf9d069c3f6b24362453c9319d7642b3064a5d5e7a48f76d929ecac9", size = 72018648, upload-time = "2026-04-27T20:32:55.124Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/ae/e58dc7bac24921984a8fcb811012dc7062aebe463bb1faf1aac22dfefd0f/casatools-6.7.5.18-cp312-cp312-macosx_26_0_arm64.whl", hash = "sha256:b1b898ad51b0a6d4c17433ced8c86f3625e6c69844740994eb6468919af43086", size = 73769776, upload-time = "2026-04-27T20:33:00.64Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/21/456b07f035c3a1aea1a905c9e9d6e27cef559d260b539434c077c28fad1a/casatools-6.7.5.18-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:ac862b1b1e1a3fb7b7c1bfba64aee30b09f01439ba8336866901145d60d68e81", size = 78972049, upload-time = "2026-04-27T20:33:04.98Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/df/b7392f11f9b18f1db5332a85f841034ad428e70631ee9b3472f23b3dd16b/casatools-6.7.5.18-cp312-cp312-manylinux_2_34_x86_64.whl", hash = "sha256:851adec89ba8ee6e29633e9e8fcf57a048448458c2ce2281fac419613a94d6d1", size = 87880578, upload-time = "2026-04-27T20:33:09.592Z" },
 ]
 
 [[package]]
@@ -812,7 +813,9 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/65/8b/3669ad3b3f247a791b2b4aceb3aa5a31f5f6817bf547e4e1ff712338145a/greenlet-3.4.0-cp312-cp312-macosx_11_0_universal2.whl", hash = "sha256:1a54a921561dd9518d31d2d3db4d7f80e589083063ab4d3e2e950756ef809e1a", size = 286902, upload-time = "2026-04-08T15:52:12.138Z" },
     { url = "https://files.pythonhosted.org/packages/38/3e/3c0e19b82900873e2d8469b590a6c4b3dfd2b316d0591f1c26b38a4879a5/greenlet-3.4.0-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:16dec271460a9a2b154e3b1c2fa1050ce6280878430320e85e08c166772e3f97", size = 606099, upload-time = "2026-04-08T16:24:38.408Z" },
     { url = "https://files.pythonhosted.org/packages/b5/33/99fef65e7754fc76a4ed14794074c38c9ed3394a5bd129d7f61b705f3168/greenlet-3.4.0-cp312-cp312-manylinux_2_24_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:90036ce224ed6fe75508c1907a77e4540176dcf0744473627785dd519c6f9996", size = 618837, upload-time = "2026-04-08T16:30:58.298Z" },
+    { url = "https://files.pythonhosted.org/packages/44/57/eae2cac10421feae6c0987e3dc106c6d86262b1cb379e171b017aba893a6/greenlet-3.4.0-cp312-cp312-manylinux_2_24_s390x.manylinux_2_28_s390x.whl", hash = "sha256:6f0def07ec9a71d72315cf26c061aceee53b306c36ed38c35caba952ea1b319d", size = 624901, upload-time = "2026-04-08T16:40:38.981Z" },
     { url = "https://files.pythonhosted.org/packages/36/f7/229f3aed6948faa20e0616a0b8568da22e365ede6a54d7d369058b128afd/greenlet-3.4.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a1c4f6b453006efb8310affb2d132832e9bbb4fc01ce6df6b70d810d38f1f6dc", size = 615062, upload-time = "2026-04-08T15:56:33.766Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/8a/0e73c9b94f31d1cc257fe79a0eff621674141cdae7d6d00f40de378a1e42/greenlet-3.4.0-cp312-cp312-manylinux_2_39_riscv64.whl", hash = "sha256:0e1254cf0cbaa17b04320c3a78575f29f3c161ef38f59c977108f19ffddaf077", size = 423927, upload-time = "2026-04-08T16:43:05.293Z" },
     { url = "https://files.pythonhosted.org/packages/08/97/d988180011aa40135c46cd0d0cf01dd97f7162bae14139b4a3ef54889ba5/greenlet-3.4.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:9b2d9a138ffa0e306d0e2b72976d2fb10b97e690d40ab36a472acaab0838e2de", size = 1573511, upload-time = "2026-04-08T16:26:20.058Z" },
     { url = "https://files.pythonhosted.org/packages/d4/0f/a5a26fe152fb3d12e6a474181f6e9848283504d0afd095f353d85726374b/greenlet-3.4.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:8424683caf46eb0eb6f626cb95e008e8cc30d0cb675bdfa48200925c79b38a08", size = 1640396, upload-time = "2026-04-08T15:57:30.88Z" },
     { url = "https://files.pythonhosted.org/packages/42/cf/bb2c32d9a100e36ee9f6e38fad6b1e082b8184010cb06259b49e1266ca01/greenlet-3.4.0-cp312-cp312-win_amd64.whl", hash = "sha256:a0a53fb071531d003b075c444014ff8f8b1a9898d36bb88abd9ac7b3524648a2", size = 238892, upload-time = "2026-04-08T17:03:10.094Z" },
@@ -1272,7 +1275,7 @@ wheels = [
 
 [[package]]
 name = "marimo"
-version = "0.23.3"
+version = "0.23.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1294,9 +1297,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/3f/7fb38c6c2a1f8d6b3c3ffb8ca6db5ff0b9dacbb113b4d05aa7690b51a771/marimo-0.23.3.tar.gz", hash = "sha256:251a8724b58882d65956ff6a20552cb21e59a6fd4149ca437727894375ec31e9", size = 38406206, upload-time = "2026-04-24T17:56:21.016Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/99/1a/79f8fc2af1be74283ba3b701cba77472ec4f30949ffa88a3166d4bb7e751/marimo-0.23.4.tar.gz", hash = "sha256:8e5f1bd78a73cb04d775e650473cfab745303be746f141a3654dcd246de2a4e6", size = 38403567, upload-time = "2026-04-28T18:01:51.14Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/e7/02d672006fb04cb8aef23aeaf0384482fe63a13f9db6125ad8e13146daee/marimo-0.23.3-py3-none-any.whl", hash = "sha256:329b35b9ca221db9c78780d1714b11f010a00e2a929942db8ae6187960d42496", size = 38828150, upload-time = "2026-04-24T17:56:16.204Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/13/c1c3d0f889115ad33e2122efd16c842f8588aab7e0d243f29125a0ee8ad5/marimo-0.23.4-py3-none-any.whl", hash = "sha256:67806cf1dc4f438624e4640debf80e0689173399b8ee17de7f879cb07f6fb476", size = 38824790, upload-time = "2026-04-28T18:01:47.909Z" },
 ]
 
 [[package]]

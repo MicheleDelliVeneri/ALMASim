@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
 
@@ -137,6 +138,6 @@ jobs:
           run: uv run pytest --ignore=illustris_python --cov=./ --cov-report=xml --rootdir ${{ github.workspace }}
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
