@@ -6,10 +6,13 @@ import pytest
 from astropy.io import fits
 
 from almasim.services.interferometry.imaging import (
+    _get_xy_from_single_or_multi,
     _grid_uv,
     _prepare_model,
     add_thermal_noise,
     check_lfac,
+    exact_weighs,
+    get_n_threads,
     image_channel,
     image_channel_ducc0,
     observe,
@@ -343,6 +346,150 @@ def test_grid_uv_basic(sample_arrays, sample_npix):
     assert UVpixsize > 0
     assert isinstance(robfac, (float, np.floating))
     assert len(baseline_phases) == Nbas
+
+
+@pytest.mark.unit
+def test_exact_weighs_real_valued_branch(monkeypatch):
+    """exact_weighs should handle real (non-complex) weights from dirty2vis."""
+    uvw = np.zeros((4, 3), dtype=np.float64)
+    wavelengths = [0.003]
+    n_pix = (32, 32)
+    pixsize = (1e-6, 1e-6)
+
+    # Return real-valued weights to exercise the else branch (line 401)
+    monkeypatch.setattr(
+        "ducc0.wgridder.vis2dirty", lambda *a, **kw: np.ones((32, 32), dtype=np.float64)
+    )
+    monkeypatch.setattr(
+        "ducc0.wgridder.dirty2vis",
+        lambda *a, **kw: np.ones((4, 1), dtype=np.float64),  # real, not complex
+    )
+
+    result = exact_weighs(uvw, n_pix, pixsize, wavelengths)
+    assert result.dtype == np.float32
+
+
+@pytest.mark.unit
+def test_get_n_threads_default(monkeypatch):
+    """get_n_threads returns env var value or default 10."""
+    monkeypatch.delenv("ALMASIM_NTHREADS", raising=False)
+    assert get_n_threads() == 10
+
+
+@pytest.mark.unit
+def test_get_n_threads_env_override(monkeypatch):
+    """get_n_threads reads ALMASIM_NTHREADS env var."""
+    monkeypatch.setenv("ALMASIM_NTHREADS", "4")
+    assert get_n_threads() == "4"
+
+
+@pytest.mark.unit
+def test_get_xy_from_single_or_multi_scalar():
+    """Scalar input should return (value, value)."""
+    assert _get_xy_from_single_or_multi(5) == (5, 5)
+    assert _get_xy_from_single_or_multi(3.14) == (3.14, 3.14)
+
+
+@pytest.mark.unit
+def test_get_xy_from_single_or_multi_invalid():
+    """Non-scalar non-pair input should raise ValueError."""
+    with pytest.raises(ValueError):
+        _get_xy_from_single_or_multi([1, 2, 3])
+
+
+@pytest.mark.unit
+def test_image_channel_accepts_dict_header(sample_wavelength):
+    """image_channel should accept a plain dict as header (tests dict→Header conversion)."""
+    Npix = 32
+    Nphf = Npix // 2
+    header_dict = {
+        "NAXIS": 3,
+        "NAXIS1": Npix,
+        "NAXIS2": Npix,
+        "NAXIS3": 16,
+    }
+    antPos = [
+        [float(x), float(y)]
+        for x, y in [
+            (0, 0), (100, 0), (0, 100), (100, 100),
+            (50, 0), (0, 50), (50, 50), (25, 25),
+            (75, 25), (25, 75), (75, 75), (50, 100),
+        ]
+    ]
+    rng = np.random.default_rng(42)
+    result = image_channel(
+        img=rng.random((Nphf, Nphf)).astype(np.float32) * 0.1,
+        wavelength=sample_wavelength,
+        Npix=Npix,
+        Nant=12,
+        Hcov=[0.0, 1.0, 2.0],
+        nH=60,
+        noise=0.01,
+        antPos=antPos,
+        robfac=0.1,
+        trlat=[0.0, 1.0],
+        trdec=[0.0, 1.0],
+        Diameters=[12.0],
+        imsize=10.0,
+        Xmax=1.0,
+        lfac=1.0e6,
+        distmat=rng.random((Npix, Npix)).astype(np.float32) * 100.0,
+        Nphf=Nphf,
+        Np4=Npix // 4,
+        zooming=1,
+        header=header_dict,
+        robust=0.0,
+    )
+    assert isinstance(result, tuple)
+    assert len(result) == 9
+
+
+@pytest.mark.unit
+def test_image_channel_ducc0_accepts_dict_header(sample_wavelength, monkeypatch):
+    """image_channel_ducc0 should accept a plain dict as header."""
+    header_dict = {
+        "DATE-OBS": "2024-01-01T00:00:00",
+        "OBSRA": 180.0,
+        "OBSDEC": -30.0,
+    }
+    valid_antpos = np.array(
+        [[0.0, 0.0, 0.0], [100.0, 0.0, 0.0], [0.0, 100.0, 0.0], [100.0, 100.0, 0.0]],
+        dtype=np.float64,
+    )
+    mock_visibilities = np.zeros((64, 8), dtype=np.complex64)
+    mock_weights = np.ones((64, 8), dtype=np.float32)
+    mock_dirtymap = np.zeros((32, 32), dtype=np.float32)
+
+    monkeypatch.setattr(
+        "almasim.services.interferometry.imaging.image_based_predict",
+        lambda *a, **kw: (mock_visibilities, mock_weights),
+    )
+    monkeypatch.setattr("ducc0.wgridder.vis2dirty", lambda *a, **kw: mock_dirtymap)
+
+    result = image_channel_ducc0(
+        img=np.ones((16, 16), dtype=np.float32),
+        wavelengths=sample_wavelength,
+        Npix=32,
+        Nant=4,
+        Hcov=[0.0, 1.0],
+        nH=10,
+        noise=0.01,
+        antPos=valid_antpos,
+        robfac=0.1,
+        trlat=[0.0, 1.0],
+        trdec=[0.0, 1.0],
+        Diameters=[12.0],
+        imsize=10.0,
+        Xmax=1.0,
+        lfac=1.0e6,
+        distmat=np.zeros((32, 32), dtype=np.float32),
+        Nphf=16,
+        Np4=8,
+        zooming=1,
+        header=header_dict,
+        robust=0.0,
+    )
+    assert isinstance(result, tuple)
 
 
 @pytest.mark.unit

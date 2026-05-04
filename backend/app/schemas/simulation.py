@@ -1,7 +1,7 @@
 """Simulation-related schemas."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -64,6 +64,10 @@ class SimulationParamsBase(BaseModel):
     )
     inject_serendipitous: bool = Field(default=False, description="Inject serendipitous sources")
     robust: float = Field(default=0.0, description="Robustness parameter")
+    imaging_algorithm: Literal["legacy", "ducc0"] = Field(
+        default="legacy",
+        description="Imaging implementation: legacy or ducc0",
+    )
     compute_backend: Optional[str] = Field(
         default="local",
         description=("Computation backend type: local, dask, slurm, or kubernetes"),

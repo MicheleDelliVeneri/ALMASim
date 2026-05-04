@@ -32,6 +32,8 @@
 	let selectedLogSimulation = $state<SimulationSummary | null>(null);
 	let selectedSimulationStatus = $state<SimulationStatus | null>(null);
 	let logSocket: WebSocket | null = null;
+	const SIMULATIONS_FETCH_TIMEOUT_MS = 20_000;
+	const SIMULATIONS_REFRESH_INTERVAL_MS = 10_000;
 
 	async function fetchSimulations() {
 		if (refreshing) {
@@ -47,7 +49,7 @@
 			error = null;
 			currentRequest?.abort();
 			const controller = new AbortController();
-			timeoutId = window.setTimeout(() => controller.abort(), 5000);
+			timeoutId = window.setTimeout(() => controller.abort('timeout'), SIMULATIONS_FETCH_TIMEOUT_MS);
 			currentRequest = controller;
 			const response = await fetch(`${apiUrl}/api/v1/simulations/`, {
 				signal: controller.signal
@@ -60,7 +62,12 @@
 			logger.debug({ count: simulations.length }, 'Simulations list refreshed');
 		} catch (err) {
 			if (err instanceof DOMException && err.name === 'AbortError') {
-				error = 'Timed out while loading simulations';
+				if (currentRequest?.signal?.reason === 'timeout') {
+					error = 'Timed out while loading simulations';
+				} else {
+					// Request was superseded or component unmounted; avoid noisy user-facing errors.
+					error = null;
+				}
 				return;
 			}
 			error = err instanceof Error ? err.message : 'Failed to load simulations';
@@ -214,8 +221,8 @@
 	onMount(() => {
 		logger.info('SimulationsList mounted');
 		fetchSimulations();
-		// Refresh every 5 seconds
-		const interval = setInterval(fetchSimulations, 5000);
+		// Refresh every 10 seconds to reduce load during long simulations.
+		const interval = setInterval(fetchSimulations, SIMULATIONS_REFRESH_INTERVAL_MS);
 		return () => {
 			clearInterval(interval);
 			currentRequest?.abort();

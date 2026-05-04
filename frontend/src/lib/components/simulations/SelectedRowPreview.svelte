@@ -16,6 +16,7 @@
 		saveMode: string;
 		nLines: number;
 		robust: number;
+		imagingAlgorithm: 'legacy' | 'ducc0';
 		sourceOffsetXArcsec: number;
 		sourceOffsetYArcsec: number;
 		backgroundMode: string;
@@ -26,7 +27,7 @@
 		estimateError: string | null;
 	}
 
-	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataSnr, useMetadataPwv, pwvOverride, saveMode, nLines, robust, sourceOffsetXArcsec, sourceOffsetYArcsec, backgroundMode, backgroundLevel, backgroundSeed, estimate, estimating, estimateError }: Props = $props();
+	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataSnr, useMetadataPwv, pwvOverride, saveMode, nLines, robust, imagingAlgorithm, sourceOffsetXArcsec, sourceOffsetYArcsec, backgroundMode, backgroundLevel, backgroundSeed, estimate, estimating, estimateError }: Props = $props();
 
 	function derivePreviewSnr(targetRow: Record<string, unknown>): string {
 		if (!useMetadataSnr) return `${snr.toFixed(2)} (manual)`;
@@ -137,6 +138,10 @@
 				<p class="mt-1 text-gray-900">
 					{sourceOffsetXArcsec.toFixed(1)}", {sourceOffsetYArcsec.toFixed(1)}"
 				</p>
+			</div>
+			<div>
+				<span class="font-medium text-gray-700">Imaging Algorithm:</span>
+				<p class="mt-1 text-gray-900">{imagingAlgorithm}</p>
 			</div>
 			<div>
 				<span class="font-medium text-gray-700">Cube Size:</span>

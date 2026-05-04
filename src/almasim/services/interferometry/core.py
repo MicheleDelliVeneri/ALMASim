@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
 
 from ..products.cube_export import write_interferometry_products
-from .imaging import image_channel
+from .imaging import image_channel, image_channel_ducc0
 from .utils import sampling_to_uv_mask
 from .visibility import assemble_visibility_table
 
@@ -66,6 +66,7 @@ class Interferometer:
         header: fits.Header,
         save_mode: str,
         robust: float,
+        imaging_algorithm: str = "legacy",
         persist: bool = True,
         antenna_diameter_m: float = 12.0,
         config_name: Optional[str] = None,
@@ -138,6 +139,7 @@ class Interferometer:
         self.save_mode = save_mode
         self.persist = persist
         self.robust = robust
+        self.imaging_algorithm = str(imaging_algorithm).lower()
         self.antenna_diameter_m = float(antenna_diameter_m)
         self.config_name = config_name
         self.array_type = array_type
@@ -359,8 +361,13 @@ class Interferometer:
             # Fallback: create empty dict if conversion fails
             header_dict = {}
 
+        # Select channel imaging implementation once per simulation run.
+        channel_imager = image_channel
+        if self.imaging_algorithm == "ducc0":
+            channel_imager = image_channel_ducc0
+
         # Get the delayed decorator from the backend
-        delayed = self.backend.delayed(image_channel)
+        delayed = self.backend.delayed(channel_imager)
 
         delayed_results = []
         for i in range(self.Nchan):
