@@ -1,0 +1,19 @@
+{
+  "name": "ALMASim (py312 + CASA + casacore)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceFolder": "/workspaces/ALMASim",
+  "postCreateCommand": "uv sync --group dev --group test --extra ms-casacore --extra casa",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/ALMASim/.venv/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  }
+}

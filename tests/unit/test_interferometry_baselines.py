@@ -1,9 +1,13 @@
 """Unit tests for interferometry baselines module."""
 
+import astropy.units as u
 import numpy as np
 import pytest
+from astropy.coordinates import EarthLocation
+from astropy.time import Time
 
 from almasim.services.interferometry.baselines import (
+    generate_via_astropy,
     prepare_baselines,
     set_baselines,
     set_noise,
@@ -188,3 +192,47 @@ def test_set_baselines_uv_calculation():
     # u should depend on B and H
     assert u.shape == (1, 3)
     assert v.shape == (1, 3)
+
+
+@pytest.mark.unit
+def test_generate_via_astropy_accepts_geodetic_lat_lon():
+    """Geodetic [lat, lon] input should match equivalent XYZ input."""
+    lat_lon_deg = np.array(
+        [
+            [-23.0290, -67.7550],
+            [-23.0286, -67.7543],
+            [-23.0282, -67.7536],
+        ],
+        dtype=np.float64,
+    )
+    loc_xyz = EarthLocation.from_geodetic(
+        lon=lat_lon_deg[:, 1] * u.deg,
+        lat=lat_lon_deg[:, 0] * u.deg,
+        height=np.zeros(lat_lon_deg.shape[0]) * u.m,
+    )
+    xyz_m = np.column_stack(
+        [
+            loc_xyz.x.to_value(u.m),
+            loc_xyz.y.to_value(u.m),
+            loc_xyz.z.to_value(u.m),
+        ]
+    )
+
+    ra = 3.26 * u.rad
+    dec = -1.05 * u.rad
+    time = Time("2024-01-01T00:00:00", scale="utc")
+
+    uvw_from_xyz = generate_via_astropy(xyz_m, ra, dec, time)
+    uvw_from_latlon = generate_via_astropy(lat_lon_deg, ra, dec, time)
+
+    assert uvw_from_xyz.shape == uvw_from_latlon.shape
+    np.testing.assert_allclose(uvw_from_latlon, uvw_from_xyz, rtol=1e-9, atol=1e-6)
+
+
+@pytest.mark.unit
+def test_generate_via_astropy_rejects_invalid_shape():
+    """Invalid antenna position shape should raise a clear error."""
+    with pytest.raises(ValueError, match=r"shape \(N, 3\) or \(N, 2\)"):
+        generate_via_astropy(
+            np.ones((3, 4), dtype=np.float64), 3.26 * u.rad, -1.05 * u.rad, Time.now()
+        )

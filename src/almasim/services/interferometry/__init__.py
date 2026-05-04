@@ -8,7 +8,13 @@ from .antenna import (
     get_max_baseline_from_antenna_array,
     get_max_baseline_from_antenna_config,
 )
-from .baselines import prepare_baselines, set_baselines, set_noise
+from .baselines import (
+    generate_via_astropy,
+    pairwise_baselines,
+    prepare_baselines,
+    set_baselines,
+    set_noise,
+)
 from .core import Interferometer, ProgressSignal
 from .frequency import freq_supp_extractor, remove_non_numeric
 from .imaging import (
@@ -43,6 +49,8 @@ __all__ = [
     "prepare_baselines",
     "set_baselines",
     "set_noise",
+    "pairwise_baselines",
+    "generate_via_astropy",
     "NoiseModelConfig",
     "estimate_receiver_temperature_k",
     "estimate_sky_temperature_k",

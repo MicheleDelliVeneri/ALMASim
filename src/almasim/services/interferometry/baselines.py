@@ -2,7 +2,78 @@
 
 from typing import Tuple
 
+import astropy.coordinates as coord
+import astropy.units as u
 import numpy as np
+from astropy.coordinates import EarthLocation
+from astropy.time import Time
+
+
+def pairwise_baselines(positions_xyz_m: np.ndarray) -> np.ndarray:
+    """Compute all unique antenna-pair baselines from Cartesian positions."""
+    n_antennas = positions_xyz_m.shape[0]
+    baselines = np.zeros((n_antennas * (n_antennas - 1) // 2, 3), dtype=np.float64)
+    count = 0
+    for i in range(n_antennas):
+        for j in range(i):
+            baselines[count, :] = positions_xyz_m[i] - positions_xyz_m[j]
+            count += 1
+    return baselines
+
+
+def generate_via_astropy(
+    antenna_positions_m: np.ndarray,
+    ra: u.Quantity,
+    dec: u.Quantity,
+    time: Time,
+) -> np.ndarray:
+    """Project antenna positions into UVW coordinates for a phase center.
+
+    Parameters
+    ----------
+    antenna_positions_m : np.ndarray
+        Either geocentric positions with shape (N, 3) as [x, y, z] in meters,
+        or geodetic positions with shape (N, 2) as [lat_deg, lon_deg].
+    """
+    positions = np.asarray(antenna_positions_m, dtype=np.float64)
+    if positions.ndim != 2:
+        raise ValueError("antenna_positions_m must be a 2D array")
+
+    if positions.shape[1] == 3:
+        antpos = EarthLocation(
+            x=positions[:, 0] * u.m,
+            y=positions[:, 1] * u.m,
+            z=positions[:, 2] * u.m,
+        )
+    elif positions.shape[1] == 2:
+        lat_deg = positions[:, 0]
+        lon_deg = positions[:, 1]
+        if np.any(lat_deg < -90.0) or np.any(lat_deg > 90.0):
+            raise ValueError("Latitude must be within [-90, 90] degrees")
+        if np.any(lon_deg < -360.0) or np.any(lon_deg > 360.0):
+            raise ValueError("Longitude must be within [-360, 360] degrees")
+        antpos = EarthLocation.from_geodetic(
+            lon=lon_deg * u.deg,
+            lat=lat_deg * u.deg,
+            height=np.zeros_like(lat_deg) * u.m,
+        )
+    else:
+        raise ValueError("antenna_positions_m must have shape (N, 3) or (N, 2)")
+
+    alma_site = EarthLocation.of_site("ALMA")
+
+    alma_p, alma_v = alma_site.get_gcrs_posvel(time)
+    antpos_gcrs = coord.GCRS(
+        antpos.get_gcrs_posvel(time)[0],
+        obstime=time,
+        obsgeoloc=alma_p,
+        obsgeovel=alma_v,
+    )
+
+    pnt = coord.SkyCoord(ra, dec, frame="icrs")
+    frame_uvw = pnt.transform_to(antpos_gcrs).skyoffset_frame()
+    antpos_uvw_xyz = antpos_gcrs.transform_to(frame_uvw).cartesian.xyz.to_value(u.m).T
+    return pairwise_baselines(antpos_uvw_xyz)
 
 
 def prepare_baselines(
