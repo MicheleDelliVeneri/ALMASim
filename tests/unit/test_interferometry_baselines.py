@@ -242,9 +242,7 @@ def test_generate_via_astropy_rejects_invalid_shape():
 def test_generate_via_astropy_rejects_1d_input():
     """1D antenna position array should raise a clear error."""
     with pytest.raises(ValueError, match="2D array"):
-        generate_via_astropy(
-            np.ones(6, dtype=np.float64), 3.26 * u.rad, -1.05 * u.rad, Time.now()
-        )
+        generate_via_astropy(np.ones(6, dtype=np.float64), 3.26 * u.rad, -1.05 * u.rad, Time.now())
 
 
 @pytest.mark.unit
