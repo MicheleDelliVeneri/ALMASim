@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
     "astropy",
     "asyncssh",
+    "httpx",
     "pyvo",
     "numpy",
     "pandas",
