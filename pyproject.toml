@@ -43,8 +43,12 @@ dependencies = [
     "multiprocess",
     "scikit-image",
     "imagecodecs",
-    "ducc0"
+    "ducc0",
+    "typer"
 ]
+
+[project.scripts]
+almasim = "almasim.cli:main"
 
 [project.optional-dependencies]
 casa = ["casatools", "casatasks"]

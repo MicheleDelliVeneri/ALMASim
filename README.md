@@ -326,6 +326,11 @@ All examples use the `sync` compute backend and require no running scheduler.
 | [`examples/imaging_cli.py`](examples/imaging_cli.py) | Synthetic imaging + iterative deconvolution |
 
 ```bash
+# Installable CLI (Typer)
+almasim metadata query \
+  --science-keyword Galaxies --band 6 \
+  --save-csv examples/output/metadata.csv
+
 # Query metadata for Band 6 galaxy observations
 python examples/query_metadata_cli.py \
   --science-keyword Galaxies --band 6 \
