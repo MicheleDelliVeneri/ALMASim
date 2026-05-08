@@ -24,6 +24,20 @@ The examples use the in-process `sync` compute backend so they do not require Da
 Metadata query CLI usage:
 
 ```bash
+almasim metadata query \
+  --science-keyword Galaxies \
+  --band 6 \
+  --save-csv examples/output/metadata_query_results.csv
+
+almasim products resolve \
+  --metadata-csv examples/output/metadata_query_results.csv \
+  --save-products-csv examples/output/resolved_products.csv
+
+almasim products download \
+  --products-csv examples/output/resolved_products.csv \
+  --destination examples/output/downloads \
+  --extract-tar
+
 python examples/query_metadata_cli.py \
   --science-keyword Galaxies \
   --band 6 \

@@ -331,6 +331,30 @@ almasim metadata query \
   --science-keyword Galaxies --band 6 \
   --save-csv examples/output/metadata.csv
 
+# Extract member_ous_uid values and resolve DataLink products
+almasim products resolve \
+  --metadata-csv examples/output/metadata.csv \
+  --save-member-ous-uid-list examples/output/member_ous_uids.txt \
+  --save-products-csv examples/output/resolved_products.csv
+
+# Download selected product types and extract archives
+almasim products download \
+  --products-csv examples/output/resolved_products.csv \
+  --product-filter all \
+  --destination examples/output/downloads \
+  --extract-tar
+
+# Download + unpack ASDM + calibrate using Slurm-backed parallel post-processing
+almasim products download \
+  --products-csv examples/output/resolved_products.csv \
+  --destination examples/output/downloads \
+  --extract-tar \
+  --unpack-ms \
+  --generate-calibrated-visibilities \
+  --postprocess-backend slurm \
+  --slurm-queue normal \
+  --slurm-workers 8
+
 # Query metadata for Band 6 galaxy observations
 python examples/query_metadata_cli.py \
   --science-keyword Galaxies --band 6 \
