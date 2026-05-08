@@ -25,6 +25,12 @@ def _json_safe(value: Any) -> Any:
         return {"value": value.value, "unit": str(value.unit)}
     if isinstance(value, Path):
         return str(value)
+    # Handle astropy StringArray and any other array-like with a tolist()
+    if hasattr(value, "tolist"):
+        return _json_safe(value.tolist())
+    # Last resort: convert to string so JSON serialization never fails
+    if not isinstance(value, (str, int, float, bool, type(None))):
+        return str(value)
     return value
 
 
@@ -58,22 +64,27 @@ def save_optional_cube(
     cube: np.ndarray | None,
     save_mode: str,
     header: Any,
-) -> None:
+) -> list[str]:
     """Persist an optional cube using ALMASim's standard save formats."""
     if cube is None:
-        return
-    output_dir = str(output_dir)
+        return []
+    output_dir_path = Path(output_dir)
     cube = np.asarray(cube)
+    saved_paths: list[str] = []
     if save_mode in ("npz", "both"):
-        np.savez_compressed(Path(output_dir) / f"{stem}_{idx}.npz", cube)
+        npz_path = output_dir_path / f"{stem}_{idx}.npz"
+        np.savez_compressed(npz_path, cube)
+        saved_paths.append(str(npz_path))
     if save_mode == "h5":
-        with h5py.File(Path(output_dir) / f"{stem}_{idx}.h5", "w") as handle:
+        h5_path = output_dir_path / f"{stem}_{idx}.h5"
+        with h5py.File(h5_path, "w") as handle:
             handle.create_dataset(stem.replace("-", "_"), data=cube)
+        saved_paths.append(str(h5_path))
     if save_mode in ("fits", "both"):
-        fits.PrimaryHDU(header=header.copy(), data=cube).writeto(
-            Path(output_dir) / f"{stem}_{idx}.fits",
-            overwrite=True,
-        )
+        fits_path = output_dir_path / f"{stem}_{idx}.fits"
+        fits.PrimaryHDU(header=header.copy(), data=cube).writeto(fits_path, overwrite=True)
+        saved_paths.append(str(fits_path))
+    return saved_paths
 
 
 def _write_fits_cube(

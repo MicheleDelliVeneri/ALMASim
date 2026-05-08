@@ -6,6 +6,7 @@ import typer
 
 from .cli_metadata import metadata_app
 from .cli_products import products_app
+from .cli_simulation import simulation_app
 
 app = typer.Typer(
     help="ALMASim command-line interface.",
@@ -14,6 +15,7 @@ app = typer.Typer(
 )
 app.add_typer(metadata_app, name="metadata")
 app.add_typer(products_app, name="products")
+app.add_typer(simulation_app, name="simulation")
 
 
 def main() -> None:

@@ -1335,6 +1335,7 @@ def export_results(
     if persist_outputs:
         if clean_cube_stage.sim_output_dir is not None:
             antenna_config_paths = []
+            cube_output_paths: dict[str, list[str]] = {}
             for index, observation_config in enumerate(
                 clean_cube_stage.observation_plan["configs"]
             ):
@@ -1356,7 +1357,7 @@ def export_results(
                 antenna_config_paths.append(os.path.join(output_dir, output_name))
             exported_results["antenna_config_path"] = antenna_config_paths[0]
             exported_results["antenna_config_paths"] = antenna_config_paths
-            save_optional_cube(
+            cube_output_paths["int_image_cube_paths"] = save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "int-image-cube",
                 params.idx,
@@ -1364,7 +1365,7 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            save_optional_cube(
+            cube_output_paths["tp_image_cube_paths"] = save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "tp-image-cube",
                 params.idx,
@@ -1372,7 +1373,7 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            save_optional_cube(
+            cube_output_paths["tp_int_image_cube_paths"] = save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "tp-int-image-cube",
                 params.idx,
@@ -1380,7 +1381,7 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            save_optional_cube(
+            cube_output_paths["tp_dirty_cube_paths"] = save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "tp-dirty-cube",
                 params.idx,
@@ -1388,13 +1389,16 @@ def export_results(
                 params.save_mode,
                 clean_cube_stage.header,
             )
-            save_optional_cube(
+            cube_output_paths["background_cube_paths"] = save_optional_cube(
                 clean_cube_stage.sim_output_dir,
                 "background-cube",
                 params.idx,
                 clean_cube_stage.background_cube,
                 params.save_mode,
                 clean_cube_stage.header,
+            )
+            exported_results.update(
+                {key: value for key, value in cube_output_paths.items() if value}
             )
 
         payload = clean_cube_stage.sim_params_payload

@@ -9,9 +9,8 @@ import typer
 
 
 def default_output_path(filename: str) -> Path:
-    """Return the default examples output path for a filename."""
-    repo_root = Path(__file__).resolve().parents[2]
-    return repo_root / "examples" / "output" / filename
+    """Return the default user-scoped output path for a filename."""
+    return Path.home() / "almasim_outputs" / filename
 
 
 def split_csv_values(values: Optional[List[str]]) -> Optional[List[str]]:

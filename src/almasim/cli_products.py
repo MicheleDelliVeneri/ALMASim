@@ -77,7 +77,18 @@ def _resolve_products_from_inputs(
         raise typer.Exit(code=2)
 
     typer.echo(f"Resolving DataLink products for {len(member_uids)} member OUS UID(s)...")
-    resolved = resolve_products(member_uids)
+    typer.echo(
+        "Using ALMA DataLink services: "
+        "ESO (almascience.eso.org), NRAO (almascience.nrao.edu), "
+        "NAOJ (almascience.nao.ac.jp)"
+    )
+
+    resolved = []
+    with typer.progressbar(member_uids, label="Resolving member OUS UIDs") as progress:
+        for uid in progress:
+            resolved.extend(resolve_products([uid]))
+
+    typer.echo(f"Resolved DataLink rows: {len(resolved)}")
     if not resolved:
         typer.echo("No products were resolved for the requested member_ous_uid values.", err=True)
         raise typer.Exit(code=1)
@@ -304,7 +315,10 @@ def products_download(
     product_filter: str = typer.Option(
         "all",
         "--product-filter",
-        help="Subset of resolved products to download.",
+        help=(
+            "Subset of resolved products to download. "
+            "Choices: all, " + ", ".join(PRODUCT_TYPES) + "."
+        ),
         case_sensitive=False,
     ),
     save_products_csv_path: Optional[Path] = typer.Option(
@@ -364,7 +378,7 @@ def products_download(
     postprocess_backend: str = typer.Option(
         "sync",
         "--postprocess-backend",
-        help="Backend for unpack/calibration stage: sync or slurm.",
+        help="Backend for unpack/calibration stage. Choices: sync, slurm.",
         case_sensitive=False,
     ),
     slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
@@ -395,6 +409,12 @@ def products_download(
         False,
         "--overwrite-archive-outputs",
         help="Overwrite existing raw/calibrated MS outputs.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip confirmation prompt and start download immediately.",
     ),
 ) -> None:
     """Download ALMA products and optionally unpack/calibrate archive data."""
@@ -433,6 +453,19 @@ def products_download(
     total_bytes = sum(product.content_length for product in filtered)
     typer.echo(f"Resolved products: {len(products)}")
     typer.echo(f"Selected for download: {len(filtered)} ({format_bytes(total_bytes)})")
+
+    if not yes:
+        unknown_sizes = sum(1 for product in filtered if product.content_length <= 0)
+        message = (
+            f"About to download {len(filtered)} product(s), total size {format_bytes(total_bytes)}"
+        )
+        if unknown_sizes:
+            message += f" ({unknown_sizes} item(s) with unknown size)"
+        message += ". Continue?"
+
+        if not typer.confirm(message, default=True):
+            typer.echo("Download cancelled.")
+            raise typer.Exit(code=0)
 
     needs_archive_postprocess = unpack_ms or generate_calibrated_visibilities
     if generate_calibrated_visibilities and not unpack_ms:

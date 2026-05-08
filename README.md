@@ -355,6 +355,14 @@ almasim products download \
   --slurm-queue normal \
   --slurm-workers 8
 
+# Run staged simulation from metadata query
+almasim simulation run \
+  --science-keyword Galaxies \
+  --band 6 \
+  --row-idx 0 \
+  --project-name demo \
+  --ml-shard-path examples/output/demo.h5
+
 # Query metadata for Band 6 galaxy observations
 python examples/query_metadata_cli.py \
   --science-keyword Galaxies --band 6 \
