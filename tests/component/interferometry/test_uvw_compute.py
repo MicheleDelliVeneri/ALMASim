@@ -85,7 +85,6 @@ def test_uvw_astropy_matches_casa_reference():
 
 @pytest.mark.component
 def test_uvw_roundtrip_read_with_python_casacore(tmp_path: Path):
-
     coordinates_m = read_coordinates(ANTENNA_CONFIG)
     baselines_astropy = generate_via_astropy(coordinates_m, RA_RAD, DEC_RAD, OBS_TIME)
     nrows = baselines_astropy.shape[0]
