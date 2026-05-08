@@ -66,6 +66,7 @@
 	let msSaveMode = $state('msv2');
 	let nLines = $state(0);
 	let robust = $state(0.0);
+	let imagingAlgorithm = $state<'legacy' | 'ducc0'>('legacy');
 	let numSimulations = $state(1);
 	let sourceOffsetXArcsec = $state(0.0);
 	let sourceOffsetYArcsec = $state(0.0);
@@ -255,9 +256,10 @@
 			n_channels: nChannels ?? undefined,
 			snr: useMetadataSnr ? undefined : snr,
 			save_mode: saveMode,
-				ms_save_mode: msSaveMode,
+			ms_save_mode: msSaveMode,
 			n_lines: nLines > 0 ? nLines : undefined,
 			robust,
+			imaging_algorithm: imagingAlgorithm,
 			source_offset_x_arcsec: sourceOffsetXArcsec,
 			source_offset_y_arcsec: sourceOffsetYArcsec,
 			background_mode: backgroundMode,
@@ -441,6 +443,7 @@
 			{msSaveMode}
 			{nLines}
 			{robust}
+			{imagingAlgorithm}
 			{numSimulations}
 			{sourceOffsetXArcsec}
 			{sourceOffsetYArcsec}
@@ -460,6 +463,7 @@
 			onMsSaveModeChange={(value) => (msSaveMode = value)}
 			onNLinesChange={(value) => (nLines = value)}
 			onRobustChange={(value) => (robust = value)}
+			onImagingAlgorithmChange={(value) => (imagingAlgorithm = value)}
 			onNumSimulationsChange={(value) => (numSimulations = value)}
 			onSourceOffsetXChange={(value) => (sourceOffsetXArcsec = value)}
 			onSourceOffsetYChange={(value) => (sourceOffsetYArcsec = value)}
@@ -490,6 +494,7 @@
 			{saveMode}
 			{nLines}
 			{robust}
+			{imagingAlgorithm}
 			{sourceOffsetXArcsec}
 			{sourceOffsetYArcsec}
 			{backgroundMode}

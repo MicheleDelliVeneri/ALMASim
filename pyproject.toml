@@ -44,7 +44,11 @@ dependencies = [
     "scikit-image",
     "imagecodecs",
     "ducc0",
+    "typer"
 ]
+
+[project.scripts]
+almasim = "almasim.cli:main"
 
 [project.optional-dependencies]
 casa = ["casatools", "casatasks"]
@@ -60,7 +64,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "ruff",
-    "mypy",
+    "mypy>=2.0.0",
     "fastapi",
     "uvicorn[standard]",
     "httpx",

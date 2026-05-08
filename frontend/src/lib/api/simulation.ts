@@ -44,6 +44,7 @@ export interface SimulationParams {
 	ms_save_mode?: string;
 	inject_serendipitous?: boolean;
 	robust?: number;
+	imaging_algorithm?: 'legacy' | 'ducc0';
 	compute_backend?: string;
 	compute_backend_config?: Record<string, unknown>;
 	ground_temperature_k?: number;

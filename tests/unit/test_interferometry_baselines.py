@@ -236,3 +236,26 @@ def test_generate_via_astropy_rejects_invalid_shape():
         generate_via_astropy(
             np.ones((3, 4), dtype=np.float64), 3.26 * u.rad, -1.05 * u.rad, Time.now()
         )
+
+
+@pytest.mark.unit
+def test_generate_via_astropy_rejects_1d_input():
+    """1D antenna position array should raise a clear error."""
+    with pytest.raises(ValueError, match="2D array"):
+        generate_via_astropy(np.ones(6, dtype=np.float64), 3.26 * u.rad, -1.05 * u.rad, Time.now())
+
+
+@pytest.mark.unit
+def test_generate_via_astropy_rejects_invalid_latitude():
+    """Out-of-range latitude should raise a clear error."""
+    bad_lat_lon = np.array([[-91.0, -67.755], [-23.029, -67.754]], dtype=np.float64)
+    with pytest.raises(ValueError, match="Latitude"):
+        generate_via_astropy(bad_lat_lon, 3.26 * u.rad, -1.05 * u.rad, Time.now())
+
+
+@pytest.mark.unit
+def test_generate_via_astropy_rejects_invalid_longitude():
+    """Out-of-range longitude should raise a clear error."""
+    bad_lat_lon = np.array([[-23.029, -400.0], [-23.028, -67.754]], dtype=np.float64)
+    with pytest.raises(ValueError, match="Longitude"):
+        generate_via_astropy(bad_lat_lon, 3.26 * u.rad, -1.05 * u.rad, Time.now())

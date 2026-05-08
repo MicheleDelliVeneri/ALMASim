@@ -230,6 +230,7 @@ class SimulationService:
                 ms_export=params.ms_export,
                 ms_export_dir=params.ms_export_dir,
                 ms_save_mode=params.ms_save_mode,
+                imaging_algorithm=params.imaging_algorithm,
             )
 
             status_store.update(

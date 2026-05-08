@@ -100,6 +100,7 @@ class SimulationParams:
     ms_export: bool = False
     ms_export_dir: Optional[str] = None
     ms_save_mode: str = "msv2"
+    imaging_algorithm: str = "legacy"
 
     @classmethod
     def from_metadata_row(
@@ -146,6 +147,7 @@ class SimulationParams:
         ms_export: bool = False,
         ms_export_dir: Optional[Path | str] = None,
         ms_save_mode: str = "msv2",
+        imaging_algorithm: str = "legacy",
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from a metadata row."""
 
@@ -282,6 +284,7 @@ class SimulationParams:
             ms_export=bool(ms_export),
             ms_export_dir=(_resolve_path(ms_export_dir) if ms_export_dir is not None else None),
             ms_save_mode=str(ms_save_mode),
+            imaging_algorithm=str(imaging_algorithm),
         )
 
 
@@ -1097,6 +1100,7 @@ def generate_clean_cube(
         "background_seed": params.background_seed,
         "background_total_flux_jy": float(np.sum(background_cube)),
         "external_input": _json_safe(external_input_metadata),
+        "imaging_algorithm": params.imaging_algorithm,
     }
     effective_snr = params.snr
     if effective_snr is None:
@@ -1175,6 +1179,7 @@ def generate_clean_cube(
                     "antenna_diameter_m": config.antenna_diameter_m,
                     "config_name": config.name,
                     "array_type": config.array_type,
+                    "imaging_algorithm": params.imaging_algorithm,
                 }
             )
     interferometer_kwargs = interferometer_runs[0] if interferometer_runs else {}
