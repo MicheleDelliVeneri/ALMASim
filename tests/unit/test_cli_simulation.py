@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 
 import pandas as pd
@@ -10,6 +11,9 @@ from typer.testing import CliRunner
 from almasim import cli, cli_simulation
 
 runner = CliRunner()
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class _DummyBackend:
@@ -37,7 +41,9 @@ def test_simulation_requires_metadata_path():
     )
 
     assert result.exit_code == 2
-    assert "Missing option '--metadata-path'" in result.output
+    cleaned = _ANSI_ESCAPE_RE.sub("", result.output)
+    assert "Missing option" in cleaned
+    assert "--metadata-path" in cleaned
 
 
 def test_simulation_invalid_backend(tmp_path):
