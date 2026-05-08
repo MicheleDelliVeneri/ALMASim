@@ -81,6 +81,7 @@ class SimulationParams:
     persist: bool
     ml_dataset_path: Optional[str]
     inject_serendipitous: bool
+    output_subdir_name: Optional[str] = None
     remote: bool = False
     observation_configs: Optional[Any] = None
     ground_temperature_k: float = 270.0
@@ -119,6 +120,7 @@ class SimulationParams:
         save_mode: str = "fits",
         persist: bool = True,
         ml_dataset_path: Optional[Path | str] = None,
+        output_subdir_name: Optional[str] = None,
         n_pix: Optional[float] = None,
         n_channels: Optional[int] = None,
         n_lines: Optional[Any] = None,
@@ -257,6 +259,7 @@ class SimulationParams:
             ml_dataset_path=(
                 _resolve_path(ml_dataset_path) if ml_dataset_path is not None else None
             ),
+            output_subdir_name=(str(output_subdir_name) if output_subdir_name else None),
             inject_serendipitous=inject_serendipitous,
             remote=remote,
             observation_configs=observation_configs,
@@ -659,7 +662,11 @@ def generate_clean_cube(
     output_dir_abs = os.path.abspath(params.output_dir)
     persist_outputs = bool(params.persist and params.save_mode != "memory")
     sim_output_dir = (
-        os.path.join(output_dir_abs, f"{params.project_name}_{params.idx}")
+        (
+            os.path.join(output_dir_abs, params.output_subdir_name)
+            if params.output_subdir_name
+            else output_dir_abs
+        )
         if persist_outputs
         else None
     )

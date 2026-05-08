@@ -19,6 +19,17 @@ ALMASIM_NTHREADS = os.environ.get("ALMASIM_NTHREADS", os.cpu_count())
 _rng = np.random.default_rng(0)
 
 
+def _ducc0_with_wgridder_fallback(func, /, **kwargs):
+    try:
+        return func(**kwargs)
+    except RuntimeError as exc:
+        if kwargs.get("do_wgridding") and "too many w planes" in str(exc):
+            retry_kwargs = dict(kwargs)
+            retry_kwargs["do_wgridding"] = False
+            return func(**retry_kwargs)
+        raise
+
+
 def prepare_2d_arrays(Npix: int) -> tuple:
     """Prepare 2D arrays for interferometric processing."""
     beam = np.zeros((Npix, Npix), dtype=np.float32)
@@ -372,7 +383,8 @@ def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
     frequencies = frequencies[freq_sort_idx]
     ones_visibilities = np.ones((n_times_baselines, n_frequencies), dtype=np.complex128)
 
-    dirty_image = _ducc0.wgridder.vis2dirty(
+    dirty_image = _ducc0_with_wgridder_fallback(
+        _ducc0.wgridder.vis2dirty,
         uvw=uvw,
         freq=frequencies,
         vis=ones_visibilities,
@@ -384,7 +396,8 @@ def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
         do_wgridding=True,
         nthreads=nthreads,
     )
-    weights = _ducc0.wgridder.dirty2vis(
+    weights = _ducc0_with_wgridder_fallback(
+        _ducc0.wgridder.dirty2vis,
         uvw=uvw,
         freq=frequencies,
         dirty=dirty_image,
@@ -414,7 +427,8 @@ def image_based_predict(
     # Sort frequencies in ascending order as required by ducc0
     freq_sort_idx = np.argsort(frequencies)
     frequencies = frequencies[freq_sort_idx]
-    visibilities = _ducc0.wgridder.dirty2vis(
+    visibilities = _ducc0_with_wgridder_fallback(
+        _ducc0.wgridder.dirty2vis,
         uvw=uvw,
         freq=frequencies,
         dirty=image,
@@ -496,7 +510,14 @@ def image_channel_ducc0(
         n_threads=nthreads,
     )
 
-    dirtymap = _ducc0.wgridder.vis2dirty(
+    frequency_order = np.argsort(frequencies)
+    frequencies = frequencies[frequency_order]
+    visibilities = np.asarray(visibilities)[..., frequency_order]
+    weights = np.asarray(weights)[..., frequency_order]
+    center_index = len(frequencies) // 2
+
+    dirtymap = _ducc0_with_wgridder_fallback(
+        _ducc0.wgridder.vis2dirty,
         uvw=uvw,
         freq=frequencies,
         vis=visibilities,
@@ -517,13 +538,22 @@ def image_channel_ducc0(
     beam = np.zeros((Npix, Npix), dtype=np.float32)
     totsampling = np.ones((Npix, Npix), dtype=np.float32)
 
-    # Placeholder visibilities and raw data (ducc0 path produces different outputs)
-    modelvis = visibilities
+    modelvis = visibilities[..., center_index]
     dirtyvis = np.fft.fft2(dirtymap)
+    antenna_pairs = np.array([(i, j) for i in range(len(antenna_positions)) for j in range(i)])
+    nrows = uvw.shape[0]
+    if antenna_pairs.shape[0] != nrows:
+        raise ValueError("UVW rows do not match the expected number of antenna baselines")
     raw_visibility = {
         "uvw_m": uvw,
-        "visibilities": visibilities,
-        "weights": weights,
+        "antenna1": antenna_pairs[:, 0].astype(np.int32),
+        "antenna2": antenna_pairs[:, 1].astype(np.int32),
+        "time_index": np.zeros(nrows, dtype=np.int32),
+        "valid": np.ones(nrows, dtype=np.bool_),
+        "model_data": np.asarray(visibilities[:, center_index], dtype=np.complex64),
+        "data": np.asarray(visibilities[:, center_index], dtype=np.complex64),
+        "weight": np.asarray(weights[:, center_index], dtype=np.float32),
+        "sigma": np.full(nrows, max(float(noise), 1e-12), dtype=np.float32),
     }
 
     return (

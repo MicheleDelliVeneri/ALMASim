@@ -713,6 +713,138 @@ def test_image_channel_ducc0_happy_path(sample_wavelength, monkeypatch):
 
 
 @pytest.mark.unit
+def test_image_channel_ducc0_sorts_frequencies_for_vis2dirty(monkeypatch):
+    """ducc0 imaging should pass ascending frequencies to vis2dirty."""
+    header = fits.Header()
+    header["DATE-OBS"] = "2024-01-01T00:00:00"
+    header["OBSRA"] = 180.0
+    header["OBSDEC"] = -30.0
+
+    valid_antpos = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0],
+            [100.0, 100.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+    mock_visibilities = np.array(
+        [
+            [1.0 + 0.0j, 2.0 + 0.0j, 3.0 + 0.0j],
+            [4.0 + 0.0j, 5.0 + 0.0j, 6.0 + 0.0j],
+        ],
+        dtype=np.complex64,
+    )
+    mock_weights = np.ones_like(mock_visibilities.real, dtype=np.float32)
+    captured: dict[str, np.ndarray] = {}
+
+    monkeypatch.setattr(
+        "almasim.services.interferometry.imaging.image_based_predict",
+        lambda *args, **kwargs: (mock_visibilities, mock_weights),
+    )
+
+    def mock_vis2dirty(*args, **kwargs):
+        captured["freq"] = np.asarray(kwargs["freq"])
+        captured["vis"] = np.asarray(kwargs["vis"])
+        return np.zeros((32, 32), dtype=np.float32)
+
+    monkeypatch.setattr("ducc0.wgridder.vis2dirty", mock_vis2dirty)
+
+    image_channel_ducc0(
+        img=np.ones((16, 16), dtype=np.float32),
+        wavelengths=[1.0, 2.0, 3.0],
+        Npix=32,
+        Nant=4,
+        Hcov=[0.0, 1.0],
+        nH=10,
+        noise=0.01,
+        antPos=valid_antpos,
+        robfac=0.1,
+        trlat=[0.0, 1.0],
+        trdec=[0.0, 1.0],
+        Diameters=[12.0],
+        imsize=10.0,
+        Xmax=1.0,
+        lfac=1.0e6,
+        distmat=np.zeros((32, 32), dtype=np.float32),
+        Nphf=16,
+        Np4=8,
+        zooming=1,
+        header=header,
+        robust=0.0,
+    )
+
+    assert np.all(np.diff(captured["freq"]) >= 0)
+    np.testing.assert_array_equal(captured["vis"], mock_visibilities[:, ::-1])
+
+
+@pytest.mark.unit
+def test_image_channel_ducc0_retries_without_wgridding(monkeypatch):
+    """ducc0 imaging should retry without w-gridding on 'too many w planes'."""
+    header = fits.Header()
+    header["DATE-OBS"] = "2024-01-01T00:00:00"
+    header["OBSRA"] = 180.0
+    header["OBSDEC"] = -30.0
+
+    valid_antpos = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0],
+            [100.0, 100.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+    monkeypatch.setattr(
+        "almasim.services.interferometry.imaging.image_based_predict",
+        lambda *args, **kwargs: (
+            np.ones((6, 3), dtype=np.complex64),
+            np.ones((6, 3), dtype=np.float32),
+        ),
+    )
+
+    calls: list[bool] = []
+
+    def mock_vis2dirty(*args, **kwargs):
+        calls.append(bool(kwargs.get("do_wgridding")))
+        if kwargs.get("do_wgridding"):
+            raise RuntimeError("too many w planes")
+        return np.zeros((32, 32), dtype=np.float32)
+
+    monkeypatch.setattr("ducc0.wgridder.vis2dirty", mock_vis2dirty)
+
+    result = image_channel_ducc0(
+        img=np.ones((16, 16), dtype=np.float32),
+        wavelengths=[1.0, 2.0, 3.0],
+        Npix=32,
+        Nant=4,
+        Hcov=[0.0, 1.0],
+        nH=10,
+        noise=0.01,
+        antPos=valid_antpos,
+        robfac=0.1,
+        trlat=[0.0, 1.0],
+        trdec=[0.0, 1.0],
+        Diameters=[12.0],
+        imsize=10.0,
+        Xmax=1.0,
+        lfac=1.0e6,
+        distmat=np.zeros((32, 32), dtype=np.float32),
+        Nphf=16,
+        Np4=8,
+        zooming=1,
+        header=header,
+        robust=0.0,
+    )
+
+    assert isinstance(result, tuple)
+    assert calls == [True, False]
+
+
+@pytest.mark.unit
 def test_image_channel_ducc0_integration():
     """Test image_channel_ducc0 with real ducc0 operations using realistic ALMA data."""
     from astropy.coordinates import EarthLocation
@@ -833,5 +965,7 @@ def test_image_channel_ducc0_integration():
     assert isinstance(totsampling, np.ndarray)
     assert isinstance(raw_visibility, dict)
     assert "uvw_m" in raw_visibility
-    assert "visibilities" in raw_visibility
-    assert "weights" in raw_visibility
+    assert "data" in raw_visibility
+    assert "model_data" in raw_visibility
+    assert "weight" in raw_visibility
+    assert "valid" in raw_visibility

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event, Thread
+from time import sleep
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import typer
+from tqdm.auto import tqdm
 
 from . import export_results, generate_clean_cube, simulate_observation
 from .services import astro
@@ -38,6 +41,57 @@ def _path_with_suffix(path: Path, *parts: Any) -> Path:
     return path.with_name(f"{path.stem}_{suffix}{path.suffix}")
 
 
+def _update_progress(progress_bar: tqdm, target: int) -> None:
+    clamped = max(0, min(100, int(target)))
+    if clamped > progress_bar.n:
+        progress_bar.update(clamped - progress_bar.n)
+
+
+def _progress_callback(progress_bar: tqdm, start: int, span: int):
+    def callback(value: int | float) -> None:
+        _update_progress(progress_bar, start + int(round((float(value) / 100.0) * span)))
+
+    return callback
+
+
+def _progress_logger(progress_bar: tqdm):
+    def logger(message: str) -> None:
+        progress_bar.write(str(message))
+
+    return logger
+
+
+def _run_stage_with_feedback(
+    progress_bar: tqdm,
+    *,
+    label: str,
+    work,
+    smooth_target: int | None = None,
+):
+    stop_event = Event()
+    spinner_frames = "|/-\\"
+
+    def refresh() -> None:
+        spinner_index = 0
+        while not stop_event.wait(0.2):
+            progress_bar.set_postfix_str(
+                f"{label} {spinner_frames[spinner_index % len(spinner_frames)]}"
+            )
+            spinner_index += 1
+            if smooth_target is not None and progress_bar.n < smooth_target:
+                progress_bar.update(1)
+                sleep(0.8)
+
+    thread = Thread(target=refresh, daemon=True)
+    thread.start()
+    try:
+        return work()
+    finally:
+        stop_event.set()
+        thread.join(timeout=1)
+        progress_bar.set_postfix_str("")
+
+
 def _build_simulation_params(
     *,
     metadata: pd.DataFrame,
@@ -56,6 +110,7 @@ def _build_simulation_params(
     imaging_algorithm: str,
     background_level: float,
     background_seed: int | None,
+    output_subdir_name: str | None,
 ) -> SimulationParams:
     rest_frequency, _ = astro.get_line_info(main_dir)
     sampled = sample_given_redshift(
@@ -89,6 +144,7 @@ def _build_simulation_params(
         save_mode=save_mode,
         persist=persist_standard_outputs,
         ml_dataset_path=ml_shard_path,
+        output_subdir_name=output_subdir_name,
         n_pix=n_pix,
         n_channels=n_channels,
         n_lines=n_lines,
@@ -285,6 +341,9 @@ def simulation_run(
                     if total_runs > 1
                     else ml_shard_resolved
                 )
+                output_subdir_name = (
+                    f"{project_name}_{run_idx}" if persist_outputs and total_runs > 1 else None
+                )
                 params = _build_simulation_params(
                     metadata=metadata,
                     row_idx=idx,
@@ -302,30 +361,62 @@ def simulation_run(
                     imaging_algorithm=imaging_algorithm_normalized,
                     background_level=background_level,
                     background_seed=(background_seed if background_seed is not None else run_seed),
+                    output_subdir_name=output_subdir_name,
                 )
 
-                clean_stage = generate_clean_cube(
-                    params,
-                    logger=typer.echo,
-                    compute_backend=compute_backend,
-                )
-                typer.echo(f"Clean cube shape: {clean_stage.model_cube.shape}")
-                typer.echo(f"Target ML shard: {params.ml_dataset_path}")
+                with tqdm(
+                    total=100,
+                    desc=f"Simulation {run_number}/{total_runs}",
+                    unit="%",
+                    leave=True,
+                ) as progress_bar:
+                    logger = _progress_logger(progress_bar)
+                    is_sync_backend = backend_normalized == "sync"
 
-                simulation_results = simulate_observation(
-                    clean_stage,
-                    compute_backend=compute_backend,
-                    robust=robust,
-                )
-                typer.echo(f"Dirty cube shape: {simulation_results['dirty_cube'].shape}")
-                typer.echo(f"UV mask cube shape: {simulation_results['uv_mask_cube'].shape}")
+                    clean_stage = _run_stage_with_feedback(
+                        progress_bar,
+                        label="clean-cube",
+                        smooth_target=(34 if is_sync_backend else None),
+                        work=lambda: generate_clean_cube(
+                            params,
+                            logger=logger,
+                            compute_backend=compute_backend,
+                            progress_emitter=_progress_callback(progress_bar, 0, 35),
+                        ),
+                    )
+                    _update_progress(progress_bar, 35)
+                    logger(f"Clean cube shape: {clean_stage.model_cube.shape}")
+                    logger(f"Target ML shard: {params.ml_dataset_path}")
 
-                exported_results = export_results(
-                    params,
-                    clean_stage,
-                    simulation_results,
-                    logger=typer.echo,
-                )
+                    simulation_results = _run_stage_with_feedback(
+                        progress_bar,
+                        label="observation",
+                        smooth_target=(89 if is_sync_backend else None),
+                        work=lambda: simulate_observation(
+                            clean_stage,
+                            compute_backend=compute_backend,
+                            robust=robust,
+                            terminal_logger=logger,
+                            interferometer_progress_callback=_progress_callback(
+                                progress_bar, 35, 55
+                            ),
+                        ),
+                    )
+                    _update_progress(progress_bar, 90)
+                    logger(f"Dirty cube shape: {simulation_results['dirty_cube'].shape}")
+                    logger(f"UV mask cube shape: {simulation_results['uv_mask_cube'].shape}")
+
+                    exported_results = _run_stage_with_feedback(
+                        progress_bar,
+                        label="export",
+                        work=lambda: export_results(
+                            params,
+                            clean_stage,
+                            simulation_results,
+                            logger=logger,
+                        ),
+                    )
+                    _update_progress(progress_bar, 100)
                 typer.echo(f"ML shard written to: {exported_results.get('ml_dataset_path')}")
                 if save_mode_normalized != "memory":
                     for key in sorted(exported_results):

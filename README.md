@@ -93,6 +93,42 @@ The library layer owns all domain logic. The backend is a thin adapter over libr
 pip install almasim
 ```
 
+### CLI installation
+
+The package installs the `almasim` command via the Python entry point:
+
+```bash
+pip install almasim
+almasim --help
+```
+
+If you are working from a local clone, install the project into a virtual environment and use the CLI directly:
+
+```bash
+git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+cd ALMASim
+pip install uv
+uv sync --group dev
+uv run almasim --help
+```
+
+For an editable local install that exposes `almasim` on your shell path:
+
+```bash
+git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+cd ALMASim
+pip install -e .
+almasim --help
+```
+
+Once installed, the CLI exposes the main workflows:
+
+```bash
+almasim metadata --help
+almasim products --help
+almasim simulation --help
+```
+
 ### With CASA tools (Linux x86-64 only)
 
 `casatools` and `casatasks` wheels are Linux-only. Install the optional `[casa]` extra on a supported Linux system:
