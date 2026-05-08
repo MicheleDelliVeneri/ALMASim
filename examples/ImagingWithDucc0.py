@@ -13,7 +13,8 @@ def _():
 
 @app.cell
 def _():
-    import xarray_ms, ducc0, radler
+    import ducc0
+    import radler
     import xarray
 
     return ducc0, radler, xarray
@@ -198,8 +199,8 @@ def _(chunked_dset):
 
 @app.cell
 def _(dec, dirty_image, image_size, np, pix_scale_arcsec, psf, ra):
-    from astropy.wcs import WCS
     from astropy.io import fits
+    from astropy.wcs import WCS
 
     # --- user / WSClean-like inputs ---
 
@@ -253,10 +254,9 @@ def _(dec, dirty_image, image_size, np, pix_scale_arcsec, psf, ra):
 
 @app.cell
 def _(dirty_image, mo, psf):
-    import matplotlib.pyplot as plt
-
     import holoviews as hv
-    from astropy.visualization import MinMaxInterval, SqrtStretch, ImageNormalize, ZScaleInterval
+    import matplotlib.pyplot as plt
+    from astropy.visualization import ImageNormalize, SqrtStretch, ZScaleInterval
 
     # Create an ImageNormalize object
     norm_img = ImageNormalize(dirty_image, interval=ZScaleInterval(), stretch=SqrtStretch())

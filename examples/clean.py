@@ -1,8 +1,8 @@
+from pathlib import Path
+
 import numpy as np
 import radler
 from astropy.io import fits
-from pathlib import Path
-from pathlib import Path
 
 
 def _read_float32_plane(path: str) -> np.ndarray:
