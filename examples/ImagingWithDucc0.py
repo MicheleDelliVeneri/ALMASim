@@ -21,7 +21,9 @@ def _():
 
 @app.cell
 def _(mo):
-    file_browser = mo.ui.file_browser(initial_path="/Data", multiple=False, selection_mode="directory")
+    file_browser = mo.ui.file_browser(
+        initial_path="/Data", multiple=False, selection_mode="directory"
+    )
     return (file_browser,)
 
 
@@ -47,7 +49,7 @@ def _(dset, mo):
 
 @app.cell
 def _(dset, dset_selector):
-    chunked_dset = dset[dset_selector.value].chunk({"time": 50}) 
+    chunked_dset = dset[dset_selector.value].chunk({"time": 50})
     chunked_uvw = chunked_dset["VISIBILITY"]
     chunked_data = chunked_dset["VISIBILITY"]
     chunked_I = chunked_data.sel(polarization="XX") + chunked_data.sel(polarization="YY")
@@ -57,8 +59,6 @@ def _(dset, dset_selector):
 
 @app.cell
 def _(dset, dset_selector):
-
-
     def read_data():
         uvw = dset[dset_selector.value]["UVW"]
         frequencies = dset[dset_selector.value]["frequency"]
@@ -75,11 +75,11 @@ def _(dset, dset_selector):
 @app.cell
 def _(I, frequencies, uvw):
     import numpy as np
-    arcsec_to_radians =  np.pi / 180 / 3600 
+
+    arcsec_to_radians = np.pi / 180 / 3600
     pix_scale_arcsec = np.array((10, 10), dtype=np.float64) * arcsec_to_radians
     image_size = (1024, 1024)
-    epsilon = 1.e-6
-
+    epsilon = 1.0e-6
 
     uvw_array = np.array(uvw.compute().data)
 
@@ -115,11 +115,43 @@ def _(
     # Computes weights
     def compute_weights():
         ones = np.ones_like(vis_array)
-        psf_unweighted = ducc0.wgridder.vis2dirty(uvw=uvw_array, vis=ones, freq=freq_array, npix_x=image_size[0], npix_y=image_size[1], pixsize_x=pix_scale_arcsec[0], pixsize_y=pix_scale_arcsec[1], do_wgridding=True, epsilon=epsilon, nthreads=10)
-        weights = ducc0.wgridder.dirty2vis(uvw=uvw_array, dirty=psf_unweighted, freq=freq_array, pixsize_x=pix_scale_arcsec[0], pixsize_y=pix_scale_arcsec[1], do_wgridding=True, epsilon=epsilon, nthreads=10)
+        psf_unweighted = ducc0.wgridder.vis2dirty(
+            uvw=uvw_array,
+            vis=ones,
+            freq=freq_array,
+            npix_x=image_size[0],
+            npix_y=image_size[1],
+            pixsize_x=pix_scale_arcsec[0],
+            pixsize_y=pix_scale_arcsec[1],
+            do_wgridding=True,
+            epsilon=epsilon,
+            nthreads=10,
+        )
+        weights = ducc0.wgridder.dirty2vis(
+            uvw=uvw_array,
+            dirty=psf_unweighted,
+            freq=freq_array,
+            pixsize_x=pix_scale_arcsec[0],
+            pixsize_y=pix_scale_arcsec[1],
+            do_wgridding=True,
+            epsilon=epsilon,
+            nthreads=10,
+        )
 
-        weights = 1./np.abs(weights)
-        psf = ducc0.wgridder.vis2dirty(uvw=uvw_array, vis=ones, wgt=weights, freq=freq_array, npix_x=image_size[0], npix_y=image_size[1], pixsize_x=pix_scale_arcsec[0], pixsize_y=pix_scale_arcsec[1], do_wgridding=True, epsilon=epsilon, nthreads=10)
+        weights = 1.0 / np.abs(weights)
+        psf = ducc0.wgridder.vis2dirty(
+            uvw=uvw_array,
+            vis=ones,
+            wgt=weights,
+            freq=freq_array,
+            npix_x=image_size[0],
+            npix_y=image_size[1],
+            pixsize_x=pix_scale_arcsec[0],
+            pixsize_y=pix_scale_arcsec[1],
+            do_wgridding=True,
+            epsilon=epsilon,
+            nthreads=10,
+        )
         return weights, psf
 
     weights, psf = compute_weights()
@@ -142,30 +174,41 @@ def _(
     vis_array,
     weights,
 ):
-    dirty_image = ducc0.wgridder.vis2dirty(uvw=uvw_array, vis=vis_array, wgt=weights, freq=freq_array, npix_x=image_size[0], npix_y=image_size[1], pixsize_x=pix_scale_arcsec[0], pixsize_y=pix_scale_arcsec[1], do_wgridding=True, epsilon=epsilon, nthreads=10)
+    dirty_image = ducc0.wgridder.vis2dirty(
+        uvw=uvw_array,
+        vis=vis_array,
+        wgt=weights,
+        freq=freq_array,
+        npix_x=image_size[0],
+        npix_y=image_size[1],
+        pixsize_x=pix_scale_arcsec[0],
+        pixsize_y=pix_scale_arcsec[1],
+        do_wgridding=True,
+        epsilon=epsilon,
+        nthreads=10,
+    )
     return (dirty_image,)
 
 
 @app.cell
 def _(chunked_dset):
-    (ra, dec)= chunked_dset["field_and_source_base_xds"]["FIELD_PHASE_CENTER_DIRECTION"][0]
+    (ra, dec) = chunked_dset["field_and_source_base_xds"]["FIELD_PHASE_CENTER_DIRECTION"][0]
     return dec, ra
 
 
 @app.cell
 def _(dec, dirty_image, image_size, np, pix_scale_arcsec, psf, ra):
-
     from astropy.wcs import WCS
     from astropy.io import fits
 
     # --- user / WSClean-like inputs ---
 
     # Image size
-    nx, ny = image_size # NAXIS1, NAXIS2
+    nx, ny = image_size  # NAXIS1, NAXIS2
 
     # Phase centre in degrees (from MS field centre or -phasecentre)
-    ra_deg  = ra / np.pi * 180     # CRVAL1
-    dec_deg = dec / np.pi * 180     # CRVAL2
+    ra_deg = ra / np.pi * 180  # CRVAL1
+    dec_deg = dec / np.pi * 180  # CRVAL2
 
     # Pixel scale in arcsec (like -scale in WSClean)
     pixscale_deg = pix_scale_arcsec / 3600.0
@@ -175,8 +218,7 @@ def _(dec, dirty_image, image_size, np, pix_scale_arcsec, psf, ra):
     w = WCS(naxis=2)
 
     # Reference pixel at image centre (WSClean default)
-    w.wcs.crpix = [ (nx + 1) / 2.0,
-                    (ny + 1) / 2.0] 
+    w.wcs.crpix = [(nx + 1) / 2.0, (ny + 1) / 2.0]
 
     # World coordinate at reference pixel = phase centre, freq centre
     w.wcs.crval = [ra_deg, dec_deg]
@@ -184,11 +226,12 @@ def _(dec, dirty_image, image_size, np, pix_scale_arcsec, psf, ra):
     # Pixel increments:
     #  - RA: negative so RA increases to the left
     #  - Dec: positive, frequency: positive
-    w.wcs.cdelt = np.array([
-        -pixscale_deg[0],      # CDELT1
-         pixscale_deg[1]
-        ,      # CDELT2
-    ])
+    w.wcs.cdelt = np.array(
+        [
+            -pixscale_deg[0],  # CDELT1
+            pixscale_deg[1],  # CDELT2
+        ]
+    )
 
     # Axis types and units
     w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
@@ -197,7 +240,7 @@ def _(dec, dirty_image, image_size, np, pix_scale_arcsec, psf, ra):
     # --- write to FITS header ---
 
     header = w.to_header()
-    header["NAXIS"]  = 2
+    header["NAXIS"] = 2
     header["NAXIS1"] = nx
     header["NAXIS2"] = ny
 
@@ -212,45 +255,52 @@ def _(dec, dirty_image, image_size, np, pix_scale_arcsec, psf, ra):
 def _(dirty_image, mo, psf):
     import matplotlib.pyplot as plt
 
-
     import holoviews as hv
-    from astropy.visualization import (MinMaxInterval, SqrtStretch,
-                                       ImageNormalize, ZScaleInterval)
-
+    from astropy.visualization import MinMaxInterval, SqrtStretch, ImageNormalize, ZScaleInterval
 
     # Create an ImageNormalize object
-    norm_img = ImageNormalize(dirty_image, interval=ZScaleInterval(),
-                          stretch=SqrtStretch())
-    norm_psf = ImageNormalize(psf, interval=ZScaleInterval(),
-                          stretch=SqrtStretch())
+    norm_img = ImageNormalize(dirty_image, interval=ZScaleInterval(), stretch=SqrtStretch())
+    norm_psf = ImageNormalize(psf, interval=ZScaleInterval(), stretch=SqrtStretch())
 
     dirty_image_show = hv.Image(dirty_image).options(
-        cmap="viridis", colorbar=True,
+        cmap="viridis",
+        colorbar=True,
         frame_width=500,
-        frame_height=500,)
+        frame_height=500,
+    )
 
     d = plt.figure("d", figsize=(10, 10))
     plt.imshow(dirty_image, norm=norm_img)
     p = plt.figure("p", figsize=(10, 10))
     plt.imshow(psf, norm=norm_psf)
-    mo.vstack([
-    d,
-    p])
+    mo.vstack([d, p])
     return
 
 
 @app.cell
-def _(arcsec_to_radians, dirty_image, np, psf, radler):
+def _(arcsec_to_radians, dirty_image, np, psf, radler, pixscale_deg):
     residual = np.array(dirty_image)
     model = np.zeros_like(residual)
     settings = radler.Settings()
+
+    settings.trimmed_image_width, settings.trimmed_image_height = psf.shape
+    settings.pixel_scale.x = pixscale_deg[0]
+    settings.pixel_scale.y = pixscale_deg[1]
+    settings.minor_iteration_count = 50000
+    settings.major_iteration_count = 1
+    settings.auto_threshold_sigma = 1.0
+    # major_loop_gain < 1 lets perform() return True when the in-iteration
+    # peak drops by this fraction, signalling a new prediction-gridding round.
+    # Without it the algorithm always runs to full completion → returns False.
+    settings.major_loop_gain = 0.9
+
     radler_object = radler.Radler(
-        settings,      # Configuration parameters
-        psf,          # Point spread function
-        residual,     # Residual image data
-        model,        # Sky model
-        10 * arcsec_to_radians,    # Synthesized beam size
-        radler.Polarization.stokes_i  # Polarization type
+        settings,  # Configuration parameters
+        psf,  # Point spread function
+        residual,  # Residual image data
+        model,  # Sky model
+        10 * arcsec_to_radians,  # Synthesized beam size
+        radler.Polarization.stokes_i,  # Polarization type
     )
     return (radler_object,)
 
