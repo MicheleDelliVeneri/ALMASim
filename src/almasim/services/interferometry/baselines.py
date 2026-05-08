@@ -21,6 +21,22 @@ def pairwise_baselines(positions_xyz_m: np.ndarray) -> np.ndarray:
     return baselines
 
 
+def _reference_location_for_positions(positions: np.ndarray) -> EarthLocation:
+    """Build a local reference EarthLocation from the provided antenna positions."""
+    if positions.shape[1] == 3:
+        return EarthLocation(
+            x=np.mean(positions[:, 0]) * u.m,
+            y=np.mean(positions[:, 1]) * u.m,
+            z=np.mean(positions[:, 2]) * u.m,
+        )
+
+    return EarthLocation.from_geodetic(
+        lon=np.mean(positions[:, 1]) * u.deg,
+        lat=np.mean(positions[:, 0]) * u.deg,
+        height=0.0 * u.m,
+    )
+
+
 def generate_via_astropy(
     antenna_positions_m: np.ndarray,
     ra: u.Quantity,
@@ -60,9 +76,9 @@ def generate_via_astropy(
     else:
         raise ValueError("antenna_positions_m must have shape (N, 3) or (N, 2)")
 
-    alma_site = EarthLocation.of_site("ALMA")
+    reference_location = _reference_location_for_positions(positions)
 
-    alma_p, alma_v = alma_site.get_gcrs_posvel(time)
+    alma_p, alma_v = reference_location.get_gcrs_posvel(time)
     antpos_gcrs = coord.GCRS(
         antpos.get_gcrs_posvel(time)[0],
         obstime=time,

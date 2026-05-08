@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from threading import Event, Thread
 from time import sleep
@@ -16,6 +17,7 @@ from . import export_results, generate_clean_cube, simulate_observation
 from .services import astro
 from .services.astro.spectral import sample_given_redshift
 from .services.compute import create_backend
+from .services.external_skymodel import EXTERNAL_SOURCE_TYPES, is_external_source_type
 from .services.simulation import SimulationParams
 
 simulation_app = typer.Typer(
@@ -34,11 +36,76 @@ _SOURCE_TYPES = [
 _SAVE_MODES = ["memory", "npz", "h5", "fits"]
 _BACKEND_TYPES = ["sync", "local"]
 _IMAGING_ALGORITHMS = ["legacy", "ducc0"]
+_SOURCE_TYPES.extend(sorted(EXTERNAL_SOURCE_TYPES))
+_EXTERNAL_INPUT_SUFFIXES = {".fits", ".fit", ".fts", ".fz"}
 
 
 def _path_with_suffix(path: Path, *parts: Any) -> Path:
     suffix = "_".join(str(part) for part in parts)
     return path.with_name(f"{path.stem}_{suffix}{path.suffix}")
+
+
+def _normalize_match_token(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _contains_token(name: str, compact_name: str, token: str | None) -> bool:
+    normalized = _normalize_match_token(token)
+    raw = str(token or "").lower()
+    return bool((normalized and normalized in compact_name) or (raw and raw in name))
+
+
+def _resolve_input_path_for_row(input_path: Path | None, row: pd.Series) -> Path | None:
+    if input_path is None:
+        return None
+
+    resolved = input_path.expanduser().resolve()
+    if resolved.is_file():
+        return resolved
+    if not resolved.is_dir():
+        raise typer.BadParameter(f"--input must be an existing file or directory: {resolved}")
+
+    candidates = [
+        path
+        for path in resolved.rglob("*")
+        if path.is_file() and path.suffix.lower() in _EXTERNAL_INPUT_SUFFIXES
+    ]
+    if not candidates:
+        raise typer.BadParameter(
+            f"No FITS skymodel files found under --input directory: {resolved}"
+        )
+
+    member_uid = row.get("member_ous_uid") if hasattr(row, "get") else None
+    group_uid = row.get("group_ous_uid") if hasattr(row, "get") else None
+
+    ranked: dict[int, list[Path]] = {3: [], 2: [], 1: []}
+    for candidate in candidates:
+        name = candidate.name.lower()
+        compact_name = _normalize_match_token(candidate.name)
+        has_member = _contains_token(name, compact_name, member_uid)
+        has_group = _contains_token(name, compact_name, group_uid)
+        if has_member and has_group:
+            ranked[3].append(candidate)
+        elif has_member:
+            ranked[2].append(candidate)
+        elif has_group:
+            ranked[1].append(candidate)
+
+    for score in (3, 2, 1):
+        matches = ranked[score]
+        if len(matches) == 1:
+            return matches[0].resolve()
+        if len(matches) > 1:
+            options = ", ".join(str(path.name) for path in sorted(matches))
+            raise typer.BadParameter(
+                "Ambiguous --input directory match for metadata row "
+                f"member_ous_uid={member_uid!r}, group_ous_uid={group_uid!r}: {options}"
+            )
+
+    raise typer.BadParameter(
+        "Could not match any input skymodel file in directory "
+        f"{resolved} for metadata row member_ous_uid={member_uid!r}, group_ous_uid={group_uid!r}"
+    )
 
 
 def _update_progress(progress_bar: tqdm, target: int) -> None:
@@ -111,6 +178,7 @@ def _build_simulation_params(
     background_level: float,
     background_seed: int | None,
     output_subdir_name: str | None,
+    input_path: Path | None,
 ) -> SimulationParams:
     rest_frequency, _ = astro.get_line_info(main_dir)
     sampled = sample_given_redshift(
@@ -130,6 +198,12 @@ def _build_simulation_params(
 
     row = sampled.iloc[row_idx]
     output_dir.mkdir(parents=True, exist_ok=True)
+    external_input_path = _resolve_input_path_for_row(input_path, row)
+    effective_source_type = (
+        source_type
+        if external_input_path is None or is_external_source_type(source_type)
+        else "external-fits-cube"
+    )
 
     return SimulationParams.from_metadata_row(
         row,
@@ -140,11 +214,12 @@ def _build_simulation_params(
         galaxy_zoo_dir=output_dir / "galaxy_zoo",
         hubble_dir=output_dir / "hubble",
         project_name=project_name,
-        source_type=source_type,
+        source_type=effective_source_type,
         save_mode=save_mode,
         persist=persist_standard_outputs,
         ml_dataset_path=ml_shard_path,
         output_subdir_name=output_subdir_name,
+        external_skymodel_path=external_input_path,
         n_pix=n_pix,
         n_channels=n_channels,
         n_lines=n_lines,
@@ -179,6 +254,15 @@ def simulation_run(
         Path.home() / "almasim_outputs" / "simulation",
         "--output-dir",
         help="Directory for simulation outputs.",
+    ),
+    input_path: Path | None = typer.Option(
+        None,
+        "--input",
+        help=(
+            "External skymodel input. If a file is provided, it is reused for all rows. "
+            "If a directory is provided, files are matched to each metadata row using "
+            "member_ous_uid and group_ous_uid."
+        ),
     ),
     main_dir: Path = typer.Option(
         Path(__file__).resolve().parents[0],
@@ -300,6 +384,9 @@ def simulation_run(
     if not metadata_path.exists():
         typer.echo(f"--metadata-path not found: {metadata_path}", err=True)
         raise typer.Exit(code=2)
+    if input_path is not None and not input_path.expanduser().exists():
+        typer.echo(f"--input not found: {input_path}", err=True)
+        raise typer.Exit(code=2)
 
     metadata = pd.read_csv(metadata_path)
     total_rows = len(metadata)
@@ -362,6 +449,7 @@ def simulation_run(
                     background_level=background_level,
                     background_seed=(background_seed if background_seed is not None else run_seed),
                     output_subdir_name=output_subdir_name,
+                    input_path=input_path,
                 )
 
                 with tqdm(

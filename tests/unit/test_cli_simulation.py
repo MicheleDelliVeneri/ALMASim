@@ -118,3 +118,33 @@ def test_simulation_run_csv_happy_path(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert "All done. Simulated 1 run(s) across 1 row(s)." in result.output
     assert "ML shard written to: /tmp/mock_ml.h5" in result.output
+
+
+def test_resolve_input_path_for_row_single_file(tmp_path):
+    """A single input file should be reused for every metadata row."""
+    input_file = tmp_path / "shared_model.fits"
+    input_file.write_text("dummy", encoding="utf-8")
+    row = pd.Series({"member_ous_uid": "uid://A", "group_ous_uid": "uid://G"})
+
+    resolved = cli_simulation._resolve_input_path_for_row(input_file, row)
+
+    assert resolved == input_file.resolve()
+
+
+def test_resolve_input_path_for_row_directory_match(tmp_path):
+    """Input directory should match files using member_ous_uid/group_ous_uid."""
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+    matched = input_dir / "skymodel_uidA001X1X1_uidA001X1.fits"
+    matched.write_text("dummy", encoding="utf-8")
+    (input_dir / "other_model.fits").write_text("dummy", encoding="utf-8")
+    row = pd.Series(
+        {
+            "member_ous_uid": "uid://A001/X1/X1",
+            "group_ous_uid": "uid://A001/X1",
+        }
+    )
+
+    resolved = cli_simulation._resolve_input_path_for_row(input_dir, row)
+
+    assert resolved == matched.resolve()

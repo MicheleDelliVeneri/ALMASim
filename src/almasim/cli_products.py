@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Lock
+from time import sleep
 from typing import Any, List, Optional
 
 import pandas as pd
 import typer
+from tqdm.auto import tqdm
 
 from .cli_shared import dedupe_keep_order, default_output_path, split_csv_values
 from .services.compute import create_backend
@@ -26,6 +29,132 @@ products_app = typer.Typer(
     help="Data product resolution and download commands.",
     no_args_is_help=True,
 )
+
+
+def _future_status(future: Any) -> str:
+    status = getattr(future, "status", None)
+    if callable(status):
+        try:
+            status = status()
+        except TypeError:
+            status = None
+    return str(status).lower() if status is not None else ""
+
+
+def _future_done(future: Any) -> bool:
+    done_attr = getattr(future, "done", None)
+    if callable(done_attr):
+        try:
+            return bool(done_attr())
+        except TypeError:
+            return False
+    if isinstance(done_attr, bool):
+        return done_attr
+
+    status = _future_status(future)
+    return status in {"finished", "done", "error", "failed", "cancelled"}
+
+
+def _compute_jobs_with_progress(
+    *,
+    backend: Any,
+    jobs: list[Any],
+    job_uids: list[str],
+    stage_label: str,
+) -> list[Any]:
+    """Run a stage and show per-UID progress for asynchronous backends."""
+    if not jobs:
+        return []
+
+    futures = backend.compute(jobs, sync=False)
+    if not isinstance(futures, list):
+        futures = [futures]
+
+    completed: set[int] = set()
+    failed: set[int] = set()
+    with tqdm(total=len(futures), desc=stage_label, unit="uid", leave=True) as progress_bar:
+        progress_bar.set_postfix_str(f"completed 0/{len(futures)}")
+        while len(completed) < len(futures):
+            for index, future in enumerate(futures):
+                if index in completed:
+                    continue
+
+                state = _future_status(future)
+                if state in {"error", "failed", "cancelled"}:
+                    failed.add(index)
+
+                if not _future_done(future):
+                    continue
+
+                completed.add(index)
+                progress_bar.update(1)
+                uid = job_uids[index] if index < len(job_uids) else f"job-{index + 1}"
+                status_text = state if state else "finished"
+                progress_bar.write(f"{stage_label} completed for {uid} [{status_text}]")
+
+            progress_bar.set_postfix_str(
+                f"completed {len(completed)}/{len(futures)} failed {len(failed)}"
+            )
+            if len(completed) < len(futures):
+                sleep(0.5)
+
+    return backend.gather(futures)
+
+
+def _download_products_with_progress(
+    products: list[Any],
+    destination: Path,
+    **kwargs: Any,
+):
+    total_known_bytes = sum(max(int(product.content_length), 0) for product in products)
+    total_files = len(products)
+    progress_total = total_known_bytes if total_known_bytes > 0 else max(total_files, 1)
+    progress_unit = "B" if total_known_bytes > 0 else "file"
+    progress_kwargs = {"unit_scale": True, "unit_divisor": 1000} if total_known_bytes > 0 else {}
+    progress_lock = Lock()
+    previous_bytes: dict[str, int] = {}
+    previous_states: dict[str, str] = {}
+    completed_files = 0
+
+    with tqdm(
+        total=progress_total,
+        desc="Downloading products",
+        unit=progress_unit,
+        leave=True,
+        **progress_kwargs,
+    ) as progress_bar:
+        progress_bar.set_postfix_str(f"files 0/{total_files}")
+
+        def update_callback(file_status: Any) -> None:
+            nonlocal completed_files
+
+            key = f"{file_status.access_url}|{file_status.filename}"
+            with progress_lock:
+                current_bytes = max(int(file_status.bytes_downloaded), 0)
+                previous = previous_bytes.get(key, 0)
+                if total_known_bytes > 0 and current_bytes > previous:
+                    progress_bar.update(current_bytes - previous)
+                previous_bytes[key] = max(previous, current_bytes)
+
+                status = str(file_status.status)
+                previous_status = previous_states.get(key)
+                if status in {"completed", "failed", "cancelled"} and previous_status not in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                }:
+                    completed_files += 1
+                    if total_known_bytes <= 0:
+                        progress_bar.update(1)
+                previous_states[key] = status
+                progress_bar.set_postfix_str(f"files {completed_files}/{total_files}")
+
+        return download_products(
+            products,
+            destination,
+            update_callback=update_callback,
+            **kwargs,
+        )
 
 
 def _read_member_uids_from_metadata(
@@ -206,7 +335,15 @@ def _run_parallel_archive_jobs(
                 )
                 for uid in asdm_uids
             ]
-            unpack_results = backend.compute(unpack_jobs, sync=True)
+            if postprocess_backend == "slurm":
+                unpack_results = _compute_jobs_with_progress(
+                    backend=backend,
+                    jobs=unpack_jobs,
+                    job_uids=asdm_uids,
+                    stage_label="Slurm unpack",
+                )
+            else:
+                unpack_results = backend.compute(unpack_jobs, sync=True)
             for result in unpack_results:
                 raw_outputs.extend(result)
 
@@ -224,7 +361,15 @@ def _run_parallel_archive_jobs(
                 )
                 for uid in asdm_uids
             ]
-            calibrate_results = backend.compute(calibrate_jobs, sync=True)
+            if postprocess_backend == "slurm":
+                calibrate_results = _compute_jobs_with_progress(
+                    backend=backend,
+                    jobs=calibrate_jobs,
+                    job_uids=asdm_uids,
+                    stage_label="Slurm calibrate",
+                )
+            else:
+                calibrate_results = backend.compute(calibrate_jobs, sync=True)
             for result in calibrate_results:
                 calibrated_outputs.extend(result)
 
@@ -482,7 +627,7 @@ def products_download(
     )
 
     if backend_normalized == "slurm" and needs_archive_postprocess:
-        summary = download_products(
+        summary = _download_products_with_progress(
             filtered,
             destination,
             max_parallel=max_parallel,
@@ -533,7 +678,7 @@ def products_download(
             )
         return
 
-    summary = download_products(
+    summary = _download_products_with_progress(
         filtered,
         destination,
         max_parallel=max_parallel,

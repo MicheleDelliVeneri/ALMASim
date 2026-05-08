@@ -125,8 +125,11 @@ def test_products_download_slurm_postprocess_path(tmp_path, monkeypatch):
     monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
 
     destination = tmp_path / "downloads"
+    captured: dict[str, object] = {}
 
     def _fake_download_products(*args, **kwargs):
+        captured.update(kwargs)
+        assert callable(kwargs["update_callback"])
         destination.mkdir(parents=True, exist_ok=True)
         return SimpleNamespace(
             destination=str(destination),
@@ -158,6 +161,7 @@ def test_products_download_slurm_postprocess_path(tmp_path, monkeypatch):
     )
 
     assert result.exit_code == 0
+    assert callable(captured["update_callback"])
     assert "Raw MS products:" in result.output
     assert "Calibrated MS products:" in result.output
 
@@ -172,6 +176,7 @@ def test_products_download_sync_path(tmp_path, monkeypatch):
 
     def _fake_download_products(*args, **kwargs):
         captured.update(kwargs)
+        assert callable(kwargs["update_callback"])
         return SimpleNamespace(
             destination=str(tmp_path / "downloads"),
             files_completed=1,
@@ -198,5 +203,55 @@ def test_products_download_sync_path(tmp_path, monkeypatch):
     )
 
     assert result.exit_code == 0
+    assert callable(captured["update_callback"])
     assert captured["unpack_ms"] is True
     assert captured["generate_calibrated_visibilities"] is False
+
+
+class _FakeFuture:
+    def __init__(self, *, done_after: int = 1, status: str = "finished"):
+        self._calls = 0
+        self._done_after = done_after
+        self.status = status
+
+    def done(self):
+        self._calls += 1
+        return self._calls >= self._done_after
+
+
+class _FakeAsyncBackend:
+    def __init__(self, futures, gathered):
+        self._futures = futures
+        self._gathered = gathered
+        self.compute_sync_values = []
+        self.gather_called = False
+
+    def compute(self, jobs, sync=True):
+        self.compute_sync_values.append(sync)
+        return self._futures
+
+    def gather(self, futures):
+        self.gather_called = True
+        assert futures is self._futures
+        return self._gathered
+
+
+def test_compute_jobs_with_progress_uses_async_and_gather(monkeypatch):
+    """Slurm progress helper should compute async and gather futures."""
+    backend = _FakeAsyncBackend(
+        futures=[_FakeFuture(done_after=1), _FakeFuture(done_after=2)],
+        gathered=[["raw1.ms"], ["raw2.ms"]],
+    )
+
+    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: None)
+
+    results = cli_products._compute_jobs_with_progress(
+        backend=backend,
+        jobs=[object(), object()],
+        job_uids=["uid://A", "uid://B"],
+        stage_label="Slurm unpack",
+    )
+
+    assert backend.compute_sync_values == [False]
+    assert backend.gather_called is True
+    assert results == [["raw1.ms"], ["raw2.ms"]]
