@@ -20,29 +20,37 @@ class _DummyBackend:
         return None
 
 
-def test_simulation_csv_mode_requires_metadata_path():
-    """CSV metadata mode must require --metadata-path."""
+def _write_metadata_csv(tmp_path, rows: list[dict]) -> str:
+    metadata_path = tmp_path / "metadata.csv"
+    pd.DataFrame(rows).to_csv(metadata_path, index=False)
+    return str(metadata_path)
+
+
+def test_simulation_requires_metadata_path():
+    """Simulation runs must require --metadata-path."""
     result = runner.invoke(
         cli.app,
         [
             "simulation",
             "run",
-            "--metadata-mode",
-            "csv",
         ],
     )
 
     assert result.exit_code == 2
-    assert "--metadata-path is required" in result.output
+    assert "Missing option '--metadata-path'" in result.output
 
 
-def test_simulation_invalid_backend():
+def test_simulation_invalid_backend(tmp_path):
     """Invalid backend values should fail fast."""
+    metadata_path = _write_metadata_csv(tmp_path, [{"member_ous_uid": "uid://A"}])
+
     result = runner.invoke(
         cli.app,
         [
             "simulation",
             "run",
+            "--metadata-path",
+            metadata_path,
             "--backend",
             "dask",
         ],
@@ -52,11 +60,10 @@ def test_simulation_invalid_backend():
     assert "--backend must be one of" in result.output
 
 
-def test_simulation_run_query_happy_path(monkeypatch):
+def test_simulation_run_csv_happy_path(monkeypatch, tmp_path):
     """Simulation run should execute staged workflow and print completion output."""
-    metadata = pd.DataFrame({"member_ous_uid": ["uid://A"]})
+    metadata_path = _write_metadata_csv(tmp_path, [{"member_ous_uid": "uid://A"}])
 
-    monkeypatch.setattr(cli_simulation, "query_metadata_by_science", lambda **kwargs: metadata)
     monkeypatch.setattr(cli_simulation.astro, "get_line_info", lambda main_dir: (100.0, None))
     monkeypatch.setattr(
         cli_simulation,
@@ -97,11 +104,11 @@ def test_simulation_run_query_happy_path(monkeypatch):
         [
             "simulation",
             "run",
-            "--science-keyword",
-            "Galaxies",
+            "--metadata-path",
+            metadata_path,
         ],
     )
 
     assert result.exit_code == 0
-    assert "Run complete" in result.output
+    assert "All done. Simulated 1 run(s) across 1 row(s)." in result.output
     assert "ML shard written to: /tmp/mock_ml.h5" in result.output
