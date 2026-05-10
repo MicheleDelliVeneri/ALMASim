@@ -127,6 +127,7 @@ Once installed, the CLI exposes the main workflows:
 almasim metadata --help
 almasim products --help
 almasim simulation --help
+almasim clean --help
 ```
 
 ### With CASA tools (Linux x86-64 only)
@@ -380,6 +381,27 @@ almasim products download \
   --destination examples/output/downloads \
   --extract-tar
 
+# Split archive stages so download/extract/unpack/calibrate can run independently
+almasim products download \
+  --products-csv examples/output/resolved_products.csv \
+  --destination examples/output/downloads
+
+almasim products extract \
+  --source-root examples/output/downloads
+
+almasim products unpack \
+  --input-root examples/output/downloads \
+  --output-root examples/output/archive_ms/raw_ms \
+  --postprocess-backend slurm \
+  --slurm-workers 8
+
+almasim products calibrate \
+  --input-root examples/output/downloads \
+  --raw-ms-root examples/output/archive_ms/raw_ms \
+  --output-root examples/output/archive_ms/calibrated_ms \
+  --postprocess-backend slurm \
+  --slurm-workers 8
+
 # Download + unpack ASDM + calibrate using Slurm-backed parallel post-processing
 almasim products download \
   --products-csv examples/output/resolved_products.csv \
@@ -390,6 +412,14 @@ almasim products download \
   --postprocess-backend slurm \
   --slurm-queue normal \
   --slurm-workers 8
+
+# Run WSClean through ALMASim (all WSClean flags are forwarded unchanged)
+almasim clean -- \
+  -name examples/output/imaging/demo \
+  -size 1024 1024 \
+  -scale 0.1asec \
+  -niter 20000 \
+  examples/output/archive_ms/calibrated_ms/uid___A001_X*.ms
 
 # Run staged simulation from metadata query
 almasim simulation run \

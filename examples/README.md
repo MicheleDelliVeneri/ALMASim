@@ -38,6 +38,29 @@ almasim products download \
   --destination examples/output/downloads \
   --extract-tar
 
+almasim products extract \
+  --source-root examples/output/downloads
+
+almasim products unpack \
+  --input-root examples/output/downloads \
+  --output-root examples/output/archive_ms/raw_ms \
+  --postprocess-backend slurm \
+  --slurm-workers 8
+
+almasim products calibrate \
+  --input-root examples/output/downloads \
+  --raw-ms-root examples/output/archive_ms/raw_ms \
+  --output-root examples/output/archive_ms/calibrated_ms \
+  --postprocess-backend slurm \
+  --slurm-workers 8
+
+almasim clean -- \
+  -name examples/output/imaging/demo \
+  -size 1024 1024 \
+  -scale 0.1asec \
+  -niter 20000 \
+  examples/output/archive_ms/calibrated_ms/uid___A001_X*.ms
+
 python examples/query_metadata_cli.py \
   --science-keyword Galaxies \
   --band 6 \

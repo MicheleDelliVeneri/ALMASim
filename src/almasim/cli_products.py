@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tarfile
 from threading import Lock
 from time import sleep
 from typing import Any, List, Optional
@@ -181,6 +182,13 @@ def _parse_member_uid_options(member_ous_uid: Optional[List[str]]) -> list[str]:
     return dedupe_keep_order(parsed)
 
 
+def _parse_asdm_uid_options(asdm_uid: Optional[List[str]]) -> list[str]:
+    parsed = split_csv_values(asdm_uid)
+    if not parsed:
+        return []
+    return dedupe_keep_order(parsed)
+
+
 def _resolve_products_from_inputs(
     *,
     products_csv: Optional[Path],
@@ -272,6 +280,7 @@ def _calibrate_single_uid(
     casa_data_root: Optional[str],
     skip_casa_data_update: bool,
     overwrite: bool,
+    clean_intermediate: bool,
 ) -> list[str]:
     from .services.archive import create_calibrated_measurement_sets
 
@@ -283,8 +292,198 @@ def _calibrate_single_uid(
         casa_data_root=casa_data_root,
         skip_casa_data_update=skip_casa_data_update,
         overwrite=overwrite,
+        clean_intermediate=clean_intermediate,
     )
     return [str(path) for path in paths]
+
+
+def _run_unpack_jobs(
+    *,
+    input_root: Path,
+    output_root: Path,
+    asdm_uids: list[str],
+    postprocess_backend: str,
+    postprocess_backend_kwargs: dict[str, Any],
+    casa_data_root: Optional[Path],
+    skip_casa_data_update: bool,
+    overwrite_outputs: bool,
+) -> list[str]:
+    from .services.archive import create_measurement_sets
+
+    if postprocess_backend == "sync":
+        if not asdm_uids:
+            return [
+                str(path)
+                for path in create_measurement_sets(
+                    input_root=input_root,
+                    output_root=output_root,
+                    casa_data_root=casa_data_root,
+                    skip_casa_data_update=skip_casa_data_update,
+                    overwrite=overwrite_outputs,
+                )
+            ]
+
+        outputs: list[str] = []
+        for uid in asdm_uids:
+            outputs.extend(
+                str(path)
+                for path in create_measurement_sets(
+                    input_root=input_root,
+                    output_root=output_root,
+                    asdm_uid=uid,
+                    casa_data_root=casa_data_root,
+                    skip_casa_data_update=skip_casa_data_update,
+                    overwrite=overwrite_outputs,
+                )
+            )
+        return outputs
+
+    effective_uids = asdm_uids or dedupe_keep_order(_extract_asdm_uids_from_download_root(input_root))
+    if not effective_uids:
+        typer.echo("No ASDM directories found to unpack.", err=True)
+        raise typer.Exit(code=1)
+
+    with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
+        unpack_task = backend.delayed(_unpack_single_uid)
+        unpack_jobs = [
+            unpack_task(
+                input_root=str(input_root),
+                raw_output_root=str(output_root),
+                asdm_uid=uid,
+                casa_data_root=str(casa_data_root) if casa_data_root else None,
+                skip_casa_data_update=skip_casa_data_update,
+                overwrite=overwrite_outputs,
+            )
+            for uid in effective_uids
+        ]
+        unpack_results = _compute_jobs_with_progress(
+            backend=backend,
+            jobs=unpack_jobs,
+            job_uids=effective_uids,
+            stage_label="Slurm unpack",
+        )
+    outputs: list[str] = []
+    for result in unpack_results:
+        outputs.extend(result)
+    return outputs
+
+
+def _run_calibrate_jobs(
+    *,
+    input_root: Path,
+    raw_ms_root: Path,
+    output_root: Path,
+    asdm_uids: list[str],
+    postprocess_backend: str,
+    postprocess_backend_kwargs: dict[str, Any],
+    casa_data_root: Optional[Path],
+    skip_casa_data_update: bool,
+    overwrite_outputs: bool,
+    clean_intermediate: bool,
+) -> list[str]:
+    from .services.archive import create_calibrated_measurement_sets
+
+    if postprocess_backend == "sync":
+        if not asdm_uids:
+            return [
+                str(path)
+                for path in create_calibrated_measurement_sets(
+                    input_root=input_root,
+                    raw_ms_root=raw_ms_root,
+                    output_root=output_root,
+                    casa_data_root=casa_data_root,
+                    skip_casa_data_update=skip_casa_data_update,
+                    overwrite=overwrite_outputs,
+                    clean_intermediate=clean_intermediate,
+                )
+            ]
+
+        outputs: list[str] = []
+        for uid in asdm_uids:
+            outputs.extend(
+                str(path)
+                for path in create_calibrated_measurement_sets(
+                    input_root=input_root,
+                    raw_ms_root=raw_ms_root,
+                    output_root=output_root,
+                    asdm_uid=uid,
+                    casa_data_root=casa_data_root,
+                    skip_casa_data_update=skip_casa_data_update,
+                    overwrite=overwrite_outputs,
+                    clean_intermediate=clean_intermediate,
+                )
+            )
+        return outputs
+
+    if clean_intermediate:
+        typer.echo(
+            "--clean-intermediate-files is not supported with --postprocess-backend=slurm.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    effective_uids = asdm_uids or dedupe_keep_order(_extract_uids_from_raw_ms_root(raw_ms_root))
+    if not effective_uids:
+        typer.echo("No raw MeasurementSets found to calibrate.", err=True)
+        raise typer.Exit(code=1)
+
+    with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
+        calibrate_task = backend.delayed(_calibrate_single_uid)
+        calibrate_jobs = [
+            calibrate_task(
+                input_root=str(input_root),
+                raw_ms_root=str(raw_ms_root),
+                calibrated_output_root=str(output_root),
+                asdm_uid=uid,
+                casa_data_root=str(casa_data_root) if casa_data_root else None,
+                skip_casa_data_update=skip_casa_data_update,
+                overwrite=overwrite_outputs,
+                clean_intermediate=False,
+            )
+            for uid in effective_uids
+        ]
+        calibrate_results = _compute_jobs_with_progress(
+            backend=backend,
+            jobs=calibrate_jobs,
+            job_uids=effective_uids,
+            stage_label="Slurm calibrate",
+        )
+    outputs: list[str] = []
+    for result in calibrate_results:
+        outputs.extend(result)
+    return outputs
+
+
+def _safe_extract_tar_archive(archive_path: Path, destination: Path) -> list[Path]:
+    """Extract a tarball while refusing absolute or escaping paths."""
+    extracted: list[Path] = []
+    destination_resolved = destination.resolve()
+    with tarfile.open(archive_path, "r:*") as archive:
+        for member in archive.getmembers():
+            member_path = Path(member.name)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                typer.echo(f"Skipping unsafe archive member: {member.name}", err=True)
+                continue
+            resolved = (destination / member.name).resolve()
+            if not str(resolved).startswith(str(destination_resolved)):
+                typer.echo(f"Skipping escaping archive member: {member.name}", err=True)
+                continue
+            archive.extract(member, destination, filter="data")
+            if not member.isdir():
+                extracted.append(resolved)
+    return extracted
+
+
+def _find_archives(root: Path, recursive: bool) -> list[Path]:
+    candidates = root.rglob("*") if recursive else root.iterdir()
+    archives = []
+    for path in candidates:
+        if not path.is_file():
+            continue
+        name = path.name.lower()
+        if name.endswith(".tar") or name.endswith(".tgz") or name.endswith(".tar.gz"):
+            archives.append(path)
+    return sorted(archives)
 
 
 def _run_parallel_archive_jobs(
@@ -358,6 +557,7 @@ def _run_parallel_archive_jobs(
                     casa_data_root=str(casa_data_root) if casa_data_root else None,
                     skip_casa_data_update=skip_casa_data_update,
                     overwrite=overwrite_archive_outputs,
+                    clean_intermediate=False,
                 )
                 for uid in asdm_uids
             ]
@@ -705,3 +905,258 @@ def products_download(
         typer.echo("Calibrated MS products:")
         for calibrated_ms in summary.calibrated_measurement_sets:
             typer.echo(f"  {calibrated_ms}")
+
+
+@products_app.command("extract")
+def products_extract(
+    source_root: Path = typer.Option(
+        default_output_path("downloads"),
+        "--source-root",
+        help="Directory containing downloaded archive files.",
+    ),
+    destination: Optional[Path] = typer.Option(
+        None,
+        "--destination",
+        help="Extraction destination (defaults to --source-root).",
+    ),
+    recursive: bool = typer.Option(
+        True,
+        "--recursive/--no-recursive",
+        help="Recursively search --source-root for .tar/.tgz archives.",
+    ),
+    delete_archives: bool = typer.Option(
+        False,
+        "--delete-archives",
+        help="Delete each archive after successful extraction.",
+    ),
+) -> None:
+    """Extract ALMA archive tarballs as a standalone step."""
+    source = source_root.expanduser().resolve()
+    if not source.exists() or not source.is_dir():
+        typer.echo(f"--source-root is not a directory: {source}", err=True)
+        raise typer.Exit(code=2)
+
+    target = destination.expanduser().resolve() if destination is not None else source
+    target.mkdir(parents=True, exist_ok=True)
+
+    archives = _find_archives(source, recursive)
+    if not archives:
+        typer.echo(f"No .tar/.tgz archives found under {source}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Found {len(archives)} archive(s) to extract.")
+    extracted_files: list[Path] = []
+    failed_archives: list[str] = []
+    for archive_path in archives:
+        try:
+            extracted = _safe_extract_tar_archive(archive_path, target)
+            extracted_files.extend(extracted)
+            typer.echo(f"Extracted {archive_path}")
+            if delete_archives:
+                archive_path.unlink(missing_ok=True)
+        except (tarfile.TarError, OSError, ValueError) as exc:
+            failed_archives.append(str(archive_path))
+            typer.echo(f"Failed to extract {archive_path}: {exc}", err=True)
+
+    typer.echo(f"Extracted files: {len(extracted_files)}")
+    typer.echo(f"Failed archives: {len(failed_archives)}")
+    if failed_archives:
+        raise typer.Exit(code=1)
+
+
+@products_app.command("unpack")
+def products_unpack(
+    input_root: Path = typer.Option(
+        default_output_path("downloads"),
+        "--input-root",
+        help="Directory containing extracted ASDM directories.",
+    ),
+    output_root: Path = typer.Option(
+        default_output_path("downloads") / "archive_ms" / "raw_ms",
+        "--output-root",
+        help="Directory where raw MeasurementSets are written.",
+    ),
+    asdm_uid: Optional[List[str]] = typer.Option(
+        None,
+        "--asdm-uid",
+        help="Optional ASDM UID(s) to process. Repeat or pass comma-separated values.",
+    ),
+    casa_data_root: Optional[Path] = typer.Option(
+        None,
+        "--casa-data-root",
+        help="Optional CASA runtime data directory.",
+    ),
+    skip_casa_data_update: bool = typer.Option(
+        False,
+        "--skip-casa-data-update",
+        help="Do not auto-download CASA runtime data if missing.",
+    ),
+    postprocess_backend: str = typer.Option(
+        "sync",
+        "--postprocess-backend",
+        help="Backend for unpack stage. Choices: sync, slurm.",
+        case_sensitive=False,
+    ),
+    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
+    slurm_project: Optional[str] = typer.Option(
+        None,
+        "--slurm-project",
+        help="Optional Slurm project/account.",
+    ),
+    slurm_walltime: str = typer.Option(
+        "02:00:00",
+        "--slurm-walltime",
+        help="Slurm walltime per worker job (HH:MM:SS).",
+    ),
+    slurm_cores: int = typer.Option(
+        1,
+        "--slurm-cores",
+        min=1,
+        help="Cores per Slurm worker.",
+    ),
+    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    slurm_workers: int = typer.Option(
+        4,
+        "--slurm-workers",
+        min=1,
+        help="Number of Slurm workers for post-processing.",
+    ),
+    overwrite_outputs: bool = typer.Option(
+        False,
+        "--overwrite-outputs",
+        help="Overwrite existing raw MS outputs.",
+    ),
+) -> None:
+    """Import ASDM directories into raw MeasurementSets as a standalone step."""
+    backend_normalized = postprocess_backend.lower()
+    if backend_normalized not in {"sync", "slurm"}:
+        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
+        raise typer.Exit(code=2)
+
+    parsed_uids = _parse_asdm_uid_options(asdm_uid)
+    raw_outputs = _run_unpack_jobs(
+        input_root=input_root.expanduser().resolve(),
+        output_root=output_root.expanduser().resolve(),
+        asdm_uids=parsed_uids,
+        postprocess_backend=backend_normalized,
+        postprocess_backend_kwargs={
+            "queue": slurm_queue,
+            "project": slurm_project,
+            "walltime": slurm_walltime,
+            "cores": slurm_cores,
+            "memory": slurm_memory,
+            "n_workers": slurm_workers,
+        },
+        casa_data_root=casa_data_root,
+        skip_casa_data_update=skip_casa_data_update,
+        overwrite_outputs=overwrite_outputs,
+    )
+
+    typer.echo(f"Raw MS products: {len(raw_outputs)}")
+    for raw_ms in raw_outputs:
+        typer.echo(f"  {raw_ms}")
+
+
+@products_app.command("calibrate")
+def products_calibrate(
+    input_root: Path = typer.Option(
+        default_output_path("downloads"),
+        "--input-root",
+        help="ALMA delivery root containing calibration products.",
+    ),
+    raw_ms_root: Path = typer.Option(
+        default_output_path("downloads") / "archive_ms" / "raw_ms",
+        "--raw-ms-root",
+        help="Directory containing raw MeasurementSets.",
+    ),
+    output_root: Path = typer.Option(
+        default_output_path("downloads") / "archive_ms" / "calibrated_ms",
+        "--output-root",
+        help="Directory where calibrated MeasurementSets are written.",
+    ),
+    asdm_uid: Optional[List[str]] = typer.Option(
+        None,
+        "--asdm-uid",
+        help="Optional UID(s) to calibrate. Repeat or pass comma-separated values.",
+    ),
+    casa_data_root: Optional[Path] = typer.Option(
+        None,
+        "--casa-data-root",
+        help="Optional CASA runtime data directory.",
+    ),
+    skip_casa_data_update: bool = typer.Option(
+        False,
+        "--skip-casa-data-update",
+        help="Do not auto-download CASA runtime data if missing.",
+    ),
+    postprocess_backend: str = typer.Option(
+        "sync",
+        "--postprocess-backend",
+        help="Backend for calibration stage. Choices: sync, slurm.",
+        case_sensitive=False,
+    ),
+    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
+    slurm_project: Optional[str] = typer.Option(
+        None,
+        "--slurm-project",
+        help="Optional Slurm project/account.",
+    ),
+    slurm_walltime: str = typer.Option(
+        "02:00:00",
+        "--slurm-walltime",
+        help="Slurm walltime per worker job (HH:MM:SS).",
+    ),
+    slurm_cores: int = typer.Option(
+        1,
+        "--slurm-cores",
+        min=1,
+        help="Cores per Slurm worker.",
+    ),
+    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    slurm_workers: int = typer.Option(
+        4,
+        "--slurm-workers",
+        min=1,
+        help="Number of Slurm workers for post-processing.",
+    ),
+    overwrite_outputs: bool = typer.Option(
+        False,
+        "--overwrite-outputs",
+        help="Overwrite existing calibrated MS outputs.",
+    ),
+    clean_intermediate_files: bool = typer.Option(
+        False,
+        "--clean-intermediate-files",
+        help="Remove intermediate raw and working files after successful calibration.",
+    ),
+) -> None:
+    """Create calibrated MeasurementSets as a standalone step."""
+    backend_normalized = postprocess_backend.lower()
+    if backend_normalized not in {"sync", "slurm"}:
+        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
+        raise typer.Exit(code=2)
+
+    parsed_uids = _parse_asdm_uid_options(asdm_uid)
+    calibrated_outputs = _run_calibrate_jobs(
+        input_root=input_root.expanduser().resolve(),
+        raw_ms_root=raw_ms_root.expanduser().resolve(),
+        output_root=output_root.expanduser().resolve(),
+        asdm_uids=parsed_uids,
+        postprocess_backend=backend_normalized,
+        postprocess_backend_kwargs={
+            "queue": slurm_queue,
+            "project": slurm_project,
+            "walltime": slurm_walltime,
+            "cores": slurm_cores,
+            "memory": slurm_memory,
+            "n_workers": slurm_workers,
+        },
+        casa_data_root=casa_data_root,
+        skip_casa_data_update=skip_casa_data_update,
+        overwrite_outputs=overwrite_outputs,
+        clean_intermediate=clean_intermediate_files,
+    )
+
+    typer.echo(f"Calibrated MS products: {len(calibrated_outputs)}")
+    for calibrated_ms in calibrated_outputs:
+        typer.echo(f"  {calibrated_ms}")

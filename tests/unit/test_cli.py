@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import tarfile
 from types import SimpleNamespace
 
 import pandas as pd
 from typer.testing import CliRunner
 
-from almasim import cli, cli_metadata, cli_products
+from almasim import cli, cli_clean, cli_metadata, cli_products
 
 runner = CliRunner()
 
@@ -255,3 +256,114 @@ def test_compute_jobs_with_progress_uses_async_and_gather(monkeypatch):
     assert backend.compute_sync_values == [False]
     assert backend.gather_called is True
     assert results == [["raw1.ms"], ["raw2.ms"]]
+
+
+def test_products_extract_standalone(tmp_path):
+    """Standalone extract should unpack tar archives from disk."""
+    source_root = tmp_path / "downloads"
+    source_root.mkdir(parents=True)
+    payload = source_root / "data.txt"
+    payload.write_text("hello", encoding="utf-8")
+    archive_path = source_root / "bundle.tar"
+    with tarfile.open(archive_path, "w") as archive:
+        archive.add(payload, arcname="nested/data.txt")
+    payload.unlink()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "products",
+            "extract",
+            "--source-root",
+            str(source_root),
+            "--no-recursive",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (source_root / "nested" / "data.txt").is_file()
+    assert "Extracted files: 1" in result.output
+
+
+def test_products_unpack_standalone(monkeypatch):
+    """Standalone unpack should delegate to unpack job runner and print outputs."""
+    monkeypatch.setattr(
+        cli_products,
+        "_run_unpack_jobs",
+        lambda **kwargs: ["/tmp/raw-a.ms", "/tmp/raw-b.ms"],
+    )
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "products",
+            "unpack",
+            "--asdm-uid",
+            "uid://A,uid://B",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Raw MS products: 2" in result.output
+
+
+def test_products_calibrate_standalone(monkeypatch):
+    """Standalone calibrate should delegate to calibrate job runner and print outputs."""
+    monkeypatch.setattr(
+        cli_products,
+        "_run_calibrate_jobs",
+        lambda **kwargs: ["/tmp/cal-a.ms"],
+    )
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "products",
+            "calibrate",
+            "--asdm-uid",
+            "uid://A",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Calibrated MS products: 1" in result.output
+
+
+def test_clean_passthrough_runs_wsclean(monkeypatch):
+    """Top-level clean command should forward unknown options to WSClean."""
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cli_clean.shutil, "which", lambda executable: f"/usr/bin/{executable}")
+
+    def _fake_run(command, cwd=None, check=False):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        captured["check"] = check
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(cli_clean.subprocess, "run", _fake_run)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "clean",
+            "--wsclean-bin",
+            "wsclean",
+            "--",
+            "-name",
+            "img",
+            "-niter",
+            "1000",
+            "input.ms",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["command"] == [
+        "/usr/bin/wsclean",
+        "-name",
+        "img",
+        "-niter",
+        "1000",
+        "input.ms",
+    ]
