@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import tarfile
+from pathlib import Path
 from threading import Lock
 from time import sleep
 from typing import Any, List, Optional
@@ -338,7 +338,9 @@ def _run_unpack_jobs(
             )
         return outputs
 
-    effective_uids = asdm_uids or dedupe_keep_order(_extract_asdm_uids_from_download_root(input_root))
+    effective_uids = asdm_uids or dedupe_keep_order(
+        _extract_asdm_uids_from_download_root(input_root)
+    )
     if not effective_uids:
         typer.echo("No ASDM directories found to unpack.", err=True)
         raise typer.Exit(code=1)
