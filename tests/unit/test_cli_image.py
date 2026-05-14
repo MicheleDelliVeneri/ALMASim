@@ -9,6 +9,7 @@ from types import ModuleType
 import numpy as np
 import pandas as pd
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from almasim import cli, cli_image
@@ -48,7 +49,7 @@ def test_import_casacore_tables_raises_when_casacore_missing(monkeypatch):
     monkeypatch.setitem(sys.modules, "casacore", casacore_module)
     monkeypatch.delitem(sys.modules, "casacore.tables", raising=False)
 
-    with pytest.raises(Exception, match="Please install casacore"):
+    with pytest.raises(typer.Exit):
         cli_image.import_casacore_tables()
 
 
@@ -97,7 +98,7 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
         expected_wavelengths / expected_max_baseline_size * radians_to_arcsec
     )
 
-    assert list(output["filename"]) == ["test_dataset.cal", "test_dataset.cal"]
+    assert list(output["filename"]) == [str(Path("test_dataset.cal").resolve())] * 2
     np.testing.assert_array_equal(output["spectral_window_id"].to_numpy(), np.array([0, 1]))
     np.testing.assert_array_equal(output["reference_frequency"].to_numpy(), expected_frequencies)
     np.testing.assert_allclose(
@@ -183,7 +184,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
     def _fake_compute(input_ms: Path) -> pd.DataFrame:
         return pd.DataFrame(
             {
-                "filename": [input_ms.name],
+                "filename": [str(input_ms.resolve())],
                 "spectral_window_id": [0],
                 "reference_frequency": [100.0],
                 "fov_per_frequency": [10.0],
@@ -202,7 +203,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
     assert result.exit_code == 0
     saved = pd.read_csv(out_csv)
     assert len(saved) == 2
-    assert sorted(saved["filename"].tolist()) == ["first.cal", "second.cal"]
+    assert sorted(Path(f).name for f in saved["filename"].tolist()) == ["first.cal", "second.cal"]
 
 
 @pytest.mark.unit

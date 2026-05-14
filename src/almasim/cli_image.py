@@ -58,7 +58,7 @@ def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
 
     derived_parameters = pd.DataFrame(
         {
-            "filename": [input_ms.name] * reference_frequencies.size,
+            "filename": [str(input_ms.resolve())] * reference_frequencies.size,
             "spectral_window_id": spectral_window_id,
             "reference_frequency": reference_frequencies,
             "fov_per_frequency": fov_per_frequency,
@@ -128,7 +128,7 @@ def compute_parameters(
     for ms in tqdm(mss[1:]):
         single_ms_output = compute_imaging_parameters(ms)
         main_output = pd.concat([main_output, single_ms_output], axis=0, ignore_index=True)
-    main_output.to_csv(output_metadata_file)
+    main_output.to_csv(output_metadata_file, index=False)
 
 
 @image_app.command("batch_image")
