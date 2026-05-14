@@ -1,6 +1,11 @@
+"""Batch imaging commands for the ALMASim CLI."""
+
+from __future__ import annotations
+
 import shlex
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -8,11 +13,11 @@ import typer
 from scipy.constants import speed_of_light
 from tqdm import tqdm
 
-ALMA_ILLUMINATION_FACTOR = 1.12
+ALMA_FOV_FACTOR = 1.22  # Rayleigh criterion for primary beam size (λ/D)
 RAD_TO_ARCSEC = 180 / np.pi * 3600
 
 
-def import_casacore_tables():
+def import_casacore_tables() -> Any:
     try:
         from casacore.tables import table
 
@@ -27,7 +32,7 @@ image_app = typer.Typer(
 )
 
 
-def compute_imaging_parameters(input_ms) -> pd.DataFrame:
+def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
     casacore_table = import_casacore_tables()
     spectral_windows = casacore_table(f"{input_ms}::SPECTRAL_WINDOW", ack=False)
     antennas = casacore_table(f"{input_ms}::ANTENNA", ack=False)
@@ -35,12 +40,15 @@ def compute_imaging_parameters(input_ms) -> pd.DataFrame:
     min_dish_diameter = np.min(antennas.getcol("DISH_DIAMETER"))
     antenna_pos = antennas.getcol("POSITION")
     i, j = np.triu_indices(antenna_pos.shape[0], k=1)
-    distance = np.sqrt((antenna_pos[j, :] - antenna_pos[i, :]) ** 2).sum(axis=1)
+    distance = np.linalg.norm(antenna_pos[j, :] - antenna_pos[i, :], axis=1)
     max_baseline_size = max(distance)
-    k = ALMA_ILLUMINATION_FACTOR * speed_of_light * RAD_TO_ARCSEC
 
-    fov_per_frequency = k / reference_frequencies / min_dish_diameter
-    synthetized_beam_size = k / reference_frequencies / max_baseline_size
+    fov_per_frequency = (
+        ALMA_FOV_FACTOR * speed_of_light * RAD_TO_ARCSEC / reference_frequencies / min_dish_diameter
+    )
+    synthetized_beam_size = (
+        speed_of_light * RAD_TO_ARCSEC / reference_frequencies / max_baseline_size
+    )
     spectral_window_id = np.arange(reference_frequencies.size, dtype=int)
 
     derived_parameters = pd.DataFrame(
@@ -56,7 +64,9 @@ def compute_imaging_parameters(input_ms) -> pd.DataFrame:
     return derived_parameters
 
 
-def imaging_parameter_to_command_arg(imaging_parameters, fov_fraction, beam_sampling):
+def imaging_parameter_to_command_arg(
+    imaging_parameters: pd.Series, fov_fraction: float, beam_sampling: float
+) -> list[str]:
     spw = imaging_parameters["spectral_window_id"]
     fov = imaging_parameters["fov_per_frequency"]
     synthetized_beam_size = imaging_parameters["synthetized_beam_size"]
