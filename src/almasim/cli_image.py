@@ -22,8 +22,13 @@ def import_casacore_tables() -> Any:
         from casacore.tables import table
 
         return table
-    except ImportError as exc:
-        raise Exception("Please install casacore to read metadata from the MS") from exc
+    except ImportError:
+        typer.echo(
+            "Missing optional dependency `python-casacore` required to read metadata from "
+            "the measurement set. Install it with the `ms-casacore` extra.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
 
 image_app = typer.Typer(
