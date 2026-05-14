@@ -132,7 +132,7 @@ def image_set(
 ):
 
     parameters = pd.read_csv(str(imaging_parameters))
-    for _, dset_parameter in parameters.iterrows():
+    for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
         input_filename = Path(dset_parameter["filename"])
         command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
 
@@ -159,5 +159,4 @@ def image_set(
             "-c",
             str(num_cores),
         ]
-        typer.echo(f"Submitting: {shlex.join(sbatch_cmd)}")
-        subprocess.run(sbatch_cmd)
+        subprocess.run(sbatch_cmd, check=True)
