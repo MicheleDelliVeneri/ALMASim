@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -48,6 +49,7 @@ def compute_imaging_parameters(input_ms) -> pd.DataFrame:
             "spectral_window_id": spectral_window_id,
             "reference_frequency": reference_frequencies,
             "fov_per_frequency": fov_per_frequency,
+            "max_baseline_size": [max_baseline_size] * reference_frequencies.size,
             "synthetized_beam_size": synthetized_beam_size,
         }
     )
@@ -62,14 +64,23 @@ def imaging_parameter_to_command_arg(imaging_parameters, fov_fraction, beam_samp
     fov *= fov_fraction
     n_pixels = int(fov / synthetized_beam_size)
     cmd_args = [
-        f"-scale {synthetized_beam_size}asec",
-        f"-size {n_pixels} {n_pixels}",
-        f"-spws {spw}",
-        "-mgain 0.85",
-        "-niter 100000",
-        "-pol I",
+        "-scale",
+        f"{synthetized_beam_size}asec",
+        "-size",
+        str(n_pixels),
+        str(n_pixels),
+        "-spws",
+        str(spw),
+        "-mgain",
+        "0.85",
+        "-niter",
+        "100000",
+        "-pol",
+        "I",
         "-make-psf",
-        "-weight briggs 0.5",
+        "-weight",
+        "briggs",
+        "0.5",
         "-update-model-required",
     ]
     return cmd_args
@@ -125,19 +136,28 @@ def image_set(
         input_filename = Path(dset_parameter["filename"])
         command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
 
-        cmd = [
+        wsclean_cmd = [
             "wsclean",
-            "-name {output_directory_path}/{input_filename.stem}",
+            "-name",
+            str(output_directory / input_filename.stem),
             *command_args,
-            f"{input_filename}",
-            f"-mem {num_cores / max_cores_per_node}",
+            "-mem",
+            str(num_cores / max_cores_per_node),
+            str(input_filename),
         ]
-        wrap_text = " ".join(cmd)
-        subprocess.run(
-            [
-                "sbatch",
-                f"--wrap='{wrap_text}'",
-                f"-o {output_directory}/std.out",
-                f"-e {output_directory}/std.err-c {num_cores}",
-            ]
-        )
+        wrap_text = shlex.join(wsclean_cmd)
+        sbatch_cmd = [
+            "sbatch",
+            "-J",
+            input_filename.stem,
+            "--wrap",
+            wrap_text,
+            "-o",
+            str(output_directory.absolute() / r"%x-std%j.out"),
+            "-e",
+            str(output_directory.absolute() / r"%x-std%j.err"),
+            "-c",
+            str(num_cores),
+        ]
+        typer.echo(f"Submitting: {shlex.join(sbatch_cmd)}")
+        subprocess.run(sbatch_cmd)
