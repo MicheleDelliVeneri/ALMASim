@@ -132,13 +132,13 @@ def test_imaging_parameter_to_command_arg_returns_expected_tokens():
         beam_sampling=2,
     )
 
-    assert cmd_args[:7] == ["-scale", "1.0asec", "-size", "12", "12", "-spws", "3"]
+    assert cmd_args[:7] == ["-scale", "1.0asec", "-size", "16", "16", "-spws", "3"]
     assert "-update-model-required" in cmd_args
 
 
 @pytest.mark.unit
 def test_ms_overview_command_prints_dataframe(monkeypatch):
-    """ms_overview should print the computed dataframe."""
+    """ms-overview should print the computed dataframe."""
     df = pd.DataFrame(
         {
             "filename": ["a.cal"],
@@ -151,7 +151,7 @@ def test_ms_overview_command_prints_dataframe(monkeypatch):
     )
     monkeypatch.setattr(cli_image, "compute_imaging_parameters", lambda _: df)
 
-    result = runner.invoke(cli.app, ["image", "ms_overview", "a.cal"])
+    result = runner.invoke(cli.app, ["image", "ms-overview", "a.cal"])
 
     assert result.exit_code == 0
     assert "filename" in result.output
@@ -159,13 +159,22 @@ def test_ms_overview_command_prints_dataframe(monkeypatch):
 
 
 @pytest.mark.unit
+def test_ms_overview_snake_case_command_is_rejected():
+    """Only hyphenated command naming should be supported."""
+    result = runner.invoke(cli.app, ["image", "ms_overview", "a.cal"])
+
+    assert result.exit_code != 0
+    assert "No such command" in result.output
+
+
+@pytest.mark.unit
 def test_compute_parameters_exits_when_no_ms_found(tmp_path):
-    """compute_parameters should fail with exit code 1 if no .cal datasets exist."""
+    """compute-parameters should fail with exit code 1 if no .cal datasets exist."""
     out_csv = tmp_path / "imaging_parameters.csv"
 
     result = runner.invoke(
         cli.app,
-        ["image", "compute_parameters", str(tmp_path), str(out_csv)],
+        ["image", "compute-parameters", str(tmp_path), str(out_csv)],
     )
 
     assert result.exit_code == 1
@@ -174,7 +183,7 @@ def test_compute_parameters_exits_when_no_ms_found(tmp_path):
 
 @pytest.mark.unit
 def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
-    """compute_parameters should aggregate rows across all matching datasets."""
+    """compute-parameters should aggregate rows across all matching datasets."""
     (tmp_path / "first.cal").mkdir()
     (tmp_path / "second.cal").mkdir()
     out_csv = tmp_path / "imaging_parameters.csv"
@@ -197,7 +206,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
 
     result = runner.invoke(
         cli.app,
-        ["image", "compute_parameters", str(tmp_path), str(out_csv)],
+        ["image", "compute-parameters", str(tmp_path), str(out_csv)],
     )
 
     assert result.exit_code == 0
@@ -208,7 +217,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
 
 @pytest.mark.unit
 def test_batch_image_submits_sbatch_with_wrap(monkeypatch, tmp_path):
-    """batch_image should call sbatch once per dataframe row with wrapped wsclean command."""
+    """batch-image should call sbatch once per dataframe row with wrapped wsclean command."""
     imaging_csv = tmp_path / "imaging_parameters.csv"
     output_dir = tmp_path / "images"
     output_dir.mkdir()
@@ -236,7 +245,7 @@ def test_batch_image_submits_sbatch_with_wrap(monkeypatch, tmp_path):
         cli.app,
         [
             "image",
-            "batch_image",
+            "batch-image",
             str(imaging_csv),
             str(output_dir),
             "--num-cores",
@@ -258,3 +267,36 @@ def test_batch_image_submits_sbatch_with_wrap(monkeypatch, tmp_path):
     wrap_idx = sbatch_cmd.index("--wrap")
     assert "wsclean" in sbatch_cmd[wrap_idx + 1]
     assert "-name" in sbatch_cmd[wrap_idx + 1]
+
+
+@pytest.mark.unit
+def test_batch_image_enforces_positive_max_cores_per_node(tmp_path):
+    """batch-image should reject invalid max cores value at CLI parsing time."""
+    imaging_csv = tmp_path / "imaging_parameters.csv"
+    output_dir = tmp_path / "images"
+    output_dir.mkdir()
+
+    pd.DataFrame(
+        {
+            "filename": ["uid___A001_X1_X1.cal"],
+            "spectral_window_id": [2],
+            "reference_frequency": [100.0e9],
+            "fov_per_frequency": [8.0],
+            "max_baseline_size": [100.0],
+            "synthetized_beam_size": [2.0],
+        }
+    ).to_csv(imaging_csv, index=False)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "image",
+            "batch-image",
+            str(imaging_csv),
+            str(output_dir),
+            "--max-cores-per-node",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 2

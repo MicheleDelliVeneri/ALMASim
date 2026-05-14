@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import shlex
 import subprocess
 from pathlib import Path
@@ -15,6 +16,7 @@ from tqdm import tqdm
 
 ALMA_FOV_FACTOR = 1.22  # Standard primary-beam/FOV approximation: 1.22 * λ / D
 RAD_TO_ARCSEC = 180 / np.pi * 3600
+MIN_IMAGE_PIXELS = 16
 
 
 def import_casacore_tables() -> Any:
@@ -77,7 +79,7 @@ def imaging_parameter_to_command_arg(
     synthetized_beam_size = imaging_parameters["synthetized_beam_size"]
     synthetized_beam_size /= beam_sampling
     fov *= fov_fraction
-    n_pixels = int(fov / synthetized_beam_size)
+    n_pixels = max(MIN_IMAGE_PIXELS, int(math.ceil(fov / synthetized_beam_size)))
     cmd_args = [
         "-scale",
         f"{synthetized_beam_size}asec",
@@ -101,7 +103,7 @@ def imaging_parameter_to_command_arg(
     return cmd_args
 
 
-@image_app.command("ms_overview")
+@image_app.command("ms-overview")
 def derive_parameters(
     input_ms: Path = typer.Argument(
         ...,
@@ -114,7 +116,7 @@ def derive_parameters(
     typer.echo(derived_parameters.to_string(index=False))
 
 
-@image_app.command("compute_parameters")
+@image_app.command("compute-parameters")
 def compute_parameters(
     archive_folder: Path = typer.Argument(..., help="Processed MSs folder"),
     output_metadata_file: Path = typer.Argument(..., help="Parameters csv file"),
@@ -131,18 +133,25 @@ def compute_parameters(
     main_output.to_csv(output_metadata_file, index=False)
 
 
-@image_app.command("batch_image")
+@image_app.command("batch-image")
 def image_set(
     imaging_parameters: Path = typer.Argument(help="Imaging parameter file"),
     output_directory: Path = typer.Argument(help="Output directory path"),
-    fov_fraction: float = typer.Option(help="Fraction of the FOV to image", default=1.5),
+    fov_fraction: float = typer.Option(
+        help="Fraction of the FOV to image",
+        default=1.5,
+        min=1e-6,
+    ),
     beam_sampling: float = typer.Option(
         help="Number of pixels to use to sample the synthetized beam. Could be fractional.",
         default=8,
+        min=1e-6,
     ),
-    num_cores: int = typer.Option(help="Number of cores per imaging task", default=10),
+    num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
     max_cores_per_node: int = typer.Option(
-        help="Number of cores per node. [Used to scale the memory usage of wsclean]", default=95
+        help="Number of cores per node. [Used to scale the memory usage of wsclean]",
+        default=95,
+        min=1,
     ),
 ):
 
@@ -155,13 +164,15 @@ def image_set(
             output_directory / input_filename.stem / f"SPW-{dset_parameter['spectral_window_id']}"
         )
         outdir.mkdir(exist_ok=True, parents=True)
+        mem_fraction = min(1.0, num_cores / max_cores_per_node)
+
         wsclean_cmd = [
             "wsclean",
             "-name",
             str(outdir / "wsclean"),
             *command_args,
             "-mem",
-            str(num_cores / max_cores_per_node),
+            str(mem_fraction),
             str(input_filename),
         ]
         wrap_text = shlex.join(wsclean_cmd)
