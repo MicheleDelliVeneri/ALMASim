@@ -35,7 +35,7 @@ def compute_imaging_parameters(input_ms) -> pd.DataFrame:
     min_dish_diameter = np.min(antennas.getcol("DISH_DIAMETER"))
     antenna_pos = antennas.getcol("POSITION")
     i, j = np.triu_indices(antenna_pos.shape[0], k=1)
-    distance = np.sqrt((antenna_pos[j, :] - antenna_pos[i, :]) ** 2).sum(axis=1)
+    distance = np.sqrt(((antenna_pos[j, :] - antenna_pos[i, :]) ** 2).sum(axis=1))
     max_baseline_size = max(distance)
     k = ALMA_ILLUMINATION_FACTOR * speed_of_light * RAD_TO_ARCSEC
 
