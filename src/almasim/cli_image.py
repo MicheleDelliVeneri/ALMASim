@@ -136,10 +136,14 @@ def image_set(
         input_filename = Path(dset_parameter["filename"])
         command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
 
+        outdir = (
+            output_directory / input_filename.stem / f"SPW-{dset_parameter['spectral_window_id']}"
+        )
+        outdir.mkdir(exist_ok=True, parents=True)
         wsclean_cmd = [
             "wsclean",
             "-name",
-            str(output_directory / input_filename.stem),
+            str(outdir / "wsclean"),
             *command_args,
             "-mem",
             str(num_cores / max_cores_per_node),
@@ -149,7 +153,7 @@ def image_set(
         sbatch_cmd = [
             "sbatch",
             "-J",
-            input_filename.stem,
+            input_filename.stem + f"_{dset_parameter['spectral_window_id']}",
             "--wrap",
             wrap_text,
             "-o",

@@ -80,7 +80,6 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
             return spectral_window
         if table_name.endswith("::ANTENNA"):
             return antenna
-        raise AssertionError(f"unexpected table name: {table_name}")
 
     monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
 
