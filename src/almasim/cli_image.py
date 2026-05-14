@@ -13,7 +13,7 @@ import typer
 from scipy.constants import speed_of_light
 from tqdm import tqdm
 
-ALMA_FOV_FACTOR = 1.12  # See https://almascience.nrao.edu/about-alma/alma-basics
+ALMA_FOV_FACTOR = 1.22  # Standard primary-beam/FOV approximation: 1.22 * λ / D
 RAD_TO_ARCSEC = 180 / np.pi * 3600
 
 
