@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -20,6 +22,34 @@ class _FakeTable:
 
     def getcol(self, name: str) -> np.ndarray:
         return self._columns[name]
+
+
+@pytest.mark.unit
+def test_import_casacore_tables_returns_table_symbol(monkeypatch):
+    """import_casacore_tables should return casacore.tables.table on success."""
+    fake_table_symbol = object()
+    casacore_module = ModuleType("casacore")
+    tables_module = ModuleType("casacore.tables")
+    tables_module.table = fake_table_symbol
+    casacore_module.tables = tables_module
+
+    monkeypatch.setitem(sys.modules, "casacore", casacore_module)
+    monkeypatch.setitem(sys.modules, "casacore.tables", tables_module)
+
+    table_symbol = cli_image.import_casacore_tables()
+
+    assert table_symbol is fake_table_symbol
+
+
+@pytest.mark.unit
+def test_import_casacore_tables_raises_when_casacore_missing(monkeypatch):
+    """import_casacore_tables should raise a friendly message if casacore is unavailable."""
+    casacore_module = ModuleType("casacore")
+    monkeypatch.setitem(sys.modules, "casacore", casacore_module)
+    monkeypatch.delitem(sys.modules, "casacore.tables", raising=False)
+
+    with pytest.raises(Exception, match="Please install casacore"):
+        cli_image.import_casacore_tables()
 
 
 @pytest.mark.unit
