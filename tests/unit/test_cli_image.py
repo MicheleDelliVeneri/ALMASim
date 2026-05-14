@@ -85,14 +85,35 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
 
     output = cli_image.compute_imaging_parameters(Path("test_dataset.cal"))
 
+    expected_frequencies = np.array([100.0e9, 200.0e9])
+    speed_of_light = 299_792_458.0
+    radians_to_arcsec = 180.0 * 3600.0 / np.pi
+    expected_max_baseline_size = 13.0
+    expected_wavelengths = speed_of_light / expected_frequencies
+    expected_fov_per_frequency = (
+        1.22 * expected_wavelengths / np.min(antenna.getcol("DISH_DIAMETER")) * radians_to_arcsec
+    )
+    expected_synthetized_beam_size = (
+        expected_wavelengths / expected_max_baseline_size * radians_to_arcsec
+    )
+
     assert list(output["filename"]) == ["test_dataset.cal", "test_dataset.cal"]
     np.testing.assert_array_equal(output["spectral_window_id"].to_numpy(), np.array([0, 1]))
-    np.testing.assert_array_equal(
-        output["reference_frequency"].to_numpy(), np.array([100.0e9, 200.0e9])
+    np.testing.assert_array_equal(output["reference_frequency"].to_numpy(), expected_frequencies)
+    np.testing.assert_allclose(
+        output["max_baseline_size"].to_numpy(),
+        np.array([expected_max_baseline_size, expected_max_baseline_size]),
     )
-    assert "fov_per_frequency" in output.columns
-    assert "synthetized_beam_size" in output.columns
-    assert "max_baseline_size" in output.columns
+    np.testing.assert_allclose(
+        output["fov_per_frequency"].to_numpy(),
+        expected_fov_per_frequency,
+        rtol=1e-12,
+    )
+    np.testing.assert_allclose(
+        output["synthetized_beam_size"].to_numpy(),
+        expected_synthetized_beam_size,
+        rtol=1e-12,
+    )
 
 
 @pytest.mark.unit
