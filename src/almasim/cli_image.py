@@ -13,7 +13,7 @@ import typer
 from scipy.constants import speed_of_light
 from tqdm import tqdm
 
-ALMA_FOV_FACTOR = 1.22  # Rayleigh criterion for primary beam size (λ/D)
+ALMA_FOV_FACTOR = 1.12  # See https://almascience.nrao.edu/about-alma/alma-basics
 RAD_TO_ARCSEC = 180 / np.pi * 3600
 
 
