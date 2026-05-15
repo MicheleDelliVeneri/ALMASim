@@ -14,7 +14,7 @@ import typer
 from scipy.constants import speed_of_light
 from tqdm import tqdm
 
-ALMA_FOV_FACTOR = 1.22  # Standard primary-beam/FOV approximation: 1.22 * λ / D
+ALMA_FOV_FACTOR = 1.12  # Standard primary-beam/FOV approximation: 1.12 * λ / D
 RAD_TO_ARCSEC = 180 / np.pi * 3600
 MIN_IMAGE_PIXELS = 16
 
