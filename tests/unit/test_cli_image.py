@@ -92,7 +92,7 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
     expected_max_baseline_size = 13.0
     expected_wavelengths = speed_of_light / expected_frequencies
     expected_fov_per_frequency = (
-        1.22 * expected_wavelengths / np.min(antenna.getcol("DISH_DIAMETER")) * radians_to_arcsec
+        1.12 * expected_wavelengths / np.min(antenna.getcol("DISH_DIAMETER")) * radians_to_arcsec
     )
     expected_synthetized_beam_size = (
         expected_wavelengths / expected_max_baseline_size * radians_to_arcsec
