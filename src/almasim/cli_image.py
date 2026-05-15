@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import math
+import os
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 import typer
+from astropy.io import fits
+from ducc0.wgridder import dirty2vis
 from scipy.constants import speed_of_light
 from tqdm import tqdm
 
@@ -190,3 +194,125 @@ def image_set(
             str(num_cores),
         ]
         subprocess.run(sbatch_cmd, check=True)
+
+
+@image_app.command("predict-single")
+def predict_single(
+    input_ms: Path = typer.Argument(..., help="Input MS"),
+    model: Path = typer.Argument(..., help="FITS model path"),
+    output_ms: Path = typer.Argument(..., help="Output MS"),
+):
+    predict_from_model(input_ms=input_ms, model=model, output_ms=output_ms)
+
+
+def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
+    typer.echo(f"Predicting visibilities from model: {model}")
+    typer.echo(f"Copying measurement set: {input_ms} -> {output_ms}")
+
+    if output_ms.exists():
+        typer.echo(f"Output MS already exists: {output_ms}", err=True)
+        raise typer.Exit(code=1)
+
+    casacore_table = import_casacore_tables()
+    shutil.copytree(input_ms, output_ms)
+    main_table = casacore_table(str(output_ms), readonly=False)
+    try:
+        nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or (os.cpu_count() or 1))
+        uvw = main_table.getcol("UVW")  # (nrows, 3) metres
+        with fits.open(model) as hdul:
+            main_hdu = cast(fits.PrimaryHDU, hdul[0])
+            header = main_hdu.header
+
+            # Pixel sizes: FITS CDELT is in degrees, ducc0 expects radians
+            deg2rad = np.pi / 180.0
+            pixsize_x = abs(cast(float, header["CDELT1"])) * deg2rad
+            pixsize_y = abs(cast(float, header["CDELT2"])) * deg2rad
+
+            # Channel frequencies from the FITS WCS axis 3 (CRVAL3/CDELT3/CRPIX3/NAXIS3)
+            nchans = int(cast(int, header["NAXIS3"]))
+            crval3 = cast(float, header["CRVAL3"])  # reference frequency [Hz]
+            cdelt3 = cast(float, header["CDELT3"])  # frequency increment [Hz]
+            crpix3 = cast(float, header["CRPIX3"])  # reference pixel (1-based)
+            freq = (crval3 + (np.arange(nchans) - (crpix3 - 1)) * cdelt3).astype(np.float64)
+            typer.echo(f"Computed frequency grid from FITS header: nchans={nchans}")
+
+            # Model image: FITS axes are [stokes, freq, y, x]; take first stokes & channel
+            assert main_hdu.data is not None, "FITS primary HDU contains no image data"
+            dirty = np.ascontiguousarray(main_hdu.data[0, 0, :, :].astype(np.float64))
+            typer.echo(f"Input arrays: uvw={uvw.shape}, dirty={dirty.shape}, freq={freq.shape}")
+
+            # Predict visibilities from the model image → shape (nrows, nchan)
+            model_vis = dirty2vis(
+                uvw=uvw.astype(np.float64),
+                dirty=dirty,
+                freq=freq,
+                pixsize_x=pixsize_x,
+                pixsize_y=pixsize_y,
+                do_wgridding=True,
+                epsilon=1e-4,
+                nthreads=nthreads,
+            )
+            typer.echo(f"Predicted visibilities with shape: {model_vis.shape}")
+
+            # Write predicted visibilities to MODEL_DATA (nrows, 4, nchan): XX, XY, YX, YY
+            zeros = np.zeros_like(model_vis)
+            half = model_vis / 2
+            model_vis_col = np.stack(
+                [half, zeros, zeros, half],
+                axis=1,
+            )  # XX=I/2, XY=0, YX=0, YY=I/2
+            main_table.putcol("MODEL_DATA", model_vis_col)
+    finally:
+        main_table.close()
+
+    typer.echo(f"Wrote MODEL_DATA to: {output_ms}")
+
+
+@image_app.command("predict-batch")
+def predict_batch(
+    imaging_parameters: Path = typer.Argument(..., help="Imaging parameter file"),
+    output_directory: Path = typer.Argument(..., help="Output directory path"),
+    num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
+    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=False),
+):
+    parameters = pd.read_csv(str(imaging_parameters))
+    for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
+        input_filename = Path(dset_parameter["filename"])
+        spw_id = int(dset_parameter["spectral_window_id"])
+        model_path = output_directory / input_filename.stem / f"SPW-{spw_id}" / "wsclean-model.fits"
+        if not model_path.exists():
+            typer.echo(
+                "[debug] missing model FITS, skipping row:"
+                "ms={input_filename} spw={spw_id} path={model_path}",
+                err=False,
+            )
+            continue
+
+        output_ms = model_path.parent / f"{input_filename.name}.predicted"
+        predict_cmd = [
+            "almasim",
+            "image",
+            "predict-single",
+            str(input_filename.absolute()),
+            str(model_path),
+            str(output_ms),
+        ]
+        wrap_text = shlex.join(predict_cmd)
+        if use_slurm:
+            cmd = [
+                "sbatch",
+                "-J",
+                input_filename.stem + f"_{spw_id}_predict",
+                "--wrap",
+                wrap_text,
+                "-o",
+                str(output_directory.absolute() / r"%x-std%j.out"),
+                "-e",
+                str(output_directory.absolute() / r"%x-std%j.err"),
+                "-c",
+                str(num_cores),
+            ]
+
+        else:
+            cmd = predict_cmd
+        subprocess.run(cmd, check=True)
