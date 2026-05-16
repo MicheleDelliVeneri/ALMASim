@@ -20,6 +20,7 @@ from .services.metadata.tap import (
     query_metadata_by_science,
     query_products,
 )
+from .services.metadata.storage import save_dataframe_csv
 
 metadata_app = typer.Typer(
     help="Metadata query commands.",
@@ -354,8 +355,7 @@ def metadata_query(
     output_csv = (
         (save_csv or default_output_path("metadata_query_results.csv")).expanduser().resolve()
     )
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
-    metadata.to_csv(output_csv, index=False)
+    save_dataframe_csv(metadata, output_csv)
 
     typer.echo(f"Saved metadata CSV: {output_csv}")
     typer.echo(f"Metadata rows: {len(metadata)}")

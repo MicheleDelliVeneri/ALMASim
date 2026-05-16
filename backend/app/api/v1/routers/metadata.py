@@ -1,7 +1,5 @@
 """Metadata API endpoints."""
 
-import json
-import os
 import sys
 import uuid
 from pathlib import Path
@@ -25,6 +23,11 @@ from app.schemas.metadata import (
 )
 from app.services.metadata_service import MetadataService
 from app.services.status_store import query_store
+from almasim.services.metadata.storage import (
+    normalize_metadata_format,
+    resolve_metadata_output_path,
+    save_metadata_records,
+)
 
 # Import database dependency
 backend_dir = Path(__file__).parent.parent.parent.parent.parent
@@ -149,77 +152,32 @@ async def load_metadata(file_path: str, db: Session = Depends(get_db)) -> Metada
 _SAVE_DETAIL = "Path must be within the outputs/query_results directory."
 
 
-def _resolve_metadata_path(raw_path: str, fmt: str = "json") -> Path:
-    """Resolve and validate metadata save path within a writable directory."""
-    # OUTPUT_DIR is writable in deployments (DATA_DIR is mounted read-only).
-    base = os.path.realpath(str(settings.OUTPUT_DIR / "query_results"))
-    Path(base).mkdir(parents=True, exist_ok=True)
-
-    sanitized = (raw_path or "").strip()
-    suffix = ".csv" if fmt.lower() == "csv" else ".json"
-
-    if not sanitized:
-        return Path(base) / f"metadata-results{suffix}"
-
-    # Strip common directory prefixes users may include from the UI.
-    parts = [p for p in sanitized.replace("\\", "/").split("/") if p]
-    if parts and parts[0] in ("data", "metadata", "query_results", "outputs"):
-        parts = parts[1:]
-    relative = "/".join(parts) if parts else f"metadata-results{suffix}"
-
-    full = os.path.realpath(os.path.join(base, relative))
-    if full != base and not full.startswith(base + os.sep):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_SAVE_DETAIL)
-
-    resolved = Path(full)
-    if resolved.suffix.lower() not in (".json", ".csv"):
-        resolved = resolved.with_suffix(suffix)
-    if resolved.suffix.lower() != suffix:
-        resolved = resolved.with_suffix(suffix)
-
-    resolved.parent.mkdir(parents=True, exist_ok=True)  # lgtm[py/path-injection]
-    return resolved
-
-
-def _write_metadata_csv(destination: Path, rows: list[dict]) -> None:
-    """Write metadata rows to a CSV file using the union of all keys as columns."""
-    import csv
-
-    columns: list[str] = []
-    seen: set[str] = set()
-    for row in rows:
-        for key in row.keys():
-            if key not in seen:
-                seen.add(key)
-                columns.append(key)
-    with destination.open("w", encoding="utf-8", newline="") as fp:  # lgtm[py/path-injection]
-        writer = csv.DictWriter(fp, fieldnames=columns)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({k: row.get(k, "") for k in columns})
-
-
-def _write_metadata_json(destination: Path, rows: list[dict]) -> None:
-    """Write metadata rows to a JSON file with a count + data envelope."""
-    with destination.open("w", encoding="utf-8") as fp:  # lgtm[py/path-injection]
-        json.dump({"count": len(rows), "data": rows}, fp, indent=2)
-
-
 @router.post("/save", response_model=MetadataSaveResponse)
 async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
     """Persist metadata records to disk within the ALMASim metadata directory."""
     try:
-        fmt = (payload.format or "json").lower()
-        if fmt not in ("json", "csv"):
+        try:
+            fmt = normalize_metadata_format(payload.format)
+        except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unsupported format. Use 'json' or 'csv'.",
+                detail=str(exc),
+            ) from exc
+
+        try:
+            destination = resolve_metadata_output_path(
+                payload.path,
+                base_dir=settings.OUTPUT_DIR / "query_results",
+                fmt=fmt,
+                error_message=_SAVE_DETAIL,
             )
-        destination = _resolve_metadata_path(payload.path, fmt=fmt)
-        if fmt == "csv":
-            _write_metadata_csv(destination, payload.data)
-        else:
-            _write_metadata_json(destination, payload.data)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+        save_metadata_records(payload.data, destination, fmt=fmt)
         return MetadataSaveResponse(
             path=str(destination),
             count=len(payload.data),
