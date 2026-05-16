@@ -165,9 +165,14 @@ async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
                 error_message=_SAVE_DETAIL,
             )
         except ValueError as exc:
+            detail = (
+                "Unsupported format. Use 'json' or 'csv'."
+                if "Unsupported format" in str(exc)
+                else _SAVE_DETAIL
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
+                detail=detail,
             ) from exc
 
         save_metadata_records(payload.data, destination, fmt=fmt)
