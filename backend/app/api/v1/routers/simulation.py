@@ -181,15 +181,15 @@ async def estimate_simulation(
 ) -> SimulationEstimate:
     """Estimate simulation cube dimensions and raw storage footprint."""
     try:
-        sim_params = sim_service.SimulationParams(
+        sim_params = sim_service.SimulationParams.from_values(
             idx=params.idx,
             source_name=params.source_name,
             member_ouid=params.member_ouid,
-            main_dir=str(settings.MAIN_DIR),
-            output_dir=params.output_dir or str(settings.OUTPUT_DIR),
-            tng_dir=str(settings.TNG_DIR),
-            galaxy_zoo_dir=str(settings.GALAXY_ZOO_DIR),
-            hubble_dir=str(settings.HUBBLE_DIR),
+            main_dir=settings.MAIN_DIR,
+            output_dir=params.output_dir or settings.OUTPUT_DIR,
+            tng_dir=settings.TNG_DIR,
+            galaxy_zoo_dir=settings.GALAXY_ZOO_DIR,
+            hubble_dir=settings.HUBBLE_DIR,
             project_name=params.project_name,
             ra=params.ra,
             dec=params.dec,

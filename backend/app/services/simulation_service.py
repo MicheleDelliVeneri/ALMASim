@@ -172,15 +172,15 @@ class SimulationService:
 
         try:
             # Convert API params to internal SimulationParams
-            sim_params = SimulationParams(
+            sim_params = SimulationParams.from_values(
                 idx=params.idx,
                 source_name=params.source_name,
                 member_ouid=params.member_ouid,
-                main_dir=str(self.main_dir),
-                output_dir=params.output_dir or str(self.output_dir),
-                tng_dir=str(self.tng_dir),
-                galaxy_zoo_dir=str(self.galaxy_zoo_dir),
-                hubble_dir=str(self.hubble_dir),
+                main_dir=self.main_dir,
+                output_dir=params.output_dir or self.output_dir,
+                tng_dir=self.tng_dir,
+                galaxy_zoo_dir=self.galaxy_zoo_dir,
+                hubble_dir=self.hubble_dir,
                 project_name=params.project_name,
                 ra=params.ra,
                 dec=params.dec,
