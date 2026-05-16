@@ -231,9 +231,7 @@ class SimulationParams:
             background_level=float(background_level),
             background_seed=(int(background_seed) if background_seed is not None else None),
             external_skymodel_path=(
-                _expand_path(external_skymodel_path)
-                if external_skymodel_path is not None
-                else None
+                _expand_path(external_skymodel_path) if external_skymodel_path is not None else None
             ),
             external_component_table_path=(
                 _expand_path(external_component_table_path)
