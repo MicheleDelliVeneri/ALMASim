@@ -169,18 +169,18 @@ class SimulationParams:
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from explicit values."""
 
-        def _resolve_path(path_like: Path | str) -> str:
-            return str(Path(path_like).expanduser())
+        def _normalize_path(path_like: Path | str) -> str:
+            return os.path.expanduser(str(path_like))
 
         return cls(
             idx=int(idx),
             source_name=str(source_name),
             member_ouid=str(member_ouid),
-            main_dir=_resolve_path(main_dir),
-            output_dir=_resolve_path(output_dir),
-            tng_dir=_resolve_path(tng_dir),
-            galaxy_zoo_dir=_resolve_path(galaxy_zoo_dir),
-            hubble_dir=_resolve_path(hubble_dir),
+            main_dir=_normalize_path(main_dir),
+            output_dir=_normalize_path(output_dir),
+            tng_dir=_normalize_path(tng_dir),
+            galaxy_zoo_dir=_normalize_path(galaxy_zoo_dir),
+            hubble_dir=_normalize_path(hubble_dir),
             project_name=str(project_name),
             ra=float(ra),
             dec=float(dec),
@@ -210,7 +210,7 @@ class SimulationParams:
             save_mode=str(save_mode),
             persist=bool(persist),
             ml_dataset_path=(
-                _resolve_path(ml_dataset_path) if ml_dataset_path is not None else None
+                _normalize_path(ml_dataset_path) if ml_dataset_path is not None else None
             ),
             inject_serendipitous=bool(inject_serendipitous),
             output_subdir_name=(str(output_subdir_name) if output_subdir_name else None),
@@ -226,12 +226,12 @@ class SimulationParams:
             background_level=float(background_level),
             background_seed=(int(background_seed) if background_seed is not None else None),
             external_skymodel_path=(
-                _resolve_path(external_skymodel_path)
+                _normalize_path(external_skymodel_path)
                 if external_skymodel_path is not None
                 else None
             ),
             external_component_table_path=(
-                _resolve_path(external_component_table_path)
+                _normalize_path(external_component_table_path)
                 if external_component_table_path is not None
                 else None
             ),
@@ -239,7 +239,7 @@ class SimulationParams:
             external_header_mode=str(external_header_mode),
             external_header_overrides=external_header_overrides,
             ms_export=bool(ms_export),
-            ms_export_dir=(_resolve_path(ms_export_dir) if ms_export_dir is not None else None),
+            ms_export_dir=(_normalize_path(ms_export_dir) if ms_export_dir is not None else None),
             ms_save_mode=str(ms_save_mode),
             imaging_algorithm=str(imaging_algorithm),
         )
