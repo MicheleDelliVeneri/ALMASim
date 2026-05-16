@@ -27,7 +27,9 @@ def normalize_metadata_format(fmt: str | None) -> str:
     """Normalize and validate metadata serialization format."""
     normalized = (fmt or "json").strip().lower()
     if normalized not in SUPPORTED_METADATA_FORMATS:
-        raise UnsupportedMetadataFormatError("Unsupported format. Use 'json' or 'csv'.")
+        raise UnsupportedMetadataFormatError(
+            f"Unsupported format: {normalized!r}. Use 'json' or 'csv'."
+        )
     return normalized
 
 
