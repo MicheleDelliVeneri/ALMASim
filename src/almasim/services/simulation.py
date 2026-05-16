@@ -170,7 +170,7 @@ class SimulationParams:
         """Build :class:`SimulationParams` from explicit values."""
 
         def _resolve_path(path_like: Path | str) -> str:
-            return str(Path(path_like).expanduser().resolve())
+            return str(Path(path_like).expanduser())
 
         return cls(
             idx=int(idx),
