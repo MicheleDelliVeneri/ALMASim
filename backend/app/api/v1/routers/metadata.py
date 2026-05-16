@@ -158,24 +158,13 @@ _SAVE_DETAIL = "Path must be within the outputs/query_results directory."
 async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
     """Persist metadata records to disk within the ALMASim metadata directory."""
     try:
-        try:
-            fmt = normalize_metadata_format(payload.format)
-            destination = resolve_metadata_output_path(
-                payload.path,
-                base_dir=settings.OUTPUT_DIR / "query_results",
-                fmt=fmt,
-                invalid_path_message=_SAVE_DETAIL,
-            )
-        except UnsupportedMetadataFormatError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
-            ) from exc
-        except InvalidMetadataPathError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
-            ) from exc
+        fmt = normalize_metadata_format(payload.format)
+        destination = resolve_metadata_output_path(
+            payload.path,
+            base_dir=settings.OUTPUT_DIR / "query_results",
+            fmt=fmt,
+            invalid_path_message=_SAVE_DETAIL,
+        )
 
         save_metadata_records(payload.data, destination, fmt=fmt)
         return MetadataSaveResponse(
@@ -183,6 +172,16 @@ async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
             count=len(payload.data),
             message="Metadata saved successfully.",
         )
+    except UnsupportedMetadataFormatError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except InvalidMetadataPathError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     except HTTPException:
         raise
     except Exception as e:

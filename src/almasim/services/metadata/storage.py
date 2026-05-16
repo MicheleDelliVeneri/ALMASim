@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 SUPPORTED_METADATA_FORMATS = {"json", "csv"}
-# Common UI prefixes users may include in relative paths; stripping them keeps writes rooted at
-# base_dir while normalizing paths like data/... or outputs/query_results/... from frontend forms.
+# Common UI prefixes currently emitted by ALMASim frontend path forms; stripping these normalizes
+# values like data/... and outputs/query_results/... while keeping writes rooted at base_dir.
+# This list is intentionally conservative and can be extended if new UI prefixes are introduced.
 STRIPPABLE_PATH_PREFIXES = {"data", "metadata", "query_results", "outputs"}
 
 
