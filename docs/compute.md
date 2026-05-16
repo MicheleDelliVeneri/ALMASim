@@ -45,3 +45,7 @@ ALMASim currently includes:
 ## Design Goal
 
 The simulation service layer should not need to know which backend is active. The backend selection is injected into the workflow and the simulation code uses the common backend interface.
+
+## SLURM Details
+
+For detailed SLURM scheduler usage and troubleshooting, see [SLURM Scheduler](slurm_scheduler.md).
