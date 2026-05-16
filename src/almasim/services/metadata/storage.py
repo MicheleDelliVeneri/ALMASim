@@ -48,8 +48,6 @@ def resolve_metadata_output_path(
     except ValueError as exc:
         raise ValueError(error_message) from exc
 
-    if resolved.suffix.lower() not in (".json", ".csv"):
-        resolved = resolved.with_suffix(suffix)
     if resolved.suffix.lower() != suffix:
         resolved = resolved.with_suffix(suffix)
 
