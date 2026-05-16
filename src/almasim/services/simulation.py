@@ -196,7 +196,7 @@ class SimulationParams:
             freq_support=str(freq_support),
             cont_sens=float(cont_sens),
             antenna_array=str(antenna_array),
-            n_pix=n_pix,
+            n_pix=(int(n_pix) if n_pix is not None else None),
             n_channels=n_channels,
             source_type=str(source_type),
             tng_api_key=tng_api_key,
