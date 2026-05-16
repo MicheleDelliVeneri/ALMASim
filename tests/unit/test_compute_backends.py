@@ -462,7 +462,7 @@ def test_create_backend_local():
 @pytest.mark.unit
 def test_create_backend_dask_with_mock():
     """create_backend('dask') creates a DaskBackend (mocked)."""
-    from almasim.services.compute.dask_backend import DaskBackend
+    from almasim.services.compute.dask import DaskBackend
     from almasim.services.compute.factory import create_backend
 
     with patch.object(DaskBackend, "__init__", return_value=None):

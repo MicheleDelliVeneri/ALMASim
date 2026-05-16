@@ -3,7 +3,7 @@
 from typing import Any, Dict
 
 from .base import ComputationBackend
-from .dask_backend import DaskBackend
+from .dask import DaskBackend
 from .kubernetes import KubernetesBackend
 from .local import LocalBackend
 from .slurm import SlurmBackend

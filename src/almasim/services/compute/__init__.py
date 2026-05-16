@@ -5,7 +5,7 @@ supporting local execution, Dask, Slurm, and Kubernetes backends.
 """
 
 from .base import ComputationBackend
-from .dask_backend import DaskBackend
+from .dask import DaskBackend
 from .factory import create_backend
 from .kubernetes import KubernetesBackend
 from .local import LocalBackend
