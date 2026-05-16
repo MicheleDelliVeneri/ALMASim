@@ -66,9 +66,7 @@ class SimulationService:
         resolved = Path(user_dir).expanduser().resolve()
         base = self.output_dir.resolve()
         if not resolved.is_relative_to(base):
-            raise ValueError(
-                "output_dir must be within the configured output directory"
-            )
+            raise ValueError("output_dir must be within the configured output directory")
         return resolved
 
     def _persist_log(
