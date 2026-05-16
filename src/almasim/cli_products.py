@@ -376,6 +376,27 @@ def _calibrate_single_uid(
     return [str(path) for path in paths]
 
 
+def _preflight_casa_data(
+    output_root: Path,
+    casa_data_root: Optional[Path],
+    skip_casa_data_update: bool,
+) -> None:
+    """Ensure CASA runtime data is populated on the master node before Slurm workers start.
+
+    Slurm compute nodes typically have no internet access, so the data must be
+    downloaded once from the submit node and written to a shared filesystem path
+    that all workers can read.
+    """
+    from .services.archive.unpack_ms import (
+        ensure_casa_runtime_data,
+        find_existing_casa_data,
+    )
+
+    casa_data = find_existing_casa_data(output_root, output_root, casa_data_root)
+    typer.echo(f"Preflight: ensuring CASA runtime data at {casa_data} …")
+    ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update)
+
+
 def _run_unpack_jobs(
     *,
     input_root: Path,
@@ -423,6 +444,9 @@ def _run_unpack_jobs(
     if not effective_uids:
         typer.echo("No ASDM directories found to unpack.", err=True)
         raise typer.Exit(code=1)
+
+    _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
+    skip_casa_data_update = True  # workers reuse what master just populated
 
     with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
         unpack_task = backend.delayed(_unpack_single_uid)
@@ -507,6 +531,9 @@ def _run_calibrate_jobs(
     if not effective_uids:
         typer.echo("No raw MeasurementSets found to calibrate.", err=True)
         raise typer.Exit(code=1)
+
+    _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
+    skip_casa_data_update = True  # workers reuse what master just populated
 
     with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
         calibrate_task = backend.delayed(_calibrate_single_uid)
@@ -1102,6 +1129,15 @@ def products_unpack(
         min=1,
         help="Number of Slurm workers for post-processing.",
     ),
+    slurm_scheduler_host: Optional[str] = typer.Option(
+        None,
+        "--slurm-scheduler-host",
+        help=(
+            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
+            "Set this to an internal/HPC network address when the public hostname "
+            "is not reachable from compute nodes (e.g. 10.20.25.44)."
+        ),
+    ),
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
@@ -1127,6 +1163,7 @@ def products_unpack(
             "cores": slurm_cores,
             "memory": slurm_memory,
             "n_workers": slurm_workers,
+            **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
         },
         casa_data_root=casa_data_root,
         skip_casa_data_update=skip_casa_data_update,
@@ -1200,6 +1237,15 @@ def products_calibrate(
         min=1,
         help="Number of Slurm workers for post-processing.",
     ),
+    slurm_scheduler_host: Optional[str] = typer.Option(
+        None,
+        "--slurm-scheduler-host",
+        help=(
+            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
+            "Set this to an internal/HPC network address when the public hostname "
+            "is not reachable from compute nodes (e.g. 10.20.25.44)."
+        ),
+    ),
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
@@ -1231,6 +1277,7 @@ def products_calibrate(
             "cores": slurm_cores,
             "memory": slurm_memory,
             "n_workers": slurm_workers,
+            **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
         },
         casa_data_root=casa_data_root,
         skip_casa_data_update=skip_casa_data_update,

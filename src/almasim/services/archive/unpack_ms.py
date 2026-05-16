@@ -57,6 +57,7 @@ def configure_casa_environment(
     """Create and point CASA at a local site config and Matplotlib cache."""
     output_path = Path(output_root).expanduser().resolve()
     casa_data_path = Path(casa_data).expanduser().resolve()
+
     mpl_config = output_path / ".matplotlib"
     casa_config_dir = output_path / ".casa-config"
     casa_site_config = casa_config_dir / "casasiteconfig.py"
@@ -100,7 +101,9 @@ def ensure_casa_runtime_data(
     _emit(logger_fn, f"Populating CASA runtime data: {casa_data}")
     from casaconfig import update_all
 
-    update_all(path=str(casa_data), logger=logger)
+    # casaconfig expects a CASA logsink object, not a Python logger — pass None
+    # so it falls back to its own stdout/stderr output.
+    update_all(path=str(casa_data), logger=None)
 
 
 def find_asdm_directories(

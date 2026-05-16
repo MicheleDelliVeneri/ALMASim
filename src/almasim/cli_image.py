@@ -54,26 +54,25 @@ def _run_commands_with_slurm_cluster(
     scheduler_interface: str | None,
     task_timeout: float | None,
 ) -> None:
-    from almasim.scheduling.cluster import SlurmDaskClusterSingleton
+    from almasim.services.compute import create_backend
 
     if not commands:
         return
 
-    manager = SlurmDaskClusterSingleton.get_instance(
+    with create_backend(
+        "slurm",
         queue=queue,
         node_cores=node_cores,
         memory=memory,
         walltime=walltime,
-        n_jobs=n_jobs,
+        n_workers=n_jobs,
         project=project,
         scheduler_host=scheduler_host,
         scheduler_interface=scheduler_interface,
-    )
-
-    try:
+    ) as backend:
         futures: list[tuple[str, Any]] = []
         for label, cmd in commands:
-            future = manager.submit_subcommand(
+            future = backend.submit_subcommand(
                 command=cmd,
                 cores=cores_per_task,
                 timeout=task_timeout,
@@ -86,8 +85,6 @@ def _run_commands_with_slurm_cluster(
                 typer.echo(f"Task failed: {label}", err=True)
                 typer.echo(result.stderr.rstrip(), err=True)
                 raise typer.Exit(code=result.returncode)
-    finally:
-        SlurmDaskClusterSingleton.close_instance()
 
 
 def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:

@@ -45,7 +45,8 @@ dependencies = [
     "scikit-image",
     "imagecodecs",
     "ducc0",
-    "typer"
+    "typer",
+    "bokeh>=3.9.0"
 ]
 
 [project.scripts]

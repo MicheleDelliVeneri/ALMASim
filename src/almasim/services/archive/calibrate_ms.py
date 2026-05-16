@@ -194,15 +194,10 @@ def apply_delivered_calibration(
 
     calls = _parse_applycal_calls(calapply_path)
     _emit(logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}")
-    current_dir = Path.cwd()
-    try:
-        os.chdir(working_dir)
-        for kwargs in calls:
-            kwargs["vis"] = working_ms.name
-            kwargs["intent"] = _normalize_intent(str(kwargs.get("intent", "")), working_ms)
-            applycal(**kwargs)
-    finally:
-        os.chdir(current_dir)
+    for kwargs in calls:
+        kwargs["vis"] = str(working_ms)
+        kwargs["intent"] = _normalize_intent(str(kwargs.get("intent", "")), working_ms)
+        applycal(**kwargs)
 
     return working_ms
 

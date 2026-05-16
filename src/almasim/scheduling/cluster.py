@@ -170,6 +170,10 @@ class SlurmDaskClusterSingleton:
         self.n_jobs = n_jobs
         self.project = project
 
+        default_log_dir = os.path.join(os.path.expanduser("~"), "dask-worker-logs")
+        log_directory = cluster_kwargs.pop("log_directory", default_log_dir)
+        os.makedirs(log_directory, exist_ok=True)
+
         slurm_kwargs = {
             "queue": queue,
             "cores": node_cores,
@@ -179,6 +183,7 @@ class SlurmDaskClusterSingleton:
             "worker_extra_args": worker_extra_args,
             "job_script_prologue": job_script_prologue,
             "scheduler_options": scheduler_options,
+            "log_directory": log_directory,
             **cluster_kwargs,
         }
         if scheduler_interface:
