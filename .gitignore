@@ -37,6 +37,10 @@ env/
 *.swo
 *~
 
+# Node
+node_modules/
+frontend/node_modules/
+
 # Testing
 .pytest_cache/
 .coverage
@@ -72,3 +76,4 @@ casa-*.log
 stitch_alma_archive_simulation_suite
 examples/output/metadata_query_results.csv
 examples/output/resolved_products.csv
+frontend/node_modules/*

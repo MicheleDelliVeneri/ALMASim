@@ -12,6 +12,7 @@ declare global {
             | Int32Array
             | BigUint64Array
             | BigInt64Array
+            | Float16Array
             | Float32Array
             | Float64Array;
         type ArrayBufferView = TypedArray | DataView;
@@ -25,6 +26,7 @@ declare global {
         type NonSharedInt32Array = Int32Array;
         type NonSharedBigUint64Array = BigUint64Array;
         type NonSharedBigInt64Array = BigInt64Array;
+        type NonSharedFloat16Array = Float16Array;
         type NonSharedFloat32Array = Float32Array;
         type NonSharedFloat64Array = Float64Array;
         type NonSharedDataView = DataView;

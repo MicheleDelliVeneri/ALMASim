@@ -174,8 +174,8 @@ class SimulationParams:
         """
 
         def _expand_path(path_like: Path | str) -> str:
-            """Expand user home references without resolving relative segments/symlinks."""
-            return os.path.expanduser(str(path_like))
+            """Normalize path-like values to absolute paths with user-home expansion."""
+            return str(Path(path_like).expanduser().resolve())
 
         return cls(
             idx=int(idx),

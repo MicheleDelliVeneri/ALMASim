@@ -2,6 +2,10 @@ export {};
 
 import * as undici from "undici-types";
 
+type _CloseEvent = typeof globalThis extends { onmessage: any } ? {} : undici.CloseEvent;
+type _CloseEventInit = typeof globalThis extends { onmessage: any } ? {} : undici.CloseEventInit;
+type _ErrorEvent = typeof globalThis extends { onmessage: any } ? {} : undici.ErrorEvent;
+type _ErrorEventInit = typeof globalThis extends { onmessage: any } ? {} : undici.ErrorEventInit;
 type _EventSource = typeof globalThis extends { onmessage: any } ? {} : undici.EventSource;
 type _EventSourceInit = typeof globalThis extends { onmessage: any } ? {} : undici.EventSourceInit;
 type _FormData = typeof globalThis extends { onmessage: any } ? {} : undici.FormData;
@@ -20,6 +24,16 @@ declare global {
         input: string | URL | Request,
         init?: RequestInit,
     ): Promise<Response>;
+
+    interface CloseEvent extends _CloseEvent {}
+    var CloseEvent: typeof globalThis extends { onmessage: any; CloseEvent: infer T } ? T : typeof undici.CloseEvent;
+
+    interface CloseEventInit extends _CloseEventInit {}
+
+    interface ErrorEvent extends _ErrorEvent {}
+    var ErrorEvent: typeof globalThis extends { onmessage: any; ErrorEvent: infer T } ? T : typeof undici.ErrorEvent;
+
+    interface ErrorEventInit extends _ErrorEventInit {}
 
     interface EventSource extends _EventSource {}
     var EventSource: typeof globalThis extends { onmessage: any; EventSource: infer T } ? T : typeof undici.EventSource;

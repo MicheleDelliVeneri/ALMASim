@@ -13,6 +13,7 @@ from .cli_shared import (
     validate_date_range,
     validate_range,
 )
+from .services.metadata.storage import save_dataframe_csv
 from .services.metadata.tap import (
     ALL_COLUMNS,
     ExclusionFilters,
@@ -20,7 +21,6 @@ from .services.metadata.tap import (
     query_metadata_by_science,
     query_products,
 )
-from .services.metadata.storage import save_dataframe_csv
 
 metadata_app = typer.Typer(
     help="Metadata query commands.",

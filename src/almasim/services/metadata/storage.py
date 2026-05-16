@@ -44,7 +44,9 @@ def resolve_metadata_output_path(
     base_dir: Path,
     fmt: str,
     default_name: str = "metadata-results",
-    invalid_path_message: str = "Metadata output path must remain within the configured output directory.",
+    invalid_path_message: str = (
+        "Metadata output path must remain within the configured output directory."
+    ),
 ) -> Path:
     """Resolve an output path inside ``base_dir`` with extension normalization."""
     normalized_fmt = normalize_metadata_format(fmt)

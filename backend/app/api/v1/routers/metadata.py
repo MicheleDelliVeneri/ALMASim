@@ -8,6 +8,13 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from almasim.services.metadata.storage import (
+    InvalidMetadataPathError,
+    UnsupportedMetadataFormatError,
+    normalize_metadata_format,
+    resolve_metadata_output_path,
+    save_metadata_records,
+)
 from app.core.config import settings
 from app.core.path_utils import resolve_safe_path
 from app.schemas.metadata import (
@@ -23,13 +30,6 @@ from app.schemas.metadata import (
 )
 from app.services.metadata_service import MetadataService
 from app.services.status_store import query_store
-from almasim.services.metadata.storage import (
-    InvalidMetadataPathError,
-    UnsupportedMetadataFormatError,
-    normalize_metadata_format,
-    resolve_metadata_output_path,
-    save_metadata_records,
-)
 
 # Import database dependency
 backend_dir = Path(__file__).parent.parent.parent.parent.parent
