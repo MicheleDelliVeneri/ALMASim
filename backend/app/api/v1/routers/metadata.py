@@ -172,9 +172,14 @@ async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
             count=len(payload.data),
             message="Metadata saved successfully.",
         )
-    except (UnsupportedMetadataFormatError, InvalidMetadataPathError) as exc:
+    except UnsupportedMetadataFormatError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except InvalidMetadataPathError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
     except HTTPException:
