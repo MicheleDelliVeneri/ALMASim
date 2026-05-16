@@ -280,6 +280,56 @@ def test_slurm_backend_context_manager_calls_close():
         slurm_mod.SLURM_AVAILABLE = original
 
 
+@pytest.mark.unit
+def test_slurm_backend_forwards_scheduler_network_kwargs():
+    """SlurmBackend should pass scheduler network kwargs to singleton manager."""
+    import almasim.services.compute.slurm as slurm_mod
+
+    original = slurm_mod.SLURM_AVAILABLE
+    try:
+        slurm_mod.SLURM_AVAILABLE = True
+        from almasim.services.compute.slurm import SlurmBackend
+
+        manager = MagicMock()
+        manager.cluster = object()
+        manager.client = object()
+
+        with (
+            patch.object(
+                slurm_mod.SlurmDaskClusterSingleton,
+                "get_instance",
+                return_value=manager,
+            ) as mock_get_instance,
+            patch.object(slurm_mod.SlurmDaskClusterSingleton, "close_instance") as mock_close,
+        ):
+            backend = SlurmBackend(
+                queue="normal",
+                project="proj",
+                walltime="00:10:00",
+                cores=8,
+                memory="16GB",
+                n_workers=2,
+                scheduler_host="headnode-internal",
+                scheduler_interface="ib0",
+            )
+
+            mock_get_instance.assert_called_once_with(
+                queue="normal",
+                node_cores=9,
+                memory="16GB",
+                walltime="00:10:00",
+                n_jobs=2,
+                project="proj",
+                scheduler_host="headnode-internal",
+                scheduler_interface="ib0",
+            )
+
+            backend.close()
+            mock_close.assert_called_once()
+    finally:
+        slurm_mod.SLURM_AVAILABLE = original
+
+
 # ===========================================================================
 # KubernetesBackend — unavailable path
 # ===========================================================================
