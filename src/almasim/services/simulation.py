@@ -104,6 +104,161 @@ class SimulationParams:
     imaging_algorithm: str = "legacy"
 
     @classmethod
+    def from_values(
+        cls,
+        *,
+        idx: int,
+        source_name: str,
+        member_ouid: str,
+        main_dir: Path | str,
+        output_dir: Path | str,
+        tng_dir: Path | str,
+        galaxy_zoo_dir: Path | str,
+        hubble_dir: Path | str,
+        project_name: str,
+        ra: float,
+        dec: float,
+        band: float,
+        ang_res: float,
+        vel_res: float,
+        fov: float,
+        obs_date: str,
+        pwv: float,
+        int_time: float,
+        bandwidth: float,
+        freq: float,
+        freq_support: str,
+        cont_sens: float,
+        antenna_array: str,
+        n_pix: Optional[int],
+        n_channels: Optional[int],
+        source_type: str,
+        tng_api_key: Optional[str],
+        ncpu: Optional[int],
+        rest_frequency: Any,
+        redshift: Any,
+        lum_infrared: Any,
+        snr: Optional[float],
+        n_lines: Any,
+        line_names: Any,
+        save_mode: str,
+        persist: bool,
+        ml_dataset_path: Optional[Path | str],
+        inject_serendipitous: bool,
+        output_subdir_name: Optional[str] = None,
+        remote: bool = False,
+        observation_configs: Optional[Any] = None,
+        ground_temperature_k: float = 270.0,
+        correlator: Optional[str] = None,
+        elevation_deg: Optional[float] = None,
+        line_sens_10kms: Optional[float] = None,
+        source_offset_x_arcsec: float = 0.0,
+        source_offset_y_arcsec: float = 0.0,
+        background_mode: str = "none",
+        background_level: float = 1.0,
+        background_seed: Optional[int] = None,
+        external_skymodel_path: Optional[Path | str] = None,
+        external_component_table_path: Optional[Path | str] = None,
+        external_alignment_mode: str = "observation",
+        external_header_mode: str = "observation",
+        external_header_overrides: Optional[dict[str, Any]] = None,
+        ms_export: bool = False,
+        ms_export_dir: Optional[Path | str] = None,
+        ms_save_mode: str = "msv2",
+        imaging_algorithm: str = "legacy",
+    ) -> "SimulationParams":
+        """Build :class:`SimulationParams` from explicit values.
+
+        ``n_pix`` and ``n_channels`` may be ``None`` to allow downstream simulation
+        stages to derive suitable defaults from the observing configuration.
+        """
+
+        _FORBIDDEN_ROOTS = (Path("/proc"), Path("/sys"), Path("/dev"))
+
+        def _expand_path(path_like: Path | str) -> str:
+            """Normalize path-like values to absolute paths with user-home expansion."""
+            raw = str(path_like)
+            if "\x00" in raw:
+                raise ValueError(f"Path contains null bytes: {path_like!r}")
+            resolved = Path(raw).expanduser().resolve()
+            for forbidden in _FORBIDDEN_ROOTS:
+                if resolved.is_relative_to(forbidden):
+                    raise ValueError(
+                        f"Path '{path_like}' resolves to a restricted system location: {resolved}"
+                    )
+            return str(resolved)
+
+        return cls(
+            idx=int(idx),
+            source_name=str(source_name),
+            member_ouid=str(member_ouid),
+            main_dir=_expand_path(main_dir),
+            output_dir=_expand_path(output_dir),
+            tng_dir=_expand_path(tng_dir),
+            galaxy_zoo_dir=_expand_path(galaxy_zoo_dir),
+            hubble_dir=_expand_path(hubble_dir),
+            project_name=str(project_name),
+            ra=float(ra),
+            dec=float(dec),
+            band=float(band),
+            ang_res=float(ang_res),
+            vel_res=float(vel_res),
+            fov=float(fov),
+            obs_date=str(obs_date),
+            pwv=float(pwv),
+            int_time=float(int_time),
+            bandwidth=float(bandwidth),
+            freq=float(freq),
+            freq_support=str(freq_support),
+            cont_sens=float(cont_sens),
+            antenna_array=str(antenna_array),
+            n_pix=n_pix,
+            n_channels=n_channels,
+            source_type=str(source_type),
+            tng_api_key=tng_api_key,
+            ncpu=int(ncpu if ncpu is not None else (os.cpu_count() or 1)),
+            rest_frequency=rest_frequency,
+            redshift=redshift,
+            lum_infrared=lum_infrared,
+            snr=snr,
+            n_lines=n_lines,
+            line_names=line_names,
+            save_mode=str(save_mode),
+            persist=bool(persist),
+            ml_dataset_path=(
+                _expand_path(ml_dataset_path) if ml_dataset_path is not None else None
+            ),
+            inject_serendipitous=bool(inject_serendipitous),
+            output_subdir_name=(str(output_subdir_name) if output_subdir_name else None),
+            remote=bool(remote),
+            observation_configs=observation_configs,
+            ground_temperature_k=float(ground_temperature_k),
+            correlator=correlator,
+            elevation_deg=elevation_deg,
+            line_sens_10kms=(float(line_sens_10kms) if line_sens_10kms is not None else None),
+            source_offset_x_arcsec=float(source_offset_x_arcsec),
+            source_offset_y_arcsec=float(source_offset_y_arcsec),
+            background_mode=str(background_mode),
+            background_level=float(background_level),
+            background_seed=(int(background_seed) if background_seed is not None else None),
+            external_skymodel_path=(
+                _expand_path(external_skymodel_path) if external_skymodel_path is not None else None
+            ),
+            external_component_table_path=(
+                _expand_path(external_component_table_path)
+                if external_component_table_path is not None
+                else None
+            ),
+            external_alignment_mode=str(external_alignment_mode),
+            external_header_mode=str(external_header_mode),
+            external_header_overrides=external_header_overrides,
+            ms_export=bool(ms_export),
+            ms_export_dir=(_expand_path(ms_export_dir) if ms_export_dir is not None else None),
+            ms_save_mode=str(ms_save_mode),
+            imaging_algorithm=str(imaging_algorithm),
+        )
+
+    @classmethod
     def from_metadata_row(
         cls,
         row: pd.Series | Mapping[str, Any],
@@ -163,9 +318,6 @@ class SimulationParams:
         payload = _as_dict(row)
         missing = object()
 
-        def _resolve_path(path_like: Path | str) -> str:
-            return str(Path(path_like).expanduser().resolve())
-
         def _get(keys, *, required=True, default=None):
             keys_seq = [keys] if isinstance(keys, str) else list(keys)
             for key in keys_seq:
@@ -216,17 +368,16 @@ class SimulationParams:
             n_lines = _get("n_lines", required=False)
         if line_names is None:
             line_names = _get("line_names", required=False)
-        ncpu = ncpu if ncpu is not None else (os.cpu_count() or 1)
 
-        return cls(
+        return cls.from_values(
             idx=idx,
-            source_name=str(source_name),
-            member_ouid=str(member_ouid),
-            main_dir=_resolve_path(main_dir),
-            output_dir=_resolve_path(output_dir),
-            tng_dir=_resolve_path(tng_dir),
-            galaxy_zoo_dir=_resolve_path(galaxy_zoo_dir),
-            hubble_dir=_resolve_path(hubble_dir),
+            source_name=source_name,
+            member_ouid=member_ouid,
+            main_dir=main_dir,
+            output_dir=output_dir,
+            tng_dir=tng_dir,
+            galaxy_zoo_dir=galaxy_zoo_dir,
+            hubble_dir=hubble_dir,
             project_name=project_name,
             ra=ra,
             dec=dec,
@@ -241,13 +392,13 @@ class SimulationParams:
             freq=freq,
             freq_support=freq_support,
             cont_sens=cont_sens,
-            line_sens_10kms=(float(line_sens_10kms) if line_sens_10kms is not None else None),
+            line_sens_10kms=line_sens_10kms,
             antenna_array=antenna_array,
             n_pix=n_pix,
             n_channels=n_channels,
             source_type=source_type,
             tng_api_key=tng_api_key,
-            ncpu=int(ncpu),
+            ncpu=ncpu,
             rest_frequency=rest_frequency,
             redshift=redshift,
             lum_infrared=lum_infrared,
@@ -255,39 +406,29 @@ class SimulationParams:
             n_lines=n_lines,
             line_names=line_names,
             save_mode=save_mode,
-            persist=bool(persist),
-            ml_dataset_path=(
-                _resolve_path(ml_dataset_path) if ml_dataset_path is not None else None
-            ),
-            output_subdir_name=(str(output_subdir_name) if output_subdir_name else None),
+            persist=persist,
+            ml_dataset_path=ml_dataset_path,
+            output_subdir_name=output_subdir_name,
             inject_serendipitous=inject_serendipitous,
             remote=remote,
             observation_configs=observation_configs,
-            ground_temperature_k=float(ground_temperature_k),
+            ground_temperature_k=ground_temperature_k,
             correlator=correlator,
             elevation_deg=elevation_deg,
-            source_offset_x_arcsec=float(source_offset_x_arcsec),
-            source_offset_y_arcsec=float(source_offset_y_arcsec),
-            background_mode=str(background_mode),
-            background_level=float(background_level),
-            background_seed=(int(background_seed) if background_seed is not None else None),
-            external_skymodel_path=(
-                _resolve_path(external_skymodel_path)
-                if external_skymodel_path is not None
-                else None
-            ),
-            external_component_table_path=(
-                _resolve_path(external_component_table_path)
-                if external_component_table_path is not None
-                else None
-            ),
-            external_alignment_mode=str(external_alignment_mode),
-            external_header_mode=str(external_header_mode),
+            source_offset_x_arcsec=source_offset_x_arcsec,
+            source_offset_y_arcsec=source_offset_y_arcsec,
+            background_mode=background_mode,
+            background_level=background_level,
+            background_seed=background_seed,
+            external_skymodel_path=external_skymodel_path,
+            external_component_table_path=external_component_table_path,
+            external_alignment_mode=external_alignment_mode,
+            external_header_mode=external_header_mode,
             external_header_overrides=external_header_overrides,
-            ms_export=bool(ms_export),
-            ms_export_dir=(_resolve_path(ms_export_dir) if ms_export_dir is not None else None),
-            ms_save_mode=str(ms_save_mode),
-            imaging_algorithm=str(imaging_algorithm),
+            ms_export=ms_export,
+            ms_export_dir=ms_export_dir,
+            ms_save_mode=ms_save_mode,
+            imaging_algorithm=imaging_algorithm,
         )
 
 

@@ -59,6 +59,16 @@ class SimulationService:
             # Keep the in-memory status path working even if the DB is unavailable.
             return
 
+    def _safe_output_dir(self, user_dir: Optional[str]) -> Path:
+        """Return a validated output directory that must reside within the configured base."""
+        if not user_dir:
+            return self.output_dir
+        resolved = Path(user_dir).expanduser().resolve()
+        base = self.output_dir.resolve()
+        if not resolved.is_relative_to(base):
+            raise ValueError("output_dir must be within the configured output directory")
+        return resolved
+
     def _persist_log(
         self,
         simulation_id: str,
@@ -172,15 +182,15 @@ class SimulationService:
 
         try:
             # Convert API params to internal SimulationParams
-            sim_params = SimulationParams(
+            sim_params = SimulationParams.from_values(
                 idx=params.idx,
                 source_name=params.source_name,
                 member_ouid=params.member_ouid,
-                main_dir=str(self.main_dir),
-                output_dir=params.output_dir or str(self.output_dir),
-                tng_dir=str(self.tng_dir),
-                galaxy_zoo_dir=str(self.galaxy_zoo_dir),
-                hubble_dir=str(self.hubble_dir),
+                main_dir=self.main_dir,
+                output_dir=self._safe_output_dir(params.output_dir),
+                tng_dir=self.tng_dir,
+                galaxy_zoo_dir=self.galaxy_zoo_dir,
+                hubble_dir=self.hubble_dir,
                 project_name=params.project_name,
                 ra=params.ra,
                 dec=params.dec,
