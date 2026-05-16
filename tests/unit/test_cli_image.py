@@ -339,7 +339,7 @@ def test_predict_batch_submits_sbatch_jobs(monkeypatch, tmp_path):
 
     result = runner.invoke(
         cli.app,
-        ["image", "predict-batch", str(imaging_csv), str(output_dir)],
+        ["image", "predict-batch", str(imaging_csv), str(output_dir), "--use-slurm"],
     )
 
     assert result.exit_code == 0
