@@ -64,7 +64,7 @@ def find_calibration_directory(
             "Found more than one calibration directory. "
             "Pass asdm_uid to select a specific execution block."
         )
-    return sorted(candidates)[0]
+    return min(candidates)
 
 
 def find_raw_ms_directories(
@@ -196,6 +196,13 @@ def apply_delivered_calibration(
     _emit(logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}")
     for kwargs in calls:
         kwargs["vis"] = str(working_ms)
+        if "gaintable" in kwargs:
+            kwargs["gaintable"] = [
+                str(working_dir / tbl) if not Path(tbl).is_absolute() else tbl
+                for tbl in kwargs["gaintable"]
+            ]
+        if "callib" in kwargs and kwargs["callib"] and not Path(kwargs["callib"]).is_absolute():
+            kwargs["callib"] = str(working_dir / kwargs["callib"])
         kwargs["intent"] = _normalize_intent(str(kwargs.get("intent", "")), working_ms)
         applycal(**kwargs)
 
