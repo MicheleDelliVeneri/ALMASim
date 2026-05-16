@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 SUPPORTED_METADATA_FORMATS = {"json", "csv"}
+KNOWN_PREFIX_DIRECTORIES = {"data", "metadata", "query_results", "outputs"}
 
 
 def normalize_metadata_format(fmt: str | None) -> str:
@@ -38,7 +39,7 @@ def resolve_metadata_output_path(
         return base / f"{default_name}{suffix}"
 
     parts = [part for part in sanitized.replace("\\", "/").split("/") if part]
-    if parts and parts[0] in {"data", "metadata", "query_results", "outputs"}:
+    if parts and parts[0] in KNOWN_PREFIX_DIRECTORIES:
         parts = parts[1:]
     relative = "/".join(parts) if parts else f"{default_name}{suffix}"
 

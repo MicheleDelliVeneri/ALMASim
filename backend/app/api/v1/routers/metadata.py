@@ -158,13 +158,6 @@ async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
     try:
         try:
             fmt = normalize_metadata_format(payload.format)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
-            ) from exc
-
-        try:
             destination = resolve_metadata_output_path(
                 payload.path,
                 base_dir=settings.OUTPUT_DIR / "query_results",
