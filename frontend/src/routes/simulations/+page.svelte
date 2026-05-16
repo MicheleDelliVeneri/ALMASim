@@ -199,7 +199,7 @@
 		row: Record<string, unknown>,
 		idx: number
 	): SimulationParamsCreate {
-		const getValue = (keys: string[], fallback: any = null) => {
+		const getValue = (keys: string[], fallback: unknown = null) => {
 			for (const key of keys) {
 				const value = row[key];
 				if (value !== null && value !== undefined && value !== '') {

@@ -62,6 +62,12 @@
 				</p>
 			</div>
 			<div>
+				<span class="font-medium text-gray-700">Imaging:</span>
+				<p class="mt-1 text-gray-900">
+					Mode {saveMode} | Lines {nLines} | Robust {robust.toFixed(2)}
+				</p>
+			</div>
+			<div>
 				<span class="font-medium text-gray-700">Dec:</span>
 				<p class="mt-1 text-gray-900">
 					{(() => {

@@ -300,3 +300,101 @@ def test_batch_image_enforces_positive_max_cores_per_node(tmp_path):
     )
 
     assert result.exit_code == 2
+
+
+@pytest.mark.unit
+def test_predict_batch_submits_sbatch_jobs(monkeypatch, tmp_path):
+    """predict-batch should submit one sbatch-wrapped predict-single command per row."""
+    imaging_csv = tmp_path / "imaging_parameters.csv"
+    output_dir = tmp_path / "images"
+    output_dir.mkdir()
+
+    first_ms = tmp_path / "uid___A001_X1_X1.cal"
+    second_ms = tmp_path / "uid___A001_X2_X2.cal"
+    pd.DataFrame(
+        {
+            "filename": [str(first_ms), str(second_ms)],
+            "spectral_window_id": [1, 3],
+            "reference_frequency": [100.0e9, 101.0e9],
+            "fov_per_frequency": [8.0, 8.2],
+            "max_baseline_size": [100.0, 100.0],
+            "synthetized_beam_size": [2.0, 2.1],
+        }
+    ).to_csv(imaging_csv, index=False)
+
+    first_model = output_dir / first_ms.stem / "SPW-1" / "wsclean-model.fits"
+    second_model = output_dir / second_ms.stem / "SPW-3" / "wsclean-model.fits"
+    first_model.parent.mkdir(parents=True)
+    second_model.parent.mkdir(parents=True)
+    first_model.touch()
+    second_model.touch()
+
+    calls: list[tuple[list[str], bool]] = []
+
+    def _fake_subprocess_run(cmd: list[str], check: bool = False):
+        calls.append((cmd, check))
+
+    monkeypatch.setattr(cli_image.subprocess, "run", _fake_subprocess_run)
+    monkeypatch.setattr(cli_image, "tqdm", lambda iterable, total=None: iterable)
+
+    result = runner.invoke(
+        cli.app,
+        ["image", "predict-batch", str(imaging_csv), str(output_dir), "--use-slurm"],
+    )
+
+    assert result.exit_code == 0
+    assert len(calls) == 2
+    first_cmd, first_check = calls[0]
+    second_cmd, second_check = calls[1]
+    assert first_check is True
+    assert second_check is True
+    assert first_cmd[0] == "sbatch"
+    assert second_cmd[0] == "sbatch"
+    assert "--wrap" in first_cmd
+    assert "--wrap" in second_cmd
+
+    first_wrap = first_cmd[first_cmd.index("--wrap") + 1]
+    second_wrap = second_cmd[second_cmd.index("--wrap") + 1]
+    assert "almasim image predict-single" in first_wrap
+    assert "almasim image predict-single" in second_wrap
+    assert str(first_model) in first_wrap
+    assert str(second_model) in second_wrap
+    assert str(first_model.parent / f"{first_ms.name}.predicted") in first_wrap
+    assert str(second_model.parent / f"{second_ms.name}.predicted") in second_wrap
+
+
+@pytest.mark.unit
+def test_predict_batch_skips_when_model_is_missing(monkeypatch, tmp_path):
+    """predict-batch should log and skip rows whose model FITS file is missing."""
+    imaging_csv = tmp_path / "imaging_parameters.csv"
+    output_dir = tmp_path / "images"
+    output_dir.mkdir()
+
+    ms_path = tmp_path / "uid___A001_X9_X9.cal"
+    pd.DataFrame(
+        {
+            "filename": [str(ms_path)],
+            "spectral_window_id": [0],
+            "reference_frequency": [100.0e9],
+            "fov_per_frequency": [8.0],
+            "max_baseline_size": [100.0],
+            "synthetized_beam_size": [2.0],
+        }
+    ).to_csv(imaging_csv, index=False)
+
+    calls: list[tuple[list[str], bool]] = []
+
+    def _fake_subprocess_run(cmd: list[str], check: bool = False):
+        calls.append((cmd, check))
+
+    monkeypatch.setattr(cli_image, "tqdm", lambda iterable, total=None: iterable)
+    monkeypatch.setattr(cli_image.subprocess, "run", _fake_subprocess_run)
+
+    result = runner.invoke(
+        cli.app,
+        ["image", "predict-batch", str(imaging_csv), str(output_dir)],
+    )
+
+    assert result.exit_code == 0
+    assert "[debug] missing model FITS, skipping row" in result.output
+    assert len(calls) == 0

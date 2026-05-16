@@ -742,8 +742,8 @@
 		{/if}
 
 		{#if statusMessage}
-			<div class="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-				{@html statusMessage}
+			<div class="whitespace-pre-wrap rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+				{statusMessage}
 			</div>
 		{/if}
 

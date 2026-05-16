@@ -24,7 +24,9 @@ function makeWriter(levelName: string) {
 
 	return (obj: object) => {
 		const payload = obj as Record<string, unknown>;
-		const { msg, scope, level: _l, time: _t, ...rest } = payload;
+		const { msg, scope, ...rest } = payload;
+		delete rest.level;
+		delete rest.time;
 		const tag = levelName.toUpperCase().padEnd(5);
 		const scopeStr = typeof scope === 'string' ? scope : '';
 		const msgStr = typeof msg === 'string' ? msg : '';
