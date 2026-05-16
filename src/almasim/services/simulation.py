@@ -173,9 +173,20 @@ class SimulationParams:
         stages to derive suitable defaults from the observing configuration.
         """
 
+        _FORBIDDEN_ROOTS = (Path("/proc"), Path("/sys"), Path("/dev"))
+
         def _expand_path(path_like: Path | str) -> str:
             """Normalize path-like values to absolute paths with user-home expansion."""
-            return str(Path(path_like).expanduser().resolve())
+            raw = str(path_like)
+            if "\x00" in raw:
+                raise ValueError(f"Path contains null bytes: {path_like!r}")
+            resolved = Path(raw).expanduser().resolve()
+            for forbidden in _FORBIDDEN_ROOTS:
+                if resolved.is_relative_to(forbidden):
+                    raise ValueError(
+                        f"Path '{path_like}' resolves to a restricted system location: {resolved}"
+                    )
+            return str(resolved)
 
         return cls(
             idx=int(idx),
