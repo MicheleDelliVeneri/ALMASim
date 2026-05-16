@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { MetadataResponse } from '$lib/api/metadata';
-	import { downloadApi, type ResolveProductsResponse } from '$lib/api/download';
+	import { downloadApi } from '$lib/api/download';
 	import { createLogger } from '$lib/logger';
 
 	const logger = createLogger('components/metadata/MetadataResultsTable');
@@ -214,13 +214,14 @@
 
 	// Reset size result when selection changes
 	$effect(() => {
-		selectedRowIndices;
+		if (selectedRowIndices.size >= 0) {
 		sizeResolved = 0;
 		sizeTotal = 0;
 		sizeTotalBytes = 0;
 		sizeTotalFiles = 0;
 		sizeError = '';
 		sizeCancelled = false;
+		}
 	});
 
 	function cancelSizeComputation() {
@@ -542,7 +543,6 @@
 						{/each}
 						<!-- Reorderable columns (drag up/down to reorder) -->
 						{#each columnOrder as col}
-							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 							<label
 								class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
 								class:text-gray-400={!dataColumnSet.has(col)}
@@ -813,11 +813,11 @@
 							</td>
 						</tr>
 					{:else}
-						{#each placeholderRows as _}
+						{#each placeholderRows as placeholder}
 							<tr class="animate-pulse border-b border-gray-100">
-								{#each tableColumns as _}
+								{#each tableColumns as column}
 									<td class="px-4 py-3">
-										<div class="h-4 w-32 rounded bg-gray-200/80" aria-hidden="true"></div>
+										<div class="h-4 w-32 rounded bg-gray-200/80" aria-hidden={placeholder !== null && column.length >= 0}></div>
 									</td>
 								{/each}
 							</tr>

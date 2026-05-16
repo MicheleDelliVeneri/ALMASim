@@ -32,6 +32,8 @@
 		stats: SelectionStats;
 	}
 
+	type ResizeHandle = 'tl' | 'tr' | 'bl' | 'br' | 'n' | 's' | 'e' | 'w';
+
 	interface Props {
 		imageData: ImageData | null;
 		scale: number;
@@ -59,7 +61,7 @@
 	// Move/resize state
 	let isDraggingSelection = $state(false);
 	let isResizingSelection = $state(false);
-	let resizeHandle = $state<'tl' | 'tr' | 'bl' | 'br' | 'n' | 's' | 'e' | 'w' | null>(null);
+	let resizeHandle = $state<ResizeHandle | null>(null);
 	let dragOffset = $state({ x: 0, y: 0 });
 	let cursorStyle = $state('grab');
 
@@ -348,7 +350,7 @@
 					if (handle) {
 						// Start resizing
 						isResizingSelection = true;
-						resizeHandle = handle as any;
+						resizeHandle = handle;
 						return;
 					}
 				}
@@ -497,7 +499,6 @@
 					}
 
 					// Recalculate stats
-					const tempSelection = { ...s, start: newStart, end: newEnd };
 					const imageCoords1 = screenToImageCoords(newStart.x, newStart.y);
 					const imageCoords2 = screenToImageCoords(newEnd.x, newEnd.y);
 
@@ -587,7 +588,7 @@
 		}
 	}
 
-	function getResizeHandle(x: number, y: number, selection: SavedSelection): string | null {
+	function getResizeHandle(x: number, y: number, selection: SavedSelection): ResizeHandle | null {
 		const handleSize = 8;
 		const sx = Math.min(selection.start.x, selection.end.x);
 		const sy = Math.min(selection.start.y, selection.end.y);
@@ -698,14 +699,10 @@
 	$effect(() => {
 		if (imageData) {
 			// Trigger redraw when data, scale, pan, or selections change
-			const _ = scale;
-			const __ = panX;
-			const ___ = panY;
-			const ____ = imageData;
-			const _____ = selectionEnd;
-			const ______ = savedSelections;
-			const _______ = selectedSelectionId;
+			const trackedDeps = [scale, panX, panY, imageData, selectionEnd, savedSelections, selectedSelectionId];
+			if (trackedDeps.length >= 0) {
 			setTimeout(() => drawImage(), 0);
+			}
 		}
 	});
 </script>

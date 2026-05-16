@@ -11,9 +11,6 @@
 	let loading = $state(true);
 	let error = $state('');
 
-	// Expanded job detail (for viewing per-file status)
-	let expandedJobId = $state<string | null>(null);
-
 	// Re-download state
 	let redownloading = $state<Set<string>>(new Set());
 	let redownloadOptionsOpen = $state(false);

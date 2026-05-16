@@ -32,7 +32,7 @@
 	}
 
 	function removeConfigKey(key: string) {
-		const { [key]: _, ...rest } = backendConfig;
+		const rest = Object.fromEntries(Object.entries(backendConfig).filter(([k]) => k !== key));
 		onConfigChange(rest);
 	}
 

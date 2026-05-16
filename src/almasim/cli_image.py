@@ -273,7 +273,7 @@ def predict_batch(
     imaging_parameters: Path = typer.Argument(..., help="Imaging parameter file"),
     output_directory: Path = typer.Argument(..., help="Output directory path"),
     num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
-    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=False),
+    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
 ):
     parameters = pd.read_csv(str(imaging_parameters))
     for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):

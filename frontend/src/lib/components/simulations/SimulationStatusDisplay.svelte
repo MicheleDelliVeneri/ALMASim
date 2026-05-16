@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { createLogger } from '$lib/logger';
 
 	const logger = createLogger('components/simulations/SimulationStatusDisplay');
