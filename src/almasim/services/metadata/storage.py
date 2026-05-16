@@ -11,11 +11,23 @@ SUPPORTED_METADATA_FORMATS = {"json", "csv"}
 STRIPPABLE_PATH_PREFIXES = {"data", "metadata", "query_results", "outputs"}
 
 
+class MetadataStorageError(ValueError):
+    """Base exception for metadata storage helper failures."""
+
+
+class UnsupportedMetadataFormatError(MetadataStorageError):
+    """Raised when metadata output format is not supported."""
+
+
+class InvalidMetadataPathError(MetadataStorageError):
+    """Raised when resolved metadata output path is outside the allowed base."""
+
+
 def normalize_metadata_format(fmt: str | None) -> str:
     """Normalize and validate metadata serialization format."""
     normalized = (fmt or "json").strip().lower()
     if normalized not in SUPPORTED_METADATA_FORMATS:
-        raise ValueError("Unsupported format. Use 'json' or 'csv'.")
+        raise UnsupportedMetadataFormatError("Unsupported format. Use 'json' or 'csv'.")
     return normalized
 
 
@@ -25,7 +37,7 @@ def resolve_metadata_output_path(
     base_dir: Path,
     fmt: str,
     default_name: str = "metadata-results",
-    error_message: str = "Invalid metadata output path.",
+    invalid_path_message: str = "Invalid metadata output path.",
 ) -> Path:
     """Resolve an output path inside ``base_dir`` with extension normalization."""
     normalized_fmt = normalize_metadata_format(fmt)
@@ -47,7 +59,7 @@ def resolve_metadata_output_path(
     try:
         resolved.relative_to(base)
     except ValueError as exc:
-        raise ValueError(error_message) from exc
+        raise InvalidMetadataPathError(invalid_path_message) from exc
 
     if resolved.suffix.lower() != suffix:
         resolved = resolved.with_suffix(suffix)

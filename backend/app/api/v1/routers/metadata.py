@@ -24,6 +24,8 @@ from app.schemas.metadata import (
 from app.services.metadata_service import MetadataService
 from app.services.status_store import query_store
 from almasim.services.metadata.storage import (
+    InvalidMetadataPathError,
+    UnsupportedMetadataFormatError,
     normalize_metadata_format,
     resolve_metadata_output_path,
     save_metadata_records,
@@ -162,17 +164,17 @@ async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
                 payload.path,
                 base_dir=settings.OUTPUT_DIR / "query_results",
                 fmt=fmt,
-                error_message=_SAVE_DETAIL,
+                invalid_path_message=_SAVE_DETAIL,
             )
-        except ValueError as exc:
-            detail = (
-                "Unsupported format. Use 'json' or 'csv'."
-                if "Unsupported format" in str(exc)
-                else _SAVE_DETAIL
-            )
+        except UnsupportedMetadataFormatError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=detail,
+                detail="Unsupported format. Use 'json' or 'csv'.",
+            ) from exc
+        except InvalidMetadataPathError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_SAVE_DETAIL,
             ) from exc
 
         save_metadata_records(payload.data, destination, fmt=fmt)
