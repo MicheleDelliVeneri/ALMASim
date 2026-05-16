@@ -3,33 +3,110 @@
 from __future__ import annotations
 
 import tarfile
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from time import sleep
 from typing import Any, List, Optional
 
-import pandas as pd
 import typer
 from tqdm.auto import tqdm
 
 from .cli_shared import dedupe_keep_order, default_output_path, split_csv_values
-from .services.compute import create_backend
-from .services.download import (
-    MAX_PARALLEL_PER_MIRROR,
-    MAX_PARALLEL_TOTAL,
-    PRODUCT_TYPES,
-    download_products,
-    filter_products,
-    format_bytes,
-    load_products_csv,
-    resolve_products,
-    save_products_csv,
-)
+
+MAX_PARALLEL_PER_MIRROR = 10
+MAX_PARALLEL_TOTAL = 30
+PRODUCT_TYPES = {
+    "all",
+    "raw",
+    "calibration",
+    "scripts",
+    "weblog",
+    "qa_reports",
+    "auxiliary",
+    "cubes",
+    "continuum",
+    "fits",
+    "other",
+}
 
 products_app = typer.Typer(
     help="Data product resolution and download commands.",
     no_args_is_help=True,
 )
+
+
+@lru_cache(maxsize=1)
+def _download_contract() -> dict[str, Any]:
+    from .services.download import (
+        MAX_PARALLEL_PER_MIRROR as _MAX_PARALLEL_PER_MIRROR,
+    )
+    from .services.download import (
+        MAX_PARALLEL_TOTAL as _MAX_PARALLEL_TOTAL,
+    )
+    from .services.download import (
+        PRODUCT_TYPES as _PRODUCT_TYPES,
+    )
+    from .services.download import (
+        download_products as _download_products,
+    )
+    from .services.download import (
+        filter_products as _filter_products,
+    )
+    from .services.download import (
+        format_bytes as _format_bytes,
+    )
+    from .services.download import (
+        load_products_csv as _load_products_csv,
+    )
+    from .services.download import (
+        resolve_products as _resolve_products,
+    )
+    from .services.download import (
+        save_products_csv as _save_products_csv,
+    )
+
+    return {
+        "MAX_PARALLEL_PER_MIRROR": _MAX_PARALLEL_PER_MIRROR,
+        "MAX_PARALLEL_TOTAL": _MAX_PARALLEL_TOTAL,
+        "PRODUCT_TYPES": _PRODUCT_TYPES,
+        "download_products": _download_products,
+        "filter_products": _filter_products,
+        "format_bytes": _format_bytes,
+        "load_products_csv": _load_products_csv,
+        "resolve_products": _resolve_products,
+        "save_products_csv": _save_products_csv,
+    }
+
+
+def create_backend(*args, **kwargs):
+    from .services.compute import create_backend as _create_backend
+
+    return _create_backend(*args, **kwargs)
+
+
+def download_products(*args, **kwargs):
+    return _download_contract()["download_products"](*args, **kwargs)
+
+
+def filter_products(*args, **kwargs):
+    return _download_contract()["filter_products"](*args, **kwargs)
+
+
+def format_bytes(*args, **kwargs):
+    return _download_contract()["format_bytes"](*args, **kwargs)
+
+
+def load_products_csv(*args, **kwargs):
+    return _download_contract()["load_products_csv"](*args, **kwargs)
+
+
+def resolve_products(*args, **kwargs):
+    return _download_contract()["resolve_products"](*args, **kwargs)
+
+
+def save_products_csv(*args, **kwargs):
+    return _download_contract()["save_products_csv"](*args, **kwargs)
 
 
 def _future_status(future: Any) -> str:
@@ -162,6 +239,8 @@ def _read_member_uids_from_metadata(
     metadata_csv: Path,
     member_limit: Optional[int],
 ) -> list[str]:
+    import pandas as pd
+
     metadata = pd.read_csv(metadata_csv.expanduser().resolve())
     if "member_ous_uid" not in metadata.columns:
         typer.echo(
