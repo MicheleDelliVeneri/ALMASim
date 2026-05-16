@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 SUPPORTED_METADATA_FORMATS = {"json", "csv"}
+# Common UI/path prefixes accepted in user inputs and stripped so writes stay rooted at base_dir.
 STRIPPABLE_PATH_PREFIXES = {"data", "metadata", "query_results", "outputs"}
 
 

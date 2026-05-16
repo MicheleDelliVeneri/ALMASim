@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
+from almasim.services.download import format_bytes
 from app.core.config import settings
 from app.schemas.download import (
     BrowseDirectoryEntry,
@@ -107,15 +108,6 @@ async def browse_directory(path: str = "/host_home"):
     return _browse_path(resolved)
 
 
-def _format_bytes(size: int) -> str:
-    """Human-friendly byte size string."""
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(size) < 1000:
-            return f"{size:.1f} {unit}"
-        size /= 1000
-    return f"{size:.1f} PB"
-
-
 @router.post("/mkdir", response_model=BrowseDirectoryResponse)
 async def make_directory(path: str):
     """Create a new directory and return a browse result for it."""
@@ -162,7 +154,7 @@ async def resolve_download_products(body: ResolveProductsRequest):
         entry["count"] += 1
         entry["size_bytes"] += p.content_length
     for entry in by_type.values():
-        entry["size_display"] = _format_bytes(entry["size_bytes"])
+        entry["size_display"] = format_bytes(entry["size_bytes"])
 
     total_bytes = sum(p.content_length for p in products)
 
@@ -181,7 +173,7 @@ async def resolve_download_products(body: ResolveProductsRequest):
         ],
         total_count=len(products),
         total_size_bytes=total_bytes,
-        total_size_display=_format_bytes(total_bytes),
+        total_size_display=format_bytes(total_bytes),
         by_type=by_type,
     )
 
@@ -206,9 +198,9 @@ async def check_disk_space(body: CheckDiskSpaceRequest):
         total_bytes=usage.total,
         used_bytes=usage.used,
         free_bytes=usage.free,
-        total_display=_format_bytes(usage.total),
-        used_display=_format_bytes(usage.used),
-        free_display=_format_bytes(usage.free),
+        total_display=format_bytes(usage.total),
+        used_display=format_bytes(usage.used),
+        free_display=format_bytes(usage.free),
         sufficient=usage.free >= body.needed_bytes,
     )
 
@@ -285,7 +277,7 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
         status="pending",
         total_files=len(products),
         total_bytes=total_bytes,
-        total_size_display=_format_bytes(total_bytes),
+        total_size_display=format_bytes(total_bytes),
         destination=body.destination,
     )
 
@@ -631,7 +623,7 @@ async def redownload_job(
         status="pending",
         total_files=len(products),
         total_bytes=total_bytes,
-        total_size_display=_format_bytes(total_bytes),
+        total_size_display=format_bytes(total_bytes),
         destination=rec.destination,
     )
 

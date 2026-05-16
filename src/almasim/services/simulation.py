@@ -130,7 +130,7 @@ class SimulationParams:
         freq_support: str,
         cont_sens: float,
         antenna_array: str,
-        n_pix: Optional[float],
+        n_pix: Optional[int],
         n_channels: Optional[int],
         source_type: str,
         tng_api_key: Optional[str],
