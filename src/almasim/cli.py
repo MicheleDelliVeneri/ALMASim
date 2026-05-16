@@ -40,7 +40,7 @@ def _forward_typer_subapp(
     module = import_module(module_name, package=__package__)
     subapp = getattr(module, app_name)
     command = typer.main.get_command(subapp)
-    args = list(ctx.args)
+    args = list(ctx.args) or ["--help"]
 
     # Typer may emit a plain Command for single-command apps; in that case,
     # users still type an explicit subcommand token (e.g. `simulation run ...`).
@@ -59,13 +59,17 @@ def _forward_clean_command(*, ctx: typer.Context) -> None:
         context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
     )(getattr(module, "clean_command"))
     command = typer.main.get_command(clean_app)
-    _invoke_click_command(command, args=list(ctx.args), prog_name="almasim clean")
+    _invoke_click_command(command, args=list(ctx.args) or ["--help"], prog_name="almasim clean")
 
 
 @app.command(
     "metadata",
     help="Metadata query commands.",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
 )
 def metadata_command(ctx: typer.Context) -> None:
     """Run metadata subcommands."""
@@ -80,7 +84,11 @@ def metadata_command(ctx: typer.Context) -> None:
 @app.command(
     "products",
     help="Data product resolution and download commands.",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
 )
 def products_command(ctx: typer.Context) -> None:
     """Run products subcommands."""
@@ -95,7 +103,11 @@ def products_command(ctx: typer.Context) -> None:
 @app.command(
     "simulation",
     help="Simulation workflow commands.",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
 )
 def simulation_command(ctx: typer.Context) -> None:
     """Run simulation subcommands."""
@@ -110,7 +122,11 @@ def simulation_command(ctx: typer.Context) -> None:
 @app.command(
     "image",
     help="Data product batch imaging.",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
 )
 def image_command(ctx: typer.Context) -> None:
     """Run image subcommands."""
@@ -125,7 +141,11 @@ def image_command(ctx: typer.Context) -> None:
 @app.command(
     "clean",
     help="Run WSClean and forward all extra arguments unchanged.",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
 )
 def clean_command_proxy(ctx: typer.Context) -> None:
     """Run clean passthrough command."""
