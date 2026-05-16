@@ -280,6 +280,92 @@ def test_slurm_backend_context_manager_calls_close():
         slurm_mod.SLURM_AVAILABLE = original
 
 
+@pytest.mark.unit
+def test_slurm_backend_forwards_scheduler_network_kwargs():
+    """SlurmBackend should pass scheduler network kwargs to singleton manager."""
+    import almasim.services.compute.slurm as slurm_mod
+
+    original = slurm_mod.SLURM_AVAILABLE
+    try:
+        slurm_mod.SLURM_AVAILABLE = True
+        from almasim.services.compute.slurm import SlurmBackend
+
+        manager = MagicMock()
+        manager.cluster = object()
+        manager.client = object()
+
+        with (
+            patch.object(
+                slurm_mod.SlurmDaskClusterSingleton,
+                "get_instance",
+                return_value=manager,
+            ) as mock_get_instance,
+            patch.object(slurm_mod.SlurmDaskClusterSingleton, "close_instance") as mock_close,
+        ):
+            backend = SlurmBackend(
+                queue="normal",
+                project="proj",
+                walltime="00:10:00",
+                cores=8,
+                memory="16GB",
+                n_workers=2,
+                scheduler_host="headnode-internal",
+                scheduler_interface="ib0",
+            )
+
+            mock_get_instance.assert_called_once_with(
+                queue="normal",
+                node_cores=9,
+                memory="16GB",
+                walltime="00:10:00",
+                n_jobs=2,
+                project="proj",
+                scheduler_host="headnode-internal",
+                scheduler_interface="ib0",
+            )
+
+            backend.close()
+            mock_close.assert_called_once()
+    finally:
+        slurm_mod.SLURM_AVAILABLE = original
+
+
+@pytest.mark.unit
+def test_slurm_backend_delegates_to_client_methods():
+    """SlurmBackend delegates scatter/compute/gather to the underlying client."""
+    from almasim.services.compute.slurm import SlurmBackend
+
+    backend = SlurmBackend.__new__(SlurmBackend)
+    backend.client = MagicMock()
+    backend.cluster = object()
+
+    backend.client.scatter.return_value = "scattered"
+    backend.client.compute.return_value = "computed"
+    backend.client.gather.side_effect = lambda items: [f"g-{item}" for item in items]
+
+    assert backend.scatter("payload", broadcast=True) == "scattered"
+    backend.client.scatter.assert_called_once_with("payload", broadcast=True)
+
+    assert backend.compute(["task"], sync=False) == "computed"
+    backend.client.compute.assert_called_once_with(["task"], sync=False)
+
+    assert backend.gather(["a", "b"]) == ["g-a", "g-b"]
+    assert backend.gather("single") == ["g-single"]
+    assert backend.client.gather.call_count == 2
+
+
+@pytest.mark.unit
+def test_slurm_backend_delayed_raises_when_dask_delayed_missing(monkeypatch):
+    """SlurmBackend.delayed raises when dask.delayed is unavailable."""
+    import almasim.services.compute.slurm as slurm_mod
+
+    backend = slurm_mod.SlurmBackend.__new__(slurm_mod.SlurmBackend)
+    monkeypatch.setattr(slurm_mod, "dask_delayed", None)
+
+    with pytest.raises(ImportError, match="Dask delayed is not available"):
+        backend.delayed(lambda x: x)
+
+
 # ===========================================================================
 # KubernetesBackend — unavailable path
 # ===========================================================================
@@ -376,7 +462,7 @@ def test_create_backend_local():
 @pytest.mark.unit
 def test_create_backend_dask_with_mock():
     """create_backend('dask') creates a DaskBackend (mocked)."""
-    from almasim.services.compute.dask_backend import DaskBackend
+    from almasim.services.compute.dask import DaskBackend
     from almasim.services.compute.factory import create_backend
 
     with patch.object(DaskBackend, "__init__", return_value=None):

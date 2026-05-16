@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import os
-import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,6 +16,8 @@ from astropy.io import fits
 from ducc0.wgridder import dirty2vis
 from scipy.constants import speed_of_light
 from tqdm import tqdm
+
+from almasim.scheduling.cluster import SlurmDaskClusterSingleton
 
 ALMA_FOV_FACTOR = 1.12  # Standard primary-beam/FOV approximation: 1.12 * λ / D
 RAD_TO_ARCSEC = 180 / np.pi * 3600
@@ -41,6 +42,54 @@ image_app = typer.Typer(
     help="Data product batch imaging.",
     no_args_is_help=True,
 )
+
+
+def _run_commands_with_slurm_cluster(
+    commands: list[tuple[str, list[str]]],
+    *,
+    cores_per_task: int,
+    node_cores: int,
+    queue: str,
+    project: str | None,
+    walltime: str,
+    memory: str,
+    n_jobs: int,
+    scheduler_host: str | None,
+    scheduler_interface: str | None,
+    task_timeout: float | None,
+) -> None:
+    if not commands:
+        return
+
+    manager = SlurmDaskClusterSingleton.get_instance(
+        queue=queue,
+        node_cores=node_cores,
+        memory=memory,
+        walltime=walltime,
+        n_jobs=n_jobs,
+        project=project,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+    )
+
+    try:
+        futures: list[tuple[str, Any]] = []
+        for label, cmd in commands:
+            future = manager.submit_subcommand(
+                command=cmd,
+                cores=cores_per_task,
+                timeout=task_timeout,
+            )
+            futures.append((label, future))
+
+        for label, future in tqdm(futures, total=len(futures), desc="SLURM tasks"):
+            result = future.result()
+            if result.returncode != 0:
+                typer.echo(f"Task failed: {label}", err=True)
+                typer.echo(result.stderr.rstrip(), err=True)
+                raise typer.Exit(code=result.returncode)
+    finally:
+        SlurmDaskClusterSingleton.close_instance()
 
 
 def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
@@ -157,9 +206,28 @@ def image_set(
         default=95,
         min=1,
     ),
+    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
+    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
+    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
+    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    scheduler_host: str | None = typer.Option(
+        default=None,
+        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
+    ),
+    scheduler_interface: str | None = typer.Option(
+        default=None,
+        help="Scheduler/worker network interface (e.g. ib0, eth0)",
+    ),
+    task_timeout: float = typer.Option(
+        default=3600,
+        min=1,
+        help="Timeout in seconds for each worker-side command",
+    ),
 ):
 
     parameters = pd.read_csv(str(imaging_parameters))
+    commands: list[tuple[str, list[str]]] = []
     for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
         input_filename = Path(dset_parameter["filename"])
         command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
@@ -179,21 +247,22 @@ def image_set(
             str(mem_fraction),
             str(input_filename),
         ]
-        wrap_text = shlex.join(wsclean_cmd)
-        sbatch_cmd = [
-            "sbatch",
-            "-J",
-            input_filename.stem + f"_{dset_parameter['spectral_window_id']}",
-            "--wrap",
-            wrap_text,
-            "-o",
-            str(output_directory.absolute() / r"%x-std%j.out"),
-            "-e",
-            str(output_directory.absolute() / r"%x-std%j.err"),
-            "-c",
-            str(num_cores),
-        ]
-        subprocess.run(sbatch_cmd, check=True)
+        label = f"{input_filename.stem}_{dset_parameter['spectral_window_id']}"
+        commands.append((label, wsclean_cmd))
+
+    _run_commands_with_slurm_cluster(
+        commands,
+        cores_per_task=num_cores,
+        node_cores=max_cores_per_node,
+        queue=slurm_queue,
+        project=slurm_project,
+        walltime=slurm_walltime,
+        memory=slurm_memory,
+        n_jobs=slurm_n_jobs,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+        task_timeout=task_timeout,
+    )
 
 
 @image_app.command("predict-single")
@@ -274,8 +343,32 @@ def predict_batch(
     output_directory: Path = typer.Argument(..., help="Output directory path"),
     num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
     use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
+    max_cores_per_node: int = typer.Option(
+        help="Number of cores per node for SLURM worker resource accounting",
+        default=95,
+        min=1,
+    ),
+    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
+    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
+    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
+    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    scheduler_host: str | None = typer.Option(
+        default=None,
+        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
+    ),
+    scheduler_interface: str | None = typer.Option(
+        default=None,
+        help="Scheduler/worker network interface (e.g. ib0, eth0)",
+    ),
+    task_timeout: float = typer.Option(
+        default=3600,
+        min=1,
+        help="Timeout in seconds for each worker-side command",
+    ),
 ):
     parameters = pd.read_csv(str(imaging_parameters))
+    slurm_commands: list[tuple[str, list[str]]] = []
     for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
         input_filename = Path(dset_parameter["filename"])
         spw_id = int(dset_parameter["spectral_window_id"])
@@ -297,22 +390,25 @@ def predict_batch(
             str(model_path),
             str(output_ms),
         ]
-        wrap_text = shlex.join(predict_cmd)
         if use_slurm:
-            cmd = [
-                "sbatch",
-                "-J",
-                input_filename.stem + f"_{spw_id}_predict",
-                "--wrap",
-                wrap_text,
-                "-o",
-                str(output_directory.absolute() / r"%x-std%j.out"),
-                "-e",
-                str(output_directory.absolute() / r"%x-std%j.err"),
-                "-c",
-                str(num_cores),
-            ]
+            label = input_filename.stem + f"_{spw_id}_predict"
+            slurm_commands.append((label, predict_cmd))
 
         else:
             cmd = predict_cmd
-        subprocess.run(cmd, check=True)
+            subprocess.run(cmd, check=True)
+
+    if use_slurm:
+        _run_commands_with_slurm_cluster(
+            slurm_commands,
+            cores_per_task=num_cores,
+            node_cores=max_cores_per_node,
+            queue=slurm_queue,
+            project=slurm_project,
+            walltime=slurm_walltime,
+            memory=slurm_memory,
+            n_jobs=slurm_n_jobs,
+            scheduler_host=scheduler_host,
+            scheduler_interface=scheduler_interface,
+            task_timeout=task_timeout,
+        )

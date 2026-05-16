@@ -2,16 +2,14 @@
 
 from typing import Any, Callable, Dict, List, Optional
 
+from almasim.scheduling.cluster import SLURM_DASK_AVAILABLE, SlurmDaskClusterSingleton
+
 try:
     from dask import delayed as dask_delayed
-    from dask.distributed import Client
-    from dask_jobqueue import SLURMCluster
 
-    SLURM_AVAILABLE = True
+    SLURM_AVAILABLE = SLURM_DASK_AVAILABLE
 except ImportError:
     SLURM_AVAILABLE = False
-    SLURMCluster = None
-    Client = None
     dask_delayed = None
 
 from .base import ComputationBackend
@@ -61,26 +59,26 @@ class SlurmBackend(ComputationBackend):
         self.memory = memory
         self.n_workers = n_workers
         self.kwargs = kwargs
+        self._cluster_manager: Optional[SlurmDaskClusterSingleton] = None
 
-        self.cluster: Optional[SLURMCluster] = None
-        self.client: Optional[Client] = None
+        self.cluster: Optional[Any] = None
+        self.client: Optional[Any] = None
         self._start_cluster()
 
     def _start_cluster(self) -> None:
-        """Start Slurm cluster and client."""
-        cluster_kwargs = {
-            "queue": self.queue,
-            "walltime": self.walltime,
-            "cores": self.cores,
-            "memory": self.memory,
+        """Start Slurm cluster and client via singleton manager."""
+        manager = SlurmDaskClusterSingleton.get_instance(
+            queue=self.queue,
+            node_cores=self.cores + 1,
+            memory=self.memory,
+            walltime=self.walltime,
+            n_jobs=self.n_workers,
+            project=self.project,
             **self.kwargs,
-        }
-        if self.project:
-            cluster_kwargs["project"] = self.project
-
-        self.cluster = SLURMCluster(**cluster_kwargs)
-        self.cluster.scale(self.n_workers)
-        self.client = Client(self.cluster)
+        )
+        self._cluster_manager = manager
+        self.cluster = manager.cluster
+        self.client = manager.client
 
     def scatter(self, data: Any, broadcast: bool = False) -> Any:
         """Scatter data to Slurm workers."""
@@ -111,12 +109,11 @@ class SlurmBackend(ComputationBackend):
 
     def close(self) -> None:
         """Close Slurm cluster and client."""
-        if self.client:
-            self.client.close()
-            self.client = None
-        if self.cluster:
-            self.cluster.close()
-            self.cluster = None
+        if getattr(self, "_cluster_manager", None) is not None:
+            SlurmDaskClusterSingleton.close_instance()
+            self._cluster_manager = None
+        self.client = None
+        self.cluster = None
 
     def __enter__(self):
         """Context manager entry."""

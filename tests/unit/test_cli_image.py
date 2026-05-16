@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -216,8 +217,8 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
-def test_batch_image_submits_sbatch_with_wrap(monkeypatch, tmp_path):
-    """batch-image should call sbatch once per dataframe row with wrapped wsclean command."""
+def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
+    """batch-image should dispatch wsclean commands via the SLURM cluster helper."""
     imaging_csv = tmp_path / "imaging_parameters.csv"
     output_dir = tmp_path / "images"
     output_dir.mkdir()
@@ -233,13 +234,36 @@ def test_batch_image_submits_sbatch_with_wrap(monkeypatch, tmp_path):
         }
     ).to_csv(imaging_csv, index=False)
 
-    calls: list[tuple[list[str], bool]] = []
+    captured: dict[str, Any] = {}
 
-    def _fake_subprocess_run(cmd: list[str], check: bool = False):
-        calls.append((cmd, check))
+    def _fake_run_with_slurm_cluster(
+        commands,
+        *,
+        cores_per_task,
+        node_cores,
+        queue,
+        project,
+        walltime,
+        memory,
+        n_jobs,
+        scheduler_host,
+        scheduler_interface,
+        task_timeout,
+    ):
+        captured["commands"] = commands
+        captured["cores_per_task"] = cores_per_task
+        captured["node_cores"] = node_cores
+        captured["queue"] = queue
+        captured["project"] = project
+        captured["walltime"] = walltime
+        captured["memory"] = memory
+        captured["n_jobs"] = n_jobs
+        captured["scheduler_host"] = scheduler_host
+        captured["scheduler_interface"] = scheduler_interface
+        captured["task_timeout"] = task_timeout
 
     monkeypatch.setattr(cli_image, "tqdm", lambda iterable, total=None: iterable)
-    monkeypatch.setattr(cli_image.subprocess, "run", _fake_subprocess_run)
+    monkeypatch.setattr(cli_image, "_run_commands_with_slurm_cluster", _fake_run_with_slurm_cluster)
 
     result = runner.invoke(
         cli.app,
@@ -256,17 +280,19 @@ def test_batch_image_submits_sbatch_with_wrap(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert len(calls) == 1
-    sbatch_cmd, check_flag = calls[0]
-    assert check_flag is True
-    assert sbatch_cmd[0] == "sbatch"
-    assert "--wrap" in sbatch_cmd
-    assert "-o" in sbatch_cmd
-    assert "-e" in sbatch_cmd
-    assert "-c" in sbatch_cmd
-    wrap_idx = sbatch_cmd.index("--wrap")
-    assert "wsclean" in sbatch_cmd[wrap_idx + 1]
-    assert "-name" in sbatch_cmd[wrap_idx + 1]
+    assert captured["cores_per_task"] == 8
+    assert captured["node_cores"] == 64
+    assert captured["queue"] == "normal"
+    assert captured["project"] is None
+    assert captured["walltime"] == "02:00:00"
+    assert captured["memory"] == "16GB"
+    assert captured["n_jobs"] == 1
+
+    commands = captured["commands"]
+    assert len(commands) == 1
+    _, cmd_tokens = commands[0]
+    assert cmd_tokens[0] == "wsclean"
+    assert "-name" in cmd_tokens
 
 
 @pytest.mark.unit
@@ -303,8 +329,8 @@ def test_batch_image_enforces_positive_max_cores_per_node(tmp_path):
 
 
 @pytest.mark.unit
-def test_predict_batch_submits_sbatch_jobs(monkeypatch, tmp_path):
-    """predict-batch should submit one sbatch-wrapped predict-single command per row."""
+def test_predict_batch_submits_jobs_via_slurm_cluster(monkeypatch, tmp_path):
+    """predict-batch should submit predict-single commands via SLURM cluster helper."""
     imaging_csv = tmp_path / "imaging_parameters.csv"
     output_dir = tmp_path / "images"
     output_dir.mkdir()
@@ -329,12 +355,35 @@ def test_predict_batch_submits_sbatch_jobs(monkeypatch, tmp_path):
     first_model.touch()
     second_model.touch()
 
-    calls: list[tuple[list[str], bool]] = []
+    captured: dict[str, Any] = {}
 
-    def _fake_subprocess_run(cmd: list[str], check: bool = False):
-        calls.append((cmd, check))
+    def _fake_run_with_slurm_cluster(
+        commands,
+        *,
+        cores_per_task,
+        node_cores,
+        queue,
+        project,
+        walltime,
+        memory,
+        n_jobs,
+        scheduler_host,
+        scheduler_interface,
+        task_timeout,
+    ):
+        captured["commands"] = commands
+        captured["cores_per_task"] = cores_per_task
+        captured["node_cores"] = node_cores
+        captured["queue"] = queue
+        captured["project"] = project
+        captured["walltime"] = walltime
+        captured["memory"] = memory
+        captured["n_jobs"] = n_jobs
+        captured["scheduler_host"] = scheduler_host
+        captured["scheduler_interface"] = scheduler_interface
+        captured["task_timeout"] = task_timeout
 
-    monkeypatch.setattr(cli_image.subprocess, "run", _fake_subprocess_run)
+    monkeypatch.setattr(cli_image, "_run_commands_with_slurm_cluster", _fake_run_with_slurm_cluster)
     monkeypatch.setattr(cli_image, "tqdm", lambda iterable, total=None: iterable)
 
     result = runner.invoke(
@@ -343,24 +392,24 @@ def test_predict_batch_submits_sbatch_jobs(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert len(calls) == 2
-    first_cmd, first_check = calls[0]
-    second_cmd, second_check = calls[1]
-    assert first_check is True
-    assert second_check is True
-    assert first_cmd[0] == "sbatch"
-    assert second_cmd[0] == "sbatch"
-    assert "--wrap" in first_cmd
-    assert "--wrap" in second_cmd
+    assert captured["cores_per_task"] == 1
+    assert captured["node_cores"] == 95
+    assert captured["queue"] == "normal"
+    assert captured["project"] is None
+    assert captured["walltime"] == "02:00:00"
+    assert captured["memory"] == "16GB"
+    assert captured["n_jobs"] == 1
 
-    first_wrap = first_cmd[first_cmd.index("--wrap") + 1]
-    second_wrap = second_cmd[second_cmd.index("--wrap") + 1]
-    assert "almasim image predict-single" in first_wrap
-    assert "almasim image predict-single" in second_wrap
-    assert str(first_model) in first_wrap
-    assert str(second_model) in second_wrap
-    assert str(first_model.parent / f"{first_ms.name}.predicted") in first_wrap
-    assert str(second_model.parent / f"{second_ms.name}.predicted") in second_wrap
+    commands = captured["commands"]
+    assert len(commands) == 2
+    first_cmd = commands[0][1]
+    second_cmd = commands[1][1]
+    assert first_cmd[:3] == ["almasim", "image", "predict-single"]
+    assert second_cmd[:3] == ["almasim", "image", "predict-single"]
+    assert str(first_model) in first_cmd
+    assert str(second_model) in second_cmd
+    assert str(first_model.parent / f"{first_ms.name}.predicted") in first_cmd
+    assert str(second_model.parent / f"{second_ms.name}.predicted") in second_cmd
 
 
 @pytest.mark.unit
