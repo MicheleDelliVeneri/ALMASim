@@ -167,7 +167,11 @@ class SimulationParams:
         ms_save_mode: str = "msv2",
         imaging_algorithm: str = "legacy",
     ) -> "SimulationParams":
-        """Build :class:`SimulationParams` from explicit values."""
+        """Build :class:`SimulationParams` from explicit values.
+
+        ``n_pix`` and ``n_channels`` may be ``None`` to allow downstream simulation
+        stages to derive suitable defaults from the observing configuration.
+        """
 
         def _normalize_path(path_like: Path | str) -> str:
             return os.path.expanduser(str(path_like))
