@@ -1,6 +1,7 @@
 """Simulation API endpoints."""
 
 import asyncio
+import os
 import uuid
 
 from database.config import get_db
@@ -107,7 +108,29 @@ async def create_simulation(
 
         # Use backend from params if provided, otherwise use default
         if params.compute_backend:
-            backend_config = params.compute_backend_config or {}
+            backend_config = dict(params.compute_backend_config or {})
+            if params.compute_backend.lower() == "slurm" and "log_directory" in backend_config:
+                raw_log_directory = backend_config["log_directory"]
+                if not isinstance(raw_log_directory, str):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="compute_backend_config.log_directory must be a string",
+                    )
+
+                safe_root = os.path.realpath(os.path.expanduser("~"))
+                resolved_log_directory = os.path.realpath(
+                    os.path.abspath(os.path.expanduser(raw_log_directory))
+                )
+                if os.path.commonpath([safe_root, resolved_log_directory]) != safe_root:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            "compute_backend_config.log_directory must be within "
+                            "the user's home directory"
+                        ),
+                    )
+                backend_config["log_directory"] = resolved_log_directory
+
             compute_backend = create_backend(params.compute_backend, **backend_config)
         else:
             compute_backend = default_backend
@@ -168,6 +191,8 @@ async def create_simulation(
             status="queued",
             message="Simulation queued successfully",
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
