@@ -1,6 +1,5 @@
 import json
 import subprocess
-import sys
 
 
 def get_changed_lines(file_path, base_ref="origin/main"):
