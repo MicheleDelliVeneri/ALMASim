@@ -243,10 +243,7 @@ def test_create_simulation_rejects_non_string_slurm_log_directory(client):
     response = client.post("/api/v1/simulations/", json=payload)
 
     assert response.status_code == 400
-    assert (
-        response.json()["detail"]
-        == "compute_backend_config.log_directory must be a string"
-    )
+    assert response.json()["detail"] == "compute_backend_config.log_directory must be a string"
 
 
 @pytest.mark.integration
