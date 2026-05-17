@@ -131,9 +131,7 @@ class SlurmDaskClusterSingleton:
             raise ValueError("log_directory must not be empty")
 
         safe_log_root = os.path.realpath(os.path.expanduser("~"))
-        log_directory = os.path.realpath(
-            os.path.abspath(os.path.expanduser(raw_log_directory))
-        )
+        log_directory = os.path.realpath(os.path.abspath(os.path.expanduser(raw_log_directory)))
 
         try:
             within_safe_root = os.path.commonpath([safe_log_root, log_directory]) == safe_log_root
