@@ -217,6 +217,34 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
 
 
 @pytest.mark.unit
+def test_compute_parameters_defaults_to_cwd_and_default_output(monkeypatch, tmp_path):
+    """compute-parameters should run without args using cwd and default output filename."""
+    monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
+
+    def _fake_compute(input_ms: Path) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "filename": [str(input_ms.resolve())],
+                "spectral_window_id": [0],
+                "reference_frequency": [100.0],
+                "fov_per_frequency": [10.0],
+                "max_baseline_size": [50.0],
+                "synthetized_beam_size": [1.0],
+            }
+        )
+
+    monkeypatch.setattr(cli_image, "compute_imaging_parameters", _fake_compute)
+
+    with runner.isolated_filesystem(temp_dir=str(tmp_path)):
+        Path("sample.cal").mkdir()
+        result = runner.invoke(cli.app, ["image", "compute-parameters"])
+
+    assert result.exit_code == 0
+    output_candidates = list(tmp_path.rglob("imaging_parameters.csv"))
+    assert output_candidates
+
+
+@pytest.mark.unit
 def test_run_commands_with_slurm_cluster_no_commands_is_noop(monkeypatch):
     """Slurm command runner should return immediately when no commands are provided."""
     called = {"create_backend": False}

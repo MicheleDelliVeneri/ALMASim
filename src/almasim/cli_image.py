@@ -35,9 +35,40 @@ def import_casacore_tables() -> Any:
 
 
 image_app = typer.Typer(
-    help="Data product batch imaging.",
+    help="Visibility-to-image and image-to-visibility commands.",
     no_args_is_help=True,
 )
+
+
+def _iter_ms_inputs(input_path: Path) -> list[Path]:
+    if input_path.is_dir() and input_path.name.endswith(".ms"):
+        return [input_path]
+    if input_path.is_dir():
+        return sorted(path for path in input_path.rglob("*.ms") if path.is_dir())
+    raise typer.BadParameter(f"Input path is not a MeasurementSet or MS folder: {input_path}")
+
+
+def _discover_models_for_ms(input_ms: Path, output_directory: Path) -> list[Path]:
+    model_root = output_directory / input_ms.stem
+    return sorted(model_root.glob("SPW-*/wsclean-model.fits"))
+
+
+def _predict_all_models_for_ms(input_ms: Path, output_directory: Path) -> list[Path]:
+    model_paths = _discover_models_for_ms(input_ms, output_directory)
+    output_mss: list[Path] = []
+    if not model_paths:
+        typer.echo(
+            f"[debug] missing model FITS, skipping MS: {input_ms}",
+            err=False,
+        )
+        return output_mss
+
+    for model_path in model_paths:
+        output_ms = model_path.parent / f"{input_ms.name}.predicted"
+        predict_from_model(input_ms=input_ms, model=model_path, output_ms=output_ms)
+        output_mss.append(output_ms)
+
+    return output_mss
 
 
 def _run_commands_with_slurm_cluster(
@@ -155,7 +186,7 @@ def imaging_parameter_to_command_arg(
     return cmd_args
 
 
-@image_app.command("ms-overview")
+@image_app.command("ms-overview", hidden=True)
 def derive_parameters(
     input_ms: Path = typer.Argument(
         ...,
@@ -170,8 +201,14 @@ def derive_parameters(
 
 @image_app.command("compute-parameters")
 def compute_parameters(
-    archive_folder: Path = typer.Argument(..., help="Processed MSs folder"),
-    output_metadata_file: Path = typer.Argument(..., help="Parameters csv file"),
+    archive_folder: Path = typer.Argument(
+        default=Path("."),
+        help="Processed MSs folder (default: current directory)",
+    ),
+    output_metadata_file: Path = typer.Argument(
+        default=Path("imaging_parameters.csv"),
+        help="Parameters CSV file (default: imaging_parameters.csv)",
+    ),
 ):
     mss = list(archive_folder.glob("*.cal"))
     if len(mss) == 0:
@@ -185,8 +222,8 @@ def compute_parameters(
     main_output.to_csv(output_metadata_file, index=False)
 
 
-@image_app.command("batch-image")
-def image_set(
+@image_app.command("image-from-ms")
+def image_from_ms(
     imaging_parameters: Path = typer.Argument(help="Imaging parameter file"),
     output_directory: Path = typer.Argument(help="Output directory path"),
     fov_fraction: float = typer.Option(
@@ -264,7 +301,113 @@ def image_set(
     )
 
 
-@image_app.command("predict-single")
+@image_app.command("batch-image", hidden=True)
+def image_set(
+    imaging_parameters: Path = typer.Argument(help="Imaging parameter file"),
+    output_directory: Path = typer.Argument(help="Output directory path"),
+    fov_fraction: float = typer.Option(
+        help="Fraction of the FOV to image",
+        default=1.5,
+        min=1e-6,
+    ),
+    beam_sampling: float = typer.Option(
+        help="Number of pixels to use to sample the synthetized beam. Could be fractional.",
+        default=8,
+        min=1e-6,
+    ),
+    num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
+    max_cores_per_node: int = typer.Option(
+        help="Number of cores per node. [Used to scale the memory usage of wsclean]",
+        default=95,
+        min=1,
+    ),
+    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
+    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
+    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
+    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    scheduler_host: str | None = typer.Option(
+        default=None,
+        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
+    ),
+    scheduler_interface: str | None = typer.Option(
+        default=None,
+        help="Scheduler/worker network interface (e.g. ib0, eth0)",
+    ),
+    task_timeout: float = typer.Option(
+        default=3600,
+        min=1,
+        help="Timeout in seconds for each worker-side command",
+    ),
+):
+    image_from_ms(
+        imaging_parameters=imaging_parameters,
+        output_directory=output_directory,
+        fov_fraction=fov_fraction,
+        beam_sampling=beam_sampling,
+        num_cores=num_cores,
+        max_cores_per_node=max_cores_per_node,
+        slurm_queue=slurm_queue,
+        slurm_project=slurm_project,
+        slurm_walltime=slurm_walltime,
+        slurm_memory=slurm_memory,
+        slurm_n_jobs=slurm_n_jobs,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+        task_timeout=task_timeout,
+    )
+
+
+@image_app.command("ms-from-image", hidden=True)
+def ms_from_image(
+    input_ms_or_folder: Path = typer.Argument(help="Single MS directory or folder of MSs"),
+    output_directory: Path = typer.Argument(help="Directory containing model FITS products"),
+    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
+    num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
+    max_cores_per_node: int = typer.Option(
+        help="Number of cores per node for SLURM worker resource accounting",
+        default=95,
+        min=1,
+    ),
+    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
+    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
+    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
+    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    scheduler_host: str | None = typer.Option(
+        default=None,
+        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
+    ),
+    scheduler_interface: str | None = typer.Option(
+        default=None,
+        help="Scheduler/worker network interface (e.g. ib0, eth0)",
+    ),
+    task_timeout: float = typer.Option(
+        default=3600,
+        min=1,
+        help="Timeout in seconds for each worker-side command",
+    ),
+):
+    from .cli_predict import ms_from_image as _predict_ms_from_image
+
+    _predict_ms_from_image(
+        input_ms_or_folder=input_ms_or_folder,
+        output_directory=output_directory,
+        use_slurm=use_slurm,
+        num_cores=num_cores,
+        max_cores_per_node=max_cores_per_node,
+        slurm_queue=slurm_queue,
+        slurm_project=slurm_project,
+        slurm_walltime=slurm_walltime,
+        slurm_memory=slurm_memory,
+        slurm_n_jobs=slurm_n_jobs,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+        task_timeout=task_timeout,
+    )
+
+
+@image_app.command("predict-single", hidden=True)
 def predict_single(
     input_ms: Path = typer.Argument(..., help="Input MS"),
     model: Path = typer.Argument(..., help="FITS model path"),
@@ -339,7 +482,7 @@ def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
     typer.echo(f"Wrote MODEL_DATA to: {output_ms}")
 
 
-@image_app.command("predict-batch")
+@image_app.command("predict-batch", hidden=True)
 def predict_batch(
     imaging_parameters: Path = typer.Argument(..., help="Imaging parameter file"),
     output_directory: Path = typer.Argument(..., help="Output directory path"),
@@ -395,10 +538,15 @@ def predict_batch(
         if use_slurm:
             label = input_filename.stem + f"_{spw_id}_predict"
             slurm_commands.append((label, predict_cmd))
-
         else:
-            cmd = predict_cmd
-            subprocess.run(cmd, check=True)
+            # Set up environment to prioritize system libraries for compatibility.
+            cmd_env = os.environ.copy()
+            ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
+            existing_ld = cmd_env.get("LD_LIBRARY_PATH", "")
+            if existing_ld:
+                ld_library_path = f"{ld_library_path}:{existing_ld}"
+            cmd_env["LD_LIBRARY_PATH"] = ld_library_path
+            subprocess.run(predict_cmd, check=True, env=cmd_env)
 
     if use_slurm:
         _run_commands_with_slurm_cluster(

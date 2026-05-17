@@ -408,6 +408,13 @@ def _calibrate_single_uid(
         f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
 
+    # Prioritize system libraries to avoid GLIBC version conflicts with spack binaries.
+    ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
+    existing_ld = env.get("LD_LIBRARY_PATH", "")
+    if existing_ld:
+        ld_library_path = f"{ld_library_path}:{existing_ld}"
+    env["LD_LIBRARY_PATH"] = ld_library_path
+
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -1083,7 +1090,7 @@ def products_download(
             typer.echo(f"  {calibrated_ms}")
 
 
-@products_app.command("extract")
+@products_app.command("extract", hidden=True)
 def products_extract(
     source_root: Path = typer.Option(
         default_output_path("downloads"),
@@ -1140,7 +1147,7 @@ def products_extract(
         raise typer.Exit(code=1)
 
 
-@products_app.command("unpack")
+@products_app.command("unpack", hidden=True)
 def products_unpack(
     input_root: Path = typer.Option(
         default_output_path("downloads"),
@@ -1243,7 +1250,7 @@ def products_unpack(
         typer.echo(f"  {raw_ms}")
 
 
-@products_app.command("calibrate")
+@products_app.command("calibrate", hidden=True)
 def products_calibrate(
     input_root: Path = typer.Option(
         default_output_path("downloads"),
