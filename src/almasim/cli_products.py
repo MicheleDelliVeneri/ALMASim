@@ -370,6 +370,7 @@ def _calibrate_single_uid(
     import os
     import subprocess
     import sys
+    from collections import deque
     from pathlib import Path as _Path
 
     # Point workers at the pre-downloaded CASA runtime data so they never try
@@ -407,17 +408,31 @@ def _calibrate_single_uid(
         f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
 
-    result = subprocess.run(
+    process = subprocess.Popen(
         cmd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
+        bufsize=1,
         cwd=str(project_root),
         env=env,
     )
-    if result.returncode != 0:
+
+    # Stream child output as it arrives so long CASA logs never accumulate in memory.
+    tail_lines: deque[str] = deque(maxlen=200)
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="", flush=True)
+        tail_lines.append(line.rstrip("\n"))
+
+    return_code = process.wait()
+    if return_code != 0:
+        tail_text = "\n".join(tail_lines)
         raise RuntimeError(
             f"Calibration failed for {asdm_uid}.\n"
-            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            f"Return code: {return_code}\n"
+            f"Last {len(tail_lines)} log lines:\n{tail_text}"
         )
 
     # Discover output paths produced by the subprocess.

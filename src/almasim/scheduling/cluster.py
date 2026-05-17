@@ -122,6 +122,17 @@ class SlurmDaskClusterSingleton:
     _instance: ClassVar[SlurmDaskClusterSingleton | None] = None
     _instance_lock: ClassVar[threading.Lock] = threading.Lock()
 
+    @staticmethod
+    def _resolve_safe_log_directory(raw_log_directory: Any) -> str:
+        """Resolve and validate that worker logs stay under the user's home directory."""
+        safe_log_root = os.path.realpath(os.path.expanduser("~"))
+        log_directory = os.path.realpath(
+            os.path.abspath(os.path.expanduser(str(raw_log_directory)))
+        )
+        if os.path.commonpath([safe_log_root, log_directory]) != safe_log_root:
+            raise ValueError("log_directory must be within the user's home directory")
+        return log_directory
+
     def __init__(
         self,
         queue: str,
@@ -171,7 +182,8 @@ class SlurmDaskClusterSingleton:
         self.project = project
 
         default_log_dir = os.path.join(os.path.expanduser("~"), "dask-worker-logs")
-        log_directory = cluster_kwargs.pop("log_directory", default_log_dir)
+        raw_log_directory = cluster_kwargs.pop("log_directory", default_log_dir)
+        log_directory = self._resolve_safe_log_directory(raw_log_directory)
         os.makedirs(log_directory, exist_ok=True)
 
         slurm_kwargs = {

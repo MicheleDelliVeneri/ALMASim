@@ -6,6 +6,7 @@ import tarfile
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 from typer.testing import CliRunner
 
 from almasim import cli, cli_clean, cli_metadata, cli_products
@@ -327,6 +328,119 @@ def test_products_calibrate_standalone(monkeypatch):
 
     assert result.exit_code == 0
     assert "Calibrated MS products: 1" in result.output
+
+
+def test_calibrate_single_uid_streams_logs_and_returns_expected_output(tmp_path, monkeypatch):
+    """Calibration worker should stream subprocess logs and return the expected split.cal path."""
+    captured: dict[str, object] = {}
+
+    class _FakeProcess:
+        def __init__(self):
+            self.stdout = iter(["first line\n", "second line\n"])
+
+        def wait(self):
+            return 0
+
+    def _fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return _FakeProcess()
+
+    monkeypatch.setenv("PYTHONPATH", "existing-path")
+    monkeypatch.setattr("subprocess.Popen", _fake_popen)
+
+    uid = "uid___A001_X1_X1"
+    output_root = tmp_path / "calibrated"
+    expected = output_root / f"{uid}.ms.split.cal"
+    expected.mkdir(parents=True)
+
+    outputs = cli_products._calibrate_single_uid(
+        input_root="/input",
+        raw_ms_root="/raw",
+        calibrated_output_root=str(output_root),
+        asdm_uid=uid,
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=True,
+        clean_intermediate=False,
+    )
+
+    assert outputs == [str(expected)]
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "--overwrite-outputs" in cmd
+    assert "--skip-casa-data-update" in cmd
+
+    kwargs = captured["kwargs"]
+    assert kwargs["cwd"].endswith("ALMASim")
+    assert "PYTHONPATH" in kwargs["env"]
+    assert kwargs["env"]["PYTHONPATH"].endswith(":existing-path")
+
+
+def test_calibrate_single_uid_uses_fallback_glob_when_expected_missing(tmp_path, monkeypatch):
+    """Calibration worker should discover split.cal outputs via glob when canonical path is absent."""
+
+    class _FakeProcess:
+        def __init__(self):
+            self.stdout = iter(["ok\n"])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _FakeProcess())
+
+    uid = "uid___A001_X1_X2"
+    output_root = tmp_path / "calibrated"
+    fallback = output_root / f"{uid}_extra.ms.split.cal"
+    fallback.mkdir(parents=True)
+
+    outputs = cli_products._calibrate_single_uid(
+        input_root="/input",
+        raw_ms_root="/raw",
+        calibrated_output_root=str(output_root),
+        asdm_uid=uid,
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=False,
+        clean_intermediate=False,
+    )
+
+    assert outputs == [str(fallback)]
+
+
+def test_calibrate_single_uid_raises_with_bounded_log_tail(tmp_path, monkeypatch):
+    """Calibration worker should include only the recent bounded tail on subprocess failure."""
+
+    class _FakeProcess:
+        def __init__(self):
+            self.stdout = iter([f"line-{idx}\n" for idx in range(205)])
+
+        def wait(self):
+            return 7
+
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _FakeProcess())
+
+    uid = "uid___A001_X1_X3"
+    output_root = tmp_path / "calibrated"
+    output_root.mkdir(parents=True)
+
+    with pytest.raises(RuntimeError, match="Calibration failed") as exc:
+        cli_products._calibrate_single_uid(
+            input_root="/input",
+            raw_ms_root="/raw",
+            calibrated_output_root=str(output_root),
+            asdm_uid=uid,
+            casa_data_root=None,
+            skip_casa_data_update=True,
+            overwrite=False,
+            clean_intermediate=False,
+        )
+
+    msg = str(exc.value)
+    assert "Return code: 7" in msg
+    assert "Last 200 log lines" in msg
+    assert "line-0" not in msg
+    assert "line-204" in msg
 
 
 def test_clean_passthrough_runs_wsclean(monkeypatch):
