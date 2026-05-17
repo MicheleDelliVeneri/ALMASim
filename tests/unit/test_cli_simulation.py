@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from types import SimpleNamespace
 
 import pandas as pd
@@ -148,3 +149,68 @@ def test_resolve_input_path_for_row_directory_match(tmp_path):
     resolved = cli_simulation._resolve_input_path_for_row(input_dir, row)
 
     assert resolved == matched.resolve()
+
+
+def test_simulation_wrapper_functions_delegate(monkeypatch):
+    """Top-level wrapper helpers should delegate to imported implementation symbols."""
+    import almasim
+    import almasim.services.compute as compute_mod
+
+    monkeypatch.setattr(compute_mod, "create_backend", lambda *args, **kwargs: (args, kwargs))
+    monkeypatch.setattr(almasim, "generate_clean_cube", lambda *args, **kwargs: "clean")
+    monkeypatch.setattr(almasim, "simulate_observation", lambda *args, **kwargs: "simulated")
+    monkeypatch.setattr(almasim, "export_results", lambda *args, **kwargs: "exported")
+
+    assert cli_simulation.create_backend("sync", n_workers=1) == (("sync",), {"n_workers": 1})
+    assert cli_simulation.generate_clean_cube() == "clean"
+    assert cli_simulation.simulate_observation() == "simulated"
+    assert cli_simulation.export_results() == "exported"
+
+
+def test_external_source_helpers_delegate(monkeypatch):
+    """External source helper accessors should reflect external_skymodel exports."""
+    fake_module = SimpleNamespace(
+        EXTERNAL_SOURCE_TYPES={"external-fits", "external-components"},
+        is_external_source_type=lambda value: value == "external-fits",
+    )
+    monkeypatch.setitem(sys.modules, "almasim.services.external_skymodel", fake_module)
+
+    assert cli_simulation._external_source_types() == ["external-components", "external-fits"]
+    assert cli_simulation._is_external_source_type("external-fits") is True
+    assert cli_simulation._is_external_source_type("point") is False
+
+
+def test_simulation_params_proxy_delegates_to_service_module(monkeypatch):
+    """SimulationParams proxy should delegate to services.simulation classmethod."""
+
+    class _DummySimulationParams:
+        @staticmethod
+        def from_metadata_row(*args, **kwargs):
+            return {"args": args, "kwargs": kwargs}
+
+    fake_module = SimpleNamespace(SimulationParams=_DummySimulationParams)
+    monkeypatch.setitem(sys.modules, "almasim.services.simulation", fake_module)
+
+    result = cli_simulation.SimulationParams.from_metadata_row("row", idx=1)
+    assert result["args"] == ("row",)
+    assert result["kwargs"] == {"idx": 1}
+
+
+def test_simulation_invalid_source_type_exits(tmp_path):
+    """Invalid source type should fail with exit code 2."""
+    metadata_path = _write_metadata_csv(tmp_path, [{"member_ous_uid": "uid://A"}])
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "simulation",
+            "run",
+            "--metadata-path",
+            metadata_path,
+            "--source-type",
+            "not-a-source",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--source-type must be one of" in result.output

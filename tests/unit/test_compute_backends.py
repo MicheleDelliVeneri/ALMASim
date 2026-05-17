@@ -495,6 +495,48 @@ def test_create_backend_slurm_raises_when_unavailable():
 
 
 @pytest.mark.unit
+def test_slurm_backend_submit_subcommand_raises_without_cluster_manager():
+    """submit_subcommand should fail if the backend has no cluster manager."""
+    from almasim.services.compute.slurm import SlurmBackend
+
+    backend = SlurmBackend.__new__(SlurmBackend)
+    backend._cluster_manager = None
+
+    with pytest.raises(RuntimeError, match="Dask cluster not initialized"):
+        backend.submit_subcommand(command=["echo", "hi"], cores=1)
+
+
+@pytest.mark.unit
+def test_slurm_backend_submit_subcommand_delegates_to_cluster_manager():
+    """submit_subcommand should pass through to singleton manager when available."""
+    from almasim.services.compute.slurm import SlurmBackend
+
+    backend = SlurmBackend.__new__(SlurmBackend)
+    manager = MagicMock()
+    manager.submit_subcommand.return_value = "future-object"
+    backend._cluster_manager = manager
+
+    result = backend.submit_subcommand(
+        command=["echo", "hi"],
+        cores=2,
+        cwd="/tmp",
+        env={"A": "1"},
+        timeout=3.0,
+        shell=False,
+    )
+
+    assert result == "future-object"
+    manager.submit_subcommand.assert_called_once_with(
+        command=["echo", "hi"],
+        cores=2,
+        cwd="/tmp",
+        env={"A": "1"},
+        timeout=3.0,
+        shell=False,
+    )
+
+
+@pytest.mark.unit
 def test_create_backend_kubernetes_raises_when_unavailable():
     """create_backend('kubernetes') raises when dask-kubernetes is not available."""
     import almasim.services.compute.kubernetes as k8s_mod
