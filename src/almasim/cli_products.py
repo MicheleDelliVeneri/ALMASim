@@ -361,19 +361,72 @@ def _calibrate_single_uid(
     overwrite: bool,
     clean_intermediate: bool,
 ) -> list[str]:
-    from .services.archive import create_calibrated_measurement_sets
+    """Run one UID's calibration in a fresh subprocess.
 
-    paths = create_calibrated_measurement_sets(
-        input_root=input_root,
-        raw_ms_root=raw_ms_root,
-        output_root=calibrated_output_root,
-        asdm_uid=asdm_uid,
-        casa_data_root=casa_data_root,
-        skip_casa_data_update=skip_casa_data_update,
-        overwrite=overwrite,
-        clean_intermediate=clean_intermediate,
+    CASA's calibrater tool maintains process-level global state that is not
+    reset between calls in the same Python process. Running as a subprocess
+    guarantees a clean CASA environment for every UID.
+    """
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path as _Path
+
+    # Point workers at the pre-downloaded CASA runtime data so they never try
+    # to download it themselves (compute nodes typically have no internet).
+    effective_casa_data = casa_data_root or str(_Path(calibrated_output_root) / ".casa-data")
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "almasim.cli",
+        "products",
+        "calibrate",
+        "--input-root",
+        input_root,
+        "--raw-ms-root",
+        raw_ms_root,
+        "--output-root",
+        calibrated_output_root,
+        "--asdm-uid",
+        asdm_uid,
+        "--postprocess-backend",
+        "sync",
+        "--casa-data-root",
+        effective_casa_data,
+        "--skip-casa-data-update",
+    ]
+    if overwrite:
+        cmd.append("--overwrite-outputs")
+
+    project_root = _Path(__file__).resolve().parents[2]
+    src_root = project_root / "src"
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
-    return [str(path) for path in paths]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=str(project_root),
+        env=env,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Calibration failed for {asdm_uid}.\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
+
+    # Discover output paths produced by the subprocess.
+    output_path = _Path(calibrated_output_root)
+    expected = output_path / f"{asdm_uid}.ms.split.cal"
+    if expected.is_dir():
+        return [str(expected)]
+    # Fallback: scan for any split.cal produced for this UID.
+    return [str(p) for p in output_path.glob(f"{asdm_uid}*.split.cal") if p.is_dir()]
 
 
 def _preflight_casa_data(
