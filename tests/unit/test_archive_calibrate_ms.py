@@ -19,12 +19,15 @@ import pytest
 # Functions that call `from casatools import ...` inside their body are tested
 # with explicit patch.dict(sys.modules) in each test.
 from almasim.services.archive.calibrate_ms import (
+    _find_input_casa_data,
     _is_relative_to,
     _parse_applycal_calls,
+    _prepare_casa_environment,
     _prepare_working_directory,
     _remove_tree_after_success,
     _safe_extract_tar,
     apply_delivered_calibration,
+    create_calibrated_measurement_sets,
     find_calibration_directory,
     find_raw_ms_directories,
     restore_calibrated_measurement_sets,
@@ -254,6 +257,70 @@ def test_parse_applycal_calls_ignores_non_applycal(tmp_path):
     assert len(calls) == 1
 
 
+@pytest.mark.unit
+def test_find_input_casa_data_returns_populated_runtime_dir(tmp_path):
+    """_find_input_casa_data should return the first populated .casa-data directory."""
+    input_root = tmp_path / "input"
+    candidate = input_root / "nested" / ".casa-data"
+    candidate.mkdir(parents=True)
+    (candidate / "readme.txt").write_text("ok")
+    (candidate / "geodetic").mkdir()
+
+    result = _find_input_casa_data(input_root)
+
+    assert result == candidate.resolve()
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+def test_prepare_casa_environment_honors_explicit_casa_data_root(mock_mkdtemp, tmp_path):
+    """Explicit casa_data_root should be used directly with an isolated workspace."""
+    input_root = tmp_path / "input"
+    output_root = tmp_path / "output"
+    explicit = tmp_path / "explicit-casa"
+    input_root.mkdir()
+    output_root.mkdir()
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    mock_mkdtemp.return_value = str(workspace)
+
+    casa_data, workspace_root = _prepare_casa_environment(input_root, output_root, explicit)
+
+    assert casa_data == explicit.resolve()
+    assert workspace_root == workspace
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.find_existing_casa_data")
+def test_prepare_casa_environment_falls_back_to_input_runtime_data(
+    mock_find_existing,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """When output/runtime data is missing, calibration should reuse populated input data."""
+    input_root = tmp_path / "input"
+    output_root = tmp_path / "output"
+    input_root.mkdir()
+    output_root.mkdir()
+
+    input_casa = input_root / "delivery" / ".casa-data"
+    input_casa.mkdir(parents=True)
+    (input_casa / "readme.txt").write_text("ok")
+    (input_casa / "geodetic").mkdir()
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    mock_mkdtemp.return_value = str(workspace)
+    mock_find_existing.return_value = output_root / ".casa-data"
+
+    casa_data, workspace_root = _prepare_casa_environment(input_root, output_root, None)
+
+    assert casa_data == input_casa.resolve()
+    assert workspace_root == workspace
+
+
 # ===========================================================================
 # _is_relative_to
 # ===========================================================================
@@ -374,14 +441,19 @@ def test_apply_delivered_calibration_calls_applycal(tmp_path):
     working_dir = tmp_path / "working"
 
     mock_applycal = MagicMock()
+    mock_clearcal = MagicMock()
 
     with patch(
         "almasim.services.archive.calibrate_ms._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
-        result = apply_delivered_calibration(mock_applycal, raw_ms, cal_dir, working_dir)
+        result = apply_delivered_calibration(
+            mock_applycal, mock_clearcal, raw_ms, cal_dir, working_dir
+        )
 
+    mock_clearcal.assert_called_once()
     mock_applycal.assert_called_once()
+    assert mock_applycal.call_args.kwargs["flagbackup"] is False
     assert result.name == f"{uid}.ms"
 
 
@@ -394,7 +466,7 @@ def test_apply_delivered_calibration_missing_calapply_raises(tmp_path):
     cal_dir.mkdir()
     working_dir = tmp_path / "working"
     with pytest.raises(RuntimeError, match="Cannot find calibration apply file"):
-        apply_delivered_calibration(MagicMock(), raw_ms, cal_dir, working_dir)
+        apply_delivered_calibration(MagicMock(), MagicMock(), raw_ms, cal_dir, working_dir)
 
 
 @pytest.mark.unit
@@ -406,16 +478,51 @@ def test_apply_delivered_calibration_emits_log(tmp_path):
     working_dir = tmp_path / "working"
     messages = []
     mock_applycal = MagicMock()
+    mock_clearcal = MagicMock()
 
     with patch(
         "almasim.services.archive.calibrate_ms._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
         apply_delivered_calibration(
-            mock_applycal, raw_ms, cal_dir, working_dir, logger_fn=messages.append
+            mock_applycal,
+            mock_clearcal,
+            raw_ms,
+            cal_dir,
+            working_dir,
+            logger_fn=messages.append,
         )
 
     assert any("Applying" in m for m in messages)
+
+
+@pytest.mark.unit
+def test_apply_delivered_calibration_resolves_relative_callib(tmp_path):
+    """Relative callib paths in delivered applycal should be resolved under working_dir."""
+    uid = "uid___A001_X1_X1"
+    raw_ms = _make_raw_ms(tmp_path / "raw", uid)
+    cal_dir = tmp_path / "calibration"
+    cal_dir.mkdir(parents=True)
+    (cal_dir / f"{uid}.ms.calapply.txt").write_text(
+        'applycal(vis="x.ms", gaintable=["g.gcal"], callib="cal/chain.callib")\n'
+    )
+    working_dir = tmp_path / "working"
+
+    mock_applycal = MagicMock()
+    with patch(
+        "almasim.services.archive.calibrate_ms._normalize_intent",
+        side_effect=lambda intent, ms_path: intent,
+    ):
+        apply_delivered_calibration(
+            mock_applycal,
+            MagicMock(),
+            raw_ms,
+            cal_dir,
+            working_dir,
+        )
+
+    kwargs = mock_applycal.call_args.kwargs
+    assert kwargs["callib"] == str(working_dir / "cal/chain.callib")
 
 
 # ===========================================================================
@@ -546,3 +653,233 @@ def test_restore_calibrated_measurement_sets_delegates(mock_create, tmp_path):
     )
     mock_create.assert_called_once()
     assert results == [tmp_path / "result.ms"]
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_create_calibrated_measurement_sets_uses_temp_workspace_when_no_casa_root(
+    mock_apply,
+    mock_split,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """Calibration should avoid writing CASA scratch under the shared output tree by default."""
+    input_root = tmp_path / "input"
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    input_root.mkdir()
+    raw_ms_root.mkdir()
+    output_root.mkdir()
+
+    raw_ms = raw_ms_root / "uid___A001_X1_X1.ms"
+    raw_ms.mkdir()
+    cal_dir = input_root / "calibration"
+    cal_dir.mkdir()
+    (cal_dir / f"{raw_ms.name}.calapply.txt").write_text('applycal(vis="x")\n')
+
+    mock_find_raw.return_value = [raw_ms]
+    mock_find_cal.return_value = cal_dir
+    mock_apply.return_value = raw_ms
+    mock_split.return_value = output_root / f"{raw_ms.name}.split.cal"
+
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+
+    fake_casatasks = MagicMock()
+    fake_casatasks.applycal = mock_apply
+    fake_casatasks.clearcal = MagicMock()
+    fake_casatasks.mstransform = MagicMock()
+
+    with patch.dict(sys.modules, {"casatasks": fake_casatasks}):
+        results = create_calibrated_measurement_sets(
+            input_root,
+            raw_ms_root,
+            output_root,
+            skip_casa_data_update=True,
+        )
+
+    mock_configure_casa.assert_called_once()
+    assert mock_configure_casa.call_args.kwargs["workspace_root"] == scratch_root
+    assert results == [output_root / f"{raw_ms.name}.split.cal"]
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_create_calibrated_measurement_sets_reuses_preflighted_output_casa_data(
+    mock_apply,
+    mock_split,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """Slurm preflighted CASA data under the output root should be reused, not recreated."""
+    input_root = tmp_path / "input"
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    input_root.mkdir()
+    raw_ms_root.mkdir()
+    output_root.mkdir()
+    (output_root / ".casa-data").mkdir()
+    (output_root / ".casa-data" / "readme.txt").write_text("data")
+    (output_root / ".casa-data" / "geodetic").mkdir()
+
+    raw_ms = raw_ms_root / "uid___A001_X1_X1.ms"
+    raw_ms.mkdir()
+    cal_dir = input_root / "calibration"
+    cal_dir.mkdir()
+    (cal_dir / f"{raw_ms.name}.calapply.txt").write_text('applycal(vis="x")\n')
+
+    mock_find_raw.return_value = [raw_ms]
+    mock_find_cal.return_value = cal_dir
+    mock_apply.return_value = raw_ms
+    mock_split.return_value = output_root / f"{raw_ms.name}.split.cal"
+
+    fake_casatasks = MagicMock()
+    fake_casatasks.applycal = mock_apply
+    fake_casatasks.clearcal = MagicMock()
+    fake_casatasks.mstransform = MagicMock()
+
+    scratch_root = tmp_path / "scratch"
+    mock_mkdtemp.return_value = str(scratch_root)
+
+    with patch.dict(sys.modules, {"casatasks": fake_casatasks}):
+        results = create_calibrated_measurement_sets(
+            input_root,
+            raw_ms_root,
+            output_root,
+            skip_casa_data_update=True,
+        )
+
+    mock_mkdtemp.assert_called_once_with(prefix="almasim-casa-")
+    mock_configure_casa.assert_called_once()
+    assert mock_configure_casa.call_args.kwargs["workspace_root"] == scratch_root
+    assert mock_ensure_casa.call_args.args[0] == output_root / ".casa-data"
+    assert results == [output_root / f"{raw_ms.name}.split.cal"]
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.shutil.rmtree")
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+def test_create_calibrated_measurement_sets_cleans_workspace_on_failure(
+    mock_find_raw,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    mock_rmtree,
+    tmp_path,
+):
+    """Temporary workspace should be removed in finally even when setup fails."""
+    input_root = tmp_path / "input"
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    input_root.mkdir()
+    raw_ms_root.mkdir()
+    output_root.mkdir()
+
+    mock_find_raw.return_value = []
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+    mock_ensure_casa.side_effect = RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        create_calibrated_measurement_sets(
+            input_root,
+            raw_ms_root,
+            output_root,
+            skip_casa_data_update=False,
+        )
+
+    mock_configure_casa.assert_called_once()
+    mock_rmtree.assert_any_call(scratch_root, ignore_errors=True)
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms._remove_tree_after_success")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_create_calibrated_measurement_sets_cleans_intermediate_paths(
+    mock_apply,
+    mock_split,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_remove_tree,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """Successful clean_intermediate mode should request cleanup of raw/working/original roots."""
+    input_root = tmp_path / "input"
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    original_data_root = tmp_path / "original"
+    input_root.mkdir()
+    raw_ms_root.mkdir()
+    output_root.mkdir()
+    original_data_root.mkdir()
+
+    raw_ms = raw_ms_root / "uid___A001_X1_X1.ms"
+    raw_ms.mkdir()
+    cal_dir = input_root / "calibration"
+    cal_dir.mkdir()
+    (cal_dir / f"{raw_ms.name}.calapply.txt").write_text('applycal(vis="x")\n')
+
+    mock_find_raw.return_value = [raw_ms]
+    mock_find_cal.return_value = cal_dir
+    mock_apply.return_value = raw_ms
+    split_output = output_root / f"{raw_ms.name}.split.cal"
+    mock_split.return_value = split_output
+
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+
+    fake_casatasks = MagicMock()
+    fake_casatasks.applycal = mock_apply
+    fake_casatasks.clearcal = MagicMock()
+    fake_casatasks.mstransform = MagicMock()
+
+    with patch.dict(sys.modules, {"casatasks": fake_casatasks}):
+        results = create_calibrated_measurement_sets(
+            input_root,
+            raw_ms_root,
+            output_root,
+            clean_intermediate=True,
+            original_data_root=original_data_root,
+            skip_casa_data_update=True,
+        )
+
+    assert results == [split_output]
+    cleanup_targets = [call.args[0] for call in mock_remove_tree.call_args_list]
+    assert raw_ms_root in cleanup_targets
+    assert output_root / "working" in cleanup_targets
+    assert original_data_root in cleanup_targets

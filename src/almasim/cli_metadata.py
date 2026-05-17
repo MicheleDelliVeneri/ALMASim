@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -13,14 +14,6 @@ from .cli_shared import (
     validate_date_range,
     validate_range,
 )
-from .services.metadata.storage import save_dataframe_csv
-from .services.metadata.tap import (
-    ALL_COLUMNS,
-    ExclusionFilters,
-    InclusionFilters,
-    query_metadata_by_science,
-    query_products,
-)
 
 metadata_app = typer.Typer(
     help="Metadata query commands.",
@@ -28,9 +21,42 @@ metadata_app = typer.Typer(
 )
 
 
+@lru_cache(maxsize=1)
+def _tap_contract() -> dict[str, Any]:
+    from .services.metadata.tap import (
+        ALL_COLUMNS,
+        ExclusionFilters,
+        InclusionFilters,
+        query_metadata_by_science,
+        query_products,
+    )
+
+    return {
+        "ALL_COLUMNS": ALL_COLUMNS,
+        "ExclusionFilters": ExclusionFilters,
+        "InclusionFilters": InclusionFilters,
+        "query_metadata_by_science": query_metadata_by_science,
+        "query_products": query_products,
+    }
+
+
+def save_dataframe_csv(*args, **kwargs):
+    from .services.metadata.storage import save_dataframe_csv as _save_dataframe_csv
+
+    return _save_dataframe_csv(*args, **kwargs)
+
+
+def query_metadata_by_science(*args, **kwargs):
+    return _tap_contract()["query_metadata_by_science"](*args, **kwargs)
+
+
+def query_products(*args, **kwargs):
+    return _tap_contract()["query_products"](*args, **kwargs)
+
+
 def _build_query_summary(
-    include: InclusionFilters,
-    exclude: ExclusionFilters,
+    include: Any,
+    exclude: Any,
     visible_columns: Optional[List[str]],
     limit: Optional[int],
 ) -> str:
@@ -244,6 +270,11 @@ def metadata_query(
     ),
 ) -> None:
     """Query ALMA metadata from TAP and save normalized CSV results."""
+    tap = _tap_contract()
+    all_columns = tap["ALL_COLUMNS"]
+    inclusion_filters = tap["InclusionFilters"]
+    exclusion_filters = tap["ExclusionFilters"]
+
     science_keywords = split_csv_values(science_keyword)
     scientific_categories = split_csv_values(scientific_category)
     array_types = split_csv_values(array_type)
@@ -268,13 +299,13 @@ def metadata_query(
         )
         raise typer.Exit(code=2)
 
-    invalid_columns = [column for column in (output_columns or []) if column not in ALL_COLUMNS]
+    invalid_columns = [column for column in (output_columns or []) if column not in all_columns]
     if invalid_columns:
         typer.echo(
             "Invalid --visible-column values: " + ", ".join(invalid_columns) + ".",
             err=True,
         )
-        typer.echo("Allowed columns: " + ", ".join(ALL_COLUMNS), err=True)
+        typer.echo("Allowed columns: " + ", ".join(all_columns), err=True)
         raise typer.Exit(code=2)
 
     angular_resolution_range = validate_range(
@@ -300,7 +331,7 @@ def metadata_query(
 
     proposal_id_prefix = [f"{2012 + cycle}." for cycle in cycles] if cycles else None
 
-    include = InclusionFilters(
+    include = inclusion_filters(
         science_keyword=science_keywords,
         scientific_category=scientific_categories,
         band=band,
@@ -320,7 +351,7 @@ def metadata_query(
         science_only=science_only,
         exclude_mosaic=exclude_mosaic,
     )
-    exclude = ExclusionFilters(
+    exclude = exclusion_filters(
         science_keyword=exclude_science_keywords,
         scientific_category=exclude_scientific_categories,
         source_name=exclude_source_names,

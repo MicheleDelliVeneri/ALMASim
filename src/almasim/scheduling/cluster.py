@@ -122,6 +122,26 @@ class SlurmDaskClusterSingleton:
     _instance: ClassVar[SlurmDaskClusterSingleton | None] = None
     _instance_lock: ClassVar[threading.Lock] = threading.Lock()
 
+    @staticmethod
+    def _resolve_safe_log_directory(raw_log_directory: Any) -> str:
+        """Resolve and validate that worker logs stay under the user's home directory."""
+        if not isinstance(raw_log_directory, str):
+            raise ValueError("log_directory must be a string")
+        if not raw_log_directory.strip():
+            raise ValueError("log_directory must not be empty")
+
+        safe_log_root = os.path.realpath(os.path.expanduser("~"))
+        log_directory = os.path.realpath(os.path.abspath(os.path.expanduser(raw_log_directory)))
+
+        try:
+            within_safe_root = os.path.commonpath([safe_log_root, log_directory]) == safe_log_root
+        except ValueError as exc:
+            raise ValueError("log_directory is invalid") from exc
+
+        if not within_safe_root:
+            raise ValueError("log_directory must be within the user's home directory")
+        return log_directory
+
     def __init__(
         self,
         queue: str,
@@ -170,6 +190,11 @@ class SlurmDaskClusterSingleton:
         self.n_jobs = n_jobs
         self.project = project
 
+        default_log_dir = os.path.join(os.path.expanduser("~"), "dask-worker-logs")
+        raw_log_directory = cluster_kwargs.pop("log_directory", default_log_dir)
+        log_directory = self._resolve_safe_log_directory(raw_log_directory)
+        os.makedirs(log_directory, exist_ok=True)
+
         slurm_kwargs = {
             "queue": queue,
             "cores": node_cores,
@@ -179,6 +204,7 @@ class SlurmDaskClusterSingleton:
             "worker_extra_args": worker_extra_args,
             "job_script_prologue": job_script_prologue,
             "scheduler_options": scheduler_options,
+            "log_directory": log_directory,
             **cluster_kwargs,
         }
         if scheduler_interface:

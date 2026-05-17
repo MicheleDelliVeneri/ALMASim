@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -214,6 +214,96 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
     saved = pd.read_csv(out_csv)
     assert len(saved) == 2
     assert sorted(Path(f).name for f in saved["filename"].tolist()) == ["first.cal", "second.cal"]
+
+
+@pytest.mark.unit
+def test_run_commands_with_slurm_cluster_no_commands_is_noop(monkeypatch):
+    """Slurm command runner should return immediately when no commands are provided."""
+    called = {"create_backend": False}
+
+    def _fake_create_backend(*args, **kwargs):
+        del args, kwargs
+        called["create_backend"] = True
+        raise AssertionError("create_backend should not be called for an empty command list")
+
+    monkeypatch.setattr("almasim.services.compute.create_backend", _fake_create_backend)
+
+    cli_image._run_commands_with_slurm_cluster(
+        commands=[],
+        cores_per_task=1,
+        node_cores=2,
+        queue="normal",
+        project=None,
+        walltime="00:10:00",
+        memory="2GB",
+        n_jobs=1,
+        scheduler_host=None,
+        scheduler_interface=None,
+        task_timeout=None,
+    )
+
+    assert called["create_backend"] is False
+
+
+@pytest.mark.unit
+def test_predict_from_model_exits_when_output_exists(tmp_path):
+    """predict_from_model should fail fast when the output MS already exists."""
+    input_ms = tmp_path / "input.ms"
+    output_ms = tmp_path / "output.ms"
+    model = tmp_path / "model.fits"
+    input_ms.mkdir()
+    output_ms.mkdir()
+    model.write_text("dummy", encoding="utf-8")
+
+    with pytest.raises(typer.Exit) as exc:
+        cli_image.predict_from_model(input_ms=input_ms, model=model, output_ms=output_ms)
+
+    assert exc.value.exit_code == 1
+
+
+@pytest.mark.unit
+def test_run_commands_with_slurm_cluster_forwards_scheduler_interface(monkeypatch):
+    """Slurm command runner should pass scheduler_interface to backend creation."""
+    captured: dict[str, object] = {}
+
+    class _Future:
+        def result(self):
+            return SimpleNamespace(returncode=0, stderr="")
+
+    class _Backend:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return None
+
+        def submit_subcommand(self, **kwargs):
+            captured["submit_kwargs"] = kwargs
+            return _Future()
+
+    def _fake_create_backend(*args, **kwargs):
+        captured["create_args"] = args
+        captured["create_kwargs"] = kwargs
+        return _Backend()
+
+    monkeypatch.setattr("almasim.services.compute.create_backend", _fake_create_backend)
+    monkeypatch.setattr(cli_image, "tqdm", lambda iterable, **kwargs: iterable)
+
+    cli_image._run_commands_with_slurm_cluster(
+        commands=[("job-1", ["echo", "ok"])],
+        cores_per_task=2,
+        node_cores=8,
+        queue="normal",
+        project=None,
+        walltime="00:10:00",
+        memory="4GB",
+        n_jobs=1,
+        scheduler_host="headnode",
+        scheduler_interface="ib0",
+        task_timeout=10.0,
+    )
+
+    assert captured["create_kwargs"]["scheduler_interface"] == "ib0"
 
 
 @pytest.mark.unit

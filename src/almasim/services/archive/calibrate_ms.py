@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import tarfile
+import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -22,6 +23,7 @@ from .unpack_ms import (
     configure_casa_environment,
     ensure_casa_runtime_data,
     find_existing_casa_data,
+    has_casa_runtime_data,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,7 +66,7 @@ def find_calibration_directory(
             "Found more than one calibration directory. "
             "Pass asdm_uid to select a specific execution block."
         )
-    return sorted(candidates)[0]
+    return min(candidates)
 
 
 def find_raw_ms_directories(
@@ -90,6 +92,37 @@ def find_raw_ms_directories(
         raise RuntimeError(f"No raw MS named {asdm_uid}.ms found under {root}")
 
     return sorted(raw_mss)
+
+
+def _find_input_casa_data(input_path: Path) -> Path | None:
+    """Return the first populated CASA runtime data directory under ``input_path``."""
+    for candidate in input_path.rglob(".casa-data"):
+        if candidate.is_dir() and has_casa_runtime_data(candidate):
+            return candidate.resolve()
+    return None
+
+
+def _prepare_casa_environment(
+    input_path: Path,
+    output_path: Path,
+    casa_data_root: str | os.PathLike[str] | None,
+) -> tuple[Path, Path | None]:
+    """Choose CASA runtime data and an isolated writable workspace for calibration jobs."""
+    workspace_root = Path(tempfile.mkdtemp(prefix="almasim-casa-"))
+
+    if casa_data_root is not None:
+        resolved = Path(casa_data_root).expanduser().resolve()
+        return resolved, workspace_root
+
+    existing = find_existing_casa_data(input_path, output_path)
+    if has_casa_runtime_data(existing):
+        return existing.resolve(), workspace_root
+
+    existing = _find_input_casa_data(input_path)
+    if existing is not None:
+        return existing, workspace_root
+
+    return workspace_root / ".casa-data", workspace_root
 
 
 def _parse_applycal_calls(calapply_path: Path) -> list[dict[str, Any]]:
@@ -178,6 +211,7 @@ def _prepare_working_directory(
 
 def apply_delivered_calibration(
     applycal: Callable[..., object],
+    clearcal: Callable[..., object] | None,
     raw_ms: Path,
     calibration_dir: Path,
     working_dir: Path,
@@ -188,21 +222,28 @@ def apply_delivered_calibration(
     working_ms = _prepare_working_directory(
         raw_ms, calibration_dir, working_dir, overwrite=overwrite
     )
+    if clearcal is not None:
+        clearcal(vis=str(working_ms), addmodel=False)
     calapply_path = calibration_dir / f"{working_ms.name}.calapply.txt"
     if not calapply_path.is_file():
         raise RuntimeError(f"Cannot find calibration apply file: {calapply_path}")
 
     calls = _parse_applycal_calls(calapply_path)
     _emit(logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}")
-    current_dir = Path.cwd()
-    try:
-        os.chdir(working_dir)
-        for kwargs in calls:
-            kwargs["vis"] = working_ms.name
-            kwargs["intent"] = _normalize_intent(str(kwargs.get("intent", "")), working_ms)
-            applycal(**kwargs)
-    finally:
-        os.chdir(current_dir)
+    for kwargs in calls:
+        kwargs["vis"] = str(working_ms)
+        if "gaintable" in kwargs:
+            kwargs["gaintable"] = [
+                str(working_dir / tbl) if not Path(tbl).is_absolute() else tbl
+                for tbl in kwargs["gaintable"]
+            ]
+        if "callib" in kwargs and kwargs["callib"] and not Path(kwargs["callib"]).is_absolute():
+            kwargs["callib"] = str(working_dir / kwargs["callib"])
+        kwargs["intent"] = _normalize_intent(str(kwargs.get("intent", "")), working_ms)
+        # Flag backup files on shared storage are not needed for this disposable working copy
+        # and can fail under heavy concurrent Slurm I/O.
+        kwargs["flagbackup"] = False
+        applycal(**kwargs)
 
     return working_ms
 
@@ -308,42 +349,47 @@ def create_calibrated_measurement_sets(
     output_path = Path(output_root).expanduser().resolve()
     raw_mss = find_raw_ms_directories(raw_ms_root, asdm_uid)
 
-    casa_data = find_existing_casa_data(input_path, output_path, casa_data_root)
-    configure_casa_environment(output_path, casa_data)
-    ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
+    casa_data, workspace_root = _prepare_casa_environment(input_path, output_path, casa_data_root)
+    try:
+        configure_casa_environment(output_path, casa_data, workspace_root=workspace_root)
+        ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
-    from casatasks import applycal, mstransform
+        from casatasks import applycal, clearcal, mstransform
 
-    calibrated_mss = []
-    for raw_ms in raw_mss:
-        uid = raw_ms.name.removesuffix(".ms")
-        calibration_dir = find_calibration_directory(input_path, uid)
-        working_ms = apply_delivered_calibration(
-            applycal,
-            raw_ms,
-            calibration_dir,
-            output_path / "working" / f"{uid}.calibration",
-            overwrite=overwrite,
-            logger_fn=logger_fn,
-        )
-        calibrated_mss.append(
-            split_calibrated_science_ms(
-                mstransform,
-                working_ms,
-                output_path,
+        calibrated_mss = []
+        for raw_ms in raw_mss:
+            uid = raw_ms.name.removesuffix(".ms")
+            calibration_dir = find_calibration_directory(input_path, uid)
+            working_ms = apply_delivered_calibration(
+                applycal,
+                clearcal,
+                raw_ms,
+                calibration_dir,
+                output_path / "working" / f"{uid}.calibration",
                 overwrite=overwrite,
                 logger_fn=logger_fn,
             )
-        )
+            calibrated_mss.append(
+                split_calibrated_science_ms(
+                    mstransform,
+                    working_ms,
+                    output_path,
+                    overwrite=overwrite,
+                    logger_fn=logger_fn,
+                )
+            )
 
-    if clean_intermediate:
-        protected = [*calibrated_mss, output_path]
-        _remove_tree_after_success(raw_ms_root, protected, logger_fn=logger_fn)
-        _remove_tree_after_success(output_path / "working", protected, logger_fn=logger_fn)
-        if original_data_root is not None:
-            _remove_tree_after_success(original_data_root, protected, logger_fn=logger_fn)
+        if clean_intermediate:
+            protected = [*calibrated_mss, output_path]
+            _remove_tree_after_success(raw_ms_root, protected, logger_fn=logger_fn)
+            _remove_tree_after_success(output_path / "working", protected, logger_fn=logger_fn)
+            if original_data_root is not None:
+                _remove_tree_after_success(original_data_root, protected, logger_fn=logger_fn)
 
-    return calibrated_mss
+        return calibrated_mss
+    finally:
+        if workspace_root is not None:
+            shutil.rmtree(workspace_root, ignore_errors=True)
 
 
 def restore_calibrated_measurement_sets(

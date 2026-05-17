@@ -3,33 +3,110 @@
 from __future__ import annotations
 
 import tarfile
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from time import sleep
 from typing import Any, List, Optional
 
-import pandas as pd
 import typer
 from tqdm.auto import tqdm
 
 from .cli_shared import dedupe_keep_order, default_output_path, split_csv_values
-from .services.compute import create_backend
-from .services.download import (
-    MAX_PARALLEL_PER_MIRROR,
-    MAX_PARALLEL_TOTAL,
-    PRODUCT_TYPES,
-    download_products,
-    filter_products,
-    format_bytes,
-    load_products_csv,
-    resolve_products,
-    save_products_csv,
-)
+
+MAX_PARALLEL_PER_MIRROR = 10
+MAX_PARALLEL_TOTAL = 30
+PRODUCT_TYPES = {
+    "all",
+    "raw",
+    "calibration",
+    "scripts",
+    "weblog",
+    "qa_reports",
+    "auxiliary",
+    "cubes",
+    "continuum",
+    "fits",
+    "other",
+}
 
 products_app = typer.Typer(
     help="Data product resolution and download commands.",
     no_args_is_help=True,
 )
+
+
+@lru_cache(maxsize=1)
+def _download_contract() -> dict[str, Any]:
+    from .services.download import (
+        MAX_PARALLEL_PER_MIRROR as _MAX_PARALLEL_PER_MIRROR,
+    )
+    from .services.download import (
+        MAX_PARALLEL_TOTAL as _MAX_PARALLEL_TOTAL,
+    )
+    from .services.download import (
+        PRODUCT_TYPES as _PRODUCT_TYPES,
+    )
+    from .services.download import (
+        download_products as _download_products,
+    )
+    from .services.download import (
+        filter_products as _filter_products,
+    )
+    from .services.download import (
+        format_bytes as _format_bytes,
+    )
+    from .services.download import (
+        load_products_csv as _load_products_csv,
+    )
+    from .services.download import (
+        resolve_products as _resolve_products,
+    )
+    from .services.download import (
+        save_products_csv as _save_products_csv,
+    )
+
+    return {
+        "MAX_PARALLEL_PER_MIRROR": _MAX_PARALLEL_PER_MIRROR,
+        "MAX_PARALLEL_TOTAL": _MAX_PARALLEL_TOTAL,
+        "PRODUCT_TYPES": _PRODUCT_TYPES,
+        "download_products": _download_products,
+        "filter_products": _filter_products,
+        "format_bytes": _format_bytes,
+        "load_products_csv": _load_products_csv,
+        "resolve_products": _resolve_products,
+        "save_products_csv": _save_products_csv,
+    }
+
+
+def create_backend(*args, **kwargs):
+    from .services.compute import create_backend as _create_backend
+
+    return _create_backend(*args, **kwargs)
+
+
+def download_products(*args, **kwargs):
+    return _download_contract()["download_products"](*args, **kwargs)
+
+
+def filter_products(*args, **kwargs):
+    return _download_contract()["filter_products"](*args, **kwargs)
+
+
+def format_bytes(*args, **kwargs):
+    return _download_contract()["format_bytes"](*args, **kwargs)
+
+
+def load_products_csv(*args, **kwargs):
+    return _download_contract()["load_products_csv"](*args, **kwargs)
+
+
+def resolve_products(*args, **kwargs):
+    return _download_contract()["resolve_products"](*args, **kwargs)
+
+
+def save_products_csv(*args, **kwargs):
+    return _download_contract()["save_products_csv"](*args, **kwargs)
 
 
 def _future_status(future: Any) -> str:
@@ -162,6 +239,8 @@ def _read_member_uids_from_metadata(
     metadata_csv: Path,
     member_limit: Optional[int],
 ) -> list[str]:
+    import pandas as pd
+
     metadata = pd.read_csv(metadata_csv.expanduser().resolve())
     if "member_ous_uid" not in metadata.columns:
         typer.echo(
@@ -282,19 +361,108 @@ def _calibrate_single_uid(
     overwrite: bool,
     clean_intermediate: bool,
 ) -> list[str]:
-    from .services.archive import create_calibrated_measurement_sets
+    """Run one UID's calibration in a fresh subprocess.
 
-    paths = create_calibrated_measurement_sets(
-        input_root=input_root,
-        raw_ms_root=raw_ms_root,
-        output_root=calibrated_output_root,
-        asdm_uid=asdm_uid,
-        casa_data_root=casa_data_root,
-        skip_casa_data_update=skip_casa_data_update,
-        overwrite=overwrite,
-        clean_intermediate=clean_intermediate,
+    CASA's calibrater tool maintains process-level global state that is not
+    reset between calls in the same Python process. Running as a subprocess
+    guarantees a clean CASA environment for every UID.
+    """
+    import os
+    import subprocess
+    import sys
+    from collections import deque
+    from pathlib import Path as _Path
+
+    # Point workers at the pre-downloaded CASA runtime data so they never try
+    # to download it themselves (compute nodes typically have no internet).
+    effective_casa_data = casa_data_root or str(_Path(calibrated_output_root) / ".casa-data")
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "almasim.cli",
+        "products",
+        "calibrate",
+        "--input-root",
+        input_root,
+        "--raw-ms-root",
+        raw_ms_root,
+        "--output-root",
+        calibrated_output_root,
+        "--asdm-uid",
+        asdm_uid,
+        "--postprocess-backend",
+        "sync",
+        "--casa-data-root",
+        effective_casa_data,
+        "--skip-casa-data-update",
+    ]
+    if overwrite:
+        cmd.append("--overwrite-outputs")
+
+    project_root = _Path(__file__).resolve().parents[2]
+    src_root = project_root / "src"
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
-    return [str(path) for path in paths]
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+        bufsize=1,
+        cwd=str(project_root),
+        env=env,
+    )
+
+    # Stream child output as it arrives so long CASA logs never accumulate in memory.
+    tail_lines: deque[str] = deque(maxlen=200)
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="", flush=True)
+        tail_lines.append(line.rstrip("\n"))
+
+    return_code = process.wait()
+    if return_code != 0:
+        tail_text = "\n".join(tail_lines)
+        raise RuntimeError(
+            f"Calibration failed for {asdm_uid}.\n"
+            f"Return code: {return_code}\n"
+            f"Last {len(tail_lines)} log lines:\n{tail_text}"
+        )
+
+    # Discover output paths produced by the subprocess.
+    output_path = _Path(calibrated_output_root)
+    expected = output_path / f"{asdm_uid}.ms.split.cal"
+    if expected.is_dir():
+        return [str(expected)]
+    # Fallback: scan for any split.cal produced for this UID.
+    return [str(p) for p in output_path.glob(f"{asdm_uid}*.split.cal") if p.is_dir()]
+
+
+def _preflight_casa_data(
+    output_root: Path,
+    casa_data_root: Optional[Path],
+    skip_casa_data_update: bool,
+) -> None:
+    """Ensure CASA runtime data is populated on the master node before Slurm workers start.
+
+    Slurm compute nodes typically have no internet access, so the data must be
+    downloaded once from the submit node and written to a shared filesystem path
+    that all workers can read.
+    """
+    from .services.archive.unpack_ms import (
+        ensure_casa_runtime_data,
+        find_existing_casa_data,
+    )
+
+    casa_data = find_existing_casa_data(output_root, output_root, casa_data_root)
+    typer.echo(f"Preflight: ensuring CASA runtime data at {casa_data} …")
+    ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update)
 
 
 def _run_unpack_jobs(
@@ -344,6 +512,9 @@ def _run_unpack_jobs(
     if not effective_uids:
         typer.echo("No ASDM directories found to unpack.", err=True)
         raise typer.Exit(code=1)
+
+    _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
+    skip_casa_data_update = True  # workers reuse what master just populated
 
     with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
         unpack_task = backend.delayed(_unpack_single_uid)
@@ -428,6 +599,9 @@ def _run_calibrate_jobs(
     if not effective_uids:
         typer.echo("No raw MeasurementSets found to calibrate.", err=True)
         raise typer.Exit(code=1)
+
+    _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
+    skip_casa_data_update = True  # workers reuse what master just populated
 
     with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
         calibrate_task = backend.delayed(_calibrate_single_uid)
@@ -1023,6 +1197,15 @@ def products_unpack(
         min=1,
         help="Number of Slurm workers for post-processing.",
     ),
+    slurm_scheduler_host: Optional[str] = typer.Option(
+        None,
+        "--slurm-scheduler-host",
+        help=(
+            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
+            "Set this to an internal/HPC network address when the public hostname "
+            "is not reachable from compute nodes (e.g. 10.20.25.44)."
+        ),
+    ),
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
@@ -1048,6 +1231,7 @@ def products_unpack(
             "cores": slurm_cores,
             "memory": slurm_memory,
             "n_workers": slurm_workers,
+            **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
         },
         casa_data_root=casa_data_root,
         skip_casa_data_update=skip_casa_data_update,
@@ -1121,6 +1305,15 @@ def products_calibrate(
         min=1,
         help="Number of Slurm workers for post-processing.",
     ),
+    slurm_scheduler_host: Optional[str] = typer.Option(
+        None,
+        "--slurm-scheduler-host",
+        help=(
+            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
+            "Set this to an internal/HPC network address when the public hostname "
+            "is not reachable from compute nodes (e.g. 10.20.25.44)."
+        ),
+    ),
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
@@ -1152,6 +1345,7 @@ def products_calibrate(
             "cores": slurm_cores,
             "memory": slurm_memory,
             "n_workers": slurm_workers,
+            **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
         },
         casa_data_root=casa_data_root,
         skip_casa_data_update=skip_casa_data_update,

@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -15,8 +16,17 @@ try:
 
     BACKEND_AVAILABLE = True
 except ImportError:
-    BACKEND_AVAILABLE = False
-    app = None
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        backend_root = repo_root / "backend"
+        if str(backend_root) not in sys.path:
+            sys.path.insert(0, str(backend_root))
+        from app.main import app
+
+        BACKEND_AVAILABLE = True
+    except ImportError:
+        BACKEND_AVAILABLE = False
+        app = None
 
 
 @pytest.fixture
@@ -194,6 +204,62 @@ def test_create_simulation(client, temp_output_dir, main_dir, test_data_dir):
         assert "simulation_id" in data
         assert "status" in data
         assert data["status"] == "queued"
+
+
+def _minimal_simulation_payload() -> dict:
+    return {
+        "idx": 0,
+        "source_name": "test_source",
+        "member_ouid": "uid://A001/X1/X1",
+        "project_name": "test_project",
+        "ra": 0.0,
+        "dec": 0.0,
+        "band": 6.0,
+        "ang_res": 0.1,
+        "vel_res": 10.0,
+        "fov": 10.0,
+        "obs_date": "2020-01-01",
+        "pwv": 1.0,
+        "int_time": 1000.0,
+        "bandwidth": 2.0,
+        "freq": 100.0,
+        "freq_support": "U[99..101,0.1]",
+        "cont_sens": 0.1,
+        "antenna_array": "C43-1",
+        "source_type": "point",
+        "n_pix": 16,
+        "n_channels": 8,
+        "save_mode": "npz",
+    }
+
+
+@pytest.mark.integration
+def test_create_simulation_rejects_non_string_slurm_log_directory(client):
+    """Slurm backend log_directory must be a string."""
+    payload = _minimal_simulation_payload()
+    payload["compute_backend"] = "slurm"
+    payload["compute_backend_config"] = {"log_directory": 123}
+
+    response = client.post("/api/v1/simulations/", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "compute_backend_config.log_directory must be a string"
+
+
+@pytest.mark.integration
+def test_create_simulation_rejects_slurm_log_directory_outside_home(client):
+    """Slurm backend log_directory must remain under HOME."""
+    payload = _minimal_simulation_payload()
+    payload["compute_backend"] = "slurm"
+    payload["compute_backend_config"] = {"log_directory": "/tmp/outside-home"}
+
+    response = client.post("/api/v1/simulations/", json=payload)
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "compute_backend_config.log_directory must be within the user's home directory"
+    )
 
 
 @pytest.mark.integration

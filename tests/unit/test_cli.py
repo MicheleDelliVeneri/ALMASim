@@ -5,7 +5,10 @@ from __future__ import annotations
 import tarfile
 from types import SimpleNamespace
 
+import click
 import pandas as pd
+import pytest
+import typer
 from typer.testing import CliRunner
 
 from almasim import cli, cli_clean, cli_metadata, cli_products
@@ -258,6 +261,184 @@ def test_compute_jobs_with_progress_uses_async_and_gather(monkeypatch):
     assert results == [["raw1.ms"], ["raw2.ms"]]
 
 
+def test_products_wrapper_functions_delegate(monkeypatch):
+    """Thin wrapper helpers should delegate to the underlying contract/functions."""
+    import almasim.services.compute as compute_mod
+
+    monkeypatch.setattr(compute_mod, "create_backend", lambda *args, **kwargs: (args, kwargs))
+    monkeypatch.setattr(
+        cli_products,
+        "_download_contract",
+        lambda: {
+            "download_products": lambda *args, **kwargs: ("download", args, kwargs),
+            "filter_products": lambda *args, **kwargs: ("filter", args, kwargs),
+            "format_bytes": lambda *args, **kwargs: "fmt",
+            "load_products_csv": lambda *args, **kwargs: ["loaded"],
+            "resolve_products": lambda *args, **kwargs: ["resolved"],
+            "save_products_csv": lambda *args, **kwargs: "saved.csv",
+        },
+    )
+
+    assert cli_products.create_backend("slurm", n_workers=2) == (("slurm",), {"n_workers": 2})
+    assert cli_products.download_products(["x"], destination="/tmp")[0] == "download"
+    assert cli_products.filter_products([1], "all")[0] == "filter"
+    assert cli_products.format_bytes(123) == "fmt"
+    assert cli_products.load_products_csv("x.csv") == ["loaded"]
+    assert cli_products.resolve_products(["uid://A"]) == ["resolved"]
+    assert cli_products.save_products_csv([], "x.csv") == "saved.csv"
+
+
+def test_preflight_casa_data_uses_resolved_path(monkeypatch, tmp_path):
+    """Preflight should resolve CASA data path and pass skip flag through."""
+    captured: dict[str, object] = {}
+
+    def _fake_find_existing(input_root, output_root, casa_data_root):
+        del input_root, output_root, casa_data_root
+        return tmp_path / "resolved-casa"
+
+    def _fake_ensure(path, skip_update=False, logger_fn=None):
+        del logger_fn
+        captured["path"] = path
+        captured["skip_update"] = skip_update
+
+    import types
+
+    fake_unpack_mod = types.SimpleNamespace(
+        ensure_casa_runtime_data=_fake_ensure,
+        find_existing_casa_data=_fake_find_existing,
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "almasim.services.archive.unpack_ms",
+        fake_unpack_mod,
+    )
+
+    cli_products._preflight_casa_data(
+        output_root=tmp_path,
+        casa_data_root=None,
+        skip_casa_data_update=True,
+    )
+
+    assert captured["path"] == tmp_path / "resolved-casa"
+    assert captured["skip_update"] is True
+
+
+def test_run_unpack_jobs_slurm_exits_when_no_uids(monkeypatch, tmp_path):
+    """Slurm unpack should fail early when no ASDM inputs can be discovered."""
+    monkeypatch.setattr(cli_products, "_extract_asdm_uids_from_download_root", lambda *_: [])
+
+    with pytest.raises(typer.Exit):
+        cli_products._run_unpack_jobs(
+            input_root=tmp_path / "input",
+            output_root=tmp_path / "out",
+            asdm_uids=[],
+            postprocess_backend="slurm",
+            postprocess_backend_kwargs={},
+            casa_data_root=None,
+            skip_casa_data_update=False,
+            overwrite_outputs=False,
+        )
+
+
+def test_run_calibrate_jobs_slurm_rejects_clean_intermediate(tmp_path):
+    """Slurm calibrate should reject clean-intermediate mode."""
+    with pytest.raises(typer.Exit):
+        cli_products._run_calibrate_jobs(
+            input_root=tmp_path / "input",
+            raw_ms_root=tmp_path / "raw",
+            output_root=tmp_path / "out",
+            asdm_uids=["uid://A"],
+            postprocess_backend="slurm",
+            postprocess_backend_kwargs={},
+            casa_data_root=None,
+            skip_casa_data_update=False,
+            overwrite_outputs=False,
+            clean_intermediate=True,
+        )
+
+
+def test_run_unpack_jobs_slurm_preflights_and_submits(monkeypatch, tmp_path):
+    """Slurm unpack should preflight CASA data and submit one job per UID."""
+    captured: dict[str, object] = {}
+
+    class _Backend:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return None
+
+        def delayed(self, fn):
+            return lambda **kwargs: kwargs
+
+    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli_products, "create_backend", lambda *args, **kwargs: _Backend())
+
+    def _fake_compute_jobs_with_progress(**kwargs):
+        captured.update(kwargs)
+        return [["/tmp/raw-a.ms"]]
+
+    monkeypatch.setattr(
+        cli_products, "_compute_jobs_with_progress", _fake_compute_jobs_with_progress
+    )
+
+    outputs = cli_products._run_unpack_jobs(
+        input_root=tmp_path / "input",
+        output_root=tmp_path / "out",
+        asdm_uids=["uid://A"],
+        postprocess_backend="slurm",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=False,
+        overwrite_outputs=False,
+    )
+
+    assert outputs == ["/tmp/raw-a.ms"]
+    assert captured["job_uids"] == ["uid://A"]
+
+
+def test_run_calibrate_jobs_slurm_preflights_and_submits(monkeypatch, tmp_path):
+    """Slurm calibrate should preflight CASA data and submit one job per UID."""
+    captured: dict[str, object] = {}
+
+    class _Backend:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return None
+
+        def delayed(self, fn):
+            return lambda **kwargs: kwargs
+
+    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli_products, "create_backend", lambda *args, **kwargs: _Backend())
+
+    def _fake_compute_jobs_with_progress(**kwargs):
+        captured.update(kwargs)
+        return [["/tmp/cal-a.ms"]]
+
+    monkeypatch.setattr(
+        cli_products, "_compute_jobs_with_progress", _fake_compute_jobs_with_progress
+    )
+
+    outputs = cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=tmp_path / "out",
+        asdm_uids=["uid://A"],
+        postprocess_backend="slurm",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=False,
+        overwrite_outputs=False,
+        clean_intermediate=False,
+    )
+
+    assert outputs == ["/tmp/cal-a.ms"]
+    assert captured["job_uids"] == ["uid://A"]
+
+
 def test_products_extract_standalone(tmp_path):
     """Standalone extract should unpack tar archives from disk."""
     source_root = tmp_path / "downloads"
@@ -329,6 +510,121 @@ def test_products_calibrate_standalone(monkeypatch):
     assert "Calibrated MS products: 1" in result.output
 
 
+def test_calibrate_single_uid_streams_logs_and_returns_expected_output(tmp_path, monkeypatch):
+    """Calibration worker should stream subprocess logs and return the expected split.cal path."""
+    captured: dict[str, object] = {}
+
+    class _FakeProcess:
+        def __init__(self):
+            self.stdout = iter(["first line\n", "second line\n"])
+
+        def wait(self):
+            return 0
+
+    def _fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return _FakeProcess()
+
+    monkeypatch.setenv("PYTHONPATH", "existing-path")
+    monkeypatch.setattr("subprocess.Popen", _fake_popen)
+
+    uid = "uid___A001_X1_X1"
+    output_root = tmp_path / "calibrated"
+    expected = output_root / f"{uid}.ms.split.cal"
+    expected.mkdir(parents=True)
+
+    outputs = cli_products._calibrate_single_uid(
+        input_root="/input",
+        raw_ms_root="/raw",
+        calibrated_output_root=str(output_root),
+        asdm_uid=uid,
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=True,
+        clean_intermediate=False,
+    )
+
+    assert outputs == [str(expected)]
+    cmd = captured["cmd"]
+    assert isinstance(cmd, list)
+    assert "--overwrite-outputs" in cmd
+    assert "--skip-casa-data-update" in cmd
+
+    kwargs = captured["kwargs"]
+    assert kwargs["cwd"].endswith("ALMASim")
+    assert "PYTHONPATH" in kwargs["env"]
+    assert kwargs["env"]["PYTHONPATH"].endswith(":existing-path")
+
+
+def test_calibrate_single_uid_uses_fallback_glob_when_expected_missing(tmp_path, monkeypatch):
+    """Calibration worker should discover split.cal outputs via glob
+    when canonical path is absent.
+    """
+
+    class _FakeProcess:
+        def __init__(self):
+            self.stdout = iter(["ok\n"])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _FakeProcess())
+
+    uid = "uid___A001_X1_X2"
+    output_root = tmp_path / "calibrated"
+    fallback = output_root / f"{uid}_extra.ms.split.cal"
+    fallback.mkdir(parents=True)
+
+    outputs = cli_products._calibrate_single_uid(
+        input_root="/input",
+        raw_ms_root="/raw",
+        calibrated_output_root=str(output_root),
+        asdm_uid=uid,
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=False,
+        clean_intermediate=False,
+    )
+
+    assert outputs == [str(fallback)]
+
+
+def test_calibrate_single_uid_raises_with_bounded_log_tail(tmp_path, monkeypatch):
+    """Calibration worker should include only the recent bounded tail on subprocess failure."""
+
+    class _FakeProcess:
+        def __init__(self):
+            self.stdout = iter([f"line-{idx}\n" for idx in range(205)])
+
+        def wait(self):
+            return 7
+
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _FakeProcess())
+
+    uid = "uid___A001_X1_X3"
+    output_root = tmp_path / "calibrated"
+    output_root.mkdir(parents=True)
+
+    with pytest.raises(RuntimeError, match="Calibration failed") as exc:
+        cli_products._calibrate_single_uid(
+            input_root="/input",
+            raw_ms_root="/raw",
+            calibrated_output_root=str(output_root),
+            asdm_uid=uid,
+            casa_data_root=None,
+            skip_casa_data_update=True,
+            overwrite=False,
+            clean_intermediate=False,
+        )
+
+    msg = str(exc.value)
+    assert "Return code: 7" in msg
+    assert "Last 200 log lines" in msg
+    assert "line-0" not in msg
+    assert "line-204" in msg
+
+
 def test_clean_passthrough_runs_wsclean(monkeypatch):
     """Top-level clean command should forward unknown options to WSClean."""
     captured: dict[str, object] = {}
@@ -367,3 +663,63 @@ def test_clean_passthrough_runs_wsclean(monkeypatch):
         "1000",
         "input.ms",
     ]
+
+
+def test_metadata_wrappers_delegate(monkeypatch):
+    """Metadata wrapper helpers should delegate through the TAP contract."""
+    monkeypatch.setattr(
+        cli_metadata,
+        "_tap_contract",
+        lambda: {
+            "query_metadata_by_science": lambda *args, **kwargs: ("meta", args, kwargs),
+            "query_products": lambda *args, **kwargs: ("products", args, kwargs),
+        },
+    )
+
+    assert cli_metadata.query_metadata_by_science(science_keyword=["Galaxies"])[0] == "meta"
+    assert cli_metadata.query_products(["uid://A"])[0] == "products"
+
+
+def test_metadata_query_invalid_visible_column_shows_allowed_columns():
+    """Metadata query should print allowed columns when visible columns are invalid."""
+    result = runner.invoke(
+        cli.app,
+        [
+            "metadata",
+            "query",
+            "--visible-column",
+            "not-a-real-column",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Allowed columns:" in result.output
+
+
+def test_invoke_click_command_raises_typer_exit_for_nonzero_int_result():
+    """Click command return codes should map to Typer exit codes."""
+
+    class _FakeClickCommand:
+        def main(self, **kwargs):
+            del kwargs
+            return 9
+
+    with pytest.raises(typer.Exit) as exc:
+        cli._invoke_click_command(_FakeClickCommand(), args=[], prog_name="almasim")
+
+    assert exc.value.exit_code == 9
+
+
+def test_invoke_click_command_maps_click_exit_to_typer_exit():
+    """Click Exit exceptions should be mapped to Typer Exit with same code."""
+
+    class _FakeClickCommand:
+        def main(self, **kwargs):
+            del kwargs
+            raise click.exceptions.Exit(3)
+
+    with pytest.raises(typer.Exit) as exc:
+        cli._invoke_click_command(_FakeClickCommand(), args=[], prog_name="almasim")
+
+    assert exc.value.exit_code == 3

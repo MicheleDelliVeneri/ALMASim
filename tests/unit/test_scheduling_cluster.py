@@ -315,6 +315,82 @@ def test_singleton_allows_explicit_scheduler_host_override(monkeypatch):
 
 
 @pytest.mark.unit
+def test_singleton_resolves_log_directory_within_home(monkeypatch, tmp_path):
+    """Custom log_directory under HOME should be accepted and normalized."""
+
+    class DummyCluster:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def scale(self, n_jobs):
+            self.n_jobs = n_jobs
+
+        def close(self):
+            return None
+
+    class DummyClient:
+        def __init__(self, cluster):
+            self.cluster = cluster
+
+        def close(self):
+            return None
+
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
+    monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
+    monkeypatch.setattr(cluster_mod, "Client", DummyClient)
+
+    instance = cluster_mod.SlurmDaskClusterSingleton.get_instance(
+        node_cores=8,
+        n_jobs=1,
+        log_directory="~/logs/../dask-worker-logs",
+    )
+
+    assert instance.cluster.kwargs["log_directory"].startswith(str(home_dir.resolve()))
+
+
+@pytest.mark.unit
+def test_singleton_rejects_log_directory_outside_home(monkeypatch, tmp_path):
+    """Custom log_directory outside HOME should be rejected."""
+
+    class DummyCluster:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def scale(self, n_jobs):
+            self.n_jobs = n_jobs
+
+        def close(self):
+            return None
+
+    class DummyClient:
+        def __init__(self, cluster):
+            self.cluster = cluster
+
+        def close(self):
+            return None
+
+    home_dir = tmp_path / "home"
+    outside_dir = tmp_path / "outside"
+    home_dir.mkdir()
+    outside_dir.mkdir()
+
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
+    monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
+    monkeypatch.setattr(cluster_mod, "Client", DummyClient)
+
+    with pytest.raises(ValueError, match="log_directory must be within the user's home directory"):
+        cluster_mod.SlurmDaskClusterSingleton.get_instance(
+            node_cores=8,
+            n_jobs=1,
+            log_directory=str(outside_dir),
+        )
+
+
+@pytest.mark.unit
 @pytest.mark.skipif(not DASK_DISTRIBUTED_AVAILABLE, reason="dask.distributed not installed")
 def test_run_subcommand_end_to_end_with_local_dask_client():
     """run_subcommand should serialize through Dask and return SubcommandResult."""

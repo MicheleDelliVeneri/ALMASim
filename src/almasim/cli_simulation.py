@@ -6,19 +6,55 @@ import re
 from pathlib import Path
 from threading import Event, Thread
 from time import sleep
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 import typer
 from tqdm.auto import tqdm
 
-from . import export_results, generate_clean_cube, simulate_observation
 from .services import astro
 from .services.astro.spectral import sample_given_redshift
-from .services.compute import create_backend
-from .services.external_skymodel import EXTERNAL_SOURCE_TYPES, is_external_source_type
-from .services.simulation import SimulationParams
+
+if TYPE_CHECKING:
+    from .services.simulation import SimulationParams
+
+
+class _SimulationParamsProxy:
+    """Lazy proxy exposing SimulationParams classmethods for CLI usage/tests."""
+
+    @staticmethod
+    def from_metadata_row(*args, **kwargs):
+        from .services.simulation import SimulationParams as _SimulationParams
+
+        return _SimulationParams.from_metadata_row(*args, **kwargs)
+
+
+def create_backend(*args, **kwargs):
+    from .services.compute import create_backend as _create_backend
+
+    return _create_backend(*args, **kwargs)
+
+
+def generate_clean_cube(*args, **kwargs):
+    from . import generate_clean_cube as _generate_clean_cube
+
+    return _generate_clean_cube(*args, **kwargs)
+
+
+def simulate_observation(*args, **kwargs):
+    from . import simulate_observation as _simulate_observation
+
+    return _simulate_observation(*args, **kwargs)
+
+
+def export_results(*args, **kwargs):
+    from . import export_results as _export_results
+
+    return _export_results(*args, **kwargs)
+
+
+SimulationParams = _SimulationParamsProxy
 
 simulation_app = typer.Typer(
     help="Simulation workflow commands.",
@@ -36,8 +72,19 @@ _SOURCE_TYPES = [
 _SAVE_MODES = ["memory", "npz", "h5", "fits"]
 _BACKEND_TYPES = ["sync", "local"]
 _IMAGING_ALGORITHMS = ["legacy", "ducc0"]
-_SOURCE_TYPES.extend(sorted(EXTERNAL_SOURCE_TYPES))
 _EXTERNAL_INPUT_SUFFIXES = {".fits", ".fit", ".fts", ".fz"}
+
+
+def _external_source_types() -> list[str]:
+    from .services.external_skymodel import EXTERNAL_SOURCE_TYPES
+
+    return sorted(EXTERNAL_SOURCE_TYPES)
+
+
+def _is_external_source_type(source_type: str) -> bool:
+    from .services.external_skymodel import is_external_source_type
+
+    return bool(is_external_source_type(source_type))
 
 
 def _path_with_suffix(path: Path, *parts: Any) -> Path:
@@ -179,7 +226,7 @@ def _build_simulation_params(
     background_seed: int | None,
     output_subdir_name: str | None,
     input_path: Path | None,
-) -> SimulationParams:
+) -> "SimulationParams":
     rest_frequency, _ = astro.get_line_info(main_dir)
     sampled = sample_given_redshift(
         metadata,
@@ -201,7 +248,7 @@ def _build_simulation_params(
     external_input_path = _resolve_input_path_for_row(input_path, row)
     effective_source_type = (
         source_type
-        if external_input_path is None or is_external_source_type(source_type)
+        if external_input_path is None or _is_external_source_type(source_type)
         else "external-fits-cube"
     )
 
@@ -358,9 +405,11 @@ def simulation_run(
     ),
 ) -> None:
     """Run staged ALMASim simulation from a pre-queried metadata CSV."""
+    source_types = _SOURCE_TYPES + _external_source_types()
+
     source_type_normalized = source_type.lower()
-    if source_type_normalized not in _SOURCE_TYPES:
-        typer.echo("--source-type must be one of: " + ", ".join(_SOURCE_TYPES), err=True)
+    if source_type_normalized not in source_types:
+        typer.echo("--source-type must be one of: " + ", ".join(source_types), err=True)
         raise typer.Exit(code=2)
 
     save_mode_normalized = save_mode.lower()

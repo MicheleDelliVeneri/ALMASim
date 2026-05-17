@@ -12,16 +12,12 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 import typer
-from astropy.io import fits
-from ducc0.wgridder import dirty2vis
-from scipy.constants import speed_of_light
 from tqdm import tqdm
-
-from almasim.scheduling.cluster import SlurmDaskClusterSingleton
 
 ALMA_FOV_FACTOR = 1.12  # Standard primary-beam/FOV approximation: 1.12 * λ / D
 RAD_TO_ARCSEC = 180 / np.pi * 3600
 MIN_IMAGE_PIXELS = 16
+SPEED_OF_LIGHT_M_S = 299_792_458.0
 
 
 def import_casacore_tables() -> Any:
@@ -58,24 +54,25 @@ def _run_commands_with_slurm_cluster(
     scheduler_interface: str | None,
     task_timeout: float | None,
 ) -> None:
+    from almasim.services.compute import create_backend
+
     if not commands:
         return
 
-    manager = SlurmDaskClusterSingleton.get_instance(
+    with create_backend(
+        "slurm",
         queue=queue,
         node_cores=node_cores,
         memory=memory,
         walltime=walltime,
-        n_jobs=n_jobs,
+        n_workers=n_jobs,
         project=project,
         scheduler_host=scheduler_host,
         scheduler_interface=scheduler_interface,
-    )
-
-    try:
+    ) as backend:
         futures: list[tuple[str, Any]] = []
         for label, cmd in commands:
-            future = manager.submit_subcommand(
+            future = backend.submit_subcommand(
                 command=cmd,
                 cores=cores_per_task,
                 timeout=task_timeout,
@@ -88,8 +85,6 @@ def _run_commands_with_slurm_cluster(
                 typer.echo(f"Task failed: {label}", err=True)
                 typer.echo(result.stderr.rstrip(), err=True)
                 raise typer.Exit(code=result.returncode)
-    finally:
-        SlurmDaskClusterSingleton.close_instance()
 
 
 def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
@@ -104,10 +99,14 @@ def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
     max_baseline_size = max(distance)
 
     fov_per_frequency = (
-        ALMA_FOV_FACTOR * speed_of_light * RAD_TO_ARCSEC / reference_frequencies / min_dish_diameter
+        ALMA_FOV_FACTOR
+        * SPEED_OF_LIGHT_M_S
+        * RAD_TO_ARCSEC
+        / reference_frequencies
+        / min_dish_diameter
     )
     synthetized_beam_size = (
-        speed_of_light * RAD_TO_ARCSEC / reference_frequencies / max_baseline_size
+        SPEED_OF_LIGHT_M_S * RAD_TO_ARCSEC / reference_frequencies / max_baseline_size
     )
     spectral_window_id = np.arange(reference_frequencies.size, dtype=int)
 
@@ -275,6 +274,9 @@ def predict_single(
 
 
 def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
+    from astropy.io import fits
+    from ducc0.wgridder import dirty2vis
+
     typer.echo(f"Predicting visibilities from model: {model}")
     typer.echo(f"Copying measurement set: {input_ms} -> {output_ms}")
 
