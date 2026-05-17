@@ -378,7 +378,9 @@ def test_calibrate_single_uid_streams_logs_and_returns_expected_output(tmp_path,
 
 
 def test_calibrate_single_uid_uses_fallback_glob_when_expected_missing(tmp_path, monkeypatch):
-    """Calibration worker should discover split.cal outputs via glob when canonical path is absent."""
+    """Calibration worker should discover split.cal outputs via glob
+    when canonical path is absent.
+    """
 
     class _FakeProcess:
         def __init__(self):
