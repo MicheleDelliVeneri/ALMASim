@@ -12,12 +12,14 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 import typer
+from astropy.time import Time
 from tqdm import tqdm
 
 ALMA_FOV_FACTOR = 1.12  # Standard primary-beam/FOV approximation: 1.12 * λ / D
 RAD_TO_ARCSEC = 180 / np.pi * 3600
 MIN_IMAGE_PIXELS = 16
 SPEED_OF_LIGHT_M_S = 299_792_458.0
+DAY_IN_SECONDS = 3600 * 24
 
 
 def import_casacore_tables() -> Any:
@@ -121,6 +123,10 @@ def _run_commands_with_slurm_cluster(
 def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
     casacore_table = import_casacore_tables()
     spectral_windows = casacore_table(f"{input_ms}::SPECTRAL_WINDOW", ack=False)
+    observation = casacore_table(f"{input_ms}::OBSERVATION", ack=False)
+    start_mjd, end_mjd = observation[0]["TIME_RANGE"]
+    start_datetime = Time(start_mjd / DAY_IN_SECONDS, format="mjd").to_datetime()
+    end_datetime = Time(end_mjd / DAY_IN_SECONDS, format="mjd").to_datetime()
     antennas = casacore_table(f"{input_ms}::ANTENNA", ack=False)
     reference_frequencies = spectral_windows.getcol("REF_FREQUENCY")
     min_dish_diameter = np.min(antennas.getcol("DISH_DIAMETER"))
@@ -128,7 +134,6 @@ def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
     i, j = np.triu_indices(antenna_pos.shape[0], k=1)
     distance = np.linalg.norm(antenna_pos[j, :] - antenna_pos[i, :], axis=1)
     max_baseline_size = max(distance)
-
     fov_per_frequency = (
         ALMA_FOV_FACTOR
         * SPEED_OF_LIGHT_M_S
@@ -149,6 +154,11 @@ def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
             "fov_per_frequency": fov_per_frequency,
             "max_baseline_size": [max_baseline_size] * reference_frequencies.size,
             "synthetized_beam_size": synthetized_beam_size,
+            "start_mjd_s": start_mjd,
+            "end_mjd_s": end_mjd,
+            "duration_s": end_mjd - start_mjd,
+            "start_datetime": start_datetime.isoformat(),
+            "end_datetime": end_datetime.isoformat(),
         }
     )
     return derived_parameters
