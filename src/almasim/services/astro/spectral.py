@@ -266,15 +266,18 @@ def find_compatible_lines(
         df_line["Line"] = ["Unknown"] * len(df_line)
         compatible_lines = pd.concat((compatible_lines, df_line), ignore_index=True, sort=False)
     compatible_lines = compatible_lines.reset_index(drop=True)
+    # A line cannot be wider than the observed spectral window. Cap the FWHM at
+    # the window width and keep it strictly positive. The previous approach
+    # shrank the FWHM by a fixed 0.1 GHz step until the line fit; for narrow
+    # spectral windows (window < ~2x the intrinsic line FWHM) this overshot past
+    # zero, yielding a negative FWHM and hence a negative line flux downstream.
+    band = freq_max - freq_min
+    min_fwhm = band / 10.0
     for index, row in compatible_lines.iterrows():
-        lower_bound = row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2
-        upper_bound = row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2
-        while lower_bound < freq_min and upper_bound > freq_max:
-            row["fwhm_GHz"] -= 0.1
-            lower_bound = row["shifted_freq(GHz)"] - row["fwhm_GHz"] / 2
-            upper_bound = row["shifted_freq(GHz)"] + row["fwhm_GHz"] / 2
-        if row["fwhm_GHz"] != compatible_lines["fwhm_GHz"].iloc[index]:
-            compatible_lines.loc[index, "fwhm_GHz"] = row["fwhm_GHz"]
+        fwhm = min(float(row["fwhm_GHz"]), band)
+        fwhm = max(fwhm, min_fwhm)
+        if fwhm != compatible_lines["fwhm_GHz"].iloc[index]:
+            compatible_lines.loc[index, "fwhm_GHz"] = fwhm
     return compatible_lines
 
 
@@ -365,7 +368,9 @@ def process_spectral_data(
         f"Line Velocities: {filtered_lines['delta_v'].values} Km/s",
         remote=remote,
     )
-    freq_steps = freq_steps.to(U.Hz).value
+    # Guard against a non-positive line width (defensive): a zero/negative
+    # freq_step would flip the line flux negative or blow it up.
+    freq_steps = np.maximum(freq_steps.to(U.Hz).value, np.finfo(float).eps)
     line_fluxes = 10 ** (np.log10(flux_infrared) + line_ratios) / freq_steps
     bandwidth = freq_max - freq_min
     freq_support = bandwidth / n_channels
