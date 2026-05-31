@@ -76,9 +76,11 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
         }
     )
 
-    fake_observation = [{
-        "TIME_RANGE": [57000 * 86400.0, 57001 * 86400.0],
-    }]
+    fake_observation = [
+        {
+            "TIME_RANGE": [57000 * 86400.0, 57001 * 86400.0],
+        }
+    ]
 
     def _fake_casacore_table(table_name: str, ack: bool = False):
         del ack
