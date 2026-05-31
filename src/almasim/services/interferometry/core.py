@@ -193,10 +193,17 @@ class Interferometer:
         self.central_freq = self.central_freq.to(U.Hz).value
         self.bandwidth = self.bandwidth.to(U.Hz).value
         self.imsize = 3 * self.fov
-        self.Npix = self.skymodel.shape[1]
+        # The input sky model IS the science field. The interferometric FFT needs
+        # a 2x zero-padded grid (guard band) around it: the model is placed in the
+        # central Nphf x Nphf box of an Npix = 2*Nphf grid. Previously Npix was set
+        # to the model size and Nphf = Npix//2, which forced the model to be
+        # downsampled by 2x into the central quarter (the "central square"
+        # artefact for extended sources). Deriving Nphf from the model size and
+        # padding to Npix = 2*Nphf keeps the model at full resolution.
+        self.Nphf = self.skymodel.shape[1]
+        self.Npix = 2 * self.Nphf
         self.Nchan = self.skymodel.shape[0]
         self.Np4 = self.Npix // 4
-        self.Nphf = self.Npix // 2
         self.pixsize = self.imsize / self.Npix
         self.UVpixsize = 2.0 / (self.imsize * np.pi / 180.0 / 3600.0)
         self.Xaxmax = self.imsize / 2
@@ -432,6 +439,20 @@ class Interferometer:
         v = np.stack(v, axis=0)
         beam = np.stack(beam, axis=0)
         totsampling = np.stack(totsampling, axis=0)
+
+        # Crop the zero-padded FFT grid back to the central science field (Nphf).
+        # The science content sits in the central Nphf x Nphf box in BOTH domains:
+        # the source is centred in the image domain (dirty/model/beam), and the
+        # sampled visibilities / uv sampling are DC-centred in the Fourier domain,
+        # so the surrounding ring is the FFT guard band in either case. The cropped
+        # size equals the input sky-model size, so downstream shapes are unchanged.
+        s, e = self.Np4, self.Np4 + self.Nphf
+        modelCube = modelCube[:, s:e, s:e]
+        dirtyCube = dirtyCube[:, s:e, s:e]
+        beam = beam[:, s:e, s:e]
+        modelVis = modelVis[:, s:e, s:e]
+        dirtyVis = dirtyVis[:, s:e, s:e]
+        totsampling = totsampling[:, s:e, s:e]
         uv_mask = sampling_to_uv_mask(totsampling)
         visibility_table = assemble_visibility_table(
             channel_rows=raw_visibility_rows,

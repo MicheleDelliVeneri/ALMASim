@@ -9,6 +9,48 @@ from dask.distributed import Client
 from .utils import gaussian
 
 
+class _ImmediateFuture:
+    """A resolved future wrapping an already-computed value."""
+
+    def __init__(self, value: Any):
+        self._value = value
+
+    def done(self) -> bool:
+        return True
+
+    def result(self) -> Any:
+        return self._value
+
+
+class _LocalClient:
+    """Minimal in-process stand-in for a ``dask.distributed.Client``.
+
+    The sky-model builders were written against the Dask ``Client`` API
+    (``compute`` / ``gather`` / ``scatter``), but the ``sync`` and ``local``
+    compute backends do not expose a Dask client, so ``client`` arrives as
+    ``None`` and the builders crash with ``'NoneType' object has no attribute
+    'compute'``. This shim evaluates the delayed graphs eagerly in-process and
+    returns resolved futures, so the builders work under any backend without a
+    running Dask cluster.
+    """
+
+    def compute(self, tasks: Any, sync: bool = False, **kwargs: Any) -> Any:
+        import dask
+
+        if isinstance(tasks, (list, tuple)):
+            results = dask.compute(*tasks)
+            return [_ImmediateFuture(r) for r in results]
+        return _ImmediateFuture(dask.compute(tasks)[0])
+
+    def gather(self, futures: Any, **kwargs: Any) -> Any:
+        if isinstance(futures, (list, tuple)):
+            return [f.result() if hasattr(f, "result") else f for f in futures]
+        return futures.result() if hasattr(futures, "result") else futures
+
+    def scatter(self, data: Any, broadcast: bool = False, **kwargs: Any) -> Any:
+        return data
+
+
 class SkyModel(ABC):
     """Base class for all sky model types."""
 
@@ -55,7 +97,9 @@ class SkyModel(ABC):
         self.fwhm_z = fwhm_z
         self.n_px = n_px
         self.n_chan = n_chan
-        self.client = client
+        # Fall back to an in-process client when no Dask cluster is provided
+        # (sync / local backends pass client=None).
+        self.client = client if client is not None else _LocalClient()
         self.update_progress = update_progress
 
     def _compute_spectral_profile(self) -> np.ndarray:

@@ -13,6 +13,8 @@ from dask.distributed import Client
 from martini import DataCube, Martini
 from martini.sources import TNGSource
 from martini.spectral_models import GaussianSpectrum
+
+from .base import _LocalClient
 from martini.sph_kernels import WendlandC2Kernel
 
 from .utils import track_progress
@@ -259,7 +261,7 @@ class ExtendedSkyModel:
         self.ra = ra
         self.dec = dec
         self.api_key = api_key
-        self.client = client
+        self.client = client if client is not None else _LocalClient()
         self.update_progress = update_progress
         self.terminal = terminal
 
