@@ -120,6 +120,44 @@ def simulation_command(ctx: typer.Context) -> None:
 
 
 @app.command(
+    "visibilities",
+    help="Visibility processing commands.",
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
+)
+def visibilities_command(ctx: typer.Context) -> None:
+    """Run visibilities subcommands."""
+    _forward_typer_subapp(
+        ".cli_visibilities",
+        "visibilities_app",
+        ctx=ctx,
+        prog_name="almasim visibilities",
+    )
+
+
+@app.command(
+    "predict",
+    help="Model prediction commands.",
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
+)
+def predict_command(ctx: typer.Context) -> None:
+    """Run predict subcommands."""
+    _forward_typer_subapp(
+        ".cli_predict",
+        "predict_app",
+        ctx=ctx,
+        prog_name="almasim predict",
+    )
+
+
+@app.command(
     "image",
     help="Data product batch imaging.",
     context_settings={

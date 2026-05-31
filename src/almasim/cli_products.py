@@ -169,6 +169,13 @@ def _compute_jobs_with_progress(
                 uid = job_uids[index] if index < len(job_uids) else f"job-{index + 1}"
                 status_text = state if state else "finished"
                 progress_bar.write(f"{stage_label} completed for {uid} [{status_text}]")
+                if state in {"error", "failed"}:
+                    try:
+                        exc = future.exception()
+                        if exc is not None:
+                            progress_bar.write(f"  {uid} error: {exc}")
+                    except Exception:
+                        pass
 
             progress_bar.set_postfix_str(
                 f"completed {len(completed)}/{len(futures)} failed {len(failed)}"
@@ -337,17 +344,93 @@ def _unpack_single_uid(
     skip_casa_data_update: bool,
     overwrite: bool,
 ) -> list[str]:
-    from .services.archive import create_measurement_sets
+    """Run one UID's ASDM import in a fresh subprocess.
 
-    paths = create_measurement_sets(
-        input_root=input_root,
-        output_root=raw_output_root,
-        asdm_uid=asdm_uid,
-        casa_data_root=casa_data_root,
-        skip_casa_data_update=skip_casa_data_update,
-        overwrite=overwrite,
+    CASA's importasdm maintains process-level global state that is not reset
+    between calls in the same Python process. Running as a subprocess guarantees
+    a clean CASA environment for every UID, matching the approach used by
+    _calibrate_single_uid.
+    """
+    import os
+    import subprocess
+    import sys
+    from collections import deque
+    from pathlib import Path as _Path
+
+    # Point workers at the pre-downloaded CASA runtime data so they never try
+    # to download it themselves (compute nodes typically have no internet).
+    effective_casa_data = casa_data_root or str(_Path(raw_output_root) / ".casa-data")
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "almasim.cli",
+        "products",
+        "unpack",
+        "--input-root",
+        input_root,
+        "--output-root",
+        raw_output_root,
+        "--asdm-uid",
+        asdm_uid,
+        "--postprocess-backend",
+        "sync",
+        "--casa-data-root",
+        effective_casa_data,
+        "--skip-casa-data-update",
+    ]
+    if overwrite:
+        cmd.append("--overwrite-outputs")
+
+    project_root = _Path(__file__).resolve().parents[2]
+    src_root = project_root / "src"
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
-    return [str(path) for path in paths]
+
+    # Prioritize system libraries to avoid GLIBC version conflicts with spack binaries.
+    ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
+    existing_ld = env.get("LD_LIBRARY_PATH", "")
+    if existing_ld:
+        ld_library_path = f"{ld_library_path}:{existing_ld}"
+    env["LD_LIBRARY_PATH"] = ld_library_path
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+        bufsize=1,
+        cwd=str(project_root),
+        env=env,
+    )
+
+    # Stream child output as it arrives so long CASA logs never accumulate in memory.
+    tail_lines: deque[str] = deque(maxlen=200)
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="", flush=True)
+        tail_lines.append(line.rstrip("\n"))
+
+    return_code = process.wait()
+    if return_code != 0:
+        tail_text = "\n".join(tail_lines)
+        raise RuntimeError(
+            f"Unpack failed for {asdm_uid}.\n"
+            f"Return code: {return_code}\n"
+            f"Last {len(tail_lines)} log lines:\n{tail_text}"
+        )
+
+    # Discover output paths produced by the subprocess.
+    working_dir = _Path(raw_output_root) / "working"
+    expected = working_dir / f"{asdm_uid}.ms"
+    if expected.is_dir():
+        return [str(expected)]
+    # Fallback: scan for any MS produced for this UID.
+    return [str(p) for p in working_dir.glob(f"{asdm_uid}*.ms") if p.is_dir()]
 
 
 def _calibrate_single_uid(
@@ -407,6 +490,13 @@ def _calibrate_single_uid(
     env["PYTHONPATH"] = (
         f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
+
+    # Prioritize system libraries to avoid GLIBC version conflicts with spack binaries.
+    ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
+    existing_ld = env.get("LD_LIBRARY_PATH", "")
+    if existing_ld:
+        ld_library_path = f"{ld_library_path}:{existing_ld}"
+    env["LD_LIBRARY_PATH"] = ld_library_path
 
     process = subprocess.Popen(
         cmd,
@@ -513,6 +603,12 @@ def _run_unpack_jobs(
         typer.echo("No ASDM directories found to unpack.", err=True)
         raise typer.Exit(code=1)
 
+    if postprocess_backend_kwargs.get("n_workers") == 0:
+        postprocess_backend_kwargs = {
+            **postprocess_backend_kwargs,
+            "n_workers": len(effective_uids),
+        }
+
     _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
     skip_casa_data_update = True  # workers reuse what master just populated
 
@@ -600,6 +696,12 @@ def _run_calibrate_jobs(
         typer.echo("No raw MeasurementSets found to calibrate.", err=True)
         raise typer.Exit(code=1)
 
+    if postprocess_backend_kwargs.get("n_workers") == 0:
+        postprocess_backend_kwargs = {
+            **postprocess_backend_kwargs,
+            "n_workers": len(effective_uids),
+        }
+
     _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
     skip_casa_data_update = True  # workers reuse what master just populated
 
@@ -662,6 +764,113 @@ def _find_archives(root: Path, recursive: bool) -> list[Path]:
     return sorted(archives)
 
 
+def _archive_done_marker(archive_path: Path) -> Path:
+    return archive_path.parent / (archive_path.name + ".done")
+
+
+def _extract_single_archive(
+    *,
+    archive_path: str,
+    destination: str,
+    delete_archive: bool,
+) -> list[str]:
+    """Extract one tarball on a Slurm worker; optionally delete it afterwards.
+
+    Fully self-contained so cloudpickle can serialize it without pulling in
+    cli_products module globals (tarfile, typer, …).
+    """
+    import tarfile as _tarfile
+    from pathlib import Path as _Path
+
+    archive = _Path(archive_path)
+    dest = _Path(destination)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    extracted: list[str] = []
+    destination_resolved = dest.resolve()
+    with _tarfile.open(archive, "r:*") as tf:
+        for member in tf.getmembers():
+            member_path = _Path(member.name)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                continue
+            resolved = (dest / member.name).resolve()
+            if not str(resolved).startswith(str(destination_resolved)):
+                continue
+            tf.extract(member, dest, filter="data")
+            if not member.isdir():
+                extracted.append(str(resolved))
+
+    # Write marker so re-runs with --skip-existing can detect completion.
+    (_Path(archive_path + ".done")).write_text("")
+
+    if delete_archive:
+        archive.unlink(missing_ok=True)
+    return extracted
+
+
+def _run_extract_jobs(
+    *,
+    source: Path,
+    target: Path,
+    archives: list[Path],
+    postprocess_backend: str,
+    postprocess_backend_kwargs: dict[str, Any],
+    delete_archives: bool,
+    skip_existing: bool = False,
+) -> tuple[list[str], list[str]]:
+    if skip_existing:
+        pending = [a for a in archives if not _archive_done_marker(a).exists()]
+        skipped = len(archives) - len(pending)
+        if skipped:
+            typer.echo(f"Skipped {skipped} already-extracted archive(s).")
+        archives = pending
+
+    if postprocess_backend == "sync":
+        extracted_files: list[str] = []
+        failed_archives: list[str] = []
+        for archive_path in archives:
+            try:
+                files = _safe_extract_tar_archive(archive_path, target)
+                extracted_files.extend(str(p) for p in files)
+                typer.echo(f"Extracted {archive_path}")
+                _archive_done_marker(archive_path).write_text("")
+                if delete_archives:
+                    archive_path.unlink(missing_ok=True)
+            except (tarfile.TarError, OSError, ValueError) as exc:
+                failed_archives.append(str(archive_path))
+                typer.echo(f"Failed to extract {archive_path}: {exc}", err=True)
+        return extracted_files, failed_archives
+
+    archive_labels = [a.name for a in archives]
+    if postprocess_backend_kwargs.get("n_workers") == 0:
+        postprocess_backend_kwargs = {
+            **postprocess_backend_kwargs,
+            "n_workers": len(archives),
+        }
+
+    with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
+        extract_task = backend.delayed(_extract_single_archive)
+        extract_jobs = [
+            extract_task(
+                archive_path=str(archive_path),
+                destination=str(target),
+                delete_archive=delete_archives,
+            )
+            for archive_path in archives
+        ]
+        extract_results = _compute_jobs_with_progress(
+            backend=backend,
+            jobs=extract_jobs,
+            job_uids=archive_labels,
+            stage_label="Slurm extract",
+        )
+
+    extracted_files = []
+    for result in extract_results:
+        extracted_files.extend(result)
+    return extracted_files, []
+
+
 def _run_parallel_archive_jobs(
     *,
     download_root: Path,
@@ -688,6 +897,12 @@ def _run_parallel_archive_jobs(
     if not asdm_uids:
         typer.echo("No ASDM/raw-MS inputs found for archive post-processing.", err=True)
         raise typer.Exit(code=1)
+
+    if postprocess_backend_kwargs.get("n_workers") == 0:
+        postprocess_backend_kwargs = {
+            **postprocess_backend_kwargs,
+            "n_workers": len(asdm_uids),
+        }
 
     typer.echo(
         "Running archive post-processing with "
@@ -923,8 +1138,8 @@ def products_download(
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
-        min=1,
-        help="Number of Slurm workers for post-processing.",
+        min=0,
+        help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
     ),
     overwrite_archive_outputs: bool = typer.Option(
         False,
@@ -1083,7 +1298,7 @@ def products_download(
             typer.echo(f"  {calibrated_ms}")
 
 
-@products_app.command("extract")
+@products_app.command("extract", hidden=True)
 def products_extract(
     source_root: Path = typer.Option(
         default_output_path("downloads"),
@@ -1105,8 +1320,57 @@ def products_extract(
         "--delete-archives",
         help="Delete each archive after successful extraction.",
     ),
+    postprocess_backend: str = typer.Option(
+        "sync",
+        "--postprocess-backend",
+        help="Backend for extraction stage. Choices: sync, slurm.",
+        case_sensitive=False,
+    ),
+    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
+    slurm_project: Optional[str] = typer.Option(
+        None,
+        "--slurm-project",
+        help="Optional Slurm project/account.",
+    ),
+    slurm_walltime: str = typer.Option(
+        "01:00:00",
+        "--slurm-walltime",
+        help="Slurm walltime per worker job (HH:MM:SS).",
+    ),
+    slurm_cores: int = typer.Option(
+        1,
+        "--slurm-cores",
+        min=1,
+        help="Cores per Slurm worker.",
+    ),
+    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    slurm_workers: int = typer.Option(
+        4,
+        "--slurm-workers",
+        min=0,
+        help="Number of Slurm workers. Pass 0 to spawn one worker per archive.",
+    ),
+    slurm_scheduler_host: Optional[str] = typer.Option(
+        None,
+        "--slurm-scheduler-host",
+        help=(
+            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
+            "Set this to an internal/HPC network address when the public hostname "
+            "is not reachable from compute nodes (e.g. 10.20.25.44)."
+        ),
+    ),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        help="Skip archives that have already been extracted (detected via a .done marker file).",
+    ),
 ) -> None:
     """Extract ALMA archive tarballs as a standalone step."""
+    backend_normalized = postprocess_backend.lower()
+    if backend_normalized not in {"sync", "slurm"}:
+        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
+        raise typer.Exit(code=2)
+
     source = source_root.expanduser().resolve()
     if not source.exists() or not source.is_dir():
         typer.echo(f"--source-root is not a directory: {source}", err=True)
@@ -1121,18 +1385,23 @@ def products_extract(
         raise typer.Exit(code=1)
 
     typer.echo(f"Found {len(archives)} archive(s) to extract.")
-    extracted_files: list[Path] = []
-    failed_archives: list[str] = []
-    for archive_path in archives:
-        try:
-            extracted = _safe_extract_tar_archive(archive_path, target)
-            extracted_files.extend(extracted)
-            typer.echo(f"Extracted {archive_path}")
-            if delete_archives:
-                archive_path.unlink(missing_ok=True)
-        except (tarfile.TarError, OSError, ValueError) as exc:
-            failed_archives.append(str(archive_path))
-            typer.echo(f"Failed to extract {archive_path}: {exc}", err=True)
+    extracted_files, failed_archives = _run_extract_jobs(
+        source=source,
+        target=target,
+        archives=archives,
+        postprocess_backend=backend_normalized,
+        postprocess_backend_kwargs={
+            "queue": slurm_queue,
+            "project": slurm_project,
+            "walltime": slurm_walltime,
+            "cores": slurm_cores,
+            "memory": slurm_memory,
+            "n_workers": slurm_workers,
+            **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
+        },
+        delete_archives=delete_archives,
+        skip_existing=skip_existing,
+    )
 
     typer.echo(f"Extracted files: {len(extracted_files)}")
     typer.echo(f"Failed archives: {len(failed_archives)}")
@@ -1140,7 +1409,7 @@ def products_extract(
         raise typer.Exit(code=1)
 
 
-@products_app.command("unpack")
+@products_app.command("unpack", hidden=True)
 def products_unpack(
     input_root: Path = typer.Option(
         default_output_path("downloads"),
@@ -1194,8 +1463,8 @@ def products_unpack(
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
-        min=1,
-        help="Number of Slurm workers for post-processing.",
+        min=0,
+        help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
     ),
     slurm_scheduler_host: Optional[str] = typer.Option(
         None,
@@ -1243,7 +1512,7 @@ def products_unpack(
         typer.echo(f"  {raw_ms}")
 
 
-@products_app.command("calibrate")
+@products_app.command("calibrate", hidden=True)
 def products_calibrate(
     input_root: Path = typer.Option(
         default_output_path("downloads"),
@@ -1302,8 +1571,8 @@ def products_calibrate(
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
-        min=1,
-        help="Number of Slurm workers for post-processing.",
+        min=0,
+        help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
     ),
     slurm_scheduler_host: Optional[str] = typer.Option(
         None,

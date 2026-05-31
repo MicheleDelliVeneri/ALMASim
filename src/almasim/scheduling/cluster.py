@@ -73,6 +73,15 @@ def run_subcommand(
     if env:
         command_env.update(dict(env))
 
+    # Prioritize system libraries (glibc, etc.) over spack versions to avoid version conflicts.
+    # Some spack builds may be compiled for newer GLIBC versions than the system provides.
+    ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
+    existing_ld = command_env.get("LD_LIBRARY_PATH", "")
+    if existing_ld:
+        # Prepend system paths before existing paths so they take priority.
+        ld_library_path = f"{ld_library_path}:{existing_ld}"
+    command_env["LD_LIBRARY_PATH"] = ld_library_path
+
     # Keep threaded libraries aligned with requested task cores.
     for var_name in (
         "OMP_NUM_THREADS",
@@ -179,6 +188,11 @@ class SlurmDaskClusterSingleton:
             # Propagate submit-node hostname to workers when requested by HPC setup.
             job_script_prologue.append(f"export HOSTNAME={shlex.quote(submit_hostname)}")
 
+        # Ensure system GLIBC takes priority over spack versions to avoid incompatibilities.
+        if not any("LD_LIBRARY_PATH" in line for line in job_script_prologue):
+            ld_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
+            job_script_prologue.append(f'export LD_LIBRARY_PATH="{ld_path}:$LD_LIBRARY_PATH"')
+
         worker_extra_args = list(cluster_kwargs.pop("worker_extra_args", []))
         if "--resources" not in worker_extra_args:
             worker_extra_args.extend(["--resources", f"CPU={node_cores}"])
@@ -215,6 +229,7 @@ class SlurmDaskClusterSingleton:
         self.cluster = SLURMCluster(**slurm_kwargs)
         self.cluster.scale(n_jobs)
         self.client = Client(self.cluster)
+        print(f"Dask dashboard: {getattr(self.client, 'dashboard_link', None)}", flush=True)
         self._config_signature = (
             queue,
             node_cores,

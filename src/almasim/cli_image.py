@@ -12,12 +12,14 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 import typer
+from astropy.time import Time
 from tqdm import tqdm
 
 ALMA_FOV_FACTOR = 1.12  # Standard primary-beam/FOV approximation: 1.12 * λ / D
 RAD_TO_ARCSEC = 180 / np.pi * 3600
 MIN_IMAGE_PIXELS = 16
 SPEED_OF_LIGHT_M_S = 299_792_458.0
+DAY_IN_SECONDS = 3600 * 24
 
 
 def import_casacore_tables() -> Any:
@@ -35,9 +37,40 @@ def import_casacore_tables() -> Any:
 
 
 image_app = typer.Typer(
-    help="Data product batch imaging.",
+    help="Visibility-to-image and image-to-visibility commands.",
     no_args_is_help=True,
 )
+
+
+def _iter_ms_inputs(input_path: Path) -> list[Path]:
+    if input_path.is_dir() and input_path.name.endswith(".ms"):
+        return [input_path]
+    if input_path.is_dir():
+        return sorted(path for path in input_path.rglob("*.ms") if path.is_dir())
+    raise typer.BadParameter(f"Input path is not a MeasurementSet or MS folder: {input_path}")
+
+
+def _discover_models_for_ms(input_ms: Path, output_directory: Path) -> list[Path]:
+    model_root = output_directory / input_ms.stem
+    return sorted(model_root.glob("SPW-*/wsclean-model.fits"))
+
+
+def _predict_all_models_for_ms(input_ms: Path, output_directory: Path) -> list[Path]:
+    model_paths = _discover_models_for_ms(input_ms, output_directory)
+    output_mss: list[Path] = []
+    if not model_paths:
+        typer.echo(
+            f"[debug] missing model FITS, skipping MS: {input_ms}",
+            err=False,
+        )
+        return output_mss
+
+    for model_path in model_paths:
+        output_ms = model_path.parent / f"{input_ms.name}.predicted"
+        predict_from_model(input_ms=input_ms, model=model_path, output_ms=output_ms)
+        output_mss.append(output_ms)
+
+    return output_mss
 
 
 def _run_commands_with_slurm_cluster(
@@ -90,6 +123,10 @@ def _run_commands_with_slurm_cluster(
 def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
     casacore_table = import_casacore_tables()
     spectral_windows = casacore_table(f"{input_ms}::SPECTRAL_WINDOW", ack=False)
+    observation = casacore_table(f"{input_ms}::OBSERVATION", ack=False)
+    start_mjd, end_mjd = observation[0]["TIME_RANGE"]
+    start_datetime = Time(start_mjd / DAY_IN_SECONDS, format="mjd").to_datetime()
+    end_datetime = Time(end_mjd / DAY_IN_SECONDS, format="mjd").to_datetime()
     antennas = casacore_table(f"{input_ms}::ANTENNA", ack=False)
     reference_frequencies = spectral_windows.getcol("REF_FREQUENCY")
     min_dish_diameter = np.min(antennas.getcol("DISH_DIAMETER"))
@@ -97,7 +134,6 @@ def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
     i, j = np.triu_indices(antenna_pos.shape[0], k=1)
     distance = np.linalg.norm(antenna_pos[j, :] - antenna_pos[i, :], axis=1)
     max_baseline_size = max(distance)
-
     fov_per_frequency = (
         ALMA_FOV_FACTOR
         * SPEED_OF_LIGHT_M_S
@@ -118,6 +154,11 @@ def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
             "fov_per_frequency": fov_per_frequency,
             "max_baseline_size": [max_baseline_size] * reference_frequencies.size,
             "synthetized_beam_size": synthetized_beam_size,
+            "start_mjd_s": start_mjd,
+            "end_mjd_s": end_mjd,
+            "duration_s": end_mjd - start_mjd,
+            "start_datetime": start_datetime.isoformat(),
+            "end_datetime": end_datetime.isoformat(),
         }
     )
     return derived_parameters
@@ -155,7 +196,7 @@ def imaging_parameter_to_command_arg(
     return cmd_args
 
 
-@image_app.command("ms-overview")
+@image_app.command("ms-overview", hidden=True)
 def derive_parameters(
     input_ms: Path = typer.Argument(
         ...,
@@ -170,8 +211,14 @@ def derive_parameters(
 
 @image_app.command("compute-parameters")
 def compute_parameters(
-    archive_folder: Path = typer.Argument(..., help="Processed MSs folder"),
-    output_metadata_file: Path = typer.Argument(..., help="Parameters csv file"),
+    archive_folder: Path = typer.Argument(
+        default=Path("."),
+        help="Processed MSs folder (default: current directory)",
+    ),
+    output_metadata_file: Path = typer.Argument(
+        default=Path("imaging_parameters.csv"),
+        help="Parameters CSV file (default: imaging_parameters.csv)",
+    ),
 ):
     mss = list(archive_folder.glob("*.cal"))
     if len(mss) == 0:
@@ -185,7 +232,98 @@ def compute_parameters(
     main_output.to_csv(output_metadata_file, index=False)
 
 
-@image_app.command("batch-image")
+@image_app.command("image-from-ms")
+def image_from_ms(
+    imaging_parameters: Path = typer.Argument(help="Imaging parameter file"),
+    output_directory: Path = typer.Argument(help="Output directory path"),
+    fov_fraction: float = typer.Option(
+        help="Fraction of the FOV to image",
+        default=1.5,
+        min=1e-6,
+    ),
+    beam_sampling: float = typer.Option(
+        help="Number of pixels to use to sample the synthetized beam. Could be fractional.",
+        default=8,
+        min=1e-6,
+    ),
+    num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
+    max_cores_per_node: int = typer.Option(
+        help="Number of cores per node. [Used to scale the memory usage of wsclean]",
+        default=95,
+        min=1,
+    ),
+    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
+    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
+    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
+    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    scheduler_host: str | None = typer.Option(
+        default=None,
+        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
+    ),
+    scheduler_interface: str | None = typer.Option(
+        default=None,
+        help="Scheduler/worker network interface (e.g. ib0, eth0)",
+    ),
+    task_timeout: float = typer.Option(
+        default=3600,
+        min=1,
+        help="Timeout in seconds for each worker-side command",
+    ),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        help="Skip SPWs whose output directory already contains wsclean-image.fits.",
+    ),
+):
+
+    parameters = pd.read_csv(str(imaging_parameters))
+    commands: list[tuple[str, list[str]]] = []
+    skipped = 0
+    for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
+        input_filename = Path(dset_parameter["filename"])
+        command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
+
+        outdir = (
+            output_directory / input_filename.stem / f"SPW-{dset_parameter['spectral_window_id']}"
+        )
+        if skip_existing and (outdir / "wsclean-image.fits").exists():
+            skipped += 1
+            continue
+        outdir.mkdir(exist_ok=True, parents=True)
+        mem_fraction = min(1.0, num_cores / max_cores_per_node)
+
+        wsclean_cmd = [
+            "wsclean",
+            "-name",
+            str(outdir / "wsclean"),
+            *command_args,
+            "-mem",
+            str(mem_fraction),
+            str(input_filename),
+        ]
+        label = f"{input_filename.stem}_{dset_parameter['spectral_window_id']}"
+        commands.append((label, wsclean_cmd))
+
+    if skip_existing and skipped:
+        typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
+
+    _run_commands_with_slurm_cluster(
+        commands,
+        cores_per_task=num_cores,
+        node_cores=max_cores_per_node,
+        queue=slurm_queue,
+        project=slurm_project,
+        walltime=slurm_walltime,
+        memory=slurm_memory,
+        n_jobs=slurm_n_jobs,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+        task_timeout=task_timeout,
+    )
+
+
+@image_app.command("batch-image", hidden=True)
 def image_set(
     imaging_parameters: Path = typer.Argument(help="Imaging parameter file"),
     output_directory: Path = typer.Argument(help="Output directory path"),
@@ -223,48 +361,81 @@ def image_set(
         min=1,
         help="Timeout in seconds for each worker-side command",
     ),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        help="Skip SPWs whose output directory already contains wsclean-image.fits.",
+    ),
 ):
+    image_from_ms(
+        imaging_parameters=imaging_parameters,
+        output_directory=output_directory,
+        fov_fraction=fov_fraction,
+        beam_sampling=beam_sampling,
+        num_cores=num_cores,
+        max_cores_per_node=max_cores_per_node,
+        slurm_queue=slurm_queue,
+        slurm_project=slurm_project,
+        slurm_walltime=slurm_walltime,
+        slurm_memory=slurm_memory,
+        slurm_n_jobs=slurm_n_jobs,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+        task_timeout=task_timeout,
+        skip_existing=skip_existing,
+    )
 
-    parameters = pd.read_csv(str(imaging_parameters))
-    commands: list[tuple[str, list[str]]] = []
-    for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
-        input_filename = Path(dset_parameter["filename"])
-        command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
 
-        outdir = (
-            output_directory / input_filename.stem / f"SPW-{dset_parameter['spectral_window_id']}"
-        )
-        outdir.mkdir(exist_ok=True, parents=True)
-        mem_fraction = min(1.0, num_cores / max_cores_per_node)
+@image_app.command("ms-from-image", hidden=True)
+def ms_from_image(
+    input_ms_or_folder: Path = typer.Argument(help="Single MS directory or folder of MSs"),
+    output_directory: Path = typer.Argument(help="Directory containing model FITS products"),
+    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
+    num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
+    max_cores_per_node: int = typer.Option(
+        help="Number of cores per node for SLURM worker resource accounting",
+        default=95,
+        min=1,
+    ),
+    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
+    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
+    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
+    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    scheduler_host: str | None = typer.Option(
+        default=None,
+        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
+    ),
+    scheduler_interface: str | None = typer.Option(
+        default=None,
+        help="Scheduler/worker network interface (e.g. ib0, eth0)",
+    ),
+    task_timeout: float = typer.Option(
+        default=3600,
+        min=1,
+        help="Timeout in seconds for each worker-side command",
+    ),
+):
+    from .cli_predict import ms_from_image as _predict_ms_from_image
 
-        wsclean_cmd = [
-            "wsclean",
-            "-name",
-            str(outdir / "wsclean"),
-            *command_args,
-            "-mem",
-            str(mem_fraction),
-            str(input_filename),
-        ]
-        label = f"{input_filename.stem}_{dset_parameter['spectral_window_id']}"
-        commands.append((label, wsclean_cmd))
-
-    _run_commands_with_slurm_cluster(
-        commands,
-        cores_per_task=num_cores,
-        node_cores=max_cores_per_node,
-        queue=slurm_queue,
-        project=slurm_project,
-        walltime=slurm_walltime,
-        memory=slurm_memory,
-        n_jobs=slurm_n_jobs,
+    _predict_ms_from_image(
+        input_ms_or_folder=input_ms_or_folder,
+        output_directory=output_directory,
+        use_slurm=use_slurm,
+        num_cores=num_cores,
+        max_cores_per_node=max_cores_per_node,
+        slurm_queue=slurm_queue,
+        slurm_project=slurm_project,
+        slurm_walltime=slurm_walltime,
+        slurm_memory=slurm_memory,
+        slurm_n_jobs=slurm_n_jobs,
         scheduler_host=scheduler_host,
         scheduler_interface=scheduler_interface,
         task_timeout=task_timeout,
     )
 
 
-@image_app.command("predict-single")
+@image_app.command("predict-single", hidden=True)
 def predict_single(
     input_ms: Path = typer.Argument(..., help="Input MS"),
     model: Path = typer.Argument(..., help="FITS model path"),
@@ -339,7 +510,7 @@ def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
     typer.echo(f"Wrote MODEL_DATA to: {output_ms}")
 
 
-@image_app.command("predict-batch")
+@image_app.command("predict-batch", hidden=True)
 def predict_batch(
     imaging_parameters: Path = typer.Argument(..., help="Imaging parameter file"),
     output_directory: Path = typer.Argument(..., help="Output directory path"),
@@ -395,10 +566,15 @@ def predict_batch(
         if use_slurm:
             label = input_filename.stem + f"_{spw_id}_predict"
             slurm_commands.append((label, predict_cmd))
-
         else:
-            cmd = predict_cmd
-            subprocess.run(cmd, check=True)
+            # Set up environment to prioritize system libraries for compatibility.
+            cmd_env = os.environ.copy()
+            ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
+            existing_ld = cmd_env.get("LD_LIBRARY_PATH", "")
+            if existing_ld:
+                ld_library_path = f"{ld_library_path}:{existing_ld}"
+            cmd_env["LD_LIBRARY_PATH"] = ld_library_path
+            subprocess.run(predict_cmd, check=True, env=cmd_env)
 
     if use_slurm:
         _run_commands_with_slurm_cluster(
