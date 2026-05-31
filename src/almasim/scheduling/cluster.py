@@ -229,6 +229,7 @@ class SlurmDaskClusterSingleton:
         self.cluster = SLURMCluster(**slurm_kwargs)
         self.cluster.scale(n_jobs)
         self.client = Client(self.cluster)
+        print(f"Dask dashboard: {self.client.dashboard_link}", flush=True)
         self._config_signature = (
             queue,
             node_cores,

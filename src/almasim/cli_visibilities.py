@@ -38,6 +38,45 @@ def extract(
         "--delete-archives",
         help="Delete each archive after successful extraction.",
     ),
+    postprocess_backend: str = typer.Option(
+        "sync",
+        "--postprocess-backend",
+        help="Backend for extraction stage. Choices: sync, slurm.",
+        case_sensitive=False,
+    ),
+    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
+    slurm_project: Optional[str] = typer.Option(
+        None,
+        "--slurm-project",
+        help="Optional Slurm project/account.",
+    ),
+    slurm_walltime: str = typer.Option(
+        "01:00:00",
+        "--slurm-walltime",
+        help="Slurm walltime per worker job (HH:MM:SS).",
+    ),
+    slurm_cores: int = typer.Option(
+        1,
+        "--slurm-cores",
+        min=1,
+        help="Cores per Slurm worker.",
+    ),
+    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    slurm_workers: int = typer.Option(
+        4,
+        "--slurm-workers",
+        min=0,
+        help="Number of Slurm workers. Pass 0 to spawn one worker per archive.",
+    ),
+    slurm_scheduler_host: Optional[str] = typer.Option(
+        None,
+        "--slurm-scheduler-host",
+        help=(
+            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
+            "Set this to an internal/HPC network address when the public hostname "
+            "is not reachable from compute nodes (e.g. 10.20.25.44)."
+        ),
+    ),
 ) -> None:
     """Extract ALMA archive tarballs as a standalone step."""
     cli_products.products_extract(
@@ -45,6 +84,14 @@ def extract(
         destination=destination,
         recursive=recursive,
         delete_archives=delete_archives,
+        postprocess_backend=postprocess_backend,
+        slurm_queue=slurm_queue,
+        slurm_project=slurm_project,
+        slurm_walltime=slurm_walltime,
+        slurm_cores=slurm_cores,
+        slurm_memory=slurm_memory,
+        slurm_workers=slurm_workers,
+        slurm_scheduler_host=slurm_scheduler_host,
     )
 
 
