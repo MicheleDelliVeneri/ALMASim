@@ -76,12 +76,18 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
         }
     )
 
+    fake_observation = [{
+        "TIME_RANGE": [57000 * 86400.0, 57001 * 86400.0],
+    }]
+
     def _fake_casacore_table(table_name: str, ack: bool = False):
         del ack
         if table_name.endswith("::SPECTRAL_WINDOW"):
             return spectral_window
         if table_name.endswith("::ANTENNA"):
             return antenna
+        if table_name.endswith("::OBSERVATION"):
+            return fake_observation
 
     monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
 
