@@ -270,10 +270,16 @@ def image_from_ms(
         min=1,
         help="Timeout in seconds for each worker-side command",
     ),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        help="Skip SPWs whose output directory already contains wsclean-image.fits.",
+    ),
 ):
 
     parameters = pd.read_csv(str(imaging_parameters))
     commands: list[tuple[str, list[str]]] = []
+    skipped = 0
     for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
         input_filename = Path(dset_parameter["filename"])
         command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
@@ -281,6 +287,9 @@ def image_from_ms(
         outdir = (
             output_directory / input_filename.stem / f"SPW-{dset_parameter['spectral_window_id']}"
         )
+        if skip_existing and (outdir / "wsclean-image.fits").exists():
+            skipped += 1
+            continue
         outdir.mkdir(exist_ok=True, parents=True)
         mem_fraction = min(1.0, num_cores / max_cores_per_node)
 
@@ -295,6 +304,9 @@ def image_from_ms(
         ]
         label = f"{input_filename.stem}_{dset_parameter['spectral_window_id']}"
         commands.append((label, wsclean_cmd))
+
+    if skip_existing and skipped:
+        typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
 
     _run_commands_with_slurm_cluster(
         commands,
@@ -349,6 +361,11 @@ def image_set(
         min=1,
         help="Timeout in seconds for each worker-side command",
     ),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        help="Skip SPWs whose output directory already contains wsclean-image.fits.",
+    ),
 ):
     image_from_ms(
         imaging_parameters=imaging_parameters,
@@ -365,6 +382,7 @@ def image_set(
         scheduler_host=scheduler_host,
         scheduler_interface=scheduler_interface,
         task_timeout=task_timeout,
+        skip_existing=skip_existing,
     )
 
 

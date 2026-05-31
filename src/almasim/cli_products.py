@@ -764,6 +764,10 @@ def _find_archives(root: Path, recursive: bool) -> list[Path]:
     return sorted(archives)
 
 
+def _archive_done_marker(archive_path: Path) -> Path:
+    return archive_path.parent / (archive_path.name + ".done")
+
+
 def _extract_single_archive(
     *,
     archive_path: str,
@@ -796,6 +800,9 @@ def _extract_single_archive(
             if not member.isdir():
                 extracted.append(str(resolved))
 
+    # Write marker so re-runs with --skip-existing can detect completion.
+    (_Path(archive_path + ".done")).write_text("")
+
     if delete_archive:
         archive.unlink(missing_ok=True)
     return extracted
@@ -809,7 +816,15 @@ def _run_extract_jobs(
     postprocess_backend: str,
     postprocess_backend_kwargs: dict[str, Any],
     delete_archives: bool,
+    skip_existing: bool = False,
 ) -> tuple[list[str], list[str]]:
+    if skip_existing:
+        pending = [a for a in archives if not _archive_done_marker(a).exists()]
+        skipped = len(archives) - len(pending)
+        if skipped:
+            typer.echo(f"Skipped {skipped} already-extracted archive(s).")
+        archives = pending
+
     if postprocess_backend == "sync":
         extracted_files: list[str] = []
         failed_archives: list[str] = []
@@ -818,6 +833,7 @@ def _run_extract_jobs(
                 files = _safe_extract_tar_archive(archive_path, target)
                 extracted_files.extend(str(p) for p in files)
                 typer.echo(f"Extracted {archive_path}")
+                _archive_done_marker(archive_path).write_text("")
                 if delete_archives:
                     archive_path.unlink(missing_ok=True)
             except (tarfile.TarError, OSError, ValueError) as exc:
@@ -1343,6 +1359,11 @@ def products_extract(
             "is not reachable from compute nodes (e.g. 10.20.25.44)."
         ),
     ),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        help="Skip archives that have already been extracted (detected via a .done marker file).",
+    ),
 ) -> None:
     """Extract ALMA archive tarballs as a standalone step."""
     backend_normalized = postprocess_backend.lower()
@@ -1379,6 +1400,7 @@ def products_extract(
             **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
         },
         delete_archives=delete_archives,
+        skip_existing=skip_existing,
     )
 
     typer.echo(f"Extracted files: {len(extracted_files)}")

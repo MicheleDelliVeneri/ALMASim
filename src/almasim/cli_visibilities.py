@@ -77,6 +77,11 @@ def extract(
             "is not reachable from compute nodes (e.g. 10.20.25.44)."
         ),
     ),
+    skip_existing: bool = typer.Option(
+        False,
+        "--skip-existing",
+        help="Skip archives that have already been extracted (detected via a .done marker file).",
+    ),
 ) -> None:
     """Extract ALMA archive tarballs as a standalone step."""
     cli_products.products_extract(
@@ -92,6 +97,7 @@ def extract(
         slurm_memory=slurm_memory,
         slurm_workers=slurm_workers,
         slurm_scheduler_host=slurm_scheduler_host,
+        skip_existing=skip_existing,
     )
 
 
