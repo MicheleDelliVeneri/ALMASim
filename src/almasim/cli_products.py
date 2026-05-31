@@ -6,7 +6,7 @@ import tarfile
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
-from time import sleep
+from time import sleep, time
 from typing import Any, List, Optional
 
 import typer
@@ -133,12 +133,16 @@ def _future_done(future: Any) -> bool:
     return status in {"finished", "done", "error", "failed", "cancelled"}
 
 
+_NO_PROGRESS_TIMEOUT_S = 300
+
+
 def _compute_jobs_with_progress(
     *,
     backend: Any,
     jobs: list[Any],
     job_uids: list[str],
     stage_label: str,
+    no_progress_timeout: float = _NO_PROGRESS_TIMEOUT_S,
 ) -> list[Any]:
     """Run a stage and show per-UID progress for asynchronous backends."""
     if not jobs:
@@ -150,9 +154,11 @@ def _compute_jobs_with_progress(
 
     completed: set[int] = set()
     failed: set[int] = set()
+    last_progress_time = time()
     with tqdm(total=len(futures), desc=stage_label, unit="uid", leave=True) as progress_bar:
         progress_bar.set_postfix_str(f"completed 0/{len(futures)}")
         while len(completed) < len(futures):
+            prev_completed = len(completed)
             for index, future in enumerate(futures):
                 if index in completed:
                     continue
@@ -177,10 +183,20 @@ def _compute_jobs_with_progress(
                     except Exception:
                         pass
 
+            if len(completed) > prev_completed:
+                last_progress_time = time()
+
             progress_bar.set_postfix_str(
                 f"completed {len(completed)}/{len(futures)} failed {len(failed)}"
             )
             if len(completed) < len(futures):
+                if time() - last_progress_time > no_progress_timeout:
+                    pending = len(futures) - len(completed)
+                    raise RuntimeError(
+                        f"{stage_label}: {pending} future(s) made no progress for "
+                        f"{no_progress_timeout:.0f}s — workers may have died. "
+                        "Re-run with --skip-existing to resume."
+                    )
                 sleep(0.5)
 
     return backend.gather(futures)
@@ -732,21 +748,55 @@ def _run_calibrate_jobs(
     return outputs
 
 
+def _archive_stem(archive_path: Path) -> str:
+    """Return the archive name with all recognised compression suffixes stripped."""
+    name = archive_path.name
+    for suffix in (".tar.gz", ".tgz", ".tar"):
+        if name.lower().endswith(suffix):
+            return name[: len(name) - len(suffix)]
+    return archive_path.stem
+
+
+def _has_single_top_level_dir(archive: tarfile.TarFile) -> bool:
+    """Return True when every member sits under a single top-level directory."""
+    roots: set[str] = set()
+    for member in archive.getmembers():
+        top = Path(member.name).parts[0] if Path(member.name).parts else ""
+        roots.add(top)
+    return len(roots) == 1
+
+
 def _safe_extract_tar_archive(archive_path: Path, destination: Path) -> list[Path]:
-    """Extract a tarball while refusing absolute or escaping paths."""
+    """Extract a tarball while refusing absolute or escaping paths.
+
+    If the archive is flat (no common top-level directory), all contents are
+    placed inside a subdirectory named after the archive stem so they never
+    spill into the destination root.
+    """
     extracted: list[Path] = []
     destination_resolved = destination.resolve()
     with tarfile.open(archive_path, "r:*") as archive:
+        if _has_single_top_level_dir(archive):
+            extract_root = destination
+        else:
+            extract_root = destination / _archive_stem(archive_path)
+            extract_root.mkdir(parents=True, exist_ok=True)
+        extract_root_resolved = extract_root.resolve()
+
         for member in archive.getmembers():
             member_path = Path(member.name)
             if member_path.is_absolute() or ".." in member_path.parts:
                 typer.echo(f"Skipping unsafe archive member: {member.name}", err=True)
                 continue
-            resolved = (destination / member.name).resolve()
+            resolved = (extract_root / member.name).resolve()
+            if not str(resolved).startswith(str(extract_root_resolved)):
+                typer.echo(f"Skipping escaping archive member: {member.name}", err=True)
+                continue
+            # Also ensure nothing escapes the original destination root.
             if not str(resolved).startswith(str(destination_resolved)):
                 typer.echo(f"Skipping escaping archive member: {member.name}", err=True)
                 continue
-            archive.extract(member, destination, filter="data")
+            archive.extract(member, extract_root, filter="data")
             if not member.isdir():
                 extracted.append(resolved)
     return extracted
@@ -782,6 +832,20 @@ def _extract_single_archive(
     import tarfile as _tarfile
     from pathlib import Path as _Path
 
+    def _stem(p: "_Path") -> str:
+        name = p.name
+        for sfx in (".tar.gz", ".tgz", ".tar"):
+            if name.lower().endswith(sfx):
+                return name[: len(name) - len(sfx)]
+        return p.stem
+
+    def _single_top_level(tf: "_tarfile.TarFile") -> bool:
+        roots: set[str] = set()
+        for m in tf.getmembers():
+            parts = _Path(m.name).parts
+            roots.add(parts[0] if parts else "")
+        return len(roots) == 1
+
     archive = _Path(archive_path)
     dest = _Path(destination)
     dest.mkdir(parents=True, exist_ok=True)
@@ -789,14 +853,23 @@ def _extract_single_archive(
     extracted: list[str] = []
     destination_resolved = dest.resolve()
     with _tarfile.open(archive, "r:*") as tf:
+        if _single_top_level(tf):
+            extract_root = dest
+        else:
+            extract_root = dest / _stem(archive)
+            extract_root.mkdir(parents=True, exist_ok=True)
+        extract_root_resolved = extract_root.resolve()
+
         for member in tf.getmembers():
             member_path = _Path(member.name)
             if member_path.is_absolute() or ".." in member_path.parts:
                 continue
-            resolved = (dest / member.name).resolve()
+            resolved = (extract_root / member.name).resolve()
+            if not str(resolved).startswith(str(extract_root_resolved)):
+                continue
             if not str(resolved).startswith(str(destination_resolved)):
                 continue
-            tf.extract(member, dest, filter="data")
+            tf.extract(member, extract_root, filter="data")
             if not member.isdir():
                 extracted.append(str(resolved))
 
@@ -824,6 +897,10 @@ def _run_extract_jobs(
         if skipped:
             typer.echo(f"Skipped {skipped} already-extracted archive(s).")
         archives = pending
+
+    if not archives:
+        typer.echo("Nothing to extract.")
+        return [], []
 
     if postprocess_backend == "sync":
         extracted_files: list[str] = []

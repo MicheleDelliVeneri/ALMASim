@@ -38,7 +38,7 @@ wheels = [
 
 [[package]]
 name = "almasim"
-version = "2.1.14"
+version = "2.1.15"
 source = { editable = "." }
 dependencies = [
     { name = "astromartini" },
