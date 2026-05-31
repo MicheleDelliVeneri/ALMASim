@@ -13,10 +13,9 @@ from dask.distributed import Client
 from martini import DataCube, Martini
 from martini.sources import TNGSource
 from martini.spectral_models import GaussianSpectrum
-
-from .base import _LocalClient
 from martini.sph_kernels import WendlandC2Kernel
 
+from .base import _LocalClient
 from .utils import track_progress
 
 
