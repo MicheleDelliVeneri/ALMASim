@@ -201,6 +201,53 @@ def test_inclusion_conditions_proposal_id_prefix():
 
 
 @pytest.mark.unit
+def test_inclusion_conditions_proposal_id_single():
+    f = InclusionFilters(
+        proposal_id=["2019.1.00001.S"],
+        public_only=False,
+        science_only=False,
+        exclude_mosaic=False,
+    )
+    conds = _build_inclusion_conditions(f)
+    assert any("proposal_id IN ('2019.1.00001.S')" in c for c in conds)
+
+
+@pytest.mark.unit
+def test_inclusion_conditions_proposal_id_multiple():
+    f = InclusionFilters(
+        proposal_id=["2019.1.00001.S", "2022.1.00333.S"],
+        public_only=False,
+        science_only=False,
+        exclude_mosaic=False,
+    )
+    conds = _build_inclusion_conditions(f)
+    assert any(
+        "proposal_id IN ('2019.1.00001.S', '2022.1.00333.S')" in c for c in conds
+    )
+
+
+@pytest.mark.unit
+def test_inclusion_conditions_proposal_id_none():
+    f = InclusionFilters(public_only=False, science_only=False, exclude_mosaic=False)
+    conds = _build_inclusion_conditions(f)
+    assert not any("proposal_id IN" in c for c in conds)
+
+
+@pytest.mark.unit
+def test_inclusion_conditions_proposal_id_and_prefix_both_present():
+    f = InclusionFilters(
+        proposal_id=["2019.1.00001.S"],
+        proposal_id_prefix=["2019."],
+        public_only=False,
+        science_only=False,
+        exclude_mosaic=False,
+    )
+    conds = _build_inclusion_conditions(f)
+    assert any("proposal_id LIKE" in c for c in conds)
+    assert any("proposal_id IN" in c for c in conds)
+
+
+@pytest.mark.unit
 def test_inclusion_conditions_defaults_add_public_science_mosaic():
     f = InclusionFilters()
     conds = _build_inclusion_conditions(f)

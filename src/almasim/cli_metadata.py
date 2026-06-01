@@ -76,6 +76,7 @@ def _build_query_summary(
         "time_resolution_range": include.time_resolution_range,
         "frequency_range": include.frequency_range,
         "proposal_id_prefix": include.proposal_id_prefix,
+        "proposal_id": include.proposal_id,
         "public_only": include.public_only,
         "science_only": include.science_only,
         "exclude_mosaic": include.exclude_mosaic,
@@ -218,6 +219,14 @@ def metadata_query(
         "--cycle",
         help="ALMA cycle number(s). Cycle N maps to proposal_id prefix {2012+N}.",
     ),
+    project_codes: Optional[List[str]] = typer.Option(
+        None,
+        "--project-code",
+        help=(
+            "Exact ALMA project code(s). Repeat for multiple or pass comma-separated values. "
+            "Example: --project-code 2019.1.00001.S --project-code 2022.1.00333.S"
+        ),
+    ),
     public_only: bool = typer.Option(
         True,
         "--public-only/--include-proprietary",
@@ -330,6 +339,7 @@ def metadata_query(
     )
 
     proposal_id_prefix = [f"{2012 + cycle}." for cycle in cycles] if cycles else None
+    project_code_list = split_csv_values(project_codes)
 
     include = inclusion_filters(
         science_keyword=science_keywords,
@@ -347,6 +357,7 @@ def metadata_query(
         time_resolution_range=time_resolution_range,
         frequency_range=frequency_range,
         proposal_id_prefix=proposal_id_prefix,
+        proposal_id=project_code_list,
         public_only=public_only,
         science_only=science_only,
         exclude_mosaic=exclude_mosaic,

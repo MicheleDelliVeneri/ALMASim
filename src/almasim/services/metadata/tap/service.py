@@ -50,6 +50,7 @@ class InclusionFilters:
     qa2_status: Optional[List[str]] = None
     obs_type: Optional[List[str]] = None
     proposal_id_prefix: Optional[List[str]] = None  # e.g. ['2016.', '2017.']
+    proposal_id: Optional[List[str]] = None  # exact codes e.g. ['2019.1.00001.S']
     public_only: bool = True  # default: only query non-proprietary data
     science_only: bool = True  # default: only science observations
     exclude_mosaic: bool = True  # default: exclude mosaic observations
@@ -327,6 +328,10 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
     if f.proposal_id_prefix:
         prefix_clauses = [f"proposal_id LIKE '{p}%'" for p in f.proposal_id_prefix]
         conds.append(f"({' OR '.join(prefix_clauses)})")
+
+    if f.proposal_id:
+        codes = "', '".join(f.proposal_id)
+        conds.append(f"proposal_id IN ('{codes}')")
 
     if f.public_only:
         conds.append("data_rights = 'Public'")
