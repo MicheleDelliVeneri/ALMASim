@@ -226,6 +226,7 @@ def _build_simulation_params(
     background_seed: int | None,
     output_subdir_name: str | None,
     input_path: Path | None,
+    kaggle_token: Path | None = None,
 ) -> "SimulationParams":
     rest_frequency, _ = astro.get_line_info(main_dir)
     sampled = sample_given_redshift(
@@ -273,6 +274,7 @@ def _build_simulation_params(
         imaging_algorithm=imaging_algorithm,
         background_level=background_level,
         background_seed=background_seed,
+        kaggle_token=kaggle_token,
         # Disable MS export by default; requires casatools or python-casacore.
         ms_export=False,
         ms_save_mode="none",
@@ -403,6 +405,16 @@ def simulation_run(
         min=1,
         help="Worker count for local backend.",
     ),
+    kaggle_token: Path | None = typer.Option(
+        None,
+        "--kaggle-token",
+        help=(
+            "Path to a Kaggle credentials file (JSON with username/key, e.g. "
+            "kaggle.json or access_token) or the directory containing it, used to "
+            "download morphology images for the galaxy-zoo / hubble-100 source "
+            "types. Defaults to the standard Kaggle locations if omitted."
+        ),
+    ),
 ) -> None:
     """Run staged ALMASim simulation from a pre-queried metadata CSV."""
     source_types = _SOURCE_TYPES + _external_source_types()
@@ -435,6 +447,9 @@ def simulation_run(
         raise typer.Exit(code=2)
     if input_path is not None and not input_path.expanduser().exists():
         typer.echo(f"--input not found: {input_path}", err=True)
+        raise typer.Exit(code=2)
+    if kaggle_token is not None and not kaggle_token.expanduser().exists():
+        typer.echo(f"--kaggle-token not found: {kaggle_token}", err=True)
         raise typer.Exit(code=2)
 
     metadata = pd.read_csv(metadata_path)
@@ -499,6 +514,7 @@ def simulation_run(
                     background_seed=(background_seed if background_seed is not None else run_seed),
                     output_subdir_name=output_subdir_name,
                     input_path=input_path,
+                    kaggle_token=kaggle_token,
                 )
 
                 with tqdm(

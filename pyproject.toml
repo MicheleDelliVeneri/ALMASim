@@ -30,6 +30,7 @@ dependencies = [
     "scipy",
     "h5py",
     "kaggle",
+    "kagglehub",
     "dask",
     "dask-expr",
     "dask-jobqueue",

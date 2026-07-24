@@ -77,3 +77,4 @@ stitch_alma_archive_simulation_suite
 examples/output/metadata_query_results.csv
 examples/output/resolved_products.csv
 frontend/node_modules/*
+

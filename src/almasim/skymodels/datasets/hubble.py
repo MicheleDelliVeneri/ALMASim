@@ -37,19 +37,19 @@ def _run_with_c_locale(func):
         locale.setlocale(locale.LC_ALL, saved)
 
 
-def download_hubble_top100(destination: Optional[Path | str] = None) -> Path:
-    """Download the Hubble Top-100 dataset via Kaggle."""
+def download_hubble_top100(
+    destination: Optional[Path | str] = None,
+    token: Optional[Path | str] = None,
+) -> Path:
+    """Download the Hubble Top-100 dataset via Kaggle.
+
+    ``token`` optionally points to a ``kaggle.json`` credentials file (or the
+    directory containing it); otherwise the Kaggle defaults are used.
+    """
+    from .galaxy_zoo import _download_dataset, configure_kaggle_token
+
+    configure_kaggle_token(token)
     base_path = Path(destination or Path.cwd() / "hubble" / "top100").expanduser().resolve()
     _ensure_directory(base_path)
-
-    def _download():
-        api = _load_kaggle_api()
-        api.authenticate()
-        api.dataset_download_files(
-            DEFAULT_HUBBLE_DATASET,
-            path=str(base_path),
-            unzip=True,
-        )
-
-    _run_with_c_locale(_download)
+    _download_dataset(DEFAULT_HUBBLE_DATASET, base_path)
     return base_path

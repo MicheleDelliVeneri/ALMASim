@@ -102,6 +102,7 @@ class SimulationParams:
     ms_export_dir: Optional[str] = None
     ms_save_mode: str = "msv2"
     imaging_algorithm: str = "legacy"
+    kaggle_token: Optional[str] = None
 
     @classmethod
     def from_values(
@@ -166,6 +167,7 @@ class SimulationParams:
         ms_export_dir: Optional[Path | str] = None,
         ms_save_mode: str = "msv2",
         imaging_algorithm: str = "legacy",
+        kaggle_token: Optional[Path | str] = None,
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from explicit values.
 
@@ -256,6 +258,7 @@ class SimulationParams:
             ms_export_dir=(_expand_path(ms_export_dir) if ms_export_dir is not None else None),
             ms_save_mode=str(ms_save_mode),
             imaging_algorithm=str(imaging_algorithm),
+            kaggle_token=(_expand_path(kaggle_token) if kaggle_token is not None else None),
         )
 
     @classmethod
@@ -305,6 +308,7 @@ class SimulationParams:
         ms_export_dir: Optional[Path | str] = None,
         ms_save_mode: str = "msv2",
         imaging_algorithm: str = "legacy",
+        kaggle_token: Optional[Path | str] = None,
     ) -> "SimulationParams":
         """Build :class:`SimulationParams` from a metadata row."""
 
@@ -429,6 +433,7 @@ class SimulationParams:
             ms_export_dir=ms_export_dir,
             ms_save_mode=ms_save_mode,
             imaging_algorithm=imaging_algorithm,
+            kaggle_token=kaggle_token,
         )
 
 
@@ -653,6 +658,40 @@ def _channel_first_to_datacube_layout(cube: np.ndarray, datacube_array: Any) -> 
     if datacube_shape[0] == cube.shape[0]:
         return cube
     return np.transpose(cube, (2, 1, 0))
+
+
+def _ensure_morphology_dataset(params: "SimulationParams", log: LogFn = None) -> None:
+    """Ensure image assets exist for image-based sky models (galaxy-zoo / hubble).
+
+    Downloads the morphology images from Kaggle when missing, using
+    ``params.kaggle_token`` (a path to a ``kaggle.json`` file or its directory) if
+    provided, otherwise the Kaggle defaults.
+    """
+    st = str(params.source_type).lower()
+
+    def _say(msg: str) -> None:
+        if log is not None:
+            try:
+                log(msg)
+            except Exception:
+                pass
+
+    if st == "galaxy-zoo":
+        data_path = os.path.join(params.galaxy_zoo_dir, "images_gz2", "images")
+        if os.path.isdir(data_path) and os.listdir(data_path):
+            return
+        from ..skymodels.datasets.galaxy_zoo import download_galaxy_zoo
+
+        _say(f"Fetching Galaxy Zoo 2 images into {params.galaxy_zoo_dir}")
+        download_galaxy_zoo(params.galaxy_zoo_dir, token=params.kaggle_token)
+    elif st in ("hubble-100", "hubble"):
+        data_path = os.path.join(params.hubble_dir, "top100")
+        if os.path.isdir(data_path) and os.listdir(data_path):
+            return
+        from ..skymodels.datasets.hubble import download_hubble_top100
+
+        _say(f"Fetching Hubble Top-100 images into {data_path}")
+        download_hubble_top100(data_path, token=params.kaggle_token)
 
 
 def _create_sky_model(
@@ -1070,6 +1109,10 @@ def generate_clean_cube(
             "n_chan": n_channels,
             "update_progress": progress_adapter,
         }
+
+        # For image-based morphologies, make sure the image assets exist,
+        # downloading them from Kaggle (optionally using params.kaggle_token).
+        _ensure_morphology_dataset(params, log)
 
         # Create and insert sky model
         status("Creating sky model")
