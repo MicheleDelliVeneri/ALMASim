@@ -221,9 +221,7 @@ def test_inclusion_conditions_proposal_id_multiple():
         exclude_mosaic=False,
     )
     conds = _build_inclusion_conditions(f)
-    assert any(
-        "proposal_id IN ('2019.1.00001.S', '2022.1.00333.S')" in c for c in conds
-    )
+    assert any("proposal_id IN ('2019.1.00001.S', '2022.1.00333.S')" in c for c in conds)
 
 
 @pytest.mark.unit
