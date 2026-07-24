@@ -131,17 +131,20 @@ def test_load_kaggle_api_caches_result():
 # ===========================================================================
 
 
+def _patch_kagglehub(mock_download):
+    """Patch ``import kagglehub`` so the modern download path is exercised
+    without touching the network."""
+    mock_kagglehub = MagicMock()
+    mock_kagglehub.dataset_download = mock_download
+    return patch.dict(sys.modules, {"kagglehub": mock_kagglehub})
+
+
 @pytest.mark.unit
 def test_download_galaxy_zoo_creates_destination(tmp_path):
     """download_galaxy_zoo creates the destination directory."""
     dest = tmp_path / "gz"
-    mock_api = MagicMock()
 
-    _load_kaggle_api.cache_clear()
-    with patch(
-        "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(MagicMock()):
         result = download_galaxy_zoo(dest)
 
     assert dest.is_dir()
@@ -149,32 +152,36 @@ def test_download_galaxy_zoo_creates_destination(tmp_path):
 
 
 @pytest.mark.unit
-def test_download_galaxy_zoo_calls_authenticate(tmp_path):
-    """download_galaxy_zoo calls api.authenticate()."""
+def test_download_galaxy_zoo_calls_kagglehub_download(tmp_path):
+    """download_galaxy_zoo downloads via kagglehub.dataset_download."""
     dest = tmp_path / "gz"
-    mock_api = MagicMock()
+    mock_download = MagicMock()
 
-    with patch(
-        "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(mock_download):
         download_galaxy_zoo(dest)
 
-    mock_api.authenticate.assert_called_once()
+    mock_download.assert_called_once_with(
+        DEFAULT_GALAXY_ZOO_DATASET,
+        output_dir=str(dest),
+    )
 
 
 @pytest.mark.unit
-def test_download_galaxy_zoo_calls_dataset_download_files(tmp_path):
-    """download_galaxy_zoo calls api.dataset_download_files with correct args."""
+def test_download_galaxy_zoo_falls_back_to_legacy_kaggle(tmp_path):
+    """When kagglehub is unavailable, download_galaxy_zoo falls back to the
+    legacy kaggle client (authenticate + dataset_download_files)."""
     dest = tmp_path / "gz"
     mock_api = MagicMock()
 
-    with patch(
-        "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",
-        return_value=mock_api,
-    ):
-        download_galaxy_zoo(dest)
+    _load_kaggle_api.cache_clear()
+    with patch.dict(sys.modules, {"kagglehub": None}):
+        with patch(
+            "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",
+            return_value=mock_api,
+        ):
+            download_galaxy_zoo(dest)
 
+    mock_api.authenticate.assert_called_once()
     mock_api.dataset_download_files.assert_called_once_with(
         DEFAULT_GALAXY_ZOO_DATASET,
         path=str(dest),
@@ -185,12 +192,7 @@ def test_download_galaxy_zoo_calls_dataset_download_files(tmp_path):
 @pytest.mark.unit
 def test_download_galaxy_zoo_default_destination(tmp_path):
     """download_galaxy_zoo with None destination uses cwd/galaxy_zoo."""
-    mock_api = MagicMock()
-
-    with patch(
-        "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(MagicMock()):
         with patch("pathlib.Path.cwd", return_value=tmp_path):
             result = download_galaxy_zoo(None)
 
@@ -202,12 +204,8 @@ def test_download_galaxy_zoo_default_destination(tmp_path):
 def test_download_galaxy_zoo_uses_c_locale(tmp_path):
     """download_galaxy_zoo wraps the download in C locale."""
     dest = tmp_path / "gz"
-    mock_api = MagicMock()
 
-    with patch(
-        "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(MagicMock()):
         with patch(
             "almasim.skymodels.datasets.galaxy_zoo._run_with_c_locale",
             side_effect=lambda fn: fn(),
@@ -221,12 +219,8 @@ def test_download_galaxy_zoo_uses_c_locale(tmp_path):
 def test_download_galaxy_zoo_returns_path_object(tmp_path):
     """download_galaxy_zoo returns a Path object."""
     dest = tmp_path / "gz"
-    mock_api = MagicMock()
 
-    with patch(
-        "almasim.skymodels.datasets.galaxy_zoo._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(MagicMock()):
         result = download_galaxy_zoo(dest)
 
     assert isinstance(result, Path)

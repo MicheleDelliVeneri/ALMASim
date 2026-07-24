@@ -105,9 +105,7 @@ def _download_dataset(handle: str, base_path: Path) -> None:
     try:
         import kagglehub  # modern client, supports KGAT_ bearer tokens
 
-        _run_with_c_locale(
-            lambda: kagglehub.dataset_download(handle, output_dir=str(base_path))
-        )
+        _run_with_c_locale(lambda: kagglehub.dataset_download(handle, output_dir=str(base_path)))
         return
     except ImportError:
         pass
