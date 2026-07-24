@@ -112,20 +112,26 @@ def test_load_kaggle_api_is_cached():
 
 # ===========================================================================
 # download_hubble_top100
+#
+# The download itself is delegated to ``galaxy_zoo._download_dataset``, so the
+# kagglehub / legacy-client / C-locale seams live on the ``galaxy_zoo`` module.
 # ===========================================================================
+
+
+def _patch_kagglehub(mock_download):
+    """Patch ``import kagglehub`` so the modern download path is exercised
+    without touching the network."""
+    mock_kagglehub = MagicMock()
+    mock_kagglehub.dataset_download = mock_download
+    return patch.dict(sys.modules, {"kagglehub": mock_kagglehub})
 
 
 @pytest.mark.unit
 def test_download_hubble_top100_creates_destination(tmp_path):
     """download_hubble_top100 creates the destination directory."""
     dest = tmp_path / "hubble"
-    mock_api = MagicMock()
 
-    _load_kaggle_api.cache_clear()
-    with patch(
-        "almasim.skymodels.datasets.hubble._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(MagicMock()):
         result = download_hubble_top100(dest)
 
     assert dest.is_dir()
@@ -133,32 +139,35 @@ def test_download_hubble_top100_creates_destination(tmp_path):
 
 
 @pytest.mark.unit
-def test_download_hubble_top100_calls_authenticate(tmp_path):
-    """download_hubble_top100 calls api.authenticate()."""
+def test_download_hubble_top100_calls_kagglehub_download(tmp_path):
+    """download_hubble_top100 downloads via kagglehub.dataset_download."""
     dest = tmp_path / "hubble"
-    mock_api = MagicMock()
+    mock_download = MagicMock()
 
-    with patch(
-        "almasim.skymodels.datasets.hubble._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(mock_download):
         download_hubble_top100(dest)
 
-    mock_api.authenticate.assert_called_once()
+    mock_download.assert_called_once_with(
+        DEFAULT_HUBBLE_DATASET,
+        output_dir=str(dest),
+    )
 
 
 @pytest.mark.unit
-def test_download_hubble_top100_calls_dataset_download_files(tmp_path):
-    """download_hubble_top100 calls api.dataset_download_files correctly."""
+def test_download_hubble_top100_falls_back_to_legacy_kaggle(tmp_path):
+    """When kagglehub is unavailable, download_hubble_top100 falls back to the
+    legacy kaggle client (authenticate + dataset_download_files)."""
+    from almasim.skymodels.datasets import galaxy_zoo
+
     dest = tmp_path / "hubble"
     mock_api = MagicMock()
 
-    with patch(
-        "almasim.skymodels.datasets.hubble._load_kaggle_api",
-        return_value=mock_api,
-    ):
-        download_hubble_top100(dest)
+    galaxy_zoo._load_kaggle_api.cache_clear()
+    with patch.dict(sys.modules, {"kagglehub": None}):
+        with patch.object(galaxy_zoo, "_load_kaggle_api", return_value=mock_api):
+            download_hubble_top100(dest)
 
+    mock_api.authenticate.assert_called_once()
     mock_api.dataset_download_files.assert_called_once_with(
         DEFAULT_HUBBLE_DATASET,
         path=str(dest),
@@ -169,12 +178,7 @@ def test_download_hubble_top100_calls_dataset_download_files(tmp_path):
 @pytest.mark.unit
 def test_download_hubble_top100_default_destination():
     """download_hubble_top100 with None uses cwd/hubble/top100."""
-    mock_api = MagicMock()
-
-    with patch(
-        "almasim.skymodels.datasets.hubble._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(MagicMock()):
         with patch("pathlib.Path.cwd", return_value=Path("/tmp/test_cwd")):
             result = download_hubble_top100(None)
 
@@ -185,12 +189,8 @@ def test_download_hubble_top100_default_destination():
 def test_download_hubble_top100_returns_path_object(tmp_path):
     """download_hubble_top100 returns a Path."""
     dest = tmp_path / "hubble"
-    mock_api = MagicMock()
 
-    with patch(
-        "almasim.skymodels.datasets.hubble._load_kaggle_api",
-        return_value=mock_api,
-    ):
+    with _patch_kagglehub(MagicMock()):
         result = download_hubble_top100(dest)
 
     assert isinstance(result, Path)
@@ -199,15 +199,14 @@ def test_download_hubble_top100_returns_path_object(tmp_path):
 @pytest.mark.unit
 def test_download_hubble_top100_uses_c_locale(tmp_path):
     """download_hubble_top100 wraps download in C locale."""
-    dest = tmp_path / "hubble"
-    mock_api = MagicMock()
+    from almasim.skymodels.datasets import galaxy_zoo
 
-    with patch(
-        "almasim.skymodels.datasets.hubble._load_kaggle_api",
-        return_value=mock_api,
-    ):
-        with patch(
-            "almasim.skymodels.datasets.hubble._run_with_c_locale",
+    dest = tmp_path / "hubble"
+
+    with _patch_kagglehub(MagicMock()):
+        with patch.object(
+            galaxy_zoo,
+            "_run_with_c_locale",
             side_effect=lambda fn: fn(),
         ) as mock_locale_runner:
             download_hubble_top100(dest)
