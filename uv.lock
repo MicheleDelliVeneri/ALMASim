@@ -38,7 +38,7 @@ wheels = [
 
 [[package]]
 name = "almasim"
-version = "2.1.15"
+version = "2.1.16"
 source = { editable = "." }
 dependencies = [
     { name = "astromartini" },
@@ -55,6 +55,7 @@ dependencies = [
     { name = "httpx" },
     { name = "imagecodecs" },
     { name = "kaggle" },
+    { name = "kagglehub" },
     { name = "matplotlib" },
     { name = "multiprocess" },
     { name = "nifty8" },
@@ -125,6 +126,7 @@ requires-dist = [
     { name = "httpx" },
     { name = "imagecodecs" },
     { name = "kaggle" },
+    { name = "kagglehub" },
     { name = "matplotlib" },
     { name = "multiprocess" },
     { name = "nifty8" },
@@ -1265,6 +1267,22 @@ wheels = [
 ]
 
 [[package]]
+name = "kagglehub"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "kagglesdk" },
+    { name = "packaging" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b5/b9/e1bdafdcdb98e8e5354b30959ed48f4a08ca2c2dc72c968c5b38c4baa1b5/kagglehub-1.0.2.tar.gz", hash = "sha256:08abae0c1e249904003ce6f23c189166e3032220478426a552c77c2edb08b93a", size = 117457, upload-time = "2026-06-09T17:14:05.313Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/1a/6b1293d0b091905e367f86771a7122e5f7f2729ab9f0f36a1617f7ad6c05/kagglehub-1.0.2-py3-none-any.whl", hash = "sha256:ffad2d79cfda9b06848e98cb0a4a48e286285cfba4aeadadc0b8dbd9bcadd372", size = 70645, upload-time = "2026-06-09T17:14:04.04Z" },
+]
+
+[[package]]
 name = "kagglesdk"
 version = "0.1.23"
 source = { registry = "https://pypi.org/simple" }
@@ -2209,15 +2227,15 @@ wheels = [
 
 [[package]]
 name = "pyvo"
-version = "1.8.1"
+version = "1.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astropy" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/33/51077325e08b68d13498ec1a63134f1feef6659ea4ad437649c942cac916/pyvo-1.8.1.tar.gz", hash = "sha256:d3cc60aa3d3416d22c89e465a04dfa9f521085fdd5228cce2cffd2fee3a9e709", size = 2120129, upload-time = "2026-02-12T21:20:41.983Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/85/35/12c0f4fa0879316837ac56f275942f006f0735e5aedba529b4449dddc36f/pyvo-1.9.1.tar.gz", hash = "sha256:2f26c99af7c32f3c34b919e2d14eaf1a95914176d693fb7769773f3ab0b7999d", size = 2167800, upload-time = "2026-06-11T14:44:01.349Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b8/e8/37bad20ef0215b13ace46f1f9a32848511fb7a4bd0c06fff9e63070e14a8/pyvo-1.8.1-py3-none-any.whl", hash = "sha256:d6531288f928e149dc059fc3ef56cf43bda0acff8edb1b6c61f91113e4c111fd", size = 1105237, upload-time = "2026-02-12T21:20:38.201Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/09/04ff6e8beaa6cd60a960f925d837c2afa3fffba7860042ab1b52a8358297/pyvo-1.9.1-py3-none-any.whl", hash = "sha256:098648d00943440f56c1d00ac76330433578a0725ea6187afaa6bae08545bb53", size = 1152763, upload-time = "2026-06-11T14:43:59.016Z" },
 ]
 
 [[package]]
