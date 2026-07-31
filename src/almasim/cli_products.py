@@ -133,7 +133,7 @@ def _future_done(future: Any) -> bool:
     return status in {"finished", "done", "error", "failed", "cancelled"}
 
 
-_NO_PROGRESS_TIMEOUT_S = 300
+_NO_PROGRESS_TIMEOUT_S = 3600
 
 
 def _compute_jobs_with_progress(
