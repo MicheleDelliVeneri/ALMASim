@@ -183,9 +183,7 @@ docker pull ghcr.io/michelledelliveneri/almasim-backend:latest
 ```python
 from almasim.services.metadata.tap.service import query_by_science_type, InclusionFilters
 
-df = query_by_science_type(
-    include=InclusionFilters(science_keyword=["Galaxies"], band=[6])
-)
+df = query_by_science_type(include=InclusionFilters(science_keyword=["Galaxies"], band=[6]))
 print(df[["ALMA_source_name", "Band", "spatial_resolution"]].head())
 ```
 
@@ -196,7 +194,7 @@ from almasim import SimulationParams, run_simulation
 from pathlib import Path
 
 params = SimulationParams.from_metadata_row(
-    row,                          # pandas Series from a metadata query
+    row,  # pandas Series from a metadata query
     idx=0,
     main_dir=Path("src/almasim"),
     output_dir=Path("output"),

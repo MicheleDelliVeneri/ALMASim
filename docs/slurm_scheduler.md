@@ -48,8 +48,8 @@ manager = SlurmDaskClusterSingleton.get_instance(
     walltime="00:30:00",
     n_jobs=1,
     project=None,
-    scheduler_host="headnode-internal",    # optional
-    scheduler_interface="ib0",             # optional
+    scheduler_host="headnode-internal",  # optional
+    scheduler_interface="ib0",  # optional
 )
 
 future = manager.submit_subcommand(
