@@ -910,9 +910,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/65/8b/3669ad3b3f247a791b2b4aceb3aa5a31f5f6817bf547e4e1ff712338145a/greenlet-3.4.0-cp312-cp312-macosx_11_0_universal2.whl", hash = "sha256:1a54a921561dd9518d31d2d3db4d7f80e589083063ab4d3e2e950756ef809e1a", size = 286902, upload-time = "2026-04-08T15:52:12.138Z" },
     { url = "https://files.pythonhosted.org/packages/38/3e/3c0e19b82900873e2d8469b590a6c4b3dfd2b316d0591f1c26b38a4879a5/greenlet-3.4.0-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:16dec271460a9a2b154e3b1c2fa1050ce6280878430320e85e08c166772e3f97", size = 606099, upload-time = "2026-04-08T16:24:38.408Z" },
     { url = "https://files.pythonhosted.org/packages/b5/33/99fef65e7754fc76a4ed14794074c38c9ed3394a5bd129d7f61b705f3168/greenlet-3.4.0-cp312-cp312-manylinux_2_24_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:90036ce224ed6fe75508c1907a77e4540176dcf0744473627785dd519c6f9996", size = 618837, upload-time = "2026-04-08T16:30:58.298Z" },
-    { url = "https://files.pythonhosted.org/packages/44/57/eae2cac10421feae6c0987e3dc106c6d86262b1cb379e171b017aba893a6/greenlet-3.4.0-cp312-cp312-manylinux_2_24_s390x.manylinux_2_28_s390x.whl", hash = "sha256:6f0def07ec9a71d72315cf26c061aceee53b306c36ed38c35caba952ea1b319d", size = 624901, upload-time = "2026-04-08T16:40:38.981Z" },
     { url = "https://files.pythonhosted.org/packages/36/f7/229f3aed6948faa20e0616a0b8568da22e365ede6a54d7d369058b128afd/greenlet-3.4.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a1c4f6b453006efb8310affb2d132832e9bbb4fc01ce6df6b70d810d38f1f6dc", size = 615062, upload-time = "2026-04-08T15:56:33.766Z" },
-    { url = "https://files.pythonhosted.org/packages/6a/8a/0e73c9b94f31d1cc257fe79a0eff621674141cdae7d6d00f40de378a1e42/greenlet-3.4.0-cp312-cp312-manylinux_2_39_riscv64.whl", hash = "sha256:0e1254cf0cbaa17b04320c3a78575f29f3c161ef38f59c977108f19ffddaf077", size = 423927, upload-time = "2026-04-08T16:43:05.293Z" },
     { url = "https://files.pythonhosted.org/packages/08/97/d988180011aa40135c46cd0d0cf01dd97f7162bae14139b4a3ef54889ba5/greenlet-3.4.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:9b2d9a138ffa0e306d0e2b72976d2fb10b97e690d40ab36a472acaab0838e2de", size = 1573511, upload-time = "2026-04-08T16:26:20.058Z" },
     { url = "https://files.pythonhosted.org/packages/d4/0f/a5a26fe152fb3d12e6a474181f6e9848283504d0afd095f353d85726374b/greenlet-3.4.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:8424683caf46eb0eb6f626cb95e008e8cc30d0cb675bdfa48200925c79b38a08", size = 1640396, upload-time = "2026-04-08T15:57:30.88Z" },
     { url = "https://files.pythonhosted.org/packages/42/cf/bb2c32d9a100e36ee9f6e38fad6b1e082b8184010cb06259b49e1266ca01/greenlet-3.4.0-cp312-cp312-win_amd64.whl", hash = "sha256:a0a53fb071531d003b075c444014ff8f8b1a9898d36bb88abd9ac7b3524648a2", size = 238892, upload-time = "2026-04-08T17:03:10.094Z" },
@@ -1491,7 +1489,7 @@ wheels = [
 
 [[package]]
 name = "matplotlib"
-version = "3.10.9"
+version = "3.11.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "contourpy" },
@@ -1504,15 +1502,15 @@ dependencies = [
     { name = "pyparsing" },
     { name = "python-dateutil" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/1b/4be5be87d43d327a0cf4de1a56e86f7f84c89312452406cf122efe2839e6/matplotlib-3.10.9.tar.gz", hash = "sha256:fd66508e8c6877d98e586654b608a0456db8d7e8a546eb1e2600efd957302358", size = 34811233, upload-time = "2026-04-24T00:14:13.539Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/64/f9a391af28f518b11ad45a8a712353c94a0aefce09d3703200e5c54b610a/matplotlib-3.11.1.tar.gz", hash = "sha256:69647db5746941c793d6e445a4cd349323ffb87d9cc958c2ad84a659b4832d30", size = 32612045, upload-time = "2026-07-18T03:39:46.63Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/c6/5581e26c72233ebb2a2a6fed2d24fb7c66b4700120b813f51b0555acf0b6/matplotlib-3.10.9-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:f0c3c28d9fbcc1fe7a03be236d73430cf6409c41fb2383a7ac52fe932b072cb1", size = 8319908, upload-time = "2026-04-24T00:12:21.323Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/18/4880dd762e40cd360c1bf06e890c5a97b997e91cb324602b1a19950ad5ce/matplotlib-3.10.9-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:41cb28c2bd769aa3e98322c6ab09854cbcc52ab69d2759d681bba3e327b2b320", size = 8216016, upload-time = "2026-04-24T00:12:23.4Z" },
-    { url = "https://files.pythonhosted.org/packages/32/91/d024616abdba99e83120e07a20658976f6a343646710760c4a51df126029/matplotlib-3.10.9-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ae20801130378b82d647ff5047c07316295b68dc054ca6b3c13519d0ea624285", size = 8789336, upload-time = "2026-04-24T00:12:26.096Z" },
-    { url = "https://files.pythonhosted.org/packages/5c/04/030a2f61ef2158f5e4c259487a92ac877732499fb33d871585d89e03c42d/matplotlib-3.10.9-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:6c63ebcd8b4b169eb2f5c200552ae6b8be8999a005b6b507ed76fb8d7d674fe2", size = 9604602, upload-time = "2026-04-24T00:12:29.052Z" },
-    { url = "https://files.pythonhosted.org/packages/fc/c2/541e4d09d87bb6b5830fc28b4c887a9a8cf4e1c6cee698a8c05552ae2003/matplotlib-3.10.9-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:d75d11c949914165976c621b2324f9ef162af7ebf4b057ddf95dd1dba7e5edcf", size = 9670966, upload-time = "2026-04-24T00:12:32.131Z" },
-    { url = "https://files.pythonhosted.org/packages/04/a1/4571fc46e7702de8d0c2dc54ad1b2f8e29328dea3ee90831181f7353d93c/matplotlib-3.10.9-cp312-cp312-win_amd64.whl", hash = "sha256:d091f9d758b34aaaaa6331d13574bf01891d903b3dec59bfff458ef7551de5d6", size = 8217462, upload-time = "2026-04-24T00:12:35.226Z" },
-    { url = "https://files.pythonhosted.org/packages/4b/d0/2269edb12aa30c13c8bcc9382892e39943ce1d28aab4ec296e0381798e81/matplotlib-3.10.9-cp312-cp312-win_arm64.whl", hash = "sha256:10cc5ce06d10231c36f40e875f3c7e8050362a4ee8f0ee5d29a6b3277d57bb42", size = 8136688, upload-time = "2026-04-24T00:12:37.442Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/6c/7ef7ebcb2bd9739b2b66b18b076e077f44bb46fdbe28ca0506edb3c62c79/matplotlib-3.11.1-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:e15ef41507f3d525f46154ac9e3ae785dacde9f20e593a25de8986267892ef74", size = 9453849, upload-time = "2026-07-18T03:38:19.593Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/f8/6d0c312c8d9738e7d9677f09fe5c986b3239e651a7b73a2deb38b65e4a71/matplotlib-3.11.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:21a67b961a6d597bca54fae826cd20695ba4a6e4d05424a08da6e13e3176fd6b", size = 9283113, upload-time = "2026-07-18T03:38:21.95Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/cf/b4ad2cc81b6672ea29ea04e64e350a9f9b493b0908ccd884c67eeff8f7b2/matplotlib-3.11.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ba8f811b8ddfac493734d6af0b2dff96919d0c28ca0d641858dab4262777c6ea", size = 10035615, upload-time = "2026-07-18T03:38:24.315Z" },
+    { url = "https://files.pythonhosted.org/packages/88/90/4e10e033d9b66589d8ed98b84c95cdbb57033d57c1f41339d7393dbd2f2e/matplotlib-3.11.1-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c52f7ad20ef476806ed212380b1d54d20310c8b86bdc2c9a68b51f0024a44472", size = 10842559, upload-time = "2026-07-18T03:38:26.285Z" },
+    { url = "https://files.pythonhosted.org/packages/88/eb/799612d0f8cd3e816a10fec59329fca52cd2353264df80378dfc541ae855/matplotlib-3.11.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:8b14eb22961fe865efb0e4ff167e333e428908b00115a8d800ccb65ee108e481", size = 10927532, upload-time = "2026-07-18T03:38:28.532Z" },
+    { url = "https://files.pythonhosted.org/packages/88/89/56649bbaa2fd12e20f3be03dbcc135b0c8676d88bac17977599e3eb442a0/matplotlib-3.11.1-cp312-cp312-win_amd64.whl", hash = "sha256:88a2a27dd9691ae448dfae4b26f59036be90c3c28757edd3553a29559d00859f", size = 9333886, upload-time = "2026-07-18T03:38:30.477Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/11/4d124efbbad677b7b7552f6f85a3bd432d4232f95400cea98fcd2ae36ef3/matplotlib-3.11.1-cp312-cp312-win_arm64.whl", hash = "sha256:480194afceca4df2f137c2721227d3cba67121fbf4397b69cee7f83714b0a58a", size = 9007545, upload-time = "2026-07-18T03:38:32.833Z" },
 ]
 
 [[package]]
@@ -1802,7 +1800,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "ptyprocess" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
