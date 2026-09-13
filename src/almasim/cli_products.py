@@ -133,7 +133,7 @@ def _future_done(future: Any) -> bool:
     return status in {"finished", "done", "error", "failed", "cancelled"}
 
 
-_NO_PROGRESS_TIMEOUT_S = 3600
+_NO_PROGRESS_TIMEOUT_S = 3600 * 4
 
 
 def _compute_jobs_with_progress(
@@ -406,12 +406,9 @@ def _unpack_single_uid(
         f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
 
-    # Prioritize system libraries to avoid GLIBC version conflicts with spack binaries.
-    ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
-    existing_ld = env.get("LD_LIBRARY_PATH", "")
-    if existing_ld:
-        ld_library_path = f"{ld_library_path}:{existing_ld}"
-    env["LD_LIBRARY_PATH"] = ld_library_path
+    # Let CASA resolve its bundled MPI/PMIx libraries instead of mixing them
+    # with the Slurm worker's system or Spack library path.
+    env.pop("LD_LIBRARY_PATH", None)
 
     process = subprocess.Popen(
         cmd,
@@ -507,12 +504,9 @@ def _calibrate_single_uid(
         f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
 
-    # Prioritize system libraries to avoid GLIBC version conflicts with spack binaries.
-    ld_library_path = "/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib"
-    existing_ld = env.get("LD_LIBRARY_PATH", "")
-    if existing_ld:
-        ld_library_path = f"{ld_library_path}:{existing_ld}"
-    env["LD_LIBRARY_PATH"] = ld_library_path
+    # Let CASA resolve its bundled MPI/PMIx libraries instead of mixing them
+    # with the Slurm worker's system or Spack library path.
+    env.pop("LD_LIBRARY_PATH", None)
 
     process = subprocess.Popen(
         cmd,
