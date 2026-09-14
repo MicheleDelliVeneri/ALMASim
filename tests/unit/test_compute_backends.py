@@ -322,6 +322,7 @@ def test_slurm_backend_forwards_scheduler_network_kwargs():
                 project="proj",
                 scheduler_host="headnode-internal",
                 scheduler_interface="ib0",
+                job_extra_directives=["--requeue"],
             )
 
             backend.close()

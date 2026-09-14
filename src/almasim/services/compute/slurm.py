@@ -1,6 +1,6 @@
 """Slurm computation backend using dask-jobqueue."""
 
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, List, Mapping, Optional, Sequence, Union
 
 from almasim.scheduling.cluster import SLURM_DASK_AVAILABLE, SlurmDaskClusterSingleton
 
@@ -29,7 +29,7 @@ class SlurmBackend(ComputationBackend):
         n_workers: int = 4,
         scheduler_host: Optional[str] = None,
         scheduler_interface: Optional[str] = None,
-        **kwargs: Dict[str, Any],
+        **kwargs: Any,
     ):
         """Initialize Slurm backend.
 
@@ -74,6 +74,10 @@ class SlurmBackend(ComputationBackend):
         self.n_workers = n_workers
         self.scheduler_host = scheduler_host
         self.scheduler_interface = scheduler_interface
+        job_extra_directives = list(kwargs.pop("job_extra_directives", []))
+        if "--requeue" not in job_extra_directives and "--no-requeue" not in job_extra_directives:
+            job_extra_directives.append("--requeue")
+        kwargs["job_extra_directives"] = job_extra_directives
         self.kwargs = kwargs
         self._cluster_manager: Optional[SlurmDaskClusterSingleton] = None
 
