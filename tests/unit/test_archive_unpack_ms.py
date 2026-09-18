@@ -385,3 +385,29 @@ def test_create_measurement_sets_returns_list(mock_ensure, mock_configure, mock_
     assert isinstance(results, list)
     assert len(results) == 1
     assert results[0] == expected_ms
+
+
+@pytest.mark.unit
+def test_configure_casa_environment_routes_casa_log(tmp_path):
+    """Site config should carry the requested CASA log file and terminal echo."""
+    output_root = tmp_path / "out"
+    log_file = output_root / "logs" / "casa-calibrate-uid.log"
+    configure_casa_environment(
+        output_root, tmp_path / "casa-data", log_file=log_file, log_to_terminal=True
+    )
+
+    site_config = (output_root / ".casa-config" / "casasiteconfig.py").read_text(encoding="utf-8")
+    assert f"logfile = {str(log_file.resolve())!r}" in site_config
+    assert "log2term = True" in site_config
+    assert log_file.parent.is_dir()
+
+
+@pytest.mark.unit
+def test_configure_casa_environment_defaults_to_quiet_terminal(tmp_path):
+    """Without options the site config keeps CASA's default log file and no terminal echo."""
+    output_root = tmp_path / "out"
+    configure_casa_environment(output_root, tmp_path / "casa-data")
+
+    site_config = (output_root / ".casa-config" / "casasiteconfig.py").read_text(encoding="utf-8")
+    assert "logfile" not in site_config
+    assert "log2term = False" in site_config

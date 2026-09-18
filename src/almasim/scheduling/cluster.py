@@ -230,6 +230,7 @@ class SlurmDaskClusterSingleton:
         self.cluster.scale(n_jobs)
         self.client = Client(self.cluster)
         print(f"Dask dashboard: {getattr(self.client, 'dashboard_link', None)}", flush=True)
+        print(f"Slurm worker logs (dask-worker stdout/stderr): {log_directory}", flush=True)
         self._config_signature = (
             queue,
             node_cores,

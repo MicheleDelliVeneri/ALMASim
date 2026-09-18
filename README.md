@@ -400,6 +400,24 @@ almasim products calibrate \
   --postprocess-backend slurm \
   --slurm-workers 8
 
+# Unpack/calibrate run every UID in its own subprocess (sync and slurm alike), so a
+# CASA crash on one execution block is skipped and the rest of the batch continues.
+# Skipped UIDs are listed at the end and the command exits with status 1; pass
+# --fail-fast to abort on the first failure instead.
+#
+# Every finished calibration gets a marker <output-root>/<uid>.ms.split.cal.done; on a
+# re-run UIDs with a marker are skipped automatically (--overwrite-outputs redoes them),
+# while partial outputs or working copies left by a crash are replaced. To trust an
+# output produced before markers existed, create its .done file by hand (touch).
+# The per-UID working copy (raw MS + caltables, ~1.8x the raw MS) is deleted as soon as
+# the split succeeds; pass --keep-working-copies to retain it.
+#
+# Following progress: each UID writes <output-root>/logs/<uid>.calibrate.log
+# (or <uid>.unpack.log) with the full CASA output, so on Slurm you can
+#   tail -f examples/output/archive_ms/calibrated_ms/logs/uid___A001_X*.calibrate.log
+# from the submit node. The submit node also prints the last log line of every
+# running UID once a minute. Dask worker stdout/stderr lands in ~/dask-worker-logs.
+
 # Download + unpack ASDM + calibrate using Slurm-backed parallel post-processing
 almasim products download \
   --products-csv examples/output/resolved_products.csv \

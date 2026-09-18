@@ -883,3 +883,297 @@ def test_create_calibrated_measurement_sets_cleans_intermediate_paths(
     assert raw_ms_root in cleanup_targets
     assert output_root / "working" in cleanup_targets
     assert original_data_root in cleanup_targets
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_create_calibrated_measurement_sets_continue_on_error_skips_failed_uid(
+    mock_apply,
+    mock_split,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """With continue_on_error the good UIDs are produced and the bad one is reported at the end."""
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    raw_a = raw_ms_root / "uid___A.ms"
+    raw_b = raw_ms_root / "uid___B.ms"
+    for path in (raw_a, raw_b):
+        path.mkdir(parents=True)
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+
+    mock_find_raw.return_value = [raw_a, raw_b]
+    mock_find_cal.return_value = tmp_path / "calibration"
+
+    def _apply(applycal, clearcal, raw_ms, *args, **kwargs):
+        if raw_ms.name == "uid___B.ms":
+            raise RuntimeError("Array has no elements")
+        return raw_ms
+
+    mock_apply.side_effect = _apply
+    mock_split.side_effect = lambda mstransform, working_ms, *a, **k: (
+        output_root / f"{working_ms.name}.split.cal"
+    )
+
+    messages: list[str] = []
+    with patch.dict(sys.modules, {"casatasks": MagicMock()}):
+        with pytest.raises(RuntimeError, match="failed for 1 of 2 UID") as exc:
+            create_calibrated_measurement_sets(
+                tmp_path / "input",
+                raw_ms_root,
+                output_root,
+                skip_casa_data_update=True,
+                continue_on_error=True,
+                logger_fn=messages.append,
+            )
+
+    assert "uid___B" in str(exc.value)
+    # Both UIDs were attempted; the good one was split.
+    assert mock_apply.call_count == 2
+    assert mock_split.call_count == 1
+    assert any("Calibration FAILED for uid___B" in message for message in messages)
+    assert any("Calibration finished for uid___A" in message for message in messages)
+    # CASA log routing is requested for the whole run.
+    configure_kwargs = mock_configure_casa.call_args.kwargs
+    assert configure_kwargs["log_to_terminal"] is True
+    assert configure_kwargs["log_file"] == output_root.resolve() / "logs" / "casa-calibrate-all.log"
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_create_calibrated_measurement_sets_fail_fast_by_default(
+    mock_apply,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """Without continue_on_error the first failure propagates unchanged."""
+    raw_ms_root = tmp_path / "raw"
+    raw_a = raw_ms_root / "uid___A.ms"
+    raw_a.mkdir(parents=True)
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+    mock_find_raw.return_value = [raw_a]
+    mock_find_cal.return_value = tmp_path / "calibration"
+    mock_apply.side_effect = RuntimeError("Array has no elements")
+
+    with patch.dict(sys.modules, {"casatasks": MagicMock()}):
+        with pytest.raises(RuntimeError, match="Array has no elements"):
+            create_calibrated_measurement_sets(
+                tmp_path / "input",
+                raw_ms_root,
+                tmp_path / "output",
+                skip_casa_data_update=True,
+            )
+
+
+@pytest.mark.unit
+def test_calibration_marker_helpers(tmp_path):
+    """Completion requires both the output directory and the marker; empty markers count."""
+    from almasim.services.archive.calibrate_ms import (
+        calibration_marker_path,
+        is_calibration_complete,
+        write_calibration_marker,
+    )
+
+    output_root = tmp_path / "cal"
+    output_root.mkdir()
+    assert is_calibration_complete(output_root, "uid___A") is False
+
+    (output_root / "uid___A.ms.split.cal").mkdir()
+    assert is_calibration_complete(output_root, "uid___A") is False
+
+    marker = write_calibration_marker(output_root, "uid___A")
+    assert marker == output_root / "uid___A.ms.split.cal.done"
+    assert '"uid": "uid___A"' in marker.read_text(encoding="utf-8")
+    assert is_calibration_complete(output_root, "uid___A") is True
+
+    # A manually created empty marker is enough to trust a pre-existing output.
+    (output_root / "uid___B.ms.split.cal").mkdir()
+    calibration_marker_path(output_root, "uid___B").touch()
+    assert is_calibration_complete(output_root, "uid___B") is True
+
+
+@pytest.mark.unit
+def test_split_calibrated_science_ms_writes_marker(tmp_path):
+    """A successful split leaves a completion marker next to the output."""
+    from almasim.services.archive.calibrate_ms import split_calibrated_science_ms
+
+    working_ms = tmp_path / "working" / "uid___A.ms"
+    working_ms.mkdir(parents=True)
+    output_root = tmp_path / "cal"
+
+    def _mstransform(vis, outputvis, spw, reindex):
+        Path(outputvis).mkdir(parents=True)
+
+    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0,1"):
+        result = split_calibrated_science_ms(_mstransform, working_ms, output_root)
+
+    assert result == output_root / "uid___A.ms.split.cal"
+    assert (output_root / "uid___A.ms.split.cal.done").is_file()
+
+
+@pytest.mark.unit
+def test_split_calibrated_science_ms_clears_stale_marker_on_overwrite(tmp_path):
+    """Overwriting removes the old marker before the new split runs."""
+    from almasim.services.archive.calibrate_ms import split_calibrated_science_ms
+
+    working_ms = tmp_path / "working" / "uid___A.ms"
+    working_ms.mkdir(parents=True)
+    output_root = tmp_path / "cal"
+    (output_root / "uid___A.ms.split.cal").mkdir(parents=True)
+    (output_root / "uid___A.ms.split.cal.done").write_text("old")
+
+    def _failing_mstransform(vis, outputvis, spw, reindex):
+        raise RuntimeError("mstransform crashed")
+
+    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0"):
+        with pytest.raises(RuntimeError, match="mstransform crashed"):
+            split_calibrated_science_ms(
+                _failing_mstransform, working_ms, output_root, overwrite=True
+            )
+
+    # The stale marker must not survive a failed redo.
+    assert not (output_root / "uid___A.ms.split.cal.done").exists()
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_create_calibrated_measurement_sets_skips_complete_and_redoes_stale(
+    mock_apply,
+    mock_split,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """Marked outputs are skipped; unmarked leftovers are redone with overwrite semantics."""
+    from almasim.services.archive.calibrate_ms import write_calibration_marker
+
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    raw_done = raw_ms_root / "uid___DONE.ms"
+    raw_stale = raw_ms_root / "uid___STALE.ms"
+    for path in (raw_done, raw_stale):
+        path.mkdir(parents=True)
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+
+    # DONE: output + marker.  STALE: partial output and working copy, no marker.
+    (output_root / "uid___DONE.ms.split.cal").mkdir(parents=True)
+    write_calibration_marker(output_root, "uid___DONE")
+    (output_root / "uid___STALE.ms.split.cal").mkdir()
+    stale_working = output_root / "working" / "uid___STALE.calibration"
+    (stale_working / "uid___STALE.ms").mkdir(parents=True)
+
+    mock_find_raw.return_value = [raw_done, raw_stale]
+    mock_find_cal.return_value = tmp_path / "calibration"
+    mock_apply.side_effect = lambda applycal, clearcal, raw_ms, *a, **k: raw_ms
+    mock_split.side_effect = lambda mstransform, working_ms, *a, **k: (
+        output_root / f"{working_ms.name}.split.cal"
+    )
+
+    messages: list[str] = []
+    with patch.dict(sys.modules, {"casatasks": MagicMock()}):
+        results = create_calibrated_measurement_sets(
+            tmp_path / "input",
+            raw_ms_root,
+            output_root,
+            skip_casa_data_update=True,
+            logger_fn=messages.append,
+        )
+
+    assert results == [
+        output_root / "uid___DONE.ms.split.cal",
+        output_root / "uid___STALE.ms.split.cal",
+    ]
+    assert mock_apply.call_count == 1
+    assert mock_apply.call_args.args[2] == raw_stale
+    assert mock_apply.call_args.kwargs["overwrite"] is True
+    assert mock_split.call_args.kwargs["overwrite"] is True
+    assert any("already calibrated, skipping" in m for m in messages)
+    assert any("Replacing incomplete output" in m for m in messages)
+    assert any("Replacing stale working copy" in m for m in messages)
+    # Working copy removed after success by default.
+    assert not stale_working.exists()
+    assert any("Removed working copy" in m for m in messages)
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_create_calibrated_measurement_sets_keeps_working_copy_when_asked(
+    mock_apply,
+    mock_split,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """remove_working_copy=False leaves the per-UID working directory in place."""
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    raw_a = raw_ms_root / "uid___A.ms"
+    raw_a.mkdir(parents=True)
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+    mock_find_raw.return_value = [raw_a]
+    mock_find_cal.return_value = tmp_path / "calibration"
+
+    def _apply(applycal, clearcal, raw_ms, calibration_dir, working_dir, **kwargs):
+        (working_dir / raw_ms.name).mkdir(parents=True)
+        return working_dir / raw_ms.name
+
+    mock_apply.side_effect = _apply
+    mock_split.side_effect = lambda mstransform, working_ms, *a, **k: (
+        output_root / f"{working_ms.name}.split.cal"
+    )
+
+    with patch.dict(sys.modules, {"casatasks": MagicMock()}):
+        create_calibrated_measurement_sets(
+            tmp_path / "input",
+            raw_ms_root,
+            output_root,
+            skip_casa_data_update=True,
+            remove_working_copy=False,
+        )
+
+    assert (output_root / "working" / "uid___A.calibration" / "uid___A.ms").is_dir()

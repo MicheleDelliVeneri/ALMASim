@@ -50,12 +50,25 @@ def find_existing_casa_data(
     return output_casa_data
 
 
+def casa_log_path(output_root: str | os.PathLike[str], stage: str, uid: str | None) -> Path:
+    """Return the CASA log file used for one ``stage`` (unpack/calibrate) of one UID."""
+    safe_uid = (uid or "all").replace("/", "_").replace(":", "_")
+    return Path(output_root).expanduser().resolve() / "logs" / f"casa-{stage}-{safe_uid}.log"
+
+
 def configure_casa_environment(
     output_root: str | os.PathLike[str],
     casa_data: str | os.PathLike[str],
     workspace_root: str | os.PathLike[str] | None = None,
+    log_file: str | os.PathLike[str] | None = None,
+    log_to_terminal: bool = False,
 ) -> Path:
-    """Create and point CASA at a local site config and Matplotlib cache."""
+    """Create and point CASA at a local site config and Matplotlib cache.
+
+    ``log_file`` redirects the CASA logger away from ``casa-<timestamp>.log`` in
+    the current directory; ``log_to_terminal`` additionally echoes every CASA log
+    message to the console so long-running tasks show progress.
+    """
     output_path = Path(output_root).expanduser().resolve()
     casa_data_path = Path(casa_data).expanduser().resolve()
     workspace_path = (
@@ -72,12 +85,17 @@ def configure_casa_environment(
     mpl_config.mkdir(parents=True, exist_ok=True)
     casa_config_dir.mkdir(parents=True, exist_ok=True)
 
-    casa_site_config.write_text(
-        "measurespath = {0!r}\ndata_auto_update = False\nmeasures_auto_update = False\n".format(
-            str(casa_data_path)
-        ),
-        encoding="utf-8",
-    )
+    config_lines = [
+        f"measurespath = {str(casa_data_path)!r}",
+        "data_auto_update = False",
+        "measures_auto_update = False",
+    ]
+    if log_file is not None:
+        log_path = Path(log_file).expanduser().resolve()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        config_lines.append(f"logfile = {str(log_path)!r}")
+    config_lines.append(f"log2term = {bool(log_to_terminal)!r}")
+    casa_site_config.write_text("\n".join(config_lines) + "\n", encoding="utf-8")
 
     os.environ.setdefault("CASASITECONFIG", str(casa_site_config))
     os.environ.setdefault("MPLCONFIGDIR", str(mpl_config))
@@ -202,7 +220,12 @@ def create_measurement_sets(
     """Create raw MeasurementSets for all matching ASDMs below ``input_root``."""
     asdm_dirs = find_asdm_directories(input_root, asdm_uid)
     casa_data = find_existing_casa_data(input_root, output_root, casa_data_root)
-    configure_casa_environment(output_root, casa_data)
+    configure_casa_environment(
+        output_root,
+        casa_data,
+        log_file=casa_log_path(output_root, "unpack", asdm_uid),
+        log_to_terminal=True,
+    )
     ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
     from casatasks import importasdm

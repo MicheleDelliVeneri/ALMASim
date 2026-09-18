@@ -172,6 +172,14 @@ def unpack(
         "--overwrite-outputs",
         help="Overwrite existing raw MS outputs.",
     ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--fail-fast",
+        help=(
+            "Skip UIDs whose processing fails and carry on with the rest, then exit "
+            "non-zero with a summary (default). --fail-fast aborts on the first failure."
+        ),
+    ),
 ) -> None:
     """Import ASDM directories into raw MeasurementSets as a standalone step."""
     cli_products.products_unpack(
@@ -189,6 +197,7 @@ def unpack(
         slurm_workers=slurm_workers,
         slurm_scheduler_host=slurm_scheduler_host,
         overwrite_outputs=overwrite_outputs,
+        continue_on_error=continue_on_error,
     )
 
 
@@ -273,6 +282,22 @@ def calibrate(
         "--clean-intermediate-files",
         help="Remove intermediate raw and working files after successful calibration.",
     ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--fail-fast",
+        help=(
+            "Skip UIDs whose processing fails and carry on with the rest, then exit "
+            "non-zero with a summary (default). --fail-fast aborts on the first failure."
+        ),
+    ),
+    keep_working_copies: bool = typer.Option(
+        False,
+        "--keep-working-copies",
+        help=(
+            "Keep each UID's working directory (raw MS copy plus caltables, about 1.8x the "
+            "raw MS) after its calibrated output is written. By default it is removed."
+        ),
+    ),
 ) -> None:
     """Create calibrated MeasurementSets as a standalone step."""
     cli_products.products_calibrate(
@@ -292,6 +317,8 @@ def calibrate(
         slurm_scheduler_host=slurm_scheduler_host,
         overwrite_outputs=overwrite_outputs,
         clean_intermediate_files=clean_intermediate_files,
+        continue_on_error=continue_on_error,
+        keep_working_copies=keep_working_copies,
     )
 
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import tarfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import click
@@ -171,12 +173,13 @@ def test_products_download_slurm_postprocess_path(tmp_path, monkeypatch):
 
 
 def test_products_download_sync_path(tmp_path, monkeypatch):
-    """Sync mode should keep archive processing in download_products call."""
+    """Sync mode should download first, then run per-UID archive stages like Slurm does."""
     products = [SimpleNamespace(content_length=12)]
     monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", lambda **kwargs: products)
     monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
 
     captured: dict[str, object] = {}
+    stage_kwargs: dict[str, object] = {}
 
     def _fake_download_products(*args, **kwargs):
         captured.update(kwargs)
@@ -190,7 +193,12 @@ def test_products_download_sync_path(tmp_path, monkeypatch):
             calibrated_measurement_sets=[],
         )
 
+    def _fake_stages(**kwargs):
+        stage_kwargs.update(kwargs)
+        return (["/tmp/raw-a.ms"], [])
+
     monkeypatch.setattr(cli_products, "download_products", _fake_download_products)
+    monkeypatch.setattr(cli_products, "_run_parallel_archive_jobs", _fake_stages)
 
     result = runner.invoke(
         cli.app,
@@ -208,8 +216,103 @@ def test_products_download_sync_path(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     assert callable(captured["update_callback"])
-    assert captured["unpack_ms"] is True
+    # In-process unpack/calibrate inside download_products is no longer used.
+    assert captured["unpack_ms"] is False
     assert captured["generate_calibrated_visibilities"] is False
+    assert stage_kwargs["postprocess_backend"] == "sync"
+    assert stage_kwargs["postprocess_backend_kwargs"] == {}
+    assert stage_kwargs["unpack_ms"] is True
+    assert stage_kwargs["continue_on_error"] is True
+    assert "Raw MS products:" in result.output
+
+
+def test_products_download_sync_without_postprocess_keeps_single_call(tmp_path, monkeypatch):
+    """Plain downloads (no unpack/calibrate) still go through download_products alone."""
+    products = [SimpleNamespace(content_length=12)]
+    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", lambda **kwargs: products)
+    monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
+    monkeypatch.setattr(
+        cli_products,
+        "_run_parallel_archive_jobs",
+        lambda **kwargs: pytest.fail("no archive stages expected"),
+    )
+    monkeypatch.setattr(
+        cli_products,
+        "download_products",
+        lambda *args, **kwargs: SimpleNamespace(
+            destination=str(tmp_path / "downloads"),
+            files_completed=1,
+            files_failed=0,
+            manifest_path=None,
+            raw_measurement_sets=[],
+            calibrated_measurement_sets=[],
+        ),
+    )
+
+    result = runner.invoke(
+        cli.app, ["products", "download", "--member-ous-uid", "uid://A", "--yes"]
+    )
+    assert result.exit_code == 0
+
+
+def test_products_download_sync_cleanup_only_when_no_failures(tmp_path, monkeypatch):
+    """--clean-intermediate-files runs after a fully successful sync post-processing run."""
+    products = [SimpleNamespace(content_length=12)]
+    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", lambda **kwargs: products)
+    monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
+    manifest = tmp_path / "downloads" / "download_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text('{"raw_measurement_sets": [], "calibrated_measurement_sets": []}')
+    monkeypatch.setattr(
+        cli_products,
+        "download_products",
+        lambda *args, **kwargs: SimpleNamespace(
+            destination=str(tmp_path / "downloads"),
+            files_completed=1,
+            files_failed=0,
+            manifest_path=str(manifest),
+            files=[],
+            extracted_files=[],
+        ),
+    )
+    cleaned: list[str] = []
+    monkeypatch.setattr(
+        cli_products, "_cleanup_after_download_postprocess", lambda **kwargs: cleaned.append("yes")
+    )
+
+    def _stages_ok(**kwargs):
+        return (["/raw/a.ms"], ["/cal/a.ms.split.cal"])
+
+    def _stages_failing(**kwargs):
+        kwargs["failures"].append(cli_products.StageFailure("uid___B", "boom"))
+        return (["/raw/a.ms"], ["/cal/a.ms.split.cal"])
+
+    args = [
+        "products",
+        "download",
+        "--member-ous-uid",
+        "uid://A",
+        "--yes",
+        "--unpack-ms",
+        "--generate-calibrated-visibilities",
+        "--clean-intermediate-files",
+    ]
+
+    monkeypatch.setattr(cli_products, "_run_parallel_archive_jobs", _stages_ok)
+    result = runner.invoke(cli.app, args)
+    assert result.exit_code == 0
+    assert cleaned == ["yes"]
+    import json
+
+    assert json.loads(manifest.read_text())["calibrated_measurement_sets"] == [
+        "/cal/a.ms.split.cal"
+    ]
+
+    monkeypatch.setattr(cli_products, "_run_parallel_archive_jobs", _stages_failing)
+    result = runner.invoke(cli.app, args)
+    assert result.exit_code == 1
+    assert cleaned == ["yes"]  # not called a second time
+    assert "Skipping --clean-intermediate-files" in result.output
 
 
 class _FakeFuture:
@@ -775,3 +878,558 @@ def test_predict_ms_from_image_slurm_dispatches_one_job_per_ms(monkeypatch, tmp_
     assert result.exit_code == 0
     assert len(captured["commands"]) == 2
     assert captured["commands"][0][1][:3] == ["almasim", "predict", "ms-from-image"]
+
+
+# ---------------------------------------------------------------------------
+# Skip-on-failure and per-UID logging for archive post-processing stages
+# ---------------------------------------------------------------------------
+
+
+class _FakeFailingFuture(_FakeFuture):
+    def __init__(self, message: str):
+        super().__init__(done_after=1, status="error")
+        self._message = message
+
+    def exception(self):
+        return RuntimeError(self._message)
+
+
+class _FakePerFutureBackend:
+    """Async backend whose gather() works on single-future lists."""
+
+    def __init__(self, futures, results):
+        self._futures = futures
+        self._results = results
+
+    def compute(self, jobs, sync=True):
+        return self._futures
+
+    def gather(self, futures):
+        return [self._results[self._futures.index(future)] for future in futures]
+
+
+def test_compute_jobs_with_progress_continue_on_error_skips_failed(monkeypatch):
+    """A failed future should become a None placeholder and a recorded StageFailure."""
+    futures = [_FakeFuture(done_after=1), _FakeFailingFuture("boom on B"), _FakeFuture()]
+    backend = _FakePerFutureBackend(futures, results=[["a.ms"], None, ["c.ms"]])
+    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: None)
+    failures: list[cli_products.StageFailure] = []
+
+    results = cli_products._compute_jobs_with_progress(
+        backend=backend,
+        jobs=[object(), object(), object()],
+        job_uids=["uid://A", "uid://B", "uid://C"],
+        stage_label="Slurm calibrate",
+        continue_on_error=True,
+        log_paths=[Path("/logs/a.log"), Path("/logs/b.log"), Path("/logs/c.log")],
+        failures=failures,
+    )
+
+    assert results == [["a.ms"], None, ["c.ms"]]
+    assert [failure.uid for failure in failures] == ["uid://B"]
+    assert "boom on B" in failures[0].error
+    assert failures[0].log_path == "/logs/b.log"
+
+
+def test_compute_jobs_with_progress_fail_fast_still_raises(monkeypatch):
+    """Without continue_on_error the helper defers to backend.gather, which raises."""
+
+    class _RaisingBackend(_FakePerFutureBackend):
+        def gather(self, futures):
+            raise RuntimeError("gather failed")
+
+    backend = _RaisingBackend([_FakeFailingFuture("boom")], results=[None])
+    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match="gather failed"):
+        cli_products._compute_jobs_with_progress(
+            backend=backend,
+            jobs=[object()],
+            job_uids=["uid://A"],
+            stage_label="Slurm calibrate",
+        )
+
+
+def test_compute_jobs_with_progress_heartbeat_prints_log_tail(monkeypatch, tmp_path):
+    """While jobs run, the last line of each UID log should be echoed periodically."""
+    log_path = tmp_path / "uid_A.calibrate.log"
+    log_path.write_text("starting\napplycal 2/5 running\n", encoding="utf-8")
+    future = _FakeFuture(done_after=3)
+    backend = _FakePerFutureBackend([future], results=[["a.ms"]])
+    written: list[str] = []
+
+    class _Bar:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+        def set_postfix_str(self, *_args):
+            pass
+
+        def update(self, *_args):
+            pass
+
+        def write(self, text):
+            written.append(text)
+
+    monkeypatch.setattr(cli_products, "tqdm", _Bar)
+    # The worker "writes" to the log while the stage is running.
+    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: os.utime(log_path, None))
+
+    cli_products._compute_jobs_with_progress(
+        backend=backend,
+        jobs=[object()],
+        job_uids=["uid://A"],
+        stage_label="Slurm calibrate",
+        log_paths=[log_path],
+        heartbeat_interval=0.0,
+    )
+
+    assert any("applycal 2/5 running" in line for line in written)
+    assert any("1 running" in line for line in written)
+
+
+def test_run_uid_stage_sync_continues_after_failure(monkeypatch, tmp_path):
+    """Sync stage runner should skip the failing UID and keep the others."""
+    calls: list[str] = []
+
+    def _task(*, asdm_uid: str) -> list[str]:
+        calls.append(asdm_uid)
+        if asdm_uid == "uid://B":
+            raise RuntimeError("Calibration failed for uid://B.\nReturn code: 134")
+        return [f"/out/{asdm_uid}.ms.split.cal"]
+
+    failures: list[cli_products.StageFailure] = []
+    uids = ["uid://A", "uid://B", "uid://C"]
+    results = cli_products._run_uid_stage(
+        backend=None,
+        postprocess_backend="sync",
+        task_fn=_task,
+        job_kwargs=[{"asdm_uid": uid} for uid in uids],
+        job_uids=uids,
+        stage_label="Calibrate",
+        log_paths=[tmp_path / f"{i}.log" for i in range(3)],
+        continue_on_error=True,
+        failures=failures,
+    )
+
+    assert calls == uids
+    assert results == [["/out/uid://A.ms.split.cal"], [], ["/out/uid://C.ms.split.cal"]]
+    assert [failure.uid for failure in failures] == ["uid://B"]
+    assert failures[0].log_path == str(tmp_path / "1.log")
+
+
+def test_run_uid_stage_sync_fail_fast_raises():
+    """With continue_on_error disabled the first failure propagates."""
+
+    def _task(*, asdm_uid: str) -> list[str]:
+        raise RuntimeError(f"failed {asdm_uid}")
+
+    with pytest.raises(RuntimeError, match="failed uid://A"):
+        cli_products._run_uid_stage(
+            backend=None,
+            postprocess_backend="sync",
+            task_fn=_task,
+            job_kwargs=[{"asdm_uid": "uid://A"}],
+            job_uids=["uid://A"],
+            stage_label="Calibrate",
+            log_paths=[],
+            continue_on_error=False,
+            failures=[],
+        )
+
+
+def test_run_calibrate_jobs_sync_multi_uid_isolates_each_uid(monkeypatch, tmp_path):
+    """Sync calibrate over several UIDs should run one subprocess wrapper per UID."""
+    seen: list[dict[str, object]] = []
+
+    def _fake_single(**kwargs):
+        seen.append(kwargs)
+        if kwargs["asdm_uid"] == "uid___B":
+            raise RuntimeError("casacore::ArrayError")
+        return [f"{kwargs['calibrated_output_root']}/{kwargs['asdm_uid']}.ms.split.cal"]
+
+    monkeypatch.setattr(cli_products, "_calibrate_single_uid", _fake_single)
+    monkeypatch.setattr(
+        cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "out" / ".casa-data"
+    )
+    monkeypatch.setattr(
+        cli_products, "_extract_uids_from_raw_ms_root", lambda *_: ["uid___A", "uid___B", "uid___C"]
+    )
+
+    failures: list[cli_products.StageFailure] = []
+    outputs = cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=tmp_path / "out",
+        asdm_uids=[],
+        postprocess_backend="sync",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=False,
+        overwrite_outputs=False,
+        clean_intermediate=False,
+        failures=failures,
+    )
+
+    assert [entry["asdm_uid"] for entry in seen] == ["uid___A", "uid___B", "uid___C"]
+    assert all(entry["casa_data_root"] == str(tmp_path / "out" / ".casa-data") for entry in seen)
+    assert all(entry["skip_casa_data_update"] is True for entry in seen)
+    assert outputs == [
+        str(tmp_path / "out" / "uid___A.ms.split.cal"),
+        str(tmp_path / "out" / "uid___C.ms.split.cal"),
+    ]
+    assert [failure.uid for failure in failures] == ["uid___B"]
+
+
+def test_run_calibrate_jobs_sync_single_uid_runs_in_process(monkeypatch, tmp_path):
+    """A single UID (the per-UID worker entry point) must not spawn another subprocess."""
+    import almasim.services.archive as archive_mod
+
+    captured: dict[str, object] = {}
+
+    def _fake_create(**kwargs):
+        captured.update(kwargs)
+        return [tmp_path / "out" / "uid___A.ms.split.cal"]
+
+    monkeypatch.setattr(archive_mod, "create_calibrated_measurement_sets", _fake_create)
+    monkeypatch.setattr(
+        cli_products,
+        "_calibrate_single_uid",
+        lambda **kwargs: pytest.fail("subprocess wrapper must not be used for one UID"),
+    )
+
+    outputs = cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=tmp_path / "out",
+        asdm_uids=["uid___A"],
+        postprocess_backend="sync",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite_outputs=False,
+        clean_intermediate=False,
+    )
+
+    assert outputs == [str(tmp_path / "out" / "uid___A.ms.split.cal")]
+    assert captured["asdm_uid"] == "uid___A"
+    assert callable(captured["logger_fn"])
+
+
+def test_run_calibrate_jobs_sync_skips_cleanup_when_failures(monkeypatch, tmp_path):
+    """Intermediate cleanup must not run when any UID failed."""
+    import almasim.services.archive as archive_mod
+
+    monkeypatch.setattr(
+        cli_products,
+        "_calibrate_single_uid",
+        lambda **kwargs: (
+            (_ for _ in ()).throw(RuntimeError("boom"))
+            if kwargs["asdm_uid"] == "uid___B"
+            else ["/out/ok.ms.split.cal"]
+        ),
+    )
+    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
+    monkeypatch.setattr(
+        archive_mod,
+        "cleanup_intermediate_calibration_data",
+        lambda *a, **k: pytest.fail("cleanup must be skipped after failures"),
+    )
+
+    failures: list[cli_products.StageFailure] = []
+    cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=tmp_path / "out",
+        asdm_uids=["uid___A", "uid___B"],
+        postprocess_backend="sync",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite_outputs=False,
+        clean_intermediate=True,
+        failures=failures,
+    )
+    assert [failure.uid for failure in failures] == ["uid___B"]
+
+
+def test_calibrate_single_uid_writes_per_uid_log_file(tmp_path, monkeypatch):
+    """The subprocess wrapper should mirror child output into <output>/logs/<uid>.calibrate.log."""
+
+    class _FakeProcess:
+        def __init__(self):
+            self.stdout = iter(["applying\n", "splitting\n"])
+
+        def wait(self):
+            return 0
+
+    captured: dict[str, object] = {}
+
+    def _fake_popen(cmd, **kwargs):
+        captured["env"] = kwargs["env"]
+        return _FakeProcess()
+
+    monkeypatch.setattr("subprocess.Popen", _fake_popen)
+
+    uid = "uid___A001_X1_X9"
+    output_root = tmp_path / "calibrated"
+    (output_root / f"{uid}.ms.split.cal").mkdir(parents=True)
+
+    cli_products._calibrate_single_uid(
+        input_root="/input",
+        raw_ms_root="/raw",
+        calibrated_output_root=str(output_root),
+        asdm_uid=uid,
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=False,
+        clean_intermediate=False,
+    )
+
+    log_path = output_root / "logs" / f"{uid}.calibrate.log"
+    content = log_path.read_text(encoding="utf-8")
+    assert content.startswith("# ")
+    assert "applying\nsplitting\n" in content
+    assert captured["env"]["PYTHONUNBUFFERED"] == "1"
+
+
+def test_products_calibrate_exits_nonzero_with_failure_summary(monkeypatch):
+    """The command should list outputs, print skipped UIDs, and exit 1."""
+
+    def _fake_run(**kwargs):
+        kwargs["failures"].append(
+            cli_products.StageFailure("uid___B", "Calibration failed for uid___B.", "/logs/b.log")
+        )
+        assert kwargs["continue_on_error"] is True
+        return ["/tmp/cal-a.ms"]
+
+    monkeypatch.setattr(cli_products, "_run_calibrate_jobs", _fake_run)
+
+    result = runner.invoke(cli.app, ["products", "calibrate", "--asdm-uid", "uid___A,uid___B"])
+
+    assert result.exit_code == 1
+    assert "Calibrated MS products: 1" in result.output
+    assert "1 UID(s) failed and were skipped" in result.output
+    assert "uid___B" in result.output
+    assert "/logs/b.log" in result.output
+
+
+def test_products_calibrate_fail_fast_flag_passthrough(monkeypatch):
+    """--fail-fast should disable continue_on_error."""
+    captured: dict[str, object] = {}
+
+    def _fake_run(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(cli_products, "_run_calibrate_jobs", _fake_run)
+    result = runner.invoke(cli.app, ["products", "calibrate", "--fail-fast"])
+
+    assert result.exit_code == 0
+    assert captured["continue_on_error"] is False
+
+
+def test_run_parallel_archive_jobs_skips_calibration_for_failed_unpack(monkeypatch, tmp_path):
+    """UIDs whose unpack failed must not be submitted to the calibrate stage."""
+
+    class _Backend:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+    monkeypatch.setattr(cli_products, "create_backend", lambda *a, **k: _Backend())
+    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
+    monkeypatch.setattr(
+        cli_products, "_extract_asdm_uids_from_download_root", lambda *_: ["uid___A", "uid___B"]
+    )
+
+    stages: list[tuple[str, list[str]]] = []
+
+    def _fake_stage(**kwargs):
+        stages.append((kwargs["stage_label"], list(kwargs["job_uids"])))
+        if kwargs["stage_label"].endswith("unpack"):
+            kwargs["failures"].append(cli_products.StageFailure("uid___B", "importasdm crashed"))
+            return [["/raw/uid___A.ms"], []]
+        return [["/cal/uid___A.ms.split.cal"]]
+
+    monkeypatch.setattr(cli_products, "_run_uid_stage", _fake_stage)
+
+    failures: list[cli_products.StageFailure] = []
+    raw, cal = cli_products._run_parallel_archive_jobs(
+        download_root=tmp_path / "dl",
+        archive_output_root=tmp_path / "archive",
+        unpack_ms=True,
+        generate_calibrated_visibilities=True,
+        postprocess_backend="slurm",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=False,
+        overwrite_archive_outputs=False,
+        failures=failures,
+    )
+
+    assert raw == ["/raw/uid___A.ms"]
+    assert cal == ["/cal/uid___A.ms.split.cal"]
+    assert stages == [("Slurm unpack", ["uid___A", "uid___B"]), ("Slurm calibrate", ["uid___A"])]
+    assert [failure.uid for failure in failures] == ["uid___B"]
+
+
+def test_tail_log_line_ignores_stale_logs(tmp_path):
+    """Logs older than the stage start are not reported as running jobs."""
+    from time import time
+
+    log_path = tmp_path / "old.log"
+    log_path.write_text("first\nlast line\n", encoding="utf-8")
+    os.utime(log_path, (time() - 3600, time() - 3600))
+
+    assert cli_products._tail_log_line(log_path) == "last line"
+    assert cli_products._tail_log_line(log_path, modified_since=time() - 60) is None
+    assert cli_products._tail_log_line(tmp_path / "missing.log") is None
+
+
+# ---------------------------------------------------------------------------
+# Completed-calibration detection and working-copy handling
+# ---------------------------------------------------------------------------
+
+
+def test_partition_completed_calibrations_skips_marked_outputs(tmp_path):
+    """Only outputs with a completion marker are treated as done."""
+    from almasim.services.archive import write_calibration_marker
+
+    output_root = tmp_path / "cal"
+    (output_root / "uid___A.ms.split.cal").mkdir(parents=True)
+    write_calibration_marker(output_root, "uid___A")
+    (output_root / "uid___B.ms.split.cal").mkdir()  # partial: no marker
+    (output_root / "uid___C.ms.split.cal.done").touch()  # marker without output
+
+    todo, done = cli_products._partition_completed_calibrations(
+        output_root, ["uid___A", "uid___B", "uid___C", "uid___D"], overwrite=False
+    )
+
+    assert todo == ["uid___B", "uid___C", "uid___D"]
+    assert done == [str(output_root / "uid___A.ms.split.cal")]
+
+    todo, done = cli_products._partition_completed_calibrations(
+        output_root, ["uid___A", "uid___B"], overwrite=True
+    )
+    assert todo == ["uid___A", "uid___B"]
+    assert done == []
+
+
+def test_run_calibrate_jobs_skips_completed_uids_before_submission(monkeypatch, tmp_path):
+    """Completed UIDs are neither preflighted nor submitted, but appear in the outputs."""
+    from almasim.services.archive import write_calibration_marker
+
+    output_root = tmp_path / "cal"
+    (output_root / "uid___A.ms.split.cal").mkdir(parents=True)
+    write_calibration_marker(output_root, "uid___A")
+
+    submitted: list[str] = []
+
+    def _fake_single(**kwargs):
+        submitted.append(kwargs["asdm_uid"])
+        assert kwargs["keep_working_copies"] is False
+        return [f"{kwargs['calibrated_output_root']}/{kwargs['asdm_uid']}.ms.split.cal"]
+
+    monkeypatch.setattr(cli_products, "_calibrate_single_uid", _fake_single)
+    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
+
+    outputs = cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=output_root,
+        asdm_uids=["uid___A", "uid___B", "uid___C"],
+        postprocess_backend="sync",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite_outputs=False,
+        clean_intermediate=False,
+    )
+
+    assert submitted == ["uid___B", "uid___C"]
+    assert outputs[0] == str(output_root / "uid___A.ms.split.cal")
+    assert len(outputs) == 3
+
+
+def test_run_calibrate_jobs_all_completed_does_nothing(monkeypatch, tmp_path):
+    """When every UID is done the runner returns the existing outputs without a backend."""
+    from almasim.services.archive import write_calibration_marker
+
+    output_root = tmp_path / "cal"
+    for uid in ("uid___A", "uid___B"):
+        (output_root / f"{uid}.ms.split.cal").mkdir(parents=True)
+        write_calibration_marker(output_root, uid)
+    monkeypatch.setattr(
+        cli_products, "_preflight_casa_data", lambda *a, **k: pytest.fail("no preflight")
+    )
+    monkeypatch.setattr(
+        cli_products, "create_backend", lambda *a, **k: pytest.fail("no backend expected")
+    )
+
+    outputs = cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=output_root,
+        asdm_uids=["uid___A", "uid___B"],
+        postprocess_backend="slurm",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite_outputs=False,
+        clean_intermediate=False,
+    )
+    assert len(outputs) == 2
+
+
+def test_calibrate_single_uid_forwards_keep_working_copies(tmp_path, monkeypatch):
+    """The worker wrapper should pass --keep-working-copies to the child only when asked."""
+    commands: list[list[str]] = []
+
+    class _FakeProcess:
+        stdout = iter([])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(
+        "subprocess.Popen", lambda cmd, **kwargs: commands.append(cmd) or _FakeProcess()
+    )
+    output_root = tmp_path / "cal"
+    (output_root / "uid___A.ms.split.cal").mkdir(parents=True)
+    common = dict(
+        input_root="/input",
+        raw_ms_root="/raw",
+        calibrated_output_root=str(output_root),
+        asdm_uid="uid___A",
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=False,
+        clean_intermediate=False,
+    )
+    cli_products._calibrate_single_uid(**common)
+    cli_products._calibrate_single_uid(**common, keep_working_copies=True)
+
+    assert "--keep-working-copies" not in commands[0]
+    assert "--keep-working-copies" in commands[1]
+
+
+def test_products_calibrate_keep_working_copies_passthrough(monkeypatch):
+    """--keep-working-copies reaches the job runner."""
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        cli_products, "_run_calibrate_jobs", lambda **kwargs: captured.update(kwargs) or []
+    )
+
+    assert runner.invoke(cli.app, ["products", "calibrate"]).exit_code == 0
+    assert captured["keep_working_copies"] is False
+    assert runner.invoke(cli.app, ["products", "calibrate", "--keep-working-copies"]).exit_code == 0
+    assert captured["keep_working_copies"] is True

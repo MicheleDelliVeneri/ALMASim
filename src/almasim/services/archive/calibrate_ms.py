@@ -9,17 +9,20 @@ then writes the science-only calibrated MS with ``casatasks.mstransform``.
 from __future__ import annotations
 
 import ast
+import json
 import logging
 import os
 import shutil
 import tarfile
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from .unpack_ms import (
     LogFn,
     _emit,
+    casa_log_path,
     configure_casa_environment,
     ensure_casa_runtime_data,
     find_existing_casa_data,
@@ -191,6 +194,7 @@ def _prepare_working_directory(
     calibration_dir: Path,
     working_dir: Path,
     overwrite: bool = False,
+    logger_fn: LogFn = None,
 ) -> Path:
     """Copy raw MS and unpack delivered calibration tables into ``working_dir``."""
     working_dir.mkdir(parents=True, exist_ok=True)
@@ -200,10 +204,12 @@ def _prepare_working_directory(
             raise RuntimeError(f"Working MS already exists: {working_ms}")
         shutil.rmtree(working_ms)
 
+    _emit(logger_fn, f"Copying raw MS {raw_ms} -> {working_ms}")
     shutil.copytree(raw_ms, working_ms, symlinks=True)
 
     for tar_path in sorted(calibration_dir.glob("*caltables.tgz")):
         logger.info("Extracting calibration tables: %s", tar_path)
+        _emit(logger_fn, f"Extracting calibration tables: {tar_path}")
         _safe_extract_tar(tar_path, working_dir)
 
     return working_ms
@@ -220,7 +226,7 @@ def apply_delivered_calibration(
 ) -> Path:
     """Run delivered ``applycal`` commands against one raw MS."""
     working_ms = _prepare_working_directory(
-        raw_ms, calibration_dir, working_dir, overwrite=overwrite
+        raw_ms, calibration_dir, working_dir, overwrite=overwrite, logger_fn=logger_fn
     )
     if clearcal is not None:
         clearcal(vis=str(working_ms), addmodel=False)
@@ -230,7 +236,7 @@ def apply_delivered_calibration(
 
     calls = _parse_applycal_calls(calapply_path)
     _emit(logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}")
-    for kwargs in calls:
+    for index, kwargs in enumerate(calls, start=1):
         kwargs["vis"] = str(working_ms)
         if "gaintable" in kwargs:
             kwargs["gaintable"] = [
@@ -243,6 +249,12 @@ def apply_delivered_calibration(
         # Flag backup files on shared storage are not needed for this disposable working copy
         # and can fail under heavy concurrent Slurm I/O.
         kwargs["flagbackup"] = False
+        _emit(
+            logger_fn,
+            f"  applycal {index}/{len(calls)} for {working_ms.name}: "
+            f"field={kwargs.get('field', '')!r} spw={kwargs.get('spw', '')!r} "
+            f"intent={kwargs.get('intent', '')!r} gaintables={len(kwargs.get('gaintable', []))}",
+        )
         applycal(**kwargs)
 
     return working_ms
@@ -265,6 +277,46 @@ def science_spws(ms_path: str | os.PathLike[str]) -> str:
     return ",".join(selected)
 
 
+def calibrated_output_path(output_root: str | os.PathLike[str], uid: str) -> Path:
+    """Return the calibrated science MS path for ``uid``."""
+    return Path(output_root).expanduser().resolve() / f"{uid}.ms.split.cal"
+
+
+def calibration_marker_path(output_root: str | os.PathLike[str], uid: str) -> Path:
+    """Return the completion marker written next to a finished ``<uid>.ms.split.cal``.
+
+    The marker is what distinguishes a finished calibration from a partial
+    output left behind by a crash. An empty file is accepted, so an output
+    produced before markers existed can be trusted by simply creating it.
+    """
+    return calibrated_output_path(output_root, uid).with_name(f"{uid}.ms.split.cal.done")
+
+
+def is_calibration_complete(output_root: str | os.PathLike[str], uid: str) -> bool:
+    """Return True when ``uid`` has both a calibrated MS directory and its marker."""
+    return (
+        calibrated_output_path(output_root, uid).is_dir()
+        and calibration_marker_path(output_root, uid).is_file()
+    )
+
+
+def write_calibration_marker(output_root: str | os.PathLike[str], uid: str) -> Path:
+    marker = calibration_marker_path(output_root, uid)
+    marker.write_text(
+        json.dumps(
+            {
+                "uid": uid,
+                "output": str(calibrated_output_path(output_root, uid)),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return marker
+
+
 def split_calibrated_science_ms(
     mstransform: Callable[..., object],
     calibrated_working_ms: Path,
@@ -273,14 +325,17 @@ def split_calibrated_science_ms(
     overwrite: bool = False,
     logger_fn: LogFn = None,
 ) -> Path:
-    """Split science SPWs into ``<uid>.ms.split.cal``."""
+    """Split science SPWs into ``<uid>.ms.split.cal`` and write its completion marker."""
     output_path = Path(output_root).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
     output_ms = output_path / f"{calibrated_working_ms.name}.split.cal"
+    uid = calibrated_working_ms.name.removesuffix(".ms")
+    marker = calibration_marker_path(output_path, uid)
     if output_ms.exists():
         if not overwrite:
             raise RuntimeError(f"Calibrated output MS already exists: {output_ms}")
         shutil.rmtree(output_ms)
+    marker.unlink(missing_ok=True)
 
     spws = science_spws(calibrated_working_ms)
     logger.info("Splitting science SPWs for %s: %s", calibrated_working_ms, spws)
@@ -297,6 +352,7 @@ def split_calibrated_science_ms(
 
     if not output_ms.is_dir():
         raise RuntimeError(f"Expected calibrated MS was not created: {output_ms}")
+    write_calibration_marker(output_path, uid)
     _emit(logger_fn, f"Created calibrated MeasurementSet: {output_ms}")
     return output_ms
 
@@ -332,6 +388,26 @@ def _remove_tree_after_success(
     _emit(logger_fn, f"Removed intermediate data: {target}")
 
 
+def cleanup_intermediate_calibration_data(
+    raw_ms_root: str | os.PathLike[str],
+    output_root: str | os.PathLike[str],
+    calibrated_mss: list[Path],
+    original_data_root: str | os.PathLike[str] | None = None,
+    logger_fn: LogFn = None,
+) -> None:
+    """Remove raw MS, working copies and (optionally) original data after a full success.
+
+    Every path that contains a calibrated output (or the output root itself) is
+    protected and left untouched.
+    """
+    output_path = Path(output_root).expanduser().resolve()
+    protected = [*calibrated_mss, output_path]
+    _remove_tree_after_success(raw_ms_root, protected, logger_fn=logger_fn)
+    _remove_tree_after_success(output_path / "working", protected, logger_fn=logger_fn)
+    if original_data_root is not None:
+        _remove_tree_after_success(original_data_root, protected, logger_fn=logger_fn)
+
+
 def create_calibrated_measurement_sets(
     input_root: str | os.PathLike[str],
     raw_ms_root: str | os.PathLike[str],
@@ -343,48 +419,116 @@ def create_calibrated_measurement_sets(
     clean_intermediate: bool = False,
     original_data_root: str | os.PathLike[str] | None = None,
     logger_fn: LogFn = None,
+    continue_on_error: bool = False,
+    remove_working_copy: bool = True,
 ) -> list[Path]:
-    """Create calibrated science MS products from raw MS and ALMA calibration products."""
+    """Create calibrated science MS products from raw MS and ALMA calibration products.
+
+    UIDs whose output already carries a completion marker are skipped (and
+    returned) unless ``overwrite`` is set. Partial outputs or working copies
+    without a marker are leftovers of a failed run and are replaced. With
+    ``remove_working_copy`` the per-UID working directory (a full copy of the
+    raw MS plus calibration tables) is deleted as soon as its split succeeds.
+
+    With ``continue_on_error`` a Python-level failure on one raw MS is logged and
+    the remaining raw MSs are still processed; a ``RuntimeError`` summarising the
+    failed UIDs is raised at the end. Note that a hard crash inside CASA (for
+    example an uncaught ``casacore`` C++ exception) terminates the whole process
+    and cannot be skipped here; the CLI isolates each UID in its own subprocess
+    for that reason.
+    """
     input_path = Path(input_root).expanduser().resolve()
     output_path = Path(output_root).expanduser().resolve()
     raw_mss = find_raw_ms_directories(raw_ms_root, asdm_uid)
 
     casa_data, workspace_root = _prepare_casa_environment(input_path, output_path, casa_data_root)
     try:
-        configure_casa_environment(output_path, casa_data, workspace_root=workspace_root)
+        casa_log = casa_log_path(output_path, "calibrate", asdm_uid)
+        configure_casa_environment(
+            output_path,
+            casa_data,
+            workspace_root=workspace_root,
+            log_file=casa_log,
+            log_to_terminal=True,
+        )
+        _emit(logger_fn, f"CASA log file: {casa_log}")
         ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
         from casatasks import applycal, clearcal, mstransform
 
-        calibrated_mss = []
-        for raw_ms in raw_mss:
+        _emit(logger_fn, f"Found {len(raw_mss)} raw MeasurementSet(s) to calibrate")
+        calibrated_mss: list[Path] = []
+        failures: list[tuple[str, str]] = []
+        for index, raw_ms in enumerate(raw_mss, start=1):
             uid = raw_ms.name.removesuffix(".ms")
-            calibration_dir = find_calibration_directory(input_path, uid)
-            working_ms = apply_delivered_calibration(
-                applycal,
-                clearcal,
-                raw_ms,
-                calibration_dir,
-                output_path / "working" / f"{uid}.calibration",
-                overwrite=overwrite,
-                logger_fn=logger_fn,
-            )
-            calibrated_mss.append(
-                split_calibrated_science_ms(
-                    mstransform,
-                    working_ms,
-                    output_path,
-                    overwrite=overwrite,
+            if is_calibration_complete(output_path, uid) and not overwrite:
+                existing = calibrated_output_path(output_path, uid)
+                _emit(
+                    logger_fn,
+                    f"[{index}/{len(raw_mss)}] {uid} already calibrated, skipping: {existing}",
+                )
+                calibrated_mss.append(existing)
+                continue
+
+            _emit(logger_fn, f"[{index}/{len(raw_mss)}] Calibrating {uid}")
+            working_dir = output_path / "working" / f"{uid}.calibration"
+            try:
+                partial_output = calibrated_output_path(output_path, uid)
+                if partial_output.exists() and not overwrite:
+                    _emit(
+                        logger_fn,
+                        f"Replacing incomplete output from a previous run: {partial_output}",
+                    )
+                if (working_dir / raw_ms.name).exists() and not overwrite:
+                    _emit(
+                        logger_fn,
+                        f"Replacing stale working copy from a previous run: {working_dir}",
+                    )
+                calibration_dir = find_calibration_directory(input_path, uid)
+                working_ms = apply_delivered_calibration(
+                    applycal,
+                    clearcal,
+                    raw_ms,
+                    calibration_dir,
+                    working_dir,
+                    overwrite=True,
                     logger_fn=logger_fn,
                 )
+                calibrated_mss.append(
+                    split_calibrated_science_ms(
+                        mstransform,
+                        working_ms,
+                        output_path,
+                        overwrite=True,
+                        logger_fn=logger_fn,
+                    )
+                )
+                if remove_working_copy and working_dir.is_dir():
+                    shutil.rmtree(working_dir, ignore_errors=True)
+                    _emit(logger_fn, f"Removed working copy: {working_dir}")
+            except Exception as exc:
+                if not continue_on_error:
+                    raise
+                logger.exception("Calibration failed for %s", uid)
+                failures.append((uid, f"{type(exc).__name__}: {exc}"))
+                _emit(logger_fn, f"[{index}/{len(raw_mss)}] Calibration FAILED for {uid}: {exc}")
+                continue
+            _emit(logger_fn, f"[{index}/{len(raw_mss)}] Calibration finished for {uid}")
+
+        if failures:
+            summary = "; ".join(f"{uid} ({error})" for uid, error in failures)
+            raise RuntimeError(
+                f"Calibration failed for {len(failures)} of {len(raw_mss)} UID(s): {summary}"
             )
 
         if clean_intermediate:
-            protected = [*calibrated_mss, output_path]
-            _remove_tree_after_success(raw_ms_root, protected, logger_fn=logger_fn)
-            _remove_tree_after_success(output_path / "working", protected, logger_fn=logger_fn)
-            if original_data_root is not None:
-                _remove_tree_after_success(original_data_root, protected, logger_fn=logger_fn)
+            cleanup_intermediate_calibration_data(
+                raw_ms_root,
+                output_path,
+                calibrated_mss,
+                original_data_root=original_data_root,
+                logger_fn=logger_fn,
+            )
 
         return calibrated_mss
     finally:

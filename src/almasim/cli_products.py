@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tarfile
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
@@ -134,6 +135,80 @@ def _future_done(future: Any) -> bool:
 
 
 _NO_PROGRESS_TIMEOUT_S = 3600
+_PROGRESS_HEARTBEAT_S = 60.0
+_FAILED_FUTURE_STATES = {"error", "failed", "cancelled", "lost"}
+
+
+@dataclass(frozen=True)
+class StageFailure:
+    """One UID that failed during an unpack/calibrate stage."""
+
+    uid: str
+    error: str
+    log_path: Optional[str] = None
+
+
+def _safe_uid(uid: str) -> str:
+    return uid.replace("/", "_").replace(":", "_")
+
+
+def _stage_log_path(output_root: Any, uid: str, stage: str) -> Path:
+    """Per-UID log file written by the worker subprocess wrappers.
+
+    The file lives under ``<output_root>/logs`` so that, on Slurm, the submit
+    node can follow it while the job runs on a compute node.
+    """
+    return Path(str(output_root)).expanduser().resolve() / "logs" / f"{_safe_uid(uid)}.{stage}.log"
+
+
+def _tail_log_line(
+    path: Path, max_bytes: int = 4096, modified_since: Optional[float] = None
+) -> Optional[str]:
+    """Return the last non-empty line of ``path`` without reading the whole file.
+
+    Files last modified before ``modified_since`` (a ``time.time()`` stamp) are
+    ignored so that a log left behind by an earlier run is not mistaken for a
+    job that is running now.
+    """
+    try:
+        if modified_since is not None and path.stat().st_mtime < modified_since:
+            return None
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(max(0, size - max_bytes))
+            chunk = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = [line.strip() for line in chunk.splitlines() if line.strip()]
+    return lines[-1] if lines else None
+
+
+def _error_headline(error: str, limit: int = 240) -> str:
+    """First informative line of an error message, trimmed for console output."""
+    for line in str(error).splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped if len(stripped) <= limit else stripped[: limit - 1] + "…"
+    return str(error)[:limit]
+
+
+def _report_stage_failures(stage_label: str, failures: list[StageFailure]) -> None:
+    if not failures:
+        return
+    typer.echo(f"{stage_label}: {len(failures)} UID(s) failed and were skipped:", err=True)
+    for failure in failures:
+        typer.echo(f"  {failure.uid}: {_error_headline(failure.error)}", err=True)
+        if failure.log_path:
+            typer.echo(f"    log: {failure.log_path}", err=True)
+
+
+def _exit_if_failures(stage_label: str, failures: list[StageFailure]) -> None:
+    """Print a failure summary and exit non-zero once every UID has been attempted."""
+    if not failures:
+        return
+    _report_stage_failures(stage_label, failures)
+    raise typer.Exit(code=1)
 
 
 def _compute_jobs_with_progress(
@@ -143,8 +218,19 @@ def _compute_jobs_with_progress(
     job_uids: list[str],
     stage_label: str,
     no_progress_timeout: float = _NO_PROGRESS_TIMEOUT_S,
+    continue_on_error: bool = False,
+    log_paths: Optional[list[Path]] = None,
+    failures: Optional[list[StageFailure]] = None,
+    heartbeat_interval: float = _PROGRESS_HEARTBEAT_S,
 ) -> list[Any]:
-    """Run a stage and show per-UID progress for asynchronous backends."""
+    """Run a stage and show per-UID progress for asynchronous backends.
+
+    With ``continue_on_error`` the result list contains ``None`` for every job
+    that failed (details are appended to ``failures``) instead of raising on the
+    first failure. When ``log_paths`` is given, the last line of every running
+    UID's log is printed every ``heartbeat_interval`` seconds so long stages are
+    not silent.
+    """
     if not jobs:
         return []
 
@@ -152,9 +238,26 @@ def _compute_jobs_with_progress(
     if not isinstance(futures, list):
         futures = [futures]
 
+    def _uid(index: int) -> str:
+        return job_uids[index] if index < len(job_uids) else f"job-{index + 1}"
+
+    def _log_path(index: int) -> Optional[Path]:
+        if log_paths is not None and index < len(log_paths):
+            return log_paths[index]
+        return None
+
+    def _record_failure(index: int, error: str) -> None:
+        if failures is not None:
+            log_path = _log_path(index)
+            failures.append(
+                StageFailure(_uid(index), error, str(log_path) if log_path is not None else None)
+            )
+
     completed: set[int] = set()
     failed: set[int] = set()
-    last_progress_time = time()
+    stage_started_at = time()
+    last_progress_time = stage_started_at
+    last_heartbeat_time = stage_started_at
     with tqdm(total=len(futures), desc=stage_label, unit="uid", leave=True) as progress_bar:
         progress_bar.set_postfix_str(f"completed 0/{len(futures)}")
         while len(completed) < len(futures):
@@ -164,7 +267,7 @@ def _compute_jobs_with_progress(
                     continue
 
                 state = _future_status(future)
-                if state in {"error", "failed", "cancelled"}:
+                if state in _FAILED_FUTURE_STATES:
                     failed.add(index)
 
                 if not _future_done(future):
@@ -172,16 +275,22 @@ def _compute_jobs_with_progress(
 
                 completed.add(index)
                 progress_bar.update(1)
-                uid = job_uids[index] if index < len(job_uids) else f"job-{index + 1}"
+                uid = _uid(index)
                 status_text = state if state else "finished"
                 progress_bar.write(f"{stage_label} completed for {uid} [{status_text}]")
-                if state in {"error", "failed"}:
+                if index in failed:
+                    error_text = f"job ended in state {status_text!r}"
                     try:
                         exc = future.exception()
                         if exc is not None:
-                            progress_bar.write(f"  {uid} error: {exc}")
+                            error_text = str(exc)
                     except Exception:
                         pass
+                    _record_failure(index, error_text)
+                    progress_bar.write(f"  {uid} error: {_error_headline(error_text)}")
+                    log_path = _log_path(index)
+                    if log_path is not None:
+                        progress_bar.write(f"  {uid} log: {log_path}")
 
             if len(completed) > prev_completed:
                 last_progress_time = time()
@@ -190,16 +299,111 @@ def _compute_jobs_with_progress(
                 f"completed {len(completed)}/{len(futures)} failed {len(failed)}"
             )
             if len(completed) < len(futures):
-                if time() - last_progress_time > no_progress_timeout:
+                now = time()
+                if now - last_progress_time > no_progress_timeout:
                     pending = len(futures) - len(completed)
                     raise RuntimeError(
                         f"{stage_label}: {pending} future(s) made no progress for "
                         f"{no_progress_timeout:.0f}s — workers may have died. "
                         "Re-run with --skip-existing to resume."
                     )
+                if log_paths is not None and now - last_heartbeat_time >= heartbeat_interval:
+                    last_heartbeat_time = now
+                    running = 0
+                    for index in range(len(futures)):
+                        if index in completed:
+                            continue
+                        log_path = _log_path(index)
+                        last_line = (
+                            _tail_log_line(log_path, modified_since=stage_started_at - 1.0)
+                            if log_path is not None
+                            else None
+                        )
+                        if last_line is None:
+                            continue
+                        running += 1
+                        progress_bar.write(f"  [{_uid(index)}] {last_line}")
+                    queued = len(futures) - len(completed) - running
+                    progress_bar.write(
+                        f"{stage_label}: {running} running, {queued} waiting for a worker, "
+                        f"{len(completed)} done"
+                    )
                 sleep(0.5)
 
-    return backend.gather(futures)
+    if not continue_on_error:
+        return backend.gather(futures)
+
+    results: list[Any] = []
+    for index, future in enumerate(futures):
+        if index in failed:
+            results.append(None)
+            continue
+        try:
+            results.append(backend.gather([future])[0])
+        except Exception as exc:
+            failed.add(index)
+            _record_failure(index, str(exc))
+            results.append(None)
+    return results
+
+
+def _run_uid_stage(
+    *,
+    backend: Any,
+    postprocess_backend: str,
+    task_fn: Any,
+    job_kwargs: list[dict[str, Any]],
+    job_uids: list[str],
+    stage_label: str,
+    log_paths: list[Path],
+    continue_on_error: bool,
+    failures: list[StageFailure],
+) -> list[list[str]]:
+    """Run one per-UID task for every UID, returning one output list per UID.
+
+    Failed UIDs yield an empty list and are recorded in ``failures`` when
+    ``continue_on_error`` is set; otherwise the first failure propagates.
+    """
+    if not job_uids:
+        return []
+
+    if postprocess_backend == "slurm":
+        task = backend.delayed(task_fn)
+        jobs = [task(**kwargs) for kwargs in job_kwargs]
+        results = _compute_jobs_with_progress(
+            backend=backend,
+            jobs=jobs,
+            job_uids=job_uids,
+            stage_label=stage_label,
+            continue_on_error=continue_on_error,
+            log_paths=log_paths,
+            failures=failures,
+        )
+        return [list(result) if result else [] for result in results]
+
+    outputs: list[list[str]] = []
+    total = len(job_uids)
+    for index, (uid, kwargs) in enumerate(zip(job_uids, job_kwargs), start=1):
+        log_path = log_paths[index - 1] if index - 1 < len(log_paths) else None
+        typer.echo(
+            f"{stage_label} [{index}/{total}] starting {uid}"
+            + (f" (log: {log_path})" if log_path else "")
+        )
+        try:
+            result = task_fn(**kwargs)
+        except Exception as exc:
+            if not continue_on_error:
+                raise
+            failures.append(StageFailure(uid, str(exc), str(log_path) if log_path else None))
+            typer.echo(
+                f"{stage_label} [{index}/{total}] FAILED {uid}: {_error_headline(str(exc))}",
+                err=True,
+            )
+            outputs.append([])
+            continue
+        typer.echo(f"{stage_label} [{index}/{total}] finished {uid}")
+        outputs.append(list(result))
+    return outputs
 
 
 def _download_products_with_progress(
@@ -412,6 +616,13 @@ def _unpack_single_uid(
     if existing_ld:
         ld_library_path = f"{ld_library_path}:{existing_ld}"
     env["LD_LIBRARY_PATH"] = ld_library_path
+    # Make the child's Python output line-buffered through the pipe so progress is live.
+    env["PYTHONUNBUFFERED"] = "1"
+
+    # Mirror everything the child prints into a per-UID log on the (shared) output
+    # filesystem so the run can be followed with ``tail -f`` even on Slurm.
+    log_path = _stage_log_path(raw_output_root, asdm_uid, "unpack")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     process = subprocess.Popen(
         cmd,
@@ -427,9 +638,13 @@ def _unpack_single_uid(
     # Stream child output as it arrives so long CASA logs never accumulate in memory.
     tail_lines: deque[str] = deque(maxlen=200)
     assert process.stdout is not None
-    for line in process.stdout:
-        print(line, end="", flush=True)
-        tail_lines.append(line.rstrip("\n"))
+    with log_path.open("w", encoding="utf-8") as log_file:
+        log_file.write("# " + " ".join(cmd) + "\n")
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            log_file.write(line)
+            log_file.flush()
+            tail_lines.append(line.rstrip("\n"))
 
     return_code = process.wait()
     if return_code != 0:
@@ -437,6 +652,7 @@ def _unpack_single_uid(
         raise RuntimeError(
             f"Unpack failed for {asdm_uid}.\n"
             f"Return code: {return_code}\n"
+            f"Full log: {log_path}\n"
             f"Last {len(tail_lines)} log lines:\n{tail_text}"
         )
 
@@ -459,6 +675,7 @@ def _calibrate_single_uid(
     skip_casa_data_update: bool,
     overwrite: bool,
     clean_intermediate: bool,
+    keep_working_copies: bool = False,
 ) -> list[str]:
     """Run one UID's calibration in a fresh subprocess.
 
@@ -498,6 +715,8 @@ def _calibrate_single_uid(
     ]
     if overwrite:
         cmd.append("--overwrite-outputs")
+    if keep_working_copies:
+        cmd.append("--keep-working-copies")
 
     project_root = _Path(__file__).resolve().parents[2]
     src_root = project_root / "src"
@@ -513,6 +732,13 @@ def _calibrate_single_uid(
     if existing_ld:
         ld_library_path = f"{ld_library_path}:{existing_ld}"
     env["LD_LIBRARY_PATH"] = ld_library_path
+    # Make the child's Python output line-buffered through the pipe so progress is live.
+    env["PYTHONUNBUFFERED"] = "1"
+
+    # Mirror everything the child prints into a per-UID log on the (shared) output
+    # filesystem so the run can be followed with ``tail -f`` even on Slurm.
+    log_path = _stage_log_path(calibrated_output_root, asdm_uid, "calibrate")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     process = subprocess.Popen(
         cmd,
@@ -528,9 +754,13 @@ def _calibrate_single_uid(
     # Stream child output as it arrives so long CASA logs never accumulate in memory.
     tail_lines: deque[str] = deque(maxlen=200)
     assert process.stdout is not None
-    for line in process.stdout:
-        print(line, end="", flush=True)
-        tail_lines.append(line.rstrip("\n"))
+    with log_path.open("w", encoding="utf-8") as log_file:
+        log_file.write("# " + " ".join(cmd) + "\n")
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            log_file.write(line)
+            log_file.flush()
+            tail_lines.append(line.rstrip("\n"))
 
     return_code = process.wait()
     if return_code != 0:
@@ -538,6 +768,7 @@ def _calibrate_single_uid(
         raise RuntimeError(
             f"Calibration failed for {asdm_uid}.\n"
             f"Return code: {return_code}\n"
+            f"Full log: {log_path}\n"
             f"Last {len(tail_lines)} log lines:\n{tail_text}"
         )
 
@@ -554,12 +785,12 @@ def _preflight_casa_data(
     output_root: Path,
     casa_data_root: Optional[Path],
     skip_casa_data_update: bool,
-) -> None:
-    """Ensure CASA runtime data is populated on the master node before Slurm workers start.
+) -> Path:
+    """Ensure CASA runtime data is populated on the master node before workers start.
 
     Slurm compute nodes typically have no internet access, so the data must be
     downloaded once from the submit node and written to a shared filesystem path
-    that all workers can read.
+    that all workers can read. Returns the directory the workers should use.
     """
     from .services.archive.unpack_ms import (
         ensure_casa_runtime_data,
@@ -569,6 +800,34 @@ def _preflight_casa_data(
     casa_data = find_existing_casa_data(output_root, output_root, casa_data_root)
     typer.echo(f"Preflight: ensuring CASA runtime data at {casa_data} …")
     ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update)
+    return Path(casa_data)
+
+
+def _partition_completed_calibrations(
+    output_root: Path, uids: list[str], overwrite: bool
+) -> tuple[list[str], list[str]]:
+    """Split ``uids`` into those still to calibrate and the outputs of finished ones.
+
+    A UID counts as finished when ``<uid>.ms.split.cal`` exists together with
+    its ``.done`` marker; with ``overwrite`` everything is redone.
+    """
+    from .services.archive import calibrated_output_path, is_calibration_complete
+
+    if overwrite:
+        return list(uids), []
+    todo: list[str] = []
+    done_outputs: list[str] = []
+    for uid in uids:
+        if is_calibration_complete(output_root, uid):
+            done_outputs.append(str(calibrated_output_path(output_root, uid)))
+        else:
+            todo.append(uid)
+    if done_outputs:
+        typer.echo(
+            f"Skipping {len(done_outputs)} already calibrated UID(s) with completion markers "
+            "(pass --overwrite-outputs to redo them)."
+        )
+    return todo, done_outputs
 
 
 def _run_unpack_jobs(
@@ -581,36 +840,20 @@ def _run_unpack_jobs(
     casa_data_root: Optional[Path],
     skip_casa_data_update: bool,
     overwrite_outputs: bool,
+    continue_on_error: bool = True,
+    failures: Optional[list[StageFailure]] = None,
 ) -> list[str]:
+    """Import ASDMs into raw MeasurementSets, one isolated subprocess per UID.
+
+    A single UID (which is also how each worker subprocess re-enters this
+    function) runs in-process. Several UIDs always run one subprocess each so a
+    CASA crash on one execution block cannot take the rest of the batch down;
+    failed UIDs are appended to ``failures`` when ``continue_on_error`` is set.
+    """
     from .services.archive import create_measurement_sets
 
-    if postprocess_backend == "sync":
-        if not asdm_uids:
-            return [
-                str(path)
-                for path in create_measurement_sets(
-                    input_root=input_root,
-                    output_root=output_root,
-                    casa_data_root=casa_data_root,
-                    skip_casa_data_update=skip_casa_data_update,
-                    overwrite=overwrite_outputs,
-                )
-            ]
-
-        outputs: list[str] = []
-        for uid in asdm_uids:
-            outputs.extend(
-                str(path)
-                for path in create_measurement_sets(
-                    input_root=input_root,
-                    output_root=output_root,
-                    asdm_uid=uid,
-                    casa_data_root=casa_data_root,
-                    skip_casa_data_update=skip_casa_data_update,
-                    overwrite=overwrite_outputs,
-                )
-            )
-        return outputs
+    if failures is None:
+        failures = []
 
     effective_uids = asdm_uids or dedupe_keep_order(
         _extract_asdm_uids_from_download_root(input_root)
@@ -619,33 +862,68 @@ def _run_unpack_jobs(
         typer.echo("No ASDM directories found to unpack.", err=True)
         raise typer.Exit(code=1)
 
+    if postprocess_backend == "sync" and len(effective_uids) == 1:
+        return [
+            str(path)
+            for path in create_measurement_sets(
+                input_root=input_root,
+                output_root=output_root,
+                asdm_uid=effective_uids[0],
+                casa_data_root=casa_data_root,
+                skip_casa_data_update=skip_casa_data_update,
+                overwrite=overwrite_outputs,
+                logger_fn=typer.echo,
+            )
+        ]
+
     if postprocess_backend_kwargs.get("n_workers") == 0:
         postprocess_backend_kwargs = {
             **postprocess_backend_kwargs,
             "n_workers": len(effective_uids),
         }
 
-    _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
+    worker_casa_data = _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
     skip_casa_data_update = True  # workers reuse what master just populated
 
-    with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
-        unpack_task = backend.delayed(_unpack_single_uid)
-        unpack_jobs = [
-            unpack_task(
-                input_root=str(input_root),
-                raw_output_root=str(output_root),
-                asdm_uid=uid,
-                casa_data_root=str(casa_data_root) if casa_data_root else None,
-                skip_casa_data_update=skip_casa_data_update,
-                overwrite=overwrite_outputs,
+    log_paths = [_stage_log_path(output_root, uid, "unpack") for uid in effective_uids]
+    typer.echo(f"Per-UID unpack logs: {log_paths[0].parent}/<uid>.unpack.log")
+    job_kwargs = [
+        {
+            "input_root": str(input_root),
+            "raw_output_root": str(output_root),
+            "asdm_uid": uid,
+            "casa_data_root": str(worker_casa_data),
+            "skip_casa_data_update": skip_casa_data_update,
+            "overwrite": overwrite_outputs,
+        }
+        for uid in effective_uids
+    ]
+
+    stage_label = "Slurm unpack" if postprocess_backend == "slurm" else "Unpack"
+    if postprocess_backend == "slurm":
+        with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
+            unpack_results = _run_uid_stage(
+                backend=backend,
+                postprocess_backend=postprocess_backend,
+                task_fn=_unpack_single_uid,
+                job_kwargs=job_kwargs,
+                job_uids=effective_uids,
+                stage_label=stage_label,
+                log_paths=log_paths,
+                continue_on_error=continue_on_error,
+                failures=failures,
             )
-            for uid in effective_uids
-        ]
-        unpack_results = _compute_jobs_with_progress(
-            backend=backend,
-            jobs=unpack_jobs,
+    else:
+        unpack_results = _run_uid_stage(
+            backend=None,
+            postprocess_backend=postprocess_backend,
+            task_fn=_unpack_single_uid,
+            job_kwargs=job_kwargs,
             job_uids=effective_uids,
-            stage_label="Slurm unpack",
+            stage_label=stage_label,
+            log_paths=log_paths,
+            continue_on_error=continue_on_error,
+            failures=failures,
         )
     outputs: list[str] = []
     for result in unpack_results:
@@ -665,42 +943,30 @@ def _run_calibrate_jobs(
     skip_casa_data_update: bool,
     overwrite_outputs: bool,
     clean_intermediate: bool,
+    continue_on_error: bool = True,
+    failures: Optional[list[StageFailure]] = None,
+    keep_working_copies: bool = False,
 ) -> list[str]:
-    from .services.archive import create_calibrated_measurement_sets
+    """Calibrate raw MeasurementSets, one isolated subprocess per UID.
 
-    if postprocess_backend == "sync":
-        if not asdm_uids:
-            return [
-                str(path)
-                for path in create_calibrated_measurement_sets(
-                    input_root=input_root,
-                    raw_ms_root=raw_ms_root,
-                    output_root=output_root,
-                    casa_data_root=casa_data_root,
-                    skip_casa_data_update=skip_casa_data_update,
-                    overwrite=overwrite_outputs,
-                    clean_intermediate=clean_intermediate,
-                )
-            ]
+    UIDs whose calibrated output already carries a completion marker are skipped
+    and reported as outputs, so an interrupted batch can simply be re-run.
 
-        outputs: list[str] = []
-        for uid in asdm_uids:
-            outputs.extend(
-                str(path)
-                for path in create_calibrated_measurement_sets(
-                    input_root=input_root,
-                    raw_ms_root=raw_ms_root,
-                    output_root=output_root,
-                    asdm_uid=uid,
-                    casa_data_root=casa_data_root,
-                    skip_casa_data_update=skip_casa_data_update,
-                    overwrite=overwrite_outputs,
-                    clean_intermediate=clean_intermediate,
-                )
-            )
-        return outputs
+    A single UID (which is also how each worker subprocess re-enters this
+    function) runs in-process. Several UIDs always run one subprocess each so a
+    CASA crash (for example an uncaught ``casacore::ArrayError``) on one
+    execution block cannot take the rest of the batch down; failed UIDs are
+    appended to ``failures`` when ``continue_on_error`` is set.
+    """
+    from .services.archive import (
+        cleanup_intermediate_calibration_data,
+        create_calibrated_measurement_sets,
+    )
 
-    if clean_intermediate:
+    if failures is None:
+        failures = []
+
+    if clean_intermediate and postprocess_backend == "slurm":
         typer.echo(
             "--clean-intermediate-files is not supported with --postprocess-backend=slurm.",
             err=True,
@@ -712,39 +978,101 @@ def _run_calibrate_jobs(
         typer.echo("No raw MeasurementSets found to calibrate.", err=True)
         raise typer.Exit(code=1)
 
+    if postprocess_backend == "sync" and len(effective_uids) == 1:
+        return [
+            str(path)
+            for path in create_calibrated_measurement_sets(
+                input_root=input_root,
+                raw_ms_root=raw_ms_root,
+                output_root=output_root,
+                asdm_uid=effective_uids[0],
+                casa_data_root=casa_data_root,
+                skip_casa_data_update=skip_casa_data_update,
+                overwrite=overwrite_outputs,
+                clean_intermediate=clean_intermediate,
+                logger_fn=typer.echo,
+                remove_working_copy=not keep_working_copies,
+            )
+        ]
+
+    effective_uids, done_outputs = _partition_completed_calibrations(
+        output_root, effective_uids, overwrite_outputs
+    )
+    if not effective_uids:
+        typer.echo("All requested UIDs are already calibrated; nothing to do.")
+        return done_outputs
+
     if postprocess_backend_kwargs.get("n_workers") == 0:
         postprocess_backend_kwargs = {
             **postprocess_backend_kwargs,
             "n_workers": len(effective_uids),
         }
 
-    _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
+    worker_casa_data = _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
     skip_casa_data_update = True  # workers reuse what master just populated
 
-    with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
-        calibrate_task = backend.delayed(_calibrate_single_uid)
-        calibrate_jobs = [
-            calibrate_task(
-                input_root=str(input_root),
-                raw_ms_root=str(raw_ms_root),
-                calibrated_output_root=str(output_root),
-                asdm_uid=uid,
-                casa_data_root=str(casa_data_root) if casa_data_root else None,
-                skip_casa_data_update=skip_casa_data_update,
-                overwrite=overwrite_outputs,
-                clean_intermediate=False,
+    log_paths = [_stage_log_path(output_root, uid, "calibrate") for uid in effective_uids]
+    typer.echo(f"Per-UID calibration logs: {log_paths[0].parent}/<uid>.calibrate.log")
+    typer.echo(f"Calibrating {len(effective_uids)} UID(s)")
+    job_kwargs = [
+        {
+            "input_root": str(input_root),
+            "raw_ms_root": str(raw_ms_root),
+            "calibrated_output_root": str(output_root),
+            "asdm_uid": uid,
+            "casa_data_root": str(worker_casa_data),
+            "skip_casa_data_update": skip_casa_data_update,
+            "overwrite": overwrite_outputs,
+            "clean_intermediate": False,
+            "keep_working_copies": keep_working_copies,
+        }
+        for uid in effective_uids
+    ]
+
+    stage_label = "Slurm calibrate" if postprocess_backend == "slurm" else "Calibrate"
+    if postprocess_backend == "slurm":
+        with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
+            calibrate_results = _run_uid_stage(
+                backend=backend,
+                postprocess_backend=postprocess_backend,
+                task_fn=_calibrate_single_uid,
+                job_kwargs=job_kwargs,
+                job_uids=effective_uids,
+                stage_label=stage_label,
+                log_paths=log_paths,
+                continue_on_error=continue_on_error,
+                failures=failures,
             )
-            for uid in effective_uids
-        ]
-        calibrate_results = _compute_jobs_with_progress(
-            backend=backend,
-            jobs=calibrate_jobs,
+    else:
+        calibrate_results = _run_uid_stage(
+            backend=None,
+            postprocess_backend=postprocess_backend,
+            task_fn=_calibrate_single_uid,
+            job_kwargs=job_kwargs,
             job_uids=effective_uids,
-            stage_label="Slurm calibrate",
+            stage_label=stage_label,
+            log_paths=log_paths,
+            continue_on_error=continue_on_error,
+            failures=failures,
         )
-    outputs: list[str] = []
+    outputs: list[str] = list(done_outputs)
     for result in calibrate_results:
         outputs.extend(result)
+
+    if clean_intermediate:
+        if failures:
+            typer.echo(
+                "Skipping --clean-intermediate-files because "
+                f"{len(failures)} UID(s) failed; raw data is kept for a re-run.",
+                err=True,
+            )
+        else:
+            cleanup_intermediate_calibration_data(
+                raw_ms_root,
+                output_root,
+                [Path(path) for path in outputs],
+                logger_fn=typer.echo,
+            )
     return outputs
 
 
@@ -959,7 +1287,12 @@ def _run_parallel_archive_jobs(
     casa_data_root: Optional[Path],
     skip_casa_data_update: bool,
     overwrite_archive_outputs: bool,
+    continue_on_error: bool = True,
+    failures: Optional[list[StageFailure]] = None,
+    keep_working_copies: bool = False,
 ) -> tuple[list[str], list[str]]:
+    if failures is None:
+        failures = []
     raw_ms_root = archive_output_root / "raw_ms"
     calibrated_ms_root = archive_output_root / "calibrated_ms"
 
@@ -988,56 +1321,89 @@ def _run_parallel_archive_jobs(
     raw_outputs: list[str] = []
     calibrated_outputs: list[str] = []
 
-    with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
-        if unpack_ms:
-            unpack_task = backend.delayed(_unpack_single_uid)
-            unpack_jobs = [
-                unpack_task(
-                    input_root=str(download_root),
-                    raw_output_root=str(raw_ms_root),
-                    asdm_uid=uid,
-                    casa_data_root=str(casa_data_root) if casa_data_root else None,
-                    skip_casa_data_update=skip_casa_data_update,
-                    overwrite=overwrite_archive_outputs,
-                )
-                for uid in asdm_uids
-            ]
-            if postprocess_backend == "slurm":
-                unpack_results = _compute_jobs_with_progress(
-                    backend=backend,
-                    jobs=unpack_jobs,
-                    job_uids=asdm_uids,
-                    stage_label="Slurm unpack",
-                )
-            else:
-                unpack_results = backend.compute(unpack_jobs, sync=True)
-            for result in unpack_results:
-                raw_outputs.extend(result)
+    # One CASA runtime data directory for both stages, populated on the submit node.
+    worker_casa_data = _preflight_casa_data(
+        archive_output_root, casa_data_root, skip_casa_data_update
+    )
+    skip_casa_data_update = True
 
-        if generate_calibrated_visibilities:
-            calibrate_task = backend.delayed(_calibrate_single_uid)
-            calibrate_jobs = [
-                calibrate_task(
-                    input_root=str(download_root),
-                    raw_ms_root=str(raw_ms_root),
-                    calibrated_output_root=str(calibrated_ms_root),
-                    asdm_uid=uid,
-                    casa_data_root=str(casa_data_root) if casa_data_root else None,
-                    skip_casa_data_update=skip_casa_data_update,
-                    overwrite=overwrite_archive_outputs,
-                    clean_intermediate=False,
+    stage_prefix = "Slurm " if postprocess_backend == "slurm" else ""
+    with create_backend(postprocess_backend, **postprocess_backend_kwargs) as backend:
+        calibrate_uids = list(asdm_uids)
+        if unpack_ms:
+            unpack_log_paths = [_stage_log_path(raw_ms_root, uid, "unpack") for uid in asdm_uids]
+            typer.echo(f"Per-UID unpack logs: {unpack_log_paths[0].parent}/<uid>.unpack.log")
+            unpack_results = _run_uid_stage(
+                backend=backend,
+                postprocess_backend=postprocess_backend,
+                task_fn=_unpack_single_uid,
+                job_kwargs=[
+                    {
+                        "input_root": str(download_root),
+                        "raw_output_root": str(raw_ms_root),
+                        "asdm_uid": uid,
+                        "casa_data_root": str(worker_casa_data),
+                        "skip_casa_data_update": skip_casa_data_update,
+                        "overwrite": overwrite_archive_outputs,
+                    }
+                    for uid in asdm_uids
+                ],
+                job_uids=asdm_uids,
+                stage_label=f"{stage_prefix}unpack",
+                log_paths=unpack_log_paths,
+                continue_on_error=continue_on_error,
+                failures=failures,
+            )
+            calibrate_uids = []
+            for uid, result in zip(asdm_uids, unpack_results):
+                raw_outputs.extend(result)
+                if result:
+                    calibrate_uids.append(uid)
+            skipped = [uid for uid in asdm_uids if uid not in calibrate_uids]
+            if skipped and generate_calibrated_visibilities:
+                typer.echo(
+                    f"Skipping calibration for {len(skipped)} UID(s) whose unpack failed: "
+                    + ", ".join(skipped),
+                    err=True,
                 )
-                for uid in asdm_uids
+
+        if generate_calibrated_visibilities and calibrate_uids:
+            calibrate_uids, done_outputs = _partition_completed_calibrations(
+                calibrated_ms_root, calibrate_uids, overwrite_archive_outputs
+            )
+            calibrated_outputs.extend(done_outputs)
+
+        if generate_calibrated_visibilities and calibrate_uids:
+            calibrate_log_paths = [
+                _stage_log_path(calibrated_ms_root, uid, "calibrate") for uid in calibrate_uids
             ]
-            if postprocess_backend == "slurm":
-                calibrate_results = _compute_jobs_with_progress(
-                    backend=backend,
-                    jobs=calibrate_jobs,
-                    job_uids=asdm_uids,
-                    stage_label="Slurm calibrate",
-                )
-            else:
-                calibrate_results = backend.compute(calibrate_jobs, sync=True)
+            typer.echo(
+                f"Per-UID calibration logs: {calibrate_log_paths[0].parent}/<uid>.calibrate.log"
+            )
+            calibrate_results = _run_uid_stage(
+                backend=backend,
+                postprocess_backend=postprocess_backend,
+                task_fn=_calibrate_single_uid,
+                job_kwargs=[
+                    {
+                        "input_root": str(download_root),
+                        "raw_ms_root": str(raw_ms_root),
+                        "calibrated_output_root": str(calibrated_ms_root),
+                        "asdm_uid": uid,
+                        "casa_data_root": str(worker_casa_data),
+                        "skip_casa_data_update": skip_casa_data_update,
+                        "overwrite": overwrite_archive_outputs,
+                        "clean_intermediate": False,
+                        "keep_working_copies": keep_working_copies,
+                    }
+                    for uid in calibrate_uids
+                ],
+                job_uids=calibrate_uids,
+                stage_label=f"{stage_prefix}calibrate",
+                log_paths=calibrate_log_paths,
+                continue_on_error=continue_on_error,
+                failures=failures,
+            )
             for result in calibrate_results:
                 calibrated_outputs.extend(result)
 
@@ -1100,6 +1466,55 @@ def products_resolve(
         save_products_csv_path=save_products_csv_path,
     )
     typer.echo(f"Resolved products: {len(products)}")
+
+
+def _update_manifest_measurement_sets(
+    manifest_path: Optional[str], raw_mss: list[str], calibrated_mss: list[str]
+) -> None:
+    """Record post-processing outputs in the download manifest written earlier."""
+    if not manifest_path:
+        return
+    import json
+
+    path = Path(manifest_path)
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(manifest, dict):
+        return
+    manifest["raw_measurement_sets"] = list(raw_mss)
+    manifest["calibrated_measurement_sets"] = list(calibrated_mss)
+    try:
+        path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    except OSError:
+        typer.echo(f"Could not update manifest {path}", err=True)
+
+
+def _cleanup_after_download_postprocess(
+    *,
+    summary: Any,
+    destination: Path,
+    archive_root: Path,
+    calibrated_mss: list[str],
+) -> None:
+    """Apply --clean-intermediate-files once every UID has been calibrated successfully."""
+    from .services.archive import cleanup_intermediate_calibration_data
+    from .services.download import _cleanup_download_inputs
+
+    calibrated_paths = [Path(path) for path in calibrated_mss]
+    cleanup_intermediate_calibration_data(
+        archive_root / "raw_ms",
+        archive_root / "calibrated_ms",
+        calibrated_paths,
+        logger_fn=typer.echo,
+    )
+    _cleanup_download_inputs(
+        destination,
+        getattr(summary, "files", []) or [],
+        getattr(summary, "extracted_files", []) or [],
+        protected_roots=[archive_root, *calibrated_paths],
+    )
 
 
 @products_app.command("download")
@@ -1223,6 +1638,22 @@ def products_download(
         "--overwrite-archive-outputs",
         help="Overwrite existing raw/calibrated MS outputs.",
     ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--fail-fast",
+        help=(
+            "Skip UIDs whose processing fails and carry on with the rest, then exit "
+            "non-zero with a summary (default). --fail-fast aborts on the first failure."
+        ),
+    ),
+    keep_working_copies: bool = typer.Option(
+        False,
+        "--keep-working-copies",
+        help=(
+            "Keep each UID's working directory (raw MS copy plus caltables, about 1.8x the "
+            "raw MS) after its calibrated output is written. By default it is removed."
+        ),
+    ),
     yes: bool = typer.Option(
         False,
         "--yes",
@@ -1294,7 +1725,9 @@ def products_download(
         else destination.expanduser().resolve() / "archive_ms"
     )
 
-    if backend_normalized == "slurm" and needs_archive_postprocess:
+    if needs_archive_postprocess:
+        # Download first, then unpack/calibrate one UID per subprocess (sync) or per
+        # Slurm task, so a CASA crash on one execution block never aborts the run.
         summary = _download_products_with_progress(
             filtered,
             destination,
@@ -1308,24 +1741,33 @@ def products_download(
             skip_casa_data_update=skip_casa_data_update,
             logger_fn=typer.echo,
         )
+        stage_failures: list[StageFailure] = []
         raw_mss, calibrated_mss = _run_parallel_archive_jobs(
             download_root=Path(summary.destination),
             archive_output_root=archive_root,
             unpack_ms=unpack_ms,
             generate_calibrated_visibilities=generate_calibrated_visibilities,
             postprocess_backend=backend_normalized,
-            postprocess_backend_kwargs={
-                "queue": slurm_queue,
-                "project": slurm_project,
-                "walltime": slurm_walltime,
-                "cores": slurm_cores,
-                "memory": slurm_memory,
-                "n_workers": slurm_workers,
-            },
+            postprocess_backend_kwargs=(
+                {
+                    "queue": slurm_queue,
+                    "project": slurm_project,
+                    "walltime": slurm_walltime,
+                    "cores": slurm_cores,
+                    "memory": slurm_memory,
+                    "n_workers": slurm_workers,
+                }
+                if backend_normalized == "slurm"
+                else {}
+            ),
             casa_data_root=casa_data_root,
             skip_casa_data_update=skip_casa_data_update,
             overwrite_archive_outputs=overwrite_archive_outputs,
+            continue_on_error=continue_on_error,
+            failures=stage_failures,
+            keep_working_copies=keep_working_copies,
         )
+        _update_manifest_measurement_sets(summary.manifest_path, raw_mss, calibrated_mss)
         typer.echo(f"Destination: {summary.destination}")
         typer.echo(f"Completed: {summary.files_completed}")
         typer.echo(f"Failed: {summary.files_failed}")
@@ -1339,11 +1781,21 @@ def products_download(
             typer.echo("Calibrated MS products:")
             for calibrated_ms in calibrated_mss:
                 typer.echo(f"  {calibrated_ms}")
-        if clean_intermediate_files:
-            typer.echo(
-                "--clean-intermediate-files is not yet applied in slurm post-processing mode.",
-                err=True,
-            )
+        if clean_intermediate_files and generate_calibrated_visibilities:
+            if stage_failures:
+                typer.echo(
+                    "Skipping --clean-intermediate-files because "
+                    f"{len(stage_failures)} UID(s) failed; inputs are kept for a re-run.",
+                    err=True,
+                )
+            else:
+                _cleanup_after_download_postprocess(
+                    summary=summary,
+                    destination=Path(summary.destination),
+                    archive_root=archive_root,
+                    calibrated_mss=calibrated_mss,
+                )
+        _exit_if_failures("Archive post-processing", stage_failures)
         return
 
     summary = _download_products_with_progress(
@@ -1557,6 +2009,14 @@ def products_unpack(
         "--overwrite-outputs",
         help="Overwrite existing raw MS outputs.",
     ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--fail-fast",
+        help=(
+            "Skip UIDs whose processing fails and carry on with the rest, then exit "
+            "non-zero with a summary (default). --fail-fast aborts on the first failure."
+        ),
+    ),
 ) -> None:
     """Import ASDM directories into raw MeasurementSets as a standalone step."""
     backend_normalized = postprocess_backend.lower()
@@ -1565,6 +2025,7 @@ def products_unpack(
         raise typer.Exit(code=2)
 
     parsed_uids = _parse_asdm_uid_options(asdm_uid)
+    stage_failures: list[StageFailure] = []
     raw_outputs = _run_unpack_jobs(
         input_root=input_root.expanduser().resolve(),
         output_root=output_root.expanduser().resolve(),
@@ -1582,11 +2043,14 @@ def products_unpack(
         casa_data_root=casa_data_root,
         skip_casa_data_update=skip_casa_data_update,
         overwrite_outputs=overwrite_outputs,
+        continue_on_error=continue_on_error,
+        failures=stage_failures,
     )
 
     typer.echo(f"Raw MS products: {len(raw_outputs)}")
     for raw_ms in raw_outputs:
         typer.echo(f"  {raw_ms}")
+    _exit_if_failures("Unpack", stage_failures)
 
 
 @products_app.command("calibrate", hidden=True)
@@ -1670,6 +2134,22 @@ def products_calibrate(
         "--clean-intermediate-files",
         help="Remove intermediate raw and working files after successful calibration.",
     ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--fail-fast",
+        help=(
+            "Skip UIDs whose processing fails and carry on with the rest, then exit "
+            "non-zero with a summary (default). --fail-fast aborts on the first failure."
+        ),
+    ),
+    keep_working_copies: bool = typer.Option(
+        False,
+        "--keep-working-copies",
+        help=(
+            "Keep each UID's working directory (raw MS copy plus caltables, about 1.8x the "
+            "raw MS) after its calibrated output is written. By default it is removed."
+        ),
+    ),
 ) -> None:
     """Create calibrated MeasurementSets as a standalone step."""
     backend_normalized = postprocess_backend.lower()
@@ -1678,6 +2158,7 @@ def products_calibrate(
         raise typer.Exit(code=2)
 
     parsed_uids = _parse_asdm_uid_options(asdm_uid)
+    stage_failures: list[StageFailure] = []
     calibrated_outputs = _run_calibrate_jobs(
         input_root=input_root.expanduser().resolve(),
         raw_ms_root=raw_ms_root.expanduser().resolve(),
@@ -1697,8 +2178,12 @@ def products_calibrate(
         skip_casa_data_update=skip_casa_data_update,
         overwrite_outputs=overwrite_outputs,
         clean_intermediate=clean_intermediate_files,
+        continue_on_error=continue_on_error,
+        failures=stage_failures,
+        keep_working_copies=keep_working_copies,
     )
 
     typer.echo(f"Calibrated MS products: {len(calibrated_outputs)}")
     for calibrated_ms in calibrated_outputs:
         typer.echo(f"  {calibrated_ms}")
+    _exit_if_failures("Calibrate", stage_failures)
