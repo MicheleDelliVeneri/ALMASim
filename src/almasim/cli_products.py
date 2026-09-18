@@ -842,6 +842,23 @@ def _preflight_casa_data(
     return Path(casa_data)
 
 
+def _one_uid_per_worker(postprocess_backend_kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Make each Slurm worker run one UID at a time.
+
+    dask-jobqueue gives a worker as many task slots as it has cores, so a
+    10-worker/20-core cluster would run up to 200 UIDs at once: each one copies
+    the whole raw MeasurementSet and starts its own CASA process, which floods
+    the shared filesystem and the nodes' memory. The real work happens in a
+    subprocess, so a single task slot per worker is enough and makes
+    ``--slurm-workers`` mean what it says: the number of UIDs in flight.
+
+    An explicit ``worker_extra_args`` from the caller is left untouched.
+    """
+    if "worker_extra_args" in postprocess_backend_kwargs:
+        return postprocess_backend_kwargs
+    return {**postprocess_backend_kwargs, "worker_extra_args": ["--nthreads", "1"]}
+
+
 def _partition_completed_calibrations(
     output_root: Path, uids: list[str], overwrite: bool
 ) -> tuple[list[str], list[str]]:
@@ -920,6 +937,8 @@ def _run_unpack_jobs(
             **postprocess_backend_kwargs,
             "n_workers": len(effective_uids),
         }
+    if postprocess_backend == "slurm":
+        postprocess_backend_kwargs = _one_uid_per_worker(postprocess_backend_kwargs)
 
     worker_casa_data = _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
     skip_casa_data_update = True  # workers reuse what master just populated
@@ -1046,6 +1065,8 @@ def _run_calibrate_jobs(
             **postprocess_backend_kwargs,
             "n_workers": len(effective_uids),
         }
+    if postprocess_backend == "slurm":
+        postprocess_backend_kwargs = _one_uid_per_worker(postprocess_backend_kwargs)
 
     worker_casa_data = _preflight_casa_data(output_root, casa_data_root, skip_casa_data_update)
     skip_casa_data_update = True  # workers reuse what master just populated
@@ -1352,6 +1373,8 @@ def _run_parallel_archive_jobs(
             **postprocess_backend_kwargs,
             "n_workers": len(asdm_uids),
         }
+    if postprocess_backend == "slurm":
+        postprocess_backend_kwargs = _one_uid_per_worker(postprocess_backend_kwargs)
 
     typer.echo(
         "Running archive post-processing with "

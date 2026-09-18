@@ -1514,3 +1514,72 @@ def test_casa_bundled_lib_dir_returns_none_when_not_installed(monkeypatch):
 
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     assert cli_products._casa_bundled_lib_dir() is None
+
+
+def test_one_uid_per_worker_limits_task_slots():
+    """Slurm workers get a single task slot so --slurm-workers == UIDs in flight."""
+    assert cli_products._one_uid_per_worker({"n_workers": 10}) == {
+        "n_workers": 10,
+        "worker_extra_args": ["--nthreads", "1"],
+    }
+    # An explicit caller setting wins.
+    explicit = {"worker_extra_args": ["--nthreads", "4"]}
+    assert cli_products._one_uid_per_worker(explicit) == explicit
+
+
+def test_run_calibrate_jobs_slurm_pins_one_task_per_worker(monkeypatch, tmp_path):
+    """The slurm calibrate path must not let a worker run many UIDs at once."""
+    captured: dict[str, object] = {}
+
+    class _Backend:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+    monkeypatch.setattr(
+        cli_products,
+        "create_backend",
+        lambda backend, **kwargs: captured.update(kwargs) or _Backend(),
+    )
+    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
+    monkeypatch.setattr(cli_products, "_run_uid_stage", lambda **kwargs: [["/cal/a.ms.split.cal"]])
+
+    cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=tmp_path / "out",
+        asdm_uids=["uid___A"],
+        postprocess_backend="slurm",
+        postprocess_backend_kwargs={"n_workers": 10},
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite_outputs=False,
+        clean_intermediate=False,
+    )
+
+    assert captured["worker_extra_args"] == ["--nthreads", "1"]
+
+
+def test_run_calibrate_jobs_sync_does_not_add_worker_args(monkeypatch, tmp_path):
+    """The sync path has no Dask workers, so no worker arguments are injected."""
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
+    monkeypatch.setattr(
+        cli_products, "_run_uid_stage", lambda **kwargs: captured.update(kwargs) or [[], []]
+    )
+
+    cli_products._run_calibrate_jobs(
+        input_root=tmp_path / "input",
+        raw_ms_root=tmp_path / "raw",
+        output_root=tmp_path / "out",
+        asdm_uids=["uid___A", "uid___B"],
+        postprocess_backend="sync",
+        postprocess_backend_kwargs={},
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite_outputs=False,
+        clean_intermediate=False,
+    )
+    assert captured["postprocess_backend"] == "sync"
