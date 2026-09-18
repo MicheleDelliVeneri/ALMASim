@@ -1433,3 +1433,84 @@ def test_products_calibrate_keep_working_copies_passthrough(monkeypatch):
     assert captured["keep_working_copies"] is False
     assert runner.invoke(cli.app, ["products", "calibrate", "--keep-working-copies"]).exit_code == 0
     assert captured["keep_working_copies"] is True
+
+
+def test_casa_bundled_lib_dir_precedes_system_paths(tmp_path, monkeypatch):
+    """Worker env must search casatools' bundled libs before /usr/lib64.
+
+    The system libpmix otherwise shadows the copy bundled with casatools and the
+    CASA extension modules fail with "undefined symbol: pmix_framework_names".
+    """
+
+    class _FakeProcess:
+        stdout = iter([])
+
+        def wait(self):
+            return 0
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "subprocess.Popen",
+        lambda cmd, **kwargs: captured.update(kwargs) or _FakeProcess(),
+    )
+    bundled = tmp_path / "site-packages" / "casatools" / "__casac__" / "lib"
+    bundled.mkdir(parents=True)
+    monkeypatch.setattr(cli_products, "_casa_bundled_lib_dir", lambda: str(bundled))
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/spack/lib")
+
+    output_root = tmp_path / "cal"
+    (output_root / "uid___A.ms.split.cal").mkdir(parents=True)
+    cli_products._calibrate_single_uid(
+        input_root="/input",
+        raw_ms_root="/raw",
+        calibrated_output_root=str(output_root),
+        asdm_uid="uid___A",
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=False,
+        clean_intermediate=False,
+    )
+
+    entries = captured["env"]["LD_LIBRARY_PATH"].split(":")
+    assert entries[0] == str(bundled)
+    assert entries.index(str(bundled)) < entries.index("/usr/lib64")
+    # Inherited (spack) paths still come last.
+    assert entries[-1] == "/opt/spack/lib"
+
+
+def test_casa_bundled_lib_dir_absent_keeps_system_paths(tmp_path, monkeypatch):
+    """Without casatools installed the previous system-first ordering is unchanged."""
+
+    class _FakeProcess:
+        stdout = iter([])
+
+        def wait(self):
+            return 0
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "subprocess.Popen", lambda cmd, **kwargs: captured.update(kwargs) or _FakeProcess()
+    )
+    monkeypatch.setattr(cli_products, "_casa_bundled_lib_dir", lambda: None)
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+
+    output_root = tmp_path / "raw"
+    (output_root / "working").mkdir(parents=True)
+    cli_products._unpack_single_uid(
+        input_root="/input",
+        raw_output_root=str(output_root),
+        asdm_uid="uid___A",
+        casa_data_root=None,
+        skip_casa_data_update=True,
+        overwrite=False,
+    )
+
+    assert captured["env"]["LD_LIBRARY_PATH"].startswith("/lib64:/usr/lib64:")
+
+
+def test_casa_bundled_lib_dir_returns_none_when_not_installed(monkeypatch):
+    """A missing casatools package resolves to None rather than raising."""
+    import importlib.util
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    assert cli_products._casa_bundled_lib_dir() is None
