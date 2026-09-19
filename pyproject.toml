@@ -47,7 +47,8 @@ dependencies = [
     "imagecodecs",
     "ducc0",
     "typer",
-    "bokeh>=3.9.0"
+    "bokeh>=3.9.0",
+    "pypdf>=6.19.0",
 ]
 
 [project.scripts]

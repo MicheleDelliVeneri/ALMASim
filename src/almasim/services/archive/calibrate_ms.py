@@ -27,6 +27,7 @@ from .unpack_ms import (
     ensure_casa_runtime_data,
     find_existing_casa_data,
     has_casa_runtime_data,
+    verify_measurement_set,
 )
 
 logger = logging.getLogger(__name__)
@@ -292,12 +293,28 @@ def calibration_marker_path(output_root: str | os.PathLike[str], uid: str) -> Pa
     return calibrated_output_path(output_root, uid).with_name(f"{uid}.ms.split.cal.done")
 
 
+def calibration_failure_marker_path(output_root: str | os.PathLike[str], uid: str) -> Path:
+    """Return the failure marker written when ``uid`` could not be calibrated.
+
+    Counterpart of :func:`calibration_marker_path`. Without it the filesystem
+    cannot distinguish a UID that was never attempted from one that failed, so
+    a rerun silently retries deterministic failures (a missing calibration
+    delivery, say) that will fail again the same way.
+    """
+    return calibrated_output_path(output_root, uid).with_name(f"{uid}.ms.split.cal.failed")
+
+
 def is_calibration_complete(output_root: str | os.PathLike[str], uid: str) -> bool:
     """Return True when ``uid`` has both a calibrated MS directory and its marker."""
     return (
         calibrated_output_path(output_root, uid).is_dir()
         and calibration_marker_path(output_root, uid).is_file()
     )
+
+
+def has_calibration_failed(output_root: str | os.PathLike[str], uid: str) -> bool:
+    """Return True when ``uid`` carries a failure marker from an earlier run."""
+    return calibration_failure_marker_path(output_root, uid).is_file()
 
 
 def write_calibration_marker(output_root: str | os.PathLike[str], uid: str) -> Path:
@@ -314,6 +331,36 @@ def write_calibration_marker(output_root: str | os.PathLike[str], uid: str) -> P
         + "\n",
         encoding="utf-8",
     )
+    # A UID that succeeds now must not keep looking failed to the next run.
+    calibration_failure_marker_path(output_root, uid).unlink(missing_ok=True)
+    return marker
+
+
+def write_calibration_failure_marker(
+    output_root: str | os.PathLike[str],
+    uid: str,
+    error: str,
+    *,
+    stage: str = "calibrate",
+    log_path: str | os.PathLike[str] | None = None,
+) -> Path:
+    """Record why ``uid`` failed, next to where its output would have gone.
+
+    ``error`` is stored verbatim so a rerun can tell a deterministic failure
+    (no delivered calibration tables) from a transient one (a truncated read)
+    without re-reading the driver log, which is per-job and easily lost.
+    """
+    marker = calibration_failure_marker_path(output_root, uid)
+    payload = {
+        "uid": uid,
+        "stage": stage,
+        "error": error,
+        "failed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if log_path is not None:
+        payload["log"] = str(log_path)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return marker
 
 
@@ -428,14 +475,18 @@ def create_calibrated_measurement_sets(
     returned) unless ``overwrite`` is set. Partial outputs or working copies
     without a marker are leftovers of a failed run and are replaced. With
     ``remove_working_copy`` the per-UID working directory (a full copy of the
-    raw MS plus calibration tables) is deleted as soon as its split succeeds.
+    raw MS plus calibration tables) is deleted as soon as the UID finishes.
 
+    Every failure writes a ``<uid>.ms.split.cal.failed`` marker recording the
+    error, so a rerun can tell "never attempted" from "attempted and failed".
     With ``continue_on_error`` a Python-level failure on one raw MS is logged and
     the remaining raw MSs are still processed; a ``RuntimeError`` summarising the
     failed UIDs is raised at the end. Note that a hard crash inside CASA (for
     example an uncaught ``casacore`` C++ exception) terminates the whole process
     and cannot be skipped here; the CLI isolates each UID in its own subprocess
-    for that reason.
+    for that reason, and that wrapper writes the failure marker instead. The
+    working copy is reclaimed in either case, so a failed UID leaves no
+    multi-GB raw copy behind in ``working/``.
     """
     input_path = Path(input_root).expanduser().resolve()
     output_path = Path(output_root).expanduser().resolve()
@@ -472,6 +523,8 @@ def create_calibrated_measurement_sets(
 
             _emit(logger_fn, f"[{index}/{len(raw_mss)}] Calibrating {uid}")
             working_dir = output_path / "working" / f"{uid}.calibration"
+            # A fresh attempt invalidates whatever the previous one concluded.
+            calibration_failure_marker_path(output_path, uid).unlink(missing_ok=True)
             try:
                 partial_output = calibrated_output_path(output_path, uid)
                 if partial_output.exists() and not overwrite:
@@ -484,6 +537,11 @@ def create_calibrated_measurement_sets(
                         logger_fn,
                         f"Replacing stale working copy from a previous run: {working_dir}",
                     )
+                # A raw MS whose import was killed opens fine but has no rows;
+                # clearcal would then abort the whole process inside casacore
+                # (minMax on an empty array), which no handler here can catch.
+                # Checking first turns that into an ordinary recorded failure.
+                verify_measurement_set(raw_ms)
                 calibration_dir = find_calibration_directory(input_path, uid)
                 working_ms = apply_delivered_calibration(
                     applycal,
@@ -503,16 +561,19 @@ def create_calibrated_measurement_sets(
                         logger_fn=logger_fn,
                     )
                 )
-                if remove_working_copy and working_dir.is_dir():
-                    shutil.rmtree(working_dir, ignore_errors=True)
-                    _emit(logger_fn, f"Removed working copy: {working_dir}")
             except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                write_calibration_failure_marker(output_path, uid, error)
                 if not continue_on_error:
                     raise
                 logger.exception("Calibration failed for %s", uid)
-                failures.append((uid, f"{type(exc).__name__}: {exc}"))
+                failures.append((uid, error))
                 _emit(logger_fn, f"[{index}/{len(raw_mss)}] Calibration FAILED for {uid}: {exc}")
                 continue
+            finally:
+                if remove_working_copy and working_dir.is_dir():
+                    shutil.rmtree(working_dir, ignore_errors=True)
+                    _emit(logger_fn, f"Removed working copy: {working_dir}")
             _emit(logger_fn, f"[{index}/{len(raw_mss)}] Calibration finished for {uid}")
 
         if failures:

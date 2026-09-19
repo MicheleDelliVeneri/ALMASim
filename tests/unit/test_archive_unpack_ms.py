@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -273,7 +274,8 @@ def test_asdm_name_strips_suffix(tmp_path):
 
 
 @pytest.mark.unit
-def test_create_measurement_set_calls_importasdm_and_returns_path(tmp_path):
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+def test_create_measurement_set_calls_importasdm_and_returns_path(mock_rows, tmp_path):
     """create_measurement_set calls importasdm and returns the expected path."""
     asdm = _make_asdm(tmp_path / "input")
     output_root = tmp_path / "output"
@@ -289,8 +291,9 @@ def test_create_measurement_set_calls_importasdm_and_returns_path(tmp_path):
 
 
 @pytest.mark.unit
-def test_create_measurement_set_skips_when_exists(tmp_path):
-    """create_measurement_set skips importasdm when MS already exists."""
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+def test_create_measurement_set_skips_when_exists(mock_rows, tmp_path):
+    """An existing MS is skipped once verified, and gains a marker."""
     asdm = _make_asdm(tmp_path / "input")
     output_root = tmp_path / "output"
     uid = asdm_name(asdm)
@@ -301,10 +304,13 @@ def test_create_measurement_set_skips_when_exists(tmp_path):
     result = create_measurement_set(mock_importasdm, asdm, output_root, overwrite=False)
     mock_importasdm.assert_not_called()
     assert result == existing_ms
+    # Grandfathered in: verified, then marked so the next run takes the fast path.
+    assert (output_root / "working" / f"{uid}.ms.done").is_file()
 
 
 @pytest.mark.unit
-def test_create_measurement_set_overwrite_true(tmp_path):
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+def test_create_measurement_set_overwrite_true(mock_rows, tmp_path):
     """When overwrite=True, importasdm is called even if MS exists."""
     asdm = _make_asdm(tmp_path / "input")
     output_root = tmp_path / "output"
@@ -341,7 +347,8 @@ def test_create_measurement_set_importasdm_failure_raises(tmp_path):
 
 
 @pytest.mark.unit
-def test_create_measurement_set_emits_log_messages(tmp_path):
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+def test_create_measurement_set_emits_log_messages(mock_rows, tmp_path):
     """create_measurement_set emits log messages via logger_fn."""
     asdm = _make_asdm(tmp_path / "input")
     output_root = tmp_path / "output"
@@ -364,7 +371,10 @@ def test_create_measurement_set_emits_log_messages(tmp_path):
 @patch("almasim.services.archive.unpack_ms.find_existing_casa_data")
 @patch("almasim.services.archive.unpack_ms.configure_casa_environment")
 @patch("almasim.services.archive.unpack_ms.ensure_casa_runtime_data")
-def test_create_measurement_sets_returns_list(mock_ensure, mock_configure, mock_find, tmp_path):
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+def test_create_measurement_sets_returns_list(
+    mock_rows, mock_ensure, mock_configure, mock_find, tmp_path
+):
     """create_measurement_sets returns a list of MS paths."""
     asdm = _make_asdm(tmp_path / "input")
     output_root = tmp_path / "output"
@@ -411,3 +421,126 @@ def test_configure_casa_environment_defaults_to_quiet_terminal(tmp_path):
     site_config = (output_root / ".casa-config" / "casasiteconfig.py").read_text(encoding="utf-8")
     assert "logfile" not in site_config
     assert "log2term = False" in site_config
+
+
+# ===========================================================================
+# unpack completion markers and row verification
+# ===========================================================================
+
+
+@pytest.mark.unit
+def test_raw_ms_marker_helpers(tmp_path):
+    """The done marker records the row count and clears any stale failure marker."""
+    from almasim.services.archive.unpack_ms import (
+        is_unpack_complete,
+        raw_ms_failure_marker_path,
+        raw_ms_marker_path,
+        write_raw_ms_failure_marker,
+        write_raw_ms_marker,
+    )
+
+    output_root = tmp_path / "out"
+    (output_root / "working").mkdir(parents=True)
+    uid = "uid___A002_X1_X2"
+
+    assert is_unpack_complete(output_root, uid) is False
+
+    failure = write_raw_ms_failure_marker(output_root, uid, "RuntimeError: killed", log_path="/l")
+    assert failure == raw_ms_failure_marker_path(output_root, uid)
+    assert failure.name == "uid___A002_X1_X2.ms.failed"
+    assert json.loads(failure.read_text())["error"] == "RuntimeError: killed"
+
+    # Marker alone is not enough; the MS directory must exist too.
+    marker = write_raw_ms_marker(output_root, uid, 42)
+    assert marker == raw_ms_marker_path(output_root, uid)
+    assert is_unpack_complete(output_root, uid) is False
+    (output_root / "working" / f"{uid}.ms").mkdir()
+    assert is_unpack_complete(output_root, uid) is True
+
+    assert json.loads(marker.read_text())["rows"] == 42
+    # Success clears the earlier failure.
+    assert not failure.exists()
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count")
+def test_verify_measurement_set_rejects_zero_rows(mock_rows, tmp_path):
+    """A 0-row MS is the signature of a killed importasdm and must not pass."""
+    from almasim.services.archive.unpack_ms import verify_measurement_set
+
+    ms = tmp_path / "uid___A002_X1_X2.ms"
+    ms.mkdir()
+
+    mock_rows.return_value = 0
+    with pytest.raises(RuntimeError, match="has no rows"):
+        verify_measurement_set(ms)
+
+    mock_rows.return_value = 7
+    assert verify_measurement_set(ms) == 7
+
+    with pytest.raises(RuntimeError, match="was not created"):
+        verify_measurement_set(tmp_path / "absent.ms")
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=0)
+def test_truncated_existing_ms_is_reimported_not_skipped(mock_rows, tmp_path):
+    """The bug that let 511 truncated MSs through: existence alone meant 'done'."""
+    asdm = _make_asdm(tmp_path / "input")
+    output_root = tmp_path / "output"
+    uid = asdm_name(asdm)
+    truncated = output_root / "working" / f"{uid}.ms"
+    truncated.mkdir(parents=True)
+
+    calls = []
+
+    def fake_importasdm(asdm, vis, overwrite):
+        calls.append(overwrite)
+        Path(vis).mkdir(parents=True, exist_ok=True)
+        # The re-import succeeds this time.
+        mock_rows.return_value = 999
+
+    result = create_measurement_set(fake_importasdm, asdm, output_root, overwrite=False)
+
+    assert calls == [True], "a truncated MS must be re-imported, with overwrite forced"
+    assert result == truncated
+    assert json.loads((output_root / "working" / f"{uid}.ms.done").read_text())["rows"] == 999
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=0)
+def test_failed_import_writes_failure_marker_and_no_done_marker(mock_rows, tmp_path):
+    """An import that produces an empty MS is a failure, and is recorded as one."""
+    asdm = _make_asdm(tmp_path / "input")
+    output_root = tmp_path / "output"
+    uid = asdm_name(asdm)
+
+    def fake_importasdm(asdm, vis, overwrite):
+        Path(vis).mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(RuntimeError, match="has no rows"):
+        create_measurement_set(fake_importasdm, asdm, output_root)
+
+    assert not (output_root / "working" / f"{uid}.ms.done").exists()
+    payload = json.loads((output_root / "working" / f"{uid}.ms.failed").read_text())
+    assert payload["stage"] == "unpack"
+    assert "has no rows" in payload["error"]
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count")
+def test_marked_ms_is_skipped_without_reopening_it(mock_rows, tmp_path):
+    """Once marked, the fast path must not pay to reopen a multi-GB MS."""
+    from almasim.services.archive.unpack_ms import write_raw_ms_marker
+
+    asdm = _make_asdm(tmp_path / "input")
+    output_root = tmp_path / "output"
+    uid = asdm_name(asdm)
+    (output_root / "working" / f"{uid}.ms").mkdir(parents=True)
+    write_raw_ms_marker(output_root, uid, 100)
+
+    mock_importasdm = MagicMock()
+    create_measurement_set(mock_importasdm, asdm, output_root, overwrite=False)
+
+    mock_importasdm.assert_not_called()
+    mock_rows.assert_not_called()

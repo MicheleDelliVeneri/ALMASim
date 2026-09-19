@@ -7,8 +7,10 @@ pipeline products.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -160,6 +162,107 @@ def asdm_name(asdm_path: str | os.PathLike[str]) -> str:
     return Path(asdm_path).name.replace(".asdm.sdm", "")
 
 
+def raw_ms_path(output_root: str | os.PathLike[str], uid: str) -> Path:
+    """Return the raw MeasurementSet path for ``uid``."""
+    return Path(output_root).expanduser().resolve() / "working" / f"{uid}.ms"
+
+
+def raw_ms_marker_path(output_root: str | os.PathLike[str], uid: str) -> Path:
+    """Return the completion marker written next to a finished raw MS."""
+    return raw_ms_path(output_root, uid).with_name(f"{uid}.ms.done")
+
+
+def raw_ms_failure_marker_path(output_root: str | os.PathLike[str], uid: str) -> Path:
+    """Return the failure marker written when ``uid`` could not be imported."""
+    return raw_ms_path(output_root, uid).with_name(f"{uid}.ms.failed")
+
+
+def measurement_set_row_count(ms_path: str | os.PathLike[str]) -> int:
+    """Return the number of rows in the MAIN table of ``ms_path``.
+
+    A killed ``importasdm`` leaves a directory that looks complete: the schema
+    and tens of GB of storage-manager files are on disk, but the row count was
+    never committed, so the table opens cleanly and reports zero rows. Checking
+    the directory exists is therefore not enough to call an import finished.
+    """
+    from casatools import table
+
+    tb = table()
+    try:
+        if not tb.open(str(ms_path)):
+            raise RuntimeError(f"Could not open MeasurementSet: {ms_path}")
+        return int(tb.nrows())
+    finally:
+        try:
+            tb.close()
+        except Exception:  # pragma: no cover - close failures are not actionable
+            pass
+
+
+def verify_measurement_set(ms_path: str | os.PathLike[str]) -> int:
+    """Raise unless ``ms_path`` is a MeasurementSet with at least one row."""
+    path = Path(ms_path)
+    if not path.is_dir():
+        raise RuntimeError(f"Expected MeasurementSet was not created: {path}")
+    rows = measurement_set_row_count(path)
+    if rows <= 0:
+        raise RuntimeError(
+            f"MeasurementSet has no rows, the import did not finish: {path}. "
+            "Re-import it from its ASDM; the directory on disk is not usable."
+        )
+    return rows
+
+
+def is_unpack_complete(output_root: str | os.PathLike[str], uid: str) -> bool:
+    """Return True when ``uid`` has both a raw MS directory and its marker."""
+    return (
+        raw_ms_path(output_root, uid).is_dir()
+        and raw_ms_marker_path(output_root, uid).is_file()
+    )
+
+
+def write_raw_ms_marker(output_root: str | os.PathLike[str], uid: str, rows: int) -> Path:
+    """Record that ``uid`` imported successfully, with the row count as proof."""
+    marker = raw_ms_marker_path(output_root, uid)
+    marker.write_text(
+        json.dumps(
+            {
+                "uid": uid,
+                "output": str(raw_ms_path(output_root, uid)),
+                "rows": rows,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    raw_ms_failure_marker_path(output_root, uid).unlink(missing_ok=True)
+    return marker
+
+
+def write_raw_ms_failure_marker(
+    output_root: str | os.PathLike[str],
+    uid: str,
+    error: str,
+    *,
+    log_path: str | os.PathLike[str] | None = None,
+) -> Path:
+    """Record why ``uid`` could not be imported."""
+    marker = raw_ms_failure_marker_path(output_root, uid)
+    payload = {
+        "uid": uid,
+        "stage": "unpack",
+        "error": error,
+        "failed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if log_path is not None:
+        payload["log"] = str(log_path)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return marker
+
+
 def create_measurement_set(
     importasdm: Callable[..., object],
     raw_asdm: str | os.PathLike[str],
@@ -167,7 +270,18 @@ def create_measurement_set(
     overwrite: bool = False,
     logger_fn: LogFn = None,
 ) -> Path:
-    """Create one raw MeasurementSet from one ASDM directory."""
+    """Create one raw MeasurementSet from one ASDM directory.
+
+    An import is only considered finished once the resulting MS has at least one
+    row and a ``<uid>.ms.done`` marker. Directory existence is deliberately not
+    enough: a killed ``importasdm`` leaves a complete-looking directory holding
+    tens of GB whose row count was never committed, and treating that as done is
+    what let truncated MeasurementSets flow into calibration, where they abort
+    CASA with ``minMax - Array has no elements``.
+
+    An existing MS without a marker is verified rather than trusted: if it has
+    rows it is grandfathered in and marked, otherwise it is re-imported.
+    """
     raw_asdm_path = Path(raw_asdm).expanduser().resolve()
     asdm_uid = asdm_name(raw_asdm_path)
     working_dir = Path(output_root).expanduser().resolve() / "working"
@@ -178,33 +292,64 @@ def create_measurement_set(
     working_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Working directory: %s", working_dir)
 
+    output_root_path = Path(output_root).expanduser().resolve()
     output_ms = working_dir / f"{asdm_uid}.ms"
-    if output_ms.exists() and not overwrite:
-        logger.info("MeasurementSet already exists, skipping import: %s", output_ms)
-        _emit(
-            logger_fn,
-            f"Raw MeasurementSet already exists, skipping import: {output_ms}",
-        )
-        return output_ms
+
+    if not overwrite and output_ms.exists():
+        if raw_ms_marker_path(output_root_path, asdm_uid).is_file():
+            logger.info("MeasurementSet already exists, skipping import: %s", output_ms)
+            _emit(
+                logger_fn,
+                f"Raw MeasurementSet already exists, skipping import: {output_ms}",
+            )
+            return output_ms
+        # No marker: either an import from before markers existed, or one that
+        # was killed mid-write. Only the row count tells the two apart, and
+        # trusting the directory is what let truncated MSs reach calibration.
+        try:
+            rows = verify_measurement_set(output_ms)
+        except RuntimeError as exc:
+            logger.warning("Replacing unusable MeasurementSet %s: %s", output_ms, exc)
+            _emit(
+                logger_fn,
+                f"Existing MeasurementSet is unusable, re-importing: {output_ms} ({exc})",
+            )
+        else:
+            write_raw_ms_marker(output_root_path, asdm_uid, rows)
+            logger.info("Verified existing MeasurementSet (%d rows): %s", rows, output_ms)
+            _emit(
+                logger_fn,
+                f"Verified existing raw MeasurementSet ({rows:,} rows), skipping import: "
+                f"{output_ms}",
+            )
+            return output_ms
 
     logger.info("Creating MeasurementSet from %s", raw_asdm_path)
     _emit(logger_fn, f"Creating raw MeasurementSet from {raw_asdm_path}")
+    # Reaching here means we have decided to import: either the caller asked for
+    # it, or whatever is on disk is unusable. importasdm must be allowed to
+    # replace it, so ``overwrite`` is unconditionally True below.
+    raw_ms_marker_path(output_root_path, asdm_uid).unlink(missing_ok=True)
+    raw_ms_failure_marker_path(output_root_path, asdm_uid).unlink(missing_ok=True)
     current_dir = Path.cwd()
     try:
-        os.chdir(working_dir)
-        importasdm(
-            asdm=str(raw_asdm_path),
-            vis=str(output_ms),
-            overwrite=overwrite,
-        )
-    finally:
-        os.chdir(current_dir)
+        try:
+            os.chdir(working_dir)
+            importasdm(
+                asdm=str(raw_asdm_path),
+                vis=str(output_ms),
+                overwrite=True,
+            )
+        finally:
+            os.chdir(current_dir)
+        rows = verify_measurement_set(output_ms)
+    except Exception as exc:
+        write_raw_ms_failure_marker(output_root_path, asdm_uid, f"{type(exc).__name__}: {exc}")
+        raise
 
-    if not output_ms.is_dir():
-        raise RuntimeError(f"Expected MeasurementSet was not created: {output_ms}")
-
-    logger.info("Created MeasurementSet: %s", output_ms)
-    _emit(logger_fn, f"Created raw MeasurementSet: {output_ms}")
+    write_raw_ms_marker(output_root_path, asdm_uid, rows)
+    logger.info("Created MeasurementSet (%d rows): %s", rows, output_ms)
+    _emit(logger_fn, f"Created raw MeasurementSet ({rows:,} rows): {output_ms}")
     return output_ms
 
 
@@ -217,7 +362,12 @@ def create_measurement_sets(
     overwrite: bool = False,
     logger_fn: LogFn = None,
 ) -> list[Path]:
-    """Create raw MeasurementSets for all matching ASDMs below ``input_root``."""
+    """Create raw MeasurementSets for all matching ASDMs below ``input_root``.
+
+    Each UID that finishes carries a ``<uid>.ms.done`` marker recording its row
+    count; each that fails carries a ``<uid>.ms.failed`` marker recording the
+    error. See :func:`create_measurement_set` for why the row count matters.
+    """
     asdm_dirs = find_asdm_directories(input_root, asdm_uid)
     casa_data = find_existing_casa_data(input_root, output_root, casa_data_root)
     configure_casa_environment(

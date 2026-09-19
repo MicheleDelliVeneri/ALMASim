@@ -682,6 +682,23 @@ def _unpack_single_uid(
     return_code = process.wait()
     if return_code != 0:
         tail_text = "\n".join(tail_lines)
+        # importasdm can be killed outright (OOM, walltime), so the in-process
+        # handler never runs. This is the only place a marker can be written for
+        # that case -- and without one, the half-written MS directory left behind
+        # looks finished to the next run.
+        from .services.archive.unpack_ms import write_raw_ms_failure_marker
+
+        error = f"Worker exited with return code {return_code}"
+        crash = next(
+            (line for line in reversed(tail_lines) if "what():" in line or "Error:" in line),
+            "",
+        ).strip()
+        if crash:
+            error = f"{error}: {crash}"
+        try:
+            write_raw_ms_failure_marker(raw_output_root, asdm_uid, error, log_path=log_path)
+        except OSError as marker_error:  # never mask the unpack failure
+            print(f"Could not write failure marker for {asdm_uid}: {marker_error}", flush=True)
         raise RuntimeError(
             f"Unpack failed for {asdm_uid}.\n"
             f"Return code: {return_code}\n"
@@ -804,6 +821,31 @@ def _calibrate_single_uid(
     return_code = process.wait()
     if return_code != 0:
         tail_text = "\n".join(tail_lines)
+        # An uncaught casacore C++ exception kills the child outright, so the
+        # in-process handler never runs: this is the only place a marker can be
+        # written for that class of failure, and the only place the abandoned
+        # working copy can be reclaimed.
+        from .services.archive.calibrate_ms import write_calibration_failure_marker
+
+        error = f"Worker exited with return code {return_code}"
+        crash = next(
+            (line for line in reversed(tail_lines) if "what():" in line or "Error:" in line),
+            "",
+        ).strip()
+        if crash:
+            error = f"{error}: {crash}"
+        try:
+            write_calibration_failure_marker(
+                calibrated_output_root, asdm_uid, error, log_path=log_path
+            )
+        except OSError as marker_error:  # never mask the calibration failure
+            print(f"Could not write failure marker for {asdm_uid}: {marker_error}", flush=True)
+        if not keep_working_copies:
+            working_dir = _Path(calibrated_output_root) / "working" / f"{asdm_uid}.calibration"
+            if working_dir.is_dir():
+                import shutil
+
+                shutil.rmtree(working_dir, ignore_errors=True)
         raise RuntimeError(
             f"Calibration failed for {asdm_uid}.\n"
             f"Return code: {return_code}\n"

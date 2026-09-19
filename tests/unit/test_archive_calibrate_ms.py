@@ -8,6 +8,7 @@ tests that require the *real* casatools (e.g. test_measurement_set_native_ms).
 
 from __future__ import annotations
 
+import json
 import sys
 import tarfile
 from pathlib import Path
@@ -34,6 +35,19 @@ from almasim.services.archive.calibrate_ms import (
     science_spws,
     split_calibrated_science_ms,
 )
+
+
+@pytest.fixture(autouse=True)
+def _skip_raw_ms_row_check():
+    """Neutralise the raw-MS row check for tests that fabricate empty MS directories.
+
+    ``create_calibrated_measurement_sets`` verifies each raw MS has rows before
+    touching CASA, which needs a real table. Tests that care about that check
+    patch ``verify_measurement_set`` themselves; their patch applies inside this
+    one and wins.
+    """
+    with patch("almasim.services.archive.calibrate_ms.verify_measurement_set", return_value=1):
+        yield
 
 # ===========================================================================
 # helpers
@@ -1177,3 +1191,194 @@ def test_create_calibrated_measurement_sets_keeps_working_copy_when_asked(
         )
 
     assert (output_root / "working" / "uid___A.calibration" / "uid___A.ms").is_dir()
+
+
+@pytest.mark.unit
+def test_calibration_failure_marker_helpers(tmp_path):
+    """The failure marker records the error and is cleared once the UID succeeds."""
+    from almasim.services.archive.calibrate_ms import (
+        calibration_failure_marker_path,
+        has_calibration_failed,
+        write_calibration_failure_marker,
+        write_calibration_marker,
+    )
+
+    output_root = tmp_path / "cal"
+    output_root.mkdir()
+
+    assert has_calibration_failed(output_root, "uid___A") is False
+
+    marker = write_calibration_failure_marker(
+        output_root, "uid___A", "RuntimeError: boom", log_path="/logs/uid___A.calibrate.log"
+    )
+    assert marker == calibration_failure_marker_path(output_root, "uid___A")
+    assert marker.name == "uid___A.ms.split.cal.failed"
+    assert has_calibration_failed(output_root, "uid___A") is True
+
+    payload = json.loads(marker.read_text())
+    assert payload["uid"] == "uid___A"
+    assert payload["error"] == "RuntimeError: boom"
+    assert payload["log"] == "/logs/uid___A.calibrate.log"
+    assert payload["failed_at"]
+
+    # A later success must not leave the UID looking failed.
+    write_calibration_marker(output_root, "uid___A")
+    assert has_calibration_failed(output_root, "uid___A") is False
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_failed_uid_writes_marker_and_reclaims_working_copy(
+    mock_apply,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """A failed UID leaves a .failed marker and no multi-GB working copy behind."""
+    from almasim.services.archive.calibrate_ms import has_calibration_failed
+
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    raw_a = raw_ms_root / "uid___A.ms"
+    raw_a.mkdir(parents=True)
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+    mock_find_raw.return_value = [raw_a]
+    mock_find_cal.return_value = tmp_path / "calibration"
+
+    def _apply(applycal, clearcal, raw_ms, calibration_dir, working_dir, **kwargs):
+        # The raw copy is made before the failure, exactly as in the real run.
+        (working_dir / raw_ms.name).mkdir(parents=True)
+        raise RuntimeError("No calibration directory found under /input")
+
+    mock_apply.side_effect = _apply
+
+    with patch.dict(sys.modules, {"casatasks": MagicMock()}):
+        with pytest.raises(RuntimeError, match="failed for 1 of 1 UID"):
+            create_calibrated_measurement_sets(
+                tmp_path / "input",
+                raw_ms_root,
+                output_root,
+                skip_casa_data_update=True,
+                continue_on_error=True,
+            )
+
+    assert has_calibration_failed(output_root, "uid___A") is True
+    payload = json.loads((output_root / "uid___A.ms.split.cal.failed").read_text())
+    assert "No calibration directory found" in payload["error"]
+    # The working copy is gone: this is what was stranding TBs of disk.
+    assert not (output_root / "working" / "uid___A.calibration").exists()
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_stale_failure_marker_cleared_when_uid_is_retried(
+    mock_apply,
+    mock_split,
+    mock_find_raw,
+    mock_find_cal,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """A retry that succeeds removes the marker left by the previous attempt."""
+    from almasim.services.archive.calibrate_ms import (
+        has_calibration_failed,
+        write_calibration_failure_marker,
+    )
+
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    raw_a = raw_ms_root / "uid___A.ms"
+    raw_a.mkdir(parents=True)
+    output_root.mkdir(parents=True)
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+    mock_find_raw.return_value = [raw_a]
+    mock_find_cal.return_value = tmp_path / "calibration"
+    mock_apply.side_effect = lambda applycal, clearcal, raw_ms, *a, **k: raw_ms
+    mock_split.side_effect = lambda mstransform, working_ms, *a, **k: (
+        output_root / f"{working_ms.name}.split.cal"
+    )
+
+    write_calibration_failure_marker(output_root, "uid___A", "RuntimeError: previous run")
+    assert has_calibration_failed(output_root, "uid___A") is True
+
+    with patch.dict(sys.modules, {"casatasks": MagicMock()}):
+        create_calibrated_measurement_sets(
+            tmp_path / "input",
+            raw_ms_root,
+            output_root,
+            skip_casa_data_update=True,
+        )
+
+    assert has_calibration_failed(output_root, "uid___A") is False
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
+@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibrate_ms.verify_measurement_set")
+@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
+@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+def test_truncated_raw_ms_fails_cleanly_instead_of_aborting_casa(
+    mock_apply,
+    mock_find_raw,
+    mock_find_cal,
+    mock_verify,
+    mock_ensure_casa,
+    mock_configure_casa,
+    mock_mkdtemp,
+    tmp_path,
+):
+    """A 0-row raw MS is rejected before clearcal can abort the whole process."""
+    from almasim.services.archive.calibrate_ms import has_calibration_failed
+
+    raw_ms_root = tmp_path / "raw"
+    output_root = tmp_path / "output"
+    raw_a = raw_ms_root / "uid___A.ms"
+    raw_a.mkdir(parents=True)
+    scratch_root = tmp_path / "scratch"
+    scratch_root.mkdir()
+    mock_mkdtemp.return_value = str(scratch_root)
+    mock_find_raw.return_value = [raw_a]
+    mock_find_cal.return_value = tmp_path / "calibration"
+    mock_verify.side_effect = RuntimeError(
+        "MeasurementSet has no rows, the import did not finish: uid___A.ms"
+    )
+
+    with patch.dict(sys.modules, {"casatasks": MagicMock()}):
+        with pytest.raises(RuntimeError, match="failed for 1 of 1 UID"):
+            create_calibrated_measurement_sets(
+                tmp_path / "input",
+                raw_ms_root,
+                output_root,
+                skip_casa_data_update=True,
+                continue_on_error=True,
+            )
+
+    # The MS is checked before any CASA work is attempted on it.
+    mock_verify.assert_called_once_with(raw_a)
+    mock_apply.assert_not_called()
+    assert has_calibration_failed(output_root, "uid___A") is True
+    payload = json.loads((output_root / "uid___A.ms.split.cal.failed").read_text())
+    assert "has no rows" in payload["error"]
