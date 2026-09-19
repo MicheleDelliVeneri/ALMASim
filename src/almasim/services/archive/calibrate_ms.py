@@ -58,11 +58,30 @@ def find_calibration_directory(
 ) -> Path:
     """Find the calibration directory matching the requested ALMA delivery."""
     input_path = Path(input_root).expanduser().resolve()
-    candidates = [path for path in input_path.rglob("calibration") if path.is_dir()]
+    # Walk with pruning rather than rglob: a calibration directory holds hundreds
+    # of caltable archives, and rglob("calibration") walks through all of them
+    # looking for nested matches that cannot exist. Over NFS that is ~100s per
+    # lookup, and this runs once per UID.
+    candidates: list[Path] = []
     if asdm_uid is not None:
+        # Fast path for the standard ALMA delivery layout: match the calapply
+        # file directly, so only directory listings are read. Falls through to
+        # the general walk below for any other layout.
         candidates = [
-            path for path in candidates if (path / f"{asdm_uid}.ms.calapply.txt").is_file()
+            hit.parent
+            for hit in input_path.glob(
+                f"*/science_goal.*/group.*/member.*/calibration/{asdm_uid}.ms.calapply.txt"
+            )
         ]
+    if not candidates:
+        for dirpath, dirnames, _ in os.walk(input_path):
+            if "calibration" in dirnames:
+                candidates.append(Path(dirpath) / "calibration")
+            dirnames[:] = [name for name in dirnames if name != "calibration"]
+        if asdm_uid is not None:
+            candidates = [
+                path for path in candidates if (path / f"{asdm_uid}.ms.calapply.txt").is_file()
+            ]
     if not candidates:
         raise RuntimeError(f"No calibration directory found under {input_path}")
     if len(candidates) > 1 and asdm_uid is None:

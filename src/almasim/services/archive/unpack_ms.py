@@ -141,13 +141,19 @@ def find_asdm_directories(
     if not input_path.is_dir():
         raise RuntimeError(f"Input root does not exist or is not a directory: {input_path}")
 
+    # Walk rather than rglob, pruning descent into matched directories. An ASDM
+    # holds thousands of files, so rglob("*.asdm.sdm") spends all its time
+    # walking *inside* the very directories it has already matched: on a tree of
+    # ~2600 ASDMs over NFS that is minutes per lookup, paid once per Slurm task.
+    wanted = f"{asdm_uid}.asdm.sdm" if asdm_uid is not None else None
     asdm_dirs = []
-    for candidate in input_path.rglob("*.asdm.sdm"):
-        if not candidate.is_dir():
-            continue
-        if asdm_uid is not None and candidate.name != f"{asdm_uid}.asdm.sdm":
-            continue
-        asdm_dirs.append(candidate)
+    for dirpath, dirnames, _ in os.walk(input_path):
+        matched = [name for name in dirnames if name.endswith(".asdm.sdm")]
+        for name in matched:
+            if wanted is None or name == wanted:
+                asdm_dirs.append(Path(dirpath) / name)
+        # Never descend into an ASDM; nothing below one is another ASDM.
+        dirnames[:] = [name for name in dirnames if not name.endswith(".asdm.sdm")]
 
     if not asdm_dirs:
         if asdm_uid is None:
