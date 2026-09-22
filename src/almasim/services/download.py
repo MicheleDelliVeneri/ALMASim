@@ -78,6 +78,8 @@ class DownloadSummary:
     files_failed: int
     files: List[FileDownloadStatus] = field(default_factory=list)
     extracted_files: List[str] = field(default_factory=list)
+    extraction_failed: List[str] = field(default_factory=list)
+    """Tars that downloaded but could not be extracted; they are kept on disk."""
     raw_measurement_sets: List[str] = field(default_factory=list)
     calibrated_measurement_sets: List[str] = field(default_factory=list)
     manifest_path: Optional[str] = None
@@ -335,30 +337,52 @@ def _download_single_attempt(
             update_callback(file_status)
         return False
 
-    with httpx.Client(timeout=300, follow_redirects=True) as client:
-        with client.stream("GET", file_status.access_url, headers=headers) as response:
-            if existing_bytes > 0 and response.status_code == 200:
-                resume_from = 0
-                open_mode = "wb"
-            else:
-                resume_from = existing_bytes
-                open_mode = "ab" if existing_bytes > 0 else "wb"
-
-            response.raise_for_status()
-            file_status.bytes_downloaded = resume_from
-            if update_callback is not None:
-                update_callback(file_status)
-            with open(part_path, open_mode) as handle:
-                for chunk in response.iter_bytes(chunk_size=_CHUNK_SIZE):
-                    if should_cancel is not None and should_cancel():
-                        file_status.status = "cancelled"
-                        if update_callback is not None:
-                            update_callback(file_status)
-                        return False
-                    handle.write(chunk)
-                    file_status.bytes_downloaded += len(chunk)
+    def _stream(response: httpx.Response, resume_from: int) -> bool:
+        response.raise_for_status()
+        file_status.bytes_downloaded = resume_from
+        if update_callback is not None:
+            update_callback(file_status)
+        with open(part_path, "ab" if resume_from > 0 else "wb") as handle:
+            for chunk in response.iter_bytes(chunk_size=_CHUNK_SIZE):
+                if should_cancel is not None and should_cancel():
+                    file_status.status = "cancelled"
                     if update_callback is not None:
                         update_callback(file_status)
+                    return False
+                handle.write(chunk)
+                file_status.bytes_downloaded += len(chunk)
+                if update_callback is not None:
+                    update_callback(file_status)
+        return True
+
+    with httpx.Client(timeout=300, follow_redirects=True) as client:
+        range_rejected = False
+        with client.stream("GET", file_status.access_url, headers=headers) as response:
+            if existing_bytes > 0 and response.status_code == 416:
+                # The server will not resume (the ALMA data portal answers 416
+                # to every ranged GET). Start over rather than fail the file.
+                range_rejected = True
+            else:
+                # A 200 to a ranged request means the server ignored the range
+                # and is sending the whole file: overwrite, do not append.
+                resume_from = 0 if response.status_code == 200 else existing_bytes
+                if not _stream(response, resume_from):
+                    return False
+        if range_rejected:
+            part_path.unlink(missing_ok=True)
+            with client.stream("GET", file_status.access_url) as response:
+                if not _stream(response, 0):
+                    return False
+
+    # A stream that ends early is not an error to httpx, and a tar truncated
+    # on a block boundary is not an error to tarfile either: it extracts as a
+    # smaller, valid-looking ASDM. The declared size is the only thing that
+    # catches it, so a short file is a failed attempt, never a completed one.
+    received = part_path.stat().st_size if part_path.exists() else 0
+    if file_status.content_length > 0 and received < file_status.content_length:
+        raise RuntimeError(
+            f"Short download: received {received} of {file_status.content_length} bytes"
+        )
     return True
 
 
@@ -441,27 +465,25 @@ def _download_single_file(
 
 
 def _extract_tar(tar_path: Path, destination: Path) -> List[str]:
-    """Safely extract a tar archive into the destination directory."""
-    import tarfile
+    """Extract a downloaded tar under ``destination`` and delete the tar.
 
-    extracted: List[str] = []
-    try:
-        with tarfile.open(tar_path, "r:*") as archive:
-            members = archive.getmembers()
-            for member in members:
-                if member.name.startswith("/") or ".." in member.name:
-                    logger.warning("Skipping unsafe tar member: %s", member.name)
-                    continue
-                resolved = (destination / member.name).resolve()
-                if not str(resolved).startswith(str(destination.resolve())):
-                    logger.warning("Skipping escaping tar member: %s", member.name)
-                    continue
-            archive.extractall(destination, filter="data")
-            extracted = [member.name for member in members if not member.isdir()]
-        tar_path.unlink(missing_ok=True)
-    except Exception as exc:  # pragma: no cover - exercised via integration use
-        logger.warning("Failed to extract %s: %s", tar_path.name, exc)
-    return extracted
+    The extraction is atomic at the directory level (see
+    :mod:`almasim.services.extraction`): an ASDM never appears under its final
+    name until every member is on disk, so an unpack job running alongside the
+    download cannot pick up a half-written ``<uid>.asdm.sdm``. Returns the
+    extracted member names relative to ``destination``; raises on failure with
+    the tar left in place for a retry.
+    """
+    from almasim.services.extraction import extract_tar_atomically
+
+    paths = extract_tar_atomically(
+        tar_path,
+        destination,
+        flat_archive_subdir=False,
+        on_skipped_member=lambda name: logger.warning("Skipping unsafe tar member: %s", name),
+    )
+    tar_path.unlink(missing_ok=True)
+    return [str(path.relative_to(destination)) for path in paths]
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
@@ -590,6 +612,7 @@ def download_products(
     ]
     _distribute_across_mirrors(statuses)
     extracted_files: List[str] = []
+    extraction_failed: List[str] = []
     raw_measurement_sets: List[str] = []
     calibrated_measurement_sets: List[str] = []
 
@@ -631,8 +654,19 @@ def download_products(
             if not (status.filename.endswith(".tar") or status.filename.endswith(".tgz")):
                 continue
             tar_path = destination_path / status.filename
-            if tar_path.exists():
+            if not tar_path.exists():
+                continue
+            try:
                 extracted_files.extend(_extract_tar(tar_path, destination_path))
+            except Exception as exc:
+                # Keep going: the other tars are fine and the failed one is
+                # still on disk. But say so loudly — a download that "completed"
+                # with an unextracted tar is exactly the kind of silent gap the
+                # unpack stage then trips over.
+                logger.error("Failed to extract %s: %s", tar_path.name, exc)
+                if logger_fn is not None:
+                    logger_fn(f"Failed to extract {tar_path.name}: {exc}")
+                extraction_failed.append(str(tar_path))
 
     if unpack_ms or generate_calibrated_visibilities:
         from almasim.services.archive import (
@@ -681,6 +715,7 @@ def download_products(
                 "products": [asdict(product) for product in products],
                 "files": [asdict(status) for status in statuses],
                 "extracted_files": extracted_files,
+                "extraction_failed": extraction_failed,
                 "raw_measurement_sets": raw_measurement_sets,
                 "calibrated_measurement_sets": calibrated_measurement_sets,
             },
@@ -714,6 +749,7 @@ def download_products(
         files_failed=files_failed,
         files=statuses,
         extracted_files=extracted_files,
+        extraction_failed=extraction_failed,
         raw_measurement_sets=raw_measurement_sets,
         calibrated_measurement_sets=calibrated_measurement_sets,
         manifest_path=str(manifest_path),

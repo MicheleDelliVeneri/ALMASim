@@ -30,6 +30,7 @@ from almasim.services.archive.unpack_ms import (  # noqa: E402
     find_asdm_directories,
     find_existing_casa_data,
     has_casa_runtime_data,
+    verify_asdm_directory,
 )
 
 # ---------------------------------------------------------------------------
@@ -37,10 +38,45 @@ from almasim.services.archive.unpack_ms import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
+_ASDM_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<ASDM xmlns:cntnr="http://Alma/XASDM/ASDM" schemaVersion="4">
+  <Entity entityId="uid://A002/X1/X1" entityTypeName="ASDM"/>
+  <Table><Name> Main </Name><NumberRows> {main_rows} </NumberRows></Table>
+  <Table><Name> Antenna </Name><NumberRows> 2 </NumberRows></Table>
+  <Table><Name> SysCal </Name><NumberRows> 3 </NumberRows></Table>
+  <Table><Name> Flag </Name><NumberRows> 0 </NumberRows></Table>
+</ASDM>
+"""
+
+_MAIN_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<MainTable xmlns="http://Alma/XASDM/MainTable">
+  <row>
+    <dataUID><EntityRef entityId="uid://A002/X1/Xa" entityTypeName="Main"/></dataUID>
+  </row>
+  <row>
+    <dataUID><EntityRef entityId="uid://A002/X1/Xb" entityTypeName="Main"/></dataUID>
+  </row>
+</MainTable>
+"""
+
+
 def _make_asdm(tmp_path: Path, uid: str = "uid___A001_X1_X1") -> Path:
-    """Create a fake ASDM directory."""
+    """Create a minimal but *complete* fake ASDM directory.
+
+    Complete means what :func:`verify_asdm_directory` checks: an index, a file
+    per non-empty table (SysCal deliberately as ``.bin``), and one non-empty
+    binary blob per ``dataUID`` in ``Main.xml``.
+    """
     asdm_dir = tmp_path / f"{uid}.asdm.sdm"
     asdm_dir.mkdir(parents=True)
+    (asdm_dir / "ASDM.xml").write_text(_ASDM_XML.format(main_rows=2))
+    (asdm_dir / "Main.xml").write_text(_MAIN_XML)
+    (asdm_dir / "Antenna.xml").write_text("<AntennaTable/>")
+    (asdm_dir / "SysCal.bin").write_bytes(b"\x00\x01")
+    binary = asdm_dir / "ASDMBinary"
+    binary.mkdir()
+    (binary / "uid___A002_X1_Xa").write_bytes(b"data")
+    (binary / "uid___A002_X1_Xb").write_bytes(b"data")
     return asdm_dir
 
 
@@ -544,3 +580,96 @@ def test_marked_ms_is_skipped_without_reopening_it(mock_rows, tmp_path):
 
     mock_importasdm.assert_not_called()
     mock_rows.assert_not_called()
+
+
+# ===========================================================================
+# verify_asdm_directory / half-extracted ASDMs
+# ===========================================================================
+
+
+@pytest.mark.unit
+def test_verify_asdm_directory_accepts_complete_asdm(tmp_path):
+    verify_asdm_directory(_make_asdm(tmp_path))
+
+
+@pytest.mark.unit
+def test_verify_asdm_directory_missing_index(tmp_path):
+    asdm = _make_asdm(tmp_path)
+    (asdm / "ASDM.xml").unlink()
+    with pytest.raises(RuntimeError, match="ASDM.xml is missing"):
+        verify_asdm_directory(asdm)
+
+
+@pytest.mark.unit
+def test_verify_asdm_directory_missing_table_file(tmp_path):
+    """The real-world case: ExecBlock.xml had not been extracted yet."""
+    asdm = _make_asdm(tmp_path)
+    (asdm / "Antenna.xml").unlink()
+    with pytest.raises(RuntimeError, match=r"table file\(s\) missing: Antenna"):
+        verify_asdm_directory(asdm)
+
+
+@pytest.mark.unit
+def test_verify_asdm_directory_accepts_bin_or_xml_table_file(tmp_path):
+    asdm = _make_asdm(tmp_path)
+    (asdm / "SysCal.bin").rename(asdm / "SysCal.xml")
+    verify_asdm_directory(asdm)
+
+
+@pytest.mark.unit
+def test_verify_asdm_directory_ignores_empty_tables(tmp_path):
+    """Flag has NumberRows 0 and no file; that is normal."""
+    asdm = _make_asdm(tmp_path)
+    assert not (asdm / "Flag.xml").exists()
+    verify_asdm_directory(asdm)
+
+
+@pytest.mark.unit
+def test_verify_asdm_directory_missing_binary_data(tmp_path):
+    asdm = _make_asdm(tmp_path)
+    (asdm / "ASDMBinary" / "uid___A002_X1_Xb").unlink()
+    with pytest.raises(RuntimeError, match=r"1/2 binary data file\(s\) missing.*uid___A002_X1_Xb"):
+        verify_asdm_directory(asdm)
+
+
+@pytest.mark.unit
+def test_verify_asdm_directory_rejects_empty_binary_data(tmp_path):
+    asdm = _make_asdm(tmp_path)
+    (asdm / "ASDMBinary" / "uid___A002_X1_Xa").write_bytes(b"")
+    with pytest.raises(RuntimeError, match="binary data file"):
+        verify_asdm_directory(asdm)
+
+
+@pytest.mark.unit
+def test_find_asdm_directories_ignores_extraction_staging(tmp_path):
+    """An ASDM still inside a download's staging directory is not an ASDM yet."""
+    from almasim.services.extraction import EXTRACTION_TMP_PREFIX
+
+    root = tmp_path / "input"
+    published = _make_asdm(root / "proj" / "raw", uid="uid___A002_X1_Xdone")
+    staging = root / f"{EXTRACTION_TMP_PREFIX}bundle-abc" / "proj" / "raw"
+    _make_asdm(staging, uid="uid___A002_X1_Xpartial")
+
+    assert find_asdm_directories(root) == [published]
+    with pytest.raises(RuntimeError, match="No ASDM named uid___A002_X1_Xpartial"):
+        find_asdm_directories(root, asdm_uid="uid___A002_X1_Xpartial")
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+def test_create_measurement_set_refuses_incomplete_asdm(mock_rows, tmp_path):
+    """A half-extracted ASDM is a recorded failure, and importasdm is never run."""
+    asdm = _make_asdm(tmp_path / "input")
+    (asdm / "ASDMBinary" / "uid___A002_X1_Xa").unlink()
+    output_root = tmp_path / "output"
+    uid = asdm_name(asdm)
+    importasdm = MagicMock()
+
+    with pytest.raises(RuntimeError, match="ASDM is incomplete"):
+        create_measurement_set(importasdm, asdm, output_root)
+
+    importasdm.assert_not_called()
+    failed = output_root / "working" / f"{uid}.ms.failed"
+    assert failed.is_file()
+    assert "ASDM is incomplete" in json.loads(failed.read_text())["error"]
+    assert not (output_root / "working" / f"{uid}.ms.done").exists()

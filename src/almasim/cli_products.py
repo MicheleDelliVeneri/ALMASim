@@ -1187,49 +1187,25 @@ def _archive_stem(archive_path: Path) -> str:
     return archive_path.stem
 
 
-def _has_single_top_level_dir(archive: tarfile.TarFile) -> bool:
-    """Return True when every member sits under a single top-level directory."""
-    roots: set[str] = set()
-    for member in archive.getmembers():
-        top = Path(member.name).parts[0] if Path(member.name).parts else ""
-        roots.add(top)
-    return len(roots) == 1
-
-
 def _safe_extract_tar_archive(archive_path: Path, destination: Path) -> list[Path]:
     """Extract a tarball while refusing absolute or escaping paths.
 
     If the archive is flat (no common top-level directory), all contents are
     placed inside a subdirectory named after the archive stem so they never
-    spill into the destination root.
+    spill into the destination root. Extraction is atomic per directory (see
+    :mod:`almasim.services.extraction`), so a concurrent unpack never sees a
+    half-extracted ASDM.
     """
-    extracted: list[Path] = []
-    destination_resolved = destination.resolve()
-    with tarfile.open(archive_path, "r:*") as archive:
-        if _has_single_top_level_dir(archive):
-            extract_root = destination
-        else:
-            extract_root = destination / _archive_stem(archive_path)
-            extract_root.mkdir(parents=True, exist_ok=True)
-        extract_root_resolved = extract_root.resolve()
+    from .services.extraction import extract_tar_atomically
 
-        for member in archive.getmembers():
-            member_path = Path(member.name)
-            if member_path.is_absolute() or ".." in member_path.parts:
-                typer.echo(f"Skipping unsafe archive member: {member.name}", err=True)
-                continue
-            resolved = (extract_root / member.name).resolve()
-            if not str(resolved).startswith(str(extract_root_resolved)):
-                typer.echo(f"Skipping escaping archive member: {member.name}", err=True)
-                continue
-            # Also ensure nothing escapes the original destination root.
-            if not str(resolved).startswith(str(destination_resolved)):
-                typer.echo(f"Skipping escaping archive member: {member.name}", err=True)
-                continue
-            archive.extract(member, extract_root, filter="data")
-            if not member.isdir():
-                extracted.append(resolved)
-    return extracted
+    return extract_tar_atomically(
+        archive_path,
+        destination,
+        flat_archive_subdir=True,
+        on_skipped_member=lambda name: typer.echo(
+            f"Skipping unsafe archive member: {name}", err=True
+        ),
+    )
 
 
 def _find_archives(root: Path, recursive: bool) -> list[Path]:
@@ -1256,52 +1232,18 @@ def _extract_single_archive(
 ) -> list[str]:
     """Extract one tarball on a Slurm worker; optionally delete it afterwards.
 
-    Fully self-contained so cloudpickle can serialize it without pulling in
-    cli_products module globals (tarfile, typer, …).
+    Imports lazily so cloudpickle ships only a reference to the installed
+    ``almasim`` package rather than this module's globals (typer, …).
     """
-    import tarfile as _tarfile
     from pathlib import Path as _Path
 
-    def _stem(p: "_Path") -> str:
-        name = p.name
-        for sfx in (".tar.gz", ".tgz", ".tar"):
-            if name.lower().endswith(sfx):
-                return name[: len(name) - len(sfx)]
-        return p.stem
-
-    def _single_top_level(tf: "_tarfile.TarFile") -> bool:
-        roots: set[str] = set()
-        for m in tf.getmembers():
-            parts = _Path(m.name).parts
-            roots.add(parts[0] if parts else "")
-        return len(roots) == 1
+    from almasim.services.extraction import extract_tar_atomically
 
     archive = _Path(archive_path)
-    dest = _Path(destination)
-    dest.mkdir(parents=True, exist_ok=True)
-
-    extracted: list[str] = []
-    destination_resolved = dest.resolve()
-    with _tarfile.open(archive, "r:*") as tf:
-        if _single_top_level(tf):
-            extract_root = dest
-        else:
-            extract_root = dest / _stem(archive)
-            extract_root.mkdir(parents=True, exist_ok=True)
-        extract_root_resolved = extract_root.resolve()
-
-        for member in tf.getmembers():
-            member_path = _Path(member.name)
-            if member_path.is_absolute() or ".." in member_path.parts:
-                continue
-            resolved = (extract_root / member.name).resolve()
-            if not str(resolved).startswith(str(extract_root_resolved)):
-                continue
-            if not str(resolved).startswith(str(destination_resolved)):
-                continue
-            tf.extract(member, extract_root, filter="data")
-            if not member.isdir():
-                extracted.append(str(resolved))
+    extracted = [
+        str(path)
+        for path in extract_tar_atomically(archive, _Path(destination), flat_archive_subdir=True)
+    ]
 
     # Write marker so re-runs with --skip-existing can detect completion.
     (_Path(archive_path + ".done")).write_text("")
@@ -1875,6 +1817,15 @@ def products_download(
         typer.echo(f"Destination: {summary.destination}")
         typer.echo(f"Completed: {summary.files_completed}")
         typer.echo(f"Failed: {summary.files_failed}")
+        extraction_failed = getattr(summary, "extraction_failed", []) or []
+        if extraction_failed:
+            typer.echo(
+                f"Extraction failed: {len(extraction_failed)} (tar kept on disk; "
+                "re-run `almasim products extract` on it)",
+                err=True,
+            )
+            for tar_path in extraction_failed:
+                typer.echo(f"  {tar_path}", err=True)
         if summary.manifest_path:
             typer.echo(f"Manifest: {summary.manifest_path}")
         if raw_mss:
