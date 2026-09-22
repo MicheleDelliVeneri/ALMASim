@@ -7,9 +7,11 @@ pipeline products.
 
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import os
+import socket
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,6 +63,33 @@ def casa_log_path(output_root: str | os.PathLike[str], stage: str, uid: str | No
     return Path(output_root).expanduser().resolve() / "logs" / f"casa-{stage}-{safe_uid}.log"
 
 
+def _site_config_name() -> str:
+    """Site config file name unique to this process, also across NFS clients."""
+    host = socket.gethostname().split(".", 1)[0] or "localhost"
+    return f"casasiteconfig-{host}-{os.getpid()}.py"
+
+
+def _write_atomically(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` so that no reader can ever observe it partially written."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+_EXIT_CLEANUP: set[Path] = set()
+
+
+def _remove_at_exit(path: Path) -> None:
+    """Delete ``path`` when the interpreter exits (registered once per path)."""
+    if path in _EXIT_CLEANUP:
+        return
+    _EXIT_CLEANUP.add(path)
+    atexit.register(path.unlink, missing_ok=True)
+
+
 def configure_casa_environment(
     output_root: str | os.PathLike[str],
     casa_data: str | os.PathLike[str],
@@ -73,6 +102,16 @@ def configure_casa_environment(
     ``log_file`` redirects the CASA logger away from ``casa-<timestamp>.log`` in
     the current directory; ``log_to_terminal`` additionally echoes every CASA log
     message to the console so long-running tasks show progress.
+
+    The site config is **per process**: it is written to
+    ``.casa-config/casasiteconfig-<host>-<pid>.py``, atomically (temp file +
+    rename), exported through ``CASASITECONFIG`` unconditionally, and removed
+    at interpreter exit. It used to be one shared ``casasiteconfig.py`` that
+    every worker truncated and rewrote; with eight children importing casatools
+    concurrently, one would read the file while another was rewriting it, see
+    an empty config, fall back to ``~/.casa/data`` and die with ``measures data
+    is not available`` before doing any work. The content is also per UID (the
+    ``logfile`` line), so a shared file was wrong even without the race.
     """
     output_path = Path(output_root).expanduser().resolve()
     casa_data_path = Path(casa_data).expanduser().resolve()
@@ -84,7 +123,7 @@ def configure_casa_environment(
 
     mpl_config = workspace_path / ".matplotlib"
     casa_config_dir = workspace_path / ".casa-config"
-    casa_site_config = casa_config_dir / "casasiteconfig.py"
+    casa_site_config = casa_config_dir / _site_config_name()
 
     casa_data_path.mkdir(parents=True, exist_ok=True)
     mpl_config.mkdir(parents=True, exist_ok=True)
@@ -100,9 +139,12 @@ def configure_casa_environment(
         log_path.parent.mkdir(parents=True, exist_ok=True)
         config_lines.append(f"logfile = {str(log_path)!r}")
     config_lines.append(f"log2term = {bool(log_to_terminal)!r}")
-    casa_site_config.write_text("\n".join(config_lines) + "\n", encoding="utf-8")
+    _write_atomically(casa_site_config, "\n".join(config_lines) + "\n")
+    _remove_at_exit(casa_site_config)
 
-    os.environ.setdefault("CASASITECONFIG", str(casa_site_config))
+    # Not setdefault: casatools reads this variable at import time and the
+    # config we just wrote is the only one that describes *this* process.
+    os.environ["CASASITECONFIG"] = str(casa_site_config)
     os.environ.setdefault("MPLCONFIGDIR", str(mpl_config))
     Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
     return casa_data_path
@@ -323,10 +365,7 @@ def verify_measurement_set(ms_path: str | os.PathLike[str]) -> int:
 
 def is_unpack_complete(output_root: str | os.PathLike[str], uid: str) -> bool:
     """Return True when ``uid`` has both a raw MS directory and its marker."""
-    return (
-        raw_ms_path(output_root, uid).is_dir()
-        and raw_ms_marker_path(output_root, uid).is_file()
-    )
+    return raw_ms_path(output_root, uid).is_dir() and raw_ms_marker_path(output_root, uid).is_file()
 
 
 def write_raw_ms_marker(output_root: str | os.PathLike[str], uid: str, rows: int) -> Path:
@@ -480,6 +519,23 @@ def create_measurement_sets(
     error. See :func:`create_measurement_set` for why the row count matters.
     """
     asdm_dirs = find_asdm_directories(input_root, asdm_uid)
+
+    # Decide what is already finished *before* importing CASA. A UID whose MS
+    # carries a ``.ms.done`` marker needs no casatools at all, and importing
+    # them anyway is what exposed finished UIDs to CASA start-up failures
+    # (which the subprocess wrapper then recorded as ``.ms.failed``).
+    finished: dict[Path, Path] = {}
+    if not overwrite:
+        for raw_asdm in asdm_dirs:
+            uid = asdm_name(raw_asdm)
+            if is_unpack_complete(output_root, uid):
+                ms = raw_ms_path(output_root, uid)
+                finished[raw_asdm] = ms
+                logger.info("MeasurementSet already exists, skipping import: %s", ms)
+                _emit(logger_fn, f"Raw MeasurementSet already exists, skipping import: {ms}")
+    if asdm_dirs and len(finished) == len(asdm_dirs):
+        return [finished[raw_asdm] for raw_asdm in asdm_dirs]
+
     casa_data = find_existing_casa_data(input_root, output_root, casa_data_root)
     configure_casa_environment(
         output_root,
@@ -501,7 +557,9 @@ def create_measurement_sets(
         f"Found {len(asdm_dirs)} ASDM director{'y' if len(asdm_dirs) == 1 else 'ies'}",
     )
     return [
-        create_measurement_set(
+        finished[raw_asdm]
+        if raw_asdm in finished
+        else create_measurement_set(
             importasdm,
             raw_asdm,
             output_root,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -31,6 +32,7 @@ from almasim.services.archive.unpack_ms import (  # noqa: E402
     find_existing_casa_data,
     has_casa_runtime_data,
     verify_asdm_directory,
+    write_raw_ms_marker,
 )
 
 # ---------------------------------------------------------------------------
@@ -187,6 +189,45 @@ def test_find_existing_casa_data_default_fallback(tmp_path):
 # ===========================================================================
 
 
+def _exported_site_config() -> Path:
+    """The site config the last configure_casa_environment call pointed CASA at."""
+    return Path(os.environ["CASASITECONFIG"])
+
+
+@pytest.mark.unit
+def test_configure_casa_environment_writes_a_per_process_config(tmp_path, monkeypatch):
+    """Each process gets its own site config, exported unconditionally, with no temp file left."""
+    output_root = tmp_path / "output"
+    monkeypatch.setenv("CASASITECONFIG", "/somewhere/else/casasiteconfig.py")
+    configure_casa_environment(output_root, tmp_path / "casa-data")
+
+    site_config = _exported_site_config()
+    assert site_config.parent == output_root / ".casa-config"
+    assert site_config.name.startswith("casasiteconfig-")
+    assert site_config.name.endswith(f"-{os.getpid()}.py")
+    assert site_config.is_file()
+    # nothing but the published config in the directory: no half-written temp file
+    assert sorted(q.name for q in site_config.parent.iterdir()) == [site_config.name]
+
+
+@pytest.mark.unit
+def test_configure_casa_environment_rewrites_in_place_and_cleans_up_at_exit(tmp_path):
+    """A second call in the same process replaces the same file and registers one cleanup."""
+    from almasim.services.archive import unpack_ms
+
+    output_root = tmp_path / "output"
+    configure_casa_environment(output_root, tmp_path / "casa-data", log_file=tmp_path / "a.log")
+    first = _exported_site_config()
+    configure_casa_environment(output_root, tmp_path / "casa-data", log_file=tmp_path / "b.log")
+    second = _exported_site_config()
+
+    assert first == second
+    assert f"logfile = {str((tmp_path / 'b.log').resolve())!r}" in second.read_text(
+        encoding="utf-8"
+    )
+    assert second in unpack_ms._EXIT_CLEANUP
+
+
 @pytest.mark.unit
 def test_configure_casa_environment_creates_files(tmp_path):
     """configure_casa_environment creates the site config and MPL cache dirs."""
@@ -194,8 +235,9 @@ def test_configure_casa_environment_creates_files(tmp_path):
     casa_data = tmp_path / "casa-data"
     configure_casa_environment(output_root, casa_data)
 
-    site_config = output_root / ".casa-config" / "casasiteconfig.py"
+    site_config = _exported_site_config()
     assert site_config.is_file()
+    assert site_config.parent == output_root / ".casa-config"
     content = site_config.read_text()
     assert "measurespath" in content
     assert "data_auto_update = False" in content
@@ -434,6 +476,67 @@ def test_create_measurement_sets_returns_list(
 
 
 @pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.find_existing_casa_data")
+@patch("almasim.services.archive.unpack_ms.configure_casa_environment")
+@patch("almasim.services.archive.unpack_ms.ensure_casa_runtime_data")
+def test_create_measurement_sets_skips_marked_uids_without_touching_casa(
+    mock_ensure, mock_configure, mock_find, tmp_path
+):
+    """A UID with a .ms.done marker is returned before CASA is configured or imported."""
+    asdm = _make_asdm(tmp_path / "input")
+    output_root = tmp_path / "output"
+    uid = asdm_name(asdm)
+    ms = output_root / "working" / f"{uid}.ms"
+    ms.mkdir(parents=True)
+    write_raw_ms_marker(output_root, uid, rows=42)
+
+    # importing casatasks must not even be attempted
+    with patch.dict(sys.modules, {"casatasks": None}):
+        results = create_measurement_sets(
+            tmp_path / "input", output_root, skip_casa_data_update=True
+        )
+
+    assert results == [ms]
+    mock_find.assert_not_called()
+    mock_configure.assert_not_called()
+    mock_ensure.assert_not_called()
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.find_existing_casa_data")
+@patch("almasim.services.archive.unpack_ms.configure_casa_environment")
+@patch("almasim.services.archive.unpack_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=7)
+def test_create_measurement_sets_mixes_finished_and_pending_uids(
+    mock_rows, mock_ensure, mock_configure, mock_find, tmp_path
+):
+    """Finished UIDs are skipped, pending ones imported, order preserved."""
+    done_asdm = _make_asdm(tmp_path / "input", uid="uid___A002_Xaaa_X1")
+    todo_asdm = _make_asdm(tmp_path / "input", uid="uid___A002_Xbbb_X2")
+    output_root = tmp_path / "output"
+    mock_find.return_value = tmp_path / "casa-data"
+    done_ms = output_root / "working" / f"{asdm_name(done_asdm)}.ms"
+    done_ms.mkdir(parents=True)
+    write_raw_ms_marker(output_root, asdm_name(done_asdm), rows=42)
+
+    imported: list[str] = []
+
+    def fake_importasdm(asdm, vis, overwrite):
+        imported.append(asdm)
+        Path(vis).mkdir(parents=True)
+
+    with patch.dict(sys.modules, {"casatasks": MagicMock(importasdm=fake_importasdm)}):
+        results = create_measurement_sets(
+            tmp_path / "input", output_root, skip_casa_data_update=True
+        )
+
+    assert imported == [str(todo_asdm.resolve())]
+    assert set(results) == {done_ms, output_root / "working" / f"{asdm_name(todo_asdm)}.ms"}
+    assert len(results) == 2
+    mock_configure.assert_called_once()
+
+
+@pytest.mark.unit
 def test_configure_casa_environment_routes_casa_log(tmp_path):
     """Site config should carry the requested CASA log file and terminal echo."""
     output_root = tmp_path / "out"
@@ -442,7 +545,7 @@ def test_configure_casa_environment_routes_casa_log(tmp_path):
         output_root, tmp_path / "casa-data", log_file=log_file, log_to_terminal=True
     )
 
-    site_config = (output_root / ".casa-config" / "casasiteconfig.py").read_text(encoding="utf-8")
+    site_config = _exported_site_config().read_text(encoding="utf-8")
     assert f"logfile = {str(log_file.resolve())!r}" in site_config
     assert "log2term = True" in site_config
     assert log_file.parent.is_dir()
@@ -454,7 +557,7 @@ def test_configure_casa_environment_defaults_to_quiet_terminal(tmp_path):
     output_root = tmp_path / "out"
     configure_casa_environment(output_root, tmp_path / "casa-data")
 
-    site_config = (output_root / ".casa-config" / "casasiteconfig.py").read_text(encoding="utf-8")
+    site_config = _exported_site_config().read_text(encoding="utf-8")
     assert "logfile" not in site_config
     assert "log2term = False" in site_config
 
