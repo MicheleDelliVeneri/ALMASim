@@ -1583,3 +1583,113 @@ def test_run_calibrate_jobs_sync_does_not_add_worker_args(monkeypatch, tmp_path)
         clean_intermediate=False,
     )
     assert captured["postprocess_backend"] == "sync"
+
+
+# ---------------------------------------------------------------------------
+# A hard abort in the CASA child (casacore terminate(), OOM kill) must still
+# leave a failure marker behind: the in-process ``finally`` never ran, so the
+# subprocess wrapper is the only place that can write it.
+# ---------------------------------------------------------------------------
+
+
+class _CrashingProcess:
+    """Child that prints a casacore abort and dies with SIGABRT (-6)."""
+
+    def __init__(self, lines: list[str] | None = None, return_code: int = -6):
+        self.stdout = iter(
+            lines
+            or [
+                "Extracting calibration tables\n",
+                "terminate called after throwing an instance of 'casacore::ArrayError'\n",
+                "  what():  minMax - Array has no elements\n",
+            ]
+        )
+        self._rc = return_code
+
+    def wait(self):
+        return self._rc
+
+
+def test_calibrate_single_uid_hard_abort_writes_failure_marker(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _CrashingProcess())
+    uid = "uid___A001_X1_X9"
+    output_root = tmp_path / "calibrated"
+    working_dir = output_root / "working" / f"{uid}.calibration"
+    working_dir.mkdir(parents=True)
+    (working_dir / f"{uid}.ms").mkdir()
+
+    with pytest.raises(RuntimeError, match="Return code: -6"):
+        cli_products._calibrate_single_uid(
+            input_root="/input",
+            raw_ms_root="/raw",
+            calibrated_output_root=str(output_root),
+            asdm_uid=uid,
+            casa_data_root=None,
+            skip_casa_data_update=True,
+            overwrite=False,
+            clean_intermediate=False,
+        )
+
+    marker = output_root / f"{uid}.ms.split.cal.failed"
+    assert marker.is_file()
+    payload = json.loads(marker.read_text())
+    assert payload["uid"] == uid
+    assert "return code -6" in payload["error"]
+    assert "minMax - Array has no elements" in payload["error"]
+    assert Path(payload["log"]).is_file()
+    assert not (output_root / f"{uid}.ms.split.cal.done").exists()
+    assert not working_dir.exists(), "the multi-GB working copy is reclaimed"
+
+
+def test_calibrate_single_uid_hard_abort_keeps_working_copy_when_asked(tmp_path, monkeypatch):
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _CrashingProcess())
+    uid = "uid___A001_X1_Xa"
+    output_root = tmp_path / "calibrated"
+    working_dir = output_root / "working" / f"{uid}.calibration"
+    working_dir.mkdir(parents=True)
+
+    with pytest.raises(RuntimeError):
+        cli_products._calibrate_single_uid(
+            input_root="/input",
+            raw_ms_root="/raw",
+            calibrated_output_root=str(output_root),
+            asdm_uid=uid,
+            casa_data_root=None,
+            skip_casa_data_update=True,
+            overwrite=False,
+            clean_intermediate=False,
+            keep_working_copies=True,
+        )
+
+    assert (output_root / f"{uid}.ms.split.cal.failed").is_file()
+    assert working_dir.is_dir()
+
+
+def test_unpack_single_uid_hard_abort_writes_failure_marker(tmp_path, monkeypatch):
+    import json
+
+    lines = ["importasdm::::casa\tstarting\n", "Killed\n"]
+    monkeypatch.setattr(
+        "subprocess.Popen", lambda *args, **kwargs: _CrashingProcess(lines, return_code=-9)
+    )
+    uid = "uid___A001_X1_Xb"
+    output_root = tmp_path / "raw"
+    (output_root / "working").mkdir(parents=True)
+
+    with pytest.raises(RuntimeError, match="Return code: -9"):
+        cli_products._unpack_single_uid(
+            input_root="/input",
+            raw_output_root=str(output_root),
+            asdm_uid=uid,
+            casa_data_root=None,
+            skip_casa_data_update=True,
+            overwrite=False,
+        )
+
+    marker = output_root / "working" / f"{uid}.ms.failed"
+    assert marker.is_file()
+    payload = json.loads(marker.read_text())
+    assert "return code -9" in payload["error"]
+    assert not (output_root / "working" / f"{uid}.ms.done").exists()
