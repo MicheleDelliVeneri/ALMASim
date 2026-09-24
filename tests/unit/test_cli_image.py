@@ -412,6 +412,8 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
     assert cmd[cmd.index("-field") + 1] == "3,4"
     assert cmd[cmd.index("-spws") + 1] == "2"
     assert cmd[-1] == "uid___A001_X1_X1.cal"
+    assert cmd[cmd.index("-auto-threshold") + 1] == "3.0", "3 sigma stopping point by default"
+    assert "-auto-mask" not in cmd
 
 
 @pytest.mark.unit
@@ -1043,3 +1045,18 @@ def test_science_selection_reports_used_spws_and_target_fields(monkeypatch):
     rows_per_spw, target_fields = cli_image.science_selection(Path("x.ms"))
     assert rows_per_spw == {5: 3, 7: 3}, "SPW 0 has no rows and is left out"
     assert target_fields == [3, 4]
+
+
+@pytest.mark.unit
+def test_imaging_parameter_to_command_arg_threshold_flags():
+    row = pd.Series(
+        {"spectral_window_id": 1, "fov_per_frequency": 10.0, "synthetized_beam_size": 1.0}
+    )
+    plain = cli_image.imaging_parameter_to_command_arg(row, 1.0, 4.0)
+    assert "-auto-threshold" not in plain and "-auto-mask" not in plain
+    flagged = cli_image.imaging_parameter_to_command_arg(
+        row, 1.0, 4.0, auto_threshold=2.5, auto_mask=5.0
+    )
+    assert flagged[flagged.index("-auto-threshold") + 1] == "2.5"
+    assert flagged[flagged.index("-auto-mask") + 1] == "5.0"
+    assert cli_image.imaging_parameter_to_command_arg(row, 1.0, 4.0, auto_threshold=0) == plain

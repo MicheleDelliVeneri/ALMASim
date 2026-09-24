@@ -222,8 +222,18 @@ def compute_imaging_parameters(input_ms: Path, science_only: bool = True) -> pd.
 
 
 def imaging_parameter_to_command_arg(
-    imaging_parameters: pd.Series, fov_fraction: float, beam_sampling: float
+    imaging_parameters: pd.Series,
+    fov_fraction: float,
+    beam_sampling: float,
+    auto_threshold: float | None = None,
+    auto_mask: float | None = None,
 ) -> list[str]:
+    """WSClean geometry and deconvolution flags for one spectral window.
+
+    ``auto_threshold`` / ``auto_mask`` (in units of the residual noise) give
+    CLEAN a stopping point; without them ``-niter`` is the only limit and every
+    task cleans into the noise until the iteration cap.
+    """
     spw = imaging_parameters["spectral_window_id"]
     fov = imaging_parameters["fov_per_frequency"]
     synthetized_beam_size = imaging_parameters["synthetized_beam_size"]
@@ -250,6 +260,10 @@ def imaging_parameter_to_command_arg(
         "0.5",
         "-update-model-required",
     ]
+    if auto_mask is not None and auto_mask > 0:
+        cmd_args += ["-auto-mask", str(auto_mask)]
+    if auto_threshold is not None and auto_threshold > 0:
+        cmd_args += ["-auto-threshold", str(auto_threshold)]
     return cmd_args
 
 
@@ -399,6 +413,8 @@ def build_imaging_tasks(
     wsclean_bin: str = "wsclean",
     overwrite_outputs: bool = False,
     trust_existing_images: bool = False,
+    auto_threshold: float | None = None,
+    auto_mask: float | None = None,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
@@ -428,7 +444,9 @@ def build_imaging_tasks(
                 write_imaging_marker(outdir, ms_path=str(input_filename), spw=spw)
                 skipped += 1
                 continue
-        command_args = imaging_parameter_to_command_arg(row, fov_fraction, beam_sampling)
+        command_args = imaging_parameter_to_command_arg(
+            row, fov_fraction, beam_sampling, auto_threshold=auto_threshold, auto_mask=auto_mask
+        )
         command = [
             wsclean_bin,
             "-name",
@@ -679,6 +697,22 @@ def image_from_ms(
         "--wsclean-bin",
         help="Path or executable name of the WSClean binary the workers run.",
     ),
+    auto_threshold: float = typer.Option(
+        3.0,
+        "--auto-threshold",
+        min=0.0,
+        help=(
+            "Stop cleaning when the residual peak drops below this many sigma of the "
+            "residual noise (WSClean -auto-threshold). 0 disables it and cleaning runs to "
+            "-niter."
+        ),
+    ),
+    auto_mask: float = typer.Option(
+        0.0,
+        "--auto-mask",
+        min=0.0,
+        help="WSClean -auto-mask level in sigma; 0 (default) disables auto-masking.",
+    ),
     postprocess_backend: str = typer.Option(
         "slurm",
         "--postprocess-backend",
@@ -750,6 +784,8 @@ def image_from_ms(
         wsclean_bin=wsclean_bin,
         overwrite_outputs=overwrite_outputs,
         trust_existing_images=skip_existing,
+        auto_threshold=auto_threshold if auto_threshold > 0 else None,
+        auto_mask=auto_mask if auto_mask > 0 else None,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -802,6 +838,8 @@ def image_set(
         min=1,
     ),
     wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin"),
+    auto_threshold: float = typer.Option(3.0, "--auto-threshold", min=0.0),
+    auto_mask: float = typer.Option(0.0, "--auto-mask", min=0.0),
     postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
     slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
@@ -824,6 +862,8 @@ def image_set(
         num_cores=num_cores,
         max_cores_per_node=max_cores_per_node,
         wsclean_bin=wsclean_bin,
+        auto_threshold=auto_threshold,
+        auto_mask=auto_mask,
         postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,
         slurm_project=slurm_project,
