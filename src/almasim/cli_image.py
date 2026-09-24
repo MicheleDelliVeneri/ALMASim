@@ -371,6 +371,7 @@ class ImagingTask:
     spw: int
     output_dir: Path
     command: list[str]
+    field_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -417,6 +418,7 @@ def build_imaging_tasks(
     update_model: bool = False,
     task_memory_gb: float | None = None,
     scratch_dir: str | None = None,
+    single_window: bool = True,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
@@ -427,6 +429,7 @@ def build_imaging_tasks(
     """
     from .services.imaging.archive_imaging import (
         IMAGE_FILENAME,
+        SINGLE_WINDOW_PLACEHOLDER,
         is_imaging_complete,
         write_imaging_marker,
     )
@@ -452,6 +455,13 @@ def build_imaging_tasks(
         command_args = imaging_parameter_to_command_arg(
             row, fov_fraction, beam_sampling, auto_threshold=auto_threshold, auto_mask=auto_mask
         )
+        if single_window:
+            # The wrapper hands WSClean a per-task MS holding only this window
+            # and the target fields, so no -spws/-field selection and no
+            # reordering (WSClean 3.7's reordering reads out of bounds on
+            # multi-window ALMA sets; see extract_single_window_ms).
+            spws_at = command_args.index("-spws")
+            command_args = command_args[:spws_at] + command_args[spws_at + 2 :]
         command = [
             wsclean_bin,
             "-name",
@@ -477,9 +487,11 @@ def build_imaging_tasks(
             # write the same MS from different nodes and grows every
             # calibrated MS; the model image is on disk anyway.
             "-update-model-required" if update_model else "-no-update-model-required",
-            *_field_arguments(row),
-            str(input_filename),
+            *(["-no-reorder"] if single_window else _field_arguments(row)),
+            SINGLE_WINDOW_PLACEHOLDER if single_window else str(input_filename),
         ]
+        field_args = _field_arguments(row)
+        field_ids = tuple(int(f) for f in field_args[1].split(",")) if field_args else ()
         tasks.append(
             ImagingTask(
                 label=f"{input_filename.stem}_{spw}",
@@ -487,6 +499,7 @@ def build_imaging_tasks(
                 spw=spw,
                 output_dir=outdir,
                 command=command,
+                field_ids=field_ids,
             )
         )
     return tasks, skipped
@@ -559,6 +572,7 @@ def run_imaging_tasks(
     heartbeat_interval: float = _IMAGING_HEARTBEAT_S,
     scratch_root: str | None = None,
     task_retries: int = 3,
+    single_window: bool = True,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -590,6 +604,8 @@ def run_imaging_tasks(
                         timeout=task_timeout,
                         scratch_root=scratch_root,
                         retries=task_retries,
+                        single_window=single_window,
+                        field_ids=list(task.field_ids),
                     )
                 )
             except Exception as exc:
@@ -626,6 +642,8 @@ def run_imaging_tasks(
                 timeout=task_timeout,
                 scratch_root=scratch_root,
                 retries=task_retries,
+                single_window=single_window,
+                field_ids=list(task.field_ids),
             )
             for task in tasks
         ]
@@ -750,6 +768,16 @@ def image_from_ms(
             "to -mem <num-cores/max-cores-per-node> percent of the node."
         ),
     ),
+    single_window: bool = typer.Option(
+        True,
+        "--single-window-ms/--no-single-window-ms",
+        help=(
+            "Extract each task's spectral window (and target fields) into a per-task MS on "
+            "the worker and image it with -no-reorder (default). WSClean 3.7's reordering "
+            "reads out of bounds on multi-window ALMA sets and crashes about half the tasks; "
+            "--no-single-window-ms images the original MS with -spws/-field instead."
+        ),
+    ),
     task_retries: int = typer.Option(
         3,
         "--task-retries",
@@ -853,6 +881,7 @@ def image_from_ms(
         update_model=update_model,
         task_memory_gb=task_memory_gb if task_memory_gb > 0 else None,
         scratch_dir=str(scratch_dir) if scratch_dir is not None else None,
+        single_window=single_window,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -879,6 +908,7 @@ def image_from_ms(
         failures=failures,
         scratch_root=str(scratch_dir) if scratch_dir is not None else None,
         task_retries=task_retries,
+        single_window=single_window,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -912,6 +942,7 @@ def image_set(
     update_model: bool = typer.Option(False, "--update-model/--no-update-model"),
     task_memory_gb: float = typer.Option(0.0, "--task-memory-gb", min=0.0),
     task_retries: int = typer.Option(3, "--task-retries", min=0),
+    single_window: bool = typer.Option(True, "--single-window-ms/--no-single-window-ms"),
     scratch_dir: Optional[Path] = typer.Option(None, "--scratch-dir"),
     postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
@@ -940,6 +971,7 @@ def image_set(
         update_model=update_model,
         task_memory_gb=task_memory_gb,
         task_retries=task_retries,
+        single_window=single_window,
         scratch_dir=scratch_dir,
         postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,

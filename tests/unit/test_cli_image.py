@@ -386,10 +386,12 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
             "64",
             "--wsclean-bin",
             "/opt/wsclean/bin/wsclean",
+            "--no-single-window-ms",
         ],
     )
 
     assert result.exit_code == 0, result.output
+    assert captured["single_window"] is False
     assert captured["cores_per_task"] == 8
     assert captured["node_cores"] == 64
     assert captured["queue"] == "normal"
@@ -1131,9 +1133,11 @@ class _FlakyWsclean:
         self.remaining = crashes
         self.final = final
         self.calls = 0
+        self.envs: list[dict] = []
 
     def __call__(self, cmd, **kwargs):
         self.calls += 1
+        self.envs.append(kwargs)
         outdir = Path(cmd[cmd.index("-name") + 1]).parent
         if self.remaining > 0:
             self.remaining -= 1
@@ -1159,6 +1163,8 @@ def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
 
     assert flaky.calls == 3 and result["attempts"] == 3
     assert ai.is_imaging_complete(outdir)
+    pads = [call["env"]["ALMASIM_WSCLEAN_PAD"] for call in flaky.envs]
+    assert pads == ["", "x", "xx"], "each attempt shifts the environment layout"
     log = ai.imaging_log_path(outdir).read_text()
     assert "# attempt 1 died with signal 11; retrying (3 left)" in log
     assert "# attempt 2 died with signal 11; retrying (2 left)" in log
@@ -1199,3 +1205,83 @@ def test_run_wsclean_task_does_not_retry_error_exits(tmp_path, monkeypatch):
             retries=3,
         )
     assert len(fake.calls) == 1
+
+
+@pytest.mark.unit
+def test_build_imaging_tasks_single_window_default(tmp_path):
+    csv_path = tmp_path / "params.csv"
+    pd.DataFrame(
+        {
+            "filename": ["/data/uid___A001_X1_X1.ms.split.cal"],
+            "spectral_window_id": [5],
+            "reference_frequency": [100.0e9],
+            "fov_per_frequency": [8.0],
+            "max_baseline_size": [100.0],
+            "synthetized_beam_size": [2.0],
+            "target_field_ids": ["2,3"],
+        }
+    ).to_csv(csv_path, index=False)
+    tasks, _ = cli_image.build_imaging_tasks(
+        pd.read_csv(csv_path),
+        tmp_path / "out",
+        fov_fraction=1.5,
+        beam_sampling=8,
+        num_cores=10,
+        max_cores_per_node=96,
+    )
+    cmd = tasks[0].command
+    assert cmd[-1] == ai.SINGLE_WINDOW_PLACEHOLDER
+    assert "-no-reorder" in cmd and "-spws" not in cmd and "-field" not in cmd
+    assert tasks[0].field_ids == (2, 3) and tasks[0].spw == 5
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeypatch):
+    fake = _FakeWsclean(returncode=0)
+    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    calls = []
+
+    def fake_extract(ms_path, spw, field_ids, out_path):
+        calls.append((ms_path, spw, list(field_ids), Path(out_path)))
+        Path(out_path).mkdir(parents=True)
+        return {"rows": 10, "bytes": 1, "data_desc_ids": [spw]}
+
+    monkeypatch.setattr(ai, "extract_single_window_ms", fake_extract)
+    outdir = tmp_path / "ms" / "SPW-5"
+    cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-no-reorder", ai.SINGLE_WINDOW_PLACEHOLDER]
+
+    ai.run_wsclean_task(
+        command=cmd,
+        output_dir=str(outdir),
+        ms_path="/data/in.ms",
+        spw=5,
+        threads=2,
+        single_window=True,
+        field_ids=[2, 3],
+    )
+    assert calls == [("/data/in.ms", 5, [2, 3], outdir / "spw5.single.ms")]
+    used = fake.calls[0]["cmd"]
+    assert used[-1] == str(outdir / "spw5.single.ms")
+    assert not (outdir / "spw5.single.ms").exists(), "the per-task MS is removed afterwards"
+    assert ai.is_imaging_complete(outdir)
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, monkeypatch):
+    def failing_extract(*args, **kwargs):
+        raise RuntimeError("No visibilities for spectral window 5")
+
+    monkeypatch.setattr(ai, "extract_single_window_ms", failing_extract)
+    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
+    outdir = tmp_path / "ms" / "SPW-5"
+    with pytest.raises(RuntimeError, match="Could not extract spectral window 5"):
+        ai.run_wsclean_task(
+            command=["wsclean", "-name", str(outdir / "wsclean"), ai.SINGLE_WINDOW_PLACEHOLDER],
+            output_dir=str(outdir),
+            ms_path="/data/in.ms",
+            spw=5,
+            threads=2,
+            single_window=True,
+        )
+    payload = json.loads(ai.imaging_failure_marker_path(outdir).read_text())
+    assert "No visibilities" in payload["error"]

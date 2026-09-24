@@ -49,6 +49,7 @@ def _skip_raw_ms_row_check():
     with patch("almasim.services.archive.calibrate_ms.verify_measurement_set", return_value=1):
         yield
 
+
 # ===========================================================================
 # helpers
 # ===========================================================================

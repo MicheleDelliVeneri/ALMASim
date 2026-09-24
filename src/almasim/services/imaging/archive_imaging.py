@@ -29,6 +29,8 @@ from typing import Callable, Mapping, Sequence
 
 __all__ = [
     "IMAGE_FILENAME",
+    "SINGLE_WINDOW_PLACEHOLDER",
+    "extract_single_window_ms",
     "imaging_failure_marker_path",
     "imaging_log_path",
     "imaging_marker_path",
@@ -42,6 +44,10 @@ __all__ = [
 # WSClean is invoked with ``-name <output_dir>/wsclean`` and a single SPW, so
 # the restored image is always this file.
 IMAGE_FILENAME = "wsclean-image.fits"
+
+# Placeholder in a task command for the per-task single-window MS that the
+# wrapper extracts on the worker (see ``extract_single_window_ms``).
+SINGLE_WINDOW_PLACEHOLDER = "__SINGLE_WINDOW_MS__"
 
 # Prefer the system C library over spack builds, but keep whatever the caller
 # had after it (same policy as the unpack/calibrate subprocess wrappers).
@@ -153,6 +159,64 @@ def _error_line(lines: Sequence[str]) -> str:
     return ""
 
 
+def extract_single_window_ms(
+    ms_path: str | os.PathLike[str],
+    spw: int,
+    field_ids: Sequence[int] | None,
+    out_path: str | os.PathLike[str],
+) -> dict[str, object]:
+    """Copy one spectral window (and optionally some fields) into a new MS.
+
+    WSClean 3.7 reads out of bounds in its reordering step when an MS holds
+    several spectral windows and ``-spws`` selects one (an ALMA split MS
+    lists 60 windows, 4 of them populated); the crash is heap-layout
+    dependent, so about half the tasks die. Handing WSClean an MS with a
+    single spectral window lets it use its contiguous reader (``-no-reorder``)
+    and skip that code entirely. The copy is a deep copy of the selected rows
+    with all subtables; DATA_DESCRIPTION and SPECTRAL_WINDOW are collapsed to
+    the one window (renumbered 0) so WSClean sees exactly one band.
+    """
+    import shutil
+
+    from casacore.tables import table, taql
+
+    src = str(ms_path)
+    out = Path(out_path)
+    shutil.rmtree(out, ignore_errors=True)
+    dd_table = table(f"{src}/DATA_DESCRIPTION", ack=False)
+    spw_of_dd = [int(x) for x in dd_table.getcol("SPECTRAL_WINDOW_ID")]
+    pol_of_dd = [int(x) for x in dd_table.getcol("POLARIZATION_ID")]
+    dd_table.close()
+    dd_ids = [i for i, s in enumerate(spw_of_dd) if s == int(spw)]
+    if not dd_ids:
+        raise RuntimeError(f"Spectral window {spw} has no DATA_DESCRIPTION row in {src}")
+    where = f"DATA_DESC_ID in [{','.join(str(i) for i in dd_ids)}]"
+    if field_ids:
+        where += f" and FIELD_ID in [{','.join(str(int(f)) for f in field_ids)}]"
+    selection = taql(f"select from {src} where {where}")
+    n_rows = int(selection.nrows())
+    if n_rows == 0:
+        selection.close()
+        raise RuntimeError(f"No visibilities for spectral window {spw} fields {field_ids} in {src}")
+    selection.copy(str(out), deep=True)
+    selection.close()
+
+    dd_out = table(f"{out}/DATA_DESCRIPTION", readonly=False, ack=False)
+    dd_out.removerows([i for i in range(dd_out.nrows()) if i not in dd_ids])
+    dd_out.putcol("SPECTRAL_WINDOW_ID", [0] * len(dd_ids))
+    dd_out.putcol("POLARIZATION_ID", [pol_of_dd[i] for i in dd_ids])
+    dd_out.close()
+    spw_out = table(f"{out}/SPECTRAL_WINDOW", readonly=False, ack=False)
+    spw_out.removerows([i for i in range(spw_out.nrows()) if i != int(spw)])
+    spw_out.close()
+    renumber = {old: new for new, old in enumerate(dd_ids)}
+    main = table(str(out), readonly=False, ack=False)
+    main.putcol("DATA_DESC_ID", [renumber[int(x)] for x in main.getcol("DATA_DESC_ID")])
+    main.close()
+    size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
+    return {"rows": n_rows, "bytes": size, "data_desc_ids": dd_ids}
+
+
 def run_wsclean_task(
     *,
     command: Sequence[str],
@@ -163,6 +227,8 @@ def run_wsclean_task(
     timeout: float | None = None,
     scratch_root: str | None = None,
     retries: int = 3,
+    single_window: bool = False,
+    field_ids: Sequence[int] | None = None,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -186,6 +252,18 @@ def run_wsclean_task(
     (out / IMAGE_FILENAME).unlink(missing_ok=True)
 
     cmd = [str(part) for part in command]
+    single_window_ms: Path | None = None
+    if single_window:
+        # Extract the window (and fields) into a per-task MS so WSClean never
+        # reorders; ``SINGLE_WINDOW_PLACEHOLDER`` in the command is replaced.
+        single_window_ms = out / f"spw{int(spw)}.single.ms"
+        try:
+            extract_single_window_ms(ms_path, spw, field_ids, single_window_ms)
+        except Exception as exc:
+            error = f"Could not extract spectral window {spw} into a single-window MS: {exc}"
+            write_imaging_failure_marker(out, ms_path=ms_path, spw=spw, error=error)
+            raise RuntimeError(error) from exc
+        cmd = [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in cmd]
     scratch_dir: Path | None = None
     if scratch_root:
         # Per-task scratch for WSClean's reordered visibilities, created here
@@ -226,10 +304,12 @@ def run_wsclean_task(
             retries=max(int(retries), 0),
         )
     finally:
-        if scratch_dir is not None:
-            import shutil
+        import shutil
 
+        if scratch_dir is not None:
             shutil.rmtree(scratch_dir, ignore_errors=True)
+        if single_window_ms is not None:
+            shutil.rmtree(single_window_ms, ignore_errors=True)
 
 
 def _run_and_mark(
@@ -252,7 +332,14 @@ def _run_and_mark(
         log.flush()
         while True:
             attempts += 1
-            returncode, timed_out = _run_once(cmd, out, log, env, timeout, tail, fail)
+            # Vary the size of the environment between attempts. The WSClean
+            # 3.7 reordering crash is deterministic for a given argv+environ
+            # and flips with their layout, so an identical retry never helps;
+            # shifting the strings by one byte per attempt does.
+            attempt_env = dict(env)
+            attempt_env["ALMASIM_WSCLEAN_ATTEMPT"] = str(attempts)
+            attempt_env["ALMASIM_WSCLEAN_PAD"] = "x" * (attempts - 1)
+            returncode, timed_out = _run_once(cmd, out, log, attempt_env, timeout, tail, fail)
             if returncode >= 0 or timed_out or attempts > retries:
                 break
             log.write(
