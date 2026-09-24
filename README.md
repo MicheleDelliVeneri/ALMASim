@@ -443,6 +443,14 @@ almasim products download \
   --slurm-queue normal \
   --slurm-workers 8
 
+# Image every calibrated MS, one WSClean per science spectral window, on Slurm.
+# Same contract as unpack/calibrate: SPW-<n>.done / .failed / .log next to each
+# output directory, failed tasks never stop the batch, reruns resume from the markers
+# (see docs/imaging.md)
+almasim image compute-parameters examples/output/archive_ms/calibrated_ms imaging_parameters.csv
+almasim image image-from-ms imaging_parameters.csv examples/output/images \
+  --num-cores 10 --slurm-queue normal --slurm-n-jobs 8
+
 # Run WSClean through ALMASim (all WSClean flags are forwarded unchanged)
 almasim clean -- \
   -name examples/output/imaging/demo \

@@ -6,8 +6,10 @@ import math
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from time import sleep, time
+from typing import Any, Optional, cast
 
 import numpy as np
 import pandas as pd
@@ -20,6 +22,8 @@ RAD_TO_ARCSEC = 180 / np.pi * 3600
 MIN_IMAGE_PIXELS = 16
 SPEED_OF_LIGHT_M_S = 299_792_458.0
 DAY_IN_SECONDS = 3600 * 24
+TARGET_INTENT = "OBSERVE_TARGET"
+_IMAGING_HEARTBEAT_S = 60.0
 
 
 def import_casacore_tables() -> Any:
@@ -120,7 +124,47 @@ def _run_commands_with_slurm_cluster(
                 raise typer.Exit(code=result.returncode)
 
 
-def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
+def science_selection(input_ms: Path) -> tuple[dict[int, int], list[int]]:
+    """Which spectral windows carry visibilities, and which fields are the science target.
+
+    An ALMA MeasurementSet lists every spectral window the correlator was set
+    up with (WVR, channel-average, pointing …), but after ``split`` only the
+    science windows have rows; imaging the others is wasted work. The main
+    table also holds the calibrator scans, so the target fields are those
+    observed with the ``OBSERVE_TARGET`` intent.
+
+    Returns ``({spw_id: n_rows}, [target field ids])``.
+    """
+    casacore_table = import_casacore_tables()
+    data_description = casacore_table(f"{input_ms}::DATA_DESCRIPTION", ack=False)
+    spw_of_dd = np.asarray(data_description.getcol("SPECTRAL_WINDOW_ID"))
+    states = casacore_table(f"{input_ms}::STATE", ack=False)
+    obs_modes = list(states.getcol("OBS_MODE")) if states.nrows() else []
+    main = casacore_table(str(input_ms), ack=False)
+    dd_ids = np.asarray(main.getcol("DATA_DESC_ID"))
+    unique_dd, counts = np.unique(dd_ids, return_counts=True)
+    rows_per_spw: dict[int, int] = {}
+    for dd_id, count in zip(unique_dd, counts):
+        spw = int(spw_of_dd[int(dd_id)])
+        rows_per_spw[spw] = rows_per_spw.get(spw, 0) + int(count)
+
+    target_states = {i for i, mode in enumerate(obs_modes) if TARGET_INTENT in str(mode)}
+    target_fields: list[int] = []
+    if target_states:
+        state_ids = np.asarray(main.getcol("STATE_ID"))
+        field_ids = np.asarray(main.getcol("FIELD_ID"))
+        mask = np.isin(state_ids, list(target_states))
+        target_fields = sorted(int(f) for f in np.unique(field_ids[mask]))
+    return rows_per_spw, target_fields
+
+
+def compute_imaging_parameters(input_ms: Path, science_only: bool = True) -> pd.DataFrame:
+    """One row per spectral window with the WSClean geometry for ``input_ms``.
+
+    With ``science_only`` (the default) only spectral windows that actually
+    hold visibilities are listed, and ``target_field_ids`` names the fields
+    observed with the science intent so imaging can leave the calibrators out.
+    """
     casacore_table = import_casacore_tables()
     spectral_windows = casacore_table(f"{input_ms}::SPECTRAL_WINDOW", ack=False)
     observation = casacore_table(f"{input_ms}::OBSERVATION", ack=False)
@@ -146,19 +190,32 @@ def compute_imaging_parameters(input_ms: Path) -> pd.DataFrame:
     )
     spectral_window_id = np.arange(reference_frequencies.size, dtype=int)
 
+    rows_per_spw: dict[int, int] = {}
+    target_fields: list[int] = []
+    if science_only:
+        rows_per_spw, target_fields = science_selection(input_ms)
+        keep = np.array([int(spw) in rows_per_spw for spw in spectral_window_id], dtype=bool)
+    else:
+        keep = np.ones(reference_frequencies.size, dtype=bool)
+    n_rows = int(keep.sum())
+
     derived_parameters = pd.DataFrame(
         {
-            "filename": [str(input_ms.resolve())] * reference_frequencies.size,
-            "spectral_window_id": spectral_window_id,
-            "reference_frequency": reference_frequencies,
-            "fov_per_frequency": fov_per_frequency,
-            "max_baseline_size": [max_baseline_size] * reference_frequencies.size,
-            "synthetized_beam_size": synthetized_beam_size,
+            "filename": [str(input_ms.resolve())] * n_rows,
+            "spectral_window_id": spectral_window_id[keep],
+            "reference_frequency": reference_frequencies[keep],
+            "fov_per_frequency": fov_per_frequency[keep],
+            "max_baseline_size": [max_baseline_size] * n_rows,
+            "synthetized_beam_size": synthetized_beam_size[keep],
             "start_mjd_s": start_mjd,
             "end_mjd_s": end_mjd,
             "duration_s": end_mjd - start_mjd,
             "start_datetime": start_datetime.isoformat(),
             "end_datetime": end_datetime.isoformat(),
+            "n_visibility_rows": [
+                rows_per_spw.get(int(spw), -1) for spw in spectral_window_id[keep]
+            ],
+            "target_field_ids": [",".join(str(f) for f in target_fields)] * n_rows,
         }
     )
     return derived_parameters
@@ -219,17 +276,382 @@ def compute_parameters(
         default=Path("imaging_parameters.csv"),
         help="Parameters CSV file (default: imaging_parameters.csv)",
     ),
+    pattern: str = typer.Option(
+        "*.cal",
+        "--pattern",
+        help="Glob for the MeasurementSets inside the folder.",
+    ),
+    science_only: bool = typer.Option(
+        True,
+        "--science-only/--all-spws",
+        help=(
+            "List only spectral windows that hold visibilities and record the "
+            "OBSERVE_TARGET field ids (default). --all-spws lists every window."
+        ),
+    ),
+    require_done_marker: bool = typer.Option(
+        True,
+        "--require-done-marker/--no-require-done-marker",
+        help=(
+            "Skip an MS whose <ms>.done calibration marker is missing. Only applies when "
+            "the folder holds at least one such marker, so plain folders still work."
+        ),
+    ),
+    fail_fast: bool = typer.Option(
+        False,
+        "--fail-fast",
+        help="Abort on the first MS that cannot be read (default: record it and continue).",
+    ),
 ):
-    mss = list(archive_folder.glob("*.cal"))
+    """Derive per-spectral-window imaging geometry for every MS in a folder.
+
+    An MS that cannot be read (a truncated table, say) is reported and listed
+    in ``<output>.failed.tsv`` instead of aborting the whole scan; the command
+    then exits with status 1 once every MS has been attempted.
+    """
+    mss = sorted(archive_folder.glob(pattern))
     if len(mss) == 0:
         typer.echo(f"Cannot find any MS in {archive_folder}")
         raise typer.Exit(code=1)
 
-    main_output = compute_imaging_parameters(mss[0])
-    for ms in tqdm(mss[1:]):
-        single_ms_output = compute_imaging_parameters(ms)
-        main_output = pd.concat([main_output, single_ms_output], axis=0, ignore_index=True)
-    main_output.to_csv(output_metadata_file, index=False)
+    if require_done_marker:
+        with_marker = [ms for ms in mss if ms.with_name(ms.name + ".done").is_file()]
+        if with_marker and len(with_marker) < len(mss):
+            typer.echo(
+                f"Skipping {len(mss) - len(with_marker)} MS(s) without a .done calibration marker."
+            )
+            mss = with_marker
+
+    frames: list[pd.DataFrame] = []
+    failures: list[tuple[Path, str]] = []
+    for ms in tqdm(mss):
+        try:
+            frames.append(compute_imaging_parameters(ms, science_only=science_only))
+        except Exception as exc:
+            if fail_fast:
+                raise
+            failures.append((ms, f"{type(exc).__name__}: {exc}"))
+            typer.echo(f"FAILED {ms.name}: {type(exc).__name__}: {exc}", err=True)
+
+    if frames:
+        main_output = pd.concat(frames, axis=0, ignore_index=True)
+        main_output.to_csv(output_metadata_file, index=False)
+        typer.echo(
+            f"Wrote {len(main_output)} spectral-window row(s) for {len(frames)} MS(s) "
+            f"to {output_metadata_file}"
+        )
+    if failures:
+        failed_path = output_metadata_file.with_name(output_metadata_file.name + ".failed.tsv")
+        failed_path.write_text(
+            "".join(f"{ms}\t{error}\n" for ms, error in failures), encoding="utf-8"
+        )
+        typer.echo(f"{len(failures)} MS(s) could not be read; listed in {failed_path}", err=True)
+        raise typer.Exit(code=1)
+
+
+@dataclass(frozen=True)
+class ImagingTask:
+    """One WSClean run: one MeasurementSet, one spectral window."""
+
+    label: str
+    ms_path: Path
+    spw: int
+    output_dir: Path
+    command: list[str]
+
+
+@dataclass(frozen=True)
+class ImagingFailure:
+    label: str
+    error: str
+    log_path: Optional[str] = None
+
+
+def _error_headline(error: str, limit: int = 240) -> str:
+    for line in str(error).splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped if len(stripped) <= limit else stripped[: limit - 1] + "…"
+    return str(error)[:limit]
+
+
+def _field_arguments(row: pd.Series) -> list[str]:
+    """``-field`` selection from the ``target_field_ids`` column, if the CSV has one."""
+    value = row.get("target_field_ids") if hasattr(row, "get") else None
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return []
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return []
+    if text.endswith(".0"):  # a single id that pandas read as a float
+        text = text[:-2]
+    return ["-field", text]
+
+
+def build_imaging_tasks(
+    parameters: pd.DataFrame,
+    output_directory: Path,
+    *,
+    fov_fraction: float,
+    beam_sampling: float,
+    num_cores: int,
+    max_cores_per_node: int,
+    wsclean_bin: str = "wsclean",
+    overwrite_outputs: bool = False,
+    trust_existing_images: bool = False,
+) -> tuple[list[ImagingTask], int]:
+    """Turn parameter rows into WSClean tasks, skipping the ones already done.
+
+    Returns ``(tasks, skipped)``. A task is done when its ``SPW-<n>.done``
+    marker and ``wsclean-image.fits`` both exist; ``trust_existing_images``
+    also accepts an image produced before markers existed and writes its
+    marker. ``overwrite_outputs`` redoes everything.
+    """
+    from .services.imaging.archive_imaging import (
+        IMAGE_FILENAME,
+        is_imaging_complete,
+        write_imaging_marker,
+    )
+
+    tasks: list[ImagingTask] = []
+    skipped = 0
+    mem_fraction = min(1.0, num_cores / max_cores_per_node)
+    for _, row in parameters.iterrows():
+        input_filename = Path(row["filename"])
+        spw = int(row["spectral_window_id"])
+        outdir = output_directory / input_filename.stem / f"SPW-{spw}"
+        if not overwrite_outputs:
+            if is_imaging_complete(outdir):
+                skipped += 1
+                continue
+            if trust_existing_images and (outdir / IMAGE_FILENAME).is_file():
+                write_imaging_marker(outdir, ms_path=str(input_filename), spw=spw)
+                skipped += 1
+                continue
+        command_args = imaging_parameter_to_command_arg(row, fov_fraction, beam_sampling)
+        command = [
+            wsclean_bin,
+            "-name",
+            str(outdir / "wsclean"),
+            "-j",
+            str(num_cores),
+            *command_args,
+            "-mem",
+            str(mem_fraction),
+            *_field_arguments(row),
+            str(input_filename),
+        ]
+        tasks.append(
+            ImagingTask(
+                label=f"{input_filename.stem}_{spw}",
+                ms_path=input_filename,
+                spw=spw,
+                output_dir=outdir,
+                command=command,
+            )
+        )
+    return tasks, skipped
+
+
+def _tail_line(path: Path, modified_since: float, max_bytes: int = 2048) -> Optional[str]:
+    try:
+        if path.stat().st_mtime < modified_since:
+            return None
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(max(0, size - max_bytes))
+            chunk = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = [line.strip() for line in chunk.splitlines() if line.strip()]
+    return lines[-1] if lines else None
+
+
+def _record_imaging_failure(task: ImagingTask, error: str, failures: list[ImagingFailure]) -> None:
+    """Record a failed task and make sure a ``.failed`` marker exists for it.
+
+    The worker-side wrapper writes the marker itself; this covers the cases
+    where it never ran or was lost with its worker (walltime, node failure).
+    """
+    from .services.imaging.archive_imaging import (
+        imaging_failure_marker_path,
+        imaging_log_path,
+        imaging_marker_path,
+        write_imaging_failure_marker,
+    )
+
+    log_path = imaging_log_path(task.output_dir)
+    if (
+        not imaging_failure_marker_path(task.output_dir).is_file()
+        and not imaging_marker_path(task.output_dir).is_file()
+    ):
+        try:
+            write_imaging_failure_marker(
+                task.output_dir,
+                ms_path=str(task.ms_path),
+                spw=task.spw,
+                error=error,
+                log_path=log_path if log_path.is_file() else None,
+            )
+        except OSError:
+            pass
+    failures.append(
+        ImagingFailure(task.label, error, str(log_path) if log_path.is_file() else None)
+    )
+
+
+def run_imaging_tasks(
+    tasks: list[ImagingTask],
+    *,
+    backend_kind: str,
+    cores_per_task: int,
+    node_cores: int,
+    queue: str,
+    project: str | None,
+    walltime: str,
+    memory: str,
+    n_jobs: int,
+    scheduler_host: str | None,
+    scheduler_interface: str | None,
+    task_timeout: float | None,
+    continue_on_error: bool = True,
+    failures: Optional[list[ImagingFailure]] = None,
+    heartbeat_interval: float = _IMAGING_HEARTBEAT_S,
+) -> list[dict[str, Any]]:
+    """Run WSClean tasks, one subprocess each, and never let one failure end the run.
+
+    Every task ends with a ``.done`` or ``.failed`` marker next to its output
+    directory. With ``continue_on_error`` (the default) failed tasks are
+    collected in ``failures`` and the rest of the batch keeps going; otherwise
+    the first failure stops the run.
+    """
+    from .services.imaging.archive_imaging import imaging_log_path, run_wsclean_task
+
+    if failures is None:
+        failures = []
+    if not tasks:
+        return []
+
+    results: list[dict[str, Any]] = []
+    if backend_kind == "sync":
+        for index, task in enumerate(tasks, start=1):
+            log_path = imaging_log_path(task.output_dir)
+            typer.echo(f"Image [{index}/{len(tasks)}] {task.label} (log: {log_path})")
+            try:
+                results.append(
+                    run_wsclean_task(
+                        command=task.command,
+                        output_dir=str(task.output_dir),
+                        ms_path=str(task.ms_path),
+                        spw=task.spw,
+                        threads=cores_per_task,
+                        timeout=task_timeout,
+                    )
+                )
+            except Exception as exc:
+                _record_imaging_failure(task, str(exc), failures)
+                typer.echo(f"  FAILED {task.label}: {_error_headline(str(exc))}", err=True)
+                if not continue_on_error:
+                    raise typer.Exit(code=1)
+        return results
+
+    from almasim.services.compute import create_backend
+
+    stage_label = "Slurm image"
+    started_at = time()
+    with create_backend(
+        "slurm",
+        queue=queue,
+        node_cores=node_cores,
+        memory=memory,
+        walltime=walltime,
+        n_workers=n_jobs,
+        project=project,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+    ) as backend:
+        futures = [
+            backend.submit_callable(
+                run_wsclean_task,
+                cores=cores_per_task,
+                command=task.command,
+                output_dir=str(task.output_dir),
+                ms_path=str(task.ms_path),
+                spw=task.spw,
+                threads=cores_per_task,
+                timeout=task_timeout,
+            )
+            for task in tasks
+        ]
+        pending = dict(enumerate(futures))
+        last_heartbeat = started_at
+        with tqdm(total=len(futures), desc=stage_label, unit="task", leave=True) as bar:
+            while pending:
+                progressed = False
+                for index, future in list(pending.items()):
+                    if not future.done():
+                        continue
+                    del pending[index]
+                    progressed = True
+                    bar.update(1)
+                    task = tasks[index]
+                    error: Optional[str] = None
+                    try:
+                        exc = future.exception()
+                        error = str(exc) if exc is not None else None
+                    except Exception as future_error:  # lost/cancelled future
+                        error = str(future_error) or "task lost"
+                    if error is None:
+                        try:
+                            results.append(future.result())
+                        except Exception as result_error:
+                            error = str(result_error)
+                    if error is None:
+                        bar.write(f"{stage_label} completed {task.label}")
+                        continue
+                    _record_imaging_failure(task, error, failures)
+                    bar.write(f"  {task.label} FAILED: {_error_headline(error)}")
+                    if not continue_on_error:
+                        for other in pending.values():
+                            cancel = getattr(other, "cancel", None)
+                            if callable(cancel):
+                                cancel()
+                        raise typer.Exit(code=1)
+                bar.set_postfix_str(
+                    f"completed {len(futures) - len(pending)}/{len(futures)} failed {len(failures)}"
+                )
+                if not pending:
+                    break
+                now = time()
+                if now - last_heartbeat >= heartbeat_interval:
+                    last_heartbeat = now
+                    running = 0
+                    for index in pending:
+                        last_line = _tail_line(
+                            imaging_log_path(tasks[index].output_dir), started_at - 1.0
+                        )
+                        if last_line is None:
+                            continue
+                        running += 1
+                        bar.write(f"  [{tasks[index].label}] {last_line}")
+                    bar.write(
+                        f"{stage_label}: {running} running, {len(pending) - running} waiting, "
+                        f"{len(futures) - len(pending)} done, {len(failures)} failed"
+                    )
+                if not progressed:
+                    sleep(0.5)
+    return results
+
+
+def _report_imaging_failures(failures: list[ImagingFailure]) -> None:
+    if not failures:
+        return
+    typer.echo(f"Image: {len(failures)} task(s) failed and were skipped:", err=True)
+    for failure in failures:
+        typer.echo(f"  {failure.label}: {_error_headline(failure.error)}", err=True)
+        if failure.log_path:
+            typer.echo(f"    log: {failure.log_path}", err=True)
 
 
 @image_app.command("image-from-ms")
@@ -252,6 +674,17 @@ def image_from_ms(
         default=95,
         min=1,
     ),
+    wsclean_bin: str = typer.Option(
+        "wsclean",
+        "--wsclean-bin",
+        help="Path or executable name of the WSClean binary the workers run.",
+    ),
+    postprocess_backend: str = typer.Option(
+        "slurm",
+        "--postprocess-backend",
+        help="Where the WSClean tasks run: slurm (default) or sync (this process, one at a time).",
+        case_sensitive=False,
+    ),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
     slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
     slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
@@ -273,43 +706,62 @@ def image_from_ms(
     skip_existing: bool = typer.Option(
         False,
         "--skip-existing",
-        help="Skip SPWs whose output directory already contains wsclean-image.fits.",
+        help=(
+            "Also trust an existing wsclean-image.fits that has no .done marker (an output "
+            "from before markers existed) and write its marker. Tasks with a marker are "
+            "always skipped."
+        ),
+    ),
+    overwrite_outputs: bool = typer.Option(
+        False,
+        "--overwrite-outputs",
+        help="Redo every task, including the ones with a .done marker.",
+    ),
+    continue_on_error: bool = typer.Option(
+        True,
+        "--continue-on-error/--fail-fast",
+        help=(
+            "Keep imaging the rest of the batch when a task fails (default); the failed "
+            "tasks are listed at the end and the command exits 1. --fail-fast stops at the "
+            "first failure."
+        ),
     ),
 ):
+    """Image every (MS, spectral window) row of a parameter CSV with WSClean.
+
+    Each task leaves ``SPW-<n>.done`` or ``SPW-<n>.failed`` (with the error and
+    the log path) next to its output directory, and ``SPW-<n>.log`` with the
+    full WSClean output. A rerun skips the tasks with a ``.done`` marker and
+    retries the rest, so an interrupted batch can simply be resubmitted.
+    """
+    backend_kind = postprocess_backend.lower()
+    if backend_kind not in {"sync", "slurm"}:
+        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
+        raise typer.Exit(code=2)
 
     parameters = pd.read_csv(str(imaging_parameters))
-    commands: list[tuple[str, list[str]]] = []
-    skipped = 0
-    for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
-        input_filename = Path(dset_parameter["filename"])
-        command_args = imaging_parameter_to_command_arg(dset_parameter, fov_fraction, beam_sampling)
-
-        outdir = (
-            output_directory / input_filename.stem / f"SPW-{dset_parameter['spectral_window_id']}"
-        )
-        if skip_existing and (outdir / "wsclean-image.fits").exists():
-            skipped += 1
-            continue
-        outdir.mkdir(exist_ok=True, parents=True)
-        mem_fraction = min(1.0, num_cores / max_cores_per_node)
-
-        wsclean_cmd = [
-            "wsclean",
-            "-name",
-            str(outdir / "wsclean"),
-            *command_args,
-            "-mem",
-            str(mem_fraction),
-            str(input_filename),
-        ]
-        label = f"{input_filename.stem}_{dset_parameter['spectral_window_id']}"
-        commands.append((label, wsclean_cmd))
-
-    if skip_existing and skipped:
+    tasks, skipped = build_imaging_tasks(
+        parameters,
+        output_directory,
+        fov_fraction=fov_fraction,
+        beam_sampling=beam_sampling,
+        num_cores=num_cores,
+        max_cores_per_node=max_cores_per_node,
+        wsclean_bin=wsclean_bin,
+        overwrite_outputs=overwrite_outputs,
+        trust_existing_images=skip_existing,
+    )
+    if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
+    if not tasks:
+        typer.echo("All requested tasks are already imaged; nothing to do.")
+        return
+    typer.echo(f"Imaging {len(tasks)} (MS, SPW) task(s); per-task logs: <output>/<ms>/SPW-<n>.log")
 
-    _run_commands_with_slurm_cluster(
-        commands,
+    failures: list[ImagingFailure] = []
+    run_imaging_tasks(
+        tasks,
+        backend_kind=backend_kind,
         cores_per_task=num_cores,
         node_cores=max_cores_per_node,
         queue=slurm_queue,
@@ -320,7 +772,13 @@ def image_from_ms(
         scheduler_host=scheduler_host,
         scheduler_interface=scheduler_interface,
         task_timeout=task_timeout,
+        continue_on_error=continue_on_error,
+        failures=failures,
     )
+    typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
+    if failures:
+        _report_imaging_failures(failures)
+        raise typer.Exit(code=1)
 
 
 @image_app.command("batch-image", hidden=True)
@@ -343,30 +801,21 @@ def image_set(
         default=95,
         min=1,
     ),
+    wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin"),
+    postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
     slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
     slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
     slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
     slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
-    scheduler_host: str | None = typer.Option(
-        default=None,
-        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
-    ),
-    scheduler_interface: str | None = typer.Option(
-        default=None,
-        help="Scheduler/worker network interface (e.g. ib0, eth0)",
-    ),
-    task_timeout: float = typer.Option(
-        default=3600,
-        min=1,
-        help="Timeout in seconds for each worker-side command",
-    ),
-    skip_existing: bool = typer.Option(
-        False,
-        "--skip-existing",
-        help="Skip SPWs whose output directory already contains wsclean-image.fits.",
-    ),
+    scheduler_host: str | None = typer.Option(default=None),
+    scheduler_interface: str | None = typer.Option(default=None),
+    task_timeout: float = typer.Option(default=3600, min=1),
+    skip_existing: bool = typer.Option(False, "--skip-existing"),
+    overwrite_outputs: bool = typer.Option(False, "--overwrite-outputs"),
+    continue_on_error: bool = typer.Option(True, "--continue-on-error/--fail-fast"),
 ):
+    """Alias of ``image-from-ms``."""
     image_from_ms(
         imaging_parameters=imaging_parameters,
         output_directory=output_directory,
@@ -374,6 +823,8 @@ def image_set(
         beam_sampling=beam_sampling,
         num_cores=num_cores,
         max_cores_per_node=max_cores_per_node,
+        wsclean_bin=wsclean_bin,
+        postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,
         slurm_project=slurm_project,
         slurm_walltime=slurm_walltime,
@@ -383,6 +834,8 @@ def image_set(
         scheduler_interface=scheduler_interface,
         task_timeout=task_timeout,
         skip_existing=skip_existing,
+        overwrite_outputs=overwrite_outputs,
+        continue_on_error=continue_on_error,
     )
 
 

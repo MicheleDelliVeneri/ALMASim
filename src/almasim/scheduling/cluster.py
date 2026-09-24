@@ -14,7 +14,7 @@ import shlex
 import subprocess
 import threading
 from dataclasses import dataclass
-from typing import Any, ClassVar, Mapping, Sequence
+from typing import Any, Callable, ClassVar, Mapping, Sequence
 
 try:
     from dask.distributed import Client
@@ -34,6 +34,11 @@ class SubcommandResult:
     stdout: str
     stderr: str
     returncode: int
+
+
+def _call_with_kwargs(func: Callable[..., Any], kwargs: Mapping[str, Any]) -> Any:
+    """Worker-side trampoline so task kwargs never collide with ``Client.submit``'s."""
+    return func(**dict(kwargs))
 
 
 def run_subcommand(
@@ -296,6 +301,21 @@ class SlurmDaskClusterSingleton:
                 cls._instance.client.close()
                 cls._instance.cluster.close()
                 cls._instance = None
+
+    def submit_callable(self, func: Callable[..., Any], *, cores: int, **kwargs: Any) -> Any:
+        """Submit ``func(**kwargs)`` to a worker, reserving ``cores`` CPU resources.
+
+        Same accounting as :meth:`submit_subcommand`, for tasks that need to
+        run Python on the worker (a subprocess wrapper that streams a log and
+        writes markers, say) instead of a bare shell command.
+        """
+        if cores <= 0:
+            raise ValueError("cores must be greater than 0")
+        if cores >= self.node_cores:
+            raise ValueError(f"cores ({cores}) must be less than node_cores ({self.node_cores})")
+        return self.client.submit(
+            _call_with_kwargs, func, kwargs, resources={"CPU": cores}, pure=False
+        )
 
     def submit_subcommand(
         self,

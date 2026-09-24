@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -92,8 +93,11 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
             return fake_observation
 
     monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
+    monkeypatch.setattr(cli_image, "science_selection", lambda _ms: ({0: 10, 1: 20}, [0, 2]))
 
     output = cli_image.compute_imaging_parameters(Path("test_dataset.cal"))
+    assert list(output["n_visibility_rows"]) == [10, 20]
+    assert list(output["target_field_ids"]) == ["0,2", "0,2"]
 
     expected_frequencies = np.array([100.0e9, 200.0e9])
     speed_of_light = 299_792_458.0
@@ -199,7 +203,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
 
-    def _fake_compute(input_ms: Path) -> pd.DataFrame:
+    def _fake_compute(input_ms: Path, science_only: bool = True) -> pd.DataFrame:
         return pd.DataFrame(
             {
                 "filename": [str(input_ms.resolve())],
@@ -229,7 +233,7 @@ def test_compute_parameters_defaults_to_cwd_and_default_output(monkeypatch, tmp_
     """compute-parameters should run without args using cwd and default output filename."""
     monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
 
-    def _fake_compute(input_ms: Path) -> pd.DataFrame:
+    def _fake_compute(input_ms: Path, science_only: bool = True) -> pd.DataFrame:
         return pd.DataFrame(
             {
                 "filename": [str(input_ms.resolve())],
@@ -344,7 +348,7 @@ def test_run_commands_with_slurm_cluster_forwards_scheduler_interface(monkeypatc
 
 @pytest.mark.unit
 def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
-    """batch-image should dispatch wsclean commands via the SLURM cluster helper."""
+    """batch-image should build one WSClean task per row and hand them to the runner."""
     imaging_csv = tmp_path / "imaging_parameters.csv"
     output_dir = tmp_path / "images"
     output_dir.mkdir()
@@ -357,39 +361,18 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
             "fov_per_frequency": [8.0],
             "max_baseline_size": [100.0],
             "synthetized_beam_size": [2.0],
+            "target_field_ids": ["3,4"],
         }
     ).to_csv(imaging_csv, index=False)
 
     captured: dict[str, Any] = {}
 
-    def _fake_run_with_slurm_cluster(
-        commands,
-        *,
-        cores_per_task,
-        node_cores,
-        queue,
-        project,
-        walltime,
-        memory,
-        n_jobs,
-        scheduler_host,
-        scheduler_interface,
-        task_timeout,
-    ):
-        captured["commands"] = commands
-        captured["cores_per_task"] = cores_per_task
-        captured["node_cores"] = node_cores
-        captured["queue"] = queue
-        captured["project"] = project
-        captured["walltime"] = walltime
-        captured["memory"] = memory
-        captured["n_jobs"] = n_jobs
-        captured["scheduler_host"] = scheduler_host
-        captured["scheduler_interface"] = scheduler_interface
-        captured["task_timeout"] = task_timeout
+    def _fake_run_imaging_tasks(tasks, **kwargs):
+        captured["tasks"] = tasks
+        captured.update(kwargs)
+        return []
 
-    monkeypatch.setattr(cli_image, "tqdm", lambda iterable, total=None: iterable)
-    monkeypatch.setattr(cli_image, "_run_commands_with_slurm_cluster", _fake_run_with_slurm_cluster)
+    monkeypatch.setattr(cli_image, "run_imaging_tasks", _fake_run_imaging_tasks)
 
     result = runner.invoke(
         cli.app,
@@ -402,10 +385,12 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
             "8",
             "--max-cores-per-node",
             "64",
+            "--wsclean-bin",
+            "/opt/wsclean/bin/wsclean",
         ],
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert captured["cores_per_task"] == 8
     assert captured["node_cores"] == 64
     assert captured["queue"] == "normal"
@@ -413,12 +398,20 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
     assert captured["walltime"] == "02:00:00"
     assert captured["memory"] == "16GB"
     assert captured["n_jobs"] == 1
+    assert captured["backend_kind"] == "slurm"
+    assert captured["continue_on_error"] is True
 
-    commands = captured["commands"]
-    assert len(commands) == 1
-    _, cmd_tokens = commands[0]
-    assert cmd_tokens[0] == "wsclean"
-    assert "-name" in cmd_tokens
+    tasks = captured["tasks"]
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task.spw == 2
+    assert task.output_dir == output_dir / "uid___A001_X1_X1" / "SPW-2"
+    cmd = task.command
+    assert cmd[0] == "/opt/wsclean/bin/wsclean"
+    assert cmd[cmd.index("-j") + 1] == "8"
+    assert cmd[cmd.index("-field") + 1] == "3,4"
+    assert cmd[cmd.index("-spws") + 1] == "2"
+    assert cmd[-1] == "uid___A001_X1_X1.cal"
 
 
 @pytest.mark.unit
@@ -573,3 +566,480 @@ def test_predict_batch_skips_when_model_is_missing(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert "[debug] missing model FITS, skipping row" in result.output
     assert len(calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# Imaging markers, the worker-side WSClean wrapper and the resilient runner.
+
+from almasim.services.imaging import archive_imaging as ai  # noqa: E402
+
+
+def _params_csv(tmp_path: Path, rows: int = 2) -> Path:
+    csv_path = tmp_path / "params.csv"
+    pd.DataFrame(
+        {
+            "filename": ["/data/uid___A001_X1_X1.ms.split.cal"] * rows,
+            "spectral_window_id": list(range(rows)),
+            "reference_frequency": [100.0e9] * rows,
+            "fov_per_frequency": [8.0] * rows,
+            "max_baseline_size": [100.0] * rows,
+            "synthetized_beam_size": [2.0] * rows,
+        }
+    ).to_csv(csv_path, index=False)
+    return csv_path
+
+
+class _FakeWsclean:
+    """Stand-in for ``subprocess.Popen`` running WSClean.
+
+    ``returncode`` drives the outcome; on success the restored image is written
+    unless ``write_image`` is False, mimicking a run that exited 0 without output.
+    """
+
+    def __init__(self, returncode: int = 0, lines=None, write_image: bool = True):
+        self.returncode = returncode
+        self.lines = lines or ["WSClean version 3.7", "Cleaning up temporary files..."]
+        self.write_image = write_image
+        self.calls: list[dict] = []
+
+    def __call__(self, cmd, **kwargs):
+        self.calls.append({"cmd": list(cmd), **kwargs})
+        outdir = Path(cmd[cmd.index("-name") + 1]).parent
+        if self.returncode == 0 and self.write_image:
+            (outdir / ai.IMAGE_FILENAME).write_bytes(b"SIMPLE")
+        lines = self.lines
+        rc = self.returncode
+
+        class _Proc:
+            stdout = iter(line + "\n" for line in lines)
+
+            @staticmethod
+            def wait():
+                return rc
+
+            @staticmethod
+            def kill():
+                pass
+
+        return _Proc()
+
+
+def _wsclean_cmd(outdir: Path) -> list[str]:
+    return ["wsclean", "-name", str(outdir / "wsclean"), "-spws", "1", "in.ms"]
+
+
+@pytest.mark.unit
+def test_imaging_marker_paths_sit_next_to_the_spw_directory(tmp_path):
+    outdir = tmp_path / "ms" / "SPW-3"
+    assert ai.imaging_marker_path(outdir) == tmp_path / "ms" / "SPW-3.done"
+    assert ai.imaging_failure_marker_path(outdir) == tmp_path / "ms" / "SPW-3.failed"
+    assert ai.imaging_log_path(outdir) == tmp_path / "ms" / "SPW-3.log"
+    assert not ai.is_imaging_complete(outdir)
+    outdir.mkdir(parents=True)
+    ai.write_imaging_marker(outdir, ms_path="in.ms", spw=3)
+    assert not ai.is_imaging_complete(outdir), "a marker without the image is not complete"
+    (outdir / ai.IMAGE_FILENAME).write_bytes(b"")
+    assert ai.is_imaging_complete(outdir)
+
+
+@pytest.mark.unit
+def test_wsclean_environment_pins_openblas_to_one_thread():
+    env = ai.wsclean_environment(6, base={"LD_LIBRARY_PATH": "/spack/lib", "PATH": "/bin"})
+    assert env["OPENBLAS_NUM_THREADS"] == "1"
+    assert env["OMP_NUM_THREADS"] == "6"
+    assert env["LD_LIBRARY_PATH"].startswith("/lib64:")
+    assert env["LD_LIBRARY_PATH"].endswith(":/spack/lib")
+    assert env["PATH"] == "/bin"
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_success_writes_done_marker_and_log(tmp_path, monkeypatch):
+    fake = _FakeWsclean(returncode=0)
+    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    outdir = tmp_path / "ms" / "SPW-1"
+
+    result = ai.run_wsclean_task(
+        command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=4
+    )
+
+    assert ai.is_imaging_complete(outdir)
+    assert result["image"] == str(outdir / ai.IMAGE_FILENAME)
+    payload = json.loads(ai.imaging_marker_path(outdir).read_text())
+    assert payload["spw"] == 1 and payload["ms"] == "in.ms" and "wsclean" in payload["command"]
+    log_text = ai.imaging_log_path(outdir).read_text()
+    assert log_text.splitlines()[0].startswith("# wsclean -name")
+    assert "Cleaning up temporary files" in log_text
+    assert fake.calls[0]["env"]["OPENBLAS_NUM_THREADS"] == "1"
+    assert fake.calls[0]["env"]["OMP_NUM_THREADS"] == "4"
+    assert not ai.imaging_failure_marker_path(outdir).exists()
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_hard_abort_writes_failure_marker(tmp_path, monkeypatch):
+    lines = [
+        "Gridding...",
+        "terminate called after throwing an instance of 'std::bad_alloc'",
+        "  what():  std::bad_alloc",
+    ]
+    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=-6, lines=lines))
+    outdir = tmp_path / "ms" / "SPW-1"
+
+    with pytest.raises(RuntimeError, match="return code -6"):
+        ai.run_wsclean_task(
+            command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=2
+        )
+
+    marker = ai.imaging_failure_marker_path(outdir)
+    assert marker.is_file()
+    payload = json.loads(marker.read_text())
+    assert payload["returncode"] == -6
+    assert "what():  std::bad_alloc" in payload["error"]
+    assert Path(payload["log"]).is_file()
+    assert payload["stage"] == "image"
+    assert not ai.imaging_marker_path(outdir).exists()
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_without_image_is_a_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=0, write_image=False))
+    outdir = tmp_path / "ms" / "SPW-2"
+
+    with pytest.raises(RuntimeError, match="wrote no wsclean-image.fits"):
+        ai.run_wsclean_task(
+            command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=2, threads=2
+        )
+    assert ai.imaging_failure_marker_path(outdir).is_file()
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_missing_binary_is_a_failure(tmp_path, monkeypatch):
+    def _no_binary(*args, **kwargs):
+        raise FileNotFoundError("wsclean")
+
+    monkeypatch.setattr(ai.subprocess, "Popen", _no_binary)
+    outdir = tmp_path / "ms" / "SPW-2"
+    with pytest.raises(RuntimeError, match="Could not start wsclean"):
+        ai.run_wsclean_task(
+            command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=2, threads=2
+        )
+    payload = json.loads(ai.imaging_failure_marker_path(outdir).read_text())
+    assert "Could not start wsclean" in payload["error"]
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_replaces_stale_markers(tmp_path, monkeypatch):
+    outdir = tmp_path / "ms" / "SPW-1"
+    outdir.mkdir(parents=True)
+    ai.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
+    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=0))
+
+    ai.run_wsclean_task(
+        command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=1
+    )
+    assert ai.is_imaging_complete(outdir)
+    assert not ai.imaging_failure_marker_path(outdir).exists()
+
+
+@pytest.mark.unit
+def test_build_imaging_tasks_skips_done_and_grandfathers_images(tmp_path):
+    csv_path = _params_csv(tmp_path, rows=3)
+    parameters = pd.read_csv(csv_path)
+    out = tmp_path / "images"
+    done_dir = out / "uid___A001_X1_X1.ms.split" / "SPW-0"
+    done_dir.mkdir(parents=True)
+    (done_dir / ai.IMAGE_FILENAME).write_bytes(b"")
+    ai.write_imaging_marker(done_dir, ms_path="x", spw=0)
+    legacy_dir = out / "uid___A001_X1_X1.ms.split" / "SPW-1"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / ai.IMAGE_FILENAME).write_bytes(b"")
+
+    common = dict(fov_fraction=1.5, beam_sampling=8, num_cores=10, max_cores_per_node=95)
+
+    tasks, skipped = cli_image.build_imaging_tasks(parameters, out, **common)
+    assert skipped == 1
+    assert [t.spw for t in tasks] == [1, 2], "an image without a marker is retried by default"
+
+    tasks, skipped = cli_image.build_imaging_tasks(
+        parameters, out, trust_existing_images=True, **common
+    )
+    assert skipped == 2
+    assert [t.spw for t in tasks] == [2]
+    assert ai.imaging_marker_path(legacy_dir).is_file(), "grandfathered image gets its marker"
+
+    tasks, skipped = cli_image.build_imaging_tasks(
+        parameters, out, overwrite_outputs=True, **common
+    )
+    assert skipped == 0 and [t.spw for t in tasks] == [0, 1, 2]
+    assert "-field" not in tasks[0].command, "no target_field_ids column: no field selection"
+
+
+class _FakeFuture:
+    def __init__(self, result=None, error=None):
+        self._result = result
+        self._error = error
+        self.cancelled = False
+
+    def done(self):
+        return True
+
+    def exception(self):
+        return self._error
+
+    def result(self):
+        if self._error is not None:
+            raise self._error
+        return self._result
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class _FakeBackend:
+    def __init__(self, outcomes):
+        self.outcomes = outcomes
+        self.submitted: list[dict] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+    def submit_callable(self, func, *, cores, **kwargs):
+        self.submitted.append({"func": func, "cores": cores, **kwargs})
+        outcome = self.outcomes[len(self.submitted) - 1]
+        if isinstance(outcome, Exception):
+            return _FakeFuture(error=outcome)
+        return _FakeFuture(result=outcome)
+
+
+def _tasks(tmp_path: Path, n: int) -> list[cli_image.ImagingTask]:
+    out = tmp_path / "images" / "ms"
+    return [
+        cli_image.ImagingTask(
+            label=f"ms_{i}",
+            ms_path=Path("in.ms"),
+            spw=i,
+            output_dir=out / f"SPW-{i}",
+            command=["wsclean", "-name", str(out / f"SPW-{i}" / "wsclean"), "in.ms"],
+        )
+        for i in range(n)
+    ]
+
+
+def _run(tasks, backend, monkeypatch, **overrides):
+    monkeypatch.setattr("almasim.services.compute.create_backend", lambda *a, **k: backend)
+    monkeypatch.setattr(cli_image, "tqdm", _QuietTqdm)
+    kwargs = dict(
+        backend_kind="slurm",
+        cores_per_task=4,
+        node_cores=32,
+        queue="q",
+        project=None,
+        walltime="01:00:00",
+        memory="8GB",
+        n_jobs=2,
+        scheduler_host=None,
+        scheduler_interface=None,
+        task_timeout=10.0,
+        heartbeat_interval=1e9,
+    )
+    kwargs.update(overrides)
+    return cli_image.run_imaging_tasks(tasks, **kwargs)
+
+
+class _QuietTqdm:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+    def update(self, n=1):
+        pass
+
+    def write(self, text):
+        pass
+
+    def set_postfix_str(self, text):
+        pass
+
+
+@pytest.mark.unit
+def test_run_imaging_tasks_continues_past_failures_and_marks_lost_tasks(tmp_path, monkeypatch):
+    tasks = _tasks(tmp_path, 3)
+    backend = _FakeBackend(
+        [{"ok": 0}, RuntimeError("WSClean exited with return code 1"), {"ok": 2}]
+    )
+    failures: list[cli_image.ImagingFailure] = []
+
+    results = _run(tasks, backend, monkeypatch, failures=failures)
+
+    assert results == [{"ok": 0}, {"ok": 2}]
+    assert [f.label for f in failures] == ["ms_1"]
+    assert "return code 1" in failures[0].error
+    # the worker never wrote a marker for the lost task: the driver does it
+    payload = json.loads(ai.imaging_failure_marker_path(tasks[1].output_dir).read_text())
+    assert payload["spw"] == 1 and "return code 1" in payload["error"]
+    assert not ai.imaging_failure_marker_path(tasks[0].output_dir).exists()
+    # resources and task kwargs both reach the backend
+    assert backend.submitted[0]["cores"] == 4
+    assert backend.submitted[0]["threads"] == 4
+    assert backend.submitted[0]["func"] is ai.run_wsclean_task
+    assert backend.submitted[0]["timeout"] == 10.0
+
+
+@pytest.mark.unit
+def test_run_imaging_tasks_fail_fast_stops_and_cancels(tmp_path, monkeypatch):
+    tasks = _tasks(tmp_path, 2)
+    backend = _FakeBackend([RuntimeError("boom"), {"ok": 1}])
+    failures: list[cli_image.ImagingFailure] = []
+
+    with pytest.raises(typer.Exit) as exc:
+        _run(tasks, backend, monkeypatch, failures=failures, continue_on_error=False)
+    assert exc.value.exit_code == 1
+    assert [f.label for f in failures] == ["ms_0"]
+
+
+@pytest.mark.unit
+def test_run_imaging_tasks_sync_backend_runs_in_process(tmp_path, monkeypatch):
+    tasks = _tasks(tmp_path, 2)
+    calls = []
+
+    def _fake_task(**kwargs):
+        calls.append(kwargs)
+        if kwargs["spw"] == 0:
+            raise RuntimeError("no image")
+        return {"spw": kwargs["spw"]}
+
+    monkeypatch.setattr(ai, "run_wsclean_task", _fake_task)
+    failures: list[cli_image.ImagingFailure] = []
+    results = _run(tasks, None, monkeypatch, backend_kind="sync", failures=failures)
+
+    assert results == [{"spw": 1}]
+    assert [f.label for f in failures] == ["ms_0"]
+    assert calls[0]["threads"] == 4
+    assert ai.imaging_failure_marker_path(tasks[0].output_dir).is_file()
+
+
+@pytest.mark.unit
+def test_image_from_ms_reports_failures_and_exits_one(monkeypatch, tmp_path):
+    csv_path = _params_csv(tmp_path, rows=2)
+
+    def _fake_run(tasks, *, failures, **kwargs):
+        failures.append(
+            cli_image.ImagingFailure(tasks[0].label, "WSClean exited with return code 1", "/l")
+        )
+        return [{"ok": 1}]
+
+    monkeypatch.setattr(cli_image, "run_imaging_tasks", _fake_run)
+    result = runner.invoke(
+        cli.app,
+        [
+            "image",
+            "image-from-ms",
+            str(csv_path),
+            str(tmp_path / "out"),
+            "--postprocess-backend",
+            "sync",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Imaged 1/2 task(s), 1 failed." in result.output
+    assert "1 task(s) failed and were skipped" in result.output
+    assert "log: /l" in result.output
+
+
+@pytest.mark.unit
+def test_image_from_ms_nothing_to_do_when_all_done(monkeypatch, tmp_path):
+    csv_path = _params_csv(tmp_path, rows=1)
+    out = tmp_path / "out"
+    done_dir = out / "uid___A001_X1_X1.ms.split" / "SPW-0"
+    done_dir.mkdir(parents=True)
+    (done_dir / ai.IMAGE_FILENAME).write_bytes(b"")
+    ai.write_imaging_marker(done_dir, ms_path="x", spw=0)
+    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda *a, **k: pytest.fail("no run"))
+
+    result = runner.invoke(cli.app, ["image", "image-from-ms", str(csv_path), str(out)])
+    assert result.exit_code == 0, result.output
+    assert "Skipped 1 already-imaged SPW(s)." in result.output
+    assert "nothing to do" in result.output
+
+
+@pytest.mark.unit
+def test_image_from_ms_rejects_unknown_backend(tmp_path):
+    csv_path = _params_csv(tmp_path, rows=1)
+    result = runner.invoke(
+        cli.app,
+        ["image", "image-from-ms", str(csv_path), str(tmp_path), "--postprocess-backend", "k8s"],
+    )
+    assert result.exit_code == 2
+
+
+@pytest.mark.unit
+def test_compute_parameters_records_unreadable_ms_and_continues(monkeypatch, tmp_path):
+    folder = tmp_path / "cal"
+    folder.mkdir()
+    for name in ("a.ms.split.cal", "b.ms.split.cal", "c.ms.split.cal"):
+        (folder / name).mkdir()
+        if name != "c.ms.split.cal":
+            (folder / f"{name}.done").write_text("{}")
+    monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
+
+    def _fake_compute(ms: Path, science_only: bool = True):
+        if ms.name.startswith("b"):
+            raise RuntimeError("Table does not exist")
+        return pd.DataFrame({"filename": [str(ms)], "spectral_window_id": [0]})
+
+    monkeypatch.setattr(cli_image, "compute_imaging_parameters", _fake_compute)
+    out_csv = tmp_path / "params.csv"
+
+    result = runner.invoke(cli.app, ["image", "compute-parameters", str(folder), str(out_csv)])
+
+    assert result.exit_code == 1
+    assert "Skipping 1 MS(s) without a .done calibration marker." in result.output
+    assert "FAILED b.ms.split.cal" in result.output
+    written = pd.read_csv(out_csv)
+    assert list(written["filename"]) == [str(folder / "a.ms.split.cal")]
+    failed = (tmp_path / "params.csv.failed.tsv").read_text()
+    assert "b.ms.split.cal\tRuntimeError: Table does not exist" in failed
+
+
+@pytest.mark.unit
+def test_science_selection_reports_used_spws_and_target_fields(monkeypatch):
+    class _Tab:
+        def __init__(self, cols, nrows=None):
+            self.cols = cols
+            self._n = nrows
+
+        def getcol(self, name):
+            return self.cols[name]
+
+        def nrows(self):
+            return self._n if self._n is not None else len(next(iter(self.cols.values())))
+
+    tables = {
+        "::DATA_DESCRIPTION": _Tab({"SPECTRAL_WINDOW_ID": np.array([0, 5, 7])}),
+        "::STATE": _Tab({"OBS_MODE": ["CALIBRATE_PHASE#ON_SOURCE", "OBSERVE_TARGET#ON_SOURCE"]}),
+        "": _Tab(
+            {
+                "DATA_DESC_ID": np.array([1, 1, 2, 2, 2, 1]),
+                "STATE_ID": np.array([0, 1, 1, 0, 1, 1]),
+                "FIELD_ID": np.array([0, 3, 3, 0, 4, 3]),
+            }
+        ),
+    }
+
+    def _fake_table(name, ack=False):
+        for suffix, tab in tables.items():
+            if suffix and name.endswith(suffix):
+                return tab
+        return tables[""]
+
+    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_table)
+    rows_per_spw, target_fields = cli_image.science_selection(Path("x.ms"))
+    assert rows_per_spw == {5: 3, 7: 3}, "SPW 0 has no rows and is left out"
+    assert target_fields == [3, 4]

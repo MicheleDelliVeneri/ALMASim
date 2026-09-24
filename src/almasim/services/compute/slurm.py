@@ -123,6 +123,12 @@ class SlurmBackend(ComputationBackend):
             shell=shell,
         )
 
+    def submit_callable(self, func: Callable, *, cores: int, **kwargs: Any) -> Any:
+        """Submit ``func(**kwargs)`` to a Slurm worker with ``cores`` CPU resources."""
+        if self._cluster_manager is None:
+            raise RuntimeError("Dask cluster not initialized")
+        return self._cluster_manager.submit_callable(func, cores=cores, **kwargs)
+
     def scatter(self, data: Any, broadcast: bool = False) -> Any:
         """Scatter data to Slurm workers."""
         if self.client is None:
