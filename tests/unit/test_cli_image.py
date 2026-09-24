@@ -146,7 +146,6 @@ def test_imaging_parameter_to_command_arg_returns_expected_tokens():
     )
 
     assert cmd_args[:7] == ["-scale", "1.0asec", "-size", "16", "16", "-spws", "3"]
-    assert "-update-model-required" in cmd_args
 
 
 @pytest.mark.unit
@@ -414,6 +413,9 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
     assert cmd[-1] == "uid___A001_X1_X1.cal"
     assert cmd[cmd.index("-auto-threshold") + 1] == "3.0", "3 sigma stopping point by default"
     assert "-auto-mask" not in cmd
+    assert cmd[cmd.index("-mem") + 1] == "12.5", "-mem is a percentage: 8 of 64 cores"
+    assert cmd[cmd.index("-temp-dir") + 1] == str(task.output_dir)
+    assert "-no-update-model-required" in cmd and "-update-model-required" not in cmd
 
 
 @pytest.mark.unit

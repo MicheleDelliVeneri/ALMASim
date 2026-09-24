@@ -258,7 +258,6 @@ def imaging_parameter_to_command_arg(
         "-weight",
         "briggs",
         "0.5",
-        "-update-model-required",
     ]
     if auto_mask is not None and auto_mask > 0:
         cmd_args += ["-auto-mask", str(auto_mask)]
@@ -415,6 +414,7 @@ def build_imaging_tasks(
     trust_existing_images: bool = False,
     auto_threshold: float | None = None,
     auto_mask: float | None = None,
+    update_model: bool = False,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
@@ -431,7 +431,10 @@ def build_imaging_tasks(
 
     tasks: list[ImagingTask] = []
     skipped = 0
-    mem_fraction = min(1.0, num_cores / max_cores_per_node)
+    # WSClean's -mem is a PERCENTAGE of system memory. Passing the fraction
+    # (0.1 for 10 cores of 96) limited every task to 0.1 % ≈ 0.4 GB and made
+    # WSClean segfault on the first gridding pass.
+    mem_percent = min(100.0, 100.0 * num_cores / max_cores_per_node)
     for _, row in parameters.iterrows():
         input_filename = Path(row["filename"])
         spw = int(row["spectral_window_id"])
@@ -455,7 +458,16 @@ def build_imaging_tasks(
             str(num_cores),
             *command_args,
             "-mem",
-            str(mem_fraction),
+            f"{mem_percent:g}",
+            # Reordered visibilities go next to the task output, not next to
+            # the MS: several spectral windows of one MS run at the same time
+            # and would otherwise clobber each other's <ms>-part*.tmp files.
+            "-temp-dir",
+            str(outdir),
+            # Writing the model back into MODEL_DATA makes concurrent tasks
+            # write the same MS from different nodes and grows every
+            # calibrated MS; the model image is on disk anyway.
+            "-update-model-required" if update_model else "-no-update-model-required",
             *_field_arguments(row),
             str(input_filename),
         ]
@@ -713,6 +725,15 @@ def image_from_ms(
         min=0.0,
         help="WSClean -auto-mask level in sigma; 0 (default) disables auto-masking.",
     ),
+    update_model: bool = typer.Option(
+        False,
+        "--update-model/--no-update-model",
+        help=(
+            "Write the CLEAN model back into the MS MODEL_DATA column (WSClean "
+            "-update-model-required). Off by default: concurrent spectral-window tasks "
+            "would write the same MS and every calibrated MS would grow."
+        ),
+    ),
     postprocess_backend: str = typer.Option(
         "slurm",
         "--postprocess-backend",
@@ -786,6 +807,7 @@ def image_from_ms(
         trust_existing_images=skip_existing,
         auto_threshold=auto_threshold if auto_threshold > 0 else None,
         auto_mask=auto_mask if auto_mask > 0 else None,
+        update_model=update_model,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -840,6 +862,7 @@ def image_set(
     wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin"),
     auto_threshold: float = typer.Option(3.0, "--auto-threshold", min=0.0),
     auto_mask: float = typer.Option(0.0, "--auto-mask", min=0.0),
+    update_model: bool = typer.Option(False, "--update-model/--no-update-model"),
     postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
     slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
@@ -864,6 +887,7 @@ def image_set(
         wsclean_bin=wsclean_bin,
         auto_threshold=auto_threshold,
         auto_mask=auto_mask,
+        update_model=update_model,
         postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,
         slurm_project=slurm_project,
