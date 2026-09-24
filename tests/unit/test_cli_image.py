@@ -1231,7 +1231,8 @@ def test_build_imaging_tasks_single_window_default(tmp_path):
     )
     cmd = tasks[0].command
     assert cmd[-1] == ai.SINGLE_WINDOW_PLACEHOLDER
-    assert "-no-reorder" in cmd and "-spws" not in cmd and "-field" not in cmd
+    assert "-no-reorder" in cmd and "-spws" not in cmd
+    assert cmd[cmd.index("-field") + 1] == "2,3", "WSClean images field 0 unless told otherwise"
     assert tasks[0].field_ids == (2, 3) and tasks[0].spw == 5
 
 

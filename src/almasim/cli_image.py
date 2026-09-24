@@ -487,7 +487,11 @@ def build_imaging_tasks(
             # write the same MS from different nodes and grows every
             # calibrated MS; the model image is on disk anyway.
             "-update-model-required" if update_model else "-no-update-model-required",
-            *(["-no-reorder"] if single_window else _field_arguments(row)),
+            # -field is needed on the single-window MS too: WSClean images
+            # field 0 by default and the extracted MS holds the target fields
+            # under their original ids.
+            *_field_arguments(row),
+            *(["-no-reorder"] if single_window else []),
             SINGLE_WINDOW_PLACEHOLDER if single_window else str(input_filename),
         ]
         field_args = _field_arguments(row)
