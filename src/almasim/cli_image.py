@@ -558,6 +558,7 @@ def run_imaging_tasks(
     failures: Optional[list[ImagingFailure]] = None,
     heartbeat_interval: float = _IMAGING_HEARTBEAT_S,
     scratch_root: str | None = None,
+    task_retries: int = 3,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -588,6 +589,7 @@ def run_imaging_tasks(
                         threads=cores_per_task,
                         timeout=task_timeout,
                         scratch_root=scratch_root,
+                        retries=task_retries,
                     )
                 )
             except Exception as exc:
@@ -623,6 +625,7 @@ def run_imaging_tasks(
                 threads=cores_per_task,
                 timeout=task_timeout,
                 scratch_root=scratch_root,
+                retries=task_retries,
             )
             for task in tasks
         ]
@@ -747,6 +750,16 @@ def image_from_ms(
             "to -mem <num-cores/max-cores-per-node> percent of the node."
         ),
     ),
+    task_retries: int = typer.Option(
+        3,
+        "--task-retries",
+        min=0,
+        help=(
+            "Retry a task whose WSClean died by a signal (segfault) this many times before "
+            "marking it failed. WSClean 3.7's multi-threaded reordering crashes "
+            "non-deterministically on some inputs; a crash costs seconds."
+        ),
+    ),
     scratch_dir: Optional[Path] = typer.Option(
         None,
         "--scratch-dir",
@@ -865,6 +878,7 @@ def image_from_ms(
         continue_on_error=continue_on_error,
         failures=failures,
         scratch_root=str(scratch_dir) if scratch_dir is not None else None,
+        task_retries=task_retries,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -897,6 +911,7 @@ def image_set(
     auto_mask: float = typer.Option(0.0, "--auto-mask", min=0.0),
     update_model: bool = typer.Option(False, "--update-model/--no-update-model"),
     task_memory_gb: float = typer.Option(0.0, "--task-memory-gb", min=0.0),
+    task_retries: int = typer.Option(3, "--task-retries", min=0),
     scratch_dir: Optional[Path] = typer.Option(None, "--scratch-dir"),
     postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
@@ -924,6 +939,7 @@ def image_set(
         auto_mask=auto_mask,
         update_model=update_model,
         task_memory_gb=task_memory_gb,
+        task_retries=task_retries,
         scratch_dir=scratch_dir,
         postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,

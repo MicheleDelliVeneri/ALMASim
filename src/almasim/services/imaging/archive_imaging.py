@@ -162,6 +162,7 @@ def run_wsclean_task(
     threads: int,
     timeout: float | None = None,
     scratch_root: str | None = None,
+    retries: int = 3,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -170,6 +171,12 @@ def run_wsclean_task(
     clean exit that produced no ``wsclean-image.fits`` all end in a ``.failed``
     marker and a ``RuntimeError`` so the driver counts the task as failed;
     success ends in a ``.done`` marker.
+
+    A death by signal (a segfault, say) is retried up to ``retries`` times
+    before the task is declared failed: WSClean 3.7's multi-threaded
+    reordering crashes non-deterministically on some inputs and passes on the
+    next run, and a crash costs seconds while the task costs minutes. Exits
+    with an error status are WSClean's own diagnostics and are not retried.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -216,6 +223,7 @@ def run_wsclean_task(
             tail=tail,
             started=started,
             fail=_fail,
+            retries=max(int(retries), 0),
         )
     finally:
         if scratch_dir is not None:
@@ -236,57 +244,35 @@ def _run_and_mark(
     tail: deque[str],
     started: float,
     fail: Callable[..., RuntimeError],
+    retries: int = 0,
 ) -> dict[str, object]:
+    attempts = 0
     with log_path.open("w", encoding="utf-8") as log:
         log.write("# " + shlex.join(cmd) + "\n")
         log.flush()
-        try:
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                errors="replace",
-                bufsize=1,
-                cwd=str(out),
-                env=env,
+        while True:
+            attempts += 1
+            returncode, timed_out = _run_once(cmd, out, log, env, timeout, tail, fail)
+            if returncode >= 0 or timed_out or attempts > retries:
+                break
+            log.write(
+                f"# attempt {attempts} died with signal {-returncode}; "
+                f"retrying ({retries - attempts + 1} left)\n"
             )
-        except OSError as exc:
-            message = f"Could not start {cmd[0]}: {exc}"
-            log.write(message + "\n")
-            raise fail(message) from exc
-
-        timed_out = threading.Event()
-        killer: threading.Timer | None = None
-        if timeout is not None and timeout > 0:
-
-            def _kill() -> None:
-                timed_out.set()
-                process.kill()
-
-            killer = threading.Timer(timeout, _kill)
-            killer.daemon = True
-            killer.start()
-
-        assert process.stdout is not None
-        try:
-            for line in process.stdout:
-                log.write(line)
-                log.flush()
-                tail.append(line.rstrip("\n"))
-            returncode = process.wait()
-        finally:
-            if killer is not None:
-                killer.cancel()
+            log.flush()
+            tail.clear()
+            _remove_reorder_files(out)
 
     elapsed = time.time() - started
-    if timed_out.is_set():
+    if timed_out:
         raise fail(f"WSClean killed after exceeding the {timeout:.0f}s task timeout", returncode)
     if returncode != 0:
         error = f"WSClean exited with return code {returncode}"
         reason = _error_line(list(tail))
         if reason:
             error = f"{error}: {reason}"
+        if attempts > 1:
+            error = f"{error} (after {attempts} attempts)"
         raise fail(error, returncode)
     image = out / IMAGE_FILENAME
     if not image.is_file():
@@ -299,4 +285,65 @@ def _run_and_mark(
         "output": str(out),
         "image": str(image),
         "seconds": round(elapsed, 1),
+        "attempts": attempts,
     }
+
+
+def _remove_reorder_files(out: Path) -> None:
+    """Drop WSClean's ``*-part*.tmp`` reorder files a crashed attempt left behind."""
+    for leftover in out.glob("*.tmp"):
+        try:
+            leftover.unlink()
+        except OSError:
+            pass
+
+
+def _run_once(
+    cmd: list[str],
+    out: Path,
+    log,
+    env: dict[str, str],
+    timeout: float | None,
+    tail: deque[str],
+    fail: Callable[..., RuntimeError],
+) -> tuple[int, bool]:
+    """Run WSClean once, streaming to ``log``. Returns ``(returncode, timed_out)``."""
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            bufsize=1,
+            cwd=str(out),
+            env=env,
+        )
+    except OSError as exc:
+        message = f"Could not start {cmd[0]}: {exc}"
+        log.write(message + "\n")
+        raise fail(message) from exc
+
+    timed_out = threading.Event()
+    killer: threading.Timer | None = None
+    if timeout is not None and timeout > 0:
+
+        def _kill() -> None:
+            timed_out.set()
+            process.kill()
+
+        killer = threading.Timer(timeout, _kill)
+        killer.daemon = True
+        killer.start()
+
+    assert process.stdout is not None
+    try:
+        for line in process.stdout:
+            log.write(line)
+            log.flush()
+            tail.append(line.rstrip("\n"))
+        returncode = process.wait()
+    finally:
+        if killer is not None:
+            killer.cancel()
+    return returncode, timed_out.is_set()

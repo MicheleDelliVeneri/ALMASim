@@ -1122,3 +1122,80 @@ def test_run_wsclean_task_removes_scratch_dir_on_failure(tmp_path, monkeypatch):
         )
     assert list(scratch_root.iterdir()) == []
     assert ai.imaging_failure_marker_path(outdir).is_file()
+
+
+class _FlakyWsclean:
+    """Crashes with a signal ``crashes`` times, then behaves like ``final``."""
+
+    def __init__(self, crashes: int, final: int = 0):
+        self.remaining = crashes
+        self.final = final
+        self.calls = 0
+
+    def __call__(self, cmd, **kwargs):
+        self.calls += 1
+        outdir = Path(cmd[cmd.index("-name") + 1]).parent
+        if self.remaining > 0:
+            self.remaining -= 1
+            (outdir / "x-part0000-I.tmp").write_bytes(b"junk")
+            return _FakeWsclean(returncode=-11, lines=["Reordering: 0%....10%"])(cmd, **kwargs)
+        return _FakeWsclean(returncode=self.final)(cmd, **kwargs)
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
+    flaky = _FlakyWsclean(crashes=2)
+    monkeypatch.setattr(ai.subprocess, "Popen", flaky)
+    outdir = tmp_path / "ms" / "SPW-1"
+
+    result = ai.run_wsclean_task(
+        command=_wsclean_cmd(outdir),
+        output_dir=str(outdir),
+        ms_path="in.ms",
+        spw=1,
+        threads=2,
+        retries=3,
+    )
+
+    assert flaky.calls == 3 and result["attempts"] == 3
+    assert ai.is_imaging_complete(outdir)
+    log = ai.imaging_log_path(outdir).read_text()
+    assert "# attempt 1 died with signal 11; retrying (3 left)" in log
+    assert "# attempt 2 died with signal 11; retrying (2 left)" in log
+    assert not list(outdir.glob("*.tmp")), "reorder leftovers are removed between attempts"
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_gives_up_after_retries(tmp_path, monkeypatch):
+    flaky = _FlakyWsclean(crashes=10)
+    monkeypatch.setattr(ai.subprocess, "Popen", flaky)
+    outdir = tmp_path / "ms" / "SPW-1"
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
+        ai.run_wsclean_task(
+            command=_wsclean_cmd(outdir),
+            output_dir=str(outdir),
+            ms_path="in.ms",
+            spw=1,
+            threads=2,
+            retries=2,
+        )
+    assert flaky.calls == 3
+    payload = json.loads(ai.imaging_failure_marker_path(outdir).read_text())
+    assert payload["returncode"] == -11 and "after 3 attempts" in payload["error"]
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_does_not_retry_error_exits(tmp_path, monkeypatch):
+    fake = _FakeWsclean(returncode=255, lines=["+ >>> Error opening meta file"])
+    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    outdir = tmp_path / "ms" / "SPW-1"
+    with pytest.raises(RuntimeError, match="return code 255"):
+        ai.run_wsclean_task(
+            command=_wsclean_cmd(outdir),
+            output_dir=str(outdir),
+            ms_path="in.ms",
+            spw=1,
+            threads=2,
+            retries=3,
+        )
+    assert len(fake.calls) == 1
