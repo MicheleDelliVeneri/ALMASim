@@ -379,6 +379,20 @@ almasim products download \
   --destination examples/output/downloads \
   --extract-tar
 
+# Two-pass download that skips execution blocks ALMA never calibrated: the
+# auxiliary tar carries each EB's QA0 report, and a QA0 "SemiPass" EB ships a raw
+# ASDM but no calibration products, so it can never be calibrated (see docs/downloads.md)
+almasim products download \
+  --products-csv examples/output/resolved_products.csv \
+  --product-filter auxiliary \
+  --destination examples/output/downloads \
+  --extract-tar --yes
+almasim products download \
+  --products-csv examples/output/resolved_products.csv \
+  --product-filter raw \
+  --destination examples/output/downloads \
+  --extract-tar --skip-qa0-semipass --yes
+
 # Split archive stages so download/extract/unpack/calibrate can run independently
 almasim products download \
   --products-csv examples/output/resolved_products.csv \

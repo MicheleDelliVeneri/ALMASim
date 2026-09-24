@@ -94,6 +94,12 @@ def filter_products(*args, **kwargs):
     return _download_contract()["filter_products"](*args, **kwargs)
 
 
+def filter_products_by_qa0(*args, **kwargs):
+    from .services.archive.qa0 import filter_products_by_qa0 as _filter_products_by_qa0
+
+    return _filter_products_by_qa0(*args, **kwargs)
+
+
 def format_bytes(*args, **kwargs):
     return _download_contract()["format_bytes"](*args, **kwargs)
 
@@ -1595,6 +1601,25 @@ def products_download(
         ),
         case_sensitive=False,
     ),
+    skip_qa0_semipass: bool = typer.Option(
+        False,
+        "--skip-qa0-semipass",
+        help=(
+            "Skip raw ASDMs whose execution block is QA0 SemiPass, read from the "
+            "<eb>.qa0_report.pdf in the member's extracted auxiliary delivery. ALMA never "
+            "delivers calibration for these, so they can never be calibrated. Download and "
+            "extract the auxiliary products first; a raw product without a readable report "
+            "is kept."
+        ),
+    ),
+    qa0_report_root: Optional[Path] = typer.Option(
+        None,
+        "--qa0-report-root",
+        help=(
+            "Root holding the extracted auxiliary deliveries "
+            "(<project>/science_goal.*/group.*/member.*/qa/). Defaults to --destination."
+        ),
+    ),
     save_products_csv_path: Optional[Path] = typer.Option(
         default_output_path("resolved_products.csv"),
         "--save-products-csv",
@@ -1740,8 +1765,24 @@ def products_download(
         typer.echo(f"No products matched --product-filter={product_filter_normalized}", err=True)
         raise typer.Exit(code=1)
 
-    total_bytes = sum(product.content_length for product in filtered)
     typer.echo(f"Resolved products: {len(products)}")
+    if skip_qa0_semipass:
+        report_root = (
+            (qa0_report_root if qa0_report_root is not None else destination).expanduser().resolve()
+        )
+        qa0_result = filter_products_by_qa0(filtered, report_root)
+        typer.echo(
+            f"QA0 filter: skipped {len(qa0_result.skipped)} SemiPass raw product(s) "
+            f"({format_bytes(qa0_result.bytes_skipped)}); "
+            f"{len(qa0_result.unknown)} raw product(s) without a readable QA0 report "
+            f"under {report_root} kept."
+        )
+        filtered = qa0_result.kept
+        if not filtered:
+            typer.echo("Nothing left to download after the QA0 filter.")
+            raise typer.Exit(code=0)
+
+    total_bytes = sum(product.content_length for product in filtered)
     typer.echo(f"Selected for download: {len(filtered)} ({format_bytes(total_bytes)})")
 
     if not yes:

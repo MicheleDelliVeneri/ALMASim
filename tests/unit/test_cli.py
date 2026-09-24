@@ -255,6 +255,81 @@ def test_products_download_sync_without_postprocess_keeps_single_call(tmp_path, 
     assert result.exit_code == 0
 
 
+def test_products_download_skip_qa0_semipass_filters_raw_products(tmp_path, monkeypatch):
+    """--skip-qa0-semipass drops SemiPass raw ASDMs and reports what it skipped."""
+    from almasim.services.archive import qa0
+
+    member = "uid://A001/X378a/X149"
+    member_dir = (
+        tmp_path
+        / "downloads"
+        / "2023.1.00879.S"
+        / "science_goal.uid___A001_X378a_X147"
+        / "group.uid___A001_X378a_X148"
+        / "member.uid___A001_X378a_X149"
+        / "qa"
+    )
+    member_dir.mkdir(parents=True)
+    for eb in ("uid___A002_X1_Xpass", "uid___A002_X1_Xsemi"):
+        (member_dir / f"{eb}.qa0_report.pdf").write_bytes(b"%PDF-1.4")
+
+    def fake_reader(path, eb_uid=""):
+        status = "SemiPass" if eb_uid.endswith("Xsemi") else "Pass"
+        return qa0.QA0Report(eb_uid, status, "SUCCESS", 1.0, "")
+
+    monkeypatch.setattr(qa0, "read_qa0_report", fake_reader)
+
+    raw_pass = SimpleNamespace(
+        product_type="raw",
+        uid=member,
+        filename="2023.1.00879.S_uid___A002_X1_Xpass.asdm.sdm.tar",
+        content_length=10,
+    )
+    raw_semi = SimpleNamespace(
+        product_type="raw",
+        uid=member,
+        filename="2023.1.00879.S_uid___A002_X1_Xsemi.asdm.sdm.tar",
+        content_length=2048,
+    )
+    monkeypatch.setattr(
+        cli_products, "_resolve_products_from_inputs", lambda **kwargs: [raw_pass, raw_semi]
+    )
+    captured: dict[str, object] = {}
+
+    def fake_download(products, *args, **kwargs):
+        captured["products"] = list(products)
+        return SimpleNamespace(
+            destination=str(tmp_path / "downloads"),
+            files_completed=1,
+            files_failed=0,
+            manifest_path=None,
+            raw_measurement_sets=[],
+            calibrated_measurement_sets=[],
+        )
+
+    monkeypatch.setattr(cli_products, "download_products", fake_download)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "products",
+            "download",
+            "--member-ous-uid",
+            member,
+            "--product-filter",
+            "raw",
+            "--destination",
+            str(tmp_path / "downloads"),
+            "--skip-qa0-semipass",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "QA0 filter: skipped 1 SemiPass raw product(s)" in result.output
+    assert captured["products"] == [raw_pass]
+
+
 def test_products_download_sync_cleanup_only_when_no_failures(tmp_path, monkeypatch):
     """--clean-intermediate-files runs after a fully successful sync post-processing run."""
     products = [SimpleNamespace(content_length=12)]
