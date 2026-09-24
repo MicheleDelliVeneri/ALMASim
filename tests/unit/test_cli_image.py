@@ -1062,3 +1062,63 @@ def test_imaging_parameter_to_command_arg_threshold_flags():
     assert flagged[flagged.index("-auto-threshold") + 1] == "2.5"
     assert flagged[flagged.index("-auto-mask") + 1] == "5.0"
     assert cli_image.imaging_parameter_to_command_arg(row, 1.0, 4.0, auto_threshold=0) == plain
+
+
+@pytest.mark.unit
+def test_build_imaging_tasks_abs_mem_and_scratch_placeholder(tmp_path):
+    parameters = pd.read_csv(_params_csv(tmp_path, rows=1))
+    tasks, _ = cli_image.build_imaging_tasks(
+        parameters,
+        tmp_path / "out",
+        fov_fraction=1.5,
+        beam_sampling=8,
+        num_cores=10,
+        max_cores_per_node=96,
+        task_memory_gb=40,
+        scratch_dir="/tmp",
+    )
+    cmd = tasks[0].command
+    assert cmd[cmd.index("-abs-mem") + 1] == "40" and "-mem" not in cmd
+    assert cmd[cmd.index("-temp-dir") + 1] == "__SCRATCH__"
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_uses_and_removes_scratch_dir(tmp_path, monkeypatch):
+    fake = _FakeWsclean(returncode=0)
+    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    outdir = tmp_path / "ms" / "SPW-1"
+    scratch_root = tmp_path / "scratch"
+    cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
+
+    ai.run_wsclean_task(
+        command=cmd,
+        output_dir=str(outdir),
+        ms_path="in.ms",
+        spw=1,
+        threads=2,
+        scratch_root=str(scratch_root),
+    )
+    used = fake.calls[0]["cmd"]
+    temp = Path(used[used.index("-temp-dir") + 1])
+    assert temp.parent == scratch_root and temp.name.startswith("SPW-1-")
+    assert not temp.exists(), "per-task scratch is removed after the run"
+    assert ai.is_imaging_complete(outdir)
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_removes_scratch_dir_on_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=-11))
+    outdir = tmp_path / "ms" / "SPW-1"
+    scratch_root = tmp_path / "scratch"
+    cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
+    with pytest.raises(RuntimeError):
+        ai.run_wsclean_task(
+            command=cmd,
+            output_dir=str(outdir),
+            ms_path="in.ms",
+            spw=1,
+            threads=2,
+            scratch_root=str(scratch_root),
+        )
+    assert list(scratch_root.iterdir()) == []
+    assert ai.imaging_failure_marker_path(outdir).is_file()

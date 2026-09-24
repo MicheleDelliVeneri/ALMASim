@@ -25,7 +25,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 __all__ = [
     "IMAGE_FILENAME",
@@ -161,6 +161,7 @@ def run_wsclean_task(
     spw: int,
     threads: int,
     timeout: float | None = None,
+    scratch_root: str | None = None,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -178,6 +179,16 @@ def run_wsclean_task(
     (out / IMAGE_FILENAME).unlink(missing_ok=True)
 
     cmd = [str(part) for part in command]
+    scratch_dir: Path | None = None
+    if scratch_root:
+        # Per-task scratch for WSClean's reordered visibilities, created here
+        # on the worker and removed whatever happens. ``__SCRATCH__`` in the
+        # command (the -temp-dir value) is replaced by it.
+        import tempfile
+
+        Path(scratch_root).mkdir(parents=True, exist_ok=True)
+        scratch_dir = Path(tempfile.mkdtemp(prefix=f"{out.name}-", dir=scratch_root))
+        cmd = [str(scratch_dir) if part == "__SCRATCH__" else part for part in cmd]
     env = wsclean_environment(threads)
     tail: deque[str] = deque(maxlen=60)
     started = time.time()
@@ -193,6 +204,39 @@ def run_wsclean_task(
         )
         return RuntimeError(f"{error}\nFull log: {log_path}")
 
+    try:
+        return _run_and_mark(
+            cmd=cmd,
+            out=out,
+            log_path=log_path,
+            env=env,
+            ms_path=ms_path,
+            spw=spw,
+            timeout=timeout,
+            tail=tail,
+            started=started,
+            fail=_fail,
+        )
+    finally:
+        if scratch_dir is not None:
+            import shutil
+
+            shutil.rmtree(scratch_dir, ignore_errors=True)
+
+
+def _run_and_mark(
+    *,
+    cmd: list[str],
+    out: Path,
+    log_path: Path,
+    env: dict[str, str],
+    ms_path: str,
+    spw: int,
+    timeout: float | None,
+    tail: deque[str],
+    started: float,
+    fail: Callable[..., RuntimeError],
+) -> dict[str, object]:
     with log_path.open("w", encoding="utf-8") as log:
         log.write("# " + shlex.join(cmd) + "\n")
         log.flush()
@@ -210,7 +254,7 @@ def run_wsclean_task(
         except OSError as exc:
             message = f"Could not start {cmd[0]}: {exc}"
             log.write(message + "\n")
-            raise _fail(message) from exc
+            raise fail(message) from exc
 
         timed_out = threading.Event()
         killer: threading.Timer | None = None
@@ -237,16 +281,16 @@ def run_wsclean_task(
 
     elapsed = time.time() - started
     if timed_out.is_set():
-        raise _fail(f"WSClean killed after exceeding the {timeout:.0f}s task timeout", returncode)
+        raise fail(f"WSClean killed after exceeding the {timeout:.0f}s task timeout", returncode)
     if returncode != 0:
         error = f"WSClean exited with return code {returncode}"
         reason = _error_line(list(tail))
         if reason:
             error = f"{error}: {reason}"
-        raise _fail(error, returncode)
+        raise fail(error, returncode)
     image = out / IMAGE_FILENAME
     if not image.is_file():
-        raise _fail(f"WSClean exited 0 but wrote no {IMAGE_FILENAME} under {out}", returncode)
+        raise fail(f"WSClean exited 0 but wrote no {IMAGE_FILENAME} under {out}", returncode)
 
     write_imaging_marker(out, ms_path=ms_path, spw=spw, command=cmd, seconds=elapsed)
     return {

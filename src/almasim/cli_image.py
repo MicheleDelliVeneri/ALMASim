@@ -415,6 +415,8 @@ def build_imaging_tasks(
     auto_threshold: float | None = None,
     auto_mask: float | None = None,
     update_model: bool = False,
+    task_memory_gb: float | None = None,
+    scratch_dir: str | None = None,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
@@ -457,13 +459,20 @@ def build_imaging_tasks(
             "-j",
             str(num_cores),
             *command_args,
-            "-mem",
-            f"{mem_percent:g}",
-            # Reordered visibilities go next to the task output, not next to
-            # the MS: several spectral windows of one MS run at the same time
-            # and would otherwise clobber each other's <ms>-part*.tmp files.
+            # An absolute limit when the caller knows the worker's allocation
+            # (WSClean's -mem is a share of the *node*, which can be far more
+            # than the Slurm job may use); otherwise the node share.
+            *(
+                ["-abs-mem", f"{task_memory_gb:g}"]
+                if task_memory_gb
+                else ["-mem", f"{mem_percent:g}"]
+            ),
+            # Reordered visibilities go next to the task output (or into a
+            # per-task scratch directory), not next to the MS: several
+            # spectral windows of one MS run at the same time and would
+            # otherwise clobber each other's <ms>-part*.tmp files.
             "-temp-dir",
-            str(outdir),
+            "__SCRATCH__" if scratch_dir else str(outdir),
             # Writing the model back into MODEL_DATA makes concurrent tasks
             # write the same MS from different nodes and grows every
             # calibrated MS; the model image is on disk anyway.
@@ -548,6 +557,7 @@ def run_imaging_tasks(
     continue_on_error: bool = True,
     failures: Optional[list[ImagingFailure]] = None,
     heartbeat_interval: float = _IMAGING_HEARTBEAT_S,
+    scratch_root: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -577,6 +587,7 @@ def run_imaging_tasks(
                         spw=task.spw,
                         threads=cores_per_task,
                         timeout=task_timeout,
+                        scratch_root=scratch_root,
                     )
                 )
             except Exception as exc:
@@ -611,6 +622,7 @@ def run_imaging_tasks(
                 spw=task.spw,
                 threads=cores_per_task,
                 timeout=task_timeout,
+                scratch_root=scratch_root,
             )
             for task in tasks
         ]
@@ -725,6 +737,24 @@ def image_from_ms(
         min=0.0,
         help="WSClean -auto-mask level in sigma; 0 (default) disables auto-masking.",
     ),
+    task_memory_gb: float = typer.Option(
+        0.0,
+        "--task-memory-gb",
+        min=0.0,
+        help=(
+            "Absolute memory limit per WSClean task in GB (WSClean -abs-mem). Use the "
+            "worker's Slurm allocation divided by the tasks per node. 0 (default) falls back "
+            "to -mem <num-cores/max-cores-per-node> percent of the node."
+        ),
+    ),
+    scratch_dir: Optional[Path] = typer.Option(
+        None,
+        "--scratch-dir",
+        help=(
+            "Directory for WSClean's reordered visibilities (one sub-directory per task, "
+            "removed afterwards). Default: the task's output directory."
+        ),
+    ),
     update_model: bool = typer.Option(
         False,
         "--update-model/--no-update-model",
@@ -808,6 +838,8 @@ def image_from_ms(
         auto_threshold=auto_threshold if auto_threshold > 0 else None,
         auto_mask=auto_mask if auto_mask > 0 else None,
         update_model=update_model,
+        task_memory_gb=task_memory_gb if task_memory_gb > 0 else None,
+        scratch_dir=str(scratch_dir) if scratch_dir is not None else None,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -832,6 +864,7 @@ def image_from_ms(
         task_timeout=task_timeout,
         continue_on_error=continue_on_error,
         failures=failures,
+        scratch_root=str(scratch_dir) if scratch_dir is not None else None,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -863,6 +896,8 @@ def image_set(
     auto_threshold: float = typer.Option(3.0, "--auto-threshold", min=0.0),
     auto_mask: float = typer.Option(0.0, "--auto-mask", min=0.0),
     update_model: bool = typer.Option(False, "--update-model/--no-update-model"),
+    task_memory_gb: float = typer.Option(0.0, "--task-memory-gb", min=0.0),
+    scratch_dir: Optional[Path] = typer.Option(None, "--scratch-dir"),
     postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
     slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
@@ -888,6 +923,8 @@ def image_set(
         auto_threshold=auto_threshold,
         auto_mask=auto_mask,
         update_model=update_model,
+        task_memory_gb=task_memory_gb,
+        scratch_dir=scratch_dir,
         postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,
         slurm_project=slurm_project,
