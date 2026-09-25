@@ -55,13 +55,33 @@ def _skip_raw_ms_row_check():
 # ===========================================================================
 
 
-def _make_calibration_dir(tmp_path: Path, uid: str = "uid___A001_X1_X1") -> Path:
-    """Create a fake calibration directory with a .calapply.txt file."""
+def _make_flagversions_tgz(cal_dir: Path, uid: str, versions=("Pipeline_Final",)) -> Path:
+    """Create ``<uid>.ms.flagversions.tgz`` as ALMA delivers it next to the calapply file."""
+    src = cal_dir / "_build" / f"{uid}.ms.flagversions"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "FLAG_VERSION_LIST").write_text(
+        "".join(f"{name} : {name} flags\n" for name in versions), encoding="utf-8"
+    )
+    for name in versions:
+        (src / f"flags.{name}").mkdir(exist_ok=True)
+        (src / f"flags.{name}" / "table.dat").write_bytes(b"\x00")
+    tar_path = cal_dir / f"{uid}.ms.flagversions.tgz"
+    with tarfile.open(tar_path, "w:gz") as tar:
+        tar.add(src, arcname=src.name)
+    return tar_path
+
+
+def _make_calibration_dir(
+    tmp_path: Path, uid: str = "uid___A001_X1_X1", with_flags: bool = True
+) -> Path:
+    """Create a fake calibration directory with a .calapply.txt file (and flag versions)."""
     cal_dir = tmp_path / "calibration"
     cal_dir.mkdir(parents=True, exist_ok=True)
     (cal_dir / f"{uid}.ms.calapply.txt").write_text(
         f'applycal(vis="{uid}.ms", gaintable=["{uid}.ms.gcal"], intent="TARGET")\n'
     )
+    if with_flags:
+        _make_flagversions_tgz(cal_dir, uid)
     return cal_dir
 
 
@@ -455,21 +475,100 @@ def test_apply_delivered_calibration_calls_applycal(tmp_path):
     cal_dir = _make_calibration_dir(tmp_path / "cal", uid)
     working_dir = tmp_path / "working"
 
-    mock_applycal = MagicMock()
-    mock_clearcal = MagicMock()
+    manager = MagicMock()
+    mock_applycal = manager.applycal
+    mock_clearcal = manager.clearcal
+    mock_flagmanager = manager.flagmanager
 
     with patch(
         "almasim.services.archive.calibrate_ms._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
         result = apply_delivered_calibration(
-            mock_applycal, mock_clearcal, raw_ms, cal_dir, working_dir
+            mock_applycal, mock_clearcal, raw_ms, cal_dir, working_dir, flagmanager=mock_flagmanager
         )
 
     mock_clearcal.assert_called_once()
     mock_applycal.assert_called_once()
     assert mock_applycal.call_args.kwargs["flagbackup"] is False
     assert result.name == f"{uid}.ms"
+    # The pipeline's final flags are restored before the tables are applied.
+    mock_flagmanager.assert_called_once_with(
+        vis=str(working_dir / f"{uid}.ms"),
+        mode="restore",
+        versionname="Pipeline_Final",
+        merge="replace",
+    )
+    order = [call[0] for call in manager.mock_calls if call[0] in {"flagmanager", "applycal"}]
+    assert order == ["flagmanager", "applycal"]
+    assert (working_dir / f"{uid}.ms.flagversions" / "FLAG_VERSION_LIST").is_file(), (
+        "the flag versions are extracted next to the working MS, where flagmanager looks"
+    )
+
+
+@pytest.mark.unit
+def test_apply_delivered_calibration_requires_flagmanager(tmp_path):
+    """Forgetting the flag restore is an error, not a silent repeat of Cycle 11."""
+    uid = "uid___A001_X1_X1"
+    raw_ms = _make_raw_ms(tmp_path / "raw", uid)
+    cal_dir = _make_calibration_dir(tmp_path / "cal", uid)
+    with pytest.raises(RuntimeError, match="flagmanager"):
+        apply_delivered_calibration(MagicMock(), MagicMock(), raw_ms, cal_dir, tmp_path / "w")
+
+
+@pytest.mark.unit
+def test_apply_delivered_calibration_fails_without_delivered_flags(tmp_path):
+    """A delivery without <uid>.ms.flagversions.tgz is a recorded failure by default."""
+    uid = "uid___A001_X1_X1"
+    raw_ms = _make_raw_ms(tmp_path / "raw", uid)
+    cal_dir = _make_calibration_dir(tmp_path / "cal", uid, with_flags=False)
+    mock_applycal = MagicMock()
+    with pytest.raises(RuntimeError, match="No delivered flag versions"):
+        apply_delivered_calibration(
+            mock_applycal, MagicMock(), raw_ms, cal_dir, tmp_path / "w", flagmanager=MagicMock()
+        )
+    mock_applycal.assert_not_called()
+
+
+@pytest.mark.unit
+def test_apply_delivered_calibration_can_skip_missing_flags_when_told(tmp_path):
+    uid = "uid___A001_X1_X1"
+    raw_ms = _make_raw_ms(tmp_path / "raw", uid)
+    cal_dir = _make_calibration_dir(tmp_path / "cal", uid, with_flags=False)
+    mock_applycal = MagicMock()
+    mock_flagmanager = MagicMock()
+    messages = []
+    with patch(
+        "almasim.services.archive.calibrate_ms._normalize_intent",
+        side_effect=lambda intent, ms_path: intent,
+    ):
+        apply_delivered_calibration(
+            mock_applycal,
+            MagicMock(),
+            raw_ms,
+            cal_dir,
+            tmp_path / "w",
+            logger_fn=messages.append,
+            flagmanager=mock_flagmanager,
+            require_pipeline_flags=False,
+        )
+    mock_flagmanager.assert_not_called()
+    mock_applycal.assert_called_once()
+    assert any("WARNING" in m and "flag versions" in m for m in messages)
+
+
+@pytest.mark.unit
+def test_restore_pipeline_flags_rejects_a_tarball_without_the_version(tmp_path):
+    from almasim.services.archive.calibrate_ms import restore_pipeline_flags
+
+    uid = "uid___A001_X1_X1"
+    cal_dir = tmp_path / "calibration"
+    cal_dir.mkdir()
+    _make_flagversions_tgz(cal_dir, uid, versions=("after_deterministic_flagging",))
+    working_dir = tmp_path / "w"
+    working_dir.mkdir()
+    with pytest.raises(RuntimeError, match="Pipeline_Final.*not in"):
+        restore_pipeline_flags(MagicMock(), working_dir / f"{uid}.ms", cal_dir, working_dir)
 
 
 @pytest.mark.unit
@@ -481,7 +580,9 @@ def test_apply_delivered_calibration_missing_calapply_raises(tmp_path):
     cal_dir.mkdir()
     working_dir = tmp_path / "working"
     with pytest.raises(RuntimeError, match="Cannot find calibration apply file"):
-        apply_delivered_calibration(MagicMock(), MagicMock(), raw_ms, cal_dir, working_dir)
+        apply_delivered_calibration(
+            MagicMock(), MagicMock(), raw_ms, cal_dir, working_dir, flagmanager=MagicMock()
+        )
 
 
 @pytest.mark.unit
@@ -506,9 +607,11 @@ def test_apply_delivered_calibration_emits_log(tmp_path):
             cal_dir,
             working_dir,
             logger_fn=messages.append,
+            flagmanager=MagicMock(),
         )
 
     assert any("Applying" in m for m in messages)
+    assert any("Restoring flag version 'Pipeline_Final'" in m for m in messages)
 
 
 @pytest.mark.unit
@@ -521,6 +624,7 @@ def test_apply_delivered_calibration_resolves_relative_callib(tmp_path):
     (cal_dir / f"{uid}.ms.calapply.txt").write_text(
         'applycal(vis="x.ms", gaintable=["g.gcal"], callib="cal/chain.callib")\n'
     )
+    _make_flagversions_tgz(cal_dir, uid)
     working_dir = tmp_path / "working"
 
     mock_applycal = MagicMock()
@@ -534,6 +638,7 @@ def test_apply_delivered_calibration_resolves_relative_callib(tmp_path):
             raw_ms,
             cal_dir,
             working_dir,
+            flagmanager=MagicMock(),
         )
 
     kwargs = mock_applycal.call_args.kwargs

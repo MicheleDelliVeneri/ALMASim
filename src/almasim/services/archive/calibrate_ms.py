@@ -235,6 +235,69 @@ def _prepare_working_directory(
     return working_ms
 
 
+PIPELINE_FLAG_VERSION = "Pipeline_Final"
+
+
+def restore_pipeline_flags(
+    flagmanager: Callable[..., object],
+    working_ms: Path,
+    calibration_dir: Path,
+    working_dir: Path,
+    *,
+    version: str = PIPELINE_FLAG_VERSION,
+    required: bool = True,
+    logger_fn: LogFn = None,
+) -> bool:
+    """Restore the pipeline's final flag state onto ``working_ms`` before ``applycal``.
+
+    ALMA delivers ``<uid>.ms.flagversions.tgz`` next to the calapply file; it
+    holds the ``Pipeline_Final`` flag version, everything the pipeline flagged
+    (bad Tsys solutions, antennas, scans, edge channels, shadowing …).
+    ``hifa_restoredata`` restores it before applying the tables, and so must
+    we: applied to unflagged data, those calibration solutions produce
+    visibilities with amplitudes ~10³ off and WEIGHT ~10⁷ (10⁶ × normal)
+    that then dominate any image. Found on 40/40 sampled Cycle-11 EBs on
+    2026-09-25 after the whole cycle had been calibrated without this step.
+
+    The tarball is extracted next to the working MS (``flagmanager`` looks
+    for ``<vis>.flagversions``), the version is checked against
+    ``FLAG_VERSION_LIST`` and restored with ``merge='replace'``. A missing
+    tarball or version is an error unless ``required`` is False, in which
+    case it is logged and the data stay as imported. Returns whether flags
+    were restored.
+    """
+    tar_path = calibration_dir / f"{working_ms.name}.flagversions.tgz"
+    if not tar_path.is_file():
+        message = (
+            f"No delivered flag versions for {working_ms.name} ({tar_path} is missing): "
+            f"the pipeline's flags would stay unset and the calibration tables would be "
+            f"applied to data the pipeline had flagged"
+        )
+        if required:
+            raise RuntimeError(message)
+        logger.warning(message)
+        _emit(logger_fn, f"WARNING: {message}")
+        return False
+    _emit(logger_fn, f"Extracting flag versions: {tar_path}")
+    _safe_extract_tar(tar_path, working_dir)
+    flag_dir = working_dir / f"{working_ms.name}.flagversions"
+    if not flag_dir.is_dir():
+        raise RuntimeError(f"{tar_path} did not contain {flag_dir.name}")
+    listing = flag_dir / "FLAG_VERSION_LIST"
+    versions = (
+        [line.split(":", 1)[0].strip() for line in listing.read_text().splitlines() if line.strip()]
+        if listing.is_file()
+        else []
+    )
+    if version not in versions:
+        raise RuntimeError(
+            f"Flag version {version!r} is not in {listing} (available: {versions or 'none'})"
+        )
+    _emit(logger_fn, f"Restoring flag version {version!r} onto {working_ms.name}")
+    flagmanager(vis=str(working_ms), mode="restore", versionname=version, merge="replace")
+    return True
+
+
 def apply_delivered_calibration(
     applycal: Callable[..., object],
     clearcal: Callable[..., object] | None,
@@ -243,16 +306,38 @@ def apply_delivered_calibration(
     working_dir: Path,
     overwrite: bool = False,
     logger_fn: LogFn = None,
+    *,
+    flagmanager: Callable[..., object] | None = None,
+    require_pipeline_flags: bool = True,
 ) -> Path:
-    """Run delivered ``applycal`` commands against one raw MS."""
+    """Run delivered ``applycal`` commands against one raw MS.
+
+    The pipeline's ``Pipeline_Final`` flags are restored first (see
+    :func:`restore_pipeline_flags`); ``flagmanager`` is the CASA task to do it
+    with and is mandatory unless ``require_pipeline_flags`` is False.
+    """
+    if flagmanager is None and require_pipeline_flags:
+        raise RuntimeError(
+            "apply_delivered_calibration needs casatasks.flagmanager to restore the "
+            "pipeline's flags before applycal (pass require_pipeline_flags=False to skip)"
+        )
     working_ms = _prepare_working_directory(
         raw_ms, calibration_dir, working_dir, overwrite=overwrite, logger_fn=logger_fn
     )
-    if clearcal is not None:
-        clearcal(vis=str(working_ms), addmodel=False)
     calapply_path = calibration_dir / f"{working_ms.name}.calapply.txt"
     if not calapply_path.is_file():
         raise RuntimeError(f"Cannot find calibration apply file: {calapply_path}")
+    if clearcal is not None:
+        clearcal(vis=str(working_ms), addmodel=False)
+    if flagmanager is not None:
+        restore_pipeline_flags(
+            flagmanager,
+            working_ms,
+            calibration_dir,
+            working_dir,
+            required=require_pipeline_flags,
+            logger_fn=logger_fn,
+        )
 
     calls = _parse_applycal_calls(calapply_path)
     _emit(logger_fn, f"Applying {len(calls)} calibration command(s) to {working_ms.name}")
@@ -487,8 +572,14 @@ def create_calibrated_measurement_sets(
     logger_fn: LogFn = None,
     continue_on_error: bool = False,
     remove_working_copy: bool = True,
+    require_pipeline_flags: bool = True,
 ) -> list[Path]:
     """Create calibrated science MS products from raw MS and ALMA calibration products.
+
+    The delivered ``Pipeline_Final`` flags are restored onto every raw MS before
+    its calibration tables are applied (:func:`restore_pipeline_flags`); a
+    delivery without them is a recorded failure unless
+    ``require_pipeline_flags`` is False.
 
     UIDs whose output already carries a completion marker are skipped (and
     returned) unless ``overwrite`` is set. Partial outputs or working copies
@@ -524,7 +615,7 @@ def create_calibrated_measurement_sets(
         _emit(logger_fn, f"CASA log file: {casa_log}")
         ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
-        from casatasks import applycal, clearcal, mstransform
+        from casatasks import applycal, clearcal, flagmanager, mstransform
 
         _emit(logger_fn, f"Found {len(raw_mss)} raw MeasurementSet(s) to calibrate")
         calibrated_mss: list[Path] = []
@@ -570,6 +661,8 @@ def create_calibrated_measurement_sets(
                     working_dir,
                     overwrite=True,
                     logger_fn=logger_fn,
+                    flagmanager=flagmanager,
+                    require_pipeline_flags=require_pipeline_flags,
                 )
                 calibrated_mss.append(
                     split_calibrated_science_ms(
