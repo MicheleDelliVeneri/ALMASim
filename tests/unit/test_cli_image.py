@@ -706,6 +706,30 @@ def test_run_wsclean_task_hard_abort_writes_failure_marker(tmp_path, monkeypatch
 
 
 @pytest.mark.unit
+def test_run_wsclean_task_removes_stale_files_of_a_previous_attempt(tmp_path, monkeypatch):
+    fake = _FakeWsclean(returncode=0)
+    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    outdir = tmp_path / "ms" / "SPW-1"
+    outdir.mkdir(parents=True)
+    # What a crashed or killed attempt leaves behind: WSClean's reorder files
+    # and the single-window copy (hundreds of GB across a production run).
+    (outdir / "in.ms-part0000-I.tmp").write_bytes(b"x")
+    (outdir / "in.ms-part0000-I-w.tmp").write_bytes(b"x")
+    (outdir / "spw1.single.ms").mkdir()
+    (outdir / "spw1.single.ms" / "table.dat").write_bytes(b"x")
+    ai.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
+
+    ai.run_wsclean_task(
+        command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=2
+    )
+
+    assert not list(outdir.glob("*.tmp"))
+    assert not (outdir / "spw1.single.ms").exists()
+    assert ai.is_imaging_complete(outdir)
+    assert not ai.imaging_failure_marker_path(outdir).exists()
+
+
+@pytest.mark.unit
 def test_run_wsclean_task_without_image_is_a_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=0, write_image=False))
     outdir = tmp_path / "ms" / "SPW-2"

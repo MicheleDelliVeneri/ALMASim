@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import threading
 import time
@@ -176,8 +177,6 @@ def extract_single_window_ms(
     with all subtables; DATA_DESCRIPTION and SPECTRAL_WINDOW are collapsed to
     the one window (renumbered 0) so WSClean sees exactly one band.
     """
-    import shutil
-
     from casacore.tables import table, taql
 
     src = str(ms_path)
@@ -250,6 +249,12 @@ def run_wsclean_task(
     imaging_marker_path(out).unlink(missing_ok=True)
     imaging_failure_marker_path(out).unlink(missing_ok=True)
     (out / IMAGE_FILENAME).unlink(missing_ok=True)
+    # A previous attempt that crashed or was killed with its worker leaves
+    # WSClean's reorder files (hundreds of GB across a run) and the
+    # single-window copy behind; nothing else ever removes them.
+    _remove_reorder_files(out)
+    for stale in out.glob("spw*.single.ms"):
+        shutil.rmtree(stale, ignore_errors=True)
 
     cmd = [str(part) for part in command]
     single_window_ms: Path | None = None
@@ -304,8 +309,6 @@ def run_wsclean_task(
             retries=max(int(retries), 0),
         )
     finally:
-        import shutil
-
         if scratch_dir is not None:
             shutil.rmtree(scratch_dir, ignore_errors=True)
         if single_window_ms is not None:
