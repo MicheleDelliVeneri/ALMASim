@@ -1326,6 +1326,34 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
 
 
 @pytest.mark.unit
+def test_extract_single_window_ms_retries_casacore_lock_file_errors(monkeypatch):
+    calls = []
+
+    def flaky(ms_path, spw, field_ids, out_path, *, max_weight):
+        calls.append(1)
+        if len(calls) < 3:
+            raise RuntimeError(
+                "(/code/casa/IO/LockFile.cc : 300) Failed AlwaysAssert tracePWRITE (...)"
+            )
+        return {"rows": 1, "bytes": 1, "data_desc_ids": [spw], "dropped_rows": 0}
+
+    monkeypatch.setattr(ai, "_extract_single_window_ms_once", flaky)
+    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    result = ai.extract_single_window_ms("in.ms", 5, [2], "out.ms", attempts=5, retry_seconds=0)
+    assert len(calls) == 3 and result["attempts"] == 3
+
+
+@pytest.mark.unit
+def test_extract_single_window_ms_does_not_retry_other_errors(monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("No visibilities for spectral window 5")
+
+    monkeypatch.setattr(ai, "_extract_single_window_ms_once", broken)
+    with pytest.raises(RuntimeError, match="No visibilities"):
+        ai.extract_single_window_ms("in.ms", 5, [2], "out.ms", attempts=5, retry_seconds=0)
+
+
+@pytest.mark.unit
 def test_extract_single_window_ms_runs_in_a_child_process(tmp_path):
     """The copy must not run in the worker: casacore holds the GIL and the
     Dask scheduler drops a worker whose event loop stops answering."""

@@ -173,6 +173,16 @@ def _error_line(lines: Sequence[str]) -> str:
     return ""
 
 
+# casacore keeps a list of the processes using a table in its table.lock file
+# and writes it with pwrite even when no read lock is taken. With several
+# tasks of one MS reading it from different nodes over NFS that write fails
+# now and then ("LockFile.cc : 300 Failed AlwaysAssert tracePWRITE", 4 of
+# ~370 tasks on 2026-09-25). It is transient, so the extraction is retried.
+_LOCK_FILE_ERROR = "LockFile.cc"
+_LOCK_FILE_ATTEMPTS = 5
+_LOCK_FILE_RETRY_SECONDS = 20.0
+
+
 def extract_single_window_ms(
     ms_path: str | os.PathLike[str],
     spw: int,
@@ -180,8 +190,14 @@ def extract_single_window_ms(
     out_path: str | os.PathLike[str],
     *,
     max_weight: float | None = DEFAULT_MAX_WEIGHT,
+    attempts: int = _LOCK_FILE_ATTEMPTS,
+    retry_seconds: float = _LOCK_FILE_RETRY_SECONDS,
 ) -> dict[str, object]:
     """Copy one spectral window (and optionally some fields) into a new MS.
+
+    A casacore lock-file failure on the shared source MS (see
+    ``_LOCK_FILE_ERROR``) is retried up to ``attempts`` times, ``retry_seconds``
+    apart; any other error propagates at once.
 
     Rows whose WEIGHT exceeds ``max_weight`` are left out (see
     ``DEFAULT_MAX_WEIGHT``; ``None`` or 0 keeps every row); the result
@@ -196,6 +212,35 @@ def extract_single_window_ms(
     with all subtables; DATA_DESCRIPTION and SPECTRAL_WINDOW are collapsed to
     the one window (renumbered 0) so WSClean sees exactly one band.
     """
+    for attempt in range(1, max(int(attempts), 1) + 1):
+        try:
+            result = _extract_single_window_ms_once(
+                ms_path, spw, field_ids, out_path, max_weight=max_weight
+            )
+        except RuntimeError as exc:
+            if _LOCK_FILE_ERROR not in str(exc) or attempt >= attempts:
+                raise
+            print(
+                f"extraction attempt {attempt}/{attempts} hit a casacore lock-file error "
+                f"({str(exc).strip().splitlines()[-1][:120]}); retrying in {retry_seconds:g} s",
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(retry_seconds)
+            continue
+        result["attempts"] = attempt
+        return result
+    raise AssertionError("unreachable")
+
+
+def _extract_single_window_ms_once(
+    ms_path: str | os.PathLike[str],
+    spw: int,
+    field_ids: Sequence[int] | None,
+    out_path: str | os.PathLike[str],
+    *,
+    max_weight: float | None,
+) -> dict[str, object]:
     from casacore.tables import table, taql
 
     src = str(ms_path)
