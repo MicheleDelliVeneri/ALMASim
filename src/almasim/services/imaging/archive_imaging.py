@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 __all__ = [
+    "DEFAULT_MAX_WEIGHT",
     "IMAGE_FILENAME",
     "SINGLE_WINDOW_PLACEHOLDER",
     "extract_single_window_ms",
@@ -51,6 +52,16 @@ IMAGE_FILENAME = "wsclean-image.fits"
 # Placeholder in a task command for the per-task single-window MS that the
 # wrapper extracts on the worker (see ``extract_single_window_ms``).
 SINGLE_WINDOW_PLACEHOLDER = "__SINGLE_WINDOW_MS__"
+
+# Rows whose WEIGHT exceeds this are left out of the single-window MS. The
+# Cycle-11 calibrated MSs (2026-09-25, 40/40 sampled) carry 4-58 % of
+# unflagged target rows with WEIGHT ~1e5-1e8 and amplitudes 1e3 too low or
+# 4-26x too high: data the ALMA pipeline had flagged (bad Tsys, antenna or
+# scan) that received garbage gains because the calibration stage did not
+# restore the delivered Pipeline_Final flags. Physical ALMA weights
+# (1/sigma^2 per visibility, calwt) stay below ~1e3; the two populations are
+# separated by more than an order of magnitude on every EB sampled.
+DEFAULT_MAX_WEIGHT = 1.0e4
 
 # Prefer the system C library over spack builds, but keep whatever the caller
 # had after it (same policy as the unpack/calibrate subprocess wrappers).
@@ -167,8 +178,14 @@ def extract_single_window_ms(
     spw: int,
     field_ids: Sequence[int] | None,
     out_path: str | os.PathLike[str],
+    *,
+    max_weight: float | None = DEFAULT_MAX_WEIGHT,
 ) -> dict[str, object]:
     """Copy one spectral window (and optionally some fields) into a new MS.
+
+    Rows whose WEIGHT exceeds ``max_weight`` are left out (see
+    ``DEFAULT_MAX_WEIGHT``; ``None`` or 0 keeps every row); the result
+    reports how many were dropped.
 
     WSClean 3.7 reads out of bounds in its reordering step when an MS holds
     several spectral windows and ``-spws`` selects one (an ALMA split MS
@@ -184,7 +201,13 @@ def extract_single_window_ms(
     src = str(ms_path)
     out = Path(out_path)
     shutil.rmtree(out, ignore_errors=True)
-    dd_table = table(f"{src}/DATA_DESCRIPTION", ack=False)
+    # The source MS is only read, by several tasks at once (one per spectral
+    # window, on different nodes) over NFS. Read locking would make every
+    # task write the shared table.lock file, which failed with
+    # "LockFile.cc: Failed AlwaysAssert tracePWRITE" when three tasks of one
+    # MS ran together (job 3835); no read locking touches no lock file.
+    lock = {"lockoptions": "usernoread", "ack": False}
+    dd_table = table(f"{src}/DATA_DESCRIPTION", **lock)
     spw_of_dd = [int(x) for x in dd_table.getcol("SPECTRAL_WINDOW_ID")]
     pol_of_dd = [int(x) for x in dd_table.getcol("POLARIZATION_ID")]
     dd_table.close()
@@ -194,13 +217,25 @@ def extract_single_window_ms(
     where = f"DATA_DESC_ID in [{','.join(str(i) for i in dd_ids)}]"
     if field_ids:
         where += f" and FIELD_ID in [{','.join(str(int(f)) for f in field_ids)}]"
-    selection = taql(f"select from {src} where {where}")
+    main_in = table(src, **lock)
+    n_all = int(taql(f"select from $1 where {where}", tables=[main_in]).nrows())
+    if n_all == 0:
+        main_in.close()
+        raise RuntimeError(f"No visibilities for spectral window {spw} fields {field_ids} in {src}")
+    if max_weight:
+        where += f" and max(WEIGHT) <= {float(max_weight)!r}"
+    selection = taql(f"select from $1 where {where}", tables=[main_in])
     n_rows = int(selection.nrows())
     if n_rows == 0:
         selection.close()
-        raise RuntimeError(f"No visibilities for spectral window {spw} fields {field_ids} in {src}")
+        main_in.close()
+        raise RuntimeError(
+            f"All {n_all} visibilities for spectral window {spw} fields {field_ids} in {src} "
+            f"have WEIGHT > {max_weight:g}"
+        )
     selection.copy(str(out), deep=True)
     selection.close()
+    main_in.close()
 
     dd_out = table(f"{out}/DATA_DESCRIPTION", readonly=False, ack=False)
     dd_out.removerows([i for i in range(dd_out.nrows()) if i not in dd_ids])
@@ -215,14 +250,21 @@ def extract_single_window_ms(
     main.putcol("DATA_DESC_ID", [renumber[int(x)] for x in main.getcol("DATA_DESC_ID")])
     main.close()
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
-    return {"rows": n_rows, "bytes": size, "data_desc_ids": dd_ids}
+    return {
+        "rows": n_rows,
+        "bytes": size,
+        "data_desc_ids": dd_ids,
+        "dropped_rows": n_all - n_rows,
+        "max_weight": float(max_weight) if max_weight else None,
+    }
 
 
 _EXTRACT_CHILD = (
     "import json, sys\n"
     "from almasim.services.imaging.archive_imaging import extract_single_window_ms\n"
     "args = json.loads(sys.argv[1])\n"
-    "result = extract_single_window_ms(args['ms'], args['spw'], args['fields'], args['out'])\n"
+    "result = extract_single_window_ms(args['ms'], args['spw'], args['fields'], args['out'], "
+    "max_weight=args.get('max_weight'))\n"
     "sys.stdout.write(json.dumps(result))\n"
 )
 
@@ -235,6 +277,7 @@ def extract_single_window_ms_subprocess(
     *,
     timeout: float | None = None,
     log_path: str | os.PathLike[str] | None = None,
+    max_weight: float | None = DEFAULT_MAX_WEIGHT,
 ) -> dict[str, object]:
     """Run ``extract_single_window_ms`` in a child Python process.
 
@@ -253,6 +296,7 @@ def extract_single_window_ms_subprocess(
             "spw": int(spw),
             "fields": [int(f) for f in field_ids] if field_ids else None,
             "out": str(out_path),
+            "max_weight": float(max_weight) if max_weight else None,
         }
     )
     started = time.time()
@@ -296,6 +340,7 @@ def run_wsclean_task(
     retries: int = 3,
     single_window: bool = False,
     field_ids: Sequence[int] | None = None,
+    max_weight: float | None = DEFAULT_MAX_WEIGHT,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -333,7 +378,13 @@ def run_wsclean_task(
         single_window_ms = out / f"spw{int(spw)}.single.ms"
         try:
             extracted = extract_single_window_ms_subprocess(
-                ms_path, spw, field_ids, single_window_ms, timeout=timeout, log_path=log_path
+                ms_path,
+                spw,
+                field_ids,
+                single_window_ms,
+                timeout=timeout,
+                log_path=log_path,
+                max_weight=max_weight,
             )
         except Exception as exc:
             error = f"Could not extract spectral window {spw} into a single-window MS: {exc}"
@@ -341,11 +392,19 @@ def run_wsclean_task(
             raise RuntimeError(error) from exc
         fields_note = list(field_ids) if field_ids else "all"
         size_gb = float(extracted.get("bytes", 0) or 0) / 1e9
+        kept = int(extracted.get("rows") or 0)
+        dropped = int(extracted.get("dropped_rows") or 0)
+        drop_note = (
+            f", dropped {dropped} rows ({100.0 * dropped / max(kept + dropped, 1):.1f} %) "
+            f"with WEIGHT > {float(extracted.get('max_weight') or 0):g}"
+            if extracted.get("max_weight")
+            else ""
+        )
         with log_path.open("a", encoding="utf-8") as log:
             log.write(
                 f"# extracted spectral window {int(spw)} fields {fields_note} into "
-                f"{single_window_ms.name}: {extracted.get('rows')} rows, {size_gb:.1f} GB, "
-                f"{extracted.get('seconds')} s\n"
+                f"{single_window_ms.name}: {kept} rows, {size_gb:.1f} GB, "
+                f"{extracted.get('seconds')} s{drop_note}\n"
             )
         cmd = [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in cmd]
     scratch_dir: Path | None = None

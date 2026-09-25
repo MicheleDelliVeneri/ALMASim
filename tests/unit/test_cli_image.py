@@ -1266,10 +1266,19 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
     monkeypatch.setattr(ai.subprocess, "Popen", fake)
     calls = []
 
-    def fake_extract(ms_path, spw, field_ids, out_path, *, timeout=None, log_path=None):
-        calls.append((ms_path, spw, list(field_ids), Path(out_path)))
+    def fake_extract(
+        ms_path, spw, field_ids, out_path, *, timeout=None, log_path=None, max_weight=None
+    ):
+        calls.append((ms_path, spw, list(field_ids), Path(out_path), max_weight))
         Path(out_path).mkdir(parents=True)
-        return {"rows": 10, "bytes": 1, "data_desc_ids": [spw], "seconds": 0.1}
+        return {
+            "rows": 10,
+            "bytes": 1,
+            "data_desc_ids": [spw],
+            "seconds": 0.1,
+            "dropped_rows": 4,
+            "max_weight": max_weight,
+        }
 
     monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", fake_extract)
     outdir = tmp_path / "ms" / "SPW-5"
@@ -1284,13 +1293,14 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
         single_window=True,
         field_ids=[2, 3],
     )
-    assert calls == [("/data/in.ms", 5, [2, 3], outdir / "spw5.single.ms")]
+    assert calls == [("/data/in.ms", 5, [2, 3], outdir / "spw5.single.ms", ai.DEFAULT_MAX_WEIGHT)]
     used = fake.calls[0]["cmd"]
     assert used[-1] == str(outdir / "spw5.single.ms")
     assert not (outdir / "spw5.single.ms").exists(), "the per-task MS is removed afterwards"
     assert ai.is_imaging_complete(outdir)
     log_lines = ai.imaging_log_path(outdir).read_text().splitlines()
     assert log_lines[0].startswith("# extracted spectral window 5 fields [2, 3]")
+    assert "dropped 4 rows (28.6 %) with WEIGHT > 10000" in log_lines[0]
     assert log_lines[1].startswith("# wsclean -name")
 
 
@@ -1344,7 +1354,7 @@ def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, 
 
     monkeypatch.setattr(ai.subprocess, "run", fake_run)
     result = ai.extract_single_window_ms_subprocess(
-        "/data/in.ms", 5, [2, 3], tmp_path / "out.ms", timeout=30
+        "/data/in.ms", 5, [2, 3], tmp_path / "out.ms", timeout=30, max_weight=500.0
     )
     assert seen["cmd"][0] == ai.sys.executable and seen["cmd"][1] == "-c"
     assert json.loads(seen["cmd"][3]) == {
@@ -1352,6 +1362,7 @@ def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, 
         "spw": 5,
         "fields": [2, 3],
         "out": str(tmp_path / "out.ms"),
+        "max_weight": 500.0,
     }
     assert seen["timeout"] == 30 and seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
     assert result["rows"] == 12 and "seconds" in result

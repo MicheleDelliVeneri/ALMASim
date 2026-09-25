@@ -577,6 +577,7 @@ def run_imaging_tasks(
     scratch_root: str | None = None,
     task_retries: int = 3,
     single_window: bool = True,
+    max_weight: float | None = None,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -610,6 +611,7 @@ def run_imaging_tasks(
                         retries=task_retries,
                         single_window=single_window,
                         field_ids=list(task.field_ids),
+                        max_weight=max_weight,
                     )
                 )
             except Exception as exc:
@@ -648,6 +650,7 @@ def run_imaging_tasks(
                 retries=task_retries,
                 single_window=single_window,
                 field_ids=list(task.field_ids),
+                max_weight=max_weight,
             )
             for task in tasks
         ]
@@ -792,6 +795,17 @@ def image_from_ms(
             "non-deterministically on some inputs; a crash costs seconds."
         ),
     ),
+    max_weight: float = typer.Option(
+        10000.0,
+        "--max-weight",
+        min=0.0,
+        help=(
+            "Leave visibility rows whose WEIGHT exceeds this out of the single-window MS "
+            "(0 keeps every row). Calibrated ALMA rows the pipeline had flagged but that "
+            "were never re-flagged carry WEIGHT ~1e5-1e8 with garbage amplitudes and would "
+            "dominate the image; physical weights stay below ~1e3."
+        ),
+    ),
     scratch_dir: Optional[Path] = typer.Option(
         None,
         "--scratch-dir",
@@ -913,6 +927,7 @@ def image_from_ms(
         scratch_root=str(scratch_dir) if scratch_dir is not None else None,
         task_retries=task_retries,
         single_window=single_window,
+        max_weight=max_weight if max_weight > 0 else None,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -947,6 +962,7 @@ def image_set(
     task_memory_gb: float = typer.Option(0.0, "--task-memory-gb", min=0.0),
     task_retries: int = typer.Option(3, "--task-retries", min=0),
     single_window: bool = typer.Option(True, "--single-window-ms/--no-single-window-ms"),
+    max_weight: float = typer.Option(10000.0, "--max-weight", min=0.0),
     scratch_dir: Optional[Path] = typer.Option(None, "--scratch-dir"),
     postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
     slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
@@ -976,6 +992,7 @@ def image_set(
         task_memory_gb=task_memory_gb,
         task_retries=task_retries,
         single_window=single_window,
+        max_weight=max_weight,
         scratch_dir=scratch_dir,
         postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,
