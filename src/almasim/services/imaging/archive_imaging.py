@@ -21,6 +21,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from collections import deque
@@ -32,6 +33,7 @@ __all__ = [
     "IMAGE_FILENAME",
     "SINGLE_WINDOW_PLACEHOLDER",
     "extract_single_window_ms",
+    "extract_single_window_ms_subprocess",
     "imaging_failure_marker_path",
     "imaging_log_path",
     "imaging_marker_path",
@@ -216,6 +218,72 @@ def extract_single_window_ms(
     return {"rows": n_rows, "bytes": size, "data_desc_ids": dd_ids}
 
 
+_EXTRACT_CHILD = (
+    "import json, sys\n"
+    "from almasim.services.imaging.archive_imaging import extract_single_window_ms\n"
+    "args = json.loads(sys.argv[1])\n"
+    "result = extract_single_window_ms(args['ms'], args['spw'], args['fields'], args['out'])\n"
+    "sys.stdout.write(json.dumps(result))\n"
+)
+
+
+def extract_single_window_ms_subprocess(
+    ms_path: str | os.PathLike[str],
+    spw: int,
+    field_ids: Sequence[int] | None,
+    out_path: str | os.PathLike[str],
+    *,
+    timeout: float | None = None,
+    log_path: str | os.PathLike[str] | None = None,
+) -> dict[str, object]:
+    """Run ``extract_single_window_ms`` in a child Python process.
+
+    casacore does the deep copy in C++ without releasing the GIL, for tens of
+    seconds to minutes per task. Called in a Dask worker thread that freezes
+    the worker's event loop, the scheduler stops receiving heartbeats and
+    drops the worker, and dask-jobqueue then cancels its Slurm job with every
+    task on it (production job 3828, 2026-09-25: all five workers lost within
+    two minutes of starting). A child process keeps the worker responsive,
+    exactly like the WSClean subprocess. The child's stderr is appended to
+    ``log_path`` when given.
+    """
+    args = json.dumps(
+        {
+            "ms": str(ms_path),
+            "spw": int(spw),
+            "fields": [int(f) for f in field_ids] if field_ids else None,
+            "out": str(out_path),
+        }
+    )
+    started = time.time()
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _EXTRACT_CHILD, args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            env=wsclean_environment(1),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"extraction killed after exceeding the {timeout:.0f}s task timeout"
+        ) from exc
+    if log_path is not None and proc.stderr.strip():
+        with Path(log_path).open("a", encoding="utf-8") as log:
+            log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
+    if proc.returncode != 0:
+        reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
+        detail = f": {reason}" if reason else ""
+        raise RuntimeError(f"extraction exited with return code {proc.returncode}{detail}")
+    try:
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError("extraction wrote no result") from exc
+    result["seconds"] = round(time.time() - started, 1)
+    return result
+
+
 def run_wsclean_task(
     *,
     command: Sequence[str],
@@ -249,6 +317,7 @@ def run_wsclean_task(
     imaging_marker_path(out).unlink(missing_ok=True)
     imaging_failure_marker_path(out).unlink(missing_ok=True)
     (out / IMAGE_FILENAME).unlink(missing_ok=True)
+    log_path.write_text("", encoding="utf-8")
     # A previous attempt that crashed or was killed with its worker leaves
     # WSClean's reorder files (hundreds of GB across a run) and the
     # single-window copy behind; nothing else ever removes them.
@@ -263,11 +332,21 @@ def run_wsclean_task(
         # reorders; ``SINGLE_WINDOW_PLACEHOLDER`` in the command is replaced.
         single_window_ms = out / f"spw{int(spw)}.single.ms"
         try:
-            extract_single_window_ms(ms_path, spw, field_ids, single_window_ms)
+            extracted = extract_single_window_ms_subprocess(
+                ms_path, spw, field_ids, single_window_ms, timeout=timeout, log_path=log_path
+            )
         except Exception as exc:
             error = f"Could not extract spectral window {spw} into a single-window MS: {exc}"
             write_imaging_failure_marker(out, ms_path=ms_path, spw=spw, error=error)
             raise RuntimeError(error) from exc
+        fields_note = list(field_ids) if field_ids else "all"
+        size_gb = float(extracted.get("bytes", 0) or 0) / 1e9
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write(
+                f"# extracted spectral window {int(spw)} fields {fields_note} into "
+                f"{single_window_ms.name}: {extracted.get('rows')} rows, {size_gb:.1f} GB, "
+                f"{extracted.get('seconds')} s\n"
+            )
         cmd = [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in cmd]
     scratch_dir: Path | None = None
     if scratch_root:
@@ -330,7 +409,9 @@ def _run_and_mark(
     retries: int = 0,
 ) -> dict[str, object]:
     attempts = 0
-    with log_path.open("w", encoding="utf-8") as log:
+    # run_wsclean_task truncated the log; for a single-window task it already
+    # holds the extraction notes, so append.
+    with log_path.open("a", encoding="utf-8") as log:
         log.write("# " + shlex.join(cmd) + "\n")
         log.flush()
         while True:

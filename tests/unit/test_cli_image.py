@@ -1266,12 +1266,12 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
     monkeypatch.setattr(ai.subprocess, "Popen", fake)
     calls = []
 
-    def fake_extract(ms_path, spw, field_ids, out_path):
+    def fake_extract(ms_path, spw, field_ids, out_path, *, timeout=None, log_path=None):
         calls.append((ms_path, spw, list(field_ids), Path(out_path)))
         Path(out_path).mkdir(parents=True)
-        return {"rows": 10, "bytes": 1, "data_desc_ids": [spw]}
+        return {"rows": 10, "bytes": 1, "data_desc_ids": [spw], "seconds": 0.1}
 
-    monkeypatch.setattr(ai, "extract_single_window_ms", fake_extract)
+    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", fake_extract)
     outdir = tmp_path / "ms" / "SPW-5"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-no-reorder", ai.SINGLE_WINDOW_PLACEHOLDER]
 
@@ -1289,6 +1289,9 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
     assert used[-1] == str(outdir / "spw5.single.ms")
     assert not (outdir / "spw5.single.ms").exists(), "the per-task MS is removed afterwards"
     assert ai.is_imaging_complete(outdir)
+    log_lines = ai.imaging_log_path(outdir).read_text().splitlines()
+    assert log_lines[0].startswith("# extracted spectral window 5 fields [2, 3]")
+    assert log_lines[1].startswith("# wsclean -name")
 
 
 @pytest.mark.unit
@@ -1296,7 +1299,7 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
     def failing_extract(*args, **kwargs):
         raise RuntimeError("No visibilities for spectral window 5")
 
-    monkeypatch.setattr(ai, "extract_single_window_ms", failing_extract)
+    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", failing_extract)
     monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
     outdir = tmp_path / "ms" / "SPW-5"
     with pytest.raises(RuntimeError, match="Could not extract spectral window 5"):
@@ -1310,3 +1313,45 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
         )
     payload = json.loads(ai.imaging_failure_marker_path(outdir).read_text())
     assert "No visibilities" in payload["error"]
+
+
+@pytest.mark.unit
+def test_extract_single_window_ms_runs_in_a_child_process(tmp_path):
+    """The copy must not run in the worker: casacore holds the GIL and the
+    Dask scheduler drops a worker whose event loop stops answering."""
+    pytest.importorskip("casacore.tables")
+    log_path = tmp_path / "SPW-5.log"
+    with pytest.raises(RuntimeError, match="extraction exited with return code"):
+        ai.extract_single_window_ms_subprocess(
+            tmp_path / "missing.ms", 5, [2], tmp_path / "spw5.single.ms", log_path=log_path
+        )
+    assert "missing.ms" in log_path.read_text(), "the child's traceback lands in the task log"
+
+
+@pytest.mark.unit
+def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, monkeypatch):
+    class _Done:
+        returncode = 0
+        stdout = '{"rows": 12, "bytes": 3000, "data_desc_ids": [1]}'
+        stderr = ""
+
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen.update(kwargs)
+        return _Done()
+
+    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    result = ai.extract_single_window_ms_subprocess(
+        "/data/in.ms", 5, [2, 3], tmp_path / "out.ms", timeout=30
+    )
+    assert seen["cmd"][0] == ai.sys.executable and seen["cmd"][1] == "-c"
+    assert json.loads(seen["cmd"][3]) == {
+        "ms": "/data/in.ms",
+        "spw": 5,
+        "fields": [2, 3],
+        "out": str(tmp_path / "out.ms"),
+    }
+    assert seen["timeout"] == 30 and seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
+    assert result["rows"] == 12 and "seconds" in result
