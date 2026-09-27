@@ -1325,32 +1325,70 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
     assert "No visibilities" in payload["error"]
 
 
+class _Child:
+    def __init__(self, returncode, stdout="", stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+_LOCK_FILE_STDERR = (
+    "RuntimeError: (/code/casa/IO/LockFile.cc : 300) Failed AlwaysAssert tracePWRITE (...)\n"
+)
+
+
 @pytest.mark.unit
-def test_extract_single_window_ms_retries_casacore_lock_file_errors(monkeypatch):
-    calls = []
+def test_extract_single_window_ms_retries_lock_file_errors_in_a_new_process(tmp_path, monkeypatch):
+    """casacore keeps a failed copy's output in its table cache, so a retry in
+    the same process fails with "target table ... is still open" (job 3841);
+    every attempt must be a new child."""
+    children = []
 
-    def flaky(ms_path, spw, field_ids, out_path, *, max_weight):
-        calls.append(1)
-        if len(calls) < 3:
-            raise RuntimeError(
-                "(/code/casa/IO/LockFile.cc : 300) Failed AlwaysAssert tracePWRITE (...)"
-            )
-        return {"rows": 1, "bytes": 1, "data_desc_ids": [spw], "dropped_rows": 0}
+    def fake_run(cmd, **kwargs):
+        children.append(cmd)
+        if len(children) < 3:
+            return _Child(1, stderr=_LOCK_FILE_STDERR)
+        return _Child(0, stdout='{"rows": 1, "bytes": 1, "data_desc_ids": [5]}')
 
-    monkeypatch.setattr(ai, "_extract_single_window_ms_once", flaky)
+    monkeypatch.setattr(ai.subprocess, "run", fake_run)
     monkeypatch.setattr(ai.time, "sleep", lambda s: None)
-    result = ai.extract_single_window_ms("in.ms", 5, [2], "out.ms", attempts=5, retry_seconds=0)
-    assert len(calls) == 3 and result["attempts"] == 3
+    log_path = tmp_path / "SPW-5.log"
+    result = ai.extract_single_window_ms_subprocess(
+        "in.ms", 5, [2], tmp_path / "out.ms", log_path=log_path, attempts=5, retry_seconds=0
+    )
+    assert len(children) == 3 and result["attempts"] == 3
+    assert log_path.read_text().count("retrying in a new process") == 2
 
 
 @pytest.mark.unit
-def test_extract_single_window_ms_does_not_retry_other_errors(monkeypatch):
-    def broken(*args, **kwargs):
-        raise RuntimeError("No visibilities for spectral window 5")
+def test_extract_single_window_ms_gives_up_after_the_last_lock_file_attempt(tmp_path, monkeypatch):
+    children = []
 
-    monkeypatch.setattr(ai, "_extract_single_window_ms_once", broken)
+    def fake_run(cmd, **kwargs):
+        children.append(cmd)
+        return _Child(1, stderr=_LOCK_FILE_STDERR)
+
+    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    with pytest.raises(RuntimeError, match="LockFile.cc"):
+        ai.extract_single_window_ms_subprocess(
+            "in.ms", 5, [2], tmp_path / "out.ms", attempts=3, retry_seconds=0
+        )
+    assert len(children) == 3
+
+
+@pytest.mark.unit
+def test_extract_single_window_ms_does_not_retry_other_errors(tmp_path, monkeypatch):
+    children = []
+
+    def fake_run(cmd, **kwargs):
+        children.append(cmd)
+        return _Child(1, stderr="RuntimeError: No visibilities for spectral window 5\n")
+
+    monkeypatch.setattr(ai.subprocess, "run", fake_run)
     with pytest.raises(RuntimeError, match="No visibilities"):
-        ai.extract_single_window_ms("in.ms", 5, [2], "out.ms", attempts=5, retry_seconds=0)
+        ai.extract_single_window_ms_subprocess(
+            "in.ms", 5, [2], tmp_path / "out.ms", attempts=5, retry_seconds=0
+        )
+    assert len(children) == 1
 
 
 @pytest.mark.unit

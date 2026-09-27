@@ -177,7 +177,11 @@ def _error_line(lines: Sequence[str]) -> str:
 # and writes it with pwrite even when no read lock is taken. With several
 # tasks of one MS reading it from different nodes over NFS that write fails
 # now and then ("LockFile.cc : 300 Failed AlwaysAssert tracePWRITE", 4 of
-# ~370 tasks on 2026-09-25). It is transient, so the extraction is retried.
+# ~370 tasks on 2026-09-25). It is transient, so the extraction is retried,
+# each attempt in a fresh child process: casacore keeps the half-written
+# output of a failed copy in its process-wide table cache, and a retry in the
+# same process then fails with "Cannot copy/rename; target table ... is still
+# open (is in the table cache)" (job 3841, 2 tasks on 2026-09-26).
 _LOCK_FILE_ERROR = "LockFile.cc"
 _LOCK_FILE_ATTEMPTS = 5
 _LOCK_FILE_RETRY_SECONDS = 20.0
@@ -190,14 +194,11 @@ def extract_single_window_ms(
     out_path: str | os.PathLike[str],
     *,
     max_weight: float | None = DEFAULT_MAX_WEIGHT,
-    attempts: int = _LOCK_FILE_ATTEMPTS,
-    retry_seconds: float = _LOCK_FILE_RETRY_SECONDS,
 ) -> dict[str, object]:
     """Copy one spectral window (and optionally some fields) into a new MS.
 
-    A casacore lock-file failure on the shared source MS (see
-    ``_LOCK_FILE_ERROR``) is retried up to ``attempts`` times, ``retry_seconds``
-    apart; any other error propagates at once.
+    One attempt; ``extract_single_window_ms_subprocess`` retries lock-file
+    failures (see ``_LOCK_FILE_ERROR``) in a new process each time.
 
     Rows whose WEIGHT exceeds ``max_weight`` are left out (see
     ``DEFAULT_MAX_WEIGHT``; ``None`` or 0 keeps every row); the result
@@ -212,25 +213,7 @@ def extract_single_window_ms(
     with all subtables; DATA_DESCRIPTION and SPECTRAL_WINDOW are collapsed to
     the one window (renumbered 0) so WSClean sees exactly one band.
     """
-    for attempt in range(1, max(int(attempts), 1) + 1):
-        try:
-            result = _extract_single_window_ms_once(
-                ms_path, spw, field_ids, out_path, max_weight=max_weight
-            )
-        except RuntimeError as exc:
-            if _LOCK_FILE_ERROR not in str(exc) or attempt >= attempts:
-                raise
-            print(
-                f"extraction attempt {attempt}/{attempts} hit a casacore lock-file error "
-                f"({str(exc).strip().splitlines()[-1][:120]}); retrying in {retry_seconds:g} s",
-                file=sys.stderr,
-                flush=True,
-            )
-            time.sleep(retry_seconds)
-            continue
-        result["attempts"] = attempt
-        return result
-    raise AssertionError("unreachable")
+    return _extract_single_window_ms_once(ms_path, spw, field_ids, out_path, max_weight=max_weight)
 
 
 def _extract_single_window_ms_once(
@@ -323,6 +306,8 @@ def extract_single_window_ms_subprocess(
     timeout: float | None = None,
     log_path: str | os.PathLike[str] | None = None,
     max_weight: float | None = DEFAULT_MAX_WEIGHT,
+    attempts: int = _LOCK_FILE_ATTEMPTS,
+    retry_seconds: float = _LOCK_FILE_RETRY_SECONDS,
 ) -> dict[str, object]:
     """Run ``extract_single_window_ms`` in a child Python process.
 
@@ -334,6 +319,11 @@ def extract_single_window_ms_subprocess(
     two minutes of starting). A child process keeps the worker responsive,
     exactly like the WSClean subprocess. The child's stderr is appended to
     ``log_path`` when given.
+
+    A child that dies of a casacore lock-file error (see ``_LOCK_FILE_ERROR``)
+    is rerun up to ``attempts`` times, ``retry_seconds`` apart, each time in a
+    new process; any other failure raises at once. ``timeout`` applies to
+    each attempt.
     """
     args = json.dumps(
         {
@@ -345,23 +335,35 @@ def extract_single_window_ms_subprocess(
         }
     )
     started = time.time()
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", _EXTRACT_CHILD, args],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=timeout,
-            env=wsclean_environment(1),
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"extraction killed after exceeding the {timeout:.0f}s task timeout"
-        ) from exc
-    if log_path is not None and proc.stderr.strip():
-        with Path(log_path).open("a", encoding="utf-8") as log:
-            log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
-    if proc.returncode != 0:
+    for attempt in range(1, max(int(attempts), 1) + 1):
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-c", _EXTRACT_CHILD, args],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=timeout,
+                env=wsclean_environment(1),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"extraction killed after exceeding the {timeout:.0f}s task timeout"
+            ) from exc
+        if log_path is not None and proc.stderr.strip():
+            with Path(log_path).open("a", encoding="utf-8") as log:
+                log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
+        if proc.returncode == 0:
+            break
+        if _LOCK_FILE_ERROR in proc.stderr and attempt < attempts:
+            message = (
+                f"extraction attempt {attempt}/{attempts} hit a casacore lock-file error; "
+                f"retrying in a new process in {retry_seconds:g} s\n"
+            )
+            if log_path is not None:
+                with Path(log_path).open("a", encoding="utf-8") as log:
+                    log.write(message)
+            time.sleep(retry_seconds)
+            continue
         reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
         detail = f": {reason}" if reason else ""
         raise RuntimeError(f"extraction exited with return code {proc.returncode}{detail}")
@@ -370,6 +372,7 @@ def extract_single_window_ms_subprocess(
     except (IndexError, ValueError) as exc:
         raise RuntimeError("extraction wrote no result") from exc
     result["seconds"] = round(time.time() - started, 1)
+    result["attempts"] = attempt
     return result
 
 
