@@ -129,6 +129,19 @@ class SlurmBackend(ComputationBackend):
             raise RuntimeError("Dask cluster not initialized")
         return self._cluster_manager.submit_callable(func, cores=cores, **kwargs)
 
+    def wait_for_workers(self, n_workers: int, timeout: Optional[float] = None) -> int:
+        """Wait until ``n_workers`` workers have registered or ``timeout`` s pass.
+
+        Returns the number registered; a timeout is not an error.
+        """
+        if self.client is None:
+            raise RuntimeError("Dask client not initialized")
+        try:
+            self.client.wait_for_workers(n_workers, timeout=timeout)
+        except (TimeoutError, OSError):
+            pass
+        return len(self.client.scheduler_info().get("workers", {}))
+
     def scatter(self, data: Any, broadcast: bool = False) -> Any:
         """Scatter data to Slurm workers."""
         if self.client is None:

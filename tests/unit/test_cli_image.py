@@ -922,6 +922,56 @@ def test_run_imaging_tasks_continues_past_failures_and_marks_lost_tasks(tmp_path
     assert backend.submitted[0]["timeout"] == 10.0
 
 
+class _SlowFuture(_FakeFuture):
+    """Finishes on its second ``done()`` poll, so tasks overlap in flight."""
+
+    def __init__(self, backend, result):
+        super().__init__(result=result)
+        self._backend = backend
+        self._polls = 0
+
+    def done(self):
+        self._polls += 1
+        if self._polls < 2:
+            return False
+        self._backend.finished += 1
+        return True
+
+
+class _SlowBackend(_FakeBackend):
+    def __init__(self):
+        super().__init__([])
+        self.finished = 0
+        self.max_in_flight = 0
+        self.waited_for = None
+
+    def wait_for_workers(self, n_workers, timeout=None):
+        self.waited_for = (n_workers, timeout)
+        return n_workers
+
+    def submit_callable(self, func, *, cores, **kwargs):
+        self.submitted.append({"func": func, "cores": cores, **kwargs})
+        in_flight = len(self.submitted) - self.finished
+        self.max_in_flight = max(self.max_in_flight, in_flight)
+        return _SlowFuture(self, {"spw": kwargs["spw"]})
+
+
+@pytest.mark.unit
+def test_run_imaging_tasks_waits_for_workers_and_fills_only_free_slots(tmp_path, monkeypatch):
+    """Job 3879: all 46 tasks landed on the first worker to register because
+    they were all submitted at once; Dask never moves them afterwards."""
+    monkeypatch.setattr(cli_image, "sleep", lambda s: None)
+    tasks = _tasks(tmp_path, 11)
+    backend = _SlowBackend()
+
+    # 2 workers x (32 // 12) = 4 slots
+    results = _run(tasks, backend, monkeypatch, cores_per_task=12, node_cores=32, n_jobs=2)
+
+    assert backend.waited_for[0] == 2
+    assert backend.max_in_flight == 4
+    assert sorted(r["spw"] for r in results) == list(range(11))
+
+
 @pytest.mark.unit
 def test_run_imaging_tasks_fail_fast_stops_and_cancels(tmp_path, monkeypatch):
     tasks = _tasks(tmp_path, 2)

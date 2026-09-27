@@ -23,6 +23,8 @@ MIN_IMAGE_PIXELS = 16
 SPEED_OF_LIGHT_M_S = 299_792_458.0
 DAY_IN_SECONDS = 3600 * 24
 TARGET_INTENT = "OBSERVE_TARGET"
+# How long the Slurm driver waits for its workers before it starts anyway.
+_WORKER_WAIT_S = 1800.0
 _IMAGING_HEARTBEAT_S = 60.0
 
 
@@ -636,8 +638,22 @@ def run_imaging_tasks(
         scheduler_host=scheduler_host,
         scheduler_interface=scheduler_interface,
     ) as backend:
-        futures = [
-            backend.submit_callable(
+        # Dask assigns a resource-restricted task to a worker the moment it is
+        # submitted and does not move it later (tasks last hours, so work
+        # stealing never sees a reason to). Submitting everything as soon as
+        # the first worker registered put all 46 tasks of job 3879 on one
+        # worker while four sat idle. So: wait for the workers, then keep only
+        # as many tasks in flight as they have slots, topping up as each ends;
+        # the scheduler then places every new task on a worker with room.
+        wait_for_workers = getattr(backend, "wait_for_workers", None)
+        if callable(wait_for_workers):
+            typer.echo(f"Waiting up to {_WORKER_WAIT_S / 60:.0f} min for {n_jobs} worker(s)...")
+            ready = wait_for_workers(n_jobs, timeout=_WORKER_WAIT_S)
+            typer.echo(f"{ready} worker(s) registered; starting.")
+        slots = max(int(n_jobs), 1) * max(int(node_cores) // max(int(cores_per_task), 1), 1)
+
+        def _submit(task: ImagingTask) -> Any:
+            return backend.submit_callable(
                 run_wsclean_task,
                 cores=cores_per_task,
                 command=task.command,
@@ -652,11 +668,15 @@ def run_imaging_tasks(
                 field_ids=list(task.field_ids),
                 max_weight=max_weight,
             )
-            for task in tasks
-        ]
-        pending = dict(enumerate(futures))
+
+        queued = list(range(len(tasks)))
+        pending: dict[int, Any] = {}
+        while queued and len(pending) < slots:
+            index = queued.pop(0)
+            pending[index] = _submit(tasks[index])
+        total = len(tasks)
         last_heartbeat = started_at
-        with tqdm(total=len(futures), desc=stage_label, unit="task", leave=True) as bar:
+        with tqdm(total=total, desc=stage_label, unit="task", leave=True) as bar:
             while pending:
                 progressed = False
                 for index, future in list(pending.items()):
@@ -665,6 +685,9 @@ def run_imaging_tasks(
                     del pending[index]
                     progressed = True
                     bar.update(1)
+                    if queued:
+                        next_index = queued.pop(0)
+                        pending[next_index] = _submit(tasks[next_index])
                     task = tasks[index]
                     error: Optional[str] = None
                     try:
@@ -688,9 +711,8 @@ def run_imaging_tasks(
                             if callable(cancel):
                                 cancel()
                         raise typer.Exit(code=1)
-                bar.set_postfix_str(
-                    f"completed {len(futures) - len(pending)}/{len(futures)} failed {len(failures)}"
-                )
+                done = total - len(pending) - len(queued)
+                bar.set_postfix_str(f"completed {done}/{total} failed {len(failures)}")
                 if not pending:
                     break
                 now = time()
@@ -706,8 +728,9 @@ def run_imaging_tasks(
                         running += 1
                         bar.write(f"  [{tasks[index].label}] {last_line}")
                     bar.write(
-                        f"{stage_label}: {running} running, {len(pending) - running} waiting, "
-                        f"{len(futures) - len(pending)} done, {len(failures)} failed"
+                        f"{stage_label}: {running} running, "
+                        f"{len(pending) - running + len(queued)} waiting, "
+                        f"{total - len(pending) - len(queued)} done, {len(failures)} failed"
                     )
                 if not progressed:
                     sleep(0.5)
