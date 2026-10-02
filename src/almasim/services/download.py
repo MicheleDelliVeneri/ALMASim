@@ -6,7 +6,9 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
+import tarfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -32,8 +34,10 @@ MAX_PARALLEL_PER_MIRROR = 10
 MAX_PARALLEL_TOTAL = MAX_PARALLEL_PER_MIRROR * len(_DATALINK_MIRRORS)
 _VOT_NS = "http://www.ivoa.net/xml/VOTable/v1.3"
 _RATE_LIMIT_SEC = 0.5
-_MAX_FILE_ATTEMPTS = 3
-_RETRY_BACKOFF_BASE = 2
+# ESO drops long tar streams mid-body; each retry resumes from the .part, so
+# attempts are cheap. Waits between them: 1, 4, 16, 64, 256 s.
+_MAX_FILE_ATTEMPTS = 6
+_RETRY_BACKOFF_BASE = 4
 _CHUNK_SIZE = 256 * 1024
 
 
@@ -319,6 +323,25 @@ def _sha256_file(path: Path) -> str:
     return hsh.hexdigest()
 
 
+def _starts_like_html(path: Path, filename: str) -> bool:
+    """True when a file meant to be data begins with an HTML page."""
+    if filename.lower().endswith((".html", ".htm", ".xml")):
+        return False
+    with open(path, "rb") as handle:
+        return handle.read(64).lstrip().startswith(b"<")
+
+
+def _has_tar_header(path: Path) -> bool:
+    """True when the first 512-byte block is a tar header with a valid checksum."""
+    with open(path, "rb") as handle:
+        block = handle.read(tarfile.BLOCKSIZE)
+    try:
+        tarfile.TarInfo.frombuf(block, tarfile.ENCODING, "surrogateescape")
+    except tarfile.HeaderError:
+        return False
+    return True
+
+
 def _download_single_attempt(
     file_status: FileDownloadStatus,
     part_path: Path,
@@ -327,6 +350,13 @@ def _download_single_attempt(
     update_callback: Optional[Callable[[FileDownloadStatus], None]] = None,
 ) -> bool:
     existing_bytes = part_path.stat().st_size if part_path.exists() else 0
+    if existing_bytes > 0 and _starts_like_html(part_path, file_status.filename):
+        # A .part left by a portal maintenance notice (EA, 2026-09-29): resuming
+        # it appends the real bytes after the page and yields a right-sized tar
+        # whose first header is HTML. Start the file over instead.
+        logger.warning("Discarding %s: it begins with an HTML page", part_path.name)
+        part_path.unlink()
+        existing_bytes = 0
     headers = {}
     if existing_bytes > 0:
         headers["Range"] = f"bytes={existing_bytes}-"
@@ -339,6 +369,13 @@ def _download_single_attempt(
 
     def _stream(response: httpx.Response, resume_from: int) -> bool:
         response.raise_for_status()
+        # A portal under maintenance answers 200 with an HTML notice (the EA
+        # mirror on 2026-09-29); without this it only shows up as a short download.
+        content_type = getattr(response, "headers", {}).get("content-type", "")
+        if "text/html" in content_type and not file_status.filename.endswith((".html", ".htm")):
+            page = b"".join(response.iter_bytes(chunk_size=_CHUNK_SIZE))[:4096]
+            text = " ".join(re.sub(rb"<[^>]+>", b" ", page).decode("utf-8", "replace").split())
+            raise RuntimeError(f"Server sent an HTML page instead of the file: {text[:300]}")
         file_status.bytes_downloaded = resume_from
         if update_callback is not None:
             update_callback(file_status)
@@ -396,6 +433,16 @@ def _download_single_file(
 ) -> None:
     destination_path = destination / file_status.filename
     part_path = destination_path.with_suffix(destination_path.suffix + ".part")
+
+    if (
+        destination_path.exists()
+        and destination_path.suffix == ".tar"
+        and not _has_tar_header(destination_path)
+    ):
+        # Right size is not enough: an HTML-prefixed tar passes the size check
+        # and then fails extraction on every rerun. Fetch it again.
+        logger.warning("Re-downloading %s: it has no tar header", destination_path.name)
+        destination_path.unlink()
 
     if destination_path.exists():
         existing_size = destination_path.stat().st_size
@@ -646,6 +693,19 @@ def download_products(
 
         for future in as_completed(futures):
             future.result()
+
+    # The per-file error otherwise lives only in the manifest's "files" list.
+    for status in statuses:
+        if status.status != "failed":
+            continue
+        message = (
+            f"Download failed: {status.filename} from {urlsplit(status.access_url).netloc} "
+            f"after {status.bytes_downloaded} of {status.content_length} bytes: "
+            f"{(status.error or 'unknown error').splitlines()[0]}"
+        )
+        logger.error(message)
+        if logger_fn is not None:
+            logger_fn(message)
 
     if extract_tar:
         for status in statuses:

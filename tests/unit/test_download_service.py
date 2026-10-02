@@ -103,9 +103,10 @@ from almasim.services import download as download_module  # noqa: E402
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, body: bytes):
+    def __init__(self, status_code: int, body: bytes, headers=None):
         self.status_code = status_code
         self._body = body
+        self.headers = headers or {}
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -132,8 +133,8 @@ class _FakeClient:
     @contextmanager
     def stream(self, method, url, headers=None):
         self.requests.append(dict(headers or {}))
-        status, body = self.script.pop(0)(headers or {})
-        yield _FakeResponse(status, body)
+        status, body, *response_headers = self.script.pop(0)(headers or {})
+        yield _FakeResponse(status, body, *response_headers)
 
 
 def _install_fake_client(monkeypatch, script) -> _FakeClient:
@@ -185,6 +186,34 @@ def test_short_download_is_failed_not_completed(tmp_path, monkeypatch):
     assert not (tmp_path / "a.asdm.sdm.tar").exists()
     assert not list(tmp_path.rglob("*.asdm.sdm"))
     assert summary.extraction_failed == []
+
+
+@pytest.mark.unit
+def test_maintenance_page_is_reported_and_logged(tmp_path, monkeypatch):
+    """The EA portal answered 200 with an HTML notice during its 2026-09-29 maintenance."""
+    body = _asdm_tar_bytes()
+    page = b"<H1>ALMA Science Portal Maintenance</H1>\nPortal is temporarily unavailable."
+    monkeypatch.setattr(download_module, "_MAX_FILE_ATTEMPTS", 1)
+    _install_fake_client(
+        monkeypatch, [lambda h: (200, page, {"content-type": "text/html; charset=utf-8"})]
+    )
+    messages: list[str] = []
+
+    summary = download_products(
+        [_product("a.asdm.sdm.tar", body)],
+        tmp_path,
+        rate_limit_sec=0,
+        extract_tar=True,
+        logger_fn=messages.append,
+    )
+
+    assert summary.files_failed == 1
+    error = summary.files[0].error or ""
+    assert "HTML page" in error and "ALMA Science Portal Maintenance" in error
+    assert not (tmp_path / "a.asdm.sdm.tar.part").exists(), "the page is not saved as data"
+    failed = [m for m in messages if m.startswith("Download failed: a.asdm.sdm.tar")]
+    assert len(failed) == 1
+    assert " from almascience." in failed[0] and "Maintenance" in failed[0]
 
 
 @pytest.mark.unit
@@ -246,3 +275,61 @@ def test_unextractable_tar_is_reported_and_kept(tmp_path, monkeypatch):
 
     manifest = json.loads((tmp_path / "download_manifest.json").read_text())
     assert manifest["extraction_failed"] == summary.extraction_failed
+
+
+_MAINTENANCE_PAGE = b"<H1>ALMA Science Portal Maintenance</H1>\nWe regret the inconvenience.\n"
+
+
+@pytest.mark.unit
+def test_html_part_is_discarded_not_resumed(tmp_path, monkeypatch):
+    """A .part holding a maintenance page (job 4029, 2026-09-29) must not be resumed."""
+    body = _asdm_tar_bytes()
+    (tmp_path / "a.asdm.sdm.tar.part").write_bytes(_MAINTENANCE_PAGE)
+
+    def fresh(headers):
+        assert "Range" not in headers, "resuming would append the tar after the page"
+        return 200, body
+
+    fake = _install_fake_client(monkeypatch, [fresh])
+
+    summary = download_products(
+        [_product("a.asdm.sdm.tar", body)], tmp_path, rate_limit_sec=0, extract_tar=True
+    )
+
+    assert len(fake.requests) == 1
+    assert summary.files_completed == 1
+    assert summary.extraction_failed == []
+    assert len(list(tmp_path.rglob("*.asdm.sdm"))) == 1
+
+
+@pytest.mark.unit
+def test_right_sized_tar_without_header_is_downloaded_again(tmp_path, monkeypatch):
+    """The page overwrote the first bytes of a full-size tar: size alone passes it."""
+    body = _asdm_tar_bytes()
+    corrupt = _MAINTENANCE_PAGE + body[len(_MAINTENANCE_PAGE) :]
+    (tmp_path / "a.asdm.sdm.tar").write_bytes(corrupt)
+    fake = _install_fake_client(monkeypatch, [lambda h: (200, body)])
+
+    summary = download_products(
+        [_product("a.asdm.sdm.tar", body)], tmp_path, rate_limit_sec=0, extract_tar=True
+    )
+
+    assert len(fake.requests) == 1
+    assert summary.files_completed == 1
+    assert summary.extraction_failed == []
+    assert len(list(tmp_path.rglob("*.asdm.sdm"))) == 1
+
+
+@pytest.mark.unit
+def test_valid_existing_tar_is_not_downloaded_again(tmp_path, monkeypatch):
+    body = _asdm_tar_bytes()
+    (tmp_path / "a.asdm.sdm.tar").write_bytes(body)
+    fake = _install_fake_client(monkeypatch, [])
+
+    summary = download_products(
+        [_product("a.asdm.sdm.tar", body)], tmp_path, rate_limit_sec=0, extract_tar=True
+    )
+
+    assert fake.requests == []
+    assert summary.files_completed == 1
+    assert len(list(tmp_path.rglob("*.asdm.sdm"))) == 1
