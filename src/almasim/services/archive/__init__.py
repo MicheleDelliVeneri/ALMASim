@@ -28,6 +28,7 @@ from .qa0 import (
 from .unpack_ms import (
     create_measurement_set,
     create_measurement_sets,
+    empty_required_subtables,
     find_asdm_directories,
     is_unpack_complete,
     measurement_set_row_count,
@@ -54,6 +55,7 @@ __all__ = [
     "create_calibrated_measurement_sets",
     "create_measurement_set",
     "create_measurement_sets",
+    "empty_required_subtables",
     "find_asdm_directories",
     "is_unpack_complete",
     "measurement_set_row_count",

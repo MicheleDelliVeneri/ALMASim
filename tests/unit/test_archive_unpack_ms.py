@@ -40,6 +40,17 @@ from almasim.services.archive.unpack_ms import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _skip_subtable_check():
+    """Neutralise the subtable check for tests that fabricate empty MS directories.
+
+    Tests that care about it patch ``empty_required_subtables`` themselves; their
+    patch applies inside this one and wins.
+    """
+    with patch("almasim.services.archive.unpack_ms.empty_required_subtables", return_value=[]):
+        yield
+
+
 _ASDM_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <ASDM xmlns:cntnr="http://Alma/XASDM/ASDM" schemaVersion="4">
   <Entity entityId="uid://A002/X1/X1" entityTypeName="ASDM"/>
@@ -776,3 +787,45 @@ def test_create_measurement_set_refuses_incomplete_asdm(mock_rows, tmp_path):
     assert failed.is_file()
     assert "ASDM is incomplete" in json.loads(failed.read_text())["error"]
     assert not (output_root / "working" / f"{uid}.ms.done").exists()
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.empty_required_subtables")
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=67182920)
+def test_existing_ms_with_empty_subtables_is_reimported(mock_rows, mock_empty, tmp_path):
+    """MAIN rows matched but ANTENNA etc. had 0 rows (uid___A002_X10f3768_Xb604).
+
+    The reuse check trusted the MAIN row count, marked the MS done and its ASDM
+    was deleted; calibration then aborted with ``minMax - Array has no elements``.
+    """
+    asdm = _make_asdm(tmp_path / "input")
+    output_root = tmp_path / "output"
+    uid = asdm_name(asdm)
+    unfinished = output_root / "working" / f"{uid}.ms"
+    unfinished.mkdir(parents=True)
+    mock_empty.return_value = ["ANTENNA", "SPECTRAL_WINDOW", "FIELD"]
+
+    calls = []
+
+    def fake_importasdm(asdm, vis, overwrite):
+        calls.append(overwrite)
+        Path(vis).mkdir(parents=True, exist_ok=True)
+        mock_empty.return_value = []  # the re-import commits the subtables
+
+    result = create_measurement_set(fake_importasdm, asdm, output_root, overwrite=False)
+
+    assert calls == [True], "an MS with empty subtables must be re-imported"
+    assert result == unfinished
+    assert (output_root / "working" / f"{uid}.ms.done").is_file()
+
+
+@pytest.mark.unit
+@patch("almasim.services.archive.unpack_ms.empty_required_subtables", return_value=["ANTENNA"])
+@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=7)
+def test_verify_measurement_set_rejects_empty_subtables(mock_rows, mock_empty, tmp_path):
+    from almasim.services.archive.unpack_ms import verify_measurement_set
+
+    ms = tmp_path / "uid___A002_X1_X2.ms"
+    ms.mkdir()
+    with pytest.raises(RuntimeError, match=r"subtables have no rows \(ANTENNA\)"):
+        verify_measurement_set(ms)
