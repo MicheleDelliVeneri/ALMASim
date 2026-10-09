@@ -202,6 +202,7 @@ def compute_imaging_parameters(input_ms: Path, science_only: bool = True) -> pd.
     n_rows = int(keep.sum())
 
     derived_parameters = pd.DataFrame(
+        [
         {
             "filename": [str(input_ms.resolve())] * n_rows,
             "spectral_window_id": spectral_window_id[keep],
@@ -217,8 +218,8 @@ def compute_imaging_parameters(input_ms: Path, science_only: bool = True) -> pd.
             "n_visibility_rows": [
                 rows_per_spw.get(int(spw), -1) for spw in spectral_window_id[keep]
             ],
-            "target_field_ids": [",".join(str(f) for f in target_fields)] * n_rows,
-        }
+            "target_field_ids": f * n_rows,
+        } for f in target_fields]
     )
     return derived_parameters
 
