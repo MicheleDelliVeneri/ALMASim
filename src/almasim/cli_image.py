@@ -9,7 +9,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from time import sleep, time
-from typing import Any, Optional, cast
+from typing import Any, Optional, Sequence, cast
 
 import numpy as np
 import pandas as pd
@@ -137,6 +137,40 @@ def science_selection(input_ms: Path) -> tuple[dict[int, int], list[int]]:
 
     Returns ``({spw_id: n_rows}, [target field ids])``.
     """
+    rows_per_spw, target_fields, _ = _field_scan(input_ms)
+    return rows_per_spw, target_fields
+
+
+def intent_matches(obs_mode: str, intents: Sequence[str]) -> bool:
+    """Whether a STATE ``OBS_MODE`` carries one of ``intents``.
+
+    ``OBS_MODE`` is a comma-separated list such as
+    ``CALIBRATE_PHASE#ON_SOURCE,CALIBRATE_WVR#ON_SOURCE``. An intent with a
+    ``#`` sub-intent must match a token exactly; one without (``OBSERVE_TARGET``)
+    matches any of its sub-intents.
+    """
+    tokens = [token.strip() for token in str(obs_mode).split(",") if token.strip()]
+    for intent in intents:
+        if "#" in intent:
+            if intent in tokens:
+                return True
+        elif any(token.split("#", 1)[0] == intent for token in tokens):
+            return True
+    return False
+
+
+def _field_scan(
+    input_ms: Path,
+    intents: Sequence[str] = (TARGET_INTENT,),
+) -> tuple[dict[int, int], list[int], dict[tuple[int, int], int]]:
+    """``science_selection`` plus ``{(spw_id, field_id): n_rows}`` for every field.
+
+    The selected fields are those with rows under one of ``intents``
+    (``OBSERVE_TARGET`` by default).
+
+    The per-field counts cover all of a field's rows in a window, whatever the
+    intent, which is what the single-window extraction copies for it.
+    """
     casacore_table = import_casacore_tables()
     data_description = casacore_table(f"{input_ms}::DATA_DESCRIPTION", ack=False)
     spw_of_dd = np.asarray(data_description.getcol("SPECTRAL_WINDOW_ID"))
@@ -150,23 +184,44 @@ def science_selection(input_ms: Path) -> tuple[dict[int, int], list[int]]:
         spw = int(spw_of_dd[int(dd_id)])
         rows_per_spw[spw] = rows_per_spw.get(spw, 0) + int(count)
 
-    target_states = {i for i, mode in enumerate(obs_modes) if TARGET_INTENT in str(mode)}
+    field_ids = np.asarray(main.getcol("FIELD_ID"))
+    rows_per_spw_field: dict[tuple[int, int], int] = {}
+    pairs, pair_counts = np.unique(np.stack([dd_ids, field_ids]), axis=1, return_counts=True)
+    for (dd_id, field_id), count in zip(pairs.T, pair_counts):
+        key = (int(spw_of_dd[int(dd_id)]), int(field_id))
+        rows_per_spw_field[key] = rows_per_spw_field.get(key, 0) + int(count)
+
+    target_states = {i for i, mode in enumerate(obs_modes) if intent_matches(mode, intents)}
     target_fields: list[int] = []
     if target_states:
         state_ids = np.asarray(main.getcol("STATE_ID"))
-        field_ids = np.asarray(main.getcol("FIELD_ID"))
         mask = np.isin(state_ids, list(target_states))
         target_fields = sorted(int(f) for f in np.unique(field_ids[mask]))
-    return rows_per_spw, target_fields
+    return rows_per_spw, target_fields, rows_per_spw_field
 
 
-def compute_imaging_parameters(input_ms: Path, science_only: bool = True) -> pd.DataFrame:
-    """One row per spectral window with the WSClean geometry for ``input_ms``.
+def compute_imaging_parameters(
+    input_ms: Path,
+    science_only: bool = True,
+    intents: Optional[Sequence[str]] = None,
+) -> pd.DataFrame:
+    """WSClean geometry for ``input_ms``: one row per spectral window and field.
 
-    With ``science_only`` (the default) only spectral windows that actually
-    hold visibilities are listed, and ``target_field_ids`` names the fields
-    observed with the science intent so imaging can leave the calibrators out.
+    Every row images one field: ``target_field_ids`` holds its single id and
+    ``field_name`` its name. WSClean's ``-field`` needs all listed fields to
+    share a phase centre, and multi-target observations do not: ``-field 2,4``
+    on HOPS-358 and HOPS-373, 12.4' apart, gridded both onto one image
+    (uid___A002_X10d9399_X32fd, Cycle 11).
+
+    Only (window, field) pairs that hold visibilities get a row. With
+    ``science_only`` (the default) the fields are those observed with one of
+    ``intents`` (``OBSERVE_TARGET`` unless given, e.g.
+    ``CALIBRATE_PHASE#ON_SOURCE`` for the phase calibrators); an MS without
+    such a field gives no rows. Otherwise every field is listed, calibrators
+    included, and ``intents`` must not be given.
     """
+    if intents and not science_only:
+        raise ValueError("intents select fields; they cannot be combined with all fields")
     casacore_table = import_casacore_tables()
     spectral_windows = casacore_table(f"{input_ms}::SPECTRAL_WINDOW", ack=False)
     observation = casacore_table(f"{input_ms}::OBSERVATION", ack=False)
@@ -192,14 +247,25 @@ def compute_imaging_parameters(input_ms: Path, science_only: bool = True) -> pd.
     )
     spectral_window_id = np.arange(reference_frequencies.size, dtype=int)
 
-    rows_per_spw: dict[int, int] = {}
-    target_fields: list[int] = []
-    if science_only:
-        rows_per_spw, target_fields = science_selection(input_ms)
-        keep = np.array([int(spw) in rows_per_spw for spw in spectral_window_id], dtype=bool)
-    else:
-        keep = np.ones(reference_frequencies.size, dtype=bool)
-    n_rows = int(keep.sum())
+    _, selected_fields, rows_per_spw_field = _field_scan(
+        input_ms, tuple(intents) if intents else (TARGET_INTENT,)
+    )
+    # (index into the spectral-window arrays, field id, n rows): only pairs
+    # with visibilities, so every row is something WSClean can image.
+    entries: list[tuple[int, int, int]] = []
+    for index, spw in enumerate(int(s) for s in spectral_window_id):
+        fields = sorted(
+            f
+            for (s, f), rows in rows_per_spw_field.items()
+            if s == spw and rows > 0 and (not science_only or f in selected_fields)
+        )
+        entries.extend((index, f, rows_per_spw_field[(spw, f)]) for f in fields)
+    field_names: list[str] = []
+    if entries:
+        field_table = casacore_table(f"{input_ms}::FIELD", ack=False)
+        field_names = [str(name) for name in field_table.getcol("NAME")]
+    keep = np.array([index for index, _, _ in entries], dtype=int)
+    n_rows = len(entries)
 
     derived_parameters = pd.DataFrame(
         {
@@ -214,10 +280,9 @@ def compute_imaging_parameters(input_ms: Path, science_only: bool = True) -> pd.
             "duration_s": end_mjd - start_mjd,
             "start_datetime": start_datetime.isoformat(),
             "end_datetime": end_datetime.isoformat(),
-            "n_visibility_rows": [
-                rows_per_spw.get(int(spw), -1) for spw in spectral_window_id[keep]
-            ],
-            "target_field_ids": [",".join(str(f) for f in target_fields)] * n_rows,
+            "n_visibility_rows": [rows for _, _, rows in entries],
+            "target_field_ids": [str(f) for _, f, _ in entries],
+            "field_name": [field_names[f] for _, f, _ in entries],
         }
     )
     return derived_parameters
@@ -300,8 +365,18 @@ def compute_parameters(
         True,
         "--science-only/--all-spws",
         help=(
-            "List only spectral windows that hold visibilities and record the "
-            "OBSERVE_TARGET field ids (default). --all-spws lists every window."
+            "One row per spectral window and per field observed with the selected intent "
+            "(OBSERVE_TARGET by default). --all-spws gives a row per field, calibrators "
+            "included. Only (window, field) pairs with visibilities are listed."
+        ),
+    ),
+    intent: Optional[list[str]] = typer.Option(
+        None,
+        "--intent",
+        help=(
+            "Scan intent selecting the fields, e.g. CALIBRATE_PHASE#ON_SOURCE, or "
+            "CALIBRATE_PHASE for any sub-intent. Repeat for several. Default: "
+            "OBSERVE_TARGET. Not with --all-spws."
         ),
     ),
     require_done_marker: bool = typer.Option(
@@ -324,6 +399,8 @@ def compute_parameters(
     in ``<output>.failed.tsv`` instead of aborting the whole scan; the command
     then exits with status 1 once every MS has been attempted.
     """
+    if intent and not science_only:
+        raise typer.BadParameter("--intent selects fields; it cannot be combined with --all-spws")
     mss = sorted(archive_folder.glob(pattern))
     if len(mss) == 0:
         typer.echo(f"Cannot find any MS in {archive_folder}")
@@ -341,7 +418,7 @@ def compute_parameters(
     failures: list[tuple[Path, str]] = []
     for ms in tqdm(mss):
         try:
-            frames.append(compute_imaging_parameters(ms, science_only=science_only))
+            frames.append(compute_imaging_parameters(ms, science_only=science_only, intents=intent))
         except Exception as exc:
             if fail_fast:
                 raise
@@ -352,7 +429,7 @@ def compute_parameters(
         main_output = pd.concat(frames, axis=0, ignore_index=True)
         main_output.to_csv(output_metadata_file, index=False)
         typer.echo(
-            f"Wrote {len(main_output)} spectral-window row(s) for {len(frames)} MS(s) "
+            f"Wrote {len(main_output)} (spectral window, field) row(s) for {len(frames)} MS(s) "
             f"to {output_metadata_file}"
         )
     if failures:
@@ -450,7 +527,14 @@ def build_imaging_tasks(
     for _, row in parameters.iterrows():
         input_filename = Path(row["filename"]).expanduser().absolute()
         spw = int(row["spectral_window_id"])
-        outdir = output_directory / input_filename.stem / f"SPW-{spw}"
+        field_args = _field_arguments(row)
+        field_ids = tuple(int(f) for f in field_args[1].split(",")) if field_args else ()
+        # One field per row gets its own directory and markers, so the fields
+        # of one window never share an image; rows without a field, or with
+        # a list (CSVs from before per-field rows), keep SPW-<n>.
+        single_field = field_ids[0] if len(field_ids) == 1 else None
+        task_name = f"SPW-{spw}" if single_field is None else f"SPW-{spw}_FIELD-{single_field}"
+        outdir = output_directory / input_filename.stem / task_name
         if not overwrite_outputs:
             if is_imaging_complete(outdir):
                 skipped += 1
@@ -501,11 +585,10 @@ def build_imaging_tasks(
             *(["-no-reorder"] if single_window else []),
             SINGLE_WINDOW_PLACEHOLDER if single_window else str(input_filename),
         ]
-        field_args = _field_arguments(row)
-        field_ids = tuple(int(f) for f in field_args[1].split(",")) if field_args else ()
         tasks.append(
             ImagingTask(
-                label=f"{input_filename.stem}_{spw}",
+                label=f"{input_filename.stem}_{spw}"
+                + ("" if single_field is None else f"_f{single_field}"),
                 ms_path=input_filename,
                 spw=spw,
                 output_dir=outdir,
@@ -934,7 +1017,10 @@ def image_from_ms(
     if not tasks:
         typer.echo("All requested tasks are already imaged; nothing to do.")
         return
-    typer.echo(f"Imaging {len(tasks)} (MS, SPW) task(s); per-task logs: <output>/<ms>/SPW-<n>.log")
+    typer.echo(
+        f"Imaging {len(tasks)} (MS, SPW, field) task(s); "
+        "per-task logs: <output>/<ms>/SPW-<n>[_FIELD-<id>].log"
+    )
 
     failures: list[ImagingFailure] = []
     run_imaging_tasks(

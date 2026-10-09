@@ -91,13 +91,20 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
             return antenna
         if table_name.endswith("::OBSERVATION"):
             return fake_observation
+        if table_name.endswith("::FIELD"):
+            return _FakeTable({"NAME": np.array(["cal", "x", "target"])})
 
     monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
-    monkeypatch.setattr(cli_image, "science_selection", lambda _ms: ({0: 10, 1: 20}, [0, 2]))
+    monkeypatch.setattr(
+        cli_image,
+        "_field_scan",
+        lambda _ms, _intents=(): ({0: 15, 1: 20}, [2], {(0, 0): 5, (0, 2): 10, (1, 2): 20}),
+    )
 
     output = cli_image.compute_imaging_parameters(Path("test_dataset.cal"))
-    assert list(output["n_visibility_rows"]) == [10, 20]
-    assert list(output["target_field_ids"]) == ["0,2", "0,2"]
+    assert list(output["n_visibility_rows"]) == [10, 20], "the calibrator (field 0) is left out"
+    assert list(output["target_field_ids"]) == ["2", "2"]
+    assert list(output["field_name"]) == ["target", "target"]
 
     expected_frequencies = np.array([100.0e9, 200.0e9])
     speed_of_light = 299_792_458.0
@@ -202,7 +209,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
 
-    def _fake_compute(input_ms: Path, science_only: bool = True) -> pd.DataFrame:
+    def _fake_compute(input_ms: Path, science_only: bool = True, intents=None) -> pd.DataFrame:
         return pd.DataFrame(
             {
                 "filename": [str(input_ms.resolve())],
@@ -232,7 +239,7 @@ def test_compute_parameters_defaults_to_cwd_and_default_output(monkeypatch, tmp_
     """compute-parameters should run without args using cwd and default output filename."""
     monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
 
-    def _fake_compute(input_ms: Path, science_only: bool = True) -> pd.DataFrame:
+    def _fake_compute(input_ms: Path, science_only: bool = True, intents=None) -> pd.DataFrame:
         return pd.DataFrame(
             {
                 "filename": [str(input_ms.resolve())],
@@ -1069,7 +1076,7 @@ def test_compute_parameters_records_unreadable_ms_and_continues(monkeypatch, tmp
             (folder / f"{name}.done").write_text("{}")
     monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
 
-    def _fake_compute(ms: Path, science_only: bool = True):
+    def _fake_compute(ms: Path, science_only: bool = True, intents=None):
         if ms.name.startswith("b"):
             raise RuntimeError("Table does not exist")
         return pd.DataFrame({"filename": [str(ms)], "spectral_window_id": [0]})
@@ -1510,3 +1517,244 @@ def test_build_imaging_tasks_makes_relative_paths_absolute(tmp_path, monkeypatch
     for flag in ("-name", "-temp-dir"):
         value = task.command[task.command.index(flag) + 1]
         assert Path(value).is_absolute(), f"{flag} {value} is relative"
+
+
+def _geometry_tables(names):
+    tables = {
+        "::SPECTRAL_WINDOW": _FakeTable({"REF_FREQUENCY": np.array([100.0e9, 200.0e9, 230.0e9])}),
+        "::ANTENNA": _FakeTable(
+            {
+                "DISH_DIAMETER": np.array([12.0, 12.0]),
+                "POSITION": np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]]),
+            }
+        ),
+        "::OBSERVATION": [{"TIME_RANGE": [57000 * 86400.0, 57000.1 * 86400.0]}],
+        "::FIELD": _FakeTable({"NAME": np.array(names)}),
+    }
+    return lambda name, ack=False: next(t for k, t in tables.items() if name.endswith(k))
+
+
+# uid___A002_X10d9399_X32fd: HOPS-358 (field 2) and HOPS-373 (field 4), 12.4' apart,
+# were imaged together with ``-field 2,4``. Fields 0, 1, 3 are calibrators.
+_X32FD_NAMES = ["J0538-4405", "J0552+0313", "HOPS-358", "J0551+0829", "HOPS-373"]
+_X32FD_SCAN = (
+    {1: 140, 2: 75},
+    [2, 4],
+    {(1, 0): 10, (1, 1): 20, (1, 2): 50, (1, 3): 20, (1, 4): 40, (2, 1): 15, (2, 2): 60},
+)
+
+
+@pytest.mark.unit
+def test_compute_imaging_parameters_one_row_per_target_field(monkeypatch):
+    """Science-only: a row per window and target field, one id per row, no calibrators."""
+    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES))
+    monkeypatch.setattr(cli_image, "_field_scan", lambda _ms, _intents=(): _X32FD_SCAN)
+
+    out = cli_image.compute_imaging_parameters(Path("x.ms.split.cal"))
+
+    rows = list(zip(out["spectral_window_id"], out["target_field_ids"], out["n_visibility_rows"]))
+    assert rows == [(1, "2", 50), (1, "4", 40), (2, "2", 60)], "field 4 has no rows in SPW 2"
+    assert list(out["field_name"]) == ["HOPS-358", "HOPS-373", "HOPS-358"]
+    assert "field_id" not in out.columns, "the field id is written once, in target_field_ids"
+
+
+@pytest.mark.unit
+def test_compute_imaging_parameters_all_spws_includes_calibrators(monkeypatch):
+    """--all-spws: every window, a row per field with data in it, calibrators included."""
+    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES))
+    monkeypatch.setattr(cli_image, "_field_scan", lambda _ms, _intents=(): _X32FD_SCAN)
+
+    out = cli_image.compute_imaging_parameters(Path("x.ms.split.cal"), science_only=False)
+
+    rows = list(zip(out["spectral_window_id"], out["target_field_ids"], out["field_name"]))
+    assert rows == [  # SPW 0 has no visibilities: no row
+        (1, "0", "J0538-4405"),
+        (1, "1", "J0552+0313"),
+        (1, "2", "HOPS-358"),
+        (1, "3", "J0551+0829"),
+        (1, "4", "HOPS-373"),
+        (2, "1", "J0552+0313"),
+        (2, "2", "HOPS-358"),
+    ]
+
+
+@pytest.mark.unit
+def test_compute_imaging_parameters_without_selected_intent_gives_no_rows(monkeypatch):
+    """No field with the intent: nothing to image (no fallback to WSClean's field 0)."""
+    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(["a"]))
+    monkeypatch.setattr(
+        cli_image,
+        "_field_scan",
+        lambda _ms, _intents=(): ({0: 7, 2: 9}, [], {(0, 0): 7, (2, 0): 9}),
+    )
+
+    assert cli_image.compute_imaging_parameters(Path("x.ms")).empty
+
+
+@pytest.mark.unit
+def test_compute_imaging_parameters_passes_intents_and_rejects_them_with_all_fields(monkeypatch):
+    seen = []
+
+    def _scan(_ms, intents=()):
+        seen.append(intents)
+        return _X32FD_SCAN[0], [1], _X32FD_SCAN[2]  # field 1 = phase calibrator
+
+    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES))
+    monkeypatch.setattr(cli_image, "_field_scan", _scan)
+
+    out = cli_image.compute_imaging_parameters(Path("x.ms"), intents=["CALIBRATE_PHASE#ON_SOURCE"])
+    assert seen == [("CALIBRATE_PHASE#ON_SOURCE",)]
+    assert list(zip(out["spectral_window_id"], out["field_name"])) == [
+        (1, "J0552+0313"),
+        (2, "J0552+0313"),
+    ]
+    with pytest.raises(ValueError):
+        cli_image.compute_imaging_parameters(Path("x.ms"), science_only=False, intents=["X"])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("obs_mode", "intents", "expected"),
+    [
+        ("CALIBRATE_PHASE#ON_SOURCE,CALIBRATE_WVR#ON_SOURCE", ["CALIBRATE_PHASE#ON_SOURCE"], True),
+        ("CALIBRATE_PHASE#ON_SOURCE,CALIBRATE_WVR#ON_SOURCE", ["CALIBRATE_PHASE"], True),
+        ("CALIBRATE_PHASE#OFF_SOURCE", ["CALIBRATE_PHASE#ON_SOURCE"], False),
+        ("OBSERVE_TARGET#ON_SOURCE", ["OBSERVE_TARGET"], True),
+        ("OBSERVE_TARGET#ON_SOURCE", ["OBSERVE"], False),
+        ("CALIBRATE_BANDPASS#ON_SOURCE", ["CALIBRATE_FLUX", "CALIBRATE_BANDPASS"], True),
+    ],
+)
+def test_intent_matches(obs_mode, intents, expected):
+    assert cli_image.intent_matches(obs_mode, intents) is expected
+
+
+@pytest.mark.unit
+def test_field_scan_selects_fields_by_given_intent(monkeypatch):
+    class _Tab:
+        def __init__(self, cols):
+            self.cols = cols
+
+        def getcol(self, name):
+            return self.cols[name]
+
+        def nrows(self):
+            return len(next(iter(self.cols.values())))
+
+    tables = {
+        "::DATA_DESCRIPTION": _Tab({"SPECTRAL_WINDOW_ID": np.array([0])}),
+        "::STATE": _Tab(
+            {
+                "OBS_MODE": [
+                    "CALIBRATE_PHASE#ON_SOURCE,CALIBRATE_WVR#ON_SOURCE",
+                    "OBSERVE_TARGET#ON_SOURCE",
+                ]
+            }
+        ),
+        "": _Tab(
+            {
+                "DATA_DESC_ID": np.array([0, 0, 0]),
+                "STATE_ID": np.array([0, 1, 1]),
+                "FIELD_ID": np.array([1, 2, 4]),
+            }
+        ),
+    }
+    monkeypatch.setattr(
+        cli_image,
+        "import_casacore_tables",
+        lambda: (
+            lambda name, ack=False: next(
+                (t for k, t in tables.items() if k and name.endswith(k)), tables[""]
+            )
+        ),
+    )
+    assert cli_image._field_scan(Path("x.ms"))[1] == [2, 4]
+    assert cli_image._field_scan(Path("x.ms"), ("CALIBRATE_PHASE#ON_SOURCE",))[1] == [1]
+
+
+@pytest.mark.unit
+def test_compute_parameters_cli_rejects_intent_with_all_spws(tmp_path):
+    result = runner.invoke(
+        cli.app,
+        ["image", "compute-parameters", str(tmp_path), "--all-spws", "--intent", "CALIBRATE_PHASE"],
+    )
+    assert result.exit_code != 0
+
+
+@pytest.mark.unit
+def test_field_scan_counts_rows_per_window_and_field(monkeypatch):
+    class _Tab:
+        def __init__(self, cols):
+            self.cols = cols
+
+        def getcol(self, name):
+            return self.cols[name]
+
+        def nrows(self):
+            return len(next(iter(self.cols.values())))
+
+    tables = {
+        "::DATA_DESCRIPTION": _Tab({"SPECTRAL_WINDOW_ID": np.array([0, 5, 7])}),
+        "::STATE": _Tab(
+            {
+                "OBS_MODE": [
+                    "CALIBRATE_PHASE#ON_SOURCE",
+                    "OBSERVE_TARGET#ON_SOURCE",
+                    "CALIBRATE_ATMOSPHERE#ON_SOURCE",
+                ]
+            }
+        ),
+        "": _Tab(
+            {
+                # dd 1 = spw 5, dd 2 = spw 7; field 0 a calibrator, 3 and 4 targets;
+                # the last row is field 3 under the atmosphere intent and still counts.
+                "DATA_DESC_ID": np.array([1, 1, 2, 2, 2, 1, 1]),
+                "STATE_ID": np.array([0, 1, 1, 0, 1, 1, 2]),
+                "FIELD_ID": np.array([0, 3, 3, 0, 4, 4, 3]),
+            }
+        ),
+    }
+
+    def _fake_table(name, ack=False):
+        return next((t for k, t in tables.items() if k and name.endswith(k)), tables[""])
+
+    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_table)
+    rows_per_spw, targets, per_field = cli_image._field_scan(Path("x.ms"))
+    assert rows_per_spw == {5: 4, 7: 3}
+    assert targets == [3, 4]
+    assert per_field == {(5, 0): 1, (5, 3): 2, (5, 4): 1, (7, 0): 1, (7, 3): 1, (7, 4): 1}
+
+
+@pytest.mark.unit
+def test_build_imaging_tasks_one_task_and_directory_per_field(tmp_path):
+    common = dict(fov_fraction=1.5, beam_sampling=8, num_cores=10, max_cores_per_node=95)
+    row = dict(
+        filename=str(tmp_path / "uid___A002_X1_X2.ms.split.cal"),
+        spectral_window_id=23,
+        reference_frequency=230e9,
+        fov_per_frequency=25.0,
+        max_baseline_size=8500.0,
+        synthetized_beam_size=0.03,
+    )
+    per_field = pd.DataFrame(
+        [
+            {**row, "target_field_ids": "2", "field_name": "HOPS-358"},
+            {**row, "target_field_ids": "4", "field_name": "HOPS-373"},
+        ]
+    )
+    csv_path = tmp_path / "params.csv"
+    per_field.to_csv(csv_path, index=False)
+
+    tasks, skipped = cli_image.build_imaging_tasks(
+        pd.read_csv(csv_path), tmp_path / "img", **common
+    )
+
+    assert skipped == 0
+    assert [t.output_dir.name for t in tasks] == ["SPW-23_FIELD-2", "SPW-23_FIELD-4"]
+    assert [t.field_ids for t in tasks] == [(2,), (4,)]
+    for task, field in zip(tasks, ("2", "4")):
+        assert task.command[task.command.index("-field") + 1] == field
+    assert len({t.label for t in tasks}) == 2
+
+    legacy = pd.DataFrame([{**row, "target_field_ids": "2,4"}])
+    tasks, _ = cli_image.build_imaging_tasks(legacy, tmp_path / "img", **common)
+    assert [t.output_dir.name for t in tasks] == ["SPW-23"], "old per-window CSVs keep their layout"
