@@ -412,7 +412,7 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
     assert cmd[cmd.index("-j") + 1] == "8"
     assert cmd[cmd.index("-field") + 1] == "3,4"
     assert cmd[cmd.index("-spws") + 1] == "2"
-    assert cmd[-1] == "uid___A001_X1_X1.cal"
+    assert Path(cmd[-1]).is_absolute() and Path(cmd[-1]).name == "uid___A001_X1_X1.cal"
     assert cmd[cmd.index("-auto-threshold") + 1] == "3.0", "3 sigma stopping point by default"
     assert "-auto-mask" not in cmd
     assert cmd[cmd.index("-mem") + 1] == "12.5", "-mem is a percentage: 8 of 64 cores"
@@ -1482,3 +1482,31 @@ def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, 
     }
     assert seen["timeout"] == 30 and seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
     assert result["rows"] == 12 and "seconds" in result
+
+
+@pytest.mark.unit
+def test_build_imaging_tasks_makes_relative_paths_absolute(tmp_path, monkeypatch):
+    """WSClean runs with the task directory as cwd, so relative paths broke every task.
+
+    A run started from /SKAO_data/cycle11 with output ``ms-imaged-flagged`` had WSClean
+    look for ``.../SPW-5/ms-imaged-flagged/.../spw5.single.ms`` (2026-10-09).
+    """
+    csv_path = _params_csv(tmp_path, rows=1)
+    parameters = pd.read_csv(csv_path)
+    monkeypatch.chdir(tmp_path)
+
+    tasks, _ = cli_image.build_imaging_tasks(
+        parameters,
+        Path("images"),
+        fov_fraction=1.5,
+        beam_sampling=8,
+        num_cores=10,
+        max_cores_per_node=95,
+    )
+
+    task = tasks[0]
+    assert Path(task.output_dir).is_absolute()
+    assert Path(task.output_dir).is_relative_to(tmp_path / "images")
+    for flag in ("-name", "-temp-dir"):
+        value = task.command[task.command.index(flag) + 1]
+        assert Path(value).is_absolute(), f"{flag} {value} is relative"

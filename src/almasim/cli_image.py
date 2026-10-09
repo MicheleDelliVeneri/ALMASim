@@ -442,8 +442,13 @@ def build_imaging_tasks(
     # (0.1 for 10 cores of 96) limited every task to 0.1 % ≈ 0.4 GB and made
     # WSClean segfault on the first gridding pass.
     mem_percent = min(100.0, 100.0 * num_cores / max_cores_per_node)
+    # WSClean runs with its task directory as cwd, so a relative path in the
+    # command resolves against that directory, not the caller's: a run started
+    # with output "ms-imaged-flagged" looked for its single-window MS under
+    # .../SPW-5/ms-imaged-flagged/... and every task failed (2026-10-09).
+    output_directory = Path(output_directory).expanduser().absolute()
     for _, row in parameters.iterrows():
-        input_filename = Path(row["filename"])
+        input_filename = Path(row["filename"]).expanduser().absolute()
         spw = int(row["spectral_window_id"])
         outdir = output_directory / input_filename.stem / f"SPW-{spw}"
         if not overwrite_outputs:
