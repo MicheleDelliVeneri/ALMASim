@@ -6,7 +6,7 @@ import math
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from time import sleep, time
 from typing import Any, Optional, Sequence, cast
@@ -200,6 +200,135 @@ def _field_scan(
     return rows_per_spw, target_fields, rows_per_spw_field
 
 
+SPECTRAL_COLUMNS = (
+    "n_channels",
+    "channel_width_hz",
+    "spectral_resolution_hz",
+    "total_bandwidth_hz",
+)
+
+
+def spectral_window_properties(spectral_windows: Any) -> dict[str, np.ndarray]:
+    """Channelisation of every row of an open SPECTRAL_WINDOW table.
+
+    ``channel_width_hz`` and ``spectral_resolution_hz`` are the median of the
+    per-channel CHAN_WIDTH and RESOLUTION (absolute: ALMA lower-sideband
+    windows have negative widths). ALMA's online Hanning smoothing makes the
+    resolution of an unaveraged FDM window twice its channel width (3840 x
+    488 kHz channels, 977 kHz resolution); an online-averaged window has a
+    resolution about equal to its width.
+    """
+    n_rows = spectral_windows.nrows()
+    widths = np.empty(n_rows)
+    resolutions = np.empty(n_rows)
+    for row in range(n_rows):
+        widths[row] = np.median(np.abs(spectral_windows.getcell("CHAN_WIDTH", row)))
+        resolutions[row] = np.median(np.abs(spectral_windows.getcell("RESOLUTION", row)))
+    return {
+        "n_channels": np.asarray(spectral_windows.getcol("NUM_CHAN"), dtype=int),
+        "channel_width_hz": widths,
+        "spectral_resolution_hz": resolutions,
+        "total_bandwidth_hz": np.abs(np.asarray(spectral_windows.getcol("TOTAL_BANDWIDTH"))),
+    }
+
+
+def add_spectral_columns(parameters: pd.DataFrame) -> pd.DataFrame:
+    """Fill ``SPECTRAL_COLUMNS`` from each MS when a CSV predates them.
+
+    Reads only the SPECTRAL_WINDOW subtables, so an existing parameter CSV
+    can be imaged as cubes without rerunning ``compute-parameters``.
+    """
+    if all(column in parameters.columns for column in SPECTRAL_COLUMNS):
+        return parameters
+    casacore_table = import_casacore_tables()
+    filled = parameters.copy()
+    for column in SPECTRAL_COLUMNS:
+        if column not in filled.columns:
+            filled[column] = np.nan
+    for filename, rows in tqdm(filled.groupby("filename").groups.items(), desc="Spectral windows"):
+        spectral_windows = casacore_table(f"{filename}::SPECTRAL_WINDOW", ack=False)
+        try:
+            spectral = spectral_window_properties(spectral_windows)
+        finally:
+            close = getattr(spectral_windows, "close", None)
+            if callable(close):
+                close()
+        spws = filled.loc[rows, "spectral_window_id"].astype(int).to_numpy()
+        for column, values in spectral.items():
+            filled.loc[rows, column] = values[spws]
+    filled["n_channels"] = filled["n_channels"].astype(int)
+    return filled
+
+
+@dataclass(frozen=True)
+class CubeOptions:
+    """How ``cube_channels`` picks the number of output channels.
+
+    * ``spectral_sampling``: output channels per spectral resolution element,
+      the spectral counterpart of ``beam_sampling``. 2 (Nyquist) keeps the
+      native channels of a Hanning-smoothed window.
+    * ``velocity_resolution_km_s``: never make channels narrower than this
+      (0: no limit).
+    * ``max_cube_gb``: largest cube, in GB of 32-bit pixels, per product
+      (image, residual ...); wide images get fewer channels.
+    """
+
+    spectral_sampling: float = 2.0
+    velocity_resolution_km_s: float = 0.0
+    max_cube_gb: float = 4.0
+
+
+def _largest_divisor_at_most(n: int, limit: int) -> int:
+    """The largest divisor of ``n`` not above ``limit`` (at least 1)."""
+    for candidate in range(max(min(int(limit), int(n)), 1), 0, -1):
+        if n % candidate == 0:
+            return candidate
+    return 1
+
+
+def cube_channels(row: pd.Series, n_pixels: int, options: CubeOptions) -> int:
+    """Output channels (WSClean ``-channels-out``) for one spectral window.
+
+    The channel width is the widest of: the native channel, the spectral
+    resolution divided by ``spectral_sampling``, and ``velocity_resolution``
+    at the window's reference frequency. The count it gives is then capped so
+    that an ``n_pixels`` x ``n_pixels`` cube stays below ``max_cube_gb``, and
+    rounded down to a divisor of the native channel count, so every output
+    channel averages the same number of native channels and the cube has one
+    channel width.
+    """
+    missing = [column for column in SPECTRAL_COLUMNS if column not in row.index]
+    if missing:
+        raise ValueError(
+            f"Cube imaging needs the spectral columns {', '.join(missing)}; "
+            "rerun compute-parameters or use add_spectral_columns"
+        )
+    n_native = int(row["n_channels"])
+    width = float(row["channel_width_hz"])
+    resolution = float(row["spectral_resolution_hz"]) or width
+    target_width = max(width, resolution / options.spectral_sampling)
+    if options.velocity_resolution_km_s > 0:
+        velocity_width = (options.velocity_resolution_km_s * 1e3 / SPEED_OF_LIGHT_M_S) * float(
+            row["reference_frequency"]
+        )
+        target_width = max(target_width, velocity_width)
+    wanted = max(int(math.floor(n_native * width / target_width + 1e-9)), 1)
+    plane_bytes = 4 * n_pixels * n_pixels
+    affordable = (
+        wanted
+        if math.isinf(options.max_cube_gb)
+        else max(int(options.max_cube_gb * 1e9 // plane_bytes), 1)
+    )
+    return _largest_divisor_at_most(n_native, min(wanted, affordable))
+
+
+def image_pixels(imaging_parameters: pd.Series, fov_fraction: float, beam_sampling: float) -> int:
+    """Image side in pixels: the FOV over the cell (beam / ``beam_sampling``)."""
+    cell = imaging_parameters["synthetized_beam_size"] / beam_sampling
+    fov = imaging_parameters["fov_per_frequency"] * fov_fraction
+    return max(MIN_IMAGE_PIXELS, int(math.ceil(fov / cell)))
+
+
 def compute_imaging_parameters(
     input_ms: Path,
     science_only: bool = True,
@@ -246,6 +375,7 @@ def compute_imaging_parameters(
         SPEED_OF_LIGHT_M_S * RAD_TO_ARCSEC / reference_frequencies / max_baseline_size
     )
     spectral_window_id = np.arange(reference_frequencies.size, dtype=int)
+    spectral = spectral_window_properties(spectral_windows)
 
     _, selected_fields, rows_per_spw_field = _field_scan(
         input_ms, tuple(intents) if intents else (TARGET_INTENT,)
@@ -275,6 +405,7 @@ def compute_imaging_parameters(
             "fov_per_frequency": fov_per_frequency[keep],
             "max_baseline_size": [max_baseline_size] * n_rows,
             "synthetized_beam_size": synthetized_beam_size[keep],
+            **{column: values[keep] for column, values in spectral.items()},
             "start_mjd_s": start_mjd,
             "end_mjd_s": end_mjd,
             "duration_s": end_mjd - start_mjd,
@@ -294,19 +425,21 @@ def imaging_parameter_to_command_arg(
     beam_sampling: float,
     auto_threshold: float | None = None,
     auto_mask: float | None = None,
+    cube: CubeOptions | None = None,
 ) -> list[str]:
     """WSClean geometry and deconvolution flags for one spectral window.
 
     ``auto_threshold`` / ``auto_mask`` (in units of the residual noise) give
     CLEAN a stopping point; without them ``-niter`` is the only limit and every
     task cleans into the noise until the iteration cap.
+
+    With ``cube`` the window is imaged as a spectral cube of ``cube_channels``
+    channels (``-channels-out``, each channel cleaned on its own); without it,
+    as one continuum plane.
     """
     spw = imaging_parameters["spectral_window_id"]
-    fov = imaging_parameters["fov_per_frequency"]
-    synthetized_beam_size = imaging_parameters["synthetized_beam_size"]
-    synthetized_beam_size /= beam_sampling
-    fov *= fov_fraction
-    n_pixels = max(MIN_IMAGE_PIXELS, int(math.ceil(fov / synthetized_beam_size)))
+    synthetized_beam_size = imaging_parameters["synthetized_beam_size"] / beam_sampling
+    n_pixels = image_pixels(imaging_parameters, fov_fraction, beam_sampling)
     cmd_args = [
         "-scale",
         f"{synthetized_beam_size}asec",
@@ -330,6 +463,10 @@ def imaging_parameter_to_command_arg(
         cmd_args += ["-auto-mask", str(auto_mask)]
     if auto_threshold is not None and auto_threshold > 0:
         cmd_args += ["-auto-threshold", str(auto_threshold)]
+    if cube is not None:
+        channels = cube_channels(imaging_parameters, n_pixels, cube)
+        if channels > 1:
+            cmd_args += ["-channels-out", str(channels)]
     return cmd_args
 
 
@@ -443,7 +580,11 @@ def compute_parameters(
 
 @dataclass(frozen=True)
 class ImagingTask:
-    """One WSClean run: one MeasurementSet, one spectral window."""
+    """One imaging task: one MeasurementSet, one spectral window (and field).
+
+    ``command`` makes the continuum image (empty when only a cube is made);
+    ``cube_command``, when set, the spectral cube.
+    """
 
     label: str
     ms_path: Path
@@ -451,6 +592,7 @@ class ImagingTask:
     output_dir: Path
     command: list[str]
     field_ids: tuple[int, ...] = ()
+    cube_command: Optional[list[str]] = None
 
 
 @dataclass(frozen=True)
@@ -498,21 +640,44 @@ def build_imaging_tasks(
     task_memory_gb: float | None = None,
     scratch_dir: str | None = None,
     single_window: bool = True,
+    continuum: bool = True,
+    cube: CubeOptions | None = None,
+    cube_products: Sequence[str] | None = None,
+    cube_reorder: bool = True,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
+    A task makes the continuum image (``continuum``, ``wsclean-*.fits``)
+    and/or, with ``cube``, a spectral cube of ``cube_channels`` channels
+    (``wsclean-cube-*.fits``); both runs share the task's single-window MS.
+    The cube gets a dirty image only when ``cube_products`` asks for it.
+
+    The cube run lets WSClean reorder (``cube_reorder``) even on a
+    single-window MS: with ``-no-reorder`` it reads the whole MS about four
+    times per output channel, and a 480-channel Band 1 cube
+    (uid___A002_X1142854_X18e99 SPW 25) took about 2 h against 4.5 min
+    reordered, with the same images (2026-10-13). The 3.7 reordering crash
+    needs several windows in the MS; the continuum run keeps ``-no-reorder``.
+
     Returns ``(tasks, skipped)``. A task is done when its ``SPW-<n>.done``
-    marker and ``wsclean-image.fits`` both exist; ``trust_existing_images``
-    also accepts an image produced before markers existed and writes its
-    marker. ``overwrite_outputs`` redoes everything.
+    marker and every image it makes exist, so a cube run over a folder of
+    continuum images (``continuum=False``) redoes only the missing cubes;
+    ``trust_existing_images`` also accepts a continuum image produced before
+    markers existed and writes its marker. ``overwrite_outputs`` redoes
+    everything.
     """
     from .services.imaging.archive_imaging import (
+        CUBE_IMAGE_FILENAME,
+        CUBE_NAME,
         IMAGE_FILENAME,
         SINGLE_WINDOW_PLACEHOLDER,
         is_imaging_complete,
         write_imaging_marker,
     )
 
+    if not continuum and cube is None:
+        raise ValueError("Nothing to image: neither the continuum nor a cube was requested")
+    required = (IMAGE_FILENAME,) * continuum + (CUBE_IMAGE_FILENAME,) * (cube is not None)
     tasks: list[ImagingTask] = []
     skipped = 0
     # WSClean's -mem is a PERCENTAGE of system memory. Passing the fraction
@@ -536,55 +701,70 @@ def build_imaging_tasks(
         task_name = f"SPW-{spw}" if single_field is None else f"SPW-{spw}_FIELD-{single_field}"
         outdir = output_directory / input_filename.stem / task_name
         if not overwrite_outputs:
-            if is_imaging_complete(outdir):
+            if is_imaging_complete(outdir, required):
                 skipped += 1
                 continue
-            if trust_existing_images and (outdir / IMAGE_FILENAME).is_file():
+            if (
+                trust_existing_images
+                and required == (IMAGE_FILENAME,)
+                and (outdir / IMAGE_FILENAME).is_file()
+            ):
                 write_imaging_marker(outdir, ms_path=str(input_filename), spw=spw)
                 skipped += 1
                 continue
-        command_args = imaging_parameter_to_command_arg(
-            row, fov_fraction, beam_sampling, auto_threshold=auto_threshold, auto_mask=auto_mask
-        )
-        if single_window:
-            # The wrapper hands WSClean a per-task MS holding only this window
-            # and the target fields, so no -spws/-field selection and no
-            # reordering (WSClean 3.7's reordering reads out of bounds on
-            # multi-window ALMA sets; see extract_single_window_ms).
-            spws_at = command_args.index("-spws")
-            command_args = command_args[:spws_at] + command_args[spws_at + 2 :]
-        command = [
-            wsclean_bin,
-            "-name",
-            str(outdir / "wsclean"),
-            "-j",
-            str(num_cores),
-            *command_args,
-            # An absolute limit when the caller knows the worker's allocation
-            # (WSClean's -mem is a share of the *node*, which can be far more
-            # than the Slurm job may use); otherwise the node share.
-            *(
-                ["-abs-mem", f"{task_memory_gb:g}"]
-                if task_memory_gb
-                else ["-mem", f"{mem_percent:g}"]
-            ),
-            # Reordered visibilities go next to the task output (or into a
-            # per-task scratch directory), not next to the MS: several
-            # spectral windows of one MS run at the same time and would
-            # otherwise clobber each other's <ms>-part*.tmp files.
-            "-temp-dir",
-            "__SCRATCH__" if scratch_dir else str(outdir),
-            # Writing the model back into MODEL_DATA makes concurrent tasks
-            # write the same MS from different nodes and grows every
-            # calibrated MS; the model image is on disk anyway.
-            "-update-model-required" if update_model else "-no-update-model-required",
-            # -field is needed on the single-window MS too: WSClean images
-            # field 0 by default and the extracted MS holds the target fields
-            # under their original ids.
-            *_field_arguments(row),
-            *(["-no-reorder"] if single_window else []),
-            SINGLE_WINDOW_PLACEHOLDER if single_window else str(input_filename),
-        ]
+
+        def wsclean_command(name: str, with_cube: bool) -> list[str]:
+            command_args = imaging_parameter_to_command_arg(
+                row,
+                fov_fraction,
+                beam_sampling,
+                auto_threshold=auto_threshold,
+                auto_mask=auto_mask,
+                cube=cube if with_cube else None,
+            )
+            if with_cube and cube_products is not None and "dirty" not in cube_products:
+                command_args.append("-no-dirty")
+            if single_window:
+                # The wrapper hands WSClean a per-task MS holding only this
+                # window and the target fields, so no -spws/-field selection
+                # and no reordering (WSClean 3.7's reordering reads out of
+                # bounds on multi-window ALMA sets; see extract_single_window_ms).
+                spws_at = command_args.index("-spws")
+                command_args = command_args[:spws_at] + command_args[spws_at + 2 :]
+            return [
+                wsclean_bin,
+                "-name",
+                str(outdir / name),
+                "-j",
+                str(num_cores),
+                *command_args,
+                # An absolute limit when the caller knows the worker's
+                # allocation (WSClean's -mem is a share of the *node*, which
+                # can be far more than the Slurm job may use); otherwise the
+                # node share.
+                *(
+                    ["-abs-mem", f"{task_memory_gb:g}"]
+                    if task_memory_gb
+                    else ["-mem", f"{mem_percent:g}"]
+                ),
+                # Reordered visibilities go next to the task output (or into a
+                # per-task scratch directory), not next to the MS: several
+                # spectral windows of one MS run at the same time and would
+                # otherwise clobber each other's <ms>-part*.tmp files.
+                "-temp-dir",
+                "__SCRATCH__" if scratch_dir else str(outdir),
+                # Writing the model back into MODEL_DATA makes concurrent tasks
+                # write the same MS from different nodes and grows every
+                # calibrated MS; the model image is on disk anyway.
+                "-update-model-required" if update_model else "-no-update-model-required",
+                # -field is needed on the single-window MS too: WSClean images
+                # field 0 by default and the extracted MS holds the target
+                # fields under their original ids.
+                *_field_arguments(row),
+                *(["-no-reorder"] if single_window and not (with_cube and cube_reorder) else []),
+                SINGLE_WINDOW_PLACEHOLDER if single_window else str(input_filename),
+            ]
+
         tasks.append(
             ImagingTask(
                 label=f"{input_filename.stem}_{spw}"
@@ -592,8 +772,9 @@ def build_imaging_tasks(
                 ms_path=input_filename,
                 spw=spw,
                 output_dir=outdir,
-                command=command,
+                command=wsclean_command("wsclean", False) if continuum else [],
                 field_ids=field_ids,
+                cube_command=wsclean_command(CUBE_NAME, True) if cube is not None else None,
             )
         )
     return tasks, skipped
@@ -668,6 +849,8 @@ def run_imaging_tasks(
     task_retries: int = 3,
     single_window: bool = True,
     max_weight: float | None = None,
+    cube_products: Sequence[str] | None = None,
+    contsub_order: int | None = None,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -702,6 +885,9 @@ def run_imaging_tasks(
                         single_window=single_window,
                         field_ids=list(task.field_ids),
                         max_weight=max_weight,
+                        cube_command=task.cube_command,
+                        cube_products=cube_products,
+                        contsub_order=contsub_order,
                     )
                 )
             except Exception as exc:
@@ -755,6 +941,9 @@ def run_imaging_tasks(
                 single_window=single_window,
                 field_ids=list(task.field_ids),
                 max_weight=max_weight,
+                cube_command=task.cube_command,
+                cube_products=cube_products,
+                contsub_order=contsub_order,
             )
 
         queued = list(range(len(tasks)))
@@ -823,6 +1012,64 @@ def run_imaging_tasks(
                 if not progressed:
                     sleep(0.5)
     return results
+
+
+CUBE_PRODUCTS = ("image", "residual", "psf", "model", "dirty")
+
+
+def cube_plan(
+    parameters: pd.DataFrame,
+    fov_fraction: float,
+    beam_sampling: float,
+    options: CubeOptions,
+) -> pd.DataFrame:
+    """Per row: image side, native and cube channels, and one cube's size in GB.
+
+    ``size_limited`` marks the rows that ``max_cube_gb`` gave fewer channels
+    than the spectral sampling asked for.
+    """
+    unlimited = replace(options, max_cube_gb=math.inf)
+    pixels = parameters.apply(lambda row: image_pixels(row, fov_fraction, beam_sampling), axis=1)
+    channels, wanted = [], []
+    for (_, row), n in zip(parameters.iterrows(), pixels):
+        channels.append(cube_channels(row, int(n), options))
+        wanted.append(cube_channels(row, int(n), unlimited))
+    plan = pd.DataFrame(
+        {
+            "n_pixels": pixels.astype(int).to_numpy(),
+            "n_channels": parameters["n_channels"].astype(int).to_numpy(),
+            "cube_channels": channels,
+            "size_limited": np.array(channels) < np.array(wanted),
+        },
+        index=parameters.index,
+    )
+    plan["cube_gb"] = 4 * plan["n_pixels"] ** 2 * plan["cube_channels"] / 1e9
+    return plan
+
+
+def _echo_cube_plan(
+    parameters: pd.DataFrame,
+    fov_fraction: float,
+    beam_sampling: float,
+    options: CubeOptions,
+    products: Sequence[str],
+) -> None:
+    plan = cube_plan(parameters, fov_fraction, beam_sampling, options)
+    if plan.empty:
+        return
+    averaged = int((plan["cube_channels"] < plan["n_channels"]).sum())
+    capped = plan["size_limited"]
+    typer.echo(
+        f"Cube plan for {len(plan)} task(s): channels per cube "
+        f"min {plan['cube_channels'].min()}, median {int(plan['cube_channels'].median())}, "
+        f"max {plan['cube_channels'].max()}; {averaged} window(s) averaged below their "
+        f"native channels; {int(capped.sum())} given fewer channels by the "
+        f"{options.max_cube_gb:g} GB cap."
+    )
+    typer.echo(
+        f"Projected volume: {plan['cube_gb'].sum() / 1e3:.1f} TB per product, "
+        f"{len(products) * plan['cube_gb'].sum() / 1e3:.1f} TB for {', '.join(products)}."
+    )
 
 
 def _report_imaging_failures(failures: list[ImagingFailure]) -> None:
@@ -981,6 +1228,86 @@ def image_from_ms(
             "first failure."
         ),
     ),
+    continuum: bool = typer.Option(
+        True,
+        "--continuum/--no-continuum",
+        help=(
+            "Make the continuum image of every window (wsclean-image.fits; default). "
+            "--no-continuum with --cube adds cubes next to existing continuum images."
+        ),
+    ),
+    cube: bool = typer.Option(
+        False,
+        "--cube/--no-cube",
+        help=(
+            "Also image every window as a spectral cube (WSClean -channels-out, the channel "
+            "count chosen per window by --spectral-sampling, --velocity-resolution and "
+            "--max-cube-gb), stacked into wsclean-cube-<product>.fits."
+        ),
+    ),
+    contsub: bool = typer.Option(
+        False,
+        "--contsub/--no-contsub",
+        help=(
+            "Also write the image cube continuum-subtracted (wsclean-cube-image.contsub.fits): "
+            "a polynomial fitted along frequency per pixel, line channels found by 3-sigma "
+            "clipping. Needs --cube."
+        ),
+    ),
+    contsub_order: int = typer.Option(
+        1,
+        "--contsub-order",
+        min=0,
+        max=1,
+        help="Continuum polynomial order for --contsub: 0 (constant) or 1 (linear, default).",
+    ),
+    spectral_sampling: float = typer.Option(
+        2.0,
+        "--spectral-sampling",
+        min=1e-6,
+        help=(
+            "Cube channels per spectral resolution element (the spectral counterpart of "
+            "--beam-sampling). 2 keeps the native channels of ALMA's Hanning-smoothed "
+            "windows; 1 halves them."
+        ),
+    ),
+    velocity_resolution: float = typer.Option(
+        0.0,
+        "--velocity-resolution",
+        min=0.0,
+        help="Narrowest cube channel in km/s at the window's reference frequency (0: no limit).",
+    ),
+    max_cube_gb: float = typer.Option(
+        4.0,
+        "--max-cube-gb",
+        min=1e-3,
+        help=(
+            "Largest cube per product in GB (32-bit pixels): windows imaged on large grids "
+            "get fewer, wider channels. Channel counts are divisors of the native count, so "
+            "every cube channel averages the same number of native channels."
+        ),
+    ),
+    cube_products: str = typer.Option(
+        "image,residual,psf",
+        "--cube-products",
+        help=(
+            "Comma-separated cube products to keep: image, residual, psf, model, dirty. "
+            "The others are removed (dirty is not even made)."
+        ),
+    ),
+    cube_reorder: bool = typer.Option(
+        True,
+        "--cube-reorder/--cube-no-reorder",
+        help=(
+            "Let WSClean reorder the single-window MS per channel for the cube (default). "
+            "Without it WSClean re-reads the whole MS for every cube channel: ~25x slower."
+        ),
+    ),
+    plan_only: bool = typer.Option(
+        False,
+        "--plan-only",
+        help="Print the channel plan and the projected cube volume, then exit without imaging.",
+    ),
 ):
     """Image every (MS, spectral window) row of a parameter CSV with WSClean.
 
@@ -995,6 +1322,29 @@ def image_from_ms(
         raise typer.Exit(code=2)
 
     parameters = pd.read_csv(str(imaging_parameters))
+    cube_options: CubeOptions | None = None
+    products: tuple[str, ...] | None = None
+    if cube:
+        products = tuple(p.strip().lower() for p in cube_products.split(",") if p.strip())
+        unknown = sorted(set(products) - set(CUBE_PRODUCTS))
+        if "image" not in products or unknown:
+            raise typer.BadParameter(
+                f"--cube-products must include image and only name {', '.join(CUBE_PRODUCTS)}"
+                + (f" (unknown: {', '.join(unknown)})" if unknown else "")
+            )
+        cube_options = CubeOptions(
+            spectral_sampling=spectral_sampling,
+            velocity_resolution_km_s=velocity_resolution,
+            max_cube_gb=max_cube_gb,
+        )
+        parameters = add_spectral_columns(parameters)
+        _echo_cube_plan(parameters, fov_fraction, beam_sampling, cube_options, products)
+    elif plan_only or contsub:
+        raise typer.BadParameter("--plan-only and --contsub need --cube")
+    if not continuum and not cube:
+        raise typer.BadParameter("--no-continuum needs --cube: there would be nothing to image")
+    if plan_only:
+        return
     tasks, skipped = build_imaging_tasks(
         parameters,
         output_directory,
@@ -1011,6 +1361,10 @@ def image_from_ms(
         task_memory_gb=task_memory_gb if task_memory_gb > 0 else None,
         scratch_dir=str(scratch_dir) if scratch_dir is not None else None,
         single_window=single_window,
+        continuum=continuum,
+        cube=cube_options,
+        cube_products=products,
+        cube_reorder=cube_reorder,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -1042,6 +1396,8 @@ def image_from_ms(
         task_retries=task_retries,
         single_window=single_window,
         max_weight=max_weight if max_weight > 0 else None,
+        cube_products=products,
+        contsub_order=contsub_order if contsub else None,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -1108,6 +1464,16 @@ def image_set(
         single_window=single_window,
         max_weight=max_weight,
         scratch_dir=scratch_dir,
+        continuum=True,
+        cube=False,
+        contsub=False,
+        contsub_order=1,
+        spectral_sampling=2.0,
+        velocity_resolution=0.0,
+        max_cube_gb=4.0,
+        cube_products="image,residual,psf",
+        cube_reorder=True,
+        plan_only=False,
         postprocess_backend=postprocess_backend,
         slurm_queue=slurm_queue,
         slurm_project=slurm_project,

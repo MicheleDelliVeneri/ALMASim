@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -27,9 +28,15 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Callable, Mapping, Sequence
+
+if TYPE_CHECKING:
+    import numpy as np
 
 __all__ = [
+    "CONTSUB_FILENAME",
+    "CUBE_IMAGE_FILENAME",
+    "CUBE_NAME",
     "DEFAULT_MAX_WEIGHT",
     "IMAGE_FILENAME",
     "SINGLE_WINDOW_PLACEHOLDER",
@@ -40,6 +47,8 @@ __all__ = [
     "imaging_marker_path",
     "is_imaging_complete",
     "run_wsclean_task",
+    "stack_channel_images",
+    "subtract_continuum",
     "write_imaging_failure_marker",
     "write_imaging_marker",
     "wsclean_environment",
@@ -48,6 +57,12 @@ __all__ = [
 # WSClean is invoked with ``-name <output_dir>/wsclean`` and a single SPW, so
 # the restored image is always this file.
 IMAGE_FILENAME = "wsclean-image.fits"
+
+# A cube run uses ``-name <output_dir>/wsclean-cube``; its per-channel images
+# are stacked into ``wsclean-cube-<product>.fits`` (see stack_channel_images).
+CUBE_NAME = "wsclean-cube"
+CUBE_IMAGE_FILENAME = f"{CUBE_NAME}-image.fits"
+CONTSUB_FILENAME = f"{CUBE_NAME}-image.contsub.fits"
 
 # Placeholder in a task command for the per-task single-window MS that the
 # wrapper extracts on the worker (see ``extract_single_window_ms``).
@@ -84,10 +99,12 @@ def imaging_log_path(output_dir: str | os.PathLike[str]) -> Path:
     return out.with_name(out.name + ".log")
 
 
-def is_imaging_complete(output_dir: str | os.PathLike[str]) -> bool:
-    """True when the task has both its marker and the restored image."""
+def is_imaging_complete(
+    output_dir: str | os.PathLike[str], required: Sequence[str] = (IMAGE_FILENAME,)
+) -> bool:
+    """True when the task has its marker and every image in ``required``."""
     out = Path(output_dir)
-    return imaging_marker_path(out).is_file() and (out / IMAGE_FILENAME).is_file()
+    return imaging_marker_path(out).is_file() and all((out / name).is_file() for name in required)
 
 
 def write_imaging_marker(
@@ -97,6 +114,8 @@ def write_imaging_marker(
     spw: int,
     command: Sequence[str] | None = None,
     seconds: float | None = None,
+    commands: Sequence[Sequence[str]] | None = None,
+    images: Sequence[str] | None = None,
 ) -> Path:
     out = Path(output_dir)
     imaging_failure_marker_path(out).unlink(missing_ok=True)
@@ -108,8 +127,13 @@ def write_imaging_marker(
         "image": str(out / IMAGE_FILENAME),
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
+    if images:
+        payload["image"] = str(out / images[0])
+        payload["images"] = [str(out / name) for name in images]
     if command is not None:
         payload["command"] = shlex.join(str(part) for part in command)
+    if commands is not None:
+        payload["commands"] = [shlex.join(str(part) for part in c) for c in commands]
     if seconds is not None:
         payload["seconds"] = round(float(seconds), 1)
     marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -389,6 +413,9 @@ def run_wsclean_task(
     single_window: bool = False,
     field_ids: Sequence[int] | None = None,
     max_weight: float | None = DEFAULT_MAX_WEIGHT,
+    cube_command: Sequence[str] | None = None,
+    cube_products: Sequence[str] | None = None,
+    contsub_order: int | None = None,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -403,13 +430,29 @@ def run_wsclean_task(
     reordering crashes non-deterministically on some inputs and passes on the
     next run, and a crash costs seconds while the task costs minutes. Exits
     with an error status are WSClean's own diagnostics and are not retried.
+
+    ``command`` makes the continuum image (empty: none); ``cube_command``,
+    run after it on the same single-window MS, the spectral cube. The cube
+    run leaves one FITS per channel; they are stacked into
+    ``wsclean-cube-<product>.fits`` (only ``cube_products`` kept, all when
+    None) and, with ``contsub_order``, the image cube is also written
+    continuum-subtracted (``subtract_continuum``) before the task counts as
+    done. Only the images this task makes are removed beforehand, so a cube
+    task leaves an existing continuum image alone.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     log_path = imaging_log_path(out)
+    commands = [[str(part) for part in c] for c in (command, cube_command or []) if c]
+    if not commands:
+        raise ValueError("run_wsclean_task needs a continuum or a cube command")
+    required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
+    if cube_command and contsub_order is not None:
+        required.append(CONTSUB_FILENAME)
     imaging_marker_path(out).unlink(missing_ok=True)
     imaging_failure_marker_path(out).unlink(missing_ok=True)
-    (out / IMAGE_FILENAME).unlink(missing_ok=True)
+    for name in required:
+        (out / name).unlink(missing_ok=True)
     log_path.write_text("", encoding="utf-8")
     # A previous attempt that crashed or was killed with its worker leaves
     # WSClean's reorder files (hundreds of GB across a run) and the
@@ -417,8 +460,9 @@ def run_wsclean_task(
     _remove_reorder_files(out)
     for stale in out.glob("spw*.single.ms"):
         shutil.rmtree(stale, ignore_errors=True)
+    for stale in out.glob(f"{CUBE_NAME}-[0-9][0-9][0-9][0-9]-*.fits"):
+        stale.unlink(missing_ok=True)
 
-    cmd = [str(part) for part in command]
     single_window_ms: Path | None = None
     if single_window:
         # Extract the window (and fields) into a per-task MS so WSClean never
@@ -454,7 +498,10 @@ def run_wsclean_task(
                 f"{single_window_ms.name}: {kept} rows, {size_gb:.1f} GB, "
                 f"{extracted.get('seconds')} s{drop_note}\n"
             )
-        cmd = [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in cmd]
+        commands = [
+            [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in c]
+            for c in commands
+        ]
     scratch_dir: Path | None = None
     if scratch_root:
         # Per-task scratch for WSClean's reordered visibilities, created here
@@ -464,7 +511,9 @@ def run_wsclean_task(
 
         Path(scratch_root).mkdir(parents=True, exist_ok=True)
         scratch_dir = Path(tempfile.mkdtemp(prefix=f"{out.name}-", dir=scratch_root))
-        cmd = [str(scratch_dir) if part == "__SCRATCH__" else part for part in cmd]
+        commands = [
+            [str(scratch_dir) if part == "__SCRATCH__" else part for part in c] for c in commands
+        ]
     env = wsclean_environment(threads)
     tail: deque[str] = deque(maxlen=60)
     started = time.time()
@@ -482,7 +531,8 @@ def run_wsclean_task(
 
     try:
         return _run_and_mark(
-            cmd=cmd,
+            commands=commands,
+            required=required,
             out=out,
             log_path=log_path,
             env=env,
@@ -493,6 +543,8 @@ def run_wsclean_task(
             started=started,
             fail=_fail,
             retries=max(int(retries), 0),
+            cube_products=cube_products,
+            contsub_order=contsub_order,
         )
     finally:
         if scratch_dir is not None:
@@ -503,7 +555,8 @@ def run_wsclean_task(
 
 def _run_and_mark(
     *,
-    cmd: list[str],
+    commands: list[list[str]],
+    required: Sequence[str],
     out: Path,
     log_path: Path,
     env: dict[str, str],
@@ -514,34 +567,100 @@ def _run_and_mark(
     started: float,
     fail: Callable[..., RuntimeError],
     retries: int = 0,
+    cube_products: Sequence[str] | None = None,
+    contsub_order: int | None = None,
 ) -> dict[str, object]:
     attempts = 0
     # run_wsclean_task truncated the log; for a single-window task it already
     # holds the extraction notes, so append.
     with log_path.open("a", encoding="utf-8") as log:
-        log.write("# " + shlex.join(cmd) + "\n")
-        log.flush()
-        while True:
-            attempts += 1
-            # Vary the size of the environment between attempts. The WSClean
-            # 3.7 reordering crash is deterministic for a given argv+environ
-            # and flips with their layout, so an identical retry never helps;
-            # shifting the strings by one byte per attempt does.
-            attempt_env = dict(env)
-            attempt_env["ALMASIM_WSCLEAN_ATTEMPT"] = str(attempts)
-            attempt_env["ALMASIM_WSCLEAN_PAD"] = "x" * (attempts - 1)
-            returncode, timed_out = _run_once(cmd, out, log, attempt_env, timeout, tail, fail)
-            if returncode >= 0 or timed_out or attempts > retries:
-                break
-            log.write(
-                f"# attempt {attempts} died with signal {-returncode}; "
-                f"retrying ({retries - attempts + 1} left)\n"
-            )
-            log.flush()
-            tail.clear()
-            _remove_reorder_files(out)
+        for cmd in commands:
+            attempts = _run_with_retries(cmd, out, log, env, timeout, tail, fail, retries)
+    cube_channels: dict[str, int] = {}
+    if CUBE_IMAGE_FILENAME in required:
+        try:
+            cube_channels = stack_channel_images(out, prefix=CUBE_NAME, keep=cube_products)
+        except Exception as exc:
+            raise fail(f"Could not stack the channel images into cubes: {exc}")
+        # WSClean also writes a <name>-MFS-<product>.fits for a -channels-out
+        # run: a copy of the continuum the continuum run already made.
+        for duplicate in out.glob(f"{CUBE_NAME}-MFS-*.fits"):
+            duplicate.unlink(missing_ok=True)
+        notes = ", ".join(f"{product} ({n} channels)" for product, n in cube_channels.items())
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write(f"# stacked channel images into cubes: {notes or 'none'}\n")
+        if contsub_order is not None and (out / CUBE_IMAGE_FILENAME).is_file():
+            try:
+                fit = subtract_continuum(
+                    out / CUBE_IMAGE_FILENAME, out / CONTSUB_FILENAME, order=contsub_order
+                )
+            except Exception as exc:
+                raise fail(f"Could not subtract the continuum from the cube: {exc}")
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(
+                    f"# continuum-subtracted cube (order {contsub_order}): "
+                    f"{fit['line_fraction']:.1%} of the fitted pixels' channels clipped as line\n"
+                )
+    missing = [name for name in required if not (out / name).is_file()]
+    if missing:
+        raise fail(f"WSClean exited 0 but wrote no {', '.join(missing)} under {out}", 0)
 
     elapsed = time.time() - started
+    write_imaging_marker(
+        out,
+        ms_path=ms_path,
+        spw=spw,
+        command=commands[0] if len(commands) == 1 else None,
+        commands=commands if len(commands) > 1 else None,
+        seconds=elapsed,
+        images=required,
+    )
+    first = out / required[0]
+    return {
+        "ms": ms_path,
+        "spw": int(spw),
+        "output": str(out),
+        "image": str(first),
+        "seconds": round(elapsed, 1),
+        "attempts": attempts,
+        **({"channels": max(cube_channels.values())} if cube_channels else {}),
+    }
+
+
+def _run_with_retries(
+    cmd: list[str],
+    out: Path,
+    log,
+    env: dict[str, str],
+    timeout: float | None,
+    tail: deque[str],
+    fail: Callable[..., RuntimeError],
+    retries: int,
+) -> int:
+    """Run one WSClean command, retrying deaths by signal; raise ``fail`` otherwise."""
+    attempts = 0
+    log.write("# " + shlex.join(cmd) + "\n")
+    log.flush()
+    tail.clear()
+    while True:
+        attempts += 1
+        # Vary the size of the environment between attempts. The WSClean
+        # 3.7 reordering crash is deterministic for a given argv+environ
+        # and flips with their layout, so an identical retry never helps;
+        # shifting the strings by one byte per attempt does.
+        attempt_env = dict(env)
+        attempt_env["ALMASIM_WSCLEAN_ATTEMPT"] = str(attempts)
+        attempt_env["ALMASIM_WSCLEAN_PAD"] = "x" * (attempts - 1)
+        returncode, timed_out = _run_once(cmd, out, log, attempt_env, timeout, tail, fail)
+        if returncode >= 0 or timed_out or attempts > retries:
+            break
+        log.write(
+            f"# attempt {attempts} died with signal {-returncode}; "
+            f"retrying ({retries - attempts + 1} left)\n"
+        )
+        log.flush()
+        tail.clear()
+        _remove_reorder_files(out)
     if timed_out:
         raise fail(f"WSClean killed after exceeding the {timeout:.0f}s task timeout", returncode)
     if returncode != 0:
@@ -552,19 +671,204 @@ def _run_and_mark(
         if attempts > 1:
             error = f"{error} (after {attempts} attempts)"
         raise fail(error, returncode)
-    image = out / IMAGE_FILENAME
-    if not image.is_file():
-        raise fail(f"WSClean exited 0 but wrote no {IMAGE_FILENAME} under {out}", returncode)
+    return attempts
 
-    write_imaging_marker(out, ms_path=ms_path, spw=spw, command=cmd, seconds=elapsed)
-    return {
-        "ms": ms_path,
-        "spw": int(spw),
-        "output": str(out),
-        "image": str(image),
-        "seconds": round(elapsed, 1),
-        "attempts": attempts,
-    }
+
+_CHANNEL_FILE = re.compile(r"^(?P<prefix>.+)-(?P<channel>\d{4})-(?P<product>[a-z-]+)\.fits$")
+
+
+def stack_channel_images(
+    output_dir: str | os.PathLike[str],
+    *,
+    prefix: str = "wsclean",
+    keep: Sequence[str] | None = None,
+) -> dict[str, int]:
+    """Stack WSClean's per-channel FITS (``-channels-out``) into one cube per product.
+
+    WSClean writes ``<prefix>-0000-image.fits``, ``<prefix>-0001-image.fits``
+    ... and no cube. Each product (image, residual, model, psf, dirty) becomes
+    ``<prefix>-<product>.fits`` with a regular frequency axis, and the
+    per-channel files are removed. Products not in ``keep`` (all when None)
+    are removed without stacking.
+
+    The channel beams differ (the beam scales with wavelength), so a cube
+    with beam keywords also gets a CASA-style ``BEAMS`` table (one row per
+    channel, BMAJ/BMIN in arcsec, BPA in degrees, ``CASAMBM = T``), which
+    CASA and spectral-cube read; the primary header keeps the middle
+    channel's beam.
+
+    Returns ``{product: n_channels}`` of the cubes written.
+    """
+    import numpy as np
+    from astropy.io import fits
+
+    out = Path(output_dir)
+    groups: dict[str, list[tuple[int, Path]]] = {}
+    for path in out.iterdir():
+        match = _CHANNEL_FILE.match(path.name)
+        if match and match["prefix"] == prefix:
+            groups.setdefault(match["product"], []).append((int(match["channel"]), path))
+    written: dict[str, int] = {}
+    for product, members in sorted(groups.items()):
+        members.sort()
+        paths = [path for _, path in members]
+        if keep is not None and product not in keep:
+            for path in paths:
+                path.unlink(missing_ok=True)
+            continue
+        headers = [fits.getheader(path) for path in paths]
+        first = headers[0]
+        if first.get("CTYPE3", "").upper() != "FREQ":
+            raise RuntimeError(f"{paths[0]} has no FREQ third axis (CTYPE3={first.get('CTYPE3')})")
+        frequencies = np.array([float(h["CRVAL3"]) for h in headers])
+        steps = np.diff(frequencies)
+        if steps.size and not np.allclose(steps, steps[0], rtol=1e-6, atol=1e-3):
+            raise RuntimeError(f"{product} channels of {out} are not evenly spaced in frequency")
+        cube = np.empty((1, len(paths), int(first["NAXIS2"]), int(first["NAXIS1"])), np.float32)
+        for index, path in enumerate(paths):
+            cube[0, index] = fits.getdata(path).reshape(cube.shape[2:])
+        header = first.copy()
+        header["NAXIS3"] = len(paths)
+        header["CRPIX3"] = 1.0
+        header["CRVAL3"] = frequencies[0]
+        if steps.size:
+            header["CDELT3"] = float(steps[0])
+        hdus: list[fits.hdu.base.ExtensionHDU] = []
+        if all("BMAJ" in h for h in headers):
+            middle = headers[len(headers) // 2]
+            for key in ("BMAJ", "BMIN", "BPA"):
+                header[key] = middle[key]
+            header["CASAMBM"] = (True, "one beam per channel in the BEAMS table")
+            beams = fits.BinTableHDU.from_columns(
+                [
+                    fits.Column("BMAJ", "1E", "arcsec", array=[h["BMAJ"] * 3600 for h in headers]),
+                    fits.Column("BMIN", "1E", "arcsec", array=[h["BMIN"] * 3600 for h in headers]),
+                    fits.Column("BPA", "1E", "deg", array=[h["BPA"] for h in headers]),
+                    fits.Column("CHAN", "1J", array=np.arange(len(headers))),
+                    fits.Column("POL", "1J", array=np.zeros(len(headers), dtype=int)),
+                ],
+                name="BEAMS",
+            )
+            beams.header["NCHAN"] = len(headers)
+            beams.header["NPOL"] = 1
+            hdus.append(beams)
+        target = out / f"{prefix}-{product}.fits"
+        partial = target.with_name(target.name + ".partial")
+        fits.HDUList([fits.PrimaryHDU(cube, header=header), *hdus]).writeto(partial, overwrite=True)
+        partial.replace(target)
+        for path in paths:
+            path.unlink(missing_ok=True)
+        written[product] = len(paths)
+    return written
+
+
+def _fit_continuum(
+    spectra: np.ndarray,
+    usable: np.ndarray,
+    order: int,
+    clip_sigma: float,
+    iterations: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Sigma-clipped polynomial continuum of ``spectra`` (channels x pixels).
+
+    Returns ``(continuum, kept)``: the fitted continuum per channel and pixel,
+    and which channels the last iteration fitted (the line-free ones).
+    """
+    import numpy as np
+
+    n_channels = spectra.shape[0]
+    x = np.linspace(-1.0, 1.0, n_channels)[:, None] if n_channels > 1 else np.zeros((1, 1))
+    y = np.where(usable, spectra, 0.0).astype(np.float64)
+    kept = usable.copy()
+    continuum = np.zeros_like(y)
+    for _ in range(max(int(iterations), 1)):
+        w = kept.astype(np.float64)
+        s0 = w.sum(axis=0)
+        t0 = (w * y).sum(axis=0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mean = np.where(s0 > 0, t0 / s0, 0.0)
+            if order >= 1:
+                s1 = (w * x).sum(axis=0)
+                s2 = (w * x * x).sum(axis=0)
+                t1 = (w * x * y).sum(axis=0)
+                det = s0 * s2 - s1 * s1
+                fit = det > 1e-12 * np.maximum(s0 * s2, 1e-300)
+                slope = np.where(fit, (s0 * t1 - s1 * t0) / det, 0.0)
+                intercept = np.where(fit, (t0 * s2 - t1 * s1) / det, mean)
+            else:
+                slope, intercept = np.zeros_like(mean), mean
+        continuum = intercept[None, :] + slope[None, :] * x
+        residual = np.abs(y - continuum)
+        sigma = 1.4826 * np.nanmedian(np.where(kept, residual, np.nan), axis=0)
+        new_kept = usable & (residual <= clip_sigma * np.nan_to_num(sigma, nan=np.inf))
+        # Never clip a pixel down to fewer channels than the fit needs.
+        new_kept = np.where(new_kept.sum(axis=0) > order, new_kept, kept)
+        if np.array_equal(new_kept, kept):
+            break
+        kept = new_kept
+    return continuum, kept
+
+
+def subtract_continuum(
+    cube_path: str | os.PathLike[str],
+    out_path: str | os.PathLike[str],
+    *,
+    order: int = 1,
+    clip_sigma: float = 3.0,
+    iterations: int = 10,
+    rows_per_chunk: int = 64,
+) -> dict[str, float]:
+    """Write ``cube_path`` minus its continuum, fitted per pixel along frequency.
+
+    The image-plane counterpart of CASA's ``imcontsub``, with the line-free
+    channels found automatically: each pixel's spectrum is fitted with a
+    polynomial of ``order`` (0: constant, 1: linear in frequency) by least
+    squares, channels further than ``clip_sigma`` robust sigma (1.4826 x
+    MAD) from the fit are dropped as line, and the fit is repeated until no
+    channel changes (at most ``iterations``). Channels that are all zero or
+    NaN (WSClean writes zeros for a fully flagged channel) are left out of
+    the fit and stay NaN in the output.
+
+    Emission covering most of a window (a broad line, a line forest) leaves
+    too few line-free channels for the clipping to find; such cubes need
+    the line-free ranges given explicitly.
+
+    Returns ``{"line_fraction": ...}``: the share of fitted pixel-channels
+    clipped as line.
+    """
+    import numpy as np
+    from astropy.io import fits
+
+    if order not in (0, 1):
+        raise ValueError(f"continuum order must be 0 or 1, not {order}")
+    with fits.open(cube_path, memmap=True) as hdus:
+        header = hdus[0].header.copy()
+        extensions = [hdu.copy() for hdu in hdus[1:]]
+        data = np.asarray(hdus[0].data, dtype=np.float32)
+    cube = data.reshape(data.shape[-3:])  # (channels, y, x); Stokes I only
+    n_channels, ny, nx = cube.shape
+    planes_blank = ~np.any(np.nan_to_num(cube) != 0, axis=(1, 2))
+    result = np.full_like(cube, np.nan)
+    clipped = fitted = 0
+    for y0 in range(0, ny, max(int(rows_per_chunk), 1)):
+        block = cube[:, y0 : y0 + rows_per_chunk, :]
+        spectra = block.reshape(n_channels, -1)
+        usable = np.isfinite(spectra) & ~planes_blank[:, None]
+        continuum, kept = _fit_continuum(spectra, usable, order, clip_sigma, iterations)
+        subtracted = np.where(usable, spectra - continuum, np.nan).astype(np.float32)
+        result[:, y0 : y0 + rows_per_chunk, :] = subtracted.reshape(block.shape)
+        fitted += int(usable.sum())
+        clipped += int((usable & ~kept).sum())
+    header["HISTORY"] = (
+        f"ALMASim continuum subtracted: order {order}, {clip_sigma:g} sigma clipping per pixel"
+    )
+    out = Path(out_path)
+    partial = out.with_name(out.name + ".partial")
+    fits.HDUList([fits.PrimaryHDU(result.reshape(data.shape), header=header), *extensions]).writeto(
+        partial, overwrite=True
+    )
+    partial.replace(out)
+    return {"line_fraction": clipped / fitted if fitted else 0.0}
 
 
 def _remove_reorder_files(out: Path) -> None:

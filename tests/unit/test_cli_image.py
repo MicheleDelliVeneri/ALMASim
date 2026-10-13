@@ -26,6 +26,12 @@ class _FakeTable:
     def getcol(self, name: str) -> np.ndarray:
         return self._columns[name]
 
+    def getcell(self, name: str, row: int) -> np.ndarray:
+        return self._columns[name][row]
+
+    def nrows(self) -> int:
+        return len(next(iter(self._columns.values())))
+
 
 @pytest.mark.unit
 def test_import_casacore_tables_returns_table_symbol(monkeypatch):
@@ -62,6 +68,10 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
     spectral_window = _FakeTable(
         {
             "REF_FREQUENCY": np.array([100.0e9, 200.0e9]),
+            "NUM_CHAN": np.array([4, 2]),
+            "CHAN_WIDTH": [np.full(4, 0.5e6), np.full(2, -15.625e6)],
+            "RESOLUTION": [np.full(4, 1.0e6), np.full(2, -31.25e6)],
+            "TOTAL_BANDWIDTH": np.array([2.0e6, 31.25e6]),
         }
     )
     antenna = _FakeTable(
@@ -105,6 +115,9 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
     assert list(output["n_visibility_rows"]) == [10, 20], "the calibrator (field 0) is left out"
     assert list(output["target_field_ids"]) == ["2", "2"]
     assert list(output["field_name"]) == ["target", "target"]
+    assert list(output["n_channels"]) == [4, 2]
+    assert list(output["channel_width_hz"]) == [0.5e6, 15.625e6], "widths are absolute"
+    assert list(output["spectral_resolution_hz"]) == [1.0e6, 31.25e6]
 
     expected_frequencies = np.array([100.0e9, 200.0e9])
     speed_of_light = 299_792_458.0
@@ -1521,7 +1534,15 @@ def test_build_imaging_tasks_makes_relative_paths_absolute(tmp_path, monkeypatch
 
 def _geometry_tables(names):
     tables = {
-        "::SPECTRAL_WINDOW": _FakeTable({"REF_FREQUENCY": np.array([100.0e9, 200.0e9, 230.0e9])}),
+        "::SPECTRAL_WINDOW": _FakeTable(
+            {
+                "REF_FREQUENCY": np.array([100.0e9, 200.0e9, 230.0e9]),
+                "NUM_CHAN": np.array([128, 3840, 480]),
+                "CHAN_WIDTH": [np.full(n, 1e6) for n in (128, 3840, 480)],
+                "RESOLUTION": [np.full(n, 2e6) for n in (128, 3840, 480)],
+                "TOTAL_BANDWIDTH": np.array([128e6, 3840e6, 480e6]),
+            }
+        ),
         "::ANTENNA": _FakeTable(
             {
                 "DISH_DIAMETER": np.array([12.0, 12.0]),
