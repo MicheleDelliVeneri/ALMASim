@@ -253,9 +253,9 @@ def test_compute_parameters_defaults_to_cwd_and_default_output(monkeypatch, tmp_
 
     monkeypatch.setattr(cli_image, "compute_imaging_parameters", _fake_compute)
 
-    with runner.isolated_filesystem(temp_dir=str(tmp_path)):
-        Path("sample.cal").mkdir()
-        result = runner.invoke(cli.app, ["image", "compute-parameters"])
+    monkeypatch.chdir(tmp_path)
+    Path("sample.cal").mkdir()
+    result = runner.invoke(cli.app, ["image", "compute-parameters"])
 
     assert result.exit_code == 0
     output_candidates = list(tmp_path.rglob("imaging_parameters.csv"))
