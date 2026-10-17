@@ -322,10 +322,56 @@ def test_slurm_backend_forwards_scheduler_network_kwargs():
                 project="proj",
                 scheduler_host="headnode-internal",
                 scheduler_interface="ib0",
+                job_extra_directives=["--requeue"],
             )
 
             backend.close()
             mock_close.assert_called_once()
+    finally:
+        slurm_mod.SLURM_AVAILABLE = original
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("directives", "expected"),
+    [
+        (None, ["--requeue"]),
+        ([], ["--requeue"]),
+        (["--exclusive"], ["--exclusive", "--requeue"]),
+        (["--requeue", "--exclusive"], ["--requeue", "--exclusive"]),
+        (["--no-requeue"], ["--no-requeue"]),
+    ],
+)
+def test_slurm_backend_job_extra_directives_requeue(directives, expected):
+    """SlurmBackend adds --requeue once, keeps caller directives and honours --no-requeue."""
+    import almasim.services.compute.slurm as slurm_mod
+
+    original = slurm_mod.SLURM_AVAILABLE
+    try:
+        slurm_mod.SLURM_AVAILABLE = True
+        from almasim.services.compute.slurm import SlurmBackend
+
+        manager = MagicMock()
+        manager.cluster = object()
+        manager.client = object()
+        caller_directives = None if directives is None else list(directives)
+
+        with (
+            patch.object(
+                slurm_mod.SlurmDaskClusterSingleton,
+                "get_instance",
+                return_value=manager,
+            ) as mock_get_instance,
+            patch.object(slurm_mod.SlurmDaskClusterSingleton, "close_instance"),
+        ):
+            backend = SlurmBackend(queue="normal", job_extra_directives=caller_directives)
+
+            forwarded = mock_get_instance.call_args.kwargs["job_extra_directives"]
+            assert forwarded == expected
+            assert forwarded.count("--requeue") <= 1
+            # The caller's list must not be mutated in place.
+            assert caller_directives == (None if directives is None else directives)
+            backend.close()
     finally:
         slurm_mod.SLURM_AVAILABLE = original
 
