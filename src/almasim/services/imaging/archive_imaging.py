@@ -52,6 +52,7 @@ __all__ = [
     "stack_channel_images",
     "fit_uv_continuum",
     "line_free_channels",
+    "continuum_restart_commands",
     "subtract_continuum",
     "subtract_uv_continuum",
     "subtract_uv_continuum_subprocess",
@@ -430,6 +431,7 @@ def run_wsclean_task(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     uv_contsub_order: int | None = None,
+    continuum_restart: bool = False,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -468,6 +470,10 @@ def run_wsclean_task(
         raise ValueError("run_wsclean_task needs a continuum or a cube command")
     if uv_contsub_order is not None and not (single_window and cube_command):
         raise ValueError("uv_contsub_order needs single_window and a cube_command")
+    if continuum_restart and command:
+        if not single_window:
+            raise ValueError("continuum_restart writes MODEL_DATA: it needs single_window")
+        commands[:1] = continuum_restart_commands(commands[0])
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -547,9 +553,10 @@ def run_wsclean_task(
                         f"{fit['line_ranges'] or 'none'}\n"
                     )
             if not fit.get("skipped"):
-                if command:
-                    commands[0] = _with_data_column(commands[0], CONTINUUM_COLUMN)
-                commands[-1] = _with_data_column(commands[-1], LINE_COLUMN)
+                # Every continuum pass (two with continuum_restart), then the cube.
+                commands = [_with_data_column(c, CONTINUUM_COLUMN) for c in commands[:-1]] + [
+                    _with_data_column(commands[-1], LINE_COLUMN)
+                ]
     scratch_dir: Path | None = None
     if scratch_root:
         # Per-task scratch for WSClean's reordered visibilities, created here
@@ -1177,6 +1184,28 @@ def subtract_uv_continuum_subprocess(
 def _with_data_column(cmd: list[str], column: str) -> list[str]:
     """``cmd`` reading ``column``: ``-data-column`` goes before the MS, its last argument."""
     return [*cmd[:-1], "-data-column", column, cmd[-1]]
+
+
+def continuum_restart_commands(cmd: Sequence[str]) -> list[list[str]]:
+    """The continuum ``cmd`` as two passes: one writing MODEL_DATA, then ``-continue``.
+
+    WSClean's auto-mask is built in the first major cycle, at ``-auto-mask``
+    times the noise it measures then; a bright source's sidelobes inflate that
+    noise, so the mask misses its fainter parts and later cycles, which clean
+    only inside it, never reach them. uid___A002_X10ded83_X6af4 SPW 16: noise
+    91 mJy at mask creation against 26 mJy at the end, a 167 mJy feature 0.7
+    beam off the peak left uncleaned, 16 % of the flux within a beam in the
+    residual. The second pass starts from the true residual, measures the
+    noise again and builds a new mask: residual 3 %, model flux +20 %
+    (2026-10-18). The model visibilities go into the task's own copy of the MS.
+    """
+    first = [
+        "-update-model-required" if part == "-no-update-model-required" else str(part)
+        for part in cmd
+    ]
+    if "-update-model-required" not in first:
+        first.insert(len(first) - 1, "-update-model-required")
+    return [first, [*first[:-1], "-continue", first[-1]]]
 
 
 def _remove_reorder_files(out: Path) -> None:
