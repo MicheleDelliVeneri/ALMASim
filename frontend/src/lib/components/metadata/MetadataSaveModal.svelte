@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { supportsFilePicker } from '$lib/utils';
+	import { supportsFilePicker } from '#lib/utils.js';
 
 	interface Props {
 		open: boolean;

@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import DatacubeFileList from '$lib/components/visualizer/DatacubeFileList.svelte';
-	import ImageCanvas from '$lib/components/visualizer/ImageCanvas.svelte';
-	import ImageStatistics from '$lib/components/visualizer/ImageStatistics.svelte';
-	import { createLogger } from '$lib/logger';
-	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
-	import { imagingApi, type DeconvolutionResponse, type ImagePreviewPayload } from '$lib/api/imaging';
-	import { API_BASE_URL } from '$lib/config';
+	import DatacubeFileList from '#lib/components/visualizer/DatacubeFileList.svelte';
+	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
+	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
+	import { createLogger } from '#lib/logger.js';
+	import { downloadApi, type BrowseDirectoryResponse } from '#lib/api/download.js';
+	import { imagingApi, type DeconvolutionResponse, type ImagePreviewPayload } from '#lib/api/imaging.js';
+	import { API_BASE_URL } from '#lib/config.js';
 
 	const logger = createLogger('routes/imaging');
 	const DIRTY_PREFIX = 'dirty-cube_';

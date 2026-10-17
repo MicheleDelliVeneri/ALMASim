@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createLogger } from '$lib/logger';
+	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/simulations/SimulationStatusDisplay');
 

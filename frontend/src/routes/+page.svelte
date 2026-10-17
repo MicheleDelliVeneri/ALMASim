@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { apiClient } from '$lib/api/client';
-	import { createLogger } from '$lib/logger';
+	import { apiClient } from '#lib/api/client.js';
+	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('routes/home');
 

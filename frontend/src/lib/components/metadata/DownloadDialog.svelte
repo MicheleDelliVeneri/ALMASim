@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { ResolveProductsResponse, DiskSpaceInfo, BrowseDirectoryResponse } from '$lib/api/download';
-	import { downloadApi } from '$lib/api/download';
-	import { createLogger } from '$lib/logger';
+	import type { ResolveProductsResponse, DiskSpaceInfo, BrowseDirectoryResponse } from '#lib/api/download.js';
+	import { downloadApi } from '#lib/api/download.js';
+	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/metadata/DownloadDialog');
 

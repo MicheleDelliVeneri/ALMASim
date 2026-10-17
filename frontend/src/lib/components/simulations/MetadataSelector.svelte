@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { MetadataResponse } from '$lib/api/metadata';
-	import { deriveArrayType } from '$lib/utils/observationPlan';
+	import type { MetadataResponse } from '#lib/api/metadata.js';
+	import { deriveArrayType } from '#lib/utils/observationPlan.js';
 
 	interface Props {
 		metadata: MetadataResponse | null;

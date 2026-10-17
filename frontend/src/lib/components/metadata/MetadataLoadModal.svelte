@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { QueryPreset } from '$lib/api/metadata';
+	import type { QueryPreset } from '#lib/api/metadata.js';
 
 	interface Props {
 		open: boolean;
