@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { DownloadJobSummary } from '$lib/api/download';
-	import { downloadApi } from '$lib/api/download';
-	import DownloadProgress from '$lib/components/metadata/DownloadProgress.svelte';
-	import { createLogger } from '$lib/logger';
+	import type { DownloadJobSummary } from '#lib/api/download.js';
+	import { downloadApi } from '#lib/api/download.js';
+	import DownloadProgress from '#lib/components/metadata/DownloadProgress.svelte';
+	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('routes/data');
 	const RESULTS_CACHE_KEY = 'almasim:metadata-results';

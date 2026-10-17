@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { MetadataQuery } from '$lib/api/metadata';
-	import { createLogger } from '$lib/logger';
+	import type { MetadataQuery } from '#lib/api/metadata.js';
+	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/metadata/MetadataQueryForm');
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { simulationApi, type DaskTestResult } from '$lib/api/simulation';
+	import { simulationApi, type DaskTestResult } from '#lib/api/simulation.js';
 
 	interface Props {
 		backendType: string;

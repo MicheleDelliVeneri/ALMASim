@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { DownloadJobStatus } from '$lib/api/download';
-	import { downloadApi } from '$lib/api/download';
+	import type { DownloadJobStatus } from '#lib/api/download.js';
+	import { downloadApi } from '#lib/api/download.js';
 
 	interface Props {
 		jobId: string;

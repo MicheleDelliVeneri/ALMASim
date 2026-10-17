@@ -5,15 +5,15 @@
 		type MetadataQuery,
 		type MetadataResponse,
 		type QueryPreset,
-	} from '$lib/api/metadata';
-	import MetadataQueryForm from '$lib/components/metadata/MetadataQueryForm.svelte';
-	import MetadataResultsTable from '$lib/components/metadata/MetadataResultsTable.svelte';
-	import MetadataLoadModal from '$lib/components/metadata/MetadataLoadModal.svelte';
-	import MetadataSaveModal from '$lib/components/metadata/MetadataSaveModal.svelte';
-	import DownloadDialog from '$lib/components/metadata/DownloadDialog.svelte';
-	import FullScreenLoader from '$lib/components/shared/Loader.svelte';
-	import { createLogger } from '$lib/logger';
-	import { formatDateStamp, supportsFilePicker } from '$lib/utils';
+	} from '#lib/api/metadata.js';
+	import MetadataQueryForm from '#lib/components/metadata/MetadataQueryForm.svelte';
+	import MetadataResultsTable from '#lib/components/metadata/MetadataResultsTable.svelte';
+	import MetadataLoadModal from '#lib/components/metadata/MetadataLoadModal.svelte';
+	import MetadataSaveModal from '#lib/components/metadata/MetadataSaveModal.svelte';
+	import DownloadDialog from '#lib/components/metadata/DownloadDialog.svelte';
+	import FullScreenLoader from '#lib/components/shared/Loader.svelte';
+	import { createLogger } from '#lib/logger.js';
+	import { formatDateStamp, supportsFilePicker } from '#lib/utils.js';
 
 	const RESULTS_CACHE_KEY = 'almasim:metadata-results';
 	const DEFAULT_METADATA_PATH = 'data';

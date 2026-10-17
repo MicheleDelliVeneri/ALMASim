@@ -4,17 +4,17 @@
 		simulationApi,
 		type SimulationEstimate,
 		type SimulationParamsCreate
-	} from '$lib/api/simulation';
-	import type { MetadataResponse } from '$lib/api/metadata';
-	import ComputeBackendConfig from '$lib/components/simulations/ComputeBackendConfig.svelte';
-	import SimulationForm from '$lib/components/simulations/SimulationForm.svelte';
-	import MetadataSelector from '$lib/components/simulations/MetadataSelector.svelte';
-	import SelectedRowPreview from '$lib/components/simulations/SelectedRowPreview.svelte';
-	import SimulationStatusDisplay from '$lib/components/simulations/SimulationStatusDisplay.svelte';
-	import SimulationsList from '$lib/components/simulations/SimulationsList.svelte';
-	import { createLogger } from '$lib/logger';
-	import { inferObservationConfigsFromMetadataRow } from '$lib/utils/observationPlan';
-	import { API_BASE_URL } from '$lib/config';
+	} from '#lib/api/simulation.js';
+	import type { MetadataResponse } from '#lib/api/metadata.js';
+	import ComputeBackendConfig from '#lib/components/simulations/ComputeBackendConfig.svelte';
+	import SimulationForm from '#lib/components/simulations/SimulationForm.svelte';
+	import MetadataSelector from '#lib/components/simulations/MetadataSelector.svelte';
+	import SelectedRowPreview from '#lib/components/simulations/SelectedRowPreview.svelte';
+	import SimulationStatusDisplay from '#lib/components/simulations/SimulationStatusDisplay.svelte';
+	import SimulationsList from '#lib/components/simulations/SimulationsList.svelte';
+	import { createLogger } from '#lib/logger.js';
+	import { inferObservationConfigsFromMetadataRow } from '#lib/utils/observationPlan.js';
+	import { API_BASE_URL } from '#lib/config.js';
 
 	const logger = createLogger('routes/simulations');
 

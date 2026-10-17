@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { deriveArrayType, inferObservationConfigsFromMetadataRow } from '$lib/utils/observationPlan';
-	import type { SimulationEstimate } from '$lib/api/simulation';
+	import { deriveArrayType, inferObservationConfigsFromMetadataRow } from '#lib/utils/observationPlan.js';
+	import type { SimulationEstimate } from '#lib/api/simulation.js';
 
 	interface Props {
 		row: Record<string, unknown> | null;

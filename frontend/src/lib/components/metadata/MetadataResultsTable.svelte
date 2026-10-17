@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { MetadataResponse } from '$lib/api/metadata';
-	import { downloadApi } from '$lib/api/download';
-	import { createLogger } from '$lib/logger';
+	import type { MetadataResponse } from '#lib/api/metadata.js';
+	import { downloadApi } from '#lib/api/download.js';
+	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/metadata/MetadataResultsTable');
 

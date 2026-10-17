@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { downloadApi, type BrowseDirectoryResponse } from '$lib/api/download';
-	import { createLogger } from '$lib/logger';
+	import { downloadApi, type BrowseDirectoryResponse } from '#lib/api/download.js';
+	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/simulations/SimulationForm');
 

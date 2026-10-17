@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { createLogger } from '$lib/logger';
-	import { simulationApi, type SimulationStatus } from '$lib/api/simulation';
+	import { createLogger } from '#lib/logger.js';
+	import { simulationApi, type SimulationStatus } from '#lib/api/simulation.js';
 
 	interface SimulationSummary {
 		simulation_id: string;
