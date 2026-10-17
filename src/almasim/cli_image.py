@@ -322,11 +322,24 @@ def cube_channels(row: pd.Series, n_pixels: int, options: CubeOptions) -> int:
     return _largest_divisor_at_most(n_native, min(wanted, affordable))
 
 
-def image_pixels(imaging_parameters: pd.Series, fov_fraction: float, beam_sampling: float) -> int:
-    """Image side in pixels: the FOV over the cell (beam / ``beam_sampling``)."""
+def image_pixels(
+    imaging_parameters: pd.Series,
+    fov_fraction: float,
+    beam_sampling: float,
+    min_beams_across: float = 0.0,
+) -> int:
+    """Image side in pixels: the FOV over the cell (beam / ``beam_sampling``).
+
+    ``min_beams_across`` widens images narrower than that many synthesized
+    beams: a compact configuration's primary beam spans few of them.
+    """
     cell = imaging_parameters["synthetized_beam_size"] / beam_sampling
     fov = imaging_parameters["fov_per_frequency"] * fov_fraction
-    return max(MIN_IMAGE_PIXELS, int(math.ceil(fov / cell)))
+    return max(
+        MIN_IMAGE_PIXELS,
+        int(math.ceil(fov / cell)),
+        int(math.ceil(min_beams_across * beam_sampling)),
+    )
 
 
 def compute_imaging_parameters(
@@ -426,6 +439,8 @@ def imaging_parameter_to_command_arg(
     auto_threshold: float | None = None,
     auto_mask: float | None = None,
     cube: CubeOptions | None = None,
+    min_beams_across: float = 0.0,
+    multiscale: bool = False,
 ) -> list[str]:
     """WSClean geometry and deconvolution flags for one spectral window.
 
@@ -435,11 +450,13 @@ def imaging_parameter_to_command_arg(
 
     With ``cube`` the window is imaged as a spectral cube of ``cube_channels``
     channels (``-channels-out``, each channel cleaned on its own); without it,
-    as one continuum plane.
+    as one continuum plane. ``multiscale`` cleans with WSClean's multi-scale
+    algorithm, which models extended emission that delta components leave
+    in the residual.
     """
     spw = imaging_parameters["spectral_window_id"]
     synthetized_beam_size = imaging_parameters["synthetized_beam_size"] / beam_sampling
-    n_pixels = image_pixels(imaging_parameters, fov_fraction, beam_sampling)
+    n_pixels = image_pixels(imaging_parameters, fov_fraction, beam_sampling, min_beams_across)
     cmd_args = [
         "-scale",
         f"{synthetized_beam_size}asec",
@@ -463,6 +480,8 @@ def imaging_parameter_to_command_arg(
         cmd_args += ["-auto-mask", str(auto_mask)]
     if auto_threshold is not None and auto_threshold > 0:
         cmd_args += ["-auto-threshold", str(auto_threshold)]
+    if multiscale:
+        cmd_args.append("-multiscale")
     if cube is not None:
         channels = cube_channels(imaging_parameters, n_pixels, cube)
         if channels > 1:
@@ -644,6 +663,8 @@ def build_imaging_tasks(
     cube: CubeOptions | None = None,
     cube_products: Sequence[str] | None = None,
     cube_reorder: bool = True,
+    min_beams_across: float = 0.0,
+    multiscale: bool = False,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
@@ -721,6 +742,8 @@ def build_imaging_tasks(
                 auto_threshold=auto_threshold,
                 auto_mask=auto_mask,
                 cube=cube if with_cube else None,
+                min_beams_across=min_beams_across,
+                multiscale=multiscale,
             )
             if with_cube and cube_products is not None and "dirty" not in cube_products:
                 command_args.append("-no-dirty")
@@ -1026,6 +1049,7 @@ def cube_plan(
     fov_fraction: float,
     beam_sampling: float,
     options: CubeOptions,
+    min_beams_across: float = 0.0,
 ) -> pd.DataFrame:
     """Per row: image side, native and cube channels, and one cube's size in GB.
 
@@ -1033,7 +1057,9 @@ def cube_plan(
     than the spectral sampling asked for.
     """
     unlimited = replace(options, max_cube_gb=math.inf)
-    pixels = parameters.apply(lambda row: image_pixels(row, fov_fraction, beam_sampling), axis=1)
+    pixels = parameters.apply(
+        lambda row: image_pixels(row, fov_fraction, beam_sampling, min_beams_across), axis=1
+    )
     channels, wanted = [], []
     for (_, row), n in zip(parameters.iterrows(), pixels):
         channels.append(cube_channels(row, int(n), options))
@@ -1057,8 +1083,9 @@ def _echo_cube_plan(
     beam_sampling: float,
     options: CubeOptions,
     products: Sequence[str],
+    min_beams_across: float = 0.0,
 ) -> None:
-    plan = cube_plan(parameters, fov_fraction, beam_sampling, options)
+    plan = cube_plan(parameters, fov_fraction, beam_sampling, options, min_beams_across)
     if plan.empty:
         return
     averaged = int((plan["cube_channels"] < plan["n_channels"]).sum())
@@ -1099,6 +1126,29 @@ def image_from_ms(
         help="Number of pixels to use to sample the synthetized beam. Could be fractional.",
         default=8,
         min=1e-6,
+    ),
+    # Compact-configuration images were ~12 beams wide: the source's sidelobes
+    # filled them, inflated the noise WSClean cleaned to and left more source
+    # in the residual. At 32 beams the line-free residual share of four
+    # cycle11 cubes fell from 7-25 % to 6-21 % and their S/N rose 1.4-4x, for
+    # ~13 % more run time; multi-scale changed nothing on these compact
+    # sources and diverged on a 6.6 Jy one in a 94 px image (2026-10-17).
+    min_beams_across: float = typer.Option(
+        32.0,
+        "--min-beams-across",
+        min=0.0,
+        help=(
+            "Make every image at least this many synthesized beams wide, whatever "
+            "--fov-fraction gives (default 32; 0: no minimum)."
+        ),
+    ),
+    multiscale: bool = typer.Option(
+        False,
+        "--multiscale/--no-multiscale",
+        help=(
+            "Clean with WSClean's multi-scale algorithm (-multiscale) for extended emission. "
+            "Off by default: it can diverge on bright sources in small images."
+        ),
     ),
     num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
     max_cores_per_node: int = typer.Option(
@@ -1352,7 +1402,9 @@ def image_from_ms(
             max_cube_gb=max_cube_gb,
         )
         parameters = add_spectral_columns(parameters)
-        _echo_cube_plan(parameters, fov_fraction, beam_sampling, cube_options, products)
+        _echo_cube_plan(
+            parameters, fov_fraction, beam_sampling, cube_options, products, min_beams_across
+        )
     elif plan_only or contsub:
         raise typer.BadParameter("--plan-only and --contsub need --cube")
     if not continuum and not cube:
@@ -1379,6 +1431,8 @@ def image_from_ms(
         cube=cube_options,
         cube_products=products,
         cube_reorder=cube_reorder,
+        min_beams_across=min_beams_across,
+        multiscale=multiscale,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -1467,6 +1521,8 @@ def image_set(
         output_directory=output_directory,
         fov_fraction=fov_fraction,
         beam_sampling=beam_sampling,
+        min_beams_across=32.0,
+        multiscale=False,
         num_cores=num_cores,
         max_cores_per_node=max_cores_per_node,
         wsclean_bin=wsclean_bin,
