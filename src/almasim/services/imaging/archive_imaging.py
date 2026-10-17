@@ -34,11 +34,13 @@ if TYPE_CHECKING:
     import numpy as np
 
 __all__ = [
+    "CONTINUUM_COLUMN",
     "CONTSUB_FILENAME",
     "CUBE_IMAGE_FILENAME",
     "CUBE_NAME",
     "DEFAULT_MAX_WEIGHT",
     "IMAGE_FILENAME",
+    "LINE_COLUMN",
     "SINGLE_WINDOW_PLACEHOLDER",
     "extract_single_window_ms",
     "extract_single_window_ms_subprocess",
@@ -48,7 +50,11 @@ __all__ = [
     "is_imaging_complete",
     "run_wsclean_task",
     "stack_channel_images",
+    "fit_uv_continuum",
+    "line_free_channels",
     "subtract_continuum",
+    "subtract_uv_continuum",
+    "subtract_uv_continuum_subprocess",
     "write_imaging_failure_marker",
     "write_imaging_marker",
     "wsclean_environment",
@@ -63,6 +69,13 @@ IMAGE_FILENAME = "wsclean-image.fits"
 CUBE_NAME = "wsclean-cube"
 CUBE_IMAGE_FILENAME = f"{CUBE_NAME}-image.fits"
 CONTSUB_FILENAME = f"{CUBE_NAME}-image.contsub.fits"
+
+# Columns ``subtract_uv_continuum`` adds to the per-task single-window MS: the
+# continuum fitted per visibility over the line-free channels, and the data
+# minus it (the lines). The continuum image is made from the first, the cube
+# from the second.
+CONTINUUM_COLUMN = "CONTINUUM_DATA"
+LINE_COLUMN = "LINE_DATA"
 
 # Placeholder in a task command for the per-task single-window MS that the
 # wrapper extracts on the worker (see ``extract_single_window_ms``).
@@ -416,6 +429,7 @@ def run_wsclean_task(
     cube_command: Sequence[str] | None = None,
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
+    uv_contsub_order: int | None = None,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -439,6 +453,12 @@ def run_wsclean_task(
     continuum-subtracted (``subtract_continuum``) before the task counts as
     done. Only the images this task makes are removed beforehand, so a cube
     task leaves an existing continuum image alone.
+
+    With ``uv_contsub_order`` (needs ``single_window`` and a cube) the
+    continuum is subtracted from the visibilities of the single-window MS
+    first (``subtract_uv_continuum``): the continuum image is made from the
+    fitted continuum and the cube from what is left, the lines. When too few
+    channels are line-free the subtraction is skipped and noted in the log.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -446,6 +466,8 @@ def run_wsclean_task(
     commands = [[str(part) for part in c] for c in (command, cube_command or []) if c]
     if not commands:
         raise ValueError("run_wsclean_task needs a continuum or a cube command")
+    if uv_contsub_order is not None and not (single_window and cube_command):
+        raise ValueError("uv_contsub_order needs single_window and a cube_command")
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -502,6 +524,32 @@ def run_wsclean_task(
             [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in c]
             for c in commands
         ]
+        if uv_contsub_order is not None:
+            try:
+                fit = subtract_uv_continuum_subprocess(
+                    single_window_ms, order=uv_contsub_order, timeout=timeout, log_path=log_path
+                )
+            except Exception as exc:
+                error = f"Could not subtract the continuum from the visibilities: {exc}"
+                write_imaging_failure_marker(out, ms_path=ms_path, spw=spw, error=error)
+                raise RuntimeError(error) from exc
+            with log_path.open("a", encoding="utf-8") as log:
+                if fit.get("skipped"):
+                    log.write(
+                        f"# continuum NOT subtracted from the visibilities: {fit['skipped']}; "
+                        "the cube keeps the continuum\n"
+                    )
+                else:
+                    log.write(
+                        f"# continuum subtracted from {fit['source_column']} (order "
+                        f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
+                        f"{fit['usable_channels']} channels line-free, lines in channels "
+                        f"{fit['line_ranges'] or 'none'}\n"
+                    )
+            if not fit.get("skipped"):
+                if command:
+                    commands[0] = _with_data_column(commands[0], CONTINUUM_COLUMN)
+                commands[-1] = _with_data_column(commands[-1], LINE_COLUMN)
     scratch_dir: Path | None = None
     if scratch_root:
         # Per-task scratch for WSClean's reordered visibilities, created here
@@ -869,6 +917,266 @@ def subtract_continuum(
     )
     partial.replace(out)
     return {"line_fraction": clipped / fitted if fitted else 0.0}
+
+
+def line_free_channels(
+    spectrum: np.ndarray,
+    usable: np.ndarray,
+    *,
+    order: int = 1,
+    clip_sigma: float = 3.0,
+    widths: Sequence[int] = (1, 4, 16, 64),
+    grow: int | None = None,
+    iterations: int = 10,
+) -> np.ndarray:
+    """Line-free channels of a source spectrum: the ones a continuum fit keeps.
+
+    A polynomial of ``order`` is fitted to the kept channels and its
+    residual smoothed with a boxcar of each of ``widths`` channels; a channel
+    is line wherever any smoothed residual exceeds ``clip_sigma`` times that
+    scale's robust noise (1.4826 x MAD over the kept channels). The fit is
+    repeated on the channels left until they stop changing. Each line is
+    then widened by ``grow`` channels on both sides (default 1 % of the
+    channels, at least 2) so its faint wings stay out of the fit.
+
+    One-channel clipping alone missed the wings of the broad line of
+    uid___A002_X10ded83_X6af4 SPW 16: ~0.3 sigma per channel over ~100
+    channels, 2.5 sigma once smoothed over them (2026-10-17).
+    """
+    import numpy as np
+
+    spectrum = np.asarray(spectrum, dtype=np.float64)
+    usable = np.asarray(usable, dtype=bool) & np.isfinite(spectrum)
+    n = spectrum.size
+    x = np.linspace(-1.0, 1.0, n) if n > 1 else np.zeros(1)
+    kept = usable.copy()
+    scales = [int(k) for k in widths if 1 <= int(k) <= max(n // 8, 1)] or [1]
+    for _ in range(max(int(iterations), 1)):
+        if kept.sum() <= order:
+            break
+        coef = np.polyfit(x[kept], spectrum[kept], order)
+        residual = np.where(usable, spectrum - np.polyval(coef, x), 0.0)
+        line = np.zeros(n, dtype=bool)
+        for k in scales:
+            box = np.ones(k)
+            counts = np.convolve(usable.astype(float), box, mode="same")
+            smooth = np.convolve(residual, box, mode="same") / np.maximum(counts, 1.0)
+            # Deviations from the median, not from zero: the first fit still
+            # includes the lines, which lifts it and offsets every residual.
+            centre = np.median(smooth[kept])
+            spread = 1.4826 * np.median(np.abs(smooth[kept] - centre))
+            if spread > 0:
+                line |= usable & (np.abs(smooth - centre) > clip_sigma * spread)
+        new_kept = usable & ~line
+        if new_kept.sum() <= order or np.array_equal(new_kept, kept):
+            break
+        kept = new_kept
+    line = usable & ~kept
+    if grow is None:
+        grow = max(2, n // 100)
+    if grow > 0 and line.any():
+        line = np.convolve(line, np.ones(2 * grow + 1), mode="same") > 0
+    return usable & ~line
+
+
+def fit_uv_continuum(
+    data: np.ndarray,
+    weight: np.ndarray,
+    flag: np.ndarray,
+    line_free: np.ndarray,
+    order: int = 1,
+) -> np.ndarray:
+    """Continuum of each visibility row, fitted over the line-free channels.
+
+    ``data``, ``weight`` and ``flag`` are ``(rows, channels, correlations)``;
+    every row and correlation gets a weighted least-squares polynomial of
+    ``order`` (0 or 1) in channel, from its unflagged ``line_free`` channels,
+    evaluated at every channel: CASA ``uvcontsub``. A row with no usable
+    line-free channel gets zero continuum; one whose channels cannot
+    constrain a slope gets a constant.
+    """
+    import numpy as np
+
+    if order not in (0, 1):
+        raise ValueError(f"continuum order must be 0 or 1, not {order}")
+    n_channels = data.shape[1]
+    x = np.linspace(-1.0, 1.0, n_channels)[None, :, None] if n_channels > 1 else np.zeros((1, 1, 1))
+    w = np.where(flag | ~np.asarray(line_free, dtype=bool)[None, :, None], 0.0, weight)
+    w = np.where(np.isfinite(data), w, 0.0)
+    y = np.where(w > 0, data, 0.0)
+    s0 = w.sum(axis=1)
+    t0 = (w * y).sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean = np.where(s0 > 0, t0 / np.where(s0 > 0, s0, 1.0), 0.0)
+        slope = np.zeros_like(mean)
+        intercept = mean
+        if order == 1:
+            s1 = (w * x).sum(axis=1)
+            s2 = (w * x * x).sum(axis=1)
+            t1 = (w * x * y).sum(axis=1)
+            det = s0 * s2 - s1 * s1
+            fit = det > 1e-9 * np.maximum(s0 * s2, 1e-300)
+            safe = np.where(fit, det, 1.0)
+            slope = np.where(fit, (s0 * t1 - s1 * t0) / safe, 0.0)
+            intercept = np.where(fit, (t0 * s2 - t1 * s1) / safe, mean)
+    return (intercept[:, None, :] + slope[:, None, :] * x).astype(data.dtype)
+
+
+def _channel_ranges(mask: np.ndarray) -> str:
+    """``0~10;20~30``: the runs of True in ``mask``, CASA channel-selection style."""
+    import numpy as np
+
+    edges = np.flatnonzero(np.diff(np.concatenate(([0], mask.astype(int), [0]))))
+    return ";".join(f"{a}~{b - 1}" for a, b in zip(edges[::2], edges[1::2]))
+
+
+def subtract_uv_continuum(
+    ms_path: str | os.PathLike[str],
+    *,
+    order: int = 1,
+    clip_sigma: float = 3.0,
+    rows_per_chunk: int = 20000,
+    min_line_free_fraction: float = 0.2,
+) -> dict[str, object]:
+    """Split a single-window MS into continuum and line visibilities.
+
+    The line channels are found on the source spectrum: the visibilities of
+    every row averaged (vector, weighted, XX and YY) per channel, its
+    amplitude fitted by ``line_free_channels``. Each row is then fitted by
+    ``fit_uv_continuum`` over the line-free channels, and the fit and the
+    data minus the fit are written to ``CONTINUUM_COLUMN`` and
+    ``LINE_COLUMN``. The data are CORRECTED_DATA when the MS has it, DATA
+    otherwise (WSClean's own choice).
+
+    Channel-by-channel cleaning stops at the threshold in each channel and
+    so leaves a faint source's continuum in the residual (uid___A002_
+    X10ded83_X6af4 SPW 16: S/N 8 per channel, 12 % of the line-free image
+    left); imaged from the fitted continuum, all line-free channels are
+    cleaned together, and the cube holds only the lines.
+
+    Nothing is written when fewer than ``min_line_free_fraction`` of the
+    usable channels are line-free (a line forest or a window filled by one
+    line); the result then carries ``skipped`` with the reason.
+    """
+    import numpy as np
+    from casacore.tables import makecoldesc, table
+
+    started = time.time()
+    ms = table(str(ms_path), readonly=False, ack=False)
+    try:
+        source = "CORRECTED_DATA" if "CORRECTED_DATA" in ms.colnames() else "DATA"
+        n_rows = ms.nrows()
+        has_spectrum_weight = "WEIGHT_SPECTRUM" in ms.colnames() and (
+            n_rows > 0 and ms.iscelldefined("WEIGHT_SPECTRUM", 0)
+        )
+
+        def chunk(start: int, n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            data = ms.getcol(source, startrow=start, nrow=n)
+            flag = ms.getcol("FLAG", startrow=start, nrow=n)
+            if has_spectrum_weight:
+                weight = ms.getcol("WEIGHT_SPECTRUM", startrow=start, nrow=n)
+            else:
+                weight = np.broadcast_to(
+                    ms.getcol("WEIGHT", startrow=start, nrow=n)[:, None, :], data.shape
+                )
+            return data, np.asarray(weight, dtype=np.float64), flag
+
+        num = den = None
+        for start in range(0, n_rows, rows_per_chunk):
+            data, weight, flag = chunk(start, min(rows_per_chunk, n_rows - start))
+            corrs = [0, data.shape[2] - 1] if data.shape[2] > 1 else [0]
+            w = np.where(flag[..., corrs] | ~np.isfinite(data[..., corrs]), 0.0, weight[..., corrs])
+            d = np.where(w > 0, data[..., corrs], 0.0)
+            if num is None:
+                num = np.zeros(data.shape[1], dtype=np.complex128)
+                den = np.zeros(data.shape[1])
+            num += (w * d).sum(axis=(0, 2))
+            den += w.sum(axis=(0, 2))
+        if num is None:
+            return {"skipped": "the MS has no rows", "source_column": source}
+        usable = den > 0
+        spectrum = np.abs(np.where(usable, num / np.where(usable, den, 1.0), 0.0))
+        line_free = line_free_channels(spectrum, usable, order=order, clip_sigma=clip_sigma)
+        result: dict[str, object] = {
+            "source_column": source,
+            "channels": int(usable.size),
+            "usable_channels": int(usable.sum()),
+            "line_free_channels": int(line_free.sum()),
+            "line_channels": int((usable & ~line_free).sum()),
+            "line_ranges": _channel_ranges(usable & ~line_free),
+            "order": int(order),
+        }
+        if line_free.sum() < max(order + 2, min_line_free_fraction * usable.sum()):
+            result["skipped"] = (
+                f"only {int(line_free.sum())} of {int(usable.sum())} usable channels are line-free"
+            )
+            return result
+        for name in (CONTINUUM_COLUMN, LINE_COLUMN):
+            if name in ms.colnames():
+                ms.removecols(name)
+            ms.addcols(makecoldesc(name, ms.getcoldesc(source)))
+        for start in range(0, n_rows, rows_per_chunk):
+            n = min(rows_per_chunk, n_rows - start)
+            data, weight, flag = chunk(start, n)
+            continuum = fit_uv_continuum(data, weight, flag, line_free, order)
+            ms.putcol(CONTINUUM_COLUMN, continuum, startrow=start, nrow=n)
+            ms.putcol(LINE_COLUMN, data - continuum, startrow=start, nrow=n)
+        result["seconds"] = round(time.time() - started, 1)
+        return result
+    finally:
+        ms.close()
+
+
+_UV_CONTSUB_CHILD = (
+    "import json, sys\n"
+    "from almasim.services.imaging.archive_imaging import subtract_uv_continuum\n"
+    "args = json.loads(sys.argv[1])\n"
+    "result = subtract_uv_continuum(args['ms'], order=args['order'])\n"
+    "sys.stdout.write(json.dumps(result))\n"
+)
+
+
+def subtract_uv_continuum_subprocess(
+    ms_path: str | os.PathLike[str],
+    *,
+    order: int = 1,
+    timeout: float | None = None,
+    log_path: str | os.PathLike[str] | None = None,
+) -> dict[str, object]:
+    """Run ``subtract_uv_continuum`` in a child process, for the reason
+    ``extract_single_window_ms_subprocess`` gives: casacore holds the GIL."""
+    args = json.dumps({"ms": str(ms_path), "order": int(order)})
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _UV_CONTSUB_CHILD, args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            env=wsclean_environment(1),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"continuum subtraction killed after exceeding the {timeout:.0f}s task timeout"
+        ) from exc
+    if log_path is not None and proc.stderr.strip():
+        with Path(log_path).open("a", encoding="utf-8") as log:
+            log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
+    if proc.returncode != 0:
+        reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
+        detail = f": {reason}" if reason else ""
+        raise RuntimeError(
+            f"continuum subtraction exited with return code {proc.returncode}{detail}"
+        )
+    try:
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError("continuum subtraction wrote no result") from exc
+
+
+def _with_data_column(cmd: list[str], column: str) -> list[str]:
+    """``cmd`` reading ``column``: ``-data-column`` goes before the MS, its last argument."""
+    return [*cmd[:-1], "-data-column", column, cmd[-1]]
 
 
 def _remove_reorder_files(out: Path) -> None:
