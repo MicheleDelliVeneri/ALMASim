@@ -441,6 +441,7 @@ def imaging_parameter_to_command_arg(
     cube: CubeOptions | None = None,
     min_beams_across: float = 0.0,
     multiscale: bool = False,
+    join_channels: bool = False,
 ) -> list[str]:
     """WSClean geometry and deconvolution flags for one spectral window.
 
@@ -452,7 +453,9 @@ def imaging_parameter_to_command_arg(
     channels (``-channels-out``, each channel cleaned on its own); without it,
     as one continuum plane. ``multiscale`` cleans with WSClean's multi-scale
     algorithm, which models extended emission that delta components leave
-    in the residual.
+    in the residual. ``join_channels`` makes a cube find its components on
+    the sum of the channels (WSClean ``-join-channels``) and fit them per
+    channel, so emission too faint to clean in one channel is still cleaned.
     """
     spw = imaging_parameters["spectral_window_id"]
     synthetized_beam_size = imaging_parameters["synthetized_beam_size"] / beam_sampling
@@ -486,6 +489,8 @@ def imaging_parameter_to_command_arg(
         channels = cube_channels(imaging_parameters, n_pixels, cube)
         if channels > 1:
             cmd_args += ["-channels-out", str(channels)]
+            if join_channels:
+                cmd_args.append("-join-channels")
     return cmd_args
 
 
@@ -665,6 +670,7 @@ def build_imaging_tasks(
     cube_reorder: bool = True,
     min_beams_across: float = 0.0,
     multiscale: bool = False,
+    join_channels: bool = False,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
@@ -744,6 +750,7 @@ def build_imaging_tasks(
                 cube=cube if with_cube else None,
                 min_beams_across=min_beams_across,
                 multiscale=multiscale,
+                join_channels=join_channels,
             )
             if with_cube and cube_products is not None and "dirty" not in cube_products:
                 command_args.append("-no-dirty")
@@ -1353,6 +1360,18 @@ def image_from_ms(
             "(default: all five). The others are removed (dirty is not even made)."
         ),
     ),
+    # On uid___A002_X10ded83_X6af4 SPW 16 joining cut the stacked line-free
+    # residual from 12 % to 8 % of the image but raised the line channels'
+    # from 11 % to 30 % (2026-10-17), so it stays opt-in.
+    join_channels: bool = typer.Option(
+        False,
+        "--join-channels/--no-join-channels",
+        help=(
+            "Clean the cube on the sum of its channels (WSClean -join-channels): "
+            "continuum too faint to clean channel by channel is cleaned too, but narrow "
+            "lines are cleaned worse. Off by default. Needs --cube."
+        ),
+    ),
     cube_reorder: bool = typer.Option(
         True,
         "--cube-reorder/--cube-no-reorder",
@@ -1405,8 +1424,8 @@ def image_from_ms(
         _echo_cube_plan(
             parameters, fov_fraction, beam_sampling, cube_options, products, min_beams_across
         )
-    elif plan_only or contsub:
-        raise typer.BadParameter("--plan-only and --contsub need --cube")
+    elif plan_only or contsub or join_channels:
+        raise typer.BadParameter("--plan-only, --contsub and --join-channels need --cube")
     if not continuum and not cube:
         raise typer.BadParameter("--no-continuum needs --cube: there would be nothing to image")
     if plan_only:
@@ -1433,6 +1452,7 @@ def image_from_ms(
         cube_reorder=cube_reorder,
         min_beams_across=min_beams_across,
         multiscale=multiscale,
+        join_channels=join_channels,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -1542,6 +1562,7 @@ def image_set(
         velocity_resolution=0.0,
         max_cube_gb=4.0,
         cube_products=",".join(CUBE_PRODUCTS),
+        join_channels=False,
         cube_reorder=True,
         plan_only=False,
         postprocess_backend=postprocess_backend,
