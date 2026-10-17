@@ -8,6 +8,7 @@ exercised exactly as on the cluster.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -114,15 +115,20 @@ def test_source_spectrum_averages_every_row(spectrum_weight):
 
 
 @pytest.mark.unit
-def test_subtract_uv_continuum_writes_continuum_and_line_columns(fake_casacore):
+@pytest.mark.parametrize(("spectrum_weight", "corrected"), [(False, True), (True, False)])
+def test_subtract_uv_continuum_writes_continuum_and_line_columns(
+    fake_casacore, spectrum_weight, corrected
+):
     data = _visibilities()
-    fake_casacore["x.ms"] = ms = _ms(data, corrected=True)
+    fake_casacore["x.ms"] = ms = _ms(data, spectrum_weight=spectrum_weight, corrected=corrected)
+    ms.columns["FLAG"][:, 5] = True  # a flagged channel
 
     result = ai.subtract_uv_continuum("x.ms", rows_per_chunk=9)
 
-    assert result["source_column"] == "CORRECTED_DATA" and not result.get("skipped")
+    assert result["source_column"] == ("CORRECTED_DATA" if corrected else "DATA")
+    assert not result.get("skipped") and ms.closed and result["usable_channels"] == 63
     ranges = [tuple(map(int, r.split("~"))) for r in result["line_ranges"].split(";")]
-    assert all(any(a <= c <= b for a, b in ranges) for c in range(30, 36)) and ms.closed
+    assert all(any(a <= c <= b for a, b in ranges) for c in range(30, 36))
     line = ms.columns[ai.LINE_COLUMN]
     assert np.abs(line[:, 30:36].real - 1.5).max() < 0.05, "the line stays in LINE_DATA"
     assert np.abs(line[:, :20]).max() < 0.05, "no continuum left"
@@ -141,6 +147,54 @@ def test_subtract_uv_continuum_skips_without_rows_or_line_free_channels(fake_cas
     result = ai.subtract_uv_continuum("lines.ms", min_line_free_fraction=0.99)
     assert "usable channels are line-free" in result["skipped"]
     assert ai.LINE_COLUMN not in ms.columns
+
+
+@pytest.mark.unit
+def test_line_free_channels_with_too_few_channels_to_fit():
+    line_free = ai.line_free_channels(np.array([1.0, 2.0]), np.array([True, False]), order=1)
+    assert list(line_free) == [True, False], "one usable channel cannot be fitted or clipped"
+
+
+class _Proc:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+@pytest.mark.unit
+def test_subtract_uv_continuum_subprocess_returns_the_child_result(tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(args=json.loads(cmd[-1]), env=kwargs["env"])
+        return _Proc(stdout='{"line_channels": 3}\n', stderr="casacore note")
+
+    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    log = tmp_path / "task.log"
+    result = ai.subtract_uv_continuum_subprocess("x.ms", order=0, log_path=log)
+
+    assert result == {"line_channels": 3} and seen["args"] == {"ms": "x.ms", "order": 0}
+    assert seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
+    assert log.read_text() == "casacore note\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("outcome", "message"),
+    [
+        (_Proc(returncode=1, stderr="Traceback\nRuntimeError: lock\n"), "return code 1: .*lock"),
+        (_Proc(stdout=""), "wrote no result"),
+        (subprocess.TimeoutExpired("python", 5), "killed after exceeding the 5s"),
+    ],
+)
+def test_subtract_uv_continuum_subprocess_failures(monkeypatch, outcome, message):
+    def fake_run(cmd, **kwargs):
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match=message):
+        ai.subtract_uv_continuum_subprocess("x.ms", timeout=5)
 
 
 @pytest.mark.unit
