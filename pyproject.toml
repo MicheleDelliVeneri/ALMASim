@@ -59,9 +59,9 @@ casa = ["casatools", "casatasks"]
 ms-casacore = ["python-casacore"]
 
 [project.urls]
-Repository = "https://github.com/MicheleDelliVeneri/ALMASim"
-Homepage = "https://github.com/MicheleDelliVeneri/ALMASim"
-Documentation = "https://micheledelliveneri.github.io/ALMASim/"
+Repository = "https://github.com/astromadiv/ALMASim"
+Homepage = "https://github.com/astromadiv/ALMASim"
+Documentation = "https://astromadiv.github.io/ALMASim/"
 
 [dependency-groups]
 dev = [

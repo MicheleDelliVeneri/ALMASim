@@ -2,9 +2,9 @@
 
 [![PyPI version](https://badge.fury.io/py/almasim.svg)](https://pypi.org/project/almasim/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
-[![Documentation](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/docs.yml/badge.svg)](https://micheledelliveneri.github.io/ALMASim/)
-[![CI](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml/badge.svg)](https://github.com/MicheleDelliVeneri/ALMASim/actions/workflows/lint_and_test.yml)
-[![codecov](https://codecov.io/gh/MicheleDelliVeneri/ALMASim/branch/main/graph/badge.svg)](https://codecov.io/gh/MicheleDelliVeneri/ALMASim)
+[![Documentation](https://github.com/astromadiv/ALMASim/actions/workflows/docs.yml/badge.svg)](https://astromadiv.github.io/ALMASim/)
+[![CI](https://github.com/astromadiv/ALMASim/actions/workflows/lint_and_test.yml/badge.svg)](https://github.com/astromadiv/ALMASim/actions/workflows/lint_and_test.yml)
+[![codecov](https://codecov.io/gh/astromadiv/ALMASim/branch/main/graph/badge.svg)](https://codecov.io/gh/astromadiv/ALMASim)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ALMASim is a **library-first** Python environment for simulating ALMA observations, exploring ALMA metadata, downloading science products, and building ML-ready radio/mm-wave datasets.
@@ -105,7 +105,7 @@ almasim --help
 If you are working from a local clone, install the project into a virtual environment and use the CLI directly:
 
 ```bash
-git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+git clone https://github.com/astromadiv/ALMASim.git
 cd ALMASim
 pip install uv
 uv sync --group dev
@@ -115,7 +115,7 @@ uv run almasim --help
 For an editable local install that exposes `almasim` on your shell path:
 
 ```bash
-git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+git clone https://github.com/astromadiv/ALMASim.git
 cd ALMASim
 pip install -e .
 almasim --help
@@ -152,7 +152,7 @@ pip install "almasim[ms-casacore]"
 ### From source (development)
 
 ```bash
-git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+git clone https://github.com/astromadiv/ALMASim.git
 cd ALMASim
 pip install uv
 uv sync --group dev
@@ -163,7 +163,7 @@ uv sync --group dev
 The FastAPI backend and Svelte frontend require Docker Compose:
 
 ```bash
-git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+git clone https://github.com/astromadiv/ALMASim.git
 cd ALMASim
 docker compose up
 ```
@@ -242,7 +242,7 @@ The pipeline is split into four composable stages:
 
 `estimate_simulation_footprint()` returns resolved pixel count, channel count, cell size, beam size, and raw output size in GiB — useful for pre-run capacity checks.
 
-Full reference: [Simulation docs](https://micheledelliveneri.github.io/ALMASim/simulation.html)
+Full reference: [Simulation docs](https://astromadiv.github.io/ALMASim/simulation.html)
 
 ---
 
@@ -268,7 +268,7 @@ All skymodels accept explicit `source_offset_x_arcsec` / `source_offset_y_arcsec
 | `dusty_diffuse` | Correlated low-spatial-frequency dusty background |
 | `combined` | Both of the above |
 
-Full reference: [Skymodels docs](https://micheledelliveneri.github.io/ALMASim/skymodels.html)
+Full reference: [Skymodels docs](https://astromadiv.github.io/ALMASim/skymodels.html)
 
 ---
 
@@ -284,7 +284,7 @@ Select via `SimulationParams.compute_backend`:
 | `slurm` | HPC job submission |
 | `kubernetes` | Cluster-native environments |
 
-Full reference: [Compute docs](https://micheledelliveneri.github.io/ALMASim/compute.html)
+Full reference: [Compute docs](https://astromadiv.github.io/ALMASim/compute.html)
 
 ---
 
@@ -319,7 +319,7 @@ products = resolve_products(df["member_ous_uid"].tolist())
 run_download_job(products, destination=Path("downloads"), extract_tar=True)
 ```
 
-Full reference: [Metadata docs](https://micheledelliveneri.github.io/ALMASim/metadata.html) · [Downloads docs](https://micheledelliveneri.github.io/ALMASim/downloads.html)
+Full reference: [Metadata docs](https://astromadiv.github.io/ALMASim/metadata.html) · [Downloads docs](https://astromadiv.github.io/ALMASim/downloads.html)
 
 ---
 
@@ -344,7 +344,7 @@ cd backend
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Full reference: [Frontend docs](https://micheledelliveneri.github.io/ALMASim/frontend.html)
+Full reference: [Frontend docs](https://astromadiv.github.io/ALMASim/frontend.html)
 
 ---
 
@@ -512,21 +512,21 @@ The notebook saves query filter presets as `.query.json` files so they can be re
 
 ## Documentation
 
-Full documentation: **[micheledelliveneri.github.io/ALMASim](https://micheledelliveneri.github.io/ALMASim/)**
+Full documentation: **[astromadiv.github.io/ALMASim](https://astromadiv.github.io/ALMASim/)**
 
 | Section | Topics |
 |---|---|
-| [Quick Start](https://micheledelliveneri.github.io/ALMASim/quickstart.html) | Installation, first simulation |
-| [Simulation](https://micheledelliveneri.github.io/ALMASim/simulation.html) | Staged API, SimulationParams, outputs |
-| [Interferometry](https://micheledelliveneri.github.io/ALMASim/interferometry.html) | UV sampling, baselines, multi-config |
-| [Noise](https://micheledelliveneri.github.io/ALMASim/noise.html) | PWV-aware noise model |
-| [Background Sky](https://micheledelliveneri.github.io/ALMASim/background.html) | Additive astrophysical background |
-| [Skymodels](https://micheledelliveneri.github.io/ALMASim/skymodels.html) | Source models reference |
-| [Imaging](https://micheledelliveneri.github.io/ALMASim/imaging.html) | Deconvolution, TP+INT combination |
-| [Metadata](https://micheledelliveneri.github.io/ALMASim/metadata.html) | TAP queries, filters |
-| [Downloads](https://micheledelliveneri.github.io/ALMASim/downloads.html) | Product download workflow |
-| [Compute Backends](https://micheledelliveneri.github.io/ALMASim/compute.html) | Sync, Dask, Slurm, Kubernetes |
-| [Frontend](https://micheledelliveneri.github.io/ALMASim/frontend.html) | Svelte UI workflows |
+| [Quick Start](https://astromadiv.github.io/ALMASim/quickstart.html) | Installation, first simulation |
+| [Simulation](https://astromadiv.github.io/ALMASim/simulation.html) | Staged API, SimulationParams, outputs |
+| [Interferometry](https://astromadiv.github.io/ALMASim/interferometry.html) | UV sampling, baselines, multi-config |
+| [Noise](https://astromadiv.github.io/ALMASim/noise.html) | PWV-aware noise model |
+| [Background Sky](https://astromadiv.github.io/ALMASim/background.html) | Additive astrophysical background |
+| [Skymodels](https://astromadiv.github.io/ALMASim/skymodels.html) | Source models reference |
+| [Imaging](https://astromadiv.github.io/ALMASim/imaging.html) | Deconvolution, TP+INT combination |
+| [Metadata](https://astromadiv.github.io/ALMASim/metadata.html) | TAP queries, filters |
+| [Downloads](https://astromadiv.github.io/ALMASim/downloads.html) | Product download workflow |
+| [Compute Backends](https://astromadiv.github.io/ALMASim/compute.html) | Sync, Dask, Slurm, Kubernetes |
+| [Frontend](https://astromadiv.github.io/ALMASim/frontend.html) | Svelte UI workflows |
 
 Build docs locally:
 
@@ -540,7 +540,7 @@ uv run sphinx-build -b html docs/source docs/build/html
 ## Contributing
 
 ```bash
-git clone https://github.com/MicheleDelliVeneri/ALMASim.git
+git clone https://github.com/astromadiv/ALMASim.git
 cd ALMASim
 uv sync --group dev
 uv run pytest --ignore=illustris_python
@@ -564,7 +564,7 @@ The release pipeline then:
 4. Creates a GitHub Release with auto-generated changelog and attached artifacts
 5. Builds and pushes the backend Docker image to GHCR
 
-> **One-time PyPI setup:** register a [trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) on PyPI with owner `MicheleDelliVeneri`, repo `ALMASim`, workflow `release.yml`, environment `pypi`.
+> **One-time PyPI setup:** register a [trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) on PyPI with owner `astromadiv`, repo `ALMASim`, workflow `release.yml`, environment `pypi`.
 
 ---
 
