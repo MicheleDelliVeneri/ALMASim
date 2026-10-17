@@ -48,6 +48,7 @@ __all__ = [
     "is_imaging_complete",
     "run_wsclean_task",
     "stack_channel_images",
+    "continuum_restart_commands",
     "subtract_continuum",
     "write_imaging_failure_marker",
     "write_imaging_marker",
@@ -416,6 +417,7 @@ def run_wsclean_task(
     cube_command: Sequence[str] | None = None,
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
+    continuum_restart: bool = False,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -446,6 +448,10 @@ def run_wsclean_task(
     commands = [[str(part) for part in c] for c in (command, cube_command or []) if c]
     if not commands:
         raise ValueError("run_wsclean_task needs a continuum or a cube command")
+    if continuum_restart and command:
+        if not single_window:
+            raise ValueError("continuum_restart writes MODEL_DATA: it needs single_window")
+        commands[:1] = continuum_restart_commands(commands[0])
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -869,6 +875,28 @@ def subtract_continuum(
     )
     partial.replace(out)
     return {"line_fraction": clipped / fitted if fitted else 0.0}
+
+
+def continuum_restart_commands(cmd: Sequence[str]) -> list[list[str]]:
+    """The continuum ``cmd`` as two passes: one writing MODEL_DATA, then ``-continue``.
+
+    WSClean's auto-mask is built in the first major cycle, at ``-auto-mask``
+    times the noise it measures then; a bright source's sidelobes inflate that
+    noise, so the mask misses its fainter parts and later cycles, which clean
+    only inside it, never reach them. uid___A002_X10ded83_X6af4 SPW 16: noise
+    91 mJy at mask creation against 26 mJy at the end, a 167 mJy feature 0.7
+    beam off the peak left uncleaned, 16 % of the flux within a beam in the
+    residual. The second pass starts from the true residual, measures the
+    noise again and builds a new mask: residual 3 %, model flux +20 %
+    (2026-10-18). The model visibilities go into the task's own copy of the MS.
+    """
+    first = [
+        "-update-model-required" if part == "-no-update-model-required" else str(part)
+        for part in cmd
+    ]
+    if "-update-model-required" not in first:
+        first.insert(len(first) - 1, "-update-model-required")
+    return [first, [*first[:-1], "-continue", first[-1]]]
 
 
 def _remove_reorder_files(out: Path) -> None:

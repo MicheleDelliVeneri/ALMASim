@@ -322,11 +322,24 @@ def cube_channels(row: pd.Series, n_pixels: int, options: CubeOptions) -> int:
     return _largest_divisor_at_most(n_native, min(wanted, affordable))
 
 
-def image_pixels(imaging_parameters: pd.Series, fov_fraction: float, beam_sampling: float) -> int:
-    """Image side in pixels: the FOV over the cell (beam / ``beam_sampling``)."""
+def image_pixels(
+    imaging_parameters: pd.Series,
+    fov_fraction: float,
+    beam_sampling: float,
+    min_beams_across: float = 0.0,
+) -> int:
+    """Image side in pixels: the FOV over the cell (beam / ``beam_sampling``).
+
+    ``min_beams_across`` widens images narrower than that many synthesized
+    beams: a compact configuration's primary beam spans few of them.
+    """
     cell = imaging_parameters["synthetized_beam_size"] / beam_sampling
     fov = imaging_parameters["fov_per_frequency"] * fov_fraction
-    return max(MIN_IMAGE_PIXELS, int(math.ceil(fov / cell)))
+    return max(
+        MIN_IMAGE_PIXELS,
+        int(math.ceil(fov / cell)),
+        int(math.ceil(min_beams_across * beam_sampling)),
+    )
 
 
 def compute_imaging_parameters(
@@ -426,6 +439,9 @@ def imaging_parameter_to_command_arg(
     auto_threshold: float | None = None,
     auto_mask: float | None = None,
     cube: CubeOptions | None = None,
+    min_beams_across: float = 0.0,
+    multiscale: bool = False,
+    join_channels: bool = False,
 ) -> list[str]:
     """WSClean geometry and deconvolution flags for one spectral window.
 
@@ -435,11 +451,15 @@ def imaging_parameter_to_command_arg(
 
     With ``cube`` the window is imaged as a spectral cube of ``cube_channels``
     channels (``-channels-out``, each channel cleaned on its own); without it,
-    as one continuum plane.
+    as one continuum plane. ``multiscale`` cleans with WSClean's multi-scale
+    algorithm, which models extended emission that delta components leave
+    in the residual. ``join_channels`` makes a cube find its components on
+    the sum of the channels (WSClean ``-join-channels``) and fit them per
+    channel, so emission too faint to clean in one channel is still cleaned.
     """
     spw = imaging_parameters["spectral_window_id"]
     synthetized_beam_size = imaging_parameters["synthetized_beam_size"] / beam_sampling
-    n_pixels = image_pixels(imaging_parameters, fov_fraction, beam_sampling)
+    n_pixels = image_pixels(imaging_parameters, fov_fraction, beam_sampling, min_beams_across)
     cmd_args = [
         "-scale",
         f"{synthetized_beam_size}asec",
@@ -463,10 +483,14 @@ def imaging_parameter_to_command_arg(
         cmd_args += ["-auto-mask", str(auto_mask)]
     if auto_threshold is not None and auto_threshold > 0:
         cmd_args += ["-auto-threshold", str(auto_threshold)]
+    if multiscale:
+        cmd_args.append("-multiscale")
     if cube is not None:
         channels = cube_channels(imaging_parameters, n_pixels, cube)
         if channels > 1:
             cmd_args += ["-channels-out", str(channels)]
+            if join_channels:
+                cmd_args.append("-join-channels")
     return cmd_args
 
 
@@ -644,6 +668,9 @@ def build_imaging_tasks(
     cube: CubeOptions | None = None,
     cube_products: Sequence[str] | None = None,
     cube_reorder: bool = True,
+    min_beams_across: float = 0.0,
+    multiscale: bool = False,
+    join_channels: bool = False,
 ) -> tuple[list[ImagingTask], int]:
     """Turn parameter rows into WSClean tasks, skipping the ones already done.
 
@@ -721,6 +748,9 @@ def build_imaging_tasks(
                 auto_threshold=auto_threshold,
                 auto_mask=auto_mask,
                 cube=cube if with_cube else None,
+                min_beams_across=min_beams_across,
+                multiscale=multiscale,
+                join_channels=join_channels,
             )
             if with_cube and cube_products is not None and "dirty" not in cube_products:
                 command_args.append("-no-dirty")
@@ -851,6 +881,7 @@ def run_imaging_tasks(
     max_weight: float | None = None,
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
+    continuum_restart: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -888,6 +919,7 @@ def run_imaging_tasks(
                         cube_command=task.cube_command,
                         cube_products=cube_products,
                         contsub_order=contsub_order,
+                        continuum_restart=continuum_restart,
                     )
                 )
             except Exception as exc:
@@ -948,6 +980,7 @@ def run_imaging_tasks(
                 cube_command=task.cube_command,
                 cube_products=cube_products,
                 contsub_order=contsub_order,
+                continuum_restart=continuum_restart,
             )
 
         queued = list(range(len(tasks)))
@@ -1026,6 +1059,7 @@ def cube_plan(
     fov_fraction: float,
     beam_sampling: float,
     options: CubeOptions,
+    min_beams_across: float = 0.0,
 ) -> pd.DataFrame:
     """Per row: image side, native and cube channels, and one cube's size in GB.
 
@@ -1033,7 +1067,9 @@ def cube_plan(
     than the spectral sampling asked for.
     """
     unlimited = replace(options, max_cube_gb=math.inf)
-    pixels = parameters.apply(lambda row: image_pixels(row, fov_fraction, beam_sampling), axis=1)
+    pixels = parameters.apply(
+        lambda row: image_pixels(row, fov_fraction, beam_sampling, min_beams_across), axis=1
+    )
     channels, wanted = [], []
     for (_, row), n in zip(parameters.iterrows(), pixels):
         channels.append(cube_channels(row, int(n), options))
@@ -1057,8 +1093,9 @@ def _echo_cube_plan(
     beam_sampling: float,
     options: CubeOptions,
     products: Sequence[str],
+    min_beams_across: float = 0.0,
 ) -> None:
-    plan = cube_plan(parameters, fov_fraction, beam_sampling, options)
+    plan = cube_plan(parameters, fov_fraction, beam_sampling, options, min_beams_across)
     if plan.empty:
         return
     averaged = int((plan["cube_channels"] < plan["n_channels"]).sum())
@@ -1100,6 +1137,29 @@ def image_from_ms(
         default=8,
         min=1e-6,
     ),
+    # Compact-configuration images were ~12 beams wide: the source's sidelobes
+    # filled them, inflated the noise WSClean cleaned to and left more source
+    # in the residual. At 32 beams the line-free residual share of four
+    # cycle11 cubes fell from 7-25 % to 6-21 % and their S/N rose 1.4-4x, for
+    # ~13 % more run time; multi-scale changed nothing on these compact
+    # sources and diverged on a 6.6 Jy one in a 94 px image (2026-10-17).
+    min_beams_across: float = typer.Option(
+        32.0,
+        "--min-beams-across",
+        min=0.0,
+        help=(
+            "Make every image at least this many synthesized beams wide, whatever "
+            "--fov-fraction gives (default 32; 0: no minimum)."
+        ),
+    ),
+    multiscale: bool = typer.Option(
+        False,
+        "--multiscale/--no-multiscale",
+        help=(
+            "Clean with WSClean's multi-scale algorithm (-multiscale) for extended emission. "
+            "Off by default: it can diverge on bright sources in small images."
+        ),
+    ),
     num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
     max_cores_per_node: int = typer.Option(
         help="Number of cores per node. [Used to scale the memory usage of wsclean]",
@@ -1112,20 +1172,24 @@ def image_from_ms(
         help="Path or executable name of the WSClean binary the workers run.",
     ),
     auto_threshold: float = typer.Option(
-        3.0,
+        1.0,
         "--auto-threshold",
         min=0.0,
         help=(
             "Stop cleaning when the residual peak drops below this many sigma of the "
-            "residual noise (WSClean -auto-threshold). 0 disables it and cleaning runs to "
-            "-niter."
+            "residual noise (WSClean -auto-threshold; default 1, inside the --auto-mask "
+            "mask). 0 disables it and cleaning runs to -niter."
         ),
     ),
     auto_mask: float = typer.Option(
-        0.0,
+        3.0,
         "--auto-mask",
         min=0.0,
-        help="WSClean -auto-mask level in sigma; 0 (default) disables auto-masking.",
+        help=(
+            "WSClean -auto-mask level in sigma (default 3): clean to this level everywhere, "
+            "then only inside the mask it found down to --auto-threshold. Must be above "
+            "--auto-threshold; 0 disables masking."
+        ),
     ),
     task_memory_gb: float = typer.Option(
         0.0,
@@ -1174,6 +1238,16 @@ def image_from_ms(
         help=(
             "Directory for WSClean's reordered visibilities (one sub-directory per task, "
             "removed afterwards). Default: the task's output directory."
+        ),
+    ),
+    continuum_restart: bool = typer.Option(
+        True,
+        "--continuum-restart/--no-continuum-restart",
+        help=(
+            "Clean the continuum in two passes, the second (-continue) from the true residual "
+            "with a mask rebuilt at the true noise: the first pass's auto-mask, built while "
+            "a bright source's sidelobes inflate the noise, misses its fainter parts "
+            "(default; only with --single-window-ms, whose per-task copy gets MODEL_DATA)."
         ),
     ),
     update_model: bool = typer.Option(
@@ -1299,6 +1373,18 @@ def image_from_ms(
             "(default: all five). The others are removed (dirty is not even made)."
         ),
     ),
+    # On uid___A002_X10ded83_X6af4 SPW 16 joining cut the stacked line-free
+    # residual from 12 % to 8 % of the image but raised the line channels'
+    # from 11 % to 30 % (2026-10-17), so it stays opt-in.
+    join_channels: bool = typer.Option(
+        False,
+        "--join-channels/--no-join-channels",
+        help=(
+            "Clean the cube on the sum of its channels (WSClean -join-channels): "
+            "continuum too faint to clean channel by channel is cleaned too, but narrow "
+            "lines are cleaned worse. Off by default. Needs --cube."
+        ),
+    ),
     cube_reorder: bool = typer.Option(
         True,
         "--cube-reorder/--cube-no-reorder",
@@ -1325,6 +1411,12 @@ def image_from_ms(
         typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
         raise typer.Exit(code=2)
 
+    # A 3-sigma stop without a mask left ~3 sigma of source in every channel's
+    # residual: stacked over the 3537 line-free channels of uid___A002_X10ded83_X6af4
+    # SPW 16 that was 7.9 sigma and 39 % of the image; masking to 3 and cleaning
+    # to 1 sigma left 4.1 sigma and 16 % (2026-10-17).
+    if 0 < auto_mask <= auto_threshold:
+        raise typer.BadParameter("--auto-mask must be above --auto-threshold (or 0 to disable it)")
     parameters = pd.read_csv(str(imaging_parameters))
     cube_options: CubeOptions | None = None
     products: tuple[str, ...] | None = None
@@ -1342,9 +1434,11 @@ def image_from_ms(
             max_cube_gb=max_cube_gb,
         )
         parameters = add_spectral_columns(parameters)
-        _echo_cube_plan(parameters, fov_fraction, beam_sampling, cube_options, products)
-    elif plan_only or contsub:
-        raise typer.BadParameter("--plan-only and --contsub need --cube")
+        _echo_cube_plan(
+            parameters, fov_fraction, beam_sampling, cube_options, products, min_beams_across
+        )
+    elif plan_only or contsub or join_channels:
+        raise typer.BadParameter("--plan-only, --contsub and --join-channels need --cube")
     if not continuum and not cube:
         raise typer.BadParameter("--no-continuum needs --cube: there would be nothing to image")
     if plan_only:
@@ -1369,6 +1463,9 @@ def image_from_ms(
         cube=cube_options,
         cube_products=products,
         cube_reorder=cube_reorder,
+        min_beams_across=min_beams_across,
+        multiscale=multiscale,
+        join_channels=join_channels,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
@@ -1402,6 +1499,7 @@ def image_from_ms(
         max_weight=max_weight if max_weight > 0 else None,
         cube_products=products,
         contsub_order=contsub_order if contsub else None,
+        continuum_restart=continuum_restart and single_window,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -1430,8 +1528,8 @@ def image_set(
         min=1,
     ),
     wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin"),
-    auto_threshold: float = typer.Option(3.0, "--auto-threshold", min=0.0),
-    auto_mask: float = typer.Option(0.0, "--auto-mask", min=0.0),
+    auto_threshold: float = typer.Option(1.0, "--auto-threshold", min=0.0),
+    auto_mask: float = typer.Option(3.0, "--auto-mask", min=0.0),
     update_model: bool = typer.Option(False, "--update-model/--no-update-model"),
     task_memory_gb: float = typer.Option(0.0, "--task-memory-gb", min=0.0),
     task_retries: int = typer.Option(3, "--task-retries", min=0),
@@ -1457,12 +1555,15 @@ def image_set(
         output_directory=output_directory,
         fov_fraction=fov_fraction,
         beam_sampling=beam_sampling,
+        min_beams_across=32.0,
+        multiscale=False,
         num_cores=num_cores,
         max_cores_per_node=max_cores_per_node,
         wsclean_bin=wsclean_bin,
         auto_threshold=auto_threshold,
         auto_mask=auto_mask,
         update_model=update_model,
+        continuum_restart=True,
         task_memory_gb=task_memory_gb,
         task_retries=task_retries,
         single_window=single_window,
@@ -1476,6 +1577,7 @@ def image_set(
         velocity_resolution=0.0,
         max_cube_gb=4.0,
         cube_products=",".join(CUBE_PRODUCTS),
+        join_channels=False,
         cube_reorder=True,
         plan_only=False,
         postprocess_backend=postprocess_backend,

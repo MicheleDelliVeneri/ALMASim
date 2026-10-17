@@ -108,7 +108,9 @@ def _write_channel(path: Path, value: np.ndarray, freq: float, *, bmaj: float | 
     header["CTYPE4"], header["CRVAL4"] = "STOKES", 1.0
     if bmaj is not None:
         header["BMAJ"], header["BMIN"], header["BPA"] = bmaj, bmaj / 2, 30.0
-    fits.PrimaryHDU(value.reshape(1, 1, *value.shape).astype(np.float32), header).writeto(path)
+    fits.PrimaryHDU(value.reshape(1, 1, *value.shape).astype(np.float32), header).writeto(
+        path, overwrite=True
+    )
 
 
 @pytest.mark.unit
@@ -387,3 +389,112 @@ def test_image_from_ms_rejects_contsub_without_cube(tmp_path):
     assert result.exit_code != 0
     # Rich styles the error box when it detects CI (GITHUB_ACTIONS/FORCE_COLOR).
     assert "need --cube" in click.unstyle(result.output)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("flags", [["--auto-mask", "1"], ["--auto-threshold", "3"]])
+def test_image_from_ms_rejects_a_mask_not_above_the_threshold(tmp_path, flags):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
+    )
+    assert result.exit_code != 0
+    assert "--auto-mask must be above --auto-threshold" in click.unstyle(result.output)
+
+
+@pytest.mark.unit
+def test_command_args_join_channels_only_on_multichannel_cubes():
+    joined = cli_image.imaging_parameter_to_command_arg(
+        _row(), 1.0, 4.0, cube=cli_image.CubeOptions(), join_channels=True
+    )
+    assert "-join-channels" in joined and "-channels-out" in joined
+    assert "-join-channels" not in cli_image.imaging_parameter_to_command_arg(
+        _row(), 1.0, 4.0, join_channels=True
+    ), "a continuum image has nothing to join"
+    assert "-join-channels" not in cli_image.imaging_parameter_to_command_arg(
+        _row(), 1.0, 4.0, cube=cli_image.CubeOptions()
+    )
+
+
+@pytest.mark.unit
+def test_image_from_ms_rejects_join_channels_without_cube(tmp_path):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), "--join-channels"]
+    )
+    assert result.exit_code != 0
+    assert "need --cube" in click.unstyle(result.output)
+
+
+@pytest.mark.unit
+def test_continuum_restart_commands_write_the_model_then_continue():
+    first, second = ai.continuum_restart_commands(
+        ["wsclean", "-name", "w", "-no-update-model-required", "x.ms"]
+    )
+    assert first == ["wsclean", "-name", "w", "-update-model-required", "x.ms"]
+    assert second == ["wsclean", "-name", "w", "-update-model-required", "-continue", "x.ms"]
+
+    first, _ = ai.continuum_restart_commands(["wsclean", "-name", "w", "x.ms"])
+    assert first[-2:] == ["-update-model-required", "x.ms"]
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_cleans_the_continuum_in_two_passes(tmp_path, monkeypatch):
+    fake = _FakeCubeWsclean()
+    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(
+        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
+    )
+    (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
+
+    ai.run_wsclean_task(
+        command=task.command,
+        cube_command=task.cube_command,
+        output_dir=str(task.output_dir),
+        ms_path=str(task.ms_path),
+        spw=task.spw,
+        threads=2,
+        single_window=True,
+        continuum_restart=True,
+    )
+
+    names = [Path(c[c.index("-name") + 1]).name for c in fake.calls]
+    assert names == ["wsclean", "wsclean", "wsclean-cube"]
+    first, second, cube = fake.calls
+    assert "-update-model-required" in first and "-continue" not in first
+    assert second[-2] == "-continue" and second[-1] == first[-1]
+    assert "-continue" not in cube and "-no-update-model-required" in cube
+    marker = json.loads(ai.imaging_marker_path(task.output_dir).read_text())
+    assert len(marker["commands"]) == 3
+
+
+@pytest.mark.unit
+def test_continuum_restart_needs_the_single_window_copy():
+    with pytest.raises(ValueError, match="needs single_window"):
+        ai.run_wsclean_task(
+            command=["wsclean", "-name", "w", "x.ms"],
+            output_dir="x",
+            ms_path="x",
+            spw=1,
+            threads=1,
+            continuum_restart=True,
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [([], True), (["--no-continuum-restart"], False), (["--no-single-window-ms"], False)],
+)
+def test_image_from_ms_continuum_restart_default(tmp_path, monkeypatch, flags, expected):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    seen = {}
+    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
+    )
+    assert result.exit_code == 0, result.output
+    assert seen["continuum_restart"] is expected
