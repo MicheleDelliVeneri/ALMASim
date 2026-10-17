@@ -922,7 +922,11 @@ def run_imaging_tasks(
         wait_for_workers = getattr(backend, "wait_for_workers", None)
         if callable(wait_for_workers):
             typer.echo(f"Waiting up to {_WORKER_WAIT_S / 60:.0f} min for {n_jobs} worker(s)...")
-            ready = wait_for_workers(n_jobs, timeout=_WORKER_WAIT_S)
+            try:
+                ready = wait_for_workers(n_jobs, timeout=_WORKER_WAIT_S)
+            except RuntimeError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(code=1)
             typer.echo(f"{ready} worker(s) registered; starting.")
         slots = max(int(n_jobs), 1) * max(int(node_cores) // max(int(cores_per_task), 1), 1)
 
@@ -1251,7 +1255,7 @@ def image_from_ms(
         help=(
             "Also write the image cube continuum-subtracted (wsclean-cube-image.contsub.fits): "
             "a polynomial fitted along frequency per pixel, line channels found by 3-sigma "
-            "clipping. Needs --cube."
+            "clipping. Off by default. Needs --cube."
         ),
     ),
     contsub_order: int = typer.Option(
@@ -1288,11 +1292,11 @@ def image_from_ms(
         ),
     ),
     cube_products: str = typer.Option(
-        "image,residual,psf",
+        ",".join(CUBE_PRODUCTS),
         "--cube-products",
         help=(
-            "Comma-separated cube products to keep: image, residual, psf, model, dirty. "
-            "The others are removed (dirty is not even made)."
+            "Comma-separated cube products to keep: image, residual, psf, model, dirty "
+            "(default: all five). The others are removed (dirty is not even made)."
         ),
     ),
     cube_reorder: bool = typer.Option(
@@ -1471,7 +1475,7 @@ def image_set(
         spectral_sampling=2.0,
         velocity_resolution=0.0,
         max_cube_gb=4.0,
-        cube_products="image,residual,psf",
+        cube_products=",".join(CUBE_PRODUCTS),
         cube_reorder=True,
         plan_only=False,
         postprocess_backend=postprocess_backend,

@@ -377,6 +377,39 @@ def test_slurm_backend_job_extra_directives_requeue(directives, expected):
 
 
 @pytest.mark.unit
+def test_slurm_backend_wait_for_workers_stops_when_workers_cannot_connect(monkeypatch):
+    import almasim.services.compute.slurm as slurm_mod
+    from almasim.services.compute.slurm import SlurmBackend
+
+    monkeypatch.setattr(slurm_mod, "_UNREACHABLE_CHECK_S", 0.01)
+    backend = SlurmBackend.__new__(SlurmBackend)
+    backend.client = MagicMock()
+    backend.client.wait_for_workers.side_effect = TimeoutError
+    backend._cluster_manager = MagicMock()
+    backend._cluster_manager.unreachable_scheduler_report.side_effect = [None, "cannot reach"]
+
+    with pytest.raises(RuntimeError, match="cannot reach"):
+        backend.wait_for_workers(1, timeout=60)
+    assert backend.client.wait_for_workers.call_count == 2
+
+
+@pytest.mark.unit
+def test_slurm_backend_wait_for_workers_timeout_is_not_an_error(monkeypatch):
+    import almasim.services.compute.slurm as slurm_mod
+    from almasim.services.compute.slurm import SlurmBackend
+
+    monkeypatch.setattr(slurm_mod, "_UNREACHABLE_CHECK_S", 0.01)
+    backend = SlurmBackend.__new__(SlurmBackend)
+    backend.client = MagicMock()
+    backend.client.wait_for_workers.side_effect = TimeoutError
+    backend.client.scheduler_info.return_value = {"workers": {"a": {}}}
+    backend._cluster_manager = MagicMock()
+    backend._cluster_manager.unreachable_scheduler_report.return_value = None
+
+    assert backend.wait_for_workers(2, timeout=0.05) == 1
+
+
+@pytest.mark.unit
 def test_slurm_backend_delegates_to_client_methods():
     """SlurmBackend delegates scatter/compute/gather to the underlying client."""
     from almasim.services.compute.slurm import SlurmBackend

@@ -26,6 +26,106 @@ def _reset_singleton():
     cluster_mod.SlurmDaskClusterSingleton.close_instance()
 
 
+@pytest.fixture(autouse=True)
+def _no_slurm_partition(monkeypatch):
+    """Keep the scheduler host independent of the Slurm cluster the tests run on."""
+    monkeypatch.setattr(cluster_mod, "_partition_node_address", lambda queue: None)
+
+
+class _RecordingCluster:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.workers = {}
+
+    def scale(self, n_jobs):
+        self.n_jobs = n_jobs
+
+    def close(self):
+        return None
+
+
+class _RecordingClient:
+    def __init__(self, cluster):
+        self.cluster = cluster
+
+    def close(self):
+        return None
+
+
+@pytest.fixture
+def recording_cluster(monkeypatch):
+    monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
+    monkeypatch.setattr(cluster_mod, "SLURMCluster", _RecordingCluster)
+    monkeypatch.setattr(cluster_mod, "Client", _RecordingClient)
+
+
+@pytest.mark.unit
+def test_default_scheduler_host_uses_the_address_routed_to_the_partition(monkeypatch):
+    monkeypatch.setattr(cluster_mod, "_partition_node_address", lambda queue: "10.20.25.47")
+    monkeypatch.setattr(
+        cluster_mod,
+        "_source_address_towards",
+        lambda address: "10.20.25.11" if address == "10.20.25.47" else None,
+    )
+    monkeypatch.setenv("HOSTNAME", "compute-node11")
+
+    assert cluster_mod.default_scheduler_host("zwickyA-CPU") == "10.20.25.11"
+
+
+@pytest.mark.unit
+def test_default_scheduler_host_never_picks_loopback(monkeypatch):
+    monkeypatch.setattr(cluster_mod, "_partition_node_address", lambda queue: "10.20.25.47")
+    monkeypatch.setattr(cluster_mod, "_source_address_towards", lambda address: "127.0.1.1")
+    monkeypatch.setenv("HOSTNAME", "localhost")
+
+    assert cluster_mod.default_scheduler_host("zwickyA-CPU") is None
+
+
+@pytest.mark.unit
+def test_source_address_towards_a_local_address_is_local():
+    assert cluster_mod._source_address_towards("127.0.0.1") == "127.0.0.1"
+
+
+@pytest.mark.unit
+def test_partition_node_address_without_slurm_is_none(monkeypatch):
+    monkeypatch.undo()
+    monkeypatch.setenv("PATH", "")
+    assert cluster_mod._partition_node_address("any") is None
+
+
+@pytest.mark.unit
+def test_singleton_with_an_interface_leaves_the_host_to_dask(monkeypatch, recording_cluster):
+    monkeypatch.setenv("HOSTNAME", "login-node01")
+
+    instance = cluster_mod.SlurmDaskClusterSingleton.get_instance(
+        node_cores=8, n_jobs=1, scheduler_interface="ib0"
+    )
+
+    assert "host" not in instance.cluster.kwargs["scheduler_options"]
+    assert instance.cluster.kwargs["interface"] == "ib0"
+
+
+@pytest.mark.unit
+def test_unreachable_scheduler_report_reads_the_worker_log(
+    monkeypatch, tmp_path, recording_cluster
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    instance = cluster_mod.SlurmDaskClusterSingleton.get_instance(
+        node_cores=8, n_jobs=1, log_directory=str(tmp_path / "logs")
+    )
+    job = type("Job", (), {"job_id": "5266"})()
+    instance.cluster.workers = {"w0": job, "w1": type("Job", (), {"job_id": None})()}
+    assert instance.unreachable_scheduler_report() is None, "no log yet"
+
+    (tmp_path / "logs" / "dask-worker-5266.err").write_text(
+        "OSError: Timed out trying to connect to tcp://127.0.1.1:45061 after 30 s\n"
+    )
+
+    report = instance.unreachable_scheduler_report()
+    assert report is not None
+    assert "job 5266" in report and "tcp://127.0.1.1:45061" in report
+
+
 @pytest.mark.unit
 def test_run_subcommand_returns_stdout_stderr_and_returncode():
     """run_subcommand should capture stdout/stderr and exit code."""

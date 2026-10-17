@@ -348,8 +348,33 @@ def test_image_from_ms_plan_only_fills_spectral_columns_and_reports(tmp_path, mo
     assert result.exit_code == 0, result.output
     assert opened == ["/data/uid___A002_X1_X2.ms.split.cal::SPECTRAL_WINDOW"]
     assert "channels per cube min 960, median 960, max 960" in result.output
-    assert "image, residual, psf" in result.output
+    assert "image, residual, psf, model, dirty" in result.output
     assert not (tmp_path / "out").exists(), "--plan-only images nothing"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("flags", "contsub_order"), [([], None), (["--contsub"], 1)])
+def test_image_from_ms_cube_keeps_every_product_and_contsub_is_opt_in(
+    tmp_path, monkeypatch, flags, contsub_order
+):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    seen = {}
+
+    def _run(tasks, **kwargs):
+        seen.update(kwargs, tasks=tasks)
+
+    monkeypatch.setattr(cli_image, "run_imaging_tasks", _run)
+    result = runner.invoke(
+        cli.app,
+        ["image", "image-from-ms", str(csv), str(tmp_path / "out"), "--cube", *flags],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen["cube_products"] == cli_image.CUBE_PRODUCTS
+    assert seen["contsub_order"] == contsub_order
+    (task,) = seen["tasks"]
+    assert "-no-dirty" not in task.cube_command, "the dirty cube is made by default"
 
 
 @pytest.mark.unit
