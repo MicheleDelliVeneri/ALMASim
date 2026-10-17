@@ -399,3 +399,28 @@ def test_image_from_ms_rejects_a_mask_not_above_the_threshold(tmp_path, flags):
     )
     assert result.exit_code != 0
     assert "--auto-mask must be above --auto-threshold" in click.unstyle(result.output)
+
+
+@pytest.mark.unit
+def test_command_args_join_channels_only_on_multichannel_cubes():
+    joined = cli_image.imaging_parameter_to_command_arg(
+        _row(), 1.0, 4.0, cube=cli_image.CubeOptions(), join_channels=True
+    )
+    assert "-join-channels" in joined and "-channels-out" in joined
+    assert "-join-channels" not in cli_image.imaging_parameter_to_command_arg(
+        _row(), 1.0, 4.0, join_channels=True
+    ), "a continuum image has nothing to join"
+    assert "-join-channels" not in cli_image.imaging_parameter_to_command_arg(
+        _row(), 1.0, 4.0, cube=cli_image.CubeOptions()
+    )
+
+
+@pytest.mark.unit
+def test_image_from_ms_rejects_join_channels_without_cube(tmp_path):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), "--join-channels"]
+    )
+    assert result.exit_code != 0
+    assert "need --cube" in click.unstyle(result.output)
