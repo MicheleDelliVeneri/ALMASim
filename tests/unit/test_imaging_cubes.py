@@ -108,7 +108,9 @@ def _write_channel(path: Path, value: np.ndarray, freq: float, *, bmaj: float | 
     header["CTYPE4"], header["CRVAL4"] = "STOKES", 1.0
     if bmaj is not None:
         header["BMAJ"], header["BMIN"], header["BPA"] = bmaj, bmaj / 2, 30.0
-    fits.PrimaryHDU(value.reshape(1, 1, *value.shape).astype(np.float32), header).writeto(path)
+    fits.PrimaryHDU(value.reshape(1, 1, *value.shape).astype(np.float32), header).writeto(
+        path, overwrite=True
+    )
 
 
 @pytest.mark.unit
@@ -504,7 +506,7 @@ def test_channel_ranges_lists_runs_casa_style():
     assert ai._channel_ranges(np.zeros(4, bool)) == ""
 
 
-def _uv_task(tmp_path, monkeypatch, fit):
+def _uv_task(tmp_path, monkeypatch, fit, **kwargs):
     fake = _FakeCubeWsclean()
     monkeypatch.setattr(ai.subprocess, "Popen", fake)
     monkeypatch.setattr(
@@ -524,6 +526,7 @@ def _uv_task(tmp_path, monkeypatch, fit):
         threads=2,
         single_window=True,
         uv_contsub_order=1,
+        **kwargs,
     )
     return fake, calls, ai.imaging_log_path(task.output_dir).read_text()
 
@@ -613,7 +616,7 @@ def test_image_from_ms_passes_uv_contsub_order(tmp_path, monkeypatch):
     assert seen["uv_contsub_order"] == 0 and seen["contsub_order"] is None
 
 
-def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20.0):
+def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20.0, restart=False):
     calls = []
 
     def fake_call(function, kwargs, *, casa=False, **_):
@@ -659,6 +662,7 @@ def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20
             run=fake_run,
             fail=RuntimeError,
             casa_data="/casa-data",
+            restart=restart,
         )
     return result, calls, images, (tmp_path / "task.log").read_text()
 
@@ -790,3 +794,104 @@ def test_casa_environment_drops_system_library_dirs():
     assert env["LD_LIBRARY_PATH"] == "/opt/x/lib" and env["OMP_NUM_THREADS"] == "1"
     assert "LD_LIBRARY_PATH" not in ai.casa_environment({"LD_LIBRARY_PATH": "/lib64"})
     assert ai.wsclean_environment(1, base)["LD_LIBRARY_PATH"].startswith("/lib64")
+
+
+@pytest.mark.unit
+def test_continuum_restart_commands_write_the_model_then_continue():
+    first, second = ai.continuum_restart_commands(
+        ["wsclean", "-name", "w", "-no-update-model-required", "x.ms"]
+    )
+    assert first == ["wsclean", "-name", "w", "-update-model-required", "x.ms"]
+    assert second == ["wsclean", "-name", "w", "-update-model-required", "-continue", "x.ms"]
+
+    first, _ = ai.continuum_restart_commands(["wsclean", "-name", "w", "x.ms"])
+    assert first[-2:] == ["-update-model-required", "x.ms"]
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_cleans_the_continuum_in_two_passes(tmp_path, monkeypatch):
+    fake = _FakeCubeWsclean()
+    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(
+        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
+    )
+    (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
+
+    ai.run_wsclean_task(
+        command=task.command,
+        cube_command=task.cube_command,
+        output_dir=str(task.output_dir),
+        ms_path=str(task.ms_path),
+        spw=task.spw,
+        threads=2,
+        single_window=True,
+        continuum_restart=True,
+    )
+
+    names = [Path(c[c.index("-name") + 1]).name for c in fake.calls]
+    assert names == ["wsclean", "wsclean", "wsclean-cube"]
+    first, second, cube = fake.calls
+    assert "-update-model-required" in first and "-continue" not in first
+    assert second[-2] == "-continue" and second[-1] == first[-1]
+    assert "-continue" not in cube and "-no-update-model-required" in cube
+    marker = json.loads(ai.imaging_marker_path(task.output_dir).read_text())
+    assert len(marker["commands"]) == 3
+
+
+@pytest.mark.unit
+def test_continuum_restart_needs_the_single_window_copy():
+    with pytest.raises(ValueError, match="needs single_window"):
+        ai.run_wsclean_task(
+            command=["wsclean", "-name", "w", "x.ms"],
+            output_dir="x",
+            ms_path="x",
+            spw=1,
+            threads=1,
+            continuum_restart=True,
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [([], True), (["--no-continuum-restart"], False), (["--no-single-window-ms"], False)],
+)
+def test_image_from_ms_continuum_restart_default(tmp_path, monkeypatch, flags, expected):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    seen = {}
+    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
+    )
+    assert result.exit_code == 0, result.output
+    assert seen["continuum_restart"] is expected
+
+
+@pytest.mark.unit
+def test_both_continuum_passes_read_the_fitted_continuum(tmp_path, monkeypatch):
+    fit = {
+        "source_column": "DATA",
+        "order": 1,
+        "seconds": 1.0,
+        "usable_channels": 8,
+        "line_free_channels": 6,
+        "line_ranges": "3~4",
+    }
+    fake, _, _ = _uv_task(tmp_path, monkeypatch, fit, continuum_restart=True)
+
+    first, second, cube = fake.calls
+    for continuum in (first, second):
+        assert continuum[continuum.index("-data-column") + 1] == ai.CONTINUUM_COLUMN
+    assert "-continue" in second and cube[cube.index("-data-column") + 1] == ai.LINE_COLUMN
+
+
+@pytest.mark.unit
+def test_self_calibrate_cleans_every_image_in_two_passes(tmp_path, monkeypatch):
+    result, _, images, _ = _run_selfcal(
+        tmp_path, monkeypatch, [30.0, 45.0], solints=("inf",), restart=True
+    )
+    names = [Path(c[c.index("-name") + 1]).name for c in images]
+    assert names == ["selfcal-0", "selfcal-0", "selfcal-1", "selfcal-1"]
+    assert ["-continue" in c for c in images] == [False, True, False, True]
+    assert result["snr"] == 45.0

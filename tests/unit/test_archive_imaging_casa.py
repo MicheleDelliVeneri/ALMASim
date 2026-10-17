@@ -398,11 +398,18 @@ def test_run_wsclean_task_self_calibrates_before_imaging(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ai, "self_calibrate", fake_self_calibrate)
     with pytest.raises(_Stop):
-        _wsclean_task(tmp_path, monkeypatch, selfcal_solints=["inf"], casa_data="/casa")
+        _wsclean_task(
+            tmp_path,
+            monkeypatch,
+            selfcal_solints=["inf"],
+            casa_data="/casa",
+            continuum_restart=True,
+        )
 
     assert Path(seen["ms"]).name == "spw25.single.ms" and seen["casa_data"] == "/casa"
     assert seen["solints"] == ["inf"] and seen["command"][-1].endswith("spw25.single.ms")
     assert seen["ran"] == ["wsclean", "-name", "probe"], "rounds image through the task runner"
+    assert seen["restart"] is True and "-update-model-required" in seen["command"]
 
 
 @pytest.mark.unit
