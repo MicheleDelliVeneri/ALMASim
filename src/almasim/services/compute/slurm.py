@@ -74,7 +74,7 @@ class SlurmBackend(ComputationBackend):
         self.n_workers = n_workers
         self.scheduler_host = scheduler_host
         self.scheduler_interface = scheduler_interface
-        job_extra_directives = list(kwargs.pop("job_extra_directives", []))
+        job_extra_directives = list(kwargs.pop("job_extra_directives", None) or [])
         if "--requeue" not in job_extra_directives and "--no-requeue" not in job_extra_directives:
             job_extra_directives.append("--requeue")
         kwargs["job_extra_directives"] = job_extra_directives
