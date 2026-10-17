@@ -55,6 +55,13 @@ __all__ = [
     "subtract_continuum",
     "subtract_uv_continuum",
     "subtract_uv_continuum_subprocess",
+    "self_calibrate",
+    "casa_selfcal_apply",
+    "casa_selfcal_solve",
+    "selfcal_apply",
+    "selfcal_prepare",
+    "selfcal_solve",
+    "solve_antenna_gains",
     "write_imaging_failure_marker",
     "write_imaging_marker",
     "wsclean_environment",
@@ -198,6 +205,26 @@ def wsclean_environment(cores: int, base: Mapping[str, str] | None = None) -> di
     env["LD_LIBRARY_PATH"] = (
         f"{_SYSTEM_LIBRARY_DIRS}:{existing}" if existing else _SYSTEM_LIBRARY_DIRS
     )
+    return env
+
+
+def casa_environment(base: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Environment for a CASA child: one thread each, and no system library
+    directories in ``LD_LIBRARY_PATH``.
+
+    ``wsclean_environment`` and the Slurm worker's job script put /lib64 and
+    friends first for WSClean's spack build; casatools then loads the
+    system PMIx under its bundled Open MPI and fails to import
+    (``libopen-pal.so.80: undefined symbol: pmix_framework_names``, every
+    task of job 5299, 2026-10-17).
+    """
+    env = wsclean_environment(1, base)
+    system = set(_SYSTEM_LIBRARY_DIRS.split(":"))
+    kept = [d for d in env.get("LD_LIBRARY_PATH", "").split(":") if d and d not in system]
+    if kept:
+        env["LD_LIBRARY_PATH"] = ":".join(kept)
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
     return env
 
 
@@ -430,6 +457,9 @@ def run_wsclean_task(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     uv_contsub_order: int | None = None,
+    selfcal_solints: Sequence[str] | None = None,
+    selfcal_min_snr: float = 20.0,
+    casa_data: str | None = None,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -459,6 +489,11 @@ def run_wsclean_task(
     first (``subtract_uv_continuum``): the continuum image is made from the
     fitted continuum and the cube from what is left, the lines. When too few
     channels are line-free the subtraction is skipped and noted in the log.
+
+    With ``selfcal_solints`` (needs ``single_window`` and a continuum
+    command) the single-window MS is phase self-calibrated first, one round
+    per solution interval (``self_calibrate``); everything after it, the
+    continuum subtraction included, reads the corrected data.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -468,6 +503,8 @@ def run_wsclean_task(
         raise ValueError("run_wsclean_task needs a continuum or a cube command")
     if uv_contsub_order is not None and not (single_window and cube_command):
         raise ValueError("uv_contsub_order needs single_window and a cube_command")
+    if selfcal_solints and not (single_window and command):
+        raise ValueError("selfcal_solints needs single_window and a continuum command")
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -524,32 +561,6 @@ def run_wsclean_task(
             [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in c]
             for c in commands
         ]
-        if uv_contsub_order is not None:
-            try:
-                fit = subtract_uv_continuum_subprocess(
-                    single_window_ms, order=uv_contsub_order, timeout=timeout, log_path=log_path
-                )
-            except Exception as exc:
-                error = f"Could not subtract the continuum from the visibilities: {exc}"
-                write_imaging_failure_marker(out, ms_path=ms_path, spw=spw, error=error)
-                raise RuntimeError(error) from exc
-            with log_path.open("a", encoding="utf-8") as log:
-                if fit.get("skipped"):
-                    log.write(
-                        f"# continuum NOT subtracted from the visibilities: {fit['skipped']}; "
-                        "the cube keeps the continuum\n"
-                    )
-                else:
-                    log.write(
-                        f"# continuum subtracted from {fit['source_column']} (order "
-                        f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
-                        f"{fit['usable_channels']} channels line-free, lines in channels "
-                        f"{fit['line_ranges'] or 'none'}\n"
-                    )
-            if not fit.get("skipped"):
-                if command:
-                    commands[0] = _with_data_column(commands[0], CONTINUUM_COLUMN)
-                commands[-1] = _with_data_column(commands[-1], LINE_COLUMN)
     scratch_dir: Path | None = None
     if scratch_root:
         # Per-task scratch for WSClean's reordered visibilities, created here
@@ -578,6 +589,33 @@ def run_wsclean_task(
         return RuntimeError(f"{error}\nFull log: {log_path}")
 
     try:
+        if single_window_ms is not None and (selfcal_solints or uv_contsub_order is not None):
+            with log_path.open("a", encoding="utf-8") as log:
+                if selfcal_solints:
+                    self_calibrate(
+                        single_window_ms,
+                        commands[0],
+                        out=out,
+                        log=log,
+                        solints=selfcal_solints,
+                        min_snr=selfcal_min_snr,
+                        run=lambda cmd: _run_with_retries(
+                            cmd, out, log, env, timeout, tail, _fail, max(int(retries), 0)
+                        ),
+                        fail=_fail,
+                        timeout=timeout,
+                        casa_data=casa_data,
+                    )
+                if uv_contsub_order is not None:
+                    commands = _subtract_uv_continuum_step(
+                        single_window_ms,
+                        commands,
+                        has_continuum=bool(command),
+                        order=uv_contsub_order,
+                        log=log,
+                        fail=_fail,
+                        timeout=timeout,
+                    )
         return _run_and_mark(
             commands=commands,
             required=required,
@@ -1030,6 +1068,62 @@ def _channel_ranges(mask: np.ndarray) -> str:
     return ";".join(f"{a}~{b - 1}" for a, b in zip(edges[::2], edges[1::2]))
 
 
+def _has_spectrum_weight(ms) -> bool:
+    return (
+        "WEIGHT_SPECTRUM" in ms.colnames()
+        and ms.nrows() > 0
+        and (ms.iscelldefined("WEIGHT_SPECTRUM", 0))
+    )
+
+
+def _read_rows(
+    ms, column: str, start: int, n: int, spectrum_weight: bool
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``column``, its weights (per channel) and FLAG for ``n`` rows from ``start``."""
+    import numpy as np
+
+    data = ms.getcol(column, startrow=start, nrow=n)
+    flag = ms.getcol("FLAG", startrow=start, nrow=n)
+    if spectrum_weight:
+        weight = ms.getcol("WEIGHT_SPECTRUM", startrow=start, nrow=n)
+    else:
+        weight = np.broadcast_to(
+            ms.getcol("WEIGHT", startrow=start, nrow=n)[:, None, :], data.shape
+        )
+    return data, np.asarray(weight, dtype=np.float64), flag
+
+
+def _parallel_hands(n_corr: int) -> list[int]:
+    """XX and YY (or RR and LL): the first and last correlation."""
+    return [0, n_corr - 1] if n_corr > 1 else [0]
+
+
+def _source_spectrum(ms, column: str, rows_per_chunk: int) -> tuple[np.ndarray, np.ndarray] | None:
+    """Amplitude of the weighted vector average of every row, per channel, and
+    which channels have any unflagged data; None for an empty MS."""
+    import numpy as np
+
+    n_rows = ms.nrows()
+    spectrum_weight = _has_spectrum_weight(ms)
+    num = den = None
+    for start in range(0, n_rows, rows_per_chunk):
+        data, weight, flag = _read_rows(
+            ms, column, start, min(rows_per_chunk, n_rows - start), spectrum_weight
+        )
+        corrs = _parallel_hands(data.shape[2])
+        w = np.where(flag[..., corrs] | ~np.isfinite(data[..., corrs]), 0.0, weight[..., corrs])
+        d = np.where(w > 0, data[..., corrs], 0.0)
+        if num is None:
+            num = np.zeros(data.shape[1], dtype=np.complex128)
+            den = np.zeros(data.shape[1])
+        num += (w * d).sum(axis=(0, 2))
+        den += w.sum(axis=(0, 2))
+    if num is None:
+        return None
+    usable = den > 0
+    return np.abs(np.where(usable, num / np.where(usable, den, 1.0), 0.0)), usable
+
+
 def subtract_uv_continuum(
     ms_path: str | os.PathLike[str],
     *,
@@ -1058,7 +1152,6 @@ def subtract_uv_continuum(
     usable channels are line-free (a line forest or a window filled by one
     line); the result then carries ``skipped`` with the reason.
     """
-    import numpy as np
     from casacore.tables import makecoldesc, table
 
     started = time.time()
@@ -1066,36 +1159,11 @@ def subtract_uv_continuum(
     try:
         source = "CORRECTED_DATA" if "CORRECTED_DATA" in ms.colnames() else "DATA"
         n_rows = ms.nrows()
-        has_spectrum_weight = "WEIGHT_SPECTRUM" in ms.colnames() and (
-            n_rows > 0 and ms.iscelldefined("WEIGHT_SPECTRUM", 0)
-        )
-
-        def chunk(start: int, n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-            data = ms.getcol(source, startrow=start, nrow=n)
-            flag = ms.getcol("FLAG", startrow=start, nrow=n)
-            if has_spectrum_weight:
-                weight = ms.getcol("WEIGHT_SPECTRUM", startrow=start, nrow=n)
-            else:
-                weight = np.broadcast_to(
-                    ms.getcol("WEIGHT", startrow=start, nrow=n)[:, None, :], data.shape
-                )
-            return data, np.asarray(weight, dtype=np.float64), flag
-
-        num = den = None
-        for start in range(0, n_rows, rows_per_chunk):
-            data, weight, flag = chunk(start, min(rows_per_chunk, n_rows - start))
-            corrs = [0, data.shape[2] - 1] if data.shape[2] > 1 else [0]
-            w = np.where(flag[..., corrs] | ~np.isfinite(data[..., corrs]), 0.0, weight[..., corrs])
-            d = np.where(w > 0, data[..., corrs], 0.0)
-            if num is None:
-                num = np.zeros(data.shape[1], dtype=np.complex128)
-                den = np.zeros(data.shape[1])
-            num += (w * d).sum(axis=(0, 2))
-            den += w.sum(axis=(0, 2))
-        if num is None:
+        spectrum_weight = _has_spectrum_weight(ms)
+        measured = _source_spectrum(ms, source, rows_per_chunk)
+        if measured is None:
             return {"skipped": "the MS has no rows", "source_column": source}
-        usable = den > 0
-        spectrum = np.abs(np.where(usable, num / np.where(usable, den, 1.0), 0.0))
+        spectrum, usable = measured
         line_free = line_free_channels(spectrum, usable, order=order, clip_sigma=clip_sigma)
         result: dict[str, object] = {
             "source_column": source,
@@ -1117,7 +1185,7 @@ def subtract_uv_continuum(
             ms.addcols(makecoldesc(name, ms.getcoldesc(source)))
         for start in range(0, n_rows, rows_per_chunk):
             n = min(rows_per_chunk, n_rows - start)
-            data, weight, flag = chunk(start, n)
+            data, weight, flag = _read_rows(ms, source, start, n, spectrum_weight)
             continuum = fit_uv_continuum(data, weight, flag, line_free, order)
             ms.putcol(CONTINUUM_COLUMN, continuum, startrow=start, nrow=n)
             ms.putcol(LINE_COLUMN, data - continuum, startrow=start, nrow=n)
@@ -1172,6 +1240,574 @@ def subtract_uv_continuum_subprocess(
         return json.loads(proc.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError) as exc:
         raise RuntimeError("continuum subtraction wrote no result") from exc
+
+
+def solve_antenna_gains(
+    vis: np.ndarray,
+    model: np.ndarray,
+    weight: np.ndarray,
+    ant1: np.ndarray,
+    ant2: np.ndarray,
+    n_antennas: int,
+    *,
+    phase_only: bool = True,
+    min_snr: float = 3.0,
+    iterations: int = 200,
+    tolerance: float = 1e-7,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Antenna gains ``g`` with ``vis ~ g[ant1] conj(g[ant2]) model`` in one interval.
+
+    ``vis``, ``model`` and ``weight`` are one value per row (already averaged
+    over channels and polarizations). Weighted least squares by alternating
+    per-antenna updates (StefCal: g_i = sum_j R_ij g_j / sum_j Q_ij |g_j|^2
+    with R = sum w vis conj(model) and Q = sum w |model|^2 per baseline),
+    damped every other iteration; ``phase_only`` keeps |g| = 1.
+
+    Returns ``(gains, snr)``: the phase of the antenna with the highest S/N is
+    set to zero, and an antenna without data or with S/N below ``min_snr`` gets
+    gain 1 (left uncorrected). The S/N of antenna i is |sum_j R_ij g_j| over
+    sqrt(sum_j Q_ij |g_j|^2), which assumes ``weight`` is 1/sigma^2.
+    """
+    import numpy as np
+
+    vis, model = np.asarray(vis, dtype=np.complex128), np.asarray(model, dtype=np.complex128)
+    w = np.where(np.isfinite(vis) & np.isfinite(model), np.asarray(weight, dtype=float), 0.0)
+    cross = (ant1 != ant2) & (w > 0)
+    a1, a2, w = ant1[cross], ant2[cross], w[cross]
+    r = w * vis[cross] * np.conj(model[cross])
+    q = w * np.abs(model[cross]) ** 2
+    big_r = np.zeros((n_antennas, n_antennas), dtype=np.complex128)
+    big_q = np.zeros((n_antennas, n_antennas))
+    np.add.at(big_r, (a1, a2), r)
+    np.add.at(big_r, (a2, a1), np.conj(r))
+    np.add.at(big_q, (a1, a2), q)
+    np.add.at(big_q, (a2, a1), q)
+    active = big_q.sum(axis=1) > 0
+    gains = np.ones(n_antennas, dtype=np.complex128)
+
+    def normalise(g: np.ndarray) -> np.ndarray:
+        if not phase_only:
+            return g
+        amplitude = np.abs(g)
+        return np.where(amplitude > 0, g / np.where(amplitude > 0, amplitude, 1.0), 1.0)
+
+    for iteration in range(iterations):
+        numerator = big_r @ gains
+        denominator = big_q @ np.abs(gains) ** 2
+        new = normalise(
+            np.where(
+                denominator > 0, numerator / np.where(denominator > 0, denominator, 1.0), gains
+            )
+        )
+        if iteration % 2:
+            new = normalise(0.5 * (new + gains))
+        converged = np.max(np.abs(new - gains)) < tolerance
+        gains = new
+        if converged:
+            break
+    noise = np.sqrt(big_q @ np.abs(gains) ** 2)
+    snr = np.where(noise > 0, np.abs(big_r @ gains) / np.where(noise > 0, noise, 1.0), 0.0)
+    good = active & (snr >= min_snr)
+    if good.any():
+        reference = int(np.argmax(np.where(good, snr, -1.0)))
+        gains = gains * np.conj(gains[reference]) / np.abs(gains[reference])
+    gains = np.where(good, gains, 1.0)
+    return gains, snr
+
+
+def _solution_intervals(time_s: np.ndarray, scan: np.ndarray, solint: str) -> np.ndarray:
+    """Interval index of every row: per scan (``inf``), per integration
+    (``int``) or per ``<seconds>s`` bin from the start of each scan."""
+    import numpy as np
+
+    if solint == "inf":
+        keys = scan.astype(np.int64)
+    elif solint == "int":
+        keys = np.round(time_s * 1e3).astype(np.int64)
+    elif solint.endswith("s"):
+        seconds = float(solint[:-1])
+        if seconds <= 0:
+            raise ValueError(f"solution interval must be positive: {solint}")
+        start = {int(s): float(time_s[scan == s].min()) for s in np.unique(scan)}
+        offsets = time_s - np.array([start[int(s)] for s in scan])
+        keys = scan.astype(np.int64) * 10_000_000 + np.floor(offsets / seconds).astype(np.int64)
+    else:
+        raise ValueError(f"solution interval must be inf, int or <seconds>s, not {solint!r}")
+    return np.unique(keys, return_inverse=True)[1]
+
+
+def _averaged_rows(ms, column: str, line_free: np.ndarray, rows_per_chunk: int):
+    """``column`` per row: weighted mean over the line-free channels and both
+    parallel hands, and the summed weight."""
+    import numpy as np
+
+    n_rows = ms.nrows()
+    spectrum_weight = _has_spectrum_weight(ms)
+    values = np.zeros(n_rows, dtype=np.complex128)
+    weights = np.zeros(n_rows)
+    for start in range(0, n_rows, rows_per_chunk):
+        n = min(rows_per_chunk, n_rows - start)
+        data, weight, flag = _read_rows(ms, column, start, n, spectrum_weight)
+        corrs = _parallel_hands(data.shape[2])
+        w = np.where(
+            flag[..., corrs] | ~np.isfinite(data[..., corrs]) | ~line_free[None, :, None],
+            0.0,
+            weight[..., corrs],
+        )
+        total = w.sum(axis=(1, 2))
+        summed = (w * np.where(w > 0, data[..., corrs], 0.0)).sum(axis=(1, 2))
+        values[start : start + n] = np.where(total > 0, summed / np.where(total > 0, total, 1.0), 0)
+        weights[start : start + n] = total
+    return values, weights
+
+
+def selfcal_solve(
+    ms_path: str | os.PathLike[str],
+    gains_path: str | os.PathLike[str],
+    *,
+    solint: str,
+    min_snr: float = 3.0,
+    rows_per_chunk: int = 20000,
+) -> dict[str, object]:
+    """Solve phase gains of DATA against MODEL_DATA, per ``solint``, into ``gains_path``.
+
+    Only the line-free channels (``line_free_channels`` on the source
+    spectrum of DATA) enter the solution, since MODEL_DATA is a continuum
+    model. One gain per antenna and interval for both polarizations (CASA
+    gaintype T, calmode p).
+    """
+    import numpy as np
+    from casacore.tables import table
+
+    started = time.time()
+    ms = table(str(ms_path), ack=False)
+    try:
+        n_antennas = table(f"{ms_path}/ANTENNA", ack=False).nrows()
+        measured = _source_spectrum(ms, "DATA", rows_per_chunk)
+        if measured is None:
+            raise RuntimeError("the MS has no rows")
+        spectrum, usable = measured
+        line_free = line_free_channels(spectrum, usable)
+        if not line_free.any():
+            line_free = usable
+        vis, weight = _averaged_rows(ms, "DATA", line_free, rows_per_chunk)
+        model, _ = _averaged_rows(ms, "MODEL_DATA", line_free, rows_per_chunk)
+        ant1, ant2 = ms.getcol("ANTENNA1"), ms.getcol("ANTENNA2")
+        interval = _solution_intervals(ms.getcol("TIME"), ms.getcol("SCAN_NUMBER"), solint)
+    finally:
+        ms.close()
+    n_intervals = int(interval.max()) + 1 if interval.size else 0
+    gains = np.ones((n_intervals, n_antennas), dtype=np.complex128)
+    solved = 0
+    for k in range(n_intervals):
+        rows = interval == k
+        g, snr = solve_antenna_gains(
+            vis[rows],
+            model[rows],
+            weight[rows],
+            ant1[rows],
+            ant2[rows],
+            n_antennas,
+            min_snr=min_snr,
+        )
+        gains[k] = g
+        solved += int((g != 1).sum())
+    np.savez(gains_path, gains=gains, interval=interval)
+    present = len(np.unique(np.concatenate([ant1, ant2])))
+    phases = np.degrees(np.abs(np.angle(gains[gains != 1]))) if solved else np.zeros(1)
+    return {
+        "solint": solint,
+        "intervals": n_intervals,
+        "solutions": solved,
+        "possible": n_intervals * present,
+        "median_phase_deg": round(float(np.median(phases)), 1),
+        "line_free_channels": int(line_free.sum()),
+        "seconds": round(time.time() - started, 1),
+    }
+
+
+def selfcal_apply(
+    ms_path: str | os.PathLike[str],
+    gains_path: str | os.PathLike[str] | None,
+    *,
+    rows_per_chunk: int = 20000,
+) -> dict[str, object]:
+    """Write CORRECTED_DATA = DATA / (g[ant1] conj(g[ant2])) from ``gains_path``;
+    with None, drop CORRECTED_DATA so imaging reads DATA again."""
+    import numpy as np
+    from casacore.tables import makecoldesc, table
+
+    ms = table(str(ms_path), readonly=False, ack=False)
+    try:
+        if "CORRECTED_DATA" in ms.colnames():
+            ms.removecols("CORRECTED_DATA")
+        if gains_path is None:
+            return {"applied": False}
+        solution = np.load(gains_path)
+        gains, interval = solution["gains"], solution["interval"]
+        ms.addcols(makecoldesc("CORRECTED_DATA", ms.getcoldesc("DATA")))
+        ant1, ant2 = ms.getcol("ANTENNA1"), ms.getcol("ANTENNA2")
+        n_rows = ms.nrows()
+        for start in range(0, n_rows, rows_per_chunk):
+            n = min(rows_per_chunk, n_rows - start)
+            rows = slice(start, start + n)
+            k = interval[rows]
+            factor = gains[k, ant1[rows]] * np.conj(gains[k, ant2[rows]])
+            data = ms.getcol("DATA", startrow=start, nrow=n)
+            ms.putcol(
+                "CORRECTED_DATA",
+                (data / factor[:, None, None]).astype(data.dtype),
+                startrow=start,
+                nrow=n,
+            )
+        return {"applied": True}
+    finally:
+        ms.close()
+
+
+_CHILD_CALL = (
+    "import json, sys\n"
+    "from almasim.services.imaging import archive_imaging as ai\n"
+    "args = json.loads(sys.argv[1])\n"
+    "result = getattr(ai, args['function'])(**args['kwargs'])\n"
+    "sys.stdout.write(json.dumps(result))\n"
+)
+
+
+def _call_in_child(
+    function: str,
+    kwargs: Mapping[str, object],
+    *,
+    what: str,
+    timeout: float | None = None,
+    log_path: str | os.PathLike[str] | None = None,
+    casa: bool = False,
+) -> dict[str, object]:
+    """``function(**kwargs)`` of this module in a new Python process, its JSON result.
+
+    casacore and CASA hold the GIL for the whole call, which would freeze a
+    Dask worker (see ``extract_single_window_ms_subprocess``), and
+    python-casacore and casatools must not share a process. The child's
+    stderr is appended to ``log_path``; ``casa`` gives it ``casa_environment``.
+    """
+    args = json.dumps({"function": function, "kwargs": dict(kwargs)})
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _CHILD_CALL, args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            env=casa_environment() if casa else wsclean_environment(1),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"{what} killed after exceeding the {timeout:.0f}s timeout") from exc
+    if log_path is not None and proc.stderr.strip():
+        with Path(log_path).open("a", encoding="utf-8") as log:
+            log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
+    if proc.returncode != 0:
+        reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
+        raise RuntimeError(
+            f"{what} exited with return code {proc.returncode}" + (f": {reason}" if reason else "")
+        )
+    try:
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"{what} wrote no result") from exc
+
+
+def selfcal_prepare(ms_path: str, rows_per_chunk: int = 20000) -> dict[str, object]:
+    """CASA selections for self-calibrating ``ms_path``: the line-free channels of
+    DATA's source spectrum (``spw``) and the antenna with the most unflagged
+    cross-correlation rows (``refant``)."""
+    import numpy as np
+    from casacore.tables import table
+
+    ms = table(str(ms_path), ack=False)
+    try:
+        measured = _source_spectrum(ms, "DATA", rows_per_chunk)
+        if measured is None:
+            raise RuntimeError("the MS has no rows")
+        spectrum, usable = measured
+        line_free = line_free_channels(spectrum, usable)
+        if not line_free.any():
+            line_free = usable
+        ant1, ant2 = ms.getcol("ANTENNA1"), ms.getcol("ANTENNA2")
+        good = ~ms.getcol("FLAG_ROW") & (ant1 != ant2)
+    finally:
+        ms.close()
+    names = table(f"{ms_path}/ANTENNA", ack=False).getcol("NAME")
+    counts = np.bincount(ant1[good], minlength=len(names)) + np.bincount(
+        ant2[good], minlength=len(names)
+    )
+    return {
+        "spw": "0:" + _channel_ranges(line_free),
+        "refant": str(names[int(np.argmax(counts))]),
+        "line_free_channels": int(line_free.sum()),
+    }
+
+
+def _configure_casa(casa_data: str, log_file: str) -> Path:
+    """Point CASA at ``casa_data`` and ``log_file`` with a private workspace (removed at exit)."""
+    import atexit
+    import tempfile
+
+    from almasim.services.archive.unpack_ms import configure_casa_environment
+
+    workspace = Path(tempfile.mkdtemp(prefix="almasim-selfcal-casa-"))
+    atexit.register(shutil.rmtree, workspace, True)
+    configure_casa_environment(workspace, casa_data, workspace_root=workspace, log_file=log_file)
+    return workspace
+
+
+def casa_selfcal_solve(
+    ms_path: str,
+    caltable: str,
+    *,
+    solint: str,
+    spw: str,
+    refant: str,
+    casa_data: str,
+    log_file: str,
+    min_snr: float = 3.0,
+) -> dict[str, object]:
+    """CASA ``gaincal`` of DATA against MODEL_DATA: phase only, one solution per
+    antenna for both polarizations (gaintype T), over ``spw`` (line-free)."""
+    import numpy as np
+
+    _configure_casa(casa_data, log_file)
+    from casatasks import gaincal
+    from casatools import table
+
+    started = time.time()
+    gaincal(
+        vis=ms_path,
+        caltable=caltable,
+        solint=solint,
+        spw=spw,
+        refant=refant,
+        calmode="p",
+        gaintype="T",
+        minsnr=min_snr,
+        minblperant=4,
+    )
+    tb = table()
+    tb.open(caltable)
+    try:
+        flags = tb.getcol("FLAG")
+        gains = tb.getcol("CPARAM")
+        times = tb.getcol("TIME")
+    finally:
+        tb.close()
+    good = ~flags
+    phases = np.degrees(np.abs(np.angle(gains[good]))) if good.any() else np.zeros(1)
+    return {
+        "solint": solint,
+        "intervals": int(np.unique(times).size),
+        "solutions": int(good.sum()),
+        "possible": int(flags.size),
+        "median_phase_deg": round(float(np.median(phases)), 1),
+        "seconds": round(time.time() - started, 1),
+    }
+
+
+def casa_selfcal_apply(ms_path: str, caltable: str, *, casa_data: str, log_file: str) -> dict:
+    """CASA ``applycal`` of ``caltable`` into CORRECTED_DATA. ``calonly``: data
+    whose solution failed stay as they were, unflagged; weights unchanged."""
+    _configure_casa(casa_data, log_file)
+    from casatasks import applycal
+
+    applycal(
+        vis=ms_path,
+        gaintable=[caltable],
+        interp=["linear"],
+        calwt=[False],
+        applymode="calonly",
+        flagbackup=False,
+    )
+    return {"applied": True}
+
+
+def image_snr(image_path: Path, residual_path: Path) -> float:
+    """Peak of the restored image over the robust noise (1.4826 MAD) of the residual."""
+    import numpy as np
+    from astropy.io import fits
+
+    image = fits.getdata(image_path).squeeze()
+    residual = fits.getdata(residual_path).squeeze()
+    finite = residual[np.isfinite(residual)]
+    noise = 1.4826 * np.median(np.abs(finite - np.median(finite)))
+    return float(np.nanmax(image) / noise) if noise > 0 else 0.0
+
+
+def _selfcal_command(cmd: list[str], out: Path, name: str) -> list[str]:
+    """The continuum command imaging into ``out/name`` and writing MODEL_DATA."""
+    result = list(cmd)
+    result[result.index("-name") + 1] = str(out / name)
+    return [
+        "-update-model-required" if part == "-no-update-model-required" else part for part in result
+    ]
+
+
+def self_calibrate(
+    ms_path: Path,
+    continuum_command: list[str],
+    *,
+    out: Path,
+    log,
+    solints: Sequence[str],
+    min_snr: float,
+    run: Callable[[list[str]], int],
+    fail: Callable[..., RuntimeError],
+    timeout: float | None = None,
+    casa_data: str | None = None,
+) -> dict[str, object]:
+    """Phase self-calibrate ``ms_path`` against its own continuum, round by round.
+
+    The continuum is imaged (``continuum_command`` into ``selfcal-0``, writing
+    MODEL_DATA); below ``min_snr`` (peak over residual noise) nothing is
+    done. Each round then solves phase gains of DATA against the model at
+    its solution interval (``selfcal_solve``), writes CORRECTED_DATA and
+    reimages. A round is kept only if the image S/N rose; otherwise the best
+    earlier gains are restored (or CORRECTED_DATA dropped) and the rounds
+    stop. The temporary images and gain files are removed.
+
+    With ``casa_data`` (CASA runtime data) the gains are solved and applied
+    by CASA ``gaincal``/``applycal`` (``casa_selfcal_solve``); otherwise by
+    this module's solver (``selfcal_solve``). CASA writes its log to
+    ``casa-selfcal.log`` in ``out``.
+    """
+    rounds: list[dict[str, object]] = []
+    casa_log = str(out / "casa-selfcal.log")
+    prepared: dict[str, object] = {}
+
+    def image(index: int) -> float:
+        name = f"selfcal-{index}"
+        run(_selfcal_command(continuum_command, out, name))
+        return image_snr(out / f"{name}-image.fits", out / f"{name}-residual.fits")
+
+    def call(function: str, **kwargs: object) -> dict[str, object]:
+        try:
+            return _call_in_child(
+                function,
+                kwargs,
+                what=function,
+                timeout=timeout,
+                log_path=log.name,
+                casa=function.startswith("casa_"),
+            )
+        except Exception as exc:
+            raise fail(f"Self-calibration failed: {exc}")
+
+    def solve(gains: Path, solint: str) -> dict[str, object]:
+        if casa_data is None:
+            return call("selfcal_solve", ms_path=str(ms_path), gains_path=str(gains), solint=solint)
+        return call(
+            "casa_selfcal_solve",
+            ms_path=str(ms_path),
+            caltable=str(gains),
+            solint=solint,
+            spw=prepared["spw"],
+            refant=prepared["refant"],
+            casa_data=casa_data,
+            log_file=casa_log,
+        )
+
+    def apply(gains: Path | None) -> None:
+        if gains is None or casa_data is None:
+            call("selfcal_apply", ms_path=str(ms_path), gains_path=gains and str(gains))
+        else:
+            call(
+                "casa_selfcal_apply",
+                ms_path=str(ms_path),
+                caltable=str(gains),
+                casa_data=casa_data,
+                log_file=casa_log,
+            )
+
+    try:
+        best_snr = image(0)
+        log.write(f"# self-calibration: initial continuum S/N {best_snr:.1f}\n")
+        if best_snr < min_snr:
+            log.write(f"# self-calibration skipped: S/N below {min_snr:g}\n")
+            log.flush()
+            return {"applied": False, "initial_snr": best_snr, "rounds": rounds}
+        if casa_data is not None:
+            prepared = call("selfcal_prepare", ms_path=str(ms_path))
+            log.write(
+                f"# self-calibration with CASA gaincal: refant {prepared['refant']}, "
+                f"{prepared['line_free_channels']} line-free channels\n"
+            )
+        best_gains: Path | None = None
+        for index, solint in enumerate(solints, start=1):
+            suffix = ".G" if casa_data is not None else ".gains.npz"
+            gains = out / f"selfcal-{index}{suffix}"
+            solved = solve(gains, solint)
+            apply(gains)
+            snr = image(index)
+            kept = snr > best_snr
+            rounds.append({**solved, "snr": round(snr, 1), "kept": kept})
+            log.write(
+                f"# self-calibration round {index} (solint {solint}): "
+                f"{solved['solutions']}/{solved['possible']} antenna solutions, median "
+                f"|phase| {solved['median_phase_deg']} deg; S/N {best_snr:.1f} -> {snr:.1f}"
+                f"{'' if kept else ', rejected'}\n"
+            )
+            log.flush()
+            if not kept:
+                apply(best_gains)
+                break
+            best_snr, best_gains = snr, gains
+        log.write(
+            f"# self-calibration {'applied' if best_gains else 'not applied'}: "
+            f"final continuum S/N {best_snr:.1f}\n"
+        )
+        log.flush()
+        return {"applied": best_gains is not None, "snr": best_snr, "rounds": rounds}
+    finally:
+        for leftover in out.glob("selfcal-*"):
+            if leftover.is_dir():
+                shutil.rmtree(leftover, ignore_errors=True)
+            else:
+                leftover.unlink(missing_ok=True)
+
+
+def _subtract_uv_continuum_step(
+    ms_path: Path,
+    commands: list[list[str]],
+    *,
+    has_continuum: bool,
+    order: int,
+    log,
+    fail: Callable[..., RuntimeError],
+    timeout: float | None = None,
+) -> list[list[str]]:
+    """Run ``subtract_uv_continuum`` and point the commands at its columns."""
+    try:
+        fit = subtract_uv_continuum_subprocess(
+            ms_path, order=order, timeout=timeout, log_path=log.name
+        )
+    except Exception as exc:
+        raise fail(f"Could not subtract the continuum from the visibilities: {exc}")
+    if fit.get("skipped"):
+        log.write(
+            f"# continuum NOT subtracted from the visibilities: {fit['skipped']}; "
+            "the cube keeps the continuum\n"
+        )
+        log.flush()
+        return commands
+    log.write(
+        f"# continuum subtracted from {fit['source_column']} (order "
+        f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
+        f"{fit['usable_channels']} channels line-free, lines in channels "
+        f"{fit['line_ranges'] or 'none'}\n"
+    )
+    log.flush()
+    commands = list(commands)
+    if has_continuum:
+        commands[0] = _with_data_column(commands[0], CONTINUUM_COLUMN)
+    commands[-1] = _with_data_column(commands[-1], LINE_COLUMN)
+    return commands
 
 
 def _with_data_column(cmd: list[str], column: str) -> list[str]:

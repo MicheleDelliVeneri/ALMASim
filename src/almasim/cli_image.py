@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, replace
@@ -882,6 +883,9 @@ def run_imaging_tasks(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     uv_contsub_order: int | None = None,
+    selfcal_solints: Sequence[str] | None = None,
+    selfcal_min_snr: float = 20.0,
+    casa_data: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -920,6 +924,9 @@ def run_imaging_tasks(
                         cube_products=cube_products,
                         contsub_order=contsub_order,
                         uv_contsub_order=uv_contsub_order,
+                        selfcal_solints=selfcal_solints,
+                        selfcal_min_snr=selfcal_min_snr,
+                        casa_data=casa_data,
                     )
                 )
             except Exception as exc:
@@ -981,6 +988,9 @@ def run_imaging_tasks(
                 cube_products=cube_products,
                 contsub_order=contsub_order,
                 uv_contsub_order=uv_contsub_order,
+                selfcal_solints=selfcal_solints,
+                selfcal_min_snr=selfcal_min_snr,
+                casa_data=casa_data,
             )
 
         queued = list(range(len(tasks)))
@@ -1121,6 +1131,30 @@ def _report_imaging_failures(failures: list[ImagingFailure]) -> None:
         typer.echo(f"  {failure.label}: {_error_headline(failure.error)}", err=True)
         if failure.log_path:
             typer.echo(f"    log: {failure.log_path}", err=True)
+
+
+def _prepare_selfcal_casa_data(output_directory: Path, casa_data_root: Path | None) -> Path:
+    """CASA runtime data for the workers' gaincal, populated here once if missing.
+
+    The calibration stage's preflight: the tasks would otherwise each try to
+    download it, or fail to import casatools without it.
+    """
+    from .services.archive.unpack_ms import (
+        configure_casa_environment,
+        ensure_casa_runtime_data,
+    )
+
+    output_directory = Path(output_directory).expanduser().absolute()
+    casa_data = (
+        Path(casa_data_root).expanduser().absolute()
+        if casa_data_root is not None
+        else output_directory / ".casa-data"
+    )
+    workspace = output_directory / ".casa-work"
+    configure_casa_environment(workspace, casa_data, workspace_root=workspace)
+    typer.echo(f"Self-calibration CASA runtime data: {casa_data}")
+    ensure_casa_runtime_data(casa_data, logger_fn=typer.echo)
+    return casa_data
 
 
 @image_app.command("image-from-ms")
@@ -1322,6 +1356,39 @@ def image_from_ms(
             "clipping. Off by default. Needs --cube."
         ),
     ),
+    selfcal: str = typer.Option(
+        "",
+        "--selfcal",
+        help=(
+            "Phase self-calibrate each window before imaging, one round per solution "
+            "interval: comma-separated inf (per scan), int (per integration) or <seconds>s, "
+            "e.g. 'inf,30s'. A round is kept only if the continuum S/N rises. Empty (default): "
+            "off. Needs --continuum and --single-window-ms."
+        ),
+    ),
+    selfcal_min_snr: float = typer.Option(
+        20.0,
+        "--selfcal-min-snr",
+        min=0.0,
+        help="Skip self-calibration when the initial continuum S/N is below this.",
+    ),
+    selfcal_solver: str = typer.Option(
+        "casa",
+        "--selfcal-solver",
+        case_sensitive=False,
+        help=(
+            "casa (default): CASA gaincal/applycal; numpy: ALMASim's own phase solver, "
+            "no CASA needed."
+        ),
+    ),
+    casa_data_root: Optional[Path] = typer.Option(
+        None,
+        "--casa-data-root",
+        help=(
+            "CASA runtime data for --selfcal (default <output>/.casa-data, downloaded once "
+            "by the driver when missing, as the calibration stage does)."
+        ),
+    ),
     uv_contsub: bool = typer.Option(
         False,
         "--uv-contsub/--no-uv-contsub",
@@ -1447,6 +1514,17 @@ def image_from_ms(
         )
     if uv_contsub and contsub:
         raise typer.BadParameter("--uv-contsub already removes the continuum: drop --contsub")
+    solints = [part.strip() for part in selfcal.split(",") if part.strip()]
+    for solint in solints:
+        if not re.fullmatch(r"inf|int|\d+(\.\d+)?s", solint):
+            raise typer.BadParameter(
+                f"--selfcal intervals are inf, int or <seconds>s, not {solint!r}"
+            )
+    if solints and not (continuum and single_window):
+        raise typer.BadParameter("--selfcal needs --continuum and --single-window-ms")
+    solver = selfcal_solver.lower()
+    if solver not in {"casa", "numpy"}:
+        raise typer.BadParameter("--selfcal-solver must be casa or numpy")
     if uv_contsub and not single_window:
         raise typer.BadParameter("--uv-contsub needs --single-window-ms: it edits the copy")
     if not continuum and not cube:
@@ -1482,6 +1560,9 @@ def image_from_ms(
     if not tasks:
         typer.echo("All requested tasks are already imaged; nothing to do.")
         return
+    casa_data: str | None = None
+    if solints and solver == "casa":
+        casa_data = str(_prepare_selfcal_casa_data(output_directory, casa_data_root))
     typer.echo(
         f"Imaging {len(tasks)} (MS, SPW, field) task(s); "
         "per-task logs: <output>/<ms>/SPW-<n>[_FIELD-<id>].log"
@@ -1510,6 +1591,9 @@ def image_from_ms(
         cube_products=products,
         contsub_order=contsub_order if contsub else None,
         uv_contsub_order=contsub_order if uv_contsub else None,
+        selfcal_solints=solints or None,
+        selfcal_min_snr=selfcal_min_snr,
+        casa_data=casa_data,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -1582,6 +1666,10 @@ def image_set(
         cube=False,
         contsub=False,
         uv_contsub=False,
+        selfcal="",
+        selfcal_min_snr=20.0,
+        selfcal_solver="casa",
+        casa_data_root=None,
         contsub_order=1,
         spectral_sampling=2.0,
         velocity_resolution=0.0,
