@@ -1112,20 +1112,24 @@ def image_from_ms(
         help="Path or executable name of the WSClean binary the workers run.",
     ),
     auto_threshold: float = typer.Option(
-        3.0,
+        1.0,
         "--auto-threshold",
         min=0.0,
         help=(
             "Stop cleaning when the residual peak drops below this many sigma of the "
-            "residual noise (WSClean -auto-threshold). 0 disables it and cleaning runs to "
-            "-niter."
+            "residual noise (WSClean -auto-threshold; default 1, inside the --auto-mask "
+            "mask). 0 disables it and cleaning runs to -niter."
         ),
     ),
     auto_mask: float = typer.Option(
-        0.0,
+        3.0,
         "--auto-mask",
         min=0.0,
-        help="WSClean -auto-mask level in sigma; 0 (default) disables auto-masking.",
+        help=(
+            "WSClean -auto-mask level in sigma (default 3): clean to this level everywhere, "
+            "then only inside the mask it found down to --auto-threshold. Must be above "
+            "--auto-threshold; 0 disables masking."
+        ),
     ),
     task_memory_gb: float = typer.Option(
         0.0,
@@ -1325,6 +1329,12 @@ def image_from_ms(
         typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
         raise typer.Exit(code=2)
 
+    # A 3-sigma stop without a mask left ~3 sigma of source in every channel's
+    # residual: stacked over the 3537 line-free channels of uid___A002_X10ded83_X6af4
+    # SPW 16 that was 7.9 sigma and 39 % of the image; masking to 3 and cleaning
+    # to 1 sigma left 4.1 sigma and 16 % (2026-10-17).
+    if 0 < auto_mask <= auto_threshold:
+        raise typer.BadParameter("--auto-mask must be above --auto-threshold (or 0 to disable it)")
     parameters = pd.read_csv(str(imaging_parameters))
     cube_options: CubeOptions | None = None
     products: tuple[str, ...] | None = None
@@ -1430,8 +1440,8 @@ def image_set(
         min=1,
     ),
     wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin"),
-    auto_threshold: float = typer.Option(3.0, "--auto-threshold", min=0.0),
-    auto_mask: float = typer.Option(0.0, "--auto-mask", min=0.0),
+    auto_threshold: float = typer.Option(1.0, "--auto-threshold", min=0.0),
+    auto_mask: float = typer.Option(3.0, "--auto-mask", min=0.0),
     update_model: bool = typer.Option(False, "--update-model/--no-update-model"),
     task_memory_gb: float = typer.Option(0.0, "--task-memory-gb", min=0.0),
     task_retries: int = typer.Option(3, "--task-retries", min=0),

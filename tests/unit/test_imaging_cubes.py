@@ -387,3 +387,15 @@ def test_image_from_ms_rejects_contsub_without_cube(tmp_path):
     assert result.exit_code != 0
     # Rich styles the error box when it detects CI (GITHUB_ACTIONS/FORCE_COLOR).
     assert "need --cube" in click.unstyle(result.output)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("flags", [["--auto-mask", "1"], ["--auto-threshold", "3"]])
+def test_image_from_ms_rejects_a_mask_not_above_the_threshold(tmp_path, flags):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
+    )
+    assert result.exit_code != 0
+    assert "--auto-mask must be above --auto-threshold" in click.unstyle(result.output)
