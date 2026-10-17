@@ -433,8 +433,8 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
     assert cmd[cmd.index("-field") + 1] == "3,4"
     assert cmd[cmd.index("-spws") + 1] == "2"
     assert Path(cmd[-1]).is_absolute() and Path(cmd[-1]).name == "uid___A001_X1_X1.cal"
-    assert cmd[cmd.index("-auto-threshold") + 1] == "3.0", "3 sigma stopping point by default"
-    assert "-auto-mask" not in cmd
+    assert cmd[cmd.index("-auto-mask") + 1] == "3.0", "masked clean by default"
+    assert cmd[cmd.index("-auto-threshold") + 1] == "1.0", "down to 1 sigma inside the mask"
     assert cmd[cmd.index("-mem") + 1] == "12.5", "-mem is a percentage: 8 of 64 cores"
     assert cmd[cmd.index("-temp-dir") + 1] == str(task.output_dir)
     assert "-no-update-model-required" in cmd and "-update-model-required" not in cmd
