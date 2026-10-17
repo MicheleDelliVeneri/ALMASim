@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 
+import click
 import numpy as np
 import pandas as pd
 import pytest
@@ -359,4 +360,5 @@ def test_image_from_ms_rejects_contsub_without_cube(tmp_path):
         cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), "--contsub"]
     )
     assert result.exit_code != 0
-    assert "need --cube" in result.output
+    # Rich styles the error box when it detects CI (GITHUB_ACTIONS/FORCE_COLOR).
+    assert "need --cube" in click.unstyle(result.output)

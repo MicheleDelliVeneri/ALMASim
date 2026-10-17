@@ -46,7 +46,7 @@ jobs:
   # 3. Build wheel + sdist and publish to PyPI via OIDC trusted publisher
   #    Setup required once on PyPI:
   #    https://docs.pypi.org/trusted-publishers/adding-a-publisher/
-  #    Owner: MicheleDelliVeneri  Repo: ALMASim
+  #    Owner: astromadiv  Repo: ALMASim
   #    Workflow: release.yml  Environment: pypi
   # ------------------------------------------------------------------
   publish-pypi:
