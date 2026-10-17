@@ -1606,10 +1606,9 @@ def self_calibrate(
         best_amp: Path | None = None
         for index, (calmode, solint) in enumerate(plan, start=1):
             gains = out / f"selfcal-{index}.{'G' if calmode == 'p' else 'A'}"
-            pre_apply = [best_phase] if calmode == "ap" and best_phase else []
-            if calmode == "ap" and best_phase is None:
-                log.write(f"# self-calibration round {index} skipped: no phase solution kept\n")
-                break
+            # An ap round always follows a kept phase round: parse_selfcal_rounds
+            # puts a phase round first, and the rounds stop at the first rejection.
+            pre_apply = [best_phase] if calmode == "ap" else []
             solved = solve(gains, calmode, solint, pre_apply)
             trial = [gains] if calmode == "p" else [best_phase, gains]
             apply(trial)
