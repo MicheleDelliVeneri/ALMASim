@@ -922,7 +922,11 @@ def run_imaging_tasks(
         wait_for_workers = getattr(backend, "wait_for_workers", None)
         if callable(wait_for_workers):
             typer.echo(f"Waiting up to {_WORKER_WAIT_S / 60:.0f} min for {n_jobs} worker(s)...")
-            ready = wait_for_workers(n_jobs, timeout=_WORKER_WAIT_S)
+            try:
+                ready = wait_for_workers(n_jobs, timeout=_WORKER_WAIT_S)
+            except RuntimeError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(code=1)
             typer.echo(f"{ready} worker(s) registered; starting.")
         slots = max(int(n_jobs), 1) * max(int(node_cores) // max(int(cores_per_task), 1), 1)
 

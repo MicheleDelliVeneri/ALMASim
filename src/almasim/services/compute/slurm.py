@@ -1,5 +1,6 @@
 """Slurm computation backend using dask-jobqueue."""
 
+from time import monotonic
 from typing import Any, Callable, List, Mapping, Optional, Sequence, Union
 
 from almasim.scheduling.cluster import SLURM_DASK_AVAILABLE, SlurmDaskClusterSingleton
@@ -13,6 +14,9 @@ except ImportError:
     dask_delayed = None
 
 from .base import ComputationBackend
+
+# How often wait_for_workers looks at the worker logs for connection failures.
+_UNREACHABLE_CHECK_S = 15.0
 
 
 class SlurmBackend(ComputationBackend):
@@ -136,14 +140,28 @@ class SlurmBackend(ComputationBackend):
     def wait_for_workers(self, n_workers: int, timeout: Optional[float] = None) -> int:
         """Wait until ``n_workers`` workers have registered or ``timeout`` s pass.
 
-        Returns the number registered; a timeout is not an error.
+        Returns the number registered; a timeout is not an error. Raises
+        ``RuntimeError`` as soon as a worker job logs that it could not reach
+        the scheduler, since none of them will.
         """
         if self.client is None:
             raise RuntimeError("Dask client not initialized")
-        try:
-            self.client.wait_for_workers(n_workers, timeout=timeout)
-        except (TimeoutError, OSError):
-            pass
+        deadline = None if timeout is None else monotonic() + timeout
+        while True:
+            step = _UNREACHABLE_CHECK_S
+            if deadline is not None:
+                step = min(step, deadline - monotonic())
+            if step <= 0:
+                break
+            try:
+                self.client.wait_for_workers(n_workers, timeout=step)
+                break
+            except (TimeoutError, OSError):
+                pass
+            manager = getattr(self, "_cluster_manager", None)
+            report = manager.unreachable_scheduler_report() if manager is not None else None
+            if report:
+                raise RuntimeError(report)
         return len(self.client.scheduler_info().get("workers", {}))
 
     def scatter(self, data: Any, broadcast: bool = False) -> Any:

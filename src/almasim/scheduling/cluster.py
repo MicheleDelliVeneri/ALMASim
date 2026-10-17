@@ -9,8 +9,11 @@ This module provides:
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import re
 import shlex
+import socket
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -25,6 +28,67 @@ except ImportError:  # pragma: no cover - import guard
     Client = None
     SLURMCluster = None
     SLURM_DASK_AVAILABLE = False
+
+
+# What a dask worker logs when it cannot open a connection to the scheduler.
+_SCHEDULER_TIMEOUT = re.compile(r"Timed out trying to connect to (?P<address>tcp://\S+)")
+
+
+def _is_loopback(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(socket.gethostbyname(host)).is_loopback
+    except (OSError, ValueError):
+        return False
+
+
+def _partition_node_address(queue: str) -> str | None:
+    """IP address of one node of ``queue`` as Slurm names it, or None without Slurm."""
+    try:
+        listing = subprocess.run(
+            ["sinfo", "-h", "-N", "-p", queue, "-o", "%o"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for name in listing.split():
+        try:
+            return socket.gethostbyname(name)
+        except OSError:
+            continue
+    return None
+
+
+def _source_address_towards(address: str) -> str | None:
+    """Local address the kernel would send from to reach ``address`` (no packet is sent)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect((address, 9))
+            return probe.getsockname()[0]
+    except OSError:
+        return None
+
+
+def default_scheduler_host(queue: str) -> str | None:
+    """Address the workers of ``queue`` should reach the scheduler on.
+
+    The submit host's own name is not reliable: on a compute node
+    ``compute-node11`` resolves to 127.0.1.1, so the scheduler listened on
+    loopback and the worker on compute-node47 timed out (job 5266,
+    2026-10-17). The address the kernel routes to the partition's nodes is
+    the one they can answer. ``HOSTNAME`` is the fallback without Slurm,
+    unless it too resolves to loopback (then Dask picks).
+    """
+    node = _partition_node_address(queue)
+    source = _source_address_towards(node) if node else None
+    if source and not ipaddress.ip_address(source).is_loopback:
+        return source
+    hostname = os.environ.get("HOSTNAME")
+    if hostname and not _is_loopback(hostname):
+        return hostname
+    return None
 
 
 @dataclass(frozen=True)
@@ -180,7 +244,11 @@ class SlurmDaskClusterSingleton:
             raise RuntimeError("Dask Slurm dependencies are not available")
 
         submit_hostname = os.environ.get("HOSTNAME")
-        effective_scheduler_host = scheduler_host or submit_hostname
+        # Dask refuses a host together with an interface, so the interface,
+        # when given, chooses the address on its own.
+        effective_scheduler_host = scheduler_host or (
+            None if scheduler_interface else default_scheduler_host(queue)
+        )
 
         scheduler_options = dict(cluster_kwargs.pop("scheduler_options", {}))
         if effective_scheduler_host and "host" not in scheduler_options:
@@ -213,6 +281,7 @@ class SlurmDaskClusterSingleton:
         raw_log_directory = cluster_kwargs.pop("log_directory", default_log_dir)
         log_directory = self._resolve_safe_log_directory(raw_log_directory)
         os.makedirs(log_directory, exist_ok=True)
+        self.log_directory = log_directory
 
         slurm_kwargs = {
             "queue": queue,
@@ -246,6 +315,32 @@ class SlurmDaskClusterSingleton:
             scheduler_host,
             scheduler_interface,
         )
+
+    def unreachable_scheduler_report(self) -> str | None:
+        """Why the worker jobs cannot reach the scheduler, from their logs, or None.
+
+        A worker that cannot connect exits after 30 s and its Slurm job ends,
+        so without this the driver waits the full worker timeout for nothing.
+        """
+        for job in list(getattr(self.cluster, "workers", {}).values()):
+            job_id = getattr(job, "job_id", None)
+            if not job_id:
+                continue
+            log_path = os.path.join(self.log_directory, f"dask-worker-{job_id}.err")
+            try:
+                with open(log_path, encoding="utf-8", errors="replace") as log:
+                    match = _SCHEDULER_TIMEOUT.search(log.read())
+            except OSError:
+                continue
+            if match:
+                return (
+                    f"Slurm worker job {job_id} could not reach the Dask scheduler at "
+                    f"{match['address']} (see {log_path}). The compute nodes cannot connect "
+                    "to this host: run the command from a compute node (e.g. inside an sbatch "
+                    "job) or pass --scheduler-host / --scheduler-interface with an address "
+                    "they can reach."
+                )
+        return None
 
     @classmethod
     def get_instance(
