@@ -1360,10 +1360,10 @@ def image_from_ms(
         "",
         "--selfcal",
         help=(
-            "Phase self-calibrate each window before imaging, one round per solution "
-            "interval: comma-separated inf (per scan), int (per integration) or <seconds>s, "
-            "e.g. 'inf,30s'. A round is kept only if the continuum S/N rises. Empty (default): "
-            "off. Needs --continuum and --single-window-ms."
+            "Phase self-calibrate each window with CASA gaincal before imaging, one round per "
+            "solution interval: comma-separated inf (per scan), int (per integration) or "
+            "<seconds>s, e.g. 'inf,30s'. A round is kept only if the continuum S/N rises. "
+            "Empty (default): off. Needs --continuum and --single-window-ms."
         ),
     ),
     selfcal_min_snr: float = typer.Option(
@@ -1371,15 +1371,6 @@ def image_from_ms(
         "--selfcal-min-snr",
         min=0.0,
         help="Skip self-calibration when the initial continuum S/N is below this.",
-    ),
-    selfcal_solver: str = typer.Option(
-        "casa",
-        "--selfcal-solver",
-        case_sensitive=False,
-        help=(
-            "casa (default): CASA gaincal/applycal; numpy: ALMASim's own phase solver, "
-            "no CASA needed."
-        ),
     ),
     casa_data_root: Optional[Path] = typer.Option(
         None,
@@ -1522,9 +1513,6 @@ def image_from_ms(
             )
     if solints and not (continuum and single_window):
         raise typer.BadParameter("--selfcal needs --continuum and --single-window-ms")
-    solver = selfcal_solver.lower()
-    if solver not in {"casa", "numpy"}:
-        raise typer.BadParameter("--selfcal-solver must be casa or numpy")
     if uv_contsub and not single_window:
         raise typer.BadParameter("--uv-contsub needs --single-window-ms: it edits the copy")
     if not continuum and not cube:
@@ -1561,7 +1549,7 @@ def image_from_ms(
         typer.echo("All requested tasks are already imaged; nothing to do.")
         return
     casa_data: str | None = None
-    if solints and solver == "casa":
+    if solints:
         casa_data = str(_prepare_selfcal_casa_data(output_directory, casa_data_root))
     typer.echo(
         f"Imaging {len(tasks)} (MS, SPW, field) task(s); "
@@ -1668,7 +1656,6 @@ def image_set(
         uv_contsub=False,
         selfcal="",
         selfcal_min_snr=20.0,
-        selfcal_solver="casa",
         casa_data_root=None,
         contsub_order=1,
         spectral_sampling=2.0,

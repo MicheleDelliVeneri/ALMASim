@@ -58,10 +58,8 @@ __all__ = [
     "self_calibrate",
     "casa_selfcal_apply",
     "casa_selfcal_solve",
-    "selfcal_apply",
+    "drop_corrected_data",
     "selfcal_prepare",
-    "selfcal_solve",
-    "solve_antenna_gains",
     "write_imaging_failure_marker",
     "write_imaging_marker",
     "wsclean_environment",
@@ -503,8 +501,8 @@ def run_wsclean_task(
         raise ValueError("run_wsclean_task needs a continuum or a cube command")
     if uv_contsub_order is not None and not (single_window and cube_command):
         raise ValueError("uv_contsub_order needs single_window and a cube_command")
-    if selfcal_solints and not (single_window and command):
-        raise ValueError("selfcal_solints needs single_window and a continuum command")
+    if selfcal_solints and not (single_window and command and casa_data):
+        raise ValueError("selfcal_solints needs single_window, a continuum command and casa_data")
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -603,8 +601,8 @@ def run_wsclean_task(
                             cmd, out, log, env, timeout, tail, _fail, max(int(retries), 0)
                         ),
                         fail=_fail,
+                        casa_data=str(casa_data),
                         timeout=timeout,
-                        casa_data=casa_data,
                     )
                 if uv_contsub_order is not None:
                     commands = _subtract_uv_continuum_step(
@@ -1242,225 +1240,16 @@ def subtract_uv_continuum_subprocess(
         raise RuntimeError("continuum subtraction wrote no result") from exc
 
 
-def solve_antenna_gains(
-    vis: np.ndarray,
-    model: np.ndarray,
-    weight: np.ndarray,
-    ant1: np.ndarray,
-    ant2: np.ndarray,
-    n_antennas: int,
-    *,
-    phase_only: bool = True,
-    min_snr: float = 3.0,
-    iterations: int = 200,
-    tolerance: float = 1e-7,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Antenna gains ``g`` with ``vis ~ g[ant1] conj(g[ant2]) model`` in one interval.
-
-    ``vis``, ``model`` and ``weight`` are one value per row (already averaged
-    over channels and polarizations). Weighted least squares by alternating
-    per-antenna updates (StefCal: g_i = sum_j R_ij g_j / sum_j Q_ij |g_j|^2
-    with R = sum w vis conj(model) and Q = sum w |model|^2 per baseline),
-    damped every other iteration; ``phase_only`` keeps |g| = 1.
-
-    Returns ``(gains, snr)``: the phase of the antenna with the highest S/N is
-    set to zero, and an antenna without data or with S/N below ``min_snr`` gets
-    gain 1 (left uncorrected). The S/N of antenna i is |sum_j R_ij g_j| over
-    sqrt(sum_j Q_ij |g_j|^2), which assumes ``weight`` is 1/sigma^2.
-    """
-    import numpy as np
-
-    vis, model = np.asarray(vis, dtype=np.complex128), np.asarray(model, dtype=np.complex128)
-    w = np.where(np.isfinite(vis) & np.isfinite(model), np.asarray(weight, dtype=float), 0.0)
-    cross = (ant1 != ant2) & (w > 0)
-    a1, a2, w = ant1[cross], ant2[cross], w[cross]
-    r = w * vis[cross] * np.conj(model[cross])
-    q = w * np.abs(model[cross]) ** 2
-    big_r = np.zeros((n_antennas, n_antennas), dtype=np.complex128)
-    big_q = np.zeros((n_antennas, n_antennas))
-    np.add.at(big_r, (a1, a2), r)
-    np.add.at(big_r, (a2, a1), np.conj(r))
-    np.add.at(big_q, (a1, a2), q)
-    np.add.at(big_q, (a2, a1), q)
-    active = big_q.sum(axis=1) > 0
-    gains = np.ones(n_antennas, dtype=np.complex128)
-
-    def normalise(g: np.ndarray) -> np.ndarray:
-        if not phase_only:
-            return g
-        amplitude = np.abs(g)
-        return np.where(amplitude > 0, g / np.where(amplitude > 0, amplitude, 1.0), 1.0)
-
-    for iteration in range(iterations):
-        numerator = big_r @ gains
-        denominator = big_q @ np.abs(gains) ** 2
-        new = normalise(
-            np.where(
-                denominator > 0, numerator / np.where(denominator > 0, denominator, 1.0), gains
-            )
-        )
-        if iteration % 2:
-            new = normalise(0.5 * (new + gains))
-        converged = np.max(np.abs(new - gains)) < tolerance
-        gains = new
-        if converged:
-            break
-    noise = np.sqrt(big_q @ np.abs(gains) ** 2)
-    snr = np.where(noise > 0, np.abs(big_r @ gains) / np.where(noise > 0, noise, 1.0), 0.0)
-    good = active & (snr >= min_snr)
-    if good.any():
-        reference = int(np.argmax(np.where(good, snr, -1.0)))
-        gains = gains * np.conj(gains[reference]) / np.abs(gains[reference])
-    gains = np.where(good, gains, 1.0)
-    return gains, snr
-
-
-def _solution_intervals(time_s: np.ndarray, scan: np.ndarray, solint: str) -> np.ndarray:
-    """Interval index of every row: per scan (``inf``), per integration
-    (``int``) or per ``<seconds>s`` bin from the start of each scan."""
-    import numpy as np
-
-    if solint == "inf":
-        keys = scan.astype(np.int64)
-    elif solint == "int":
-        keys = np.round(time_s * 1e3).astype(np.int64)
-    elif solint.endswith("s"):
-        seconds = float(solint[:-1])
-        if seconds <= 0:
-            raise ValueError(f"solution interval must be positive: {solint}")
-        start = {int(s): float(time_s[scan == s].min()) for s in np.unique(scan)}
-        offsets = time_s - np.array([start[int(s)] for s in scan])
-        keys = scan.astype(np.int64) * 10_000_000 + np.floor(offsets / seconds).astype(np.int64)
-    else:
-        raise ValueError(f"solution interval must be inf, int or <seconds>s, not {solint!r}")
-    return np.unique(keys, return_inverse=True)[1]
-
-
-def _averaged_rows(ms, column: str, line_free: np.ndarray, rows_per_chunk: int):
-    """``column`` per row: weighted mean over the line-free channels and both
-    parallel hands, and the summed weight."""
-    import numpy as np
-
-    n_rows = ms.nrows()
-    spectrum_weight = _has_spectrum_weight(ms)
-    values = np.zeros(n_rows, dtype=np.complex128)
-    weights = np.zeros(n_rows)
-    for start in range(0, n_rows, rows_per_chunk):
-        n = min(rows_per_chunk, n_rows - start)
-        data, weight, flag = _read_rows(ms, column, start, n, spectrum_weight)
-        corrs = _parallel_hands(data.shape[2])
-        w = np.where(
-            flag[..., corrs] | ~np.isfinite(data[..., corrs]) | ~line_free[None, :, None],
-            0.0,
-            weight[..., corrs],
-        )
-        total = w.sum(axis=(1, 2))
-        summed = (w * np.where(w > 0, data[..., corrs], 0.0)).sum(axis=(1, 2))
-        values[start : start + n] = np.where(total > 0, summed / np.where(total > 0, total, 1.0), 0)
-        weights[start : start + n] = total
-    return values, weights
-
-
-def selfcal_solve(
-    ms_path: str | os.PathLike[str],
-    gains_path: str | os.PathLike[str],
-    *,
-    solint: str,
-    min_snr: float = 3.0,
-    rows_per_chunk: int = 20000,
-) -> dict[str, object]:
-    """Solve phase gains of DATA against MODEL_DATA, per ``solint``, into ``gains_path``.
-
-    Only the line-free channels (``line_free_channels`` on the source
-    spectrum of DATA) enter the solution, since MODEL_DATA is a continuum
-    model. One gain per antenna and interval for both polarizations (CASA
-    gaintype T, calmode p).
-    """
-    import numpy as np
+def drop_corrected_data(ms_path: str) -> dict[str, object]:
+    """Remove CORRECTED_DATA, so imaging reads DATA again (an undone self-calibration)."""
     from casacore.tables import table
-
-    started = time.time()
-    ms = table(str(ms_path), ack=False)
-    try:
-        n_antennas = table(f"{ms_path}/ANTENNA", ack=False).nrows()
-        measured = _source_spectrum(ms, "DATA", rows_per_chunk)
-        if measured is None:
-            raise RuntimeError("the MS has no rows")
-        spectrum, usable = measured
-        line_free = line_free_channels(spectrum, usable)
-        if not line_free.any():
-            line_free = usable
-        vis, weight = _averaged_rows(ms, "DATA", line_free, rows_per_chunk)
-        model, _ = _averaged_rows(ms, "MODEL_DATA", line_free, rows_per_chunk)
-        ant1, ant2 = ms.getcol("ANTENNA1"), ms.getcol("ANTENNA2")
-        interval = _solution_intervals(ms.getcol("TIME"), ms.getcol("SCAN_NUMBER"), solint)
-    finally:
-        ms.close()
-    n_intervals = int(interval.max()) + 1 if interval.size else 0
-    gains = np.ones((n_intervals, n_antennas), dtype=np.complex128)
-    solved = 0
-    for k in range(n_intervals):
-        rows = interval == k
-        g, snr = solve_antenna_gains(
-            vis[rows],
-            model[rows],
-            weight[rows],
-            ant1[rows],
-            ant2[rows],
-            n_antennas,
-            min_snr=min_snr,
-        )
-        gains[k] = g
-        solved += int((g != 1).sum())
-    np.savez(gains_path, gains=gains, interval=interval)
-    present = len(np.unique(np.concatenate([ant1, ant2])))
-    phases = np.degrees(np.abs(np.angle(gains[gains != 1]))) if solved else np.zeros(1)
-    return {
-        "solint": solint,
-        "intervals": n_intervals,
-        "solutions": solved,
-        "possible": n_intervals * present,
-        "median_phase_deg": round(float(np.median(phases)), 1),
-        "line_free_channels": int(line_free.sum()),
-        "seconds": round(time.time() - started, 1),
-    }
-
-
-def selfcal_apply(
-    ms_path: str | os.PathLike[str],
-    gains_path: str | os.PathLike[str] | None,
-    *,
-    rows_per_chunk: int = 20000,
-) -> dict[str, object]:
-    """Write CORRECTED_DATA = DATA / (g[ant1] conj(g[ant2])) from ``gains_path``;
-    with None, drop CORRECTED_DATA so imaging reads DATA again."""
-    import numpy as np
-    from casacore.tables import makecoldesc, table
 
     ms = table(str(ms_path), readonly=False, ack=False)
     try:
-        if "CORRECTED_DATA" in ms.colnames():
+        dropped = "CORRECTED_DATA" in ms.colnames()
+        if dropped:
             ms.removecols("CORRECTED_DATA")
-        if gains_path is None:
-            return {"applied": False}
-        solution = np.load(gains_path)
-        gains, interval = solution["gains"], solution["interval"]
-        ms.addcols(makecoldesc("CORRECTED_DATA", ms.getcoldesc("DATA")))
-        ant1, ant2 = ms.getcol("ANTENNA1"), ms.getcol("ANTENNA2")
-        n_rows = ms.nrows()
-        for start in range(0, n_rows, rows_per_chunk):
-            n = min(rows_per_chunk, n_rows - start)
-            rows = slice(start, start + n)
-            k = interval[rows]
-            factor = gains[k, ant1[rows]] * np.conj(gains[k, ant2[rows]])
-            data = ms.getcol("DATA", startrow=start, nrow=n)
-            ms.putcol(
-                "CORRECTED_DATA",
-                (data / factor[:, None, None]).astype(data.dtype),
-                startrow=start,
-                nrow=n,
-            )
-        return {"applied": True}
+        return {"dropped": dropped}
     finally:
         ms.close()
 
@@ -1659,23 +1448,24 @@ def self_calibrate(
     min_snr: float,
     run: Callable[[list[str]], int],
     fail: Callable[..., RuntimeError],
+    casa_data: str,
     timeout: float | None = None,
-    casa_data: str | None = None,
 ) -> dict[str, object]:
     """Phase self-calibrate ``ms_path`` against its own continuum, round by round.
 
     The continuum is imaged (``continuum_command`` into ``selfcal-0``, writing
     MODEL_DATA); below ``min_snr`` (peak over residual noise) nothing is
     done. Each round then solves phase gains of DATA against the model at
-    its solution interval (``selfcal_solve``), writes CORRECTED_DATA and
-    reimages. A round is kept only if the image S/N rose; otherwise the best
-    earlier gains are restored (or CORRECTED_DATA dropped) and the rounds
-    stop. The temporary images and gain files are removed.
+    its solution interval with CASA ``gaincal`` (``casa_selfcal_solve``),
+    applies them into CORRECTED_DATA (``casa_selfcal_apply``) and reimages.
+    A round is kept only if the image S/N rose; otherwise the best earlier
+    gains are restored (or CORRECTED_DATA dropped) and the rounds stop.
+    The temporary images and calibration tables are removed; CASA, run with
+    ``casa_data`` as its runtime data, logs to ``casa-selfcal.log`` in
+    ``out``.
 
-    With ``casa_data`` (CASA runtime data) the gains are solved and applied
-    by CASA ``gaincal``/``applycal`` (``casa_selfcal_solve``); otherwise by
-    this module's solver (``selfcal_solve``). CASA writes its log to
-    ``casa-selfcal.log`` in ``out``.
+    ALMASim's own StefCal-style solver gave the same S/N within ~1 % on four
+    cycle11 cubes and was dropped for CASA (2026-10-17).
     """
     rounds: list[dict[str, object]] = []
     casa_log = str(out / "casa-selfcal.log")
@@ -1700,8 +1490,6 @@ def self_calibrate(
             raise fail(f"Self-calibration failed: {exc}")
 
     def solve(gains: Path, solint: str) -> dict[str, object]:
-        if casa_data is None:
-            return call("selfcal_solve", ms_path=str(ms_path), gains_path=str(gains), solint=solint)
         return call(
             "casa_selfcal_solve",
             ms_path=str(ms_path),
@@ -1714,8 +1502,8 @@ def self_calibrate(
         )
 
     def apply(gains: Path | None) -> None:
-        if gains is None or casa_data is None:
-            call("selfcal_apply", ms_path=str(ms_path), gains_path=gains and str(gains))
+        if gains is None:
+            call("drop_corrected_data", ms_path=str(ms_path))
         else:
             call(
                 "casa_selfcal_apply",
@@ -1732,16 +1520,14 @@ def self_calibrate(
             log.write(f"# self-calibration skipped: S/N below {min_snr:g}\n")
             log.flush()
             return {"applied": False, "initial_snr": best_snr, "rounds": rounds}
-        if casa_data is not None:
-            prepared = call("selfcal_prepare", ms_path=str(ms_path))
-            log.write(
-                f"# self-calibration with CASA gaincal: refant {prepared['refant']}, "
-                f"{prepared['line_free_channels']} line-free channels\n"
-            )
+        prepared = call("selfcal_prepare", ms_path=str(ms_path))
+        log.write(
+            f"# self-calibration with CASA gaincal: refant {prepared['refant']}, "
+            f"{prepared['line_free_channels']} line-free channels\n"
+        )
         best_gains: Path | None = None
         for index, solint in enumerate(solints, start=1):
-            suffix = ".G" if casa_data is not None else ".gains.npz"
-            gains = out / f"selfcal-{index}{suffix}"
+            gains = out / f"selfcal-{index}.G"
             solved = solve(gains, solint)
             apply(gains)
             snr = image(index)

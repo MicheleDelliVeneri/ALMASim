@@ -613,84 +613,18 @@ def test_image_from_ms_passes_uv_contsub_order(tmp_path, monkeypatch):
     assert seen["uv_contsub_order"] == 0 and seen["contsub_order"] is None
 
 
-def _baselines(n_antennas, repeats=1):
-    a1, a2 = np.triu_indices(n_antennas, 1)
-    return np.tile(a1, repeats), np.tile(a2, repeats)
-
-
-@pytest.mark.unit
-def test_solve_antenna_gains_recovers_phases_up_to_a_reference():
-    rng = np.random.default_rng(11)
-    n = 10
-    true = np.exp(1j * rng.uniform(-np.pi, np.pi, n))
-    a1, a2 = _baselines(n, repeats=5)
-    model = np.full(a1.size, 2.0 + 0j)
-    sigma = 0.05
-    vis = true[a1] * np.conj(true[a2]) * model + sigma * (
-        rng.normal(size=a1.size) + 1j * rng.normal(size=a1.size)
-    )
-    weight = np.full(a1.size, 1 / sigma**2)
-
-    gains, snr = ai.solve_antenna_gains(vis, model, weight, a1, a2, n)
-
-    assert np.allclose(np.abs(gains), 1.0)
-    recovered = gains[a1] * np.conj(gains[a2])
-    expected = true[a1] * np.conj(true[a2])
-    assert np.max(np.abs(np.angle(recovered / expected))) < np.radians(2)
-    assert np.isclose(np.angle(gains[np.argmax(snr)]), 0.0), "reference phase is zero"
-    assert snr.min() > 100
-
-
-@pytest.mark.unit
-def test_solve_antenna_gains_leaves_missing_and_weak_antennas_uncorrected():
-    n = 6
-    a1, a2 = _baselines(5, repeats=3)  # antenna 5 never appears
-    model = np.ones(a1.size, complex)
-    vis = np.exp(1j * 0.3 * (a1 - a2)) * model
-    weight = np.full(a1.size, 1e4)
-    weak = (a1 == 4) | (a2 == 4)
-    weight[weak] = 1e-6
-
-    gains, snr = ai.solve_antenna_gains(vis, model, weight, a1, a2, n, min_snr=3.0)
-
-    assert gains[5] == 1 and snr[5] == 0
-    assert gains[4] == 1 and snr[4] < 3
-    assert not np.allclose(gains[:4], 1)
-
-
-@pytest.mark.unit
-def test_solve_antenna_gains_amplitude_and_phase():
-    rng = np.random.default_rng(2)
-    n = 8
-    true = rng.uniform(0.8, 1.2, n) * np.exp(1j * rng.uniform(-1, 1, n))
-    a1, a2 = _baselines(n, repeats=4)
-    model = np.ones(a1.size, complex)
-    vis = true[a1] * np.conj(true[a2])
-    gains, _ = ai.solve_antenna_gains(
-        vis, model, np.ones(a1.size), a1, a2, n, phase_only=False, min_snr=0
-    )
-    assert np.allclose(np.abs(gains), np.abs(true), rtol=1e-4)
-
-
-@pytest.mark.unit
-def test_solution_intervals():
-    time_s = np.array([0.0, 6.0, 12.0, 40.0, 100.0, 106.0, 160.0])
-    scan = np.array([1, 1, 1, 1, 2, 2, 2])
-    assert list(ai._solution_intervals(time_s, scan, "inf")) == [0, 0, 0, 0, 1, 1, 1]
-    assert len(set(ai._solution_intervals(time_s, scan, "int"))) == 7
-    assert list(ai._solution_intervals(time_s, scan, "30s")) == [0, 0, 0, 1, 2, 2, 3]
-    with pytest.raises(ValueError, match="solution interval"):
-        ai._solution_intervals(time_s, scan, "fast")
-
-
-def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20.0, casa_data=None):
+def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20.0):
     calls = []
 
-    def fake_call(function, kwargs, **_):
-        gains = kwargs.get("gains_path", kwargs.get("caltable"))
-        step = {"selfcal_solve": "solve", "casa_selfcal_solve": "solve"}.get(function, function)
-        step = {"selfcal_apply": "apply", "casa_selfcal_apply": "apply"}.get(step, step)
+    def fake_call(function, kwargs, *, casa=False, **_):
+        step = {
+            "casa_selfcal_solve": "solve",
+            "casa_selfcal_apply": "apply",
+            "drop_corrected_data": "apply",
+        }.get(function, function)
+        gains = kwargs.get("caltable")
         calls.append((step, None if gains is None else Path(gains).name, kwargs.get("solint")))
+        assert casa == function.startswith("casa_"), "only CASA steps get the CASA environment"
         if function == "selfcal_prepare":
             return {"spw": "0:0~9", "refant": "DA41", "line_free_channels": 10}
         return {"solutions": 9, "possible": 10, "median_phase_deg": 12.0}
@@ -704,6 +638,7 @@ def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20
         name = Path(cmd[cmd.index("-name") + 1])
         images.append(cmd)
         name.with_name(name.name + "-image.fits").write_text("x")
+        (tmp_path / "selfcal-1.G").mkdir(exist_ok=True)  # a CASA caltable is a directory
         return 1
 
     with (tmp_path / "task.log").open("w") as log:
@@ -716,7 +651,7 @@ def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20
             min_snr=min_snr,
             run=fake_run,
             fail=RuntimeError,
-            casa_data=casa_data,
+            casa_data="/casa-data",
         )
     return result, calls, images, (tmp_path / "task.log").read_text()
 
@@ -727,33 +662,35 @@ def test_self_calibrate_keeps_rounds_while_the_snr_rises(tmp_path, monkeypatch):
 
     assert result["applied"] and result["snr"] == 60.0
     assert calls == [
-        ("solve", "selfcal-1.gains.npz", "inf"),
-        ("apply", "selfcal-1.gains.npz", None),
-        ("solve", "selfcal-2.gains.npz", "30s"),
-        ("apply", "selfcal-2.gains.npz", None),
+        ("selfcal_prepare", None, None),
+        ("solve", "selfcal-1.G", "inf"),
+        ("apply", "selfcal-1.G", None),
+        ("solve", "selfcal-2.G", "30s"),
+        ("apply", "selfcal-2.G", None),
     ]
     assert all(
         "-update-model-required" in c and "-no-update-model-required" not in c for c in images
     )
-    assert not list(tmp_path.glob("selfcal-*")), "temporary images and gains removed"
-    assert "S/N 45.0 -> 60.0" in log
+    assert not list(tmp_path.glob("selfcal-*")), "temporary images and caltables removed"
+    assert "CASA gaincal: refant DA41" in log and "S/N 45.0 -> 60.0" in log
 
 
 @pytest.mark.unit
 def test_self_calibrate_reverts_a_round_that_makes_it_worse(tmp_path, monkeypatch):
     result, calls, _, log = _run_selfcal(tmp_path, monkeypatch, [30.0, 45.0, 40.0])
-    assert calls[-1] == ("apply", "selfcal-1.gains.npz", None), "back to round 1"
+    assert calls[-1] == ("apply", "selfcal-1.G", None), "back to round 1"
     assert result["snr"] == 45.0 and "rejected" in log
 
     result, calls, _, _ = _run_selfcal(tmp_path, monkeypatch, [30.0, 25.0], solints=("inf",))
-    assert calls[-1] == ("apply", None, None) and not result["applied"]
+    assert calls[-1] == ("apply", None, None), "round 1 rejected: CORRECTED_DATA dropped"
+    assert not result["applied"]
 
 
 @pytest.mark.unit
 def test_self_calibrate_skips_faint_sources(tmp_path, monkeypatch):
     result, calls, images, log = _run_selfcal(tmp_path, monkeypatch, [8.0])
     assert calls == [] and len(images) == 1 and not result["applied"]
-    assert "skipped: S/N below 20" in log
+    assert "skipped: S/N below 20" in log and "CASA" not in log
 
 
 @pytest.mark.unit
@@ -776,7 +713,7 @@ def test_image_from_ms_checks_selfcal(tmp_path, flags, message):
 
 
 @pytest.mark.unit
-def test_image_from_ms_passes_selfcal_solints(tmp_path, monkeypatch):
+def test_image_from_ms_passes_selfcal_solints_and_casa_data(tmp_path, monkeypatch):
     csv = tmp_path / "params.csv"
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
@@ -791,38 +728,6 @@ def test_image_from_ms_passes_selfcal_solints(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert seen["selfcal_solints"] == ["inf", "30s"] and seen["selfcal_min_snr"] == 20.0
     assert seen["casa_data"].endswith("out/.casa-data")
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "image",
-            "image-from-ms",
-            str(csv),
-            str(tmp_path / "out2"),
-            "--selfcal",
-            "inf",
-            "--selfcal-solver",
-            "numpy",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    assert seen["casa_data"] is None, "the numpy solver needs no CASA data"
-
-
-@pytest.mark.unit
-def test_self_calibrate_with_casa_prepares_once_and_uses_caltables(tmp_path, monkeypatch):
-    result, calls, _, log = _run_selfcal(
-        tmp_path, monkeypatch, [30.0, 45.0, 40.0], casa_data="/casa-data"
-    )
-    assert calls == [
-        ("selfcal_prepare", None, None),
-        ("solve", "selfcal-1.G", "inf"),
-        ("apply", "selfcal-1.G", None),
-        ("solve", "selfcal-2.G", "30s"),
-        ("apply", "selfcal-2.G", None),
-        ("apply", "selfcal-1.G", None),
-    ]
-    assert "CASA gaincal: refant DA41" in log and result["snr"] == 45.0
 
 
 @pytest.mark.unit
