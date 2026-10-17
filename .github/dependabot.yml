@@ -23,6 +23,27 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
 
+  # Docker base images (FROM lines only; pip pins inside Dockerfile.dask
+  # are not updated by Dependabot and follow uv.lock).
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/backend"
+      - "/frontend"
+      - "/.devcontainer"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    ignore:
+      # Python is capped at 3.12 (requires-python) and Node is pinned to 22;
+      # only take patch/digest updates for the base images.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "*devcontainers/python"
+        update-types: ["version-update:semver-major"]
+
   # GitHub Actions workflow dependencies.
   - package-ecosystem: "github-actions"
     directory: "/"
