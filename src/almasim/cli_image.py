@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import os
-import re
 import shutil
 import subprocess
 from dataclasses import dataclass, replace
@@ -1360,10 +1359,11 @@ def image_from_ms(
         "",
         "--selfcal",
         help=(
-            "Phase self-calibrate each window with CASA gaincal before imaging, one round per "
-            "solution interval: comma-separated inf (per scan), int (per integration) or "
-            "<seconds>s, e.g. 'inf,30s'. A round is kept only if the continuum S/N rises. "
-            "Empty (default): off. Needs --continuum and --single-window-ms."
+            "Self-calibrate each window with CASA gaincal before imaging, one round per "
+            "comma-separated solution interval: inf (per scan), int (per integration) or "
+            "<seconds>s for phase; ap:<interval> for amplitude and phase on top of the "
+            "phase solution, e.g. 'inf,30s,ap:inf'. A round is kept only if the continuum "
+            "S/N rises. Empty (default): off. Needs --continuum and --single-window-ms."
         ),
     ),
     selfcal_min_snr: float = typer.Option(
@@ -1505,12 +1505,13 @@ def image_from_ms(
         )
     if uv_contsub and contsub:
         raise typer.BadParameter("--uv-contsub already removes the continuum: drop --contsub")
+    from .services.imaging.archive_imaging import parse_selfcal_rounds
+
     solints = [part.strip() for part in selfcal.split(",") if part.strip()]
-    for solint in solints:
-        if not re.fullmatch(r"inf|int|\d+(\.\d+)?s", solint):
-            raise typer.BadParameter(
-                f"--selfcal intervals are inf, int or <seconds>s, not {solint!r}"
-            )
+    try:
+        parse_selfcal_rounds(solints)
+    except ValueError as exc:
+        raise typer.BadParameter(f"--selfcal: {exc}") from exc
     if solints and not (continuum and single_window):
         raise typer.BadParameter("--selfcal needs --continuum and --single-window-ms")
     if uv_contsub and not single_window:

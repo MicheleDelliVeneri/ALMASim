@@ -617,28 +617,35 @@ def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20
     calls = []
 
     def fake_call(function, kwargs, *, casa=False, **_):
-        step = {
-            "casa_selfcal_solve": "solve",
-            "casa_selfcal_apply": "apply",
-            "drop_corrected_data": "apply",
-        }.get(function, function)
-        gains = kwargs.get("caltable")
-        calls.append((step, None if gains is None else Path(gains).name, kwargs.get("solint")))
         assert casa == function.startswith("casa_"), "only CASA steps get the CASA environment"
-        if function == "selfcal_prepare":
-            return {"spw": "0:0~9", "refant": "DA41", "line_free_channels": 10}
-        return {"solutions": 9, "possible": 10, "median_phase_deg": 12.0}
+        if function == "casa_selfcal_solve":
+            pre = tuple(Path(t).name for t in kwargs["pre_apply"])
+            calls.append(("solve", Path(kwargs["caltable"]).name, kwargs["calmode"], pre))
+            Path(kwargs["caltable"]).mkdir()  # a CASA caltable is a directory
+            return {
+                "solutions": 9,
+                "possible": 10,
+                "median_phase_deg": 12.0,
+                "median_amp_dev": 0.05,
+            }
+        if function == "casa_selfcal_apply":
+            calls.append(("apply", tuple(Path(t).name for t in kwargs["caltables"])))
+        elif function == "drop_corrected_data":
+            calls.append(("apply", ()))
+        else:
+            calls.append((function,))
+        return {"spw": "0:0~9", "refant": "DA41", "line_free_channels": 10}
 
     monkeypatch.setattr(ai, "_call_in_child", fake_call)
     remaining = list(snrs)
     monkeypatch.setattr(ai, "image_snr", lambda image, residual: remaining.pop(0))
+    monkeypatch.setattr(ai, "image_peak", lambda image: 1.0)
     images = []
 
     def fake_run(cmd):
         name = Path(cmd[cmd.index("-name") + 1])
         images.append(cmd)
         name.with_name(name.name + "-image.fits").write_text("x")
-        (tmp_path / "selfcal-1.G").mkdir(exist_ok=True)  # a CASA caltable is a directory
         return 1
 
     with (tmp_path / "task.log").open("w") as log:
@@ -662,11 +669,11 @@ def test_self_calibrate_keeps_rounds_while_the_snr_rises(tmp_path, monkeypatch):
 
     assert result["applied"] and result["snr"] == 60.0
     assert calls == [
-        ("selfcal_prepare", None, None),
-        ("solve", "selfcal-1.G", "inf"),
-        ("apply", "selfcal-1.G", None),
-        ("solve", "selfcal-2.G", "30s"),
-        ("apply", "selfcal-2.G", None),
+        ("selfcal_prepare",),
+        ("solve", "selfcal-1.G", "p", ()),
+        ("apply", ("selfcal-1.G",)),
+        ("solve", "selfcal-2.G", "p", ()),
+        ("apply", ("selfcal-2.G",)),
     ]
     assert all(
         "-update-model-required" in c and "-no-update-model-required" not in c for c in images
@@ -676,13 +683,43 @@ def test_self_calibrate_keeps_rounds_while_the_snr_rises(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
+def test_self_calibrate_amplitude_round_on_top_of_the_kept_phase(tmp_path, monkeypatch):
+    result, calls, _, log = _run_selfcal(
+        tmp_path, monkeypatch, [30.0, 45.0, 44.0, 50.0], solints=("inf", "30s", "ap:inf")
+    )
+    # Round 2 (30s) is rejected, so round 1 is back in place and the rounds stop.
+    assert calls[-1] == ("apply", ("selfcal-1.G",)) and len(calls) == 6
+
+    calls.clear()
+    result, calls, _, log = _run_selfcal(
+        tmp_path, monkeypatch, [30.0, 45.0, 50.0], solints=("inf", "ap:inf")
+    )
+    assert calls[-2:] == [
+        ("solve", "selfcal-2.A", "ap", ("selfcal-1.G",)),
+        ("apply", ("selfcal-1.G", "selfcal-2.A")),
+    ]
+    assert result["applied"] and result["snr"] == 50.0
+    assert "round 2 (ap, solint inf)" in log and "median |amp - 1| 0.05" in log
+    assert "applied (selfcal-1.G, selfcal-2.A)" in log
+
+
+@pytest.mark.unit
+def test_self_calibrate_rejected_amplitude_round_keeps_the_phase(tmp_path, monkeypatch):
+    result, calls, _, log = _run_selfcal(
+        tmp_path, monkeypatch, [30.0, 45.0, 40.0], solints=("inf", "ap:inf")
+    )
+    assert calls[-1] == ("apply", ("selfcal-1.G",)) and result["snr"] == 45.0
+    assert "rejected" in log and "applied (selfcal-1.G)" in log
+
+
+@pytest.mark.unit
 def test_self_calibrate_reverts_a_round_that_makes_it_worse(tmp_path, monkeypatch):
     result, calls, _, log = _run_selfcal(tmp_path, monkeypatch, [30.0, 45.0, 40.0])
-    assert calls[-1] == ("apply", "selfcal-1.G", None), "back to round 1"
+    assert calls[-1] == ("apply", ("selfcal-1.G",)), "back to round 1"
     assert result["snr"] == 45.0 and "rejected" in log
 
     result, calls, _, _ = _run_selfcal(tmp_path, monkeypatch, [30.0, 25.0], solints=("inf",))
-    assert calls[-1] == ("apply", None, None), "round 1 rejected: CORRECTED_DATA dropped"
+    assert calls[-1] == ("apply", ()), "round 1 rejected: CORRECTED_DATA dropped"
     assert not result["applied"]
 
 
@@ -694,10 +731,26 @@ def test_self_calibrate_skips_faint_sources(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
+def test_parse_selfcal_rounds():
+    assert ai.parse_selfcal_rounds(["inf", "30s", "ap:inf", "ap:60s"]) == [
+        ("p", "inf"),
+        ("p", "30s"),
+        ("ap", "inf"),
+        ("ap", "60s"),
+    ]
+    with pytest.raises(ValueError, match="needs a phase round"):
+        ai.parse_selfcal_rounds(["ap:inf"])
+    for bad in ("fast", "a:inf", "ap:"):
+        with pytest.raises(ValueError, match="self-calibration rounds are"):
+            ai.parse_selfcal_rounds([bad])
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("flags", "message"),
     [
-        (["--selfcal", "inf,fast"], "inf, int or <seconds>s"),
+        (["--selfcal", "inf,fast"], "self-calibration rounds are"),
+        (["--selfcal", "ap:inf"], "needs a phase round"),
         (["--selfcal", "inf", "--no-single-window-ms"], "--selfcal needs --continuum"),
         (["--selfcal", "inf", "--no-continuum", "--cube"], "--selfcal needs --continuum"),
     ],
@@ -709,7 +762,7 @@ def test_image_from_ms_checks_selfcal(tmp_path, flags, message):
         cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
     )
     assert result.exit_code != 0
-    assert message in click.unstyle(result.output)
+    assert message in " ".join(click.unstyle(result.output).replace("│", " ").split())
 
 
 @pytest.mark.unit
@@ -723,10 +776,10 @@ def test_image_from_ms_passes_selfcal_solints_and_casa_data(tmp_path, monkeypatc
     )
     result = runner.invoke(
         cli.app,
-        ["image", "image-from-ms", str(csv), str(tmp_path / "out"), "--selfcal", "inf, 30s"],
+        ["image", "image-from-ms", str(csv), str(tmp_path / "out"), "--selfcal", "inf, ap:inf"],
     )
     assert result.exit_code == 0, result.output
-    assert seen["selfcal_solints"] == ["inf", "30s"] and seen["selfcal_min_snr"] == 20.0
+    assert seen["selfcal_solints"] == ["inf", "ap:inf"] and seen["selfcal_min_snr"] == 20.0
     assert seen["casa_data"].endswith("out/.casa-data")
 
 

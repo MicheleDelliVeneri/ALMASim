@@ -59,6 +59,7 @@ __all__ = [
     "casa_selfcal_apply",
     "casa_selfcal_solve",
     "drop_corrected_data",
+    "parse_selfcal_rounds",
     "selfcal_prepare",
     "write_imaging_failure_marker",
     "write_imaging_marker",
@@ -1359,9 +1360,16 @@ def casa_selfcal_solve(
     casa_data: str,
     log_file: str,
     min_snr: float = 3.0,
+    calmode: str = "p",
+    pre_apply: Sequence[str] = (),
 ) -> dict[str, object]:
-    """CASA ``gaincal`` of DATA against MODEL_DATA: phase only, one solution per
-    antenna for both polarizations (gaintype T), over ``spw`` (line-free)."""
+    """CASA ``gaincal`` of DATA against MODEL_DATA: one solution per antenna for
+    both polarizations (gaintype T), over ``spw`` (line-free).
+
+    ``calmode`` is ``p`` (phase) or ``ap`` (amplitude and phase); an ``ap``
+    solve is made on top of the ``pre_apply`` tables (the kept phase
+    solution) and normalised (``solnorm``) so the flux scale stays put.
+    """
     import numpy as np
 
     _configure_casa(casa_data, log_file)
@@ -1375,10 +1383,13 @@ def casa_selfcal_solve(
         solint=solint,
         spw=spw,
         refant=refant,
-        calmode="p",
+        calmode=calmode,
         gaintype="T",
         minsnr=min_snr,
         minblperant=4,
+        solnorm=calmode == "ap",
+        gaintable=list(pre_apply),
+        interp=["linear"] * len(pre_apply),
     )
     tb = table()
     tb.open(caltable)
@@ -1390,7 +1401,10 @@ def casa_selfcal_solve(
         tb.close()
     good = ~flags
     phases = np.degrees(np.abs(np.angle(gains[good]))) if good.any() else np.zeros(1)
+    amplitudes = np.abs(gains[good]) if good.any() else np.ones(1)
     return {
+        "calmode": calmode,
+        "median_amp_dev": round(float(np.median(np.abs(amplitudes - 1.0))), 3),
         "solint": solint,
         "intervals": int(np.unique(times).size),
         "solutions": int(good.sum()),
@@ -1400,17 +1414,19 @@ def casa_selfcal_solve(
     }
 
 
-def casa_selfcal_apply(ms_path: str, caltable: str, *, casa_data: str, log_file: str) -> dict:
-    """CASA ``applycal`` of ``caltable`` into CORRECTED_DATA. ``calonly``: data
+def casa_selfcal_apply(
+    ms_path: str, caltables: Sequence[str], *, casa_data: str, log_file: str
+) -> dict:
+    """CASA ``applycal`` of ``caltables`` into CORRECTED_DATA. ``calonly``: data
     whose solution failed stay as they were, unflagged; weights unchanged."""
     _configure_casa(casa_data, log_file)
     from casatasks import applycal
 
     applycal(
         vis=ms_path,
-        gaintable=[caltable],
-        interp=["linear"],
-        calwt=[False],
+        gaintable=list(caltables),
+        interp=["linear"] * len(caltables),
+        calwt=[False] * len(caltables),
         applymode="calonly",
         flagbackup=False,
     )
@@ -1427,6 +1443,32 @@ def image_snr(image_path: Path, residual_path: Path) -> float:
     finite = residual[np.isfinite(residual)]
     noise = 1.4826 * np.median(np.abs(finite - np.median(finite)))
     return float(np.nanmax(image) / noise) if noise > 0 else 0.0
+
+
+def image_peak(image_path: Path) -> float:
+    """Peak of the restored image."""
+    import numpy as np
+    from astropy.io import fits
+
+    return float(np.nanmax(fits.getdata(image_path)))
+
+
+def parse_selfcal_rounds(solints: Sequence[str]) -> list[tuple[str, str]]:
+    """``(calmode, solint)`` per round: ``inf`` or ``30s`` is a phase round,
+    ``ap:inf`` an amplitude-and-phase one. An amplitude round must come after
+    a phase round: it is solved on top of the phase solution."""
+    rounds = []
+    for item in solints:
+        calmode, _, solint = item.rpartition(":")
+        calmode = calmode or "p"
+        if calmode not in ("p", "ap") or not re.fullmatch(r"inf|int|\d+(\.\d+)?s", solint):
+            raise ValueError(
+                f"self-calibration rounds are [ap:]inf, [ap:]int or [ap:]<seconds>s, not {item!r}"
+            )
+        rounds.append((calmode, solint))
+    if rounds and rounds[0][0] == "ap":
+        raise ValueError("an amplitude (ap:) round needs a phase round before it")
+    return rounds
 
 
 def _selfcal_command(cmd: list[str], out: Path, name: str) -> list[str]:
@@ -1451,13 +1493,16 @@ def self_calibrate(
     casa_data: str,
     timeout: float | None = None,
 ) -> dict[str, object]:
-    """Phase self-calibrate ``ms_path`` against its own continuum, round by round.
+    """Self-calibrate ``ms_path`` against its own continuum, round by round.
 
     The continuum is imaged (``continuum_command`` into ``selfcal-0``, writing
     MODEL_DATA); below ``min_snr`` (peak over residual noise) nothing is
-    done. Each round then solves phase gains of DATA against the model at
-    its solution interval with CASA ``gaincal`` (``casa_selfcal_solve``),
-    applies them into CORRECTED_DATA (``casa_selfcal_apply``) and reimages.
+    done. Each round (``parse_selfcal_rounds``: ``inf``, ``30s`` for phase,
+    ``ap:inf`` for amplitude and phase) then solves gains of DATA against the
+    model at its solution interval with CASA ``gaincal``
+    (``casa_selfcal_solve``), an amplitude round on top of the kept phase
+    table, applies the kept phase table and the new one into CORRECTED_DATA
+    (``casa_selfcal_apply``) and reimages.
     A round is kept only if the image S/N rose; otherwise the best earlier
     gains are restored (or CORRECTED_DATA dropped) and the rounds stop.
     The temporary images and calibration tables are removed; CASA, run with
@@ -1467,14 +1512,16 @@ def self_calibrate(
     ALMASim's own StefCal-style solver gave the same S/N within ~1 % on four
     cycle11 cubes and was dropped for CASA (2026-10-17).
     """
+    plan = parse_selfcal_rounds(solints)
     rounds: list[dict[str, object]] = []
     casa_log = str(out / "casa-selfcal.log")
     prepared: dict[str, object] = {}
 
-    def image(index: int) -> float:
+    def image(index: int) -> tuple[float, float]:
         name = f"selfcal-{index}"
         run(_selfcal_command(continuum_command, out, name))
-        return image_snr(out / f"{name}-image.fits", out / f"{name}-residual.fits")
+        image_path = out / f"{name}-image.fits"
+        return image_snr(image_path, out / f"{name}-residual.fits"), image_peak(image_path)
 
     def call(function: str, **kwargs: object) -> dict[str, object]:
         try:
@@ -1489,7 +1536,7 @@ def self_calibrate(
         except Exception as exc:
             raise fail(f"Self-calibration failed: {exc}")
 
-    def solve(gains: Path, solint: str) -> dict[str, object]:
+    def solve(gains: Path, calmode: str, solint: str, pre_apply: list[Path]) -> dict:
         return call(
             "casa_selfcal_solve",
             ms_path=str(ms_path),
@@ -1499,23 +1546,28 @@ def self_calibrate(
             refant=prepared["refant"],
             casa_data=casa_data,
             log_file=casa_log,
+            calmode=calmode,
+            pre_apply=[str(t) for t in pre_apply],
         )
 
-    def apply(gains: Path | None) -> None:
-        if gains is None:
+    def apply(tables: list[Path]) -> None:
+        if not tables:
             call("drop_corrected_data", ms_path=str(ms_path))
         else:
             call(
                 "casa_selfcal_apply",
                 ms_path=str(ms_path),
-                caltable=str(gains),
+                caltables=[str(t) for t in tables],
                 casa_data=casa_data,
                 log_file=casa_log,
             )
 
     try:
-        best_snr = image(0)
-        log.write(f"# self-calibration: initial continuum S/N {best_snr:.1f}\n")
+        best_snr, best_peak = image(0)
+        log.write(
+            f"# self-calibration: initial continuum S/N {best_snr:.1f}, "
+            f"peak {best_peak:.4g} Jy/beam\n"
+        )
         if best_snr < min_snr:
             log.write(f"# self-calibration skipped: S/N below {min_snr:g}\n")
             log.flush()
@@ -1525,31 +1577,46 @@ def self_calibrate(
             f"# self-calibration with CASA gaincal: refant {prepared['refant']}, "
             f"{prepared['line_free_channels']} line-free channels\n"
         )
-        best_gains: Path | None = None
-        for index, solint in enumerate(solints, start=1):
-            gains = out / f"selfcal-{index}.G"
-            solved = solve(gains, solint)
-            apply(gains)
-            snr = image(index)
+        # The kept tables: the best phase table, then the best amplitude one.
+        best_phase: Path | None = None
+        best_amp: Path | None = None
+        for index, (calmode, solint) in enumerate(plan, start=1):
+            gains = out / f"selfcal-{index}.{'G' if calmode == 'p' else 'A'}"
+            pre_apply = [best_phase] if calmode == "ap" and best_phase else []
+            if calmode == "ap" and best_phase is None:
+                log.write(f"# self-calibration round {index} skipped: no phase solution kept\n")
+                break
+            solved = solve(gains, calmode, solint, pre_apply)
+            trial = [gains] if calmode == "p" else [best_phase, gains]
+            apply(trial)
+            snr, peak = image(index)
             kept = snr > best_snr
-            rounds.append({**solved, "snr": round(snr, 1), "kept": kept})
+            rounds.append({**solved, "snr": round(snr, 1), "peak": peak, "kept": kept})
+            detail = (
+                f"median |phase| {solved['median_phase_deg']} deg"
+                if calmode == "p"
+                else f"median |amp - 1| {solved['median_amp_dev']}"
+            )
             log.write(
-                f"# self-calibration round {index} (solint {solint}): "
-                f"{solved['solutions']}/{solved['possible']} antenna solutions, median "
-                f"|phase| {solved['median_phase_deg']} deg; S/N {best_snr:.1f} -> {snr:.1f}"
+                f"# self-calibration round {index} ({calmode}, solint {solint}): "
+                f"{solved['solutions']}/{solved['possible']} antenna solutions, {detail}; "
+                f"S/N {best_snr:.1f} -> {snr:.1f}, peak {best_peak:.4g} -> {peak:.4g} Jy/beam"
                 f"{'' if kept else ', rejected'}\n"
             )
             log.flush()
             if not kept:
-                apply(best_gains)
+                apply([t for t in (best_phase, best_amp) if t])
                 break
-            best_snr, best_gains = snr, gains
-        log.write(
-            f"# self-calibration {'applied' if best_gains else 'not applied'}: "
-            f"final continuum S/N {best_snr:.1f}\n"
-        )
+            best_snr, best_peak = snr, peak
+            if calmode == "p":
+                best_phase, best_amp = gains, None
+            else:
+                best_amp = gains
+        applied = [t.name for t in (best_phase, best_amp) if t]
+        outcome = f"applied ({', '.join(applied)})" if applied else "not applied"
+        log.write(f"# self-calibration {outcome}: final continuum S/N {best_snr:.1f}\n")
         log.flush()
-        return {"applied": best_gains is not None, "snr": best_snr, "rounds": rounds}
+        return {"applied": bool(applied), "snr": best_snr, "rounds": rounds}
     finally:
         for leftover in out.glob("selfcal-*"):
             if leftover.is_dir():
