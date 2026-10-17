@@ -617,285 +617,222 @@ def test_image_from_ms_passes_uv_contsub_order(tmp_path, monkeypatch):
     assert seen["uv_contsub_order"] == 0 and seen["contsub_order"] is None
 
 
-@pytest.mark.unit
-def test_continuum_restart_commands_write_the_model_then_continue():
-    first, second = ai.continuum_restart_commands(
-        ["wsclean", "-name", "w", "-no-update-model-required", "x.ms"]
-    )
-    assert first == ["wsclean", "-name", "w", "-update-model-required", "x.ms"]
-    assert second == ["wsclean", "-name", "w", "-update-model-required", "-continue", "x.ms"]
-
-    first, _ = ai.continuum_restart_commands(["wsclean", "-name", "w", "x.ms"])
-    assert first[-2:] == ["-update-model-required", "x.ms"]
+def _baselines(n_antennas, repeats=1):
+    a1, a2 = np.triu_indices(n_antennas, 1)
+    return np.tile(a1, repeats), np.tile(a2, repeats)
 
 
 @pytest.mark.unit
-def test_run_wsclean_task_cleans_the_continuum_in_two_passes(tmp_path, monkeypatch):
-    fake = _FakeCubeWsclean()
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
-    monkeypatch.setattr(
-        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
+def test_solve_antenna_gains_recovers_phases_up_to_a_reference():
+    rng = np.random.default_rng(11)
+    n = 10
+    true = np.exp(1j * rng.uniform(-np.pi, np.pi, n))
+    a1, a2 = _baselines(n, repeats=5)
+    model = np.full(a1.size, 2.0 + 0j)
+    sigma = 0.05
+    vis = true[a1] * np.conj(true[a2]) * model + sigma * (
+        rng.normal(size=a1.size) + 1j * rng.normal(size=a1.size)
     )
-    (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
+    weight = np.full(a1.size, 1 / sigma**2)
 
-    ai.run_wsclean_task(
-        command=task.command,
-        cube_command=task.cube_command,
-        output_dir=str(task.output_dir),
-        ms_path=str(task.ms_path),
-        spw=task.spw,
-        threads=2,
-        single_window=True,
-        continuum_restart=True,
-    )
+    gains, snr = ai.solve_antenna_gains(vis, model, weight, a1, a2, n)
 
-    names = [Path(c[c.index("-name") + 1]).name for c in fake.calls]
-    assert names == ["wsclean", "wsclean", "wsclean-cube"]
-    first, second, cube = fake.calls
-    assert "-update-model-required" in first and "-continue" not in first
-    assert second[-2] == "-continue" and second[-1] == first[-1]
-    assert "-continue" not in cube and "-no-update-model-required" in cube
-    marker = json.loads(ai.imaging_marker_path(task.output_dir).read_text())
-    assert len(marker["commands"]) == 3
+    assert np.allclose(np.abs(gains), 1.0)
+    recovered = gains[a1] * np.conj(gains[a2])
+    expected = true[a1] * np.conj(true[a2])
+    assert np.max(np.abs(np.angle(recovered / expected))) < np.radians(2)
+    assert np.isclose(np.angle(gains[np.argmax(snr)]), 0.0), "reference phase is zero"
+    assert snr.min() > 100
 
 
 @pytest.mark.unit
-def test_continuum_restart_needs_the_single_window_copy():
-    with pytest.raises(ValueError, match="needs single_window"):
-        ai.run_wsclean_task(
-            command=["wsclean", "-name", "w", "x.ms"],
-            output_dir="x",
-            ms_path="x",
-            spw=1,
-            threads=1,
-            continuum_restart=True,
+def test_solve_antenna_gains_leaves_missing_and_weak_antennas_uncorrected():
+    n = 6
+    a1, a2 = _baselines(5, repeats=3)  # antenna 5 never appears
+    model = np.ones(a1.size, complex)
+    vis = np.exp(1j * 0.3 * (a1 - a2)) * model
+    weight = np.full(a1.size, 1e4)
+    weak = (a1 == 4) | (a2 == 4)
+    weight[weak] = 1e-6
+
+    gains, snr = ai.solve_antenna_gains(vis, model, weight, a1, a2, n, min_snr=3.0)
+
+    assert gains[5] == 1 and snr[5] == 0
+    assert gains[4] == 1 and snr[4] < 3
+    assert not np.allclose(gains[:4], 1)
+
+
+@pytest.mark.unit
+def test_solve_antenna_gains_amplitude_and_phase():
+    rng = np.random.default_rng(2)
+    n = 8
+    true = rng.uniform(0.8, 1.2, n) * np.exp(1j * rng.uniform(-1, 1, n))
+    a1, a2 = _baselines(n, repeats=4)
+    model = np.ones(a1.size, complex)
+    vis = true[a1] * np.conj(true[a2])
+    gains, _ = ai.solve_antenna_gains(
+        vis, model, np.ones(a1.size), a1, a2, n, phase_only=False, min_snr=0
+    )
+    assert np.allclose(np.abs(gains), np.abs(true), rtol=1e-4)
+
+
+@pytest.mark.unit
+def test_solution_intervals():
+    time_s = np.array([0.0, 6.0, 12.0, 40.0, 100.0, 106.0, 160.0])
+    scan = np.array([1, 1, 1, 1, 2, 2, 2])
+    assert list(ai._solution_intervals(time_s, scan, "inf")) == [0, 0, 0, 0, 1, 1, 1]
+    assert len(set(ai._solution_intervals(time_s, scan, "int"))) == 7
+    assert list(ai._solution_intervals(time_s, scan, "30s")) == [0, 0, 0, 1, 2, 2, 3]
+    with pytest.raises(ValueError, match="solution interval"):
+        ai._solution_intervals(time_s, scan, "fast")
+
+
+def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20.0, casa_data=None):
+    calls = []
+
+    def fake_call(function, kwargs, **_):
+        gains = kwargs.get("gains_path", kwargs.get("caltable"))
+        step = {"selfcal_solve": "solve", "casa_selfcal_solve": "solve"}.get(function, function)
+        step = {"selfcal_apply": "apply", "casa_selfcal_apply": "apply"}.get(step, step)
+        calls.append((step, None if gains is None else Path(gains).name, kwargs.get("solint")))
+        if function == "selfcal_prepare":
+            return {"spw": "0:0~9", "refant": "DA41", "line_free_channels": 10}
+        return {"solutions": 9, "possible": 10, "median_phase_deg": 12.0}
+
+    monkeypatch.setattr(ai, "_call_in_child", fake_call)
+    remaining = list(snrs)
+    monkeypatch.setattr(ai, "image_snr", lambda image, residual: remaining.pop(0))
+    images = []
+
+    def fake_run(cmd):
+        name = Path(cmd[cmd.index("-name") + 1])
+        images.append(cmd)
+        name.with_name(name.name + "-image.fits").write_text("x")
+        return 1
+
+    with (tmp_path / "task.log").open("w") as log:
+        result = ai.self_calibrate(
+            tmp_path / "spw.ms",
+            ["wsclean", "-name", str(tmp_path / "wsclean"), "-no-update-model-required", "ms"],
+            out=tmp_path,
+            log=log,
+            solints=solints,
+            min_snr=min_snr,
+            run=fake_run,
+            fail=RuntimeError,
+            casa_data=casa_data,
         )
+    return result, calls, images, (tmp_path / "task.log").read_text()
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    ("flags", "expected"),
-    [([], True), (["--no-continuum-restart"], False), (["--no-single-window-ms"], False)],
-)
-def test_image_from_ms_continuum_restart_default(tmp_path, monkeypatch, flags, expected):
-    csv = tmp_path / "params.csv"
-    pd.DataFrame([_row()]).to_csv(csv, index=False)
-    seen = {}
-    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
-    result = runner.invoke(
-        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
-    )
-    assert result.exit_code == 0, result.output
-    assert seen["continuum_restart"] is expected
+def test_self_calibrate_keeps_rounds_while_the_snr_rises(tmp_path, monkeypatch):
+    result, calls, images, log = _run_selfcal(tmp_path, monkeypatch, [30.0, 45.0, 60.0])
 
-
-@pytest.mark.unit
-def test_both_continuum_passes_read_the_fitted_continuum(tmp_path, monkeypatch):
-    fit = {
-        "source_column": "DATA",
-        "order": 1,
-        "seconds": 1.0,
-        "channels": 8,
-        "usable_channels": 8,
-        "line_free_channels": 6,
-        "line_ranges": "3~4",
-    }
-    fake, _, _ = _uv_task(tmp_path, monkeypatch, fit, continuum_restart=True)
-
-    first, second, cube = fake.calls
-    for continuum in (first, second):
-        assert continuum[continuum.index("-data-column") + 1] == ai.CONTINUUM_COLUMN
-    assert "-continue" in second and cube[cube.index("-data-column") + 1] == ai.LINE_COLUMN
-
-
-def _line_channels(out, n_channels=40, size=64, seed=8):
-    """Channel images of a faint line: 1 sigma per channel, ~6 sigma summed."""
-    rng = np.random.default_rng(seed)
-    yy, xx = np.mgrid[:size, :size]
-    blob = np.exp(-((yy - 32) ** 2 + (xx - 20) ** 2) / (2 * 2.0**2))
-    out.mkdir(parents=True, exist_ok=True)
-    for c in range(n_channels):
-        plane = rng.normal(0, 1, (size, size)) + 1.0 * blob
-        path = out / f"wsclean-cube-{c:04d}-image.fits"
-        _write_channel(path, plane, 230e9 + c * 1e6, bmaj=4 * 2.5e-4)  # 4 pixels
-        with fits.open(path, mode="update") as hdus:
-            hdus[0].header["CDELT1"], hdus[0].header["CDELT2"] = -2.5e-4, 2.5e-4
-
-
-@pytest.mark.unit
-def test_line_mask_from_channels_finds_a_line_no_channel_shows(tmp_path):
-    _line_channels(tmp_path)
-
-    pixels = ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits")
-
-    mask = fits.getdata(tmp_path / "mask.fits").squeeze().astype(bool)
-    assert pixels == mask.sum() and mask[32, 20], "the blob is in the mask"
-    assert mask[32, 24] and not mask[32, 40], "grown by about one beam, no further"
-    assert mask.mean() < 0.1
-
-
-@pytest.mark.unit
-def test_line_mask_from_channels_without_channels_or_signal(tmp_path):
-    assert ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
-    for c in range(3):
-        _write_channel(tmp_path / f"wsclean-cube-{c:04d}-image.fits", np.zeros((8, 8)), 230e9)
-    (tmp_path / "mask.fits").write_text("stale mask from an earlier run")
-    assert ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
-    assert not (tmp_path / "mask.fits").exists(), "no mask built, none left behind"
-
-
-@pytest.mark.unit
-def test_line_mask_pass_continues_inside_the_mask(tmp_path, monkeypatch):
-    cube = ["wsclean", "-name", "c", "-auto-mask", "3.0", "-auto-threshold", "1.0", "x.ms"]
-    with (tmp_path / "log").open("w") as log:
-        monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 120)
-        second = ai._line_mask_pass(cube, tmp_path, log)
-        monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 0)
-        assert ai._line_mask_pass(cube, tmp_path, log) is None
-    assert second == [
-        "wsclean",
-        "-name",
-        "c",
-        "-auto-threshold",
-        "1.0",
-        "-fits-mask",
-        str(tmp_path / ai.LINE_MASK_FILENAME),
-        "-continue",
-        "x.ms",
+    assert result["applied"] and result["snr"] == 60.0
+    assert calls == [
+        ("solve", "selfcal-1.gains.npz", "inf"),
+        ("apply", "selfcal-1.gains.npz", None),
+        ("solve", "selfcal-2.gains.npz", "30s"),
+        ("apply", "selfcal-2.gains.npz", None),
     ]
-    log = (tmp_path / "log").read_text()
-    assert "120 pixels; second pass" in log and "nothing above 3 sigma" in log
+    assert all(
+        "-update-model-required" in c and "-no-update-model-required" not in c for c in images
+    )
+    assert not list(tmp_path.glob("selfcal-*")), "temporary images and gains removed"
+    assert "S/N 45.0 -> 60.0" in log
 
 
 @pytest.mark.unit
-def test_run_wsclean_task_cleans_the_cube_again_inside_the_line_mask(tmp_path, monkeypatch):
-    fake = _FakeCubeWsclean()
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
-    monkeypatch.setattr(
-        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
-    )
-    monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 50)
-    (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
+def test_self_calibrate_reverts_a_round_that_makes_it_worse(tmp_path, monkeypatch):
+    result, calls, _, log = _run_selfcal(tmp_path, monkeypatch, [30.0, 45.0, 40.0])
+    assert calls[-1] == ("apply", "selfcal-1.gains.npz", None), "back to round 1"
+    assert result["snr"] == 45.0 and "rejected" in log
 
-    ai.run_wsclean_task(
-        command=task.command,
-        cube_command=task.cube_command,
-        output_dir=str(task.output_dir),
-        ms_path=str(task.ms_path),
-        spw=task.spw,
-        threads=2,
-        single_window=True,
-        cube_line_mask=True,
-    )
-
-    continuum, cube, second = fake.calls
-    assert "-no-update-model-required" in continuum
-    assert "-update-model-required" in cube and "-continue" not in cube
-    assert second[-2] == "-continue" and "-fits-mask" in second and "-auto-mask" not in second
-    marker = json.loads(ai.imaging_marker_path(task.output_dir).read_text())
-    assert len(marker["commands"]) == 3
-    assert fits.getdata(task.output_dir / "wsclean-cube-image.fits").shape[1] == 8
+    result, calls, _, _ = _run_selfcal(tmp_path, monkeypatch, [30.0, 25.0], solints=("inf",))
+    assert calls[-1] == ("apply", None, None) and not result["applied"]
 
 
 @pytest.mark.unit
-def test_cube_line_mask_needs_the_single_window_copy():
-    with pytest.raises(ValueError, match="cube_line_mask writes MODEL_DATA"):
-        ai.run_wsclean_task(
-            command=[],
-            cube_command=["wsclean", "-name", "c", "x.ms"],
-            output_dir="x",
-            ms_path="x",
-            spw=1,
-            threads=1,
-            cube_line_mask=True,
-        )
+def test_self_calibrate_skips_faint_sources(tmp_path, monkeypatch):
+    result, calls, images, log = _run_selfcal(tmp_path, monkeypatch, [8.0])
+    assert calls == [] and len(images) == 1 and not result["applied"]
+    assert "skipped: S/N below 20" in log
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    ("flags", "expected"),
+    ("flags", "message"),
     [
-        (["--cube"], True),
-        (["--cube", "--no-cube-line-mask"], False),
-        (["--cube", "--no-single-window-ms"], False),
-        ([], False),
+        (["--selfcal", "inf,fast"], "inf, int or <seconds>s"),
+        (["--selfcal", "inf", "--no-single-window-ms"], "--selfcal needs --continuum"),
+        (["--selfcal", "inf", "--no-continuum", "--cube"], "--selfcal needs --continuum"),
     ],
 )
-def test_image_from_ms_cube_line_mask_default(tmp_path, monkeypatch, flags, expected):
+def test_image_from_ms_checks_selfcal(tmp_path, flags, message):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
+    )
+    assert result.exit_code != 0
+    assert message in click.unstyle(result.output)
+
+
+@pytest.mark.unit
+def test_image_from_ms_passes_selfcal_solints(tmp_path, monkeypatch):
     csv = tmp_path / "params.csv"
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
     monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    monkeypatch.setattr(
+        cli_image, "_prepare_selfcal_casa_data", lambda out, root: Path(out) / ".casa-data"
+    )
     result = runner.invoke(
-        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
+        cli.app,
+        ["image", "image-from-ms", str(csv), str(tmp_path / "out"), "--selfcal", "inf, 30s"],
     )
     assert result.exit_code == 0, result.output
-    assert seen["cube_line_mask"] is expected
+    assert seen["selfcal_solints"] == ["inf", "30s"] and seen["selfcal_min_snr"] == 20.0
+    assert seen["casa_data"].endswith("out/.casa-data")
 
-
-@pytest.mark.unit
-def test_line_mask_from_channels_without_a_pixel_scale_is_not_grown(tmp_path):
-    rng = np.random.default_rng(3)
-    for c in range(20):
-        plane = rng.normal(0, 1, (32, 32))
-        plane[16, 16] += 3.0
-        _write_channel(tmp_path / f"wsclean-cube-{c:04d}-image.fits", plane, 230e9, bmaj=1e-3)
-    pixels = ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits")
-    mask = fits.getdata(tmp_path / "mask.fits").squeeze().astype(bool)
-    assert mask[16, 16] and pixels <= 5, "the source pixel, plus at most a stray noise peak"
-
-
-@pytest.mark.unit
-def test_line_mask_pass_reads_the_line_column_too(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 50)
-    fit = {
-        "source_column": "DATA",
-        "order": 1,
-        "seconds": 1.0,
-        "channels": 8,
-        "usable_channels": 8,
-        "line_free_channels": 6,
-        "line_ranges": "3~4",
-    }
-    fake, _, _ = _uv_task(tmp_path, monkeypatch, fit, cube_line_mask=True)
-
-    continuum, cube, second = fake.calls
-    assert continuum[continuum.index("-data-column") + 1] == ai.CONTINUUM_COLUMN
-    for command in (cube, second):
-        assert command[command.index("-data-column") + 1] == ai.LINE_COLUMN
-    assert "-continue" in second and "-fits-mask" in second
-
-
-@pytest.mark.unit
-def test_line_mask_pass_zeroes_the_nan_models_of_empty_channels(tmp_path, monkeypatch):
-    for c, value in enumerate([1.0, np.nan]):
-        plane = np.full((4, 4), value)
-        _write_channel(tmp_path / f"wsclean-cube-{c:04d}-model.fits", plane, 230e9)
-    monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 10)
-
-    with (tmp_path / "log").open("w") as log:
-        assert ai._line_mask_pass(["wsclean", "-name", "c", "x.ms"], tmp_path, log)
-
-    assert np.all(fits.getdata(tmp_path / "wsclean-cube-0001-model.fits") == 0)
-    assert np.all(fits.getdata(tmp_path / "wsclean-cube-0000-model.fits") == 1)
-    assert "1 channel model(s) were NaN" in (tmp_path / "log").read_text()
-    assert ai._zero_non_finite_models(tmp_path) == 0, "nothing left to fix"
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("order", [0, 1])
-def test_line_free_channels_on_a_noiseless_spectrum(order):
-    spectrum = np.ones(128) if order == 0 else np.linspace(1.0, 1.2, 128)
-    spectrum = spectrum.copy()
-    spectrum[62:66] += 4.0
-    line_free = ai.line_free_channels(spectrum, np.ones(128, bool), order=order)
-    assert not line_free[62:66].any(), "zero spread must not hide the line"
-    assert line_free[:50].all() and line_free[80:].all()
-
-
-@pytest.mark.unit
-def test_line_free_channels_on_a_short_spectrum():
-    line_free = ai.line_free_channels(
-        np.array([1.0, 1.01, 1.02, 2.0]), np.ones(4, bool), order=0, grow=2
+    result = runner.invoke(
+        cli.app,
+        [
+            "image",
+            "image-from-ms",
+            str(csv),
+            str(tmp_path / "out2"),
+            "--selfcal",
+            "inf",
+            "--selfcal-solver",
+            "numpy",
+        ],
     )
-    assert line_free.shape == (4,)
+    assert result.exit_code == 0, result.output
+    assert seen["casa_data"] is None, "the numpy solver needs no CASA data"
+
+
+@pytest.mark.unit
+def test_self_calibrate_with_casa_prepares_once_and_uses_caltables(tmp_path, monkeypatch):
+    result, calls, _, log = _run_selfcal(
+        tmp_path, monkeypatch, [30.0, 45.0, 40.0], casa_data="/casa-data"
+    )
+    assert calls == [
+        ("selfcal_prepare", None, None),
+        ("solve", "selfcal-1.G", "inf"),
+        ("apply", "selfcal-1.G", None),
+        ("solve", "selfcal-2.G", "30s"),
+        ("apply", "selfcal-2.G", None),
+        ("apply", "selfcal-1.G", None),
+    ]
+    assert "CASA gaincal: refant DA41" in log and result["snr"] == 45.0
+
+
+@pytest.mark.unit
+def test_casa_environment_drops_system_library_dirs():
+    base = {"LD_LIBRARY_PATH": "/lib64:/usr/lib64:/opt/x/lib:/usr/lib", "PATH": "/bin"}
+    env = ai.casa_environment(base)
+    assert env["LD_LIBRARY_PATH"] == "/opt/x/lib" and env["OMP_NUM_THREADS"] == "1"
+    assert "LD_LIBRARY_PATH" not in ai.casa_environment({"LD_LIBRARY_PATH": "/lib64"})
+    assert ai.wsclean_environment(1, base)["LD_LIBRARY_PATH"].startswith("/lib64")
