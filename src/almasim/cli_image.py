@@ -881,6 +881,7 @@ def run_imaging_tasks(
     max_weight: float | None = None,
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
+    continuum_restart: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -918,6 +919,7 @@ def run_imaging_tasks(
                         cube_command=task.cube_command,
                         cube_products=cube_products,
                         contsub_order=contsub_order,
+                        continuum_restart=continuum_restart,
                     )
                 )
             except Exception as exc:
@@ -978,6 +980,7 @@ def run_imaging_tasks(
                 cube_command=task.cube_command,
                 cube_products=cube_products,
                 contsub_order=contsub_order,
+                continuum_restart=continuum_restart,
             )
 
         queued = list(range(len(tasks)))
@@ -1237,6 +1240,16 @@ def image_from_ms(
             "removed afterwards). Default: the task's output directory."
         ),
     ),
+    continuum_restart: bool = typer.Option(
+        True,
+        "--continuum-restart/--no-continuum-restart",
+        help=(
+            "Clean the continuum in two passes, the second (-continue) from the true residual "
+            "with a mask rebuilt at the true noise: the first pass's auto-mask, built while "
+            "a bright source's sidelobes inflate the noise, misses its fainter parts "
+            "(default; only with --single-window-ms, whose per-task copy gets MODEL_DATA)."
+        ),
+    ),
     update_model: bool = typer.Option(
         False,
         "--update-model/--no-update-model",
@@ -1486,6 +1499,7 @@ def image_from_ms(
         max_weight=max_weight if max_weight > 0 else None,
         cube_products=products,
         contsub_order=contsub_order if contsub else None,
+        continuum_restart=continuum_restart and single_window,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -1549,6 +1563,7 @@ def image_set(
         auto_threshold=auto_threshold,
         auto_mask=auto_mask,
         update_model=update_model,
+        continuum_restart=True,
         task_memory_gb=task_memory_gb,
         task_retries=task_retries,
         single_window=single_window,
