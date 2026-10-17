@@ -8,16 +8,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Dask + the scientific packages used by ALMASim workers
+# Install Dask + the scientific packages used by ALMASim workers.
+# Versions mirror uv.lock: dask/distributed on the workers must match the client,
+# so bump these together with the lockfile.
 RUN pip install --no-cache-dir \
-    dask[complete] \
-    distributed \
-    numpy \
-    scipy \
-    astropy \
-    h5py \
-    pandas \
-    scikit-image
+    "dask[complete]==2026.8.0" \
+    distributed==2026.8.0 \
+    numpy==2.5.2 \
+    scipy==1.17.1 \
+    astropy==7.2.0 \
+    h5py==3.16.0 \
+    pandas==3.0.3 \
+    scikit-image==0.26.0
 
 # tini as PID-1 for proper signal handling
 ENTRYPOINT ["tini", "-g", "--"]
