@@ -412,6 +412,7 @@ def test_run_wsclean_task_self_calibrates_before_imaging(tmp_path, monkeypatch):
     assert seen["solints"] == ["inf"] and seen["command"][-1].endswith("spw25.single.ms")
     assert seen["ran"] == ["wsclean", "-name", "probe"], "rounds image through the task runner"
     assert seen["restart"] is True and "-update-model-required" in seen["command"]
+    assert seen["keep_gains"] is False, "noise products (and gains) are off unless asked for"
 
 
 @pytest.mark.unit
@@ -817,3 +818,49 @@ def test_run_wsclean_task_makes_noise_products_after_an_applied_selfcal(tmp_path
     assert seen["continuum_command"][2].endswith("wsclean")
     assert seen["cube_command"][2].endswith("wsclean-cube")
     assert seen["run"](["wsclean"]) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("continuum", "cube", "gone", "kept"),
+    [
+        (True, True, ["wsclean", "cube", "gains"], []),
+        (False, True, ["cube"], ["wsclean", "gains"]),
+        (True, False, ["wsclean", "gains"], ["cube"]),
+    ],
+)
+def test_run_wsclean_task_clears_stale_noise_products(
+    tmp_path, monkeypatch, continuum, cube, gone, kept
+):
+    out = tmp_path / "out" / "SPW-25"
+    out.mkdir(parents=True)
+    files = {
+        "wsclean": [ai.SELFCAL_CORRECTION_FILENAME, ai.TOTAL_RESIDUAL_FILENAME],
+        "cube": [ai.CUBE_SELFCAL_CORRECTION_FILENAME, ai.CUBE_TOTAL_RESIDUAL_FILENAME],
+    }
+    for names in files.values():
+        for name in names:
+            (out / name).write_text("previous run")
+    (out / ai.SELFCAL_GAINS_DIRNAME).mkdir()
+
+    def stop(*args, **kwargs):
+        raise _Stop
+
+    monkeypatch.setattr(ai, "_run_and_mark", stop)
+    with pytest.raises(_Stop):
+        ai.run_wsclean_task(
+            command=["wsclean", "-name", str(out / "wsclean"), "x.ms"] if continuum else [],
+            cube_command=["wsclean", "-name", str(out / "wsclean-cube"), "x.ms"] if cube else None,
+            output_dir=str(out),
+            ms_path="x.ms",
+            spw=25,
+            threads=1,
+        )
+
+    def present(group):
+        if group == "gains":
+            return (out / ai.SELFCAL_GAINS_DIRNAME).exists()
+        return all((out / name).exists() for name in files[group])
+
+    assert not any(present(group) for group in gone)
+    assert all(present(group) for group in kept)

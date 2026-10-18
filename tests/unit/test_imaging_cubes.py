@@ -617,7 +617,9 @@ def test_image_from_ms_passes_uv_contsub_order(tmp_path, monkeypatch):
     assert seen["uv_contsub_order"] == 0 and seen["contsub_order"] is None
 
 
-def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20.0, restart=False):
+def _run_selfcal(
+    tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20.0, restart=False, **kwargs
+):
     calls = []
 
     def fake_call(function, kwargs, *, casa=False, **_):
@@ -667,6 +669,7 @@ def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20
             fail=RuntimeError,
             casa_data="/casa-data",
             restart=restart,
+            **kwargs,
         )
     return result, calls, images, (tmp_path / "task.log").read_text()
 
@@ -1127,3 +1130,12 @@ def test_image_from_ms_noise_products_default(tmp_path, monkeypatch, flags, expe
     )
     assert result.exit_code == 0, result.output
     assert seen["noise_products"] is expected
+
+
+@pytest.mark.unit
+def test_self_calibrate_keeps_no_gains_when_asked_not_to(tmp_path, monkeypatch):
+    result, _, _, log = _run_selfcal(
+        tmp_path, monkeypatch, [30.0, 45.0], solints=("inf",), keep_gains=False
+    )
+    assert result["applied"] and result["gains"] == []
+    assert not (tmp_path / ai.SELFCAL_GAINS_DIRNAME).exists() and "gains kept" not in log

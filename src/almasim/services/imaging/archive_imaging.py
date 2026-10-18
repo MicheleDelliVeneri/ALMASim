@@ -559,6 +559,15 @@ def run_wsclean_task(
     imaging_failure_marker_path(out).unlink(missing_ok=True)
     for name in required:
         (out / name).unlink(missing_ok=True)
+    # The noise products of what this task regenerates: a rerun whose
+    # self-calibration is skipped or rejected must not leave the previous
+    # run's beside the new images. Self-calibration runs with the continuum.
+    stale = [SELFCAL_CORRECTION_FILENAME, TOTAL_RESIDUAL_FILENAME] * bool(command)
+    stale += [CUBE_SELFCAL_CORRECTION_FILENAME, CUBE_TOTAL_RESIDUAL_FILENAME] * bool(cube_command)
+    for name in stale:
+        (out / name).unlink(missing_ok=True)
+    if command:
+        shutil.rmtree(out / SELFCAL_GAINS_DIRNAME, ignore_errors=True)
     log_path.write_text("", encoding="utf-8")
     # A previous attempt that crashed or was killed with its worker leaves
     # WSClean's reorder files (hundreds of GB across a run) and the
@@ -655,6 +664,7 @@ def run_wsclean_task(
                         casa_data=str(casa_data),
                         timeout=timeout,
                         restart=continuum_restart,
+                        keep_gains=noise_products,
                     )
                 if uv_contsub_order is not None:
                     commands, fit = _subtract_uv_continuum_step(
@@ -1651,6 +1661,7 @@ def self_calibrate(
     casa_data: str,
     timeout: float | None = None,
     restart: bool = False,
+    keep_gains: bool = True,
 ) -> dict[str, object]:
     """Self-calibrate ``ms_path`` against its own continuum, round by round.
 
@@ -1670,7 +1681,8 @@ def self_calibrate(
 
     With ``restart`` every image is cleaned in two passes, as the continuum
     is (``continuum_restart_commands``), so the model the gains are solved
-    against is complete.
+    against is complete. With ``keep_gains`` the applied tables are kept in
+    ``selfcal_gains/`` (``_keep_gain_tables``).
 
     ALMASim's own StefCal-style solver gave the same S/N within ~1 % on four
     cycle11 cubes and was dropped for CASA (2026-10-17).
@@ -1782,10 +1794,14 @@ def self_calibrate(
         applied = [t.name for t in (best_phase, best_amp) if t]
         outcome = f"applied ({', '.join(applied)})" if applied else "not applied"
         log.write(f"# self-calibration {outcome}: final continuum S/N {best_snr:.1f}\n")
-        kept_gains = _keep_gain_tables(
-            [(t, kind) for t, kind in ((best_phase, "phase"), (best_amp, "amplitude")) if t],
-            out,
-            call,
+        kept_gains = (
+            _keep_gain_tables(
+                [(t, kind) for t, kind in ((best_phase, "phase"), (best_amp, "amplitude")) if t],
+                out,
+                call,
+            )
+            if keep_gains
+            else []
         )
         if kept_gains:
             log.write(
