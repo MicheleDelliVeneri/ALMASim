@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 from types import ModuleType
 
 import numpy as np
@@ -32,6 +33,9 @@ class _FakeTable:
 
     def iscelldefined(self, name, row):
         return name in self.columns
+
+    def getcell(self, name, row):
+        return self.columns[name][row]
 
     def getcol(self, name, startrow=0, nrow=-1):
         column = self.columns[name]
@@ -174,9 +178,12 @@ def test_subtract_uv_continuum_subprocess_failures(monkeypatch, outcome, message
 
 @pytest.mark.unit
 def test_run_wsclean_task_fails_when_the_uv_subtraction_fails(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
-    )
+    def extract(ms, spw, fields, out_path, **kwargs):
+        (Path(out_path) / "table.dat").parent.mkdir(parents=True)
+        (Path(out_path) / "table.dat").write_text("x")
+        return {"rows": 1, "bytes": 0}
+
+    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", extract)
 
     def broken(*args, **kwargs):
         raise RuntimeError("casacore lock")
@@ -201,3 +208,42 @@ def test_run_wsclean_task_fails_when_the_uv_subtraction_fails(tmp_path, monkeypa
         )
     marker = json.loads(ai.imaging_failure_marker_path(out).read_text())
     assert "casacore lock" in marker["error"]
+    assert not list(out.glob("spw*.single.ms")), "the single-window copy is removed"
+
+
+@pytest.mark.unit
+def test_subtract_uv_continuum_ignores_rows_flagged_by_flag_row(fake_casacore):
+    data = _visibilities()
+    data[::5, 10:20] += 100.0  # garbage in rows the observatory flagged as a whole
+    fake_casacore["x.ms"] = ms = _ms(data)
+    ms.columns["FLAG_ROW"] = np.zeros(data.shape[0], bool)
+    ms.columns["FLAG_ROW"][::5] = True
+
+    result = ai.subtract_uv_continuum("x.ms")
+
+    ranges = [tuple(map(int, r.split("~"))) for r in result["line_ranges"].split(";")]
+    assert not any(a <= 15 <= b for a, b in ranges), "flagged rows never make a line"
+    assert any(a <= 32 <= b for a, b in ranges), "the real line is still found"
+
+
+@pytest.mark.unit
+def test_subtract_uv_continuum_reads_chunks_sized_by_samples(fake_casacore, monkeypatch):
+    fake_casacore["x.ms"] = ms = _ms(_visibilities(n_rows=40, n_channels=64))
+    reads = []
+    getcol = ms.getcol
+    monkeypatch.setattr(
+        ms,
+        "getcol",
+        lambda name, startrow=0, nrow=-1: reads.append(nrow) or getcol(name, startrow, nrow),
+    )
+    monkeypatch.setattr(ai, "_CHUNK_SAMPLES", 64 * 2 * 10)  # ten rows of 64 channels x 2
+
+    ai.subtract_uv_continuum("x.ms")
+
+    assert max(reads) == 10
+
+
+@pytest.mark.unit
+def test_rows_for_chunk():
+    assert ai.rows_for_chunk(3840, 2) == 2604
+    assert ai.rows_for_chunk(10**9, 4) == 1, "at least one row"

@@ -56,6 +56,7 @@ __all__ = [
     "subtract_continuum",
     "subtract_uv_continuum",
     "subtract_uv_continuum_subprocess",
+    "rows_for_chunk",
     "write_imaging_failure_marker",
     "write_imaging_marker",
     "wsclean_environment",
@@ -533,6 +534,9 @@ def run_wsclean_task(
                     single_window_ms, order=uv_contsub_order, timeout=timeout, log_path=log_path
                 )
             except Exception as exc:
+                # The cleanup below is not reached yet: drop the copy (with
+                # any columns already added) here.
+                shutil.rmtree(single_window_ms, ignore_errors=True)
                 error = f"Could not subtract the continuum from the visibilities: {exc}"
                 write_imaging_failure_marker(out, ms_path=ms_path, spw=spw, error=error)
                 raise RuntimeError(error) from exc
@@ -546,8 +550,8 @@ def run_wsclean_task(
                     log.write(
                         f"# continuum subtracted from {fit['source_column']} (order "
                         f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
-                        f"{fit['usable_channels']} channels line-free, lines in channels "
-                        f"{fit['line_ranges'] or 'none'}\n"
+                        f"{fit['usable_channels']} channels line-free ({fit['channels']} in the "
+                        f"window), lines in channels {fit['line_ranges'] or 'none'}\n"
                     )
             if not fit.get("skipped"):
                 if command:
@@ -962,6 +966,9 @@ def line_free_channels(
     x = np.linspace(-1.0, 1.0, n) if n > 1 else np.zeros(1)
     kept = usable.copy()
     scales = [int(k) for k in widths if 1 <= int(k) <= max(n // 8, 1)] or [1]
+    # A noiseless (simulated) spectrum has zero spread: then anything above
+    # rounding is a line, or the fit would absorb it.
+    floor = 1e-9 * float(np.max(np.abs(spectrum[usable]))) if usable.any() else 0.0
     for _ in range(max(int(iterations), 1)):
         if kept.sum() <= order:
             break
@@ -978,6 +985,8 @@ def line_free_channels(
             spread = 1.4826 * np.median(np.abs(smooth[kept] - centre))
             if spread > 0:
                 line |= usable & (np.abs(smooth - centre) > clip_sigma * spread)
+            elif floor > 0:
+                line |= usable & (np.abs(smooth - centre) > floor)
         new_kept = usable & ~line
         if new_kept.sum() <= order or np.array_equal(new_kept, kept):
             break
@@ -986,7 +995,9 @@ def line_free_channels(
     if grow is None:
         grow = max(2, n // 100)
     if grow > 0 and line.any():
-        line = np.convolve(line, np.ones(2 * grow + 1), mode="same") > 0
+        # "full" and sliced: "same" returns the longer input, which a short
+        # spectrum (fewer than 2 * grow + 1 channels) is not.
+        line = np.convolve(line, np.ones(2 * grow + 1), mode="full")[grow : grow + n] > 0
     return usable & ~line
 
 
@@ -1041,12 +1052,24 @@ def _channel_ranges(mask: np.ndarray) -> str:
     return ";".join(f"{a}~{b - 1}" for a, b in zip(edges[::2], edges[1::2]))
 
 
+# Samples (rows x channels x correlations) per chunk read from an MS: with
+# complex64 data, float64 weights, flags and the fit's temporaries about
+# 1 GB. A fixed 20000 rows was over 5 GB for a 3840-channel window.
+_CHUNK_SAMPLES = 20_000_000
+
+
+def rows_for_chunk(n_channels: int, n_correlations: int, samples: int | None = None) -> int:
+    """Rows per chunk keeping it near ``samples`` (default ``_CHUNK_SAMPLES``) samples, >= 1."""
+    budget = _CHUNK_SAMPLES if samples is None else samples
+    return max(int(budget // max(int(n_channels) * int(n_correlations), 1)), 1)
+
+
 def subtract_uv_continuum(
     ms_path: str | os.PathLike[str],
     *,
     order: int = 1,
     clip_sigma: float = 3.0,
-    rows_per_chunk: int = 20000,
+    rows_per_chunk: int | None = None,
     min_line_free_fraction: float = 0.2,
 ) -> dict[str, object]:
     """Split a single-window MS into continuum and line visibilities.
@@ -1068,6 +1091,10 @@ def subtract_uv_continuum(
     Nothing is written when fewer than ``min_line_free_fraction`` of the
     usable channels are line-free (a line forest or a window filled by one
     line); the result then carries ``skipped`` with the reason.
+
+    Rows are read ``rows_per_chunk`` at a time, by default as many as keep a
+    chunk near ``_CHUNK_SAMPLES`` samples; rows flagged with FLAG_ROW are
+    left out like flagged samples.
     """
     import numpy as np
     from casacore.tables import makecoldesc, table
@@ -1081,9 +1108,16 @@ def subtract_uv_continuum(
             n_rows > 0 and ms.iscelldefined("WEIGHT_SPECTRUM", 0)
         )
 
+        has_flag_row = "FLAG_ROW" in ms.colnames()
+        if rows_per_chunk is None:
+            shape = ms.getcell(source, 0).shape if n_rows else (1, 1)
+            rows_per_chunk = rows_for_chunk(shape[0], shape[-1])
+
         def chunk(start: int, n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
             data = ms.getcol(source, startrow=start, nrow=n)
             flag = ms.getcol("FLAG", startrow=start, nrow=n)
+            if has_flag_row:
+                flag = flag | ms.getcol("FLAG_ROW", startrow=start, nrow=n)[:, None, None]
             if has_spectrum_weight:
                 weight = ms.getcol("WEIGHT_SPECTRUM", startrow=start, nrow=n)
             else:
