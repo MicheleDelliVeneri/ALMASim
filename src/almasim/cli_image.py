@@ -882,6 +882,8 @@ def run_imaging_tasks(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     uv_contsub_order: int | None = None,
+    continuum_restart: bool = False,
+    cube_line_mask: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -920,6 +922,8 @@ def run_imaging_tasks(
                         cube_products=cube_products,
                         contsub_order=contsub_order,
                         uv_contsub_order=uv_contsub_order,
+                        continuum_restart=continuum_restart,
+                        cube_line_mask=cube_line_mask,
                     )
                 )
             except Exception as exc:
@@ -981,6 +985,8 @@ def run_imaging_tasks(
                 cube_products=cube_products,
                 contsub_order=contsub_order,
                 uv_contsub_order=uv_contsub_order,
+                continuum_restart=continuum_restart,
+                cube_line_mask=cube_line_mask,
             )
 
         queued = list(range(len(tasks)))
@@ -1530,6 +1536,8 @@ def image_from_ms(
         cube_products=products,
         contsub_order=contsub_order if contsub else None,
         uv_contsub_order=contsub_order if uv_contsub else None,
+        continuum_restart=continuum_restart and single_window,
+        cube_line_mask=cube_line_mask and cube and single_window,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:

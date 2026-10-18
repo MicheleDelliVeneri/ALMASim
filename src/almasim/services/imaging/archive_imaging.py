@@ -41,6 +41,7 @@ __all__ = [
     "DEFAULT_MAX_WEIGHT",
     "IMAGE_FILENAME",
     "LINE_COLUMN",
+    "LINE_MASK_FILENAME",
     "SINGLE_WINDOW_PLACEHOLDER",
     "extract_single_window_ms",
     "extract_single_window_ms_subprocess",
@@ -53,6 +54,7 @@ __all__ = [
     "stack_channel_images",
     "fit_uv_continuum",
     "line_free_channels",
+    "continuum_restart_commands",
     "subtract_continuum",
     "subtract_uv_continuum",
     "subtract_uv_continuum_subprocess",
@@ -434,6 +436,8 @@ def run_wsclean_task(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     uv_contsub_order: int | None = None,
+    continuum_restart: bool = False,
+    cube_line_mask: bool = False,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -472,6 +476,18 @@ def run_wsclean_task(
         raise ValueError("run_wsclean_task needs a continuum or a cube command")
     if uv_contsub_order is not None and not (single_window and cube_command):
         raise ValueError("uv_contsub_order needs single_window and a cube_command")
+    if continuum_restart and command:
+        if not single_window:
+            raise ValueError("continuum_restart writes MODEL_DATA: it needs single_window")
+        commands[:1] = continuum_restart_commands(commands[0])
+    if cube_line_mask and cube_command:
+        if not single_window:
+            raise ValueError("cube_line_mask writes MODEL_DATA: it needs single_window")
+        # The second pass continues from this one's model visibilities.
+        commands[-1] = [
+            "-update-model-required" if part == "-no-update-model-required" else part
+            for part in commands[-1]
+        ]
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -554,9 +570,10 @@ def run_wsclean_task(
                         f"window), lines in channels {fit['line_ranges'] or 'none'}\n"
                     )
             if not fit.get("skipped"):
-                if command:
-                    commands[0] = _with_data_column(commands[0], CONTINUUM_COLUMN)
-                commands[-1] = _with_data_column(commands[-1], LINE_COLUMN)
+                # Every continuum pass (two with continuum_restart), then the cube.
+                commands = [_with_data_column(c, CONTINUUM_COLUMN) for c in commands[:-1]] + [
+                    _with_data_column(commands[-1], LINE_COLUMN)
+                ]
     scratch_dir: Path | None = None
     if scratch_root:
         # Per-task scratch for WSClean's reordered visibilities, created here
@@ -1222,6 +1239,143 @@ def subtract_uv_continuum_subprocess(
 def _with_data_column(cmd: list[str], column: str) -> list[str]:
     """``cmd`` reading ``column``: ``-data-column`` goes before the MS, its last argument."""
     return [*cmd[:-1], "-data-column", column, cmd[-1]]
+
+
+def line_mask_from_channels(
+    output_dir: str | os.PathLike[str],
+    mask_path: str | os.PathLike[str],
+    *,
+    prefix: str = CUBE_NAME,
+    sigma: float = 3.0,
+) -> int:
+    """Write the cube's moment-0 mask from WSClean's per-channel images; its pixel count.
+
+    The channel images ``<prefix>-NNNN-image.fits`` are summed, the sum is
+    thresholded at ``sigma`` times its robust noise (1.4826 x MAD) and the
+    result grown by one beam (the median BMAJ of the channels). 0 (and no
+    file) when the run left no channel images or nothing is above it.
+    """
+    import numpy as np
+    from astropy.io import fits
+
+    out = Path(output_dir)
+    # A mask left by an earlier run must not survive a run that builds none.
+    Path(mask_path).unlink(missing_ok=True)
+    paths = sorted(
+        path
+        for path in out.glob(f"{prefix}-[0-9][0-9][0-9][0-9]-image.fits")
+        if _CHANNEL_FILE.match(path.name)
+    )
+    if not paths:
+        return 0
+    moment = None
+    beams = []
+    for path in paths:
+        with fits.open(path) as hdus:
+            plane = np.nan_to_num(np.asarray(hdus[0].data, dtype=np.float64).squeeze())
+            beams.append(float(hdus[0].header.get("BMAJ", 0.0)))
+            header = hdus[0].header.copy()
+        moment = plane if moment is None else moment + plane
+    assert moment is not None
+    noise = 1.4826 * np.median(np.abs(moment - np.median(moment)))
+    mask = moment > sigma * noise if noise > 0 else np.zeros(moment.shape, bool)
+    if not mask.any():
+        return 0
+    cell = abs(float(header.get("CDELT2", 0.0)))
+    beam_pixels = float(np.median(beams)) / cell if cell else 0.0
+    if beam_pixels > 0:
+        radius = int(np.ceil(beam_pixels))
+        yy, xx = np.mgrid[-radius : radius + 1, -radius : radius + 1]
+        disk = (np.hypot(yy, xx) <= beam_pixels).astype(float)
+        grown = np.fft.irfft2(
+            np.fft.rfft2(mask.astype(float), s=[n + 2 * radius for n in mask.shape])
+            * np.fft.rfft2(disk, s=[n + 2 * radius for n in mask.shape]),
+            s=[n + 2 * radius for n in mask.shape],
+        )
+        mask = grown[radius : radius + mask.shape[0], radius : radius + mask.shape[1]] > 0.5
+    fits.PrimaryHDU(mask.astype(np.float32)[None, None], header=header).writeto(
+        mask_path, overwrite=True
+    )
+    return int(mask.sum())
+
+
+def _line_mask_pass(cube_cmd: Sequence[str], out: Path, log) -> list[str] | None:
+    """The cube's second pass: ``-continue`` inside the moment-0 mask of the first.
+
+    Each channel's ``-auto-mask`` is built from that channel alone, so the
+    faint parts of a line, below 3 sigma in every channel but clear in their
+    sum, are never cleaned. uid___A002_X10ded83_X6af4 SPW 16 (1121 channels
+    of its line): 34 % of the line within its moment-0 mask left in the
+    residual; continuing inside that mask down to the same 1 sigma left 12 %,
+    with 23 % more model flux and the per-channel noise down from 135 to 107
+    mJy; going below 1 sigma there diverged (2026-10-18).
+    """
+    mask_path = out / LINE_MASK_FILENAME
+    pixels = line_mask_from_channels(out, mask_path)
+    if pixels:
+        blanked = _zero_non_finite_models(out)
+        if blanked:
+            log.write(f"# cube line mask: {blanked} channel model(s) were NaN (no data); zeroed\n")
+    if not pixels:
+        log.write("# cube line mask: nothing above 3 sigma in the moment-0 map; one pass\n")
+        log.flush()
+        return None
+    log.write(f"# cube line mask: {pixels} pixels; second pass inside it\n")
+    log.flush()
+    second: list[str] = []
+    parts = list(cube_cmd)
+    index = 0
+    while index < len(parts):
+        if parts[index] == "-auto-mask":
+            index += 2  # the fixed mask replaces the per-channel one
+            continue
+        second.append(parts[index])
+        index += 1
+    return [*second[:-1], "-fits-mask", str(mask_path), "-continue", second[-1]]
+
+
+def _zero_non_finite_models(out: Path, prefix: str = CUBE_NAME) -> int:
+    """Set the non-finite pixels of the per-channel model images to 0; how many files changed.
+
+    WSClean writes a NaN model for a channel with no unflagged data, and
+    ``-continue`` refuses to predict from it ("The input image contains
+    non-finite values"): uid___A002_X11aaa01_X32ce SPW 16 has 128 such
+    channels (2026-10-18).
+    """
+    import numpy as np
+    from astropy.io import fits
+
+    changed = 0
+    for path in sorted(out.glob(f"{prefix}-[0-9][0-9][0-9][0-9]-model.fits")):
+        with fits.open(path, mode="update") as hdus:
+            data = hdus[0].data
+            bad = ~np.isfinite(data)
+            if bad.any():
+                data[bad] = 0.0
+                changed += 1
+    return changed
+
+
+def continuum_restart_commands(cmd: Sequence[str]) -> list[list[str]]:
+    """The continuum ``cmd`` as two passes: one writing MODEL_DATA, then ``-continue``.
+
+    WSClean's auto-mask is built in the first major cycle, at ``-auto-mask``
+    times the noise it measures then; a bright source's sidelobes inflate that
+    noise, so the mask misses its fainter parts and later cycles, which clean
+    only inside it, never reach them. uid___A002_X10ded83_X6af4 SPW 16: noise
+    91 mJy at mask creation against 26 mJy at the end, a 167 mJy feature 0.7
+    beam off the peak left uncleaned, 16 % of the flux within a beam in the
+    residual. The second pass starts from the true residual, measures the
+    noise again and builds a new mask: residual 3 %, model flux +20 %
+    (2026-10-18). The model visibilities go into the task's own copy of the MS.
+    """
+    first = [
+        "-update-model-required" if part == "-no-update-model-required" else str(part)
+        for part in cmd
+    ]
+    if "-update-model-required" not in first:
+        first.insert(len(first) - 1, "-update-model-required")
+    return [first, [*first[:-1], "-continue", first[-1]]]
 
 
 def _remove_reorder_files(out: Path) -> None:

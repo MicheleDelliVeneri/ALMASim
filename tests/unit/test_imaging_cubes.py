@@ -506,7 +506,7 @@ def test_channel_ranges_lists_runs_casa_style():
     assert ai._channel_ranges(np.zeros(4, bool)) == ""
 
 
-def _uv_task(tmp_path, monkeypatch, fit):
+def _uv_task(tmp_path, monkeypatch, fit, **kwargs):
     fake = _FakeCubeWsclean()
     monkeypatch.setattr(ai.subprocess, "Popen", fake)
     monkeypatch.setattr(
@@ -526,6 +526,7 @@ def _uv_task(tmp_path, monkeypatch, fit):
         threads=2,
         single_window=True,
         uv_contsub_order=1,
+        **kwargs,
     )
     return fake, calls, ai.imaging_log_path(task.output_dir).read_text()
 
