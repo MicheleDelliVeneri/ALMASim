@@ -967,6 +967,10 @@ def _line_mask_pass(cube_cmd: Sequence[str], out: Path, log) -> list[str] | None
     """
     mask_path = out / LINE_MASK_FILENAME
     pixels = line_mask_from_channels(out, mask_path)
+    if pixels:
+        blanked = _zero_non_finite_models(out)
+        if blanked:
+            log.write(f"# cube line mask: {blanked} channel model(s) were NaN (no data); zeroed\n")
     if not pixels:
         log.write("# cube line mask: nothing above 3 sigma in the moment-0 map; one pass\n")
         log.flush()
@@ -983,6 +987,28 @@ def _line_mask_pass(cube_cmd: Sequence[str], out: Path, log) -> list[str] | None
         second.append(parts[index])
         index += 1
     return [*second[:-1], "-fits-mask", str(mask_path), "-continue", second[-1]]
+
+
+def _zero_non_finite_models(out: Path, prefix: str = CUBE_NAME) -> int:
+    """Set the non-finite pixels of the per-channel model images to 0; how many files changed.
+
+    WSClean writes a NaN model for a channel with no unflagged data, and
+    ``-continue`` refuses to predict from it ("The input image contains
+    non-finite values"): uid___A002_X11aaa01_X32ce SPW 16 has 128 such
+    channels (2026-10-18).
+    """
+    import numpy as np
+    from astropy.io import fits
+
+    changed = 0
+    for path in sorted(out.glob(f"{prefix}-[0-9][0-9][0-9][0-9]-model.fits")):
+        with fits.open(path, mode="update") as hdus:
+            data = hdus[0].data
+            bad = ~np.isfinite(data)
+            if bad.any():
+                data[bad] = 0.0
+                changed += 1
+    return changed
 
 
 def continuum_restart_commands(cmd: Sequence[str]) -> list[list[str]]:

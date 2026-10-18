@@ -634,3 +634,19 @@ def test_line_mask_from_channels_without_a_pixel_scale_is_not_grown(tmp_path):
     pixels = ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits")
     mask = fits.getdata(tmp_path / "mask.fits").squeeze().astype(bool)
     assert mask[16, 16] and pixels <= 5, "the source pixel, plus at most a stray noise peak"
+
+
+@pytest.mark.unit
+def test_line_mask_pass_zeroes_the_nan_models_of_empty_channels(tmp_path, monkeypatch):
+    for c, value in enumerate([1.0, np.nan]):
+        plane = np.full((4, 4), value)
+        _write_channel(tmp_path / f"wsclean-cube-{c:04d}-model.fits", plane, 230e9)
+    monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 10)
+
+    with (tmp_path / "log").open("w") as log:
+        assert ai._line_mask_pass(["wsclean", "-name", "c", "x.ms"], tmp_path, log)
+
+    assert np.all(fits.getdata(tmp_path / "wsclean-cube-0001-model.fits") == 0)
+    assert np.all(fits.getdata(tmp_path / "wsclean-cube-0000-model.fits") == 1)
+    assert "1 channel model(s) were NaN" in (tmp_path / "log").read_text()
+    assert ai._zero_non_finite_models(tmp_path) == 0, "nothing left to fix"
