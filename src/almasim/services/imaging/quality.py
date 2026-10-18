@@ -53,6 +53,7 @@ import csv
 import json
 import math
 import re
+import shlex
 import warnings
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -74,7 +75,8 @@ RINGS_BEAMS = ((0, 0.5), (0.5, 1), (1, 1.5), (1.5, 2), (2, 3), (3, 5))
 _SIGMA = re.compile(r"Estimated standard deviation of background noise: ([-+.\w]+) (\w*Jy)")
 _UNIT = {"Jy": 1.0, "mJy": 1e-3, "µJy": 1e-6, "uJy": 1e-6, "nJy": 1e-9}
 _LINE_RANGES = re.compile(
-    r"(?:(\d+) of (\d+) channels line-free, )?lines in channels ([\d~;]+|none)"
+    r"(?:(\d+) of (\d+) channels line-free(?: \((\d+) in the window\))?, )?"
+    r"lines in channels ([\d~;]+|none)"
 )
 
 
@@ -123,7 +125,13 @@ def noise_history(log_path: Path, name: str) -> list[float]:
         if line.startswith("# ") and " -name " in line:
             if sigmas:
                 break
-            target = line.split(" -name ", 1)[1].split()[0]
+            # The task logs each command with shlex.join: quoted paths
+            # (spaces and the like) only split right with shlex.
+            try:
+                words = shlex.split(line[2:])
+            except ValueError:
+                words = line[2:].split()
+            target = words[words.index("-name") + 1] if "-name" in words[:-1] else ""
             current = Path(target).name == name
             continue
         match = _SIGMA.search(line)
@@ -192,16 +200,24 @@ def _logged_line_channels(task_dir: Path, n_channels: int) -> np.ndarray | None:
     matches = _LINE_RANGES.findall(log.read_text(errors="replace"))
     if not matches:
         return None
-    _, usable, ranges = matches[-1]
+    _, usable, window, ranges = matches[-1]
     line = np.zeros(n_channels, dtype=bool)
     if ranges == "none":
         return line
     native = [tuple(map(int, part.split("~"))) for part in ranges.split(";")]
     # Cube channels average a whole number of native ones (cube_channels picks
-    # divisors): the smallest factor covering the usable native channels and
-    # the highest line channel logged.
-    covered = max(int(usable or 0), max(end for _, end in native) + 1)
-    factor = max(math.ceil(covered / n_channels), 1)
+    # divisors). The window's channel count gives that factor exactly; an
+    # older log gives only the usable count, which flagged channels make
+    # smaller, so it is trusted only when the cube has at least that many
+    # channels (no averaging); otherwise the lines are found on the spectrum.
+    if window:
+        if int(window) % n_channels:
+            return None
+        factor = int(window) // n_channels
+    elif n_channels >= max(int(usable or 0), max(end for _, end in native) + 1):
+        factor = 1
+    else:
+        return None
     for start, end in native:
         line[start // factor : end // factor + 1] = True
     return line

@@ -1662,6 +1662,9 @@ def clean_quality(
             results.append(assess_task(task, write_moments=moments))
         except Exception as exc:  # one broken task must not hide the others
             typer.echo(f"  {task}: {type(exc).__name__}: {exc}", err=True)
+    if not results:
+        typer.echo(f"None of the {len(tasks)} task(s) under {root} could be assessed", err=True)
+        raise typer.Exit(code=1)
     rows = summary_rows(results, root)
     summary_path = summary or root / SUMMARY_FILENAME
     write_summary(rows, summary_path)

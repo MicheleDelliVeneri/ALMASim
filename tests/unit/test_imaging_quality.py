@@ -164,25 +164,51 @@ def test_logged_line_channels_follow_averaged_cubes(tmp_path):
     task = tmp_path / "SPW-1"
     task.mkdir()
     log = tmp_path / "SPW-1.log"
-    log.write_text(
-        "# continuum subtracted ...: 60 of 80 channels line-free, lines in channels 2~19\n"
-    )
-    line = q._logged_line_channels(task, 40)  # 80 native channels averaged 2 by 2
-    assert np.flatnonzero(line).tolist() == list(range(1, 10)), "lines low in the band"
-    log.write_text(
-        "# continuum subtracted ...: 1700 of 1920 channels line-free, lines in channels 100~199\n"
-    )
-    line = q._logged_line_channels(task, 2048)  # native channels, 128 of them flagged
-    assert np.flatnonzero(line).tolist() == list(range(100, 200))
-    log.write_text("lines in channels 20~39;60~61\n")  # an older log without the counts
-    assert np.flatnonzero(q._logged_line_channels(task, 40)).tolist() == list(range(10, 20)) + [30]
 
-    log.write_text("lines in channels none\n")
-    assert not q._logged_line_channels(task, 40).any()
-    log.write_text("nothing about lines\n")
-    assert q._logged_line_channels(task, 40) is None
+    def logged(text, n):
+        log.write_text(text + "\n")
+        line = q._logged_line_channels(task, n)
+        return None if line is None else np.flatnonzero(line).tolist()
+
+    head = "# continuum subtracted from DATA (order 1, 1 s): "
+    # 2048 channels, 128 flagged, averaged 32 to 1: the window count, not the usable one.
+    text = head + "1800 of 1920 channels line-free (2048 in the window), lines in channels 900~999"
+    assert logged(text, 64) == [28, 29, 30, 31]
+    assert logged(text, 2048) == list(range(900, 1000))
+    assert logged(text, 100) is None, "not a whole number of native channels per cube channel"
+    # Older logs without the window count: trusted only without averaging.
+    assert logged(head + "60 of 80 channels line-free, lines in channels 2~19", 40) is None
+    assert logged(
+        head + "1700 of 1920 channels line-free, lines in channels 100~199", 2048
+    ) == list(range(100, 200))
+    assert logged("lines in channels 20~39;60~61", 80) == list(range(20, 40)) + [60, 61]
+    assert (
+        logged(head + "8 of 8 channels line-free (8 in the window), lines in channels none", 8)
+        == []
+    )
+    assert logged("nothing about lines", 40) is None
     log.unlink()
     assert q._logged_line_channels(task, 40) is None
+
+
+@pytest.mark.unit
+def test_cube_quality_falls_back_to_the_spectrum_when_the_mapping_is_unknown(tmp_path):
+    task = _task(tmp_path, log_lines=False)
+    log = task.parent / "SPW-1.log"
+    log.write_text(log.read_text() + "# ...: 60 of 80 channels line-free, lines in channels 2~19\n")
+    assert q.cube_quality(task, write_moments=False)["line_channels_from"] == "source spectrum"
+
+
+@pytest.mark.unit
+def test_noise_history_reads_quoted_paths(tmp_path):
+    log = tmp_path / "x.log"
+    log.write_text(
+        "# /bin/wsclean -name '/data/my run/wsclean' -j 1 x.ms\n"
+        "Estimated standard deviation of background noise: 50 mJy\n"
+        "Estimated standard deviation of background noise: 10 mJy\n"
+        "# /bin/wsclean -name 'unbalanced\n"
+    )
+    assert q.noise_history(log, "wsclean") == pytest.approx([0.05, 0.01])
 
 
 @pytest.mark.unit
@@ -264,3 +290,18 @@ def test_clean_quality_command(tmp_path):
 def test_clean_quality_without_tasks(tmp_path):
     result = runner.invoke(cli.app, ["image", "clean-quality", str(tmp_path)])
     assert result.exit_code == 1 and "No imaged tasks" in result.output
+
+
+@pytest.mark.unit
+def test_clean_quality_when_every_task_fails(tmp_path):
+    broken = tmp_path / "uid___A002_X2.ms.split" / "SPW-3"
+    broken.mkdir(parents=True)
+    for name in ("image", "residual", "model"):
+        (broken / f"wsclean-{name}.fits").write_text("not a FITS file")
+    (tmp_path / q.SUMMARY_FILENAME).write_text("an earlier summary\n")
+
+    result = runner.invoke(cli.app, ["image", "clean-quality", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "None of the 1 task(s)" in result.output
+    assert (tmp_path / q.SUMMARY_FILENAME).read_text() == "an earlier summary\n", "left alone"
