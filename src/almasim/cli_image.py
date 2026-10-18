@@ -882,6 +882,7 @@ def run_imaging_tasks(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     continuum_restart: bool = False,
+    cube_line_mask: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -920,6 +921,7 @@ def run_imaging_tasks(
                         cube_products=cube_products,
                         contsub_order=contsub_order,
                         continuum_restart=continuum_restart,
+                        cube_line_mask=cube_line_mask,
                     )
                 )
             except Exception as exc:
@@ -981,6 +983,7 @@ def run_imaging_tasks(
                 cube_products=cube_products,
                 contsub_order=contsub_order,
                 continuum_restart=continuum_restart,
+                cube_line_mask=cube_line_mask,
             )
 
         queued = list(range(len(tasks)))
@@ -1385,6 +1388,16 @@ def image_from_ms(
             "lines are cleaned worse. Off by default. Needs --cube."
         ),
     ),
+    cube_line_mask: bool = typer.Option(
+        True,
+        "--cube-line-mask/--no-cube-line-mask",
+        help=(
+            "Clean the cube a second time (-continue) inside the moment-0 mask of the first "
+            "pass: a line's faint parts, below each channel's own auto-mask but clear in the "
+            "sum, are cleaned too (default; with --cube and --single-window-ms; ~2x the cube "
+            "time)."
+        ),
+    ),
     cube_reorder: bool = typer.Option(
         True,
         "--cube-reorder/--cube-no-reorder",
@@ -1500,6 +1513,7 @@ def image_from_ms(
         cube_products=products,
         contsub_order=contsub_order if contsub else None,
         continuum_restart=continuum_restart and single_window,
+        cube_line_mask=cube_line_mask and cube and single_window,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -1578,6 +1592,7 @@ def image_set(
         max_cube_gb=4.0,
         cube_products=",".join(CUBE_PRODUCTS),
         join_channels=False,
+        cube_line_mask=True,
         cube_reorder=True,
         plan_only=False,
         postprocess_backend=postprocess_backend,
