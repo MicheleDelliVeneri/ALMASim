@@ -202,21 +202,23 @@ class SlurmDaskClusterSingleton:
 
     @staticmethod
     def _resolve_safe_log_directory(raw_log_directory: Any) -> str:
-        """Resolve and validate that worker logs stay under the user's home directory."""
+        """Resolve and validate that worker logs stay in a directory under the user's home.
+
+        The path is resolved (``realpath``: ``..`` segments and symlinks) before it
+        is compared with the home directory plus a separator, so neither
+        ``~/../etc`` nor a sibling such as ``/home/user2`` for ``/home/user``
+        passes; CodeQL recognises this normalise-then-prefix check as a
+        path-injection guard (py/path-injection).
+        """
         if not isinstance(raw_log_directory, str):
             raise ValueError("log_directory must be a string")
         if not raw_log_directory.strip():
             raise ValueError("log_directory must not be empty")
 
         safe_log_root = os.path.realpath(os.path.expanduser("~"))
+        prefix = safe_log_root if safe_log_root.endswith(os.sep) else safe_log_root + os.sep
         log_directory = os.path.realpath(os.path.abspath(os.path.expanduser(raw_log_directory)))
-
-        try:
-            within_safe_root = os.path.commonpath([safe_log_root, log_directory]) == safe_log_root
-        except ValueError as exc:
-            raise ValueError("log_directory is invalid") from exc
-
-        if not within_safe_root:
+        if not log_directory.startswith(prefix):
             raise ValueError("log_directory must be within the user's home directory")
         return log_directory
 
