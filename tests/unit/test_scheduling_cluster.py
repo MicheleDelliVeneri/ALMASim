@@ -513,3 +513,42 @@ def test_run_subcommand_end_to_end_with_local_dask_client():
     assert isinstance(result, cluster_mod.SubcommandResult)
     assert "demo-ok" in result.stdout
     assert result.returncode == 0
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "raw",
+    ["~", "~/../{sibling}", "{sibling}/logs", "~/logs/../../{sibling_name}/logs", "/etc"],
+)
+def test_resolve_safe_log_directory_rejects_paths_outside_home(monkeypatch, tmp_path, raw):
+    home = tmp_path / "user"
+    sibling = tmp_path / "user2"  # shares the home's name as a prefix
+    home.mkdir()
+    sibling.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    raw = raw.format(sibling=sibling, sibling_name=sibling.name)
+    with pytest.raises(ValueError, match="within the user's home directory"):
+        cluster_mod.SlurmDaskClusterSingleton._resolve_safe_log_directory(raw)
+
+
+@pytest.mark.unit
+def test_resolve_safe_log_directory_follows_symlinks_out_of_home(monkeypatch, tmp_path):
+    home = tmp_path / "user"
+    outside = tmp_path / "outside"
+    home.mkdir()
+    outside.mkdir()
+    (home / "logs").symlink_to(outside)
+    monkeypatch.setenv("HOME", str(home))
+    with pytest.raises(ValueError, match="within the user's home directory"):
+        cluster_mod.SlurmDaskClusterSingleton._resolve_safe_log_directory("~/logs")
+    resolved = cluster_mod.SlurmDaskClusterSingleton._resolve_safe_log_directory("~/a/../b")
+    assert resolved == str((home / "b").resolve())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("raw", "message"), [(None, "must be a string"), ("  ", "must not be empty")]
+)
+def test_resolve_safe_log_directory_rejects_bad_values(raw, message):
+    with pytest.raises(ValueError, match=message):
+        cluster_mod.SlurmDaskClusterSingleton._resolve_safe_log_directory(raw)
