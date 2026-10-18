@@ -531,8 +531,9 @@ def test_line_mask_from_channels_without_channels_or_signal(tmp_path):
     assert ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
     for c in range(3):
         _write_channel(tmp_path / f"wsclean-cube-{c:04d}-image.fits", np.zeros((8, 8)), 230e9)
+    (tmp_path / "mask.fits").write_text("stale mask from an earlier run")
     assert ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
-    assert not (tmp_path / "mask.fits").exists()
+    assert not (tmp_path / "mask.fits").exists(), "no mask built, none left behind"
 
 
 @pytest.mark.unit

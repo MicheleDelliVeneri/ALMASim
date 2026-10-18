@@ -916,6 +916,8 @@ def line_mask_from_channels(
     from astropy.io import fits
 
     out = Path(output_dir)
+    # A mask left by an earlier run must not survive a run that builds none.
+    Path(mask_path).unlink(missing_ok=True)
     paths = sorted(
         path
         for path in out.glob(f"{prefix}-[0-9][0-9][0-9][0-9]-image.fits")
