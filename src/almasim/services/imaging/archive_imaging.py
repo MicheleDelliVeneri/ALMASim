@@ -62,8 +62,10 @@ __all__ = [
     "casa_selfcal_apply",
     "casa_selfcal_solve",
     "drop_corrected_data",
+    "adopt_corrected_data",
     "parse_selfcal_rounds",
     "selfcal_prepare",
+    "rows_for_chunk",
     "write_imaging_failure_marker",
     "write_imaging_marker",
     "wsclean_environment",
@@ -464,6 +466,8 @@ def run_wsclean_task(
     selfcal_solints: Sequence[str] | None = None,
     selfcal_min_snr: float = 20.0,
     casa_data: str | None = None,
+    continuum_restart: bool = False,
+    cube_line_mask: bool = False,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -509,6 +513,18 @@ def run_wsclean_task(
         raise ValueError("uv_contsub_order needs single_window and a cube_command")
     if selfcal_solints and not (single_window and command and casa_data):
         raise ValueError("selfcal_solints needs single_window, a continuum command and casa_data")
+    if continuum_restart and command:
+        if not single_window:
+            raise ValueError("continuum_restart writes MODEL_DATA: it needs single_window")
+        commands[:1] = continuum_restart_commands(commands[0])
+    if cube_line_mask and cube_command:
+        if not single_window:
+            raise ValueError("cube_line_mask writes MODEL_DATA: it needs single_window")
+        # The second pass continues from this one's model visibilities.
+        commands[-1] = [
+            "-update-model-required" if part == "-no-update-model-required" else part
+            for part in commands[-1]
+        ]
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -609,6 +625,7 @@ def run_wsclean_task(
                         fail=_fail,
                         casa_data=str(casa_data),
                         timeout=timeout,
+                        restart=continuum_restart,
                     )
                 if uv_contsub_order is not None:
                     commands = _subtract_uv_continuum_step(
@@ -1087,6 +1104,18 @@ def _channel_ranges(mask: np.ndarray) -> str:
     return ";".join(f"{a}~{b - 1}" for a, b in zip(edges[::2], edges[1::2]))
 
 
+# Samples (rows x channels x correlations) per chunk read from an MS: with
+# complex64 data, float64 weights, flags and the fit's temporaries about
+# 1 GB. A fixed 20000 rows was over 5 GB for a 3840-channel window.
+_CHUNK_SAMPLES = 20_000_000
+
+
+def rows_for_chunk(n_channels: int, n_correlations: int, samples: int | None = None) -> int:
+    """Rows per chunk keeping it near ``samples`` (default ``_CHUNK_SAMPLES``) samples, >= 1."""
+    budget = _CHUNK_SAMPLES if samples is None else samples
+    return max(int(budget // max(int(n_channels) * int(n_correlations), 1)), 1)
+
+
 def _has_spectrum_weight(ms) -> bool:
     return (
         "WEIGHT_SPECTRUM" in ms.colnames()
@@ -1098,11 +1127,17 @@ def _has_spectrum_weight(ms) -> bool:
 def _read_rows(
     ms, column: str, start: int, n: int, spectrum_weight: bool
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """``column``, its weights (per channel) and FLAG for ``n`` rows from ``start``."""
+    """``column``, its weights (per channel) and flags for ``n`` rows from ``start``.
+
+    The flags combine FLAG with FLAG_ROW: a row flagged as a whole counts as
+    flagged in every sample.
+    """
     import numpy as np
 
     data = ms.getcol(column, startrow=start, nrow=n)
     flag = ms.getcol("FLAG", startrow=start, nrow=n)
+    if "FLAG_ROW" in ms.colnames():
+        flag = flag | ms.getcol("FLAG_ROW", startrow=start, nrow=n)[:, None, None]
     if spectrum_weight:
         weight = ms.getcol("WEIGHT_SPECTRUM", startrow=start, nrow=n)
     else:
@@ -1110,6 +1145,12 @@ def _read_rows(
             ms.getcol("WEIGHT", startrow=start, nrow=n)[:, None, :], data.shape
         )
     return data, np.asarray(weight, dtype=np.float64), flag
+
+
+def _default_rows_per_chunk(ms, column: str) -> int:
+    """``rows_for_chunk`` for the shape of ``column``'s cells (one row for an empty MS)."""
+    shape = ms.getcell(column, 0).shape if ms.nrows() else (1, 1)
+    return rows_for_chunk(shape[0], shape[-1])
 
 
 def _parallel_hands(n_corr: int) -> list[int]:
@@ -1183,6 +1224,8 @@ def subtract_uv_continuum(
         source = "CORRECTED_DATA" if "CORRECTED_DATA" in ms.colnames() else "DATA"
         n_rows = ms.nrows()
         spectrum_weight = _has_spectrum_weight(ms)
+        if rows_per_chunk is None:
+            rows_per_chunk = _default_rows_per_chunk(ms, source)
         measured = _source_spectrum(ms, source, rows_per_chunk)
         if measured is None:
             return {"skipped": "the MS has no rows", "source_column": source}
@@ -1330,15 +1373,19 @@ def _call_in_child(
         raise RuntimeError(f"{what} wrote no result") from exc
 
 
-def selfcal_prepare(ms_path: str, rows_per_chunk: int = 20000) -> dict[str, object]:
+def selfcal_prepare(ms_path: str, rows_per_chunk: int | None = None) -> dict[str, object]:
     """CASA selections for self-calibrating ``ms_path``: the line-free channels of
-    DATA's source spectrum (``spw``) and the antenna with the most unflagged
-    cross-correlation rows (``refant``)."""
+    DATA's source spectrum (``spw``) and the antenna with the most
+    cross-correlation rows holding an unflagged line-free parallel-hand sample
+    (``refant``); a row unflagged as a whole can still have every such sample
+    flagged."""
     import numpy as np
     from casacore.tables import table
 
     ms = table(str(ms_path), ack=False)
     try:
+        if rows_per_chunk is None:
+            rows_per_chunk = _default_rows_per_chunk(ms, "DATA")
         measured = _source_spectrum(ms, "DATA", rows_per_chunk)
         if measured is None:
             raise RuntimeError("the MS has no rows")
@@ -1347,7 +1394,14 @@ def selfcal_prepare(ms_path: str, rows_per_chunk: int = 20000) -> dict[str, obje
         if not line_free.any():
             line_free = usable
         ant1, ant2 = ms.getcol("ANTENNA1"), ms.getcol("ANTENNA2")
-        good = ~ms.getcol("FLAG_ROW") & (ant1 != ant2)
+        has_data = np.zeros(ms.nrows(), dtype=bool)
+        spectrum_weight = _has_spectrum_weight(ms)
+        for start in range(0, ms.nrows(), rows_per_chunk):
+            n = min(rows_per_chunk, ms.nrows() - start)
+            _, _, flag = _read_rows(ms, "DATA", start, n, spectrum_weight)
+            corrs = _parallel_hands(flag.shape[2])
+            has_data[start : start + n] = (~flag[:, line_free][..., corrs]).any(axis=(1, 2))
+        good = has_data & (ant1 != ant2)
     finally:
         ms.close()
     names = table(f"{ms_path}/ANTENNA", ack=False).getcol("NAME")
@@ -1359,6 +1413,33 @@ def selfcal_prepare(ms_path: str, rows_per_chunk: int = 20000) -> dict[str, obje
         "refant": str(names[int(np.argmax(counts))]),
         "line_free_channels": int(line_free.sum()),
     }
+
+
+def adopt_corrected_data(ms_path: str, rows_per_chunk: int | None = None) -> dict[str, object]:
+    """Make an incoming CORRECTED_DATA the task copy's DATA, and drop it.
+
+    Self-calibration solves from DATA, writes CORRECTED_DATA and, when a
+    round is rejected, drops it: an MS that arrived with its calibration in
+    CORRECTED_DATA would then be solved from, and fall back to, the
+    uncalibrated DATA. The single-window MS is the task's own copy.
+    """
+    from casacore.tables import table
+
+    ms = table(str(ms_path), readonly=False, ack=False)
+    try:
+        if "CORRECTED_DATA" not in ms.colnames():
+            return {"adopted": False}
+        if rows_per_chunk is None:
+            rows_per_chunk = _default_rows_per_chunk(ms, "CORRECTED_DATA")
+        for start in range(0, ms.nrows(), rows_per_chunk):
+            n = min(rows_per_chunk, ms.nrows() - start)
+            ms.putcol(
+                "DATA", ms.getcol("CORRECTED_DATA", startrow=start, nrow=n), startrow=start, nrow=n
+            )
+        ms.removecols("CORRECTED_DATA")
+        return {"adopted": True}
+    finally:
+        ms.close()
 
 
 def _configure_casa(casa_data: str, log_file: str) -> Path:
@@ -1516,6 +1597,7 @@ def self_calibrate(
     fail: Callable[..., RuntimeError],
     casa_data: str,
     timeout: float | None = None,
+    restart: bool = False,
 ) -> dict[str, object]:
     """Self-calibrate ``ms_path`` against its own continuum, round by round.
 
@@ -1533,6 +1615,10 @@ def self_calibrate(
     ``casa_data`` as its runtime data, logs to ``casa-selfcal.log`` in
     ``out``.
 
+    With ``restart`` every image is cleaned in two passes, as the continuum
+    is (``continuum_restart_commands``), so the model the gains are solved
+    against is complete.
+
     ALMASim's own StefCal-style solver gave the same S/N within ~1 % on four
     cycle11 cubes and was dropped for CASA (2026-10-17).
     """
@@ -1543,7 +1629,10 @@ def self_calibrate(
 
     def image(index: int) -> tuple[float, float]:
         name = f"selfcal-{index}"
-        run(_selfcal_command(continuum_command, out, name))
+        command = _selfcal_command(continuum_command, out, name)
+        run(command)
+        if restart:
+            run([*command[:-1], "-continue", command[-1]])
         image_path = out / f"{name}-image.fits"
         return image_snr(image_path, out / f"{name}-residual.fits"), image_peak(image_path)
 
@@ -1587,6 +1676,8 @@ def self_calibrate(
             )
 
     try:
+        if call("adopt_corrected_data", ms_path=str(ms_path)).get("adopted"):
+            log.write("# self-calibration: incoming CORRECTED_DATA adopted as DATA\n")
         best_snr, best_peak = image(0)
         log.write(
             f"# self-calibration: initial continuum S/N {best_snr:.1f}, "
@@ -1675,15 +1766,16 @@ def _subtract_uv_continuum_step(
     log.write(
         f"# continuum subtracted from {fit['source_column']} (order "
         f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
-        f"{fit['usable_channels']} channels line-free, lines in channels "
+        f"{fit['usable_channels']} channels line-free ({fit['channels']} in the window), "
+        "lines in channels "
         f"{fit['line_ranges'] or 'none'}\n"
     )
     log.flush()
-    commands = list(commands)
-    if has_continuum:
-        commands[0] = _with_data_column(commands[0], CONTINUUM_COLUMN)
-    commands[-1] = _with_data_column(commands[-1], LINE_COLUMN)
-    return commands
+    # Every continuum pass (two with continuum_restart), then the cube.
+    continuum = (
+        [_with_data_column(c, CONTINUUM_COLUMN) for c in commands[:-1]] if has_continuum else []
+    )
+    return [*continuum, _with_data_column(commands[-1], LINE_COLUMN)]
 
 
 def _with_data_column(cmd: list[str], column: str) -> list[str]:

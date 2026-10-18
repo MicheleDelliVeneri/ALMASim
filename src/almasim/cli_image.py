@@ -885,6 +885,8 @@ def run_imaging_tasks(
     selfcal_solints: Sequence[str] | None = None,
     selfcal_min_snr: float = 20.0,
     casa_data: str | None = None,
+    continuum_restart: bool = False,
+    cube_line_mask: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -926,6 +928,8 @@ def run_imaging_tasks(
                         selfcal_solints=selfcal_solints,
                         selfcal_min_snr=selfcal_min_snr,
                         casa_data=casa_data,
+                        continuum_restart=continuum_restart,
+                        cube_line_mask=cube_line_mask,
                     )
                 )
             except Exception as exc:
@@ -990,6 +994,8 @@ def run_imaging_tasks(
                 selfcal_solints=selfcal_solints,
                 selfcal_min_snr=selfcal_min_snr,
                 casa_data=casa_data,
+                continuum_restart=continuum_restart,
+                cube_line_mask=cube_line_mask,
             )
 
         queued = list(range(len(tasks)))
@@ -1603,6 +1609,8 @@ def image_from_ms(
         selfcal_solints=solints or None,
         selfcal_min_snr=selfcal_min_snr,
         casa_data=casa_data,
+        continuum_restart=continuum_restart and single_window,
+        cube_line_mask=cube_line_mask and cube and single_window,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
