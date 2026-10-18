@@ -562,9 +562,11 @@ def run_wsclean_task(
     # The noise products of what this task regenerates: a rerun whose
     # self-calibration is skipped or rejected must not leave the previous
     # run's beside the new images. Self-calibration runs with the continuum.
-    stale = [SELFCAL_CORRECTION_FILENAME, TOTAL_RESIDUAL_FILENAME] * bool(command)
-    stale += [CUBE_SELFCAL_CORRECTION_FILENAME, CUBE_TOTAL_RESIDUAL_FILENAME] * bool(cube_command)
-    for name in stale:
+    stale_products = [SELFCAL_CORRECTION_FILENAME, TOTAL_RESIDUAL_FILENAME] * bool(command)
+    stale_products += [CUBE_SELFCAL_CORRECTION_FILENAME, CUBE_TOTAL_RESIDUAL_FILENAME] * bool(
+        cube_command
+    )
+    for name in stale_products:
         (out / name).unlink(missing_ok=True)
     if command:
         shutil.rmtree(out / SELFCAL_GAINS_DIRNAME, ignore_errors=True)
