@@ -622,6 +622,9 @@ def _run_selfcal(tmp_path, monkeypatch, snrs, solints=("inf", "30s"), min_snr=20
 
     def fake_call(function, kwargs, *, casa=False, **_):
         assert casa == function.startswith("casa_"), "only CASA steps get the CASA environment"
+        if function == "export_gain_table":
+            Path(kwargs["csv_path"]).write_text("time_mjd_s,antenna\n")
+            return {"rows": 1}
         if function == "casa_selfcal_solve":
             pre = tuple(Path(t).name for t in kwargs["pre_apply"])
             calls.append(("solve", Path(kwargs["caltable"]).name, kwargs["calmode"], pre))
@@ -1092,3 +1095,35 @@ def test_line_free_channels_on_a_short_spectrum():
         np.array([1.0, 1.01, 1.02, 2.0]), np.ones(4, bool), order=0, grow=2
     )
     assert line_free.shape == (4,)
+
+
+@pytest.mark.unit
+def test_self_calibrate_keeps_the_applied_gain_tables(tmp_path, monkeypatch):
+    result, _, _, log = _run_selfcal(
+        tmp_path, monkeypatch, [30.0, 45.0, 50.0], solints=("inf", "ap:inf")
+    )
+    gains = tmp_path / ai.SELFCAL_GAINS_DIRNAME
+    assert result["gains"] == ["phase.cal", "phase.csv", "amplitude.cal", "amplitude.csv"]
+    assert (gains / "phase.cal").is_dir() and (gains / "amplitude.csv").is_file()
+    assert "gains kept in selfcal_gains/" in log
+    assert not list(tmp_path.glob("selfcal-*")), "the working tables are still removed"
+
+    (tmp_path / "rejected").mkdir()
+    result, _, _, _ = _run_selfcal(
+        tmp_path / "rejected", monkeypatch, [30.0, 25.0], solints=("inf",)
+    )
+    assert result["gains"] == [] and not (tmp_path / "rejected" / ai.SELFCAL_GAINS_DIRNAME).exists()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("flags", "expected"), [([], True), (["--no-noise-products"], False)])
+def test_image_from_ms_noise_products_default(tmp_path, monkeypatch, flags, expected):
+    csv = tmp_path / "params.csv"
+    pd.DataFrame([_row()]).to_csv(csv, index=False)
+    seen = {}
+    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    result = runner.invoke(
+        cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
+    )
+    assert result.exit_code == 0, result.output
+    assert seen["noise_products"] is expected

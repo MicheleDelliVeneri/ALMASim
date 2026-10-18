@@ -887,6 +887,7 @@ def run_imaging_tasks(
     casa_data: str | None = None,
     continuum_restart: bool = False,
     cube_line_mask: bool = False,
+    noise_products: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -930,6 +931,7 @@ def run_imaging_tasks(
                         casa_data=casa_data,
                         continuum_restart=continuum_restart,
                         cube_line_mask=cube_line_mask,
+                        noise_products=noise_products,
                     )
                 )
             except Exception as exc:
@@ -996,6 +998,7 @@ def run_imaging_tasks(
                 casa_data=casa_data,
                 continuum_restart=continuum_restart,
                 cube_line_mask=cube_line_mask,
+                noise_products=noise_products,
             )
 
         queued = list(range(len(tasks)))
@@ -1388,6 +1391,16 @@ def image_from_ms(
         min=0.0,
         help="Skip self-calibration when the initial continuum S/N is below this.",
     ),
+    noise_products: bool = typer.Option(
+        True,
+        "--noise-products/--no-noise-products",
+        help=(
+            "Where self-calibration was applied, also image what it removed and keep it: "
+            "wsclean[-cube]-selfcal-correction.fits, wsclean[-cube]-residual-total.fits "
+            "(residual + correction: all the data the model does not explain) and the gain "
+            "tables in selfcal_gains/ (default)."
+        ),
+    ),
     casa_data_root: Optional[Path] = typer.Option(
         None,
         "--casa-data-root",
@@ -1611,6 +1624,7 @@ def image_from_ms(
         casa_data=casa_data,
         continuum_restart=continuum_restart and single_window,
         cube_line_mask=cube_line_mask and cube and single_window,
+        noise_products=noise_products,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -1743,6 +1757,7 @@ def image_set(
         uv_contsub=False,
         selfcal="",
         selfcal_min_snr=20.0,
+        noise_products=True,
         casa_data_root=None,
         contsub_order=1,
         spectral_sampling=2.0,

@@ -35,6 +35,14 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CONTINUUM_COLUMN",
+    "CUBE_SELFCAL_CORRECTION_FILENAME",
+    "CUBE_TOTAL_RESIDUAL_FILENAME",
+    "SELFCAL_CORRECTION_FILENAME",
+    "SELFCAL_GAINS_DIRNAME",
+    "TOTAL_RESIDUAL_FILENAME",
+    "add_images",
+    "export_gain_table",
+    "selfcal_correction_columns",
     "CONTSUB_FILENAME",
     "CUBE_IMAGE_FILENAME",
     "CUBE_NAME",
@@ -89,6 +97,19 @@ LINE_MASK_FILENAME = f"{CUBE_NAME}-linemask.fits"
 # from the second.
 CONTINUUM_COLUMN = "CONTINUUM_DATA"
 LINE_COLUMN = "LINE_DATA"
+
+# What self-calibration removed (DATA - CORRECTED_DATA), whole or split into
+# continuum and lines like the data (``selfcal_correction_columns``), and the
+# images made from it: the dirty image of the correction and the total
+# residual, the kept residual plus the correction (``_selfcal_noise_products``).
+SELFCAL_COLUMN = "SELFCAL_DATA"
+SELFCAL_CONTINUUM_COLUMN = "SELFCAL_CONTINUUM_DATA"
+SELFCAL_LINE_COLUMN = "SELFCAL_LINE_DATA"
+SELFCAL_CORRECTION_FILENAME = "wsclean-selfcal-correction.fits"
+TOTAL_RESIDUAL_FILENAME = "wsclean-residual-total.fits"
+CUBE_SELFCAL_CORRECTION_FILENAME = f"{CUBE_NAME}-selfcal-correction.fits"
+CUBE_TOTAL_RESIDUAL_FILENAME = f"{CUBE_NAME}-residual-total.fits"
+SELFCAL_GAINS_DIRNAME = "selfcal_gains"
 
 # Placeholder in a task command for the per-task single-window MS that the
 # wrapper extracts on the worker (see ``extract_single_window_ms``).
@@ -468,6 +489,7 @@ def run_wsclean_task(
     casa_data: str | None = None,
     continuum_restart: bool = False,
     cube_line_mask: bool = False,
+    noise_products: bool = False,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -502,6 +524,11 @@ def run_wsclean_task(
     command) the single-window MS is phase self-calibrated first, one round
     per solution interval (``self_calibrate``); everything after it, the
     continuum subtraction included, reads the corrected data.
+
+    With ``noise_products``, where self-calibration was applied, what it
+    removed is imaged too (``_selfcal_noise_products``): the correction and
+    the total residual (kept residual + correction) of the continuum and the
+    cube; its gain tables are kept in ``selfcal_gains/``.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -609,10 +636,12 @@ def run_wsclean_task(
         return RuntimeError(f"{error}\nFull log: {log_path}")
 
     try:
+        selfcal: dict[str, object] = {}
+        fit: dict[str, object] | None = None
         if single_window_ms is not None and (selfcal_solints or uv_contsub_order is not None):
             with log_path.open("a", encoding="utf-8") as log:
                 if selfcal_solints:
-                    self_calibrate(
+                    selfcal = self_calibrate(
                         single_window_ms,
                         commands[0],
                         out=out,
@@ -628,7 +657,7 @@ def run_wsclean_task(
                         restart=continuum_restart,
                     )
                 if uv_contsub_order is not None:
-                    commands = _subtract_uv_continuum_step(
+                    commands, fit = _subtract_uv_continuum_step(
                         single_window_ms,
                         commands,
                         has_continuum=bool(command),
@@ -637,6 +666,26 @@ def run_wsclean_task(
                         fail=_fail,
                         timeout=timeout,
                     )
+        after_images = None
+        if noise_products and selfcal.get("applied") and single_window_ms is not None:
+            sw_ms, final_commands, final_fit = single_window_ms, list(commands), fit
+
+            def after_images() -> None:
+                with log_path.open("a", encoding="utf-8") as log:
+                    _selfcal_noise_products(
+                        sw_ms,
+                        continuum_command=final_commands[0] if command else None,
+                        cube_command=final_commands[-1] if cube_command else None,
+                        fit=final_fit,
+                        out=out,
+                        log=log,
+                        run=lambda cmd: _run_with_retries(
+                            cmd, out, log, env, timeout, tail, _fail, max(int(retries), 0)
+                        ),
+                        fail=_fail,
+                        timeout=timeout,
+                    )
+
         return _run_and_mark(
             commands=commands,
             required=required,
@@ -653,6 +702,7 @@ def run_wsclean_task(
             cube_products=cube_products,
             contsub_order=contsub_order,
             cube_line_mask=bool(cube_line_mask and cube_command),
+            after_images=after_images,
         )
     finally:
         if scratch_dir is not None:
@@ -678,6 +728,7 @@ def _run_and_mark(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     cube_line_mask: bool = False,
+    after_images: Callable[[], None] | None = None,
 ) -> dict[str, object]:
     attempts = 0
     commands = list(commands)
@@ -716,6 +767,8 @@ def _run_and_mark(
                     f"# continuum-subtracted cube (order {contsub_order}): "
                     f"{fit['line_fraction']:.1%} of the fitted pixels' channels clipped as line\n"
                 )
+    if after_images is not None:
+        after_images()
     missing = [name for name in required if not (out / name).is_file()]
     if missing:
         raise fail(f"WSClean exited 0 but wrote no {', '.join(missing)} under {out}", 0)
@@ -1729,8 +1782,18 @@ def self_calibrate(
         applied = [t.name for t in (best_phase, best_amp) if t]
         outcome = f"applied ({', '.join(applied)})" if applied else "not applied"
         log.write(f"# self-calibration {outcome}: final continuum S/N {best_snr:.1f}\n")
+        kept_gains = _keep_gain_tables(
+            [(t, kind) for t, kind in ((best_phase, "phase"), (best_amp, "amplitude")) if t],
+            out,
+            call,
+        )
+        if kept_gains:
+            log.write(
+                f"# self-calibration gains kept in {SELFCAL_GAINS_DIRNAME}/: "
+                f"{', '.join(kept_gains)}\n"
+            )
         log.flush()
-        return {"applied": bool(applied), "snr": best_snr, "rounds": rounds}
+        return {"applied": bool(applied), "snr": best_snr, "rounds": rounds, "gains": kept_gains}
     finally:
         for leftover in out.glob("selfcal-*"):
             if leftover.is_dir():
@@ -1748,8 +1811,11 @@ def _subtract_uv_continuum_step(
     log,
     fail: Callable[..., RuntimeError],
     timeout: float | None = None,
-) -> list[list[str]]:
-    """Run ``subtract_uv_continuum`` and point the commands at its columns."""
+) -> tuple[list[list[str]], dict[str, object] | None]:
+    """Run ``subtract_uv_continuum`` and point the commands at its columns.
+
+    Returns the commands and the fit's result (None when it was skipped).
+    """
     try:
         fit = subtract_uv_continuum_subprocess(
             ms_path, order=order, timeout=timeout, log_path=log.name
@@ -1762,7 +1828,7 @@ def _subtract_uv_continuum_step(
             "the cube keeps the continuum\n"
         )
         log.flush()
-        return commands
+        return commands, None
     log.write(
         f"# continuum subtracted from {fit['source_column']} (order "
         f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
@@ -1775,7 +1841,301 @@ def _subtract_uv_continuum_step(
     continuum = (
         [_with_data_column(c, CONTINUUM_COLUMN) for c in commands[:-1]] if has_continuum else []
     )
-    return [*continuum, _with_data_column(commands[-1], LINE_COLUMN)]
+    return [*continuum, _with_data_column(commands[-1], LINE_COLUMN)], fit
+
+
+def _keep_gain_tables(
+    tables: Sequence[tuple[Path, str]], out: Path, call: Callable[..., dict[str, object]]
+) -> list[str]:
+    """Copy the kept calibration tables to ``selfcal_gains/`` as ``<kind>.cal``,
+    each with a CSV of its solutions (``export_gain_table``); the names written."""
+    if not tables:
+        return []
+    target = out / SELFCAL_GAINS_DIRNAME
+    shutil.rmtree(target, ignore_errors=True)
+    target.mkdir(parents=True)
+    written = []
+    for table, kind in tables:
+        shutil.copytree(table, target / f"{kind}.cal")
+        call("export_gain_table", caltable=str(table), csv_path=str(target / f"{kind}.csv"))
+        written += [f"{kind}.cal", f"{kind}.csv"]
+    return written
+
+
+def export_gain_table(caltable: str, csv_path: str) -> dict[str, object]:
+    """A CASA gain table as CSV: one row per solution (time, antenna, polarization),
+    with amplitude, phase in degrees and the flag. Read with casacore, no CASA."""
+    import csv
+
+    import numpy as np
+    from casacore.tables import table
+
+    tb = table(str(caltable), ack=False)
+    try:
+        times = tb.getcol("TIME")
+        antennas = tb.getcol("ANTENNA1")
+        gains = tb.getcol("CPARAM")  # (rows, channels, polarizations)
+        flags = tb.getcol("FLAG")
+    finally:
+        tb.close()
+    names = table(f"{caltable}/ANTENNA", ack=False).getcol("NAME")
+    rows = 0
+    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            ["time_mjd_s", "antenna", "polarization", "amplitude", "phase_deg", "flagged"]
+        )
+        for row in range(len(times)):
+            antenna = int(antennas[row])
+            for pol in range(gains.shape[2]):
+                gain = complex(gains[row, 0, pol])
+                writer.writerow(
+                    [
+                        f"{times[row]:.3f}",
+                        str(names[antenna]) if antenna < len(names) else antenna,
+                        pol,
+                        f"{abs(gain):.6g}",
+                        f"{np.degrees(np.angle(gain)):.4g}",
+                        bool(flags[row, 0, pol]),
+                    ]
+                )
+                rows += 1
+    return {"rows": rows}
+
+
+def _line_free_from_ranges(ranges: str, n_channels: int) -> np.ndarray:
+    """Line-free channels from ``_channel_ranges`` text ("" when there are no lines)."""
+    import numpy as np
+
+    line_free = np.ones(n_channels, dtype=bool)
+    for part in filter(None, ranges.split(";")):
+        start, end = map(int, part.split("~"))
+        line_free[start : end + 1] = False
+    return line_free
+
+
+def selfcal_correction_columns(
+    ms_path: str,
+    *,
+    line_ranges: str | None = None,
+    order: int = 1,
+    rows_per_chunk: int | None = None,
+) -> dict[str, object]:
+    """Write what self-calibration removed, DATA - CORRECTED_DATA, to new columns.
+
+    Without ``line_ranges`` it goes whole to ``SELFCAL_COLUMN``. With them (the
+    visibility-plane continuum subtraction's line channels) it is split the
+    way the data were: the per-row continuum fit over the same line-free
+    channels and order to ``SELFCAL_CONTINUUM_COLUMN``, the rest to
+    ``SELFCAL_LINE_COLUMN``. The fit is linear in the data, so each part of
+    the correction plus the matching part of the self-calibrated data is that
+    part of DATA.
+    """
+    from casacore.tables import makecoldesc, table
+
+    ms = table(str(ms_path), readonly=False, ack=False)
+    try:
+        if "CORRECTED_DATA" not in ms.colnames():
+            raise RuntimeError("the MS has no CORRECTED_DATA: nothing was self-calibrated")
+        n_rows = ms.nrows()
+        if rows_per_chunk is None:
+            rows_per_chunk = _default_rows_per_chunk(ms, "DATA")
+        split = line_ranges is not None
+        names = [SELFCAL_CONTINUUM_COLUMN, SELFCAL_LINE_COLUMN] if split else [SELFCAL_COLUMN]
+        for name in names:
+            if name in ms.colnames():
+                ms.removecols(name)
+            ms.addcols(makecoldesc(name, ms.getcoldesc("DATA")))
+        spectrum_weight = _has_spectrum_weight(ms)
+        line_free = None
+        for start in range(0, n_rows, rows_per_chunk):
+            n = min(rows_per_chunk, n_rows - start)
+            data, weight, flag = _read_rows(ms, "DATA", start, n, spectrum_weight)
+            correction = (data - ms.getcol("CORRECTED_DATA", startrow=start, nrow=n)).astype(
+                data.dtype
+            )
+            if not split:
+                ms.putcol(SELFCAL_COLUMN, correction, startrow=start, nrow=n)
+                continue
+            if line_free is None:
+                line_free = _line_free_from_ranges(str(line_ranges), data.shape[1])
+            continuum = fit_uv_continuum(correction, weight, flag, line_free, order)
+            ms.putcol(SELFCAL_CONTINUUM_COLUMN, continuum, startrow=start, nrow=n)
+            ms.putcol(
+                SELFCAL_LINE_COLUMN,
+                (correction - continuum).astype(data.dtype),
+                startrow=start,
+                nrow=n,
+            )
+        return {"columns": names, "rows": int(n_rows)}
+    finally:
+        ms.close()
+
+
+def _dirty_command(cmd: Sequence[str], out: Path, name: str, column: str) -> list[str]:
+    """``cmd`` turned into a dirty image of ``column`` into ``out/name``: same grid,
+    weighting and channels, no cleaning, no PSF, the model column left alone."""
+    parts = [str(part) for part in cmd]
+    with_value = {"-auto-mask", "-auto-threshold", "-fits-mask", "-data-column", "-name", "-niter"}
+    alone = {"-continue", "-make-psf", "-update-model-required", "-no-update-model-required"}
+    kept: list[str] = []
+    index = 1
+    while index < len(parts) - 1:
+        if parts[index] in with_value:
+            index += 2
+            continue
+        if parts[index] not in alone:
+            kept.append(parts[index])
+        index += 1
+    return [
+        parts[0],
+        "-name",
+        str(out / name),
+        *kept,
+        "-niter",
+        "0",
+        "-no-update-model-required",
+        "-data-column",
+        column,
+        parts[-1],
+    ]
+
+
+def add_images(first: Path, second: Path, target: Path, history: str) -> None:
+    """Write ``first + second`` to ``target`` plane by plane, with ``first``'s
+    header and extensions (a cube's BEAMS table included)."""
+    import numpy as np
+    from astropy.io import fits
+
+    partial = target.with_name(target.name + ".partial")
+    shutil.copyfile(first, partial)
+    with (
+        fits.open(partial, mode="update", memmap=True) as hdus,
+        fits.open(second, memmap=True) as others,
+    ):
+        data, other = hdus[0].data, others[0].data
+        if data.shape != other.shape:
+            raise RuntimeError(f"{first.name} {data.shape} and {second.name} {other.shape} differ")
+        planes = data.reshape(-1, *data.shape[-2:])
+        other_planes = other.reshape(-1, *other.shape[-2:])
+        for index in range(planes.shape[0]):
+            planes[index] = np.asarray(planes[index], dtype=np.float64) + other_planes[index]
+        hdus[0].header["HISTORY"] = history
+    partial.replace(target)
+
+
+def _single_image(out: Path, name: str) -> Path | None:
+    """The image a ``-niter 0`` WSClean run wrote: ``-dirty`` or ``-image``."""
+    return next(
+        (
+            path
+            for path in (out / f"{name}-dirty.fits", out / f"{name}-image.fits")
+            if path.is_file()
+        ),
+        None,
+    )
+
+
+def _selfcal_noise_products(
+    ms_path: Path,
+    *,
+    continuum_command: Sequence[str] | None,
+    cube_command: Sequence[str] | None,
+    fit: dict[str, object] | None,
+    out: Path,
+    log,
+    run: Callable[[list[str]], int],
+    fail: Callable[..., RuntimeError],
+    timeout: float | None = None,
+) -> list[str]:
+    """Image what self-calibration removed and form the total residuals.
+
+    The kept residual is the dirty image (same grid and weighting) of the
+    self-calibrated data minus the model. The correction column
+    (``selfcal_correction_columns``, split like the data when the continuum
+    was subtracted in the visibilities) imaged the same way gives
+    ``wsclean[-cube]-selfcal-correction.fits``; imaging with fixed weights is
+    linear, so residual + correction is the dirty image of the data before
+    self-calibration minus the model, everything the final model does not
+    explain: ``wsclean[-cube]-residual-total.fits``. Returns the files written.
+    """
+    split = fit is not None
+    try:
+        _call_in_child(
+            "selfcal_correction_columns",
+            {
+                "ms_path": str(ms_path),
+                "line_ranges": fit["line_ranges"] if fit is not None else None,
+                "order": fit["order"] if fit is not None else 1,
+            },
+            what="selfcal_correction_columns",
+            timeout=timeout,
+            log_path=log.name,
+        )
+    except Exception as exc:
+        raise fail(f"Could not write the self-calibration correction: {exc}")
+    written: list[str] = []
+    products = (
+        (
+            continuum_command,
+            "wsclean",
+            SELFCAL_CONTINUUM_COLUMN,
+            SELFCAL_CORRECTION_FILENAME,
+            TOTAL_RESIDUAL_FILENAME,
+            False,
+        ),
+        (
+            cube_command,
+            CUBE_NAME,
+            SELFCAL_LINE_COLUMN,
+            CUBE_SELFCAL_CORRECTION_FILENAME,
+            CUBE_TOTAL_RESIDUAL_FILENAME,
+            True,
+        ),
+    )
+    for command, prefix, split_column, correction_name, total_name, is_cube in products:
+        if not command:
+            continue
+        name = f"{prefix}-selfcal-correction"
+        run(_dirty_command(command, out, name, split_column if split else SELFCAL_COLUMN))
+        image: Path | None = None
+        if is_cube:
+            try:
+                stacked = stack_channel_images(out, prefix=name, keep=("dirty", "image"))
+            except Exception as exc:
+                raise fail(f"Could not stack the self-calibration correction cube: {exc}")
+            for duplicate in out.glob(f"{name}-MFS-*.fits"):
+                duplicate.unlink(missing_ok=True)
+            image = next(
+                (
+                    out / f"{name}-{product}.fits"
+                    for product in ("dirty", "image")
+                    if product in stacked
+                ),
+                None,
+            )
+        image = image or _single_image(out, name)
+        if image is None:
+            raise fail(f"WSClean wrote no {name} image under {out}")
+        image.replace(out / correction_name)
+        for leftover in out.glob(f"{name}-*.fits"):
+            leftover.unlink(missing_ok=True)
+        written.append(correction_name)
+        residual = out / f"{prefix}-residual.fits"
+        if residual.is_file():
+            try:
+                add_images(
+                    residual,
+                    out / correction_name,
+                    out / total_name,
+                    "ALMASim total residual: residual + self-calibration correction",
+                )
+            except Exception as exc:
+                raise fail(f"Could not form {total_name}: {exc}")
+            written.append(total_name)
+    log.write(f"# self-calibration noise products: {', '.join(written) or 'none'}\n")
+    log.flush()
+    return written
 
 
 def _with_data_column(cmd: list[str], column: str) -> list[str]:
