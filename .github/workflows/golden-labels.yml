@@ -1,0 +1,55 @@
+name: Golden labels
+
+# Guards the regression-gate labels (MADIV-28):
+# - golden:supersede: the PR changes products on purpose and creates a new
+#   baseline; it must describe the change under "Expected product changes".
+# - golden:skip: no golden run for this PR (reason required in the body).
+# The two labels exclude each other.
+
+on:
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check labels and PR description
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+          labels = set(filter(None, os.environ["LABELS"].split(",")))
+          body = os.environ.get("BODY") or ""
+          errors = []
+          if {"golden:supersede", "golden:skip"} <= labels:
+              errors.append("golden:supersede and golden:skip cannot be used together.")
+
+          def section(title):
+              match = re.search(rf"^## {title}\s*\n(.*?)(?=^## |\Z)", body, re.S | re.M)
+              if not match:
+                  return ""
+              text = re.sub(r"<!--.*?-->", "", match.group(1), flags=re.S)
+              return text.strip()
+
+          if "golden:supersede" in labels:
+              expected = section("Expected product changes")
+              if not expected or expected.lower() in {"none", "none."}:
+                  errors.append(
+                      "golden:supersede needs an 'Expected product changes' section "
+                      "describing which products change and why."
+                  )
+          if "golden:skip" in labels and "golden:skip" not in body:
+              errors.append("golden:skip needs a line in the PR body explaining why (mention golden:skip).")
+          for error in errors:
+              print(f"::error::{error}")
+          if not errors:
+              print(f"labels OK: {sorted(labels) or 'none'}")
+          sys.exit(1 if errors else 0)
+          PY
