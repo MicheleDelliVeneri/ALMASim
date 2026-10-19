@@ -1618,6 +1618,63 @@ def image_from_ms(
         raise typer.Exit(code=1)
 
 
+@image_app.command("clean-quality")
+def clean_quality(
+    output_root: Path = typer.Argument(
+        help="An image-from-ms output directory (or one task directory) to assess."
+    ),
+    moments: bool = typer.Option(
+        True,
+        "--moments/--no-moments",
+        help="Write the cube moment maps (quality/cube-*.fits) next to each task's images.",
+    ),
+    summary: Optional[Path] = typer.Option(
+        None,
+        "--summary",
+        help="Summary CSV path (default <output_root>/clean-quality.csv).",
+    ),
+):
+    """Measure how much source signal the clean left in the residuals, task by task.
+
+    For every task under OUTPUT_ROOT writes quality.json (continuum and cube
+    statistics: S/N, the residual's share and profile at the source, the
+    noise WSClean measured when it built its mask, line and line-free
+    residuals, model fluxes) and, for cubes, moment maps of the line and of
+    the residual; prints one row per task and writes them to a CSV. See
+    almasim.services.imaging.quality for each statistic.
+    """
+    from .services.imaging.quality import (
+        SUMMARY_FILENAME,
+        assess_task,
+        find_task_dirs,
+        summary_rows,
+        write_summary,
+    )
+
+    root = Path(output_root).expanduser().absolute()
+    tasks = find_task_dirs(root)
+    if not tasks:
+        typer.echo(f"No imaged tasks (wsclean-image.fits or wsclean-cube-image.fits) under {root}")
+        raise typer.Exit(code=1)
+    results = []
+    for task in tqdm(tasks, desc="clean quality", unit="task"):
+        try:
+            results.append(assess_task(task, write_moments=moments))
+        except Exception as exc:  # one broken task must not hide the others
+            typer.echo(f"  {task}: {type(exc).__name__}: {exc}", err=True)
+    if not results:
+        typer.echo(f"None of the {len(tasks)} task(s) under {root} could be assessed", err=True)
+        raise typer.Exit(code=1)
+    rows = summary_rows(results, root)
+    summary_path = summary or root / SUMMARY_FILENAME
+    write_summary(rows, summary_path)
+    frame = pd.DataFrame(rows).set_index("task")
+    frame.columns = [column.replace("continuum.", "cont.") for column in frame.columns]
+    with pd.option_context("display.width", 250, "display.max_columns", None):
+        typer.echo(frame.to_string(float_format=lambda value: f"{value:.3g}"))
+    typer.echo(f"Wrote {len(results)} quality.json file(s) and {summary_path}")
+
+
 @image_app.command("batch-image", hidden=True)
 def image_set(
     imaging_parameters: Path = typer.Argument(help="Imaging parameter file"),
