@@ -83,7 +83,7 @@ jobs:
 
       - name: Smoke test
         run: |
-          docker run --rm "${{ steps.tag.outputs.image }}" bash -c '
+          docker run --rm "${{ steps.tag.outputs.image }}" bash -o pipefail -c '
             wsclean --version | head -2 &&
             python -c "import casatools, casatasks, casacore.tables, ducc0; print(\"casatools\", casatools.version_string())" &&
             ls /opt/casa-data | head'

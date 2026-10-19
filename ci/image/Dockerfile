@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libboost-filesystem1.83.0 libboost-program-options1.83.0 \
         libboost-system1.83.0 libcfitsio10t64 libfftw3-double3 \
         libfftw3-single3 libgfortran5 libgomp1 libgsl27 libhdf5-103-1t64 \
+        libhdf5-cpp-103-1t64 \
         liblapack3 libpython3.12t64 libreadline8t64 libwcs8 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
@@ -84,7 +85,9 @@ RUN python -c "from casaconfig import pull_data; pull_data('/opt/casa-data')" \
         'data_auto_update = False' \
         > "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/casasiteconfig.py"
 
-RUN wsclean --version | head -2 \
+# Fail the build if any shared library is missing (a pipe into head would hide it).
+RUN if ldd /opt/stack/bin/wsclean | grep "not found"; then exit 1; fi \
+    && wsclean --version > /tmp/wsclean-version && head -2 /tmp/wsclean-version \
     && python -c "import casatools, casatasks, casacore.tables, ducc0; print(casatools.version_string())"
 
 WORKDIR /work
