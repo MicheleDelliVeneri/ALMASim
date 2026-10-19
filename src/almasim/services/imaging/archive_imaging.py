@@ -58,6 +58,13 @@ __all__ = [
     "subtract_continuum",
     "subtract_uv_continuum",
     "subtract_uv_continuum_subprocess",
+    "self_calibrate",
+    "casa_selfcal_apply",
+    "casa_selfcal_solve",
+    "drop_corrected_data",
+    "adopt_corrected_data",
+    "parse_selfcal_rounds",
+    "selfcal_prepare",
     "rows_for_chunk",
     "write_imaging_failure_marker",
     "write_imaging_marker",
@@ -204,6 +211,26 @@ def wsclean_environment(cores: int, base: Mapping[str, str] | None = None) -> di
     env["LD_LIBRARY_PATH"] = (
         f"{_SYSTEM_LIBRARY_DIRS}:{existing}" if existing else _SYSTEM_LIBRARY_DIRS
     )
+    return env
+
+
+def casa_environment(base: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Environment for a CASA child: one thread each, and no system library
+    directories in ``LD_LIBRARY_PATH``.
+
+    ``wsclean_environment`` and the Slurm worker's job script put /lib64 and
+    friends first for WSClean's spack build; casatools then loads the
+    system PMIx under its bundled Open MPI and fails to import
+    (``libopen-pal.so.80: undefined symbol: pmix_framework_names``, every
+    task of job 5299, 2026-10-17).
+    """
+    env = wsclean_environment(1, base)
+    system = set(_SYSTEM_LIBRARY_DIRS.split(":"))
+    kept = [d for d in env.get("LD_LIBRARY_PATH", "").split(":") if d and d not in system]
+    if kept:
+        env["LD_LIBRARY_PATH"] = ":".join(kept)
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
     return env
 
 
@@ -436,6 +463,9 @@ def run_wsclean_task(
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     uv_contsub_order: int | None = None,
+    selfcal_solints: Sequence[str] | None = None,
+    selfcal_min_snr: float = 20.0,
+    casa_data: str | None = None,
     continuum_restart: bool = False,
     cube_line_mask: bool = False,
 ) -> dict[str, object]:
@@ -467,6 +497,11 @@ def run_wsclean_task(
     first (``subtract_uv_continuum``): the continuum image is made from the
     fitted continuum and the cube from what is left, the lines. When too few
     channels are line-free the subtraction is skipped and noted in the log.
+
+    With ``selfcal_solints`` (needs ``single_window`` and a continuum
+    command) the single-window MS is phase self-calibrated first, one round
+    per solution interval (``self_calibrate``); everything after it, the
+    continuum subtraction included, reads the corrected data.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -476,6 +511,8 @@ def run_wsclean_task(
         raise ValueError("run_wsclean_task needs a continuum or a cube command")
     if uv_contsub_order is not None and not (single_window and cube_command):
         raise ValueError("uv_contsub_order needs single_window and a cube_command")
+    if selfcal_solints and not (single_window and command and casa_data):
+        raise ValueError("selfcal_solints needs single_window, a continuum command and casa_data")
     if continuum_restart and command:
         if not single_window:
             raise ValueError("continuum_restart writes MODEL_DATA: it needs single_window")
@@ -544,36 +581,6 @@ def run_wsclean_task(
             [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in c]
             for c in commands
         ]
-        if uv_contsub_order is not None:
-            try:
-                fit = subtract_uv_continuum_subprocess(
-                    single_window_ms, order=uv_contsub_order, timeout=timeout, log_path=log_path
-                )
-            except Exception as exc:
-                # The cleanup below is not reached yet: drop the copy (with
-                # any columns already added) here.
-                shutil.rmtree(single_window_ms, ignore_errors=True)
-                error = f"Could not subtract the continuum from the visibilities: {exc}"
-                write_imaging_failure_marker(out, ms_path=ms_path, spw=spw, error=error)
-                raise RuntimeError(error) from exc
-            with log_path.open("a", encoding="utf-8") as log:
-                if fit.get("skipped"):
-                    log.write(
-                        f"# continuum NOT subtracted from the visibilities: {fit['skipped']}; "
-                        "the cube keeps the continuum\n"
-                    )
-                else:
-                    log.write(
-                        f"# continuum subtracted from {fit['source_column']} (order "
-                        f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
-                        f"{fit['usable_channels']} channels line-free ({fit['channels']} in the "
-                        f"window), lines in channels {fit['line_ranges'] or 'none'}\n"
-                    )
-            if not fit.get("skipped"):
-                # Every continuum pass (two with continuum_restart), then the cube.
-                commands = [_with_data_column(c, CONTINUUM_COLUMN) for c in commands[:-1]] + [
-                    _with_data_column(commands[-1], LINE_COLUMN)
-                ]
     scratch_dir: Path | None = None
     if scratch_root:
         # Per-task scratch for WSClean's reordered visibilities, created here
@@ -602,6 +609,34 @@ def run_wsclean_task(
         return RuntimeError(f"{error}\nFull log: {log_path}")
 
     try:
+        if single_window_ms is not None and (selfcal_solints or uv_contsub_order is not None):
+            with log_path.open("a", encoding="utf-8") as log:
+                if selfcal_solints:
+                    self_calibrate(
+                        single_window_ms,
+                        commands[0],
+                        out=out,
+                        log=log,
+                        solints=selfcal_solints,
+                        min_snr=selfcal_min_snr,
+                        run=lambda cmd: _run_with_retries(
+                            cmd, out, log, env, timeout, tail, _fail, max(int(retries), 0)
+                        ),
+                        fail=_fail,
+                        casa_data=str(casa_data),
+                        timeout=timeout,
+                        restart=continuum_restart,
+                    )
+                if uv_contsub_order is not None:
+                    commands = _subtract_uv_continuum_step(
+                        single_window_ms,
+                        commands,
+                        has_continuum=bool(command),
+                        order=uv_contsub_order,
+                        log=log,
+                        fail=_fail,
+                        timeout=timeout,
+                    )
         return _run_and_mark(
             commands=commands,
             required=required,
@@ -1081,6 +1116,74 @@ def rows_for_chunk(n_channels: int, n_correlations: int, samples: int | None = N
     return max(int(budget // max(int(n_channels) * int(n_correlations), 1)), 1)
 
 
+def _has_spectrum_weight(ms) -> bool:
+    return (
+        "WEIGHT_SPECTRUM" in ms.colnames()
+        and ms.nrows() > 0
+        and (ms.iscelldefined("WEIGHT_SPECTRUM", 0))
+    )
+
+
+def _read_rows(
+    ms, column: str, start: int, n: int, spectrum_weight: bool
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``column``, its weights (per channel) and flags for ``n`` rows from ``start``.
+
+    The flags combine FLAG with FLAG_ROW: a row flagged as a whole counts as
+    flagged in every sample.
+    """
+    import numpy as np
+
+    data = ms.getcol(column, startrow=start, nrow=n)
+    flag = ms.getcol("FLAG", startrow=start, nrow=n)
+    if "FLAG_ROW" in ms.colnames():
+        flag = flag | ms.getcol("FLAG_ROW", startrow=start, nrow=n)[:, None, None]
+    if spectrum_weight:
+        weight = ms.getcol("WEIGHT_SPECTRUM", startrow=start, nrow=n)
+    else:
+        weight = np.broadcast_to(
+            ms.getcol("WEIGHT", startrow=start, nrow=n)[:, None, :], data.shape
+        )
+    return data, np.asarray(weight, dtype=np.float64), flag
+
+
+def _default_rows_per_chunk(ms, column: str) -> int:
+    """``rows_for_chunk`` for the shape of ``column``'s cells (one row for an empty MS)."""
+    shape = ms.getcell(column, 0).shape if ms.nrows() else (1, 1)
+    return rows_for_chunk(shape[0], shape[-1])
+
+
+def _parallel_hands(n_corr: int) -> list[int]:
+    """XX and YY (or RR and LL): the first and last correlation."""
+    return [0, n_corr - 1] if n_corr > 1 else [0]
+
+
+def _source_spectrum(ms, column: str, rows_per_chunk: int) -> tuple[np.ndarray, np.ndarray] | None:
+    """Amplitude of the weighted vector average of every row, per channel, and
+    which channels have any unflagged data; None for an empty MS."""
+    import numpy as np
+
+    n_rows = ms.nrows()
+    spectrum_weight = _has_spectrum_weight(ms)
+    num = den = None
+    for start in range(0, n_rows, rows_per_chunk):
+        data, weight, flag = _read_rows(
+            ms, column, start, min(rows_per_chunk, n_rows - start), spectrum_weight
+        )
+        corrs = _parallel_hands(data.shape[2])
+        w = np.where(flag[..., corrs] | ~np.isfinite(data[..., corrs]), 0.0, weight[..., corrs])
+        d = np.where(w > 0, data[..., corrs], 0.0)
+        if num is None:
+            num = np.zeros(data.shape[1], dtype=np.complex128)
+            den = np.zeros(data.shape[1])
+        num += (w * d).sum(axis=(0, 2))
+        den += w.sum(axis=(0, 2))
+    if num is None:
+        return None
+    usable = den > 0
+    return np.abs(np.where(usable, num / np.where(usable, den, 1.0), 0.0)), usable
+
+
 def subtract_uv_continuum(
     ms_path: str | os.PathLike[str],
     *,
@@ -1113,7 +1216,6 @@ def subtract_uv_continuum(
     chunk near ``_CHUNK_SAMPLES`` samples; rows flagged with FLAG_ROW are
     left out like flagged samples.
     """
-    import numpy as np
     from casacore.tables import makecoldesc, table
 
     started = time.time()
@@ -1121,43 +1223,13 @@ def subtract_uv_continuum(
     try:
         source = "CORRECTED_DATA" if "CORRECTED_DATA" in ms.colnames() else "DATA"
         n_rows = ms.nrows()
-        has_spectrum_weight = "WEIGHT_SPECTRUM" in ms.colnames() and (
-            n_rows > 0 and ms.iscelldefined("WEIGHT_SPECTRUM", 0)
-        )
-
-        has_flag_row = "FLAG_ROW" in ms.colnames()
+        spectrum_weight = _has_spectrum_weight(ms)
         if rows_per_chunk is None:
-            shape = ms.getcell(source, 0).shape if n_rows else (1, 1)
-            rows_per_chunk = rows_for_chunk(shape[0], shape[-1])
-
-        def chunk(start: int, n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-            data = ms.getcol(source, startrow=start, nrow=n)
-            flag = ms.getcol("FLAG", startrow=start, nrow=n)
-            if has_flag_row:
-                flag = flag | ms.getcol("FLAG_ROW", startrow=start, nrow=n)[:, None, None]
-            if has_spectrum_weight:
-                weight = ms.getcol("WEIGHT_SPECTRUM", startrow=start, nrow=n)
-            else:
-                weight = np.broadcast_to(
-                    ms.getcol("WEIGHT", startrow=start, nrow=n)[:, None, :], data.shape
-                )
-            return data, np.asarray(weight, dtype=np.float64), flag
-
-        num = den = None
-        for start in range(0, n_rows, rows_per_chunk):
-            data, weight, flag = chunk(start, min(rows_per_chunk, n_rows - start))
-            corrs = [0, data.shape[2] - 1] if data.shape[2] > 1 else [0]
-            w = np.where(flag[..., corrs] | ~np.isfinite(data[..., corrs]), 0.0, weight[..., corrs])
-            d = np.where(w > 0, data[..., corrs], 0.0)
-            if num is None:
-                num = np.zeros(data.shape[1], dtype=np.complex128)
-                den = np.zeros(data.shape[1])
-            num += (w * d).sum(axis=(0, 2))
-            den += w.sum(axis=(0, 2))
-        if num is None:
+            rows_per_chunk = _default_rows_per_chunk(ms, source)
+        measured = _source_spectrum(ms, source, rows_per_chunk)
+        if measured is None:
             return {"skipped": "the MS has no rows", "source_column": source}
-        usable = den > 0
-        spectrum = np.abs(np.where(usable, num / np.where(usable, den, 1.0), 0.0))
+        spectrum, usable = measured
         line_free = line_free_channels(spectrum, usable, order=order, clip_sigma=clip_sigma)
         result: dict[str, object] = {
             "source_column": source,
@@ -1179,7 +1251,7 @@ def subtract_uv_continuum(
             ms.addcols(makecoldesc(name, ms.getcoldesc(source)))
         for start in range(0, n_rows, rows_per_chunk):
             n = min(rows_per_chunk, n_rows - start)
-            data, weight, flag = chunk(start, n)
+            data, weight, flag = _read_rows(ms, source, start, n, spectrum_weight)
             continuum = fit_uv_continuum(data, weight, flag, line_free, order)
             ms.putcol(CONTINUUM_COLUMN, continuum, startrow=start, nrow=n)
             ms.putcol(LINE_COLUMN, data - continuum, startrow=start, nrow=n)
@@ -1234,6 +1306,476 @@ def subtract_uv_continuum_subprocess(
         return json.loads(proc.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError) as exc:
         raise RuntimeError("continuum subtraction wrote no result") from exc
+
+
+def drop_corrected_data(ms_path: str) -> dict[str, object]:
+    """Remove CORRECTED_DATA, so imaging reads DATA again (an undone self-calibration)."""
+    from casacore.tables import table
+
+    ms = table(str(ms_path), readonly=False, ack=False)
+    try:
+        dropped = "CORRECTED_DATA" in ms.colnames()
+        if dropped:
+            ms.removecols("CORRECTED_DATA")
+        return {"dropped": dropped}
+    finally:
+        ms.close()
+
+
+_CHILD_CALL = (
+    "import json, sys\n"
+    "from almasim.services.imaging import archive_imaging as ai\n"
+    "args = json.loads(sys.argv[1])\n"
+    "result = getattr(ai, args['function'])(**args['kwargs'])\n"
+    "sys.stdout.write(json.dumps(result))\n"
+)
+
+
+def _call_in_child(
+    function: str,
+    kwargs: Mapping[str, object],
+    *,
+    what: str,
+    timeout: float | None = None,
+    log_path: str | os.PathLike[str] | None = None,
+    casa: bool = False,
+) -> dict[str, object]:
+    """``function(**kwargs)`` of this module in a new Python process, its JSON result.
+
+    casacore and CASA hold the GIL for the whole call, which would freeze a
+    Dask worker (see ``extract_single_window_ms_subprocess``), and
+    python-casacore and casatools must not share a process. The child's
+    stderr is appended to ``log_path``; ``casa`` gives it ``casa_environment``.
+    """
+    args = json.dumps({"function": function, "kwargs": dict(kwargs)})
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _CHILD_CALL, args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            env=casa_environment() if casa else wsclean_environment(1),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"{what} killed after exceeding the {timeout:.0f}s timeout") from exc
+    if log_path is not None and proc.stderr.strip():
+        with Path(log_path).open("a", encoding="utf-8") as log:
+            log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
+    if proc.returncode != 0:
+        reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
+        raise RuntimeError(
+            f"{what} exited with return code {proc.returncode}" + (f": {reason}" if reason else "")
+        )
+    try:
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"{what} wrote no result") from exc
+
+
+def selfcal_prepare(ms_path: str, rows_per_chunk: int | None = None) -> dict[str, object]:
+    """CASA selections for self-calibrating ``ms_path``: the line-free channels of
+    DATA's source spectrum (``spw``) and the antenna with the most
+    cross-correlation rows holding an unflagged line-free parallel-hand sample
+    (``refant``); a row unflagged as a whole can still have every such sample
+    flagged."""
+    import numpy as np
+    from casacore.tables import table
+
+    ms = table(str(ms_path), ack=False)
+    try:
+        if rows_per_chunk is None:
+            rows_per_chunk = _default_rows_per_chunk(ms, "DATA")
+        measured = _source_spectrum(ms, "DATA", rows_per_chunk)
+        if measured is None:
+            raise RuntimeError("the MS has no rows")
+        spectrum, usable = measured
+        line_free = line_free_channels(spectrum, usable)
+        if not line_free.any():
+            line_free = usable
+        ant1, ant2 = ms.getcol("ANTENNA1"), ms.getcol("ANTENNA2")
+        has_data = np.zeros(ms.nrows(), dtype=bool)
+        spectrum_weight = _has_spectrum_weight(ms)
+        for start in range(0, ms.nrows(), rows_per_chunk):
+            n = min(rows_per_chunk, ms.nrows() - start)
+            _, _, flag = _read_rows(ms, "DATA", start, n, spectrum_weight)
+            corrs = _parallel_hands(flag.shape[2])
+            has_data[start : start + n] = (~flag[:, line_free][..., corrs]).any(axis=(1, 2))
+        good = has_data & (ant1 != ant2)
+    finally:
+        ms.close()
+    names = table(f"{ms_path}/ANTENNA", ack=False).getcol("NAME")
+    counts = np.bincount(ant1[good], minlength=len(names)) + np.bincount(
+        ant2[good], minlength=len(names)
+    )
+    return {
+        "spw": "0:" + _channel_ranges(line_free),
+        "refant": str(names[int(np.argmax(counts))]),
+        "line_free_channels": int(line_free.sum()),
+    }
+
+
+def adopt_corrected_data(ms_path: str, rows_per_chunk: int | None = None) -> dict[str, object]:
+    """Make an incoming CORRECTED_DATA the task copy's DATA, and drop it.
+
+    Self-calibration solves from DATA, writes CORRECTED_DATA and, when a
+    round is rejected, drops it: an MS that arrived with its calibration in
+    CORRECTED_DATA would then be solved from, and fall back to, the
+    uncalibrated DATA. The single-window MS is the task's own copy.
+    """
+    from casacore.tables import table
+
+    ms = table(str(ms_path), readonly=False, ack=False)
+    try:
+        if "CORRECTED_DATA" not in ms.colnames():
+            return {"adopted": False}
+        if rows_per_chunk is None:
+            rows_per_chunk = _default_rows_per_chunk(ms, "CORRECTED_DATA")
+        for start in range(0, ms.nrows(), rows_per_chunk):
+            n = min(rows_per_chunk, ms.nrows() - start)
+            ms.putcol(
+                "DATA", ms.getcol("CORRECTED_DATA", startrow=start, nrow=n), startrow=start, nrow=n
+            )
+        ms.removecols("CORRECTED_DATA")
+        return {"adopted": True}
+    finally:
+        ms.close()
+
+
+def _configure_casa(casa_data: str, log_file: str) -> Path:
+    """Point CASA at ``casa_data`` and ``log_file`` with a private workspace (removed at exit)."""
+    import atexit
+    import tempfile
+
+    from almasim.services.archive.unpack_ms import configure_casa_environment
+
+    workspace = Path(tempfile.mkdtemp(prefix="almasim-selfcal-casa-"))
+    atexit.register(shutil.rmtree, workspace, True)
+    configure_casa_environment(workspace, casa_data, workspace_root=workspace, log_file=log_file)
+    return workspace
+
+
+def casa_selfcal_solve(
+    ms_path: str,
+    caltable: str,
+    *,
+    solint: str,
+    spw: str,
+    refant: str,
+    casa_data: str,
+    log_file: str,
+    min_snr: float = 3.0,
+    calmode: str = "p",
+    pre_apply: Sequence[str] = (),
+) -> dict[str, object]:
+    """CASA ``gaincal`` of DATA against MODEL_DATA: one solution per antenna for
+    both polarizations (gaintype T), over ``spw`` (line-free).
+
+    ``calmode`` is ``p`` (phase) or ``ap`` (amplitude and phase); an ``ap``
+    solve is made on top of the ``pre_apply`` tables (the kept phase
+    solution) and normalised (``solnorm``) so the flux scale stays put.
+    """
+    import numpy as np
+
+    _configure_casa(casa_data, log_file)
+    from casatasks import gaincal
+    from casatools import table
+
+    started = time.time()
+    gaincal(
+        vis=ms_path,
+        caltable=caltable,
+        solint=solint,
+        spw=spw,
+        refant=refant,
+        calmode=calmode,
+        gaintype="T",
+        minsnr=min_snr,
+        minblperant=4,
+        solnorm=calmode == "ap",
+        gaintable=list(pre_apply),
+        interp=["linear"] * len(pre_apply),
+    )
+    tb = table()
+    tb.open(caltable)
+    try:
+        flags = tb.getcol("FLAG")
+        gains = tb.getcol("CPARAM")
+        times = tb.getcol("TIME")
+    finally:
+        tb.close()
+    good = ~flags
+    phases = np.degrees(np.abs(np.angle(gains[good]))) if good.any() else np.zeros(1)
+    amplitudes = np.abs(gains[good]) if good.any() else np.ones(1)
+    return {
+        "calmode": calmode,
+        "median_amp_dev": round(float(np.median(np.abs(amplitudes - 1.0))), 3),
+        "solint": solint,
+        "intervals": int(np.unique(times).size),
+        "solutions": int(good.sum()),
+        "possible": int(flags.size),
+        "median_phase_deg": round(float(np.median(phases)), 1),
+        "seconds": round(time.time() - started, 1),
+    }
+
+
+def casa_selfcal_apply(
+    ms_path: str, caltables: Sequence[str], *, casa_data: str, log_file: str
+) -> dict:
+    """CASA ``applycal`` of ``caltables`` into CORRECTED_DATA. ``calonly``: data
+    whose solution failed stay as they were, unflagged; weights unchanged."""
+    _configure_casa(casa_data, log_file)
+    from casatasks import applycal
+
+    applycal(
+        vis=ms_path,
+        gaintable=list(caltables),
+        interp=["linear"] * len(caltables),
+        calwt=[False] * len(caltables),
+        applymode="calonly",
+        flagbackup=False,
+    )
+    return {"applied": True}
+
+
+def image_snr(image_path: Path, residual_path: Path) -> float:
+    """Peak of the restored image over the robust noise (1.4826 MAD) of the residual."""
+    import numpy as np
+    from astropy.io import fits
+
+    image = fits.getdata(image_path).squeeze()
+    residual = fits.getdata(residual_path).squeeze()
+    finite = residual[np.isfinite(residual)]
+    noise = 1.4826 * np.median(np.abs(finite - np.median(finite)))
+    return float(np.nanmax(image) / noise) if noise > 0 else 0.0
+
+
+def image_peak(image_path: Path) -> float:
+    """Peak of the restored image."""
+    import numpy as np
+    from astropy.io import fits
+
+    return float(np.nanmax(fits.getdata(image_path)))
+
+
+def parse_selfcal_rounds(solints: Sequence[str]) -> list[tuple[str, str]]:
+    """``(calmode, solint)`` per round: ``inf`` or ``30s`` is a phase round,
+    ``ap:inf`` an amplitude-and-phase one. An amplitude round must come after
+    a phase round: it is solved on top of the phase solution."""
+    rounds = []
+    for item in solints:
+        calmode, _, solint = item.rpartition(":")
+        calmode = calmode or "p"
+        if calmode not in ("p", "ap") or not re.fullmatch(r"inf|int|\d+(\.\d+)?s", solint):
+            raise ValueError(
+                f"self-calibration rounds are [ap:]inf, [ap:]int or [ap:]<seconds>s, not {item!r}"
+            )
+        rounds.append((calmode, solint))
+    if rounds and rounds[0][0] == "ap":
+        raise ValueError("an amplitude (ap:) round needs a phase round before it")
+    return rounds
+
+
+def _selfcal_command(cmd: list[str], out: Path, name: str) -> list[str]:
+    """The continuum command imaging into ``out/name`` and writing MODEL_DATA."""
+    result = list(cmd)
+    result[result.index("-name") + 1] = str(out / name)
+    return [
+        "-update-model-required" if part == "-no-update-model-required" else part for part in result
+    ]
+
+
+def self_calibrate(
+    ms_path: Path,
+    continuum_command: list[str],
+    *,
+    out: Path,
+    log,
+    solints: Sequence[str],
+    min_snr: float,
+    run: Callable[[list[str]], int],
+    fail: Callable[..., RuntimeError],
+    casa_data: str,
+    timeout: float | None = None,
+    restart: bool = False,
+) -> dict[str, object]:
+    """Self-calibrate ``ms_path`` against its own continuum, round by round.
+
+    The continuum is imaged (``continuum_command`` into ``selfcal-0``, writing
+    MODEL_DATA); below ``min_snr`` (peak over residual noise) nothing is
+    done. Each round (``parse_selfcal_rounds``: ``inf``, ``30s`` for phase,
+    ``ap:inf`` for amplitude and phase) then solves gains of DATA against the
+    model at its solution interval with CASA ``gaincal``
+    (``casa_selfcal_solve``), an amplitude round on top of the kept phase
+    table, applies the kept phase table and the new one into CORRECTED_DATA
+    (``casa_selfcal_apply``) and reimages.
+    A round is kept only if the image S/N rose; otherwise the best earlier
+    gains are restored (or CORRECTED_DATA dropped) and the rounds stop.
+    The temporary images and calibration tables are removed; CASA, run with
+    ``casa_data`` as its runtime data, logs to ``casa-selfcal.log`` in
+    ``out``.
+
+    With ``restart`` every image is cleaned in two passes, as the continuum
+    is (``continuum_restart_commands``), so the model the gains are solved
+    against is complete.
+
+    ALMASim's own StefCal-style solver gave the same S/N within ~1 % on four
+    cycle11 cubes and was dropped for CASA (2026-10-17).
+    """
+    plan = parse_selfcal_rounds(solints)
+    rounds: list[dict[str, object]] = []
+    casa_log = str(out / "casa-selfcal.log")
+    prepared: dict[str, object] = {}
+
+    def image(index: int) -> tuple[float, float]:
+        name = f"selfcal-{index}"
+        command = _selfcal_command(continuum_command, out, name)
+        run(command)
+        if restart:
+            run([*command[:-1], "-continue", command[-1]])
+        image_path = out / f"{name}-image.fits"
+        return image_snr(image_path, out / f"{name}-residual.fits"), image_peak(image_path)
+
+    def call(function: str, **kwargs: object) -> dict[str, object]:
+        try:
+            return _call_in_child(
+                function,
+                kwargs,
+                what=function,
+                timeout=timeout,
+                log_path=log.name,
+                casa=function.startswith("casa_"),
+            )
+        except Exception as exc:
+            raise fail(f"Self-calibration failed: {exc}")
+
+    def solve(gains: Path, calmode: str, solint: str, pre_apply: list[Path]) -> dict:
+        return call(
+            "casa_selfcal_solve",
+            ms_path=str(ms_path),
+            caltable=str(gains),
+            solint=solint,
+            spw=prepared["spw"],
+            refant=prepared["refant"],
+            casa_data=casa_data,
+            log_file=casa_log,
+            calmode=calmode,
+            pre_apply=[str(t) for t in pre_apply],
+        )
+
+    def apply(tables: list[Path]) -> None:
+        if not tables:
+            call("drop_corrected_data", ms_path=str(ms_path))
+        else:
+            call(
+                "casa_selfcal_apply",
+                ms_path=str(ms_path),
+                caltables=[str(t) for t in tables],
+                casa_data=casa_data,
+                log_file=casa_log,
+            )
+
+    try:
+        if call("adopt_corrected_data", ms_path=str(ms_path)).get("adopted"):
+            log.write("# self-calibration: incoming CORRECTED_DATA adopted as DATA\n")
+        best_snr, best_peak = image(0)
+        log.write(
+            f"# self-calibration: initial continuum S/N {best_snr:.1f}, "
+            f"peak {best_peak:.4g} Jy/beam\n"
+        )
+        if best_snr < min_snr:
+            log.write(f"# self-calibration skipped: S/N below {min_snr:g}\n")
+            log.flush()
+            return {"applied": False, "initial_snr": best_snr, "rounds": rounds}
+        prepared = call("selfcal_prepare", ms_path=str(ms_path))
+        log.write(
+            f"# self-calibration with CASA gaincal: refant {prepared['refant']}, "
+            f"{prepared['line_free_channels']} line-free channels\n"
+        )
+        # The kept tables: the best phase table, then the best amplitude one.
+        best_phase: Path | None = None
+        best_amp: Path | None = None
+        for index, (calmode, solint) in enumerate(plan, start=1):
+            gains = out / f"selfcal-{index}.{'G' if calmode == 'p' else 'A'}"
+            # An ap round always follows a kept phase round: parse_selfcal_rounds
+            # puts a phase round first, and the rounds stop at the first rejection.
+            pre_apply = [best_phase] if calmode == "ap" else []
+            solved = solve(gains, calmode, solint, pre_apply)
+            trial = [gains] if calmode == "p" else [best_phase, gains]
+            apply(trial)
+            snr, peak = image(index)
+            kept = snr > best_snr
+            rounds.append({**solved, "snr": round(snr, 1), "peak": peak, "kept": kept})
+            detail = (
+                f"median |phase| {solved['median_phase_deg']} deg"
+                if calmode == "p"
+                else f"median |amp - 1| {solved['median_amp_dev']}"
+            )
+            log.write(
+                f"# self-calibration round {index} ({calmode}, solint {solint}): "
+                f"{solved['solutions']}/{solved['possible']} antenna solutions, {detail}; "
+                f"S/N {best_snr:.1f} -> {snr:.1f}, peak {best_peak:.4g} -> {peak:.4g} Jy/beam"
+                f"{'' if kept else ', rejected'}\n"
+            )
+            log.flush()
+            if not kept:
+                apply([t for t in (best_phase, best_amp) if t])
+                break
+            best_snr, best_peak = snr, peak
+            if calmode == "p":
+                best_phase, best_amp = gains, None
+            else:
+                best_amp = gains
+        applied = [t.name for t in (best_phase, best_amp) if t]
+        outcome = f"applied ({', '.join(applied)})" if applied else "not applied"
+        log.write(f"# self-calibration {outcome}: final continuum S/N {best_snr:.1f}\n")
+        log.flush()
+        return {"applied": bool(applied), "snr": best_snr, "rounds": rounds}
+    finally:
+        for leftover in out.glob("selfcal-*"):
+            if leftover.is_dir():
+                shutil.rmtree(leftover, ignore_errors=True)
+            else:
+                leftover.unlink(missing_ok=True)
+
+
+def _subtract_uv_continuum_step(
+    ms_path: Path,
+    commands: list[list[str]],
+    *,
+    has_continuum: bool,
+    order: int,
+    log,
+    fail: Callable[..., RuntimeError],
+    timeout: float | None = None,
+) -> list[list[str]]:
+    """Run ``subtract_uv_continuum`` and point the commands at its columns."""
+    try:
+        fit = subtract_uv_continuum_subprocess(
+            ms_path, order=order, timeout=timeout, log_path=log.name
+        )
+    except Exception as exc:
+        raise fail(f"Could not subtract the continuum from the visibilities: {exc}")
+    if fit.get("skipped"):
+        log.write(
+            f"# continuum NOT subtracted from the visibilities: {fit['skipped']}; "
+            "the cube keeps the continuum\n"
+        )
+        log.flush()
+        return commands
+    log.write(
+        f"# continuum subtracted from {fit['source_column']} (order "
+        f"{fit['order']}, {fit['seconds']} s): {fit['line_free_channels']} of "
+        f"{fit['usable_channels']} channels line-free ({fit['channels']} in the window), "
+        "lines in channels "
+        f"{fit['line_ranges'] or 'none'}\n"
+    )
+    log.flush()
+    # Every continuum pass (two with continuum_restart), then the cube.
+    continuum = (
+        [_with_data_column(c, CONTINUUM_COLUMN) for c in commands[:-1]] if has_continuum else []
+    )
+    return [*continuum, _with_data_column(commands[-1], LINE_COLUMN)]
 
 
 def _with_data_column(cmd: list[str], column: str) -> list[str]:
