@@ -113,6 +113,28 @@ def deep_copy_rows(source: Path, rows: np.ndarray, destination: Path) -> None:
     tab.close()
 
 
+def trim_pointing(ms: Path, antennas: list[int], margin_s: float = 60.0) -> None:
+    """Keep POINTING rows of the kept antennas around the kept data (506 MB in full)."""
+    from casacore.tables import table
+
+    main = table(str(ms), ack=False)
+    time = main.getcol("TIME")
+    main.close()
+    pointing = ms / "POINTING"
+    tab = table(str(pointing), ack=False)
+    keep = np.flatnonzero(
+        np.isin(tab.getcol("ANTENNA_ID"), antennas)
+        & (tab.getcol("TIME") >= time.min() - margin_s)
+        & (tab.getcol("TIME") <= time.max() + margin_s)
+    )
+    log(f"POINTING: keeping {len(keep)} of {tab.nrows()} rows")
+    trimmed = ms / "POINTING.trimmed"
+    tab.selectrows(keep.tolist()).copy(str(trimmed), deep=True)
+    tab.close()
+    shutil.rmtree(pointing)
+    trimmed.rename(pointing)
+
+
 def build(args: argparse.Namespace) -> int:
     work = args.work.resolve()
     fixture = work / "fixture"
@@ -137,6 +159,7 @@ def build(args: argparse.Namespace) -> int:
     trimmed.parent.mkdir(parents=True)
     log(f"deep copy of {len(rows)} rows -> {trimmed}")
     deep_copy_rows(RAW_MS, rows, trimmed)
+    trim_pointing(trimmed, antennas)
 
     # Pipeline_Final for the trimmed rows, delivered the way ALMA delivers it.
     versions = scratch / "flagversions" / f"{UID}.ms.flagversions"
