@@ -77,50 +77,54 @@ else
     echo "resuming at the comparison (GOLDEN_FROM=$GOLDEN_FROM)"
 fi
 
-# Reference digests are computed once (reading 20 GB) and cached read-only.
-DIGESTS="$MADIV28/fixture-digests"
-mkdir -p "$DIGESTS"
-MAPS=(--map RAW "" "$REF_RAW_ROOT" --map CAL "" "$REF_CAL_ROOT" --map CUBES "" "$REF_CUBES" --map ASDM "" "$REF_ASDM_ROOT")
-for kind in raw cal; do
-    ms="$REF_RAW_MS"; [ "$kind" = cal ] && ms="$REF_CAL_MS"
-    if [ ! -s "$DIGESTS/$kind.json" ]; then
-        tmp="$DIGESTS/.$kind.json.$$"
-        stage "digest-ref-$kind" "$PYTHON" -I "$RUN/harness/compare_products.py" digest "$ms" "$tmp" "${MAPS[@]}"
-        mv -n "$tmp" "$DIGESTS/$kind.json" && chmod a-w "$DIGESTS/$kind.json"
-        rm -f "$tmp"
-    fi
-done
+# The baseline to compare with: a directory holding raw.json and cal.json (MS
+# digests), cubes/<uid>.ms.split/<task> (image products) and prefixes.env (the
+# paths its products were written under). GOLDEN_BASELINE overrides golden.env.
+BASELINE_DIR="${GOLDEN_BASELINE:-$BASELINE_DIR}"
+# shellcheck source=/dev/null
+source "$BASELINE_DIR/prefixes.env"
+echo "baseline: $BASELINE_DIR"
 
 echo "== compare $(date --iso-8601=seconds)"
 set +e
 "$PYTHON" -I "$RUN/harness/compare_products.py" golden --run "$RUN" --uid "$GOLDEN_UID" \
-    --task "$GOLDEN_TASK" --ref-raw "$DIGESTS/raw.json" --ref-cal "$DIGESTS/cal.json" \
-    --ref-task "$REF_TASK" \
-    --map RAW "$RUN/raw_ms" "$REF_RAW_ROOT" \
-    --map CAL "$RUN/cal" "$REF_CAL_ROOT" \
-    --map CUBES "$RUN/cubes" "$REF_CUBES,$CYCLE11/MADIV-16/noise/cubes" \
-    --map ASDM "$RUN/asdm" "$REF_ASDM_ROOT" \
+    --task "$GOLDEN_TASK" --ref-raw "$BASELINE_DIR/raw.json" --ref-cal "$BASELINE_DIR/cal.json" \
+    --ref-task "$BASELINE_DIR/cubes/$GOLDEN_UID.ms.split/$GOLDEN_TASK" \
+    --map RAW "$RUN/raw_ms" "$BASELINE_PREFIX_RAW" \
+    --map CAL "$RUN/cal" "$BASELINE_PREFIX_CAL" \
+    --map CUBES "$RUN/cubes" "$BASELINE_DIR/cubes,$BASELINE_PREFIX_CUBES" \
+    --map ASDM "$RUN/asdm" "$BASELINE_PREFIX_ASDM" \
+    --save-digests "$RUN/digests" \
     --report "$RUN/report.md"
 verdict=$?
 set -e
 {
     echo
+    echo "baseline: $BASELINE_DIR"
     echo "stage seconds: $(for s in "${!STAGE_SECONDS[@]}"; do printf '%s=%s ' "$s" "${STAGE_SECONDS[$s]}"; done)"
     echo "total seconds: $SECONDS"
 } >> "$RUN/report.md"
 
-# Clean up: everything on PASS; on FAIL keep the report, logs and image products.
-if [ "$verdict" -eq 0 ]; then
+# Clean up. MS copies are always removed. On PASS nothing else is kept unless
+# GOLDEN_KEEP=1 (a candidate baseline, see promote_baseline.sh); on FAIL the
+# report, logs, digests and image products are kept for inspection.
+cp "$RUN/report.md" "$MADIV28/regression/logs/$(basename "$RUN").report.md"
+if [ "$verdict" -eq 0 ] && [ "${GOLDEN_KEEP:-0}" != 1 ]; then
     echo "PASS: removing $RUN"
-    cp "$RUN/report.md" "$MADIV28/regression/logs/$(basename "$RUN").report.md"
     rm -rf "$RUN"
 else
-    FAILED="$MADIV28/regression/failed/$(basename "$RUN")"
-    mkdir -p "$FAILED"
-    cp -r "$RUN/report.md" "$RUN/run.txt" "$RUN/logs" "$RUN/params.csv" "$FAILED/"
-    [ -d "$RUN/cubes" ] && cp -r "$RUN/cubes" "$FAILED/"
+    [ "$verdict" -eq 0 ] && KEPT="$MADIV28/regression/kept/$(basename "$RUN")" \
+        || KEPT="$MADIV28/regression/failed/$(basename "$RUN")"
+    mkdir -p "$KEPT"
+    cp -r "$RUN/report.md" "$RUN/run.txt" "$RUN/logs" "$RUN/params.csv" "$KEPT/"
+    for d in digests cubes; do [ -d "$RUN/$d" ] && cp -r "$RUN/$d" "$KEPT/"; done
+    printf '%s\n' \
+        "BASELINE_PREFIX_RAW=$RUN/raw_ms" \
+        "BASELINE_PREFIX_CAL=$RUN/cal" \
+        "BASELINE_PREFIX_CUBES=$RUN/cubes" \
+        "BASELINE_PREFIX_ASDM=$RUN/asdm" > "$KEPT/prefixes.env"
     rm -rf "$RUN"
-    echo "FAIL: kept report, logs and image products in $FAILED"
+    echo "$([ "$verdict" -eq 0 ] && echo PASS || echo FAIL): kept report, logs, digests and image products in $KEPT"
 fi
 echo "finished $(date --iso-8601=seconds)"
 exit "$verdict"

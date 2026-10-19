@@ -195,3 +195,27 @@ def test_casacore_partly_undefined_column(cp, tmp_path):
     tab.putcell("REST", 3, np.array([2.0e11]))
     tab.close()
     assert cp.table_digest(tmp_path / "new") != cp.table_digest(tmp_path / "ref")
+
+
+def test_history_paths_split_across_cards_are_normalised(cp, tmp_path):
+    def write(path, root):
+        header = fits.Header()
+        command = f"wsclean -name {root}/cubes/task/wsclean -j 10 -temp-dir {root}/cubes/task"
+        for start in range(0, len(command), 72):  # WSClean wraps HISTORY at 72 chars
+            header.add_history(command[start : start + 72])
+        fits.PrimaryHDU(np.zeros((2, 2), dtype=np.float32), header).writeto(path)
+
+    write(tmp_path / "new.fits", "/a/much/longer/run/directory/20261020-000750-807e700f")
+    write(tmp_path / "ref.fits", "/SKAO_data/cycle11/MADIV-16/noise")
+    names = cp.PathMap(
+        [
+            (
+                "ROOT",
+                "/a/much/longer/run/directory/20261020-000750-807e700f",
+                "/SKAO_data/cycle11/MADIV-16/noise",
+            )
+        ]
+    )
+    report = cp.Report()
+    cp.compare_fits(report, "f", tmp_path / "new.fits", tmp_path / "ref.fits", names, 0.0)
+    assert report.passed, report.render()

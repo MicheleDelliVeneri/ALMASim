@@ -294,6 +294,23 @@ def _arrays_equal(new: np.ndarray, ref: np.ndarray, tolerance: float) -> tuple[b
     return bool(tolerance and diff <= tolerance * scale), detail
 
 
+def _header_cards(header: Any, names: PathMap) -> tuple[list[tuple[str, Any]], str]:
+    """Header cards without volatile keys, and the HISTORY/COMMENT text joined.
+
+    WSClean writes its command line across several 72-character HISTORY cards,
+    so paths are split between cards; they are normalised on the joined text.
+    """
+    cards, history = [], []
+    for card in header.cards:
+        if card.keyword in VOLATILE_FITS_KEYS:
+            continue
+        if card.keyword in ("HISTORY", "COMMENT"):
+            history.append(str(card.value))
+        else:
+            cards.append((card.keyword, names(card.value)))
+    return cards, names("".join(history))
+
+
 def compare_fits(
     report: Report, label: str, new: Path, ref: Path, names: PathMap, tolerance: float
 ) -> None:
@@ -306,18 +323,12 @@ def compare_fits(
             return
         for index, (a, b) in enumerate(zip(new_hdus, ref_hdus, strict=True)):
             hdu = f"{label}[{index}]"
-            header_a = [
-                (c.keyword, names(c.value))
-                for c in a.header.cards
-                if c.keyword not in VOLATILE_FITS_KEYS
-            ]
-            header_b = [
-                (c.keyword, names(c.value))
-                for c in b.header.cards
-                if c.keyword not in VOLATILE_FITS_KEYS
-            ]
-            changed = sorted({k for k, v in set(header_a) ^ set(header_b)})
-            report.check(f"{hdu} header", header_a == header_b, ", ".join(changed))
+            cards_a, history_a = _header_cards(a.header, names)
+            cards_b, history_b = _header_cards(b.header, names)
+            changed = sorted({k for k, _ in set(cards_a) ^ set(cards_b)})
+            if history_a != history_b:
+                changed.append("HISTORY")
+            report.check(f"{hdu} header", not changed, ", ".join(changed))
             if isinstance(a, fits.BinTableHDU) or isinstance(b, fits.BinTableHDU):
                 cols_a = a.columns.names if a.data is not None else []
                 cols_b = b.columns.names if b.data is not None else []
@@ -470,6 +481,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ref-raw", type=Path, help="Reference raw MS or its digest.")
     p.add_argument("--ref-cal", type=Path, help="Reference calibrated MS or its digest.")
     p.add_argument("--ref-task", type=Path, required=True, help="Reference task directory.")
+    p.add_argument("--save-digests", type=Path, help="Also save the run's MS digests here.")
     _add_common(p)
 
     args = parser.parse_args(argv)
@@ -488,20 +500,19 @@ def main(argv: list[str] | None = None) -> int:
         compare_tree(report, args.new, args.ref, names, args.tolerance)
     else:
         run, uid = args.run, args.uid
-        if args.ref_raw:
-            compare_digests(
-                report,
-                "raw MS",
-                table_digest(run / "raw_ms" / "working" / f"{uid}.ms", names),
-                load_digest(args.ref_raw, names),
-            )
-        if args.ref_cal:
-            compare_digests(
-                report,
-                "calibrated MS",
-                table_digest(run / "cal" / f"{uid}.ms.split.cal", names),
-                load_digest(args.ref_cal, names),
-            )
+        new_tables = {
+            "raw": (args.ref_raw, "raw MS", run / "raw_ms" / "working" / f"{uid}.ms"),
+            "cal": (args.ref_cal, "calibrated MS", run / "cal" / f"{uid}.ms.split.cal"),
+        }
+        for kind, (ref, label, path) in new_tables.items():
+            if not ref:
+                continue
+            digest = table_digest(path, names)
+            if args.save_digests:
+                # Kept so this run can be promoted to a baseline without rereading the MS.
+                args.save_digests.mkdir(parents=True, exist_ok=True)
+                (args.save_digests / f"{kind}.json").write_text(json.dumps(digest, indent=1) + "\n")
+            compare_digests(report, label, digest, load_digest(ref, names))
         task_dir = run / "cubes" / f"{uid}.ms.split" / args.task
         compare_tree(report, task_dir, args.ref_task, names, args.tolerance, label=args.task)
         for suffix in (".done",):
