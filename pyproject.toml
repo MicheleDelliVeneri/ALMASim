@@ -98,7 +98,7 @@ packages = ["src/almasim"]
 
 [tool.ruff]
 line-length = 100
-exclude = ["experimental", "illustris_python", "node_modules", ".venv", "build", "htmlcov", "frontend"]
+exclude = ["node_modules", ".venv", "build", "htmlcov", "frontend"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

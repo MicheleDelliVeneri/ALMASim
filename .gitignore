@@ -78,3 +78,11 @@ examples/output/metadata_query_results.csv
 examples/output/resolved_products.csv
 frontend/node_modules/*
 
+
+# Coverage output (MADIV-28 T0.2)
+coverage.xml
+coverage*.json
+cov_*.json
+htmlcov/
+# marimo session caches
+__marimo__/
