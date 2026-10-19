@@ -138,7 +138,7 @@ jobs:
             --save-digests "$RUN/digests" --report "$RUN/report.md"
           verdict=$?
           set -e
-          { echo "## Golden regression (tier 1)"; echo; grep -E "FAIL" "$RUN/report.md" | head -50; tail -1 "$RUN/report.md"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "## Golden regression (tier 1)"; echo; { grep -E "FAIL" "$RUN/report.md" || true; } | head -50; tail -1 "$RUN/report.md"; } >> "$GITHUB_STEP_SUMMARY"
           if [ "$verdict" -ne 0 ] && [ "$SUPERSEDE" = true ]; then
             echo "::warning::Products differ from the baseline, as declared by golden:supersede."
             exit 0
@@ -212,7 +212,7 @@ jobs:
             --report /tmp/sim-report.md
           verdict=$?
           set -e
-          { echo "## Simulation golden"; echo; grep FAIL /tmp/sim-report.md | head -40; tail -1 /tmp/sim-report.md; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "## Simulation golden"; echo; { grep FAIL /tmp/sim-report.md || true; } | head -40; tail -1 /tmp/sim-report.md; } >> "$GITHUB_STEP_SUMMARY"
           if [ "$verdict" -ne 0 ] && [ "$SUPERSEDE" = true ]; then
             echo "::warning::Simulation products differ from the baseline, as declared by golden:supersede."
             exit 0
