@@ -1,0 +1,18 @@
+{
+  "fixture": {
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/test-data-v1/almasim-golden-ci-v1.tar.gz",
+    "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
+  },
+  "baseline": {
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v1/golden-baseline-v1.tar.gz",
+    "sha256": "74f69bcbca75d3d0145de91e6acf72987ffed2926c45d06ac3db8c77ebe7ee79",
+    "version": "v1",
+    "source": "workflow run 39341514141, commit e2606c18 (pipeline code of main 325f731b)"
+  },
+  "simulation_baseline": {
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v1/golden-simulation-v1.tar.gz",
+    "sha256": "8bb47e6b06f2760d6f7045c698bba03324f29df62047194943b38d071bdf8554",
+    "version": "v1",
+    "source": "workflow run 39341514141, commit e2606c18"
+  }
+}

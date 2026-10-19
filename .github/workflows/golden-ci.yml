@@ -1,0 +1,243 @@
+name: Golden regression
+
+# MADIV-28 CI tier 1. The trimmed golden window (ci/golden/baseline.json ->
+# fixture) goes through extract -> calibrate -> compute-parameters -> image ->
+# clean-quality in the CI image (single-threaded imaging, which is
+# bit-reproducible), and every product is compared with the current baseline.
+#
+# - No baseline yet ("baseline": null): the products are packaged as a
+#   candidate baseline artifact and the job passes (bootstrap).
+# - golden:supersede: differences are reported, not failed, and the candidate
+#   baseline is uploaded for the PR to adopt.
+# - golden:skip: no run.
+#
+# The simulation job (T0.17) runs seeded simulations of four source types and
+# compares them with the simulation baseline the same way.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - src/**
+      - backend/**
+      - scripts/regression/**
+      - ci/**
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/golden-ci.yml
+      - .github/workflows/ci-image.yml
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - backend/**
+      - scripts/regression/**
+      - ci/**
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/golden-ci.yml
+      - .github/workflows/ci-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: golden-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  UID_EB: uid___A002_X113d9b7_Xb670
+  RUN: /tmp/golden-run
+
+# Container steps default to sh; the steps use bash arrays and process substitution.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  image:
+    uses: ./.github/workflows/ci-image.yml
+
+  tier1:
+    needs: image
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'golden:skip') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: ${{ needs.image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      SUPERSEDE: ${{ contains(github.event.pull_request.labels.*.name, 'golden:supersede') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install this checkout into the image environment
+        run: uv sync --frozen --no-default-groups --group test --extra casa --extra ms-casacore
+
+      - name: Read the fixture and baseline pointers
+        id: pointers
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          pointers = json.load(open("ci/golden/baseline.json"))
+          for key in ("fixture", "baseline"):
+              entry = pointers.get(key)
+              print(f"{key}_url={entry['url'] if entry else ''}")
+              print(f"{key}_sha256={entry['sha256'] if entry else ''}")
+          PY
+
+      - name: Cache the fixture and baseline
+        uses: actions/cache@v4
+        with:
+          path: .golden-cache
+          key: golden-${{ steps.pointers.outputs.fixture_sha256 }}-${{ steps.pointers.outputs.baseline_sha256 }}
+
+      - name: Download and verify
+        run: |
+          mkdir -p .golden-cache
+          fetch() {  # fetch URL SHA256 DIR
+            local file=".golden-cache/$(basename "$1")"
+            [ -f "$file" ] || curl -fsSL --retry 3 -o "$file" "$1"
+            echo "$2  $file" | sha256sum -c -
+            rm -rf "$3" && mkdir -p "$3" && tar -xzf "$file" -C "$3" --strip-components 1
+          }
+          fetch "${{ steps.pointers.outputs.fixture_url }}" "${{ steps.pointers.outputs.fixture_sha256 }}" /tmp/fixture
+          if [ -n "${{ steps.pointers.outputs.baseline_url }}" ]; then
+            fetch "${{ steps.pointers.outputs.baseline_url }}" "${{ steps.pointers.outputs.baseline_sha256 }}" /tmp/baseline
+          fi
+
+      - name: Run the pipeline chain on the fixture
+        run: scripts/regression/ci_chain.sh /tmp/fixture "$RUN"
+
+      - name: Compare with the baseline
+        run: |
+          maps=(--map RAW "$RUN/raw_ms" "" --map CAL "$RUN/cal" "" --map CUBES "$RUN/cubes" "" --map ASDM "$RUN/asdm" "")
+          mkdir -p "$RUN/digests"
+          if [ ! -d /tmp/baseline ]; then
+            for kind in raw cal; do
+              ms="$RUN/raw_ms/working/$UID_EB.ms"; [ "$kind" = cal ] && ms="$RUN/cal/$UID_EB.ms.split.cal"
+              python -I scripts/regression/compare_products.py digest "$ms" "$RUN/digests/$kind.json" "${maps[@]}"
+            done
+            echo "::notice::No baseline in ci/golden/baseline.json yet: products packaged as the candidate baseline."
+            echo "No baseline yet: this run's products are the candidate baseline (artifact golden-candidate-baseline)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          source /tmp/baseline/prefixes.env
+          task="$(cat /tmp/baseline/TASK)"
+          set +e
+          python -I scripts/regression/compare_products.py golden --run "$RUN" --uid "$UID_EB" \
+            --task "$task" --ref-raw /tmp/baseline/raw.json --ref-cal /tmp/baseline/cal.json \
+            --ref-task "/tmp/baseline/cubes/$UID_EB.ms.split/$task" \
+            --map RAW "$RUN/raw_ms" "$BASELINE_PREFIX_RAW" --map CAL "$RUN/cal" "$BASELINE_PREFIX_CAL" \
+            --map CUBES "$RUN/cubes" "/tmp/baseline/cubes,$BASELINE_PREFIX_CUBES" \
+            --map ASDM "$RUN/asdm" "$BASELINE_PREFIX_ASDM" \
+            --save-digests "$RUN/digests" --report "$RUN/report.md"
+          verdict=$?
+          set -e
+          { echo "## Golden regression (tier 1)"; echo; { grep -E "FAIL" "$RUN/report.md" || true; } | head -50; tail -1 "$RUN/report.md"; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$verdict" -ne 0 ] && [ "$SUPERSEDE" = true ]; then
+            echo "::warning::Products differ from the baseline, as declared by golden:supersede."
+            exit 0
+          fi
+          exit "$verdict"
+
+      - name: Package the candidate baseline
+        if: always()
+        run: |
+          [ -f "$RUN/digests/raw.json" ] || exit 0
+          scripts/regression/package_baseline.sh "$RUN" /tmp/candidate golden-baseline-candidate \
+            "commit=${{ github.sha }} run=${{ github.run_id }} ref=${{ github.ref }}"
+
+      - name: Upload the run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-run
+          path: |
+            ${{ env.RUN }}/report.md
+            ${{ env.RUN }}/logs
+            ${{ env.RUN }}/params.csv
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload the candidate baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-candidate-baseline
+          path: /tmp/candidate
+          retention-days: 30
+          if-no-files-found: ignore
+
+  simulation:
+    needs: image
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'golden:skip') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: ${{ needs.image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      SUPERSEDE: ${{ contains(github.event.pull_request.labels.*.name, 'golden:supersede') }}
+      SIM_RUN: /tmp/sim-run
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install this checkout into the image environment
+        run: uv sync --frozen --no-default-groups --group test --extra casa --extra ms-casacore
+
+      - name: Run the seeded simulations
+        run: scripts/regression/sim_golden.sh "$SIM_RUN"
+
+      - name: Compare with the simulation baseline
+        run: |
+          read -r url sha < <(python -c "import json; b = json.load(open('ci/golden/baseline.json')).get('simulation_baseline'); print(b['url'], b['sha256']) if b else print('', '')")
+          if [ -z "$url" ]; then
+            echo "::notice::No simulation baseline yet: products packaged as the candidate (artifact golden-candidate-simulation)."
+            exit 0
+          fi
+          curl -fsSL --retry 3 -o /tmp/sim-baseline.tar.gz "$url"
+          echo "$sha  /tmp/sim-baseline.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/sim-baseline && tar -xzf /tmp/sim-baseline.tar.gz -C /tmp/sim-baseline --strip-components 1
+          set +e
+          python -I scripts/regression/compare_products.py tree "$SIM_RUN" /tmp/sim-baseline/products \
+            --map SIM "$SIM_RUN" "$(cat /tmp/sim-baseline/RUN_PREFIX)" \
+            --map REPO "$GITHUB_WORKSPACE" "$(cat /tmp/sim-baseline/REPO_PREFIX)" \
+            --report /tmp/sim-report.md
+          verdict=$?
+          set -e
+          { echo "## Simulation golden"; echo; { grep FAIL /tmp/sim-report.md || true; } | head -40; tail -1 /tmp/sim-report.md; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$verdict" -ne 0 ] && [ "$SUPERSEDE" = true ]; then
+            echo "::warning::Simulation products differ from the baseline, as declared by golden:supersede."
+            exit 0
+          fi
+          exit "$verdict"
+
+      - name: Package the candidate simulation baseline
+        if: always()
+        run: |
+          [ -d "$SIM_RUN" ] || exit 0
+          stage=/tmp/candidate-sim/golden-simulation-candidate
+          mkdir -p "$stage/products"
+          (cd "$SIM_RUN" && cp -r $(ls -d */ | grep -v '^logs/$') "$stage/products/")
+          echo "$SIM_RUN" > "$stage/RUN_PREFIX"
+          echo "$GITHUB_WORKSPACE" > "$stage/REPO_PREFIX"
+          echo "commit=${{ github.sha }} run=${{ github.run_id }} ref=${{ github.ref }}" > "$stage/PROVENANCE"
+          tar -czf /tmp/candidate-sim/golden-simulation-candidate.tar.gz -C /tmp/candidate-sim golden-simulation-candidate
+          (cd /tmp/candidate-sim && sha256sum golden-simulation-candidate.tar.gz > golden-simulation-candidate.tar.gz.sha256)
+          rm -rf "$stage"
+
+      - name: Upload the candidate simulation baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-candidate-simulation
+          path: /tmp/candidate-sim
+          retention-days: 30
+          if-no-files-found: ignore
