@@ -1,0 +1,7 @@
+{
+  "fixture": {
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/test-data-v1/almasim-golden-ci-v1.tar.gz",
+    "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
+  },
+  "baseline": null
+}
