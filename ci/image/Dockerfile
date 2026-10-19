@@ -74,8 +74,15 @@ RUN uv python install 3.12 \
         --no-default-groups --group test --extra casa --extra ms-casacore
 
 # CASA runtime data (measures, geodetic), read-only at /opt/casa-data.
+# casasiteconfig points casatools at it and turns off the auto-updates that
+# would otherwise try to write to ~/.casa/data at import time.
 RUN python -c "from casaconfig import pull_data; pull_data('/opt/casa-data')" \
-    && chmod -R a+rX /opt/casa-data
+    && chmod -R a+rX /opt/casa-data \
+    && printf '%s\n' \
+        'measurespath = "/opt/casa-data"' \
+        'measures_auto_update = False' \
+        'data_auto_update = False' \
+        > "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/casasiteconfig.py"
 
 RUN wsclean --version | head -2 \
     && python -c "import casatools, casatasks, casacore.tables, ducc0; print(casatools.version_string())"
