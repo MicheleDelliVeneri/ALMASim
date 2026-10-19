@@ -161,3 +161,22 @@ def test_casacore_table_digest_detects_changes(cp, tmp_path):
         report, "t", cp.table_digest(tmp_path / "new"), cp.table_digest(tmp_path / "ref")
     )
     assert [name for ok, name, _ in report.lines if not ok] == ["t column data"]
+
+
+def test_casacore_variable_shape_column(cp, tmp_path, monkeypatch):
+    tables = pytest.importorskip("casacore.tables")
+    # Small chunks so the adaptive read sizing is exercised across many reads.
+    monkeypatch.setattr(cp, "CHUNK_BYTES", 64)
+    desc = tables.maketabdesc([tables.makearrcoldesc("DATA", 0.0, valuetype="double")])
+    for name in ("new", "ref"):
+        tab = tables.table(str(tmp_path / name), desc, nrow=50, ack=False)
+        for row in range(50):
+            tab.putcell("DATA", row, np.arange(row % 7 + 1, dtype=float))
+        tab.close()
+    new, ref = cp.table_digest(tmp_path / "new"), cp.table_digest(tmp_path / "ref")
+    assert new == ref
+
+    tab = tables.table(str(tmp_path / "new"), readonly=False, ack=False)
+    tab.putcell("DATA", 49, np.arange(2, dtype=float))  # same values, different shape
+    tab.close()
+    assert cp.table_digest(tmp_path / "new") != ref

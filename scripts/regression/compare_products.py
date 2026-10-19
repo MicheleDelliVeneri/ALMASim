@@ -115,7 +115,7 @@ def _hash_array(digest: Any, value: Any) -> None:
     if isinstance(value, np.ndarray) and value.dtype.kind not in "OUS":
         array = np.ascontiguousarray(value)
         digest.update(f"{array.dtype.str}{array.shape}".encode())
-        digest.update(array.tobytes())
+        digest.update(array.reshape(-1).view(np.uint8))
     else:
         digest.update(json.dumps(value, default=_json_default, sort_keys=True).encode())
 
@@ -133,21 +133,28 @@ def _column_digest(table: Any, column: str) -> str:
     nrows = table.nrows()
     if nrows == 0:
         return digest.hexdigest()
-    try:
-        first = table.getcell(column, 0)
-        row_bytes = max(1, getattr(first, "nbytes", 64))
-    except RuntimeError:
-        row_bytes = 64
-    step = max(1, CHUNK_BYTES // row_bytes)
-    for start in range(0, nrows, step):
-        count = min(step, nrows - start)
+    if not table.isvarcol(column):
         try:
-            _hash_array(digest, table.getcol(column, startrow=start, nrow=count))
+            row_bytes = max(1, getattr(table.getcell(column, 0), "nbytes", 64))
         except RuntimeError:
-            # Variable-shape or partly undefined cells: hash row by row.
-            cells = table.getvarcol(column, startrow=start, nrow=count)
-            for key in sorted(cells, key=lambda k: int(k.lstrip("r"))):
-                _hash_array(digest, cells[key])
+            row_bytes = 64
+        step = max(1, CHUNK_BYTES // row_bytes)
+        for start in range(0, nrows, step):
+            _hash_array(digest, table.getcol(column, startrow=start, nrow=min(step, nrows - start)))
+        return digest.hexdigest()
+    # Variable-shape cells (e.g. DATA over spectral windows of different widths):
+    # cell by cell, sizing each read from the bytes the previous one returned.
+    start, step = 0, 1024
+    while start < nrows:
+        count = min(step, nrows - start)
+        cells = table.getvarcol(column, startrow=start, nrow=count)
+        size = 0
+        for row in range(start, start + count):
+            cell = cells[f"r{row + 1}"]
+            _hash_array(digest, cell)
+            size += getattr(cell, "nbytes", 64)
+        start += count
+        step = max(1, min(1_000_000, CHUNK_BYTES * count // max(size, 1)))
     return digest.hexdigest()
 
 
