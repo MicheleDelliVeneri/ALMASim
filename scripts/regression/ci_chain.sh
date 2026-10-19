@@ -16,7 +16,10 @@ UID_EB=uid___A002_X113d9b7_Xb670
 PYTHON="${PYTHON:-python}"
 WSCLEAN_BIN="${WSCLEAN_BIN:-$(command -v wsclean)}"
 CASA_DATA="${CASA_DATA:-/opt/casa-data}"
-CORES="${CORES:-4}"
+# WSClean is only bit-reproducible single-threaded: with -j N its gridding sums
+# in a different order each run (measured on this fixture: -j 4 runs differ by
+# up to 4e-3 x std, -j 1 runs are identical).
+CORES="${CORES:-1}"
 TASK_MEMORY_GB="${TASK_MEMORY_GB:-12}"
 # The trimmed data has a much lower S/N than the full window; a low threshold
 # keeps the self-calibration path exercised.

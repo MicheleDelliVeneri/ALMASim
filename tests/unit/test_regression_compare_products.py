@@ -200,7 +200,10 @@ def test_casacore_partly_undefined_column(cp, tmp_path):
 def test_history_paths_split_across_cards_are_normalised(cp, tmp_path):
     def write(path, root):
         header = fits.Header()
-        command = f"wsclean -name {root}/cubes/task/wsclean -j 10 -temp-dir {root}/cubes/task"
+        command = (
+            f"wsclean -name {root}/cubes/task/wsclean -j 10 -scale 0.28asec -size 282 282 "
+            f"-mgain 0.85 -temp-dir {root}/cubes/task -field 2 {root}/cubes/task/spw31.ms"
+        )
         for start in range(0, len(command), 72):  # WSClean wraps HISTORY at 72 chars
             header.add_history(command[start : start + 72])
         fits.PrimaryHDU(np.zeros((2, 2), dtype=np.float32), header).writeto(path)

@@ -11,6 +11,10 @@
 # up. Submit with submit_golden.sh, which prepares $RUN; see the "Regression
 # gate" section of the MADIV-28 plan.
 #
+# Imaging is single-threaded by default (GOLDEN_CORES=1): WSClean's
+# multi-threaded gridding is not bit-reproducible, so two -j 10 runs of the same
+# commit differ. MADIV-16 used --num-cores 10.
+#
 # If a stage fails the run directory is left in place. GOLDEN_FROM=compare
 # (sbatch --export=ALL,GOLDEN_FROM=compare golden_run.sbatch RUN) then repeats
 # only the digests, comparison and clean-up on the products already there.
@@ -69,7 +73,7 @@ PY
 
 stage image "$PYTHON" -m almasim.cli image image-from-ms "$RUN/params.csv" "$RUN/cubes" \
     --postprocess-backend sync --wsclean-bin "$WSCLEAN_BIN" \
-    --num-cores 10 --task-memory-gb 36 --task-timeout 28800 \
+    --num-cores "${GOLDEN_CORES:-1}" --task-memory-gb 36 --task-timeout 28800 \
     --cube --uv-contsub --selfcal inf,30s,ap:inf --noise-products --casa-data-root "$CASA_DATA"
 
 stage clean-quality "$PYTHON" -m almasim.cli image clean-quality "$RUN/cubes"

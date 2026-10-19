@@ -308,7 +308,10 @@ def _header_cards(header: Any, names: PathMap) -> tuple[list[tuple[str, Any]], s
             history.append(str(card.value))
         else:
             cards.append((card.keyword, names(card.value)))
-    return cards, names("".join(history))
+    # Card values lose trailing spaces, so a space at a 72-character break is
+    # dropped where the run's paths are shorter or longer: compare without
+    # whitespace.
+    return cards, re.sub(r"\s+", "", names("".join(history)))
 
 
 def compare_fits(
