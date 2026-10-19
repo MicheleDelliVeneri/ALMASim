@@ -881,6 +881,7 @@ def run_imaging_tasks(
     max_weight: float | None = None,
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
+    uv_contsub_order: int | None = None,
     continuum_restart: bool = False,
     cube_line_mask: bool = False,
 ) -> list[dict[str, Any]]:
@@ -920,6 +921,7 @@ def run_imaging_tasks(
                         cube_command=task.cube_command,
                         cube_products=cube_products,
                         contsub_order=contsub_order,
+                        uv_contsub_order=uv_contsub_order,
                         continuum_restart=continuum_restart,
                         cube_line_mask=cube_line_mask,
                     )
@@ -982,6 +984,7 @@ def run_imaging_tasks(
                 cube_command=task.cube_command,
                 cube_products=cube_products,
                 contsub_order=contsub_order,
+                uv_contsub_order=uv_contsub_order,
                 continuum_restart=continuum_restart,
                 cube_line_mask=cube_line_mask,
             )
@@ -1335,12 +1338,26 @@ def image_from_ms(
             "clipping. Off by default. Needs --cube."
         ),
     ),
+    uv_contsub: bool = typer.Option(
+        False,
+        "--uv-contsub/--no-uv-contsub",
+        help=(
+            "Subtract the continuum from the visibilities before imaging (CASA uvcontsub): "
+            "line channels are found on the source spectrum, the continuum is fitted per "
+            "visibility over the others. The continuum image is made from the fitted "
+            "continuum and every cube product holds only the lines. Needs --cube and "
+            "--single-window-ms; replaces --contsub."
+        ),
+    ),
     contsub_order: int = typer.Option(
         1,
         "--contsub-order",
         min=0,
         max=1,
-        help="Continuum polynomial order for --contsub: 0 (constant) or 1 (linear, default).",
+        help=(
+            "Continuum polynomial order for --contsub and --uv-contsub: 0 (constant) or 1 "
+            "(linear, default)."
+        ),
     ),
     spectral_sampling: float = typer.Option(
         2.0,
@@ -1450,8 +1467,14 @@ def image_from_ms(
         _echo_cube_plan(
             parameters, fov_fraction, beam_sampling, cube_options, products, min_beams_across
         )
-    elif plan_only or contsub or join_channels:
-        raise typer.BadParameter("--plan-only, --contsub and --join-channels need --cube")
+    elif plan_only or contsub or join_channels or uv_contsub:
+        raise typer.BadParameter(
+            "Options that need --cube: --plan-only, --contsub, --uv-contsub, --join-channels"
+        )
+    if uv_contsub and contsub:
+        raise typer.BadParameter("--uv-contsub already removes the continuum: drop --contsub")
+    if uv_contsub and not single_window:
+        raise typer.BadParameter("--uv-contsub needs --single-window-ms: it edits the copy")
     if not continuum and not cube:
         raise typer.BadParameter("--no-continuum needs --cube: there would be nothing to image")
     if plan_only:
@@ -1512,6 +1535,7 @@ def image_from_ms(
         max_weight=max_weight if max_weight > 0 else None,
         cube_products=products,
         contsub_order=contsub_order if contsub else None,
+        uv_contsub_order=contsub_order if uv_contsub else None,
         continuum_restart=continuum_restart and single_window,
         cube_line_mask=cube_line_mask and cube and single_window,
     )
@@ -1586,6 +1610,7 @@ def image_set(
         continuum=True,
         cube=False,
         contsub=False,
+        uv_contsub=False,
         contsub_order=1,
         spectral_sampling=2.0,
         velocity_resolution=0.0,
