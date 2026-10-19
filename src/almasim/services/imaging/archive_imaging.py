@@ -28,7 +28,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 if TYPE_CHECKING:
     import numpy as np
@@ -90,6 +90,12 @@ CUBE_IMAGE_FILENAME = f"{CUBE_NAME}-image.fits"
 CONTSUB_FILENAME = f"{CUBE_NAME}-image.contsub.fits"
 # The moment-0 mask the cube's second pass cleans in (``line_mask_from_channels``).
 LINE_MASK_FILENAME = f"{CUBE_NAME}-linemask.fits"
+# The primary beam and the primary-beam corrected image, continuum and cube
+# (``primary_beam.primary_beam_correct``).
+PB_FILENAME = "wsclean-pb.fits"
+PBCOR_FILENAME = "wsclean-image.pbcor.fits"
+CUBE_PB_FILENAME = f"{CUBE_NAME}-pb.fits"
+CUBE_PBCOR_FILENAME = f"{CUBE_NAME}-image.pbcor.fits"
 
 # Columns ``subtract_uv_continuum`` adds to the per-task single-window MS: the
 # continuum fitted per visibility over the line-free channels, and the data
@@ -490,6 +496,7 @@ def run_wsclean_task(
     continuum_restart: bool = False,
     cube_line_mask: bool = False,
     noise_products: bool = False,
+    pb_dish_diameter: float | None = None,
 ) -> dict[str, object]:
     """Run one WSClean task in a subprocess and leave a marker whatever happens.
 
@@ -529,6 +536,11 @@ def run_wsclean_task(
     removed is imaged too (``_selfcal_noise_products``): the correction and
     the total residual (kept residual + correction) of the continuum and the
     cube; its gain tables are kept in ``selfcal_gains/``.
+
+    With ``pb_dish_diameter`` (the antennas' diameter in metres) the
+    continuum image and the image cube are primary-beam corrected
+    (``pb_correct_task``): ``wsclean[-cube]-pb.fits`` and
+    ``wsclean[-cube]-image.pbcor.fits``.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -566,6 +578,8 @@ def run_wsclean_task(
     stale_products += [CUBE_SELFCAL_CORRECTION_FILENAME, CUBE_TOTAL_RESIDUAL_FILENAME] * bool(
         cube_command
     )
+    stale_products += [PB_FILENAME, PBCOR_FILENAME] * bool(command)
+    stale_products += [CUBE_PB_FILENAME, CUBE_PBCOR_FILENAME] * bool(cube_command)
     for name in stale_products:
         (out / name).unlink(missing_ok=True)
     if command:
@@ -715,6 +729,7 @@ def run_wsclean_task(
             contsub_order=contsub_order,
             cube_line_mask=bool(cube_line_mask and cube_command),
             after_images=after_images,
+            pb_dish_diameter=pb_dish_diameter,
         )
     finally:
         if scratch_dir is not None:
@@ -741,6 +756,7 @@ def _run_and_mark(
     contsub_order: int | None = None,
     cube_line_mask: bool = False,
     after_images: Callable[[], None] | None = None,
+    pb_dish_diameter: float | None = None,
 ) -> dict[str, object]:
     attempts = 0
     commands = list(commands)
@@ -784,6 +800,14 @@ def _run_and_mark(
     missing = [name for name in required if not (out / name).is_file()]
     if missing:
         raise fail(f"WSClean exited 0 but wrote no {', '.join(missing)} under {out}", 0)
+    if pb_dish_diameter:
+        try:
+            corrected = pb_correct_task(out, pb_dish_diameter)
+        except Exception as exc:
+            raise fail(f"Could not primary-beam correct the images: {exc}")
+        with log_path.open("a", encoding="utf-8") as log:
+            for name, info in corrected.items():
+                log.write(f"# primary-beam corrected {name}: {pb_note(info)}\n")
 
     elapsed = time.time() - started
     write_imaging_marker(
@@ -805,6 +829,40 @@ def _run_and_mark(
         "attempts": attempts,
         **({"channels": max(cube_channels.values())} if cube_channels else {}),
     }
+
+
+def pb_correct_task(
+    output_dir: str | os.PathLike[str], dish_diameter: float, cutoff: float | None = None
+) -> dict[str, dict[str, Any]]:
+    """Primary-beam correct a task's continuum image and image cube, where present.
+
+    Returns ``{image file name: primary_beam_correct's summary}``.
+    """
+    from .primary_beam import PB_CUTOFF, primary_beam_correct
+
+    out = Path(output_dir)
+    corrected: dict[str, dict[str, Any]] = {}
+    for image, pb, pbcor in (
+        (IMAGE_FILENAME, PB_FILENAME, PBCOR_FILENAME),
+        (CUBE_IMAGE_FILENAME, CUBE_PB_FILENAME, CUBE_PBCOR_FILENAME),
+    ):
+        if (out / image).is_file():
+            corrected[image] = primary_beam_correct(
+                out / image,
+                out / pb,
+                out / pbcor,
+                dish_diameter,
+                cutoff=PB_CUTOFF if cutoff is None else cutoff,
+            )
+    return corrected
+
+
+def pb_note(info: Mapping[str, Any]) -> str:
+    return (
+        f"{info['model']} ({float(info['dish_diameter']):g} m dish), FWHM "
+        f'{info["fwhm_arcsec"]}" at the middle channel, {info["channels"]} channel(s), '
+        f"{100 * float(info['blanked_fraction']):.1f} % blanked below {info['cutoff']}"
+    )
 
 
 def _run_with_retries(
