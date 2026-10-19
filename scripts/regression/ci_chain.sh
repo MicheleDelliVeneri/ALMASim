@@ -31,10 +31,14 @@ SLURM_QUEUE="${SLURM_QUEUE:-ci}"
 export OPENBLAS_NUM_THREADS=1
 if [ "$BACKEND" = slurm ]; then
     CALIBRATE_BACKEND=(--postprocess-backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-cores 2
-        --slurm-memory 6GB --slurm-workers 1 --slurm-walltime 01:00:00
-        --slurm-scheduler-host "${SCHEDULER_HOST:-127.0.0.1}")
+        --slurm-memory 6GB --slurm-workers 1 --slurm-walltime 01:00:00)
     IMAGE_BACKEND=(--postprocess-backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-memory 10GB
-        --slurm-n-jobs 1 --slurm-walltime 01:00:00 --scheduler-host "${SCHEDULER_HOST:-127.0.0.1}")
+        --slurm-n-jobs 1 --slurm-walltime 01:00:00)
+    # Without SCHEDULER_HOST the pipeline picks the address the workers can reach.
+    if [ -n "${SCHEDULER_HOST:-}" ]; then
+        CALIBRATE_BACKEND+=(--slurm-scheduler-host "$SCHEDULER_HOST")
+        IMAGE_BACKEND+=(--scheduler-host "$SCHEDULER_HOST")
+    fi
 else
     CALIBRATE_BACKEND=(--postprocess-backend sync)
     IMAGE_BACKEND=(--postprocess-backend sync)

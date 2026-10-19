@@ -306,7 +306,7 @@ jobs:
           [ "$b_url" = - ] || fetch "$b_url" "$b_sha" /tmp/baseline
 
       - name: Run the pipeline chain through Slurm
-        run: BACKEND=slurm scripts/regression/ci_chain.sh /tmp/fixture "$RUN"
+        run: BACKEND=slurm SCHEDULER_HOST=127.0.0.1 scripts/regression/ci_chain.sh /tmp/fixture "$RUN"
 
       - name: Compare with the tier-1 baseline
         run: |
