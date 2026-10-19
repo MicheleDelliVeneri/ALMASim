@@ -433,8 +433,10 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
     assert cmd[cmd.index("-field") + 1] == "3,4"
     assert cmd[cmd.index("-spws") + 1] == "2"
     assert Path(cmd[-1]).is_absolute() and Path(cmd[-1]).name == "uid___A001_X1_X1.cal"
-    assert cmd[cmd.index("-auto-threshold") + 1] == "3.0", "3 sigma stopping point by default"
-    assert "-auto-mask" not in cmd
+    assert cmd[cmd.index("-auto-mask") + 1] == "3.0", "masked clean by default"
+    assert cmd[cmd.index("-auto-threshold") + 1] == "1.0", "down to 1 sigma inside the mask"
+    assert cmd[cmd.index("-size") + 1] == "256", "6 beams of FOV widened to 32 beams x 8 px"
+    assert "-multiscale" not in cmd
     assert cmd[cmd.index("-mem") + 1] == "12.5", "-mem is a percentage: 8 of 64 cores"
     assert cmd[cmd.index("-temp-dir") + 1] == str(task.output_dir)
     assert "-no-update-model-required" in cmd and "-update-model-required" not in cmd
@@ -1158,6 +1160,29 @@ def test_imaging_parameter_to_command_arg_threshold_flags():
     assert flagged[flagged.index("-auto-threshold") + 1] == "2.5"
     assert flagged[flagged.index("-auto-mask") + 1] == "5.0"
     assert cli_image.imaging_parameter_to_command_arg(row, 1.0, 4.0, auto_threshold=0) == plain
+
+
+@pytest.mark.unit
+def test_image_pixels_min_beams_across_only_widens_narrow_images():
+    row = pd.Series({"fov_per_frequency": 30.0, "synthetized_beam_size": 3.0})
+    assert cli_image.image_pixels(row, 1.5, 8) == 120, "15 beams from the FOV"
+    assert cli_image.image_pixels(row, 1.5, 8, min_beams_across=32) == 256
+    assert cli_image.image_pixels(row, 1.5, 8, min_beams_across=10) == 120
+
+
+@pytest.mark.unit
+def test_imaging_parameter_to_command_arg_multiscale_and_min_beams():
+    row = pd.Series(
+        {"spectral_window_id": 1, "fov_per_frequency": 10.0, "synthetized_beam_size": 1.0}
+    )
+    plain = cli_image.imaging_parameter_to_command_arg(row, 1.0, 4.0)
+    assert "-multiscale" not in plain
+    assert plain[plain.index("-size") + 1] == "40"
+    wide = cli_image.imaging_parameter_to_command_arg(
+        row, 1.0, 4.0, min_beams_across=32, multiscale=True
+    )
+    assert "-multiscale" in wide
+    assert wide[wide.index("-size") + 1 : wide.index("-size") + 3] == ["128", "128"]
 
 
 @pytest.mark.unit
