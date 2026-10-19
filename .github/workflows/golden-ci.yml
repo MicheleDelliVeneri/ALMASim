@@ -51,6 +51,11 @@ env:
   UID_EB: uid___A002_X113d9b7_Xb670
   RUN: /tmp/golden-run
 
+# Container steps default to sh; the steps use bash arrays and process substitution.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   image:
     uses: ./.github/workflows/ci-image.yml
