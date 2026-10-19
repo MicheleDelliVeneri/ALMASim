@@ -110,6 +110,43 @@ select = ["E", "F", "W", "I"]
 [tool.ruff.format]
 docstring-code-format = true
 
+[tool.mypy]
+python_version = "3.12"
+files = ["src/almasim", "backend/app"]
+mypy_path = ["src", "backend"]
+explicit_package_bases = true
+ignore_missing_imports = true
+
+# Baseline (MADIV-28 T0.1): these modules had type errors when mypy was first
+# enabled in CI. Remove a module from this list once its errors are fixed.
+[[tool.mypy.overrides]]
+module = [
+    "app.api.v1.routers.download",
+    "app.api.v1.routers.imaging",
+    "app.api.v1.routers.simulation",
+    "app.services.metadata_service",
+    "almasim.cli",
+    "almasim.cli_image",
+    "almasim.cli_simulation",
+    "almasim.scheduling.cluster",
+    "almasim.services.archive.calibrate_ms",
+    "almasim.services.archive.qa0",
+    "almasim.services.astro.spectral",
+    "almasim.services.compute.dask",
+    "almasim.services.compute.factory",
+    "almasim.services.compute.kubernetes",
+    "almasim.services.external_skymodel",
+    "almasim.services.imaging.archive_imaging",
+    "almasim.services.imaging.reconstruction",
+    "almasim.services.interferometry.core",
+    "almasim.services.interferometry.imaging",
+    "almasim.services.interferometry.utils",
+    "almasim.services.simulation",
+    "almasim.skymodels.datasets.tng",
+    "almasim.skymodels.serendipitous",
+]
+ignore_errors = true
+
 [tool.uv]
 package = true
 
