@@ -412,6 +412,7 @@ def test_run_wsclean_task_self_calibrates_before_imaging(tmp_path, monkeypatch):
     assert seen["solints"] == ["inf"] and seen["command"][-1].endswith("spw25.single.ms")
     assert seen["ran"] == ["wsclean", "-name", "probe"], "rounds image through the task runner"
     assert seen["restart"] is True and "-update-model-required" in seen["command"]
+    assert seen["keep_gains"] is False, "noise products (and gains) are off unless asked for"
 
 
 @pytest.mark.unit
@@ -580,3 +581,286 @@ def test_default_rows_per_chunk_follows_the_cell_shape(monkeypatch):
     monkeypatch.setattr(ai, "_CHUNK_SAMPLES", 640)
     assert ai._default_rows_per_chunk(_ms(_visibilities(n_channels=64)), "DATA") == 5
     assert ai._default_rows_per_chunk(_ms(_visibilities()[:0]), "DATA") == 640
+
+
+@pytest.mark.unit
+def test_selfcal_correction_columns_whole(fake_casacore):
+    data = _visibilities()
+    fake_casacore["s.ms"] = ms = _ms(data.copy(), corrected=True)
+    ms.columns["CORRECTED_DATA"] = (data * 0.9).astype(data.dtype)
+
+    result = ai.selfcal_correction_columns("s.ms", rows_per_chunk=7)
+
+    assert result["columns"] == [ai.SELFCAL_COLUMN]
+    np.testing.assert_allclose(ms.columns[ai.SELFCAL_COLUMN], data * 0.1, rtol=1e-4, atol=1e-6)
+    assert ms.closed
+
+
+@pytest.mark.unit
+def test_selfcal_correction_columns_split_like_the_data(fake_casacore):
+    data = _visibilities()
+    corrected = (data * 0.9).astype(data.dtype)
+    fake_casacore["s.ms"] = ms = _ms(data.copy(), corrected=True)
+    ms.columns["CORRECTED_DATA"] = corrected.copy()
+
+    ai.selfcal_correction_columns("s.ms", line_ranges="27~39", order=1)
+
+    continuum = ms.columns[ai.SELFCAL_CONTINUUM_COLUMN]
+    line = ms.columns[ai.SELFCAL_LINE_COLUMN]
+    np.testing.assert_allclose(continuum + line, data - corrected, atol=1e-5)
+    line_free = ai._line_free_from_ranges("27~39", data.shape[1])
+    expected = ai.fit_uv_continuum(
+        data - corrected, np.ones(data.shape), np.zeros(data.shape, bool), line_free, 1
+    )
+    np.testing.assert_allclose(continuum, expected, atol=1e-5)
+    ai.selfcal_correction_columns("s.ms", line_ranges="", order=0)  # replaces the columns
+    assert ai.SELFCAL_LINE_COLUMN in ms.columns
+
+
+@pytest.mark.unit
+def test_selfcal_correction_columns_need_corrected_data(fake_casacore):
+    fake_casacore["n.ms"] = _ms(_visibilities())
+    with pytest.raises(RuntimeError, match="no CORRECTED_DATA"):
+        ai.selfcal_correction_columns("n.ms")
+
+
+@pytest.mark.unit
+def test_line_free_from_ranges():
+    assert ai._line_free_from_ranges("1~2;5~5", 7).tolist() == [
+        True,
+        False,
+        False,
+        True,
+        True,
+        False,
+        True,
+    ]
+    assert ai._line_free_from_ranges("", 3).all()
+
+
+@pytest.mark.unit
+def test_export_gain_table(fake_casacore, tmp_path):
+    gains = np.array([[[np.exp(0.5j) * 1.2]], [[np.exp(-0.25j)]]])
+    fake_casacore["g.cal"] = _FakeTable(
+        {
+            "TIME": np.array([100.0, 160.0]),
+            "ANTENNA1": np.array([0, 7]),
+            "CPARAM": gains,
+            "FLAG": np.array([[[False]], [[True]]]),
+        }
+    )
+    fake_casacore["g.cal/ANTENNA"] = _FakeTable({"NAME": np.array(["DA41", "DA42"])})
+
+    assert ai.export_gain_table("g.cal", str(tmp_path / "g.csv")) == {"rows": 2}
+    lines = (tmp_path / "g.csv").read_text().splitlines()
+    assert lines[0] == "time_mjd_s,antenna,polarization,amplitude,phase_deg,flagged"
+    assert lines[1] == "100.000,DA41,0,1.2,28.65,False"
+    assert lines[2] == "160.000,7,0,1,-14.32,True", "an antenna id beyond the table"
+
+
+@pytest.mark.unit
+def test_dirty_command():
+    cmd = [
+        "wsclean", "-name", "/o/wsclean", "-j", "4", "-size", "256", "256", "-niter", "100000",
+        "-make-psf", "-auto-mask", "3.0", "-auto-threshold", "1.0", "-update-model-required",
+        "-continue", "-fits-mask", "m.fits", "-data-column", "CONTINUUM_DATA", "x.ms",
+    ]  # fmt: skip
+    assert ai._dirty_command(cmd, Path("/out"), "corr", "SELFCAL_DATA") == [
+        "wsclean", "-name", "/out/corr", "-j", "4", "-size", "256", "256",
+        "-niter", "0", "-no-update-model-required", "-data-column", "SELFCAL_DATA", "x.ms",
+    ]  # fmt: skip
+
+
+@pytest.mark.unit
+def test_add_images(tmp_path):
+    a, b = tmp_path / "a.fits", tmp_path / "b.fits"
+    beams = fits.BinTableHDU.from_columns(
+        [fits.Column("BMAJ", "1E", array=[1.0, 2.0])], name="BEAMS"
+    )
+    fits.HDUList([fits.PrimaryHDU(np.ones((1, 2, 3, 3), np.float32)), beams]).writeto(a)
+    fits.PrimaryHDU(np.full((1, 2, 3, 3), 0.5, np.float32)).writeto(b)
+
+    ai.add_images(a, b, tmp_path / "sum.fits", "sum")
+
+    with fits.open(tmp_path / "sum.fits") as hdus:
+        assert np.allclose(hdus[0].data, 1.5)
+        assert hdus["BEAMS"].data["BMAJ"].tolist() == [1.0, 2.0]
+        assert "sum" in str(hdus[0].header["HISTORY"])
+    fits.PrimaryHDU(np.zeros((1, 1, 3, 3), np.float32)).writeto(tmp_path / "c.fits")
+    with pytest.raises(RuntimeError, match="differ"):
+        ai.add_images(a, tmp_path / "c.fits", tmp_path / "bad.fits", "x")
+
+
+def _noise_run(tmp_path, monkeypatch, *, fit, single_channel=False, write=True):
+    out = tmp_path / "SPW-1"
+    out.mkdir(parents=True)
+    fits.PrimaryHDU(np.ones((1, 1, 4, 4), np.float32)).writeto(out / "wsclean-residual.fits")
+    fits.PrimaryHDU(np.ones((1, 3, 4, 4), np.float32)).writeto(out / "wsclean-cube-residual.fits")
+    children, runs = [], []
+    monkeypatch.setattr(ai, "_call_in_child", lambda f, kw, **_: children.append((f, kw)) or {})
+
+    def stack(out_dir, prefix, keep):
+        if single_channel:
+            return {}
+        (out_dir / f"{prefix}-0000-dirty.fits").rename(out_dir / f"{prefix}-dirty.fits")
+        return {"dirty": 3}
+
+    monkeypatch.setattr(ai, "stack_channel_images", stack)
+
+    def run(cmd):
+        runs.append(cmd)
+        name = Path(cmd[cmd.index("-name") + 1]).name
+        if not write:
+            return 1
+        if "cube" in name and not single_channel:
+            plane, target = (1, 3, 4, 4), out / f"{name}-0000-dirty.fits"
+        else:
+            plane, target = (
+                (1, 1, 4, 4) if "cube" not in name else (1, 3, 4, 4),
+                out / f"{name}-dirty.fits",
+            )
+        fits.PrimaryHDU(np.full(plane, 0.25, np.float32)).writeto(target)
+        fits.PrimaryHDU(np.ones(plane, np.float32)).writeto(out / f"{name}-psf.fits")
+        return 1
+
+    with (tmp_path / "log").open("w") as log:
+        written = ai._selfcal_noise_products(
+            Path("x.ms"),
+            continuum_command=["wsclean", "-name", "w", "-niter", "9", "x.ms"],
+            cube_command=["wsclean", "-name", "c", "-channels-out", "3", "x.ms"],
+            fit=fit,
+            out=out,
+            log=log,
+            run=run,
+            fail=RuntimeError,
+        )
+    return out, written, children, runs, (tmp_path / "log").read_text()
+
+
+@pytest.mark.unit
+def test_selfcal_noise_products_with_continuum_subtraction(tmp_path, monkeypatch):
+    out, written, children, runs, log = _noise_run(
+        tmp_path, monkeypatch, fit={"line_ranges": "1~1", "order": 1}
+    )
+    assert children == [
+        ("selfcal_correction_columns", {"ms_path": "x.ms", "line_ranges": "1~1", "order": 1})
+    ]
+    assert [r[r.index("-data-column") + 1] for r in runs] == [
+        ai.SELFCAL_CONTINUUM_COLUMN,
+        ai.SELFCAL_LINE_COLUMN,
+    ]
+    assert written == [
+        ai.SELFCAL_CORRECTION_FILENAME,
+        ai.TOTAL_RESIDUAL_FILENAME,
+        ai.CUBE_SELFCAL_CORRECTION_FILENAME,
+        ai.CUBE_TOTAL_RESIDUAL_FILENAME,
+    ]
+    assert np.allclose(fits.getdata(out / ai.TOTAL_RESIDUAL_FILENAME), 1.25)
+    assert np.allclose(fits.getdata(out / ai.CUBE_TOTAL_RESIDUAL_FILENAME), 1.25)
+    assert not list(out.glob("*-selfcal-correction-*.fits")), "WSClean's own files removed"
+    assert "noise products: wsclean-selfcal-correction.fits" in log
+
+
+@pytest.mark.unit
+def test_selfcal_noise_products_without_subtraction_single_channel(tmp_path, monkeypatch):
+    out, written, children, runs, _ = _noise_run(
+        tmp_path, monkeypatch, fit=None, single_channel=True
+    )
+    assert children[0][1]["line_ranges"] is None
+    assert {r[r.index("-data-column") + 1] for r in runs} == {ai.SELFCAL_COLUMN}
+    assert ai.CUBE_TOTAL_RESIDUAL_FILENAME in written
+
+
+@pytest.mark.unit
+def test_selfcal_noise_products_failures(tmp_path, monkeypatch):
+    with pytest.raises(RuntimeError, match="wrote no wsclean-selfcal-correction"):
+        _noise_run(tmp_path, monkeypatch, fit=None, write=False)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("casacore lock")
+
+    monkeypatch.setattr(ai, "_call_in_child", broken)
+    with (
+        (tmp_path / "l").open("w") as log,
+        pytest.raises(RuntimeError, match="Could not write the self-calibration correction"),
+    ):
+        ai._selfcal_noise_products(
+            Path("x.ms"),
+            continuum_command=None,
+            cube_command=None,
+            fit=None,
+            out=tmp_path,
+            log=log,
+            run=lambda c: 1,
+            fail=RuntimeError,
+        )
+
+
+@pytest.mark.unit
+def test_run_wsclean_task_makes_noise_products_after_an_applied_selfcal(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(ai, "self_calibrate", lambda *a, **k: {"applied": True})
+    monkeypatch.setattr(
+        ai, "_selfcal_noise_products", lambda ms, **kwargs: seen.update(kwargs, ms=ms) or []
+    )
+    monkeypatch.setattr(ai, "_run_with_retries", lambda cmd, *args: 1)
+
+    def stop(*args, **kwargs):
+        kwargs["after_images"]()
+        raise _Stop
+
+    monkeypatch.setattr(ai, "_run_and_mark", stop)
+    with pytest.raises(_Stop):
+        _wsclean_task(
+            tmp_path, monkeypatch, selfcal_solints=["inf"], casa_data="/casa", noise_products=True
+        )
+    assert Path(seen["ms"]).name == "spw25.single.ms" and seen["fit"] is None
+    assert seen["continuum_command"][2].endswith("wsclean")
+    assert seen["cube_command"][2].endswith("wsclean-cube")
+    assert seen["run"](["wsclean"]) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("continuum", "cube", "gone", "kept"),
+    [
+        (True, True, ["wsclean", "cube", "gains"], []),
+        (False, True, ["cube"], ["wsclean", "gains"]),
+        (True, False, ["wsclean", "gains"], ["cube"]),
+    ],
+)
+def test_run_wsclean_task_clears_stale_noise_products(
+    tmp_path, monkeypatch, continuum, cube, gone, kept
+):
+    out = tmp_path / "out" / "SPW-25"
+    out.mkdir(parents=True)
+    files = {
+        "wsclean": [ai.SELFCAL_CORRECTION_FILENAME, ai.TOTAL_RESIDUAL_FILENAME],
+        "cube": [ai.CUBE_SELFCAL_CORRECTION_FILENAME, ai.CUBE_TOTAL_RESIDUAL_FILENAME],
+    }
+    for names in files.values():
+        for name in names:
+            (out / name).write_text("previous run")
+    (out / ai.SELFCAL_GAINS_DIRNAME).mkdir()
+
+    def stop(*args, **kwargs):
+        raise _Stop
+
+    monkeypatch.setattr(ai, "_run_and_mark", stop)
+    with pytest.raises(_Stop):
+        ai.run_wsclean_task(
+            command=["wsclean", "-name", str(out / "wsclean"), "x.ms"] if continuum else [],
+            cube_command=["wsclean", "-name", str(out / "wsclean-cube"), "x.ms"] if cube else None,
+            output_dir=str(out),
+            ms_path="x.ms",
+            spw=25,
+            threads=1,
+        )
+
+    def present(group):
+        if group == "gains":
+            return (out / ai.SELFCAL_GAINS_DIRNAME).exists()
+        return all((out / name).exists() for name in files[group])
+
+    assert not any(present(group) for group in gone)
+    assert all(present(group) for group in kept)
