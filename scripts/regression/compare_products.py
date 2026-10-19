@@ -47,6 +47,7 @@ from typing import Any
 import numpy as np
 
 CHUNK_BYTES = 64 * 1024 * 1024
+SHAPE_ROWS = 100_000
 # Fields that record when or how long something ran, not what it produced.
 VOLATILE_JSON_KEYS = {"completed_at", "failed_at", "started_at", "seconds", "elapsed_s"}
 # Header cards that record when a file was written.
@@ -142,19 +143,26 @@ def _column_digest(table: Any, column: str) -> str:
         for start in range(0, nrows, step):
             _hash_array(digest, table.getcol(column, startrow=start, nrow=min(step, nrows - start)))
         return digest.hexdigest()
-    # Variable-shape cells (e.g. DATA over spectral windows of different widths):
-    # cell by cell, sizing each read from the bytes the previous one returned.
-    start, step = 0, 1024
-    while start < nrows:
-        count = min(step, nrows - start)
-        cells = table.getvarcol(column, startrow=start, nrow=count)
-        size = 0
-        for row in range(start, start + count):
-            cell = cells[f"r{row + 1}"]
-            _hash_array(digest, cell)
-            size += getattr(cell, "nbytes", 64)
-        start += count
-        step = max(1, min(1_000_000, CHUNK_BYTES * count // max(size, 1)))
+    # Variable-shape cells (e.g. DATA over spectral windows of different widths).
+    # getvarcol holds far more memory than the data it returns, so read the cell
+    # shapes, split the rows into runs of one shape and read each run with getcol.
+    if not any(table.iscelldefined(column, row) for row in range(nrows)):
+        digest.update(b"<no data>")
+        return digest.hexdigest()
+    for start in range(0, nrows, SHAPE_ROWS):
+        count = min(SHAPE_ROWS, nrows - start)
+        shapes = table.getcolshapestring(column, startrow=start, nrow=count)
+        first = 0
+        while first < count:
+            last = first + 1
+            while last < count and shapes[last] == shapes[first]:
+                last += 1
+            cell_values = max(1, int(np.prod([int(n) for n in re.findall(r"\d+", shapes[first])])))
+            step = max(1, CHUNK_BYTES // (cell_values * 16))
+            for row in range(start + first, start + last, step):
+                n = min(step, start + last - row)
+                _hash_array(digest, table.getcol(column, startrow=row, nrow=n))
+            first = last
     return digest.hexdigest()
 
 
