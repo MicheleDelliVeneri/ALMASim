@@ -10,6 +10,10 @@
 # on one ALMA window, then compare every product with the references and clean
 # up. Submit with submit_golden.sh, which prepares $RUN; see the "Regression
 # gate" section of the MADIV-28 plan.
+#
+# If a stage fails the run directory is left in place. GOLDEN_FROM=compare
+# (sbatch --export=ALL,GOLDEN_FROM=compare golden_run.sbatch RUN) then repeats
+# only the digests, comparison and clean-up on the products already there.
 set -euo pipefail
 umask 0002
 RUN="${1:?usage: golden_run.sbatch RUN_DIR}"
@@ -34,6 +38,7 @@ stage() {  # stage NAME COMMAND...
 }
 mkdir -p "$RUN/logs" "$RUN/archives"
 
+if [ "${GOLDEN_FROM:-start}" = start ]; then
 stage fixture-checksum bash -c "cd '$(dirname "$FIXTURE_TAR")' && sha256sum -c '$(basename "$FIXTURE_TAR").sha256'"
 # extract writes <archive>.done beside the archive: point it at a per-run link.
 ln -sfn "$FIXTURE_TAR" "$RUN/archives/$(basename "$FIXTURE_TAR")"
@@ -68,6 +73,9 @@ stage image "$PYTHON" -m almasim.cli image image-from-ms "$RUN/params.csv" "$RUN
     --cube --uv-contsub --selfcal inf,30s,ap:inf --noise-products --casa-data-root "$CASA_DATA"
 
 stage clean-quality "$PYTHON" -m almasim.cli image clean-quality "$RUN/cubes"
+else
+    echo "resuming at the comparison (GOLDEN_FROM=$GOLDEN_FROM)"
+fi
 
 # Reference digests are computed once (reading 20 GB) and cached read-only.
 DIGESTS="$MADIV28/fixture-digests"

@@ -180,3 +180,18 @@ def test_casacore_variable_shape_column(cp, tmp_path, monkeypatch):
     tab.putcell("DATA", 49, np.arange(2, dtype=float))  # same values, different shape
     tab.close()
     assert cp.table_digest(tmp_path / "new") != ref
+
+
+def test_casacore_partly_undefined_column(cp, tmp_path):
+    tables = pytest.importorskip("casacore.tables")
+    desc = tables.maketabdesc([tables.makearrcoldesc("REST", 0.0, valuetype="double")])
+    for name in ("new", "ref"):
+        tab = tables.table(str(tmp_path / name), desc, nrow=4, ack=False)
+        for row in (1, 3):  # rows 0 and 2 stay undefined, as in SOURCE.REST_FREQUENCY
+            tab.putcell("REST", row, np.array([1.0e11 + row]))
+        tab.close()
+    assert cp.table_digest(tmp_path / "new") == cp.table_digest(tmp_path / "ref")
+    tab = tables.table(str(tmp_path / "new"), readonly=False, ack=False)
+    tab.putcell("REST", 3, np.array([2.0e11]))
+    tab.close()
+    assert cp.table_digest(tmp_path / "new") != cp.table_digest(tmp_path / "ref")

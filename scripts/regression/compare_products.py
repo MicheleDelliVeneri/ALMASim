@@ -151,7 +151,16 @@ def _column_digest(table: Any, column: str) -> str:
         return digest.hexdigest()
     for start in range(0, nrows, SHAPE_ROWS):
         count = min(SHAPE_ROWS, nrows - start)
-        shapes = table.getcolshapestring(column, startrow=start, nrow=count)
+        try:
+            shapes = table.getcolshapestring(column, startrow=start, nrow=count)
+        except RuntimeError:
+            # Some cells undefined (e.g. SOURCE.REST_FREQUENCY): cell by cell.
+            for row in range(start, start + count):
+                if table.iscelldefined(column, row):
+                    _hash_array(digest, np.asarray(table.getcell(column, row)))
+                else:
+                    digest.update(b"<undefined>")
+            continue
         first = 0
         while first < count:
             last = first + 1
