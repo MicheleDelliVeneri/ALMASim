@@ -325,7 +325,7 @@ jobs:
             --map ASDM "$RUN/asdm" "$BASELINE_PREFIX_ASDM" --report "$RUN/report.md"
           verdict=$?
           set -e
-          { echo "## Golden regression (tier 2, Slurm)"; echo; grep FAIL "$RUN/report.md" | head -50; tail -1 "$RUN/report.md"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "## Golden regression (tier 2, Slurm)"; echo; { grep FAIL "$RUN/report.md" || true; } | head -50; tail -1 "$RUN/report.md"; } >> "$GITHUB_STEP_SUMMARY"
           if [ "$verdict" -ne 0 ] && [ "$SUPERSEDE" = true ]; then
             echo "::warning::Products differ from the baseline, as declared by golden:supersede."
             exit 0
