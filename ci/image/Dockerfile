@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libblas-dev libboost-date-time-dev libboost-filesystem-dev \
         libboost-program-options-dev libboost-system-dev libboost-test-dev \
         libcfitsio-dev libfftw3-dev libgsl-dev libhdf5-dev liblapack-dev \
-        libncurses-dev libreadline-dev pkg-config python3 wcslib-dev \
+        libncurses-dev libreadline-dev pkg-config pybind11-dev python3 python3-dev \
+        wcslib-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 --branch "v${CASACORE_VERSION}" \
@@ -49,7 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libboost-filesystem1.83.0 libboost-program-options1.83.0 \
         libboost-system1.83.0 libcfitsio10t64 libfftw3-double3 \
         libfftw3-single3 libgfortran5 libgomp1 libgsl27 libhdf5-103-1t64 \
-        liblapack3 libreadline8t64 libwcs8 xz-utils \
+        liblapack3 libpython3.12t64 libreadline8t64 libwcs8 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /opt/stack /opt/stack
