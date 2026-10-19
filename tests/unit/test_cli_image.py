@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -1804,3 +1805,19 @@ def test_build_imaging_tasks_one_task_and_directory_per_field(tmp_path):
     legacy = pd.DataFrame([{**row, "target_field_ids": "2,4"}])
     tasks, _ = cli_image.build_imaging_tasks(legacy, tmp_path / "img", **common)
     assert [t.output_dir.name for t in tasks] == ["SPW-23"], "old per-window CSVs keep their layout"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("pbcor", "expected"), [(True, 12.0), (False, None)])
+def test_run_imaging_tasks_passes_the_dish_diameter_when_correcting(
+    tmp_path, monkeypatch, pbcor, expected
+):
+    tasks = [dataclasses.replace(task, dish_diameter=12.0) for task in _tasks(tmp_path, 1)]
+    backend = _FakeBackend([{"ok": 0}])
+    _run(tasks, backend, monkeypatch, pbcor=pbcor)
+    assert backend.submitted[0]["pb_dish_diameter"] == expected
+
+    calls = []
+    monkeypatch.setattr(ai, "run_wsclean_task", lambda **kwargs: calls.append(kwargs) or {})
+    _run(tasks, None, monkeypatch, backend_kind="sync", pbcor=pbcor)
+    assert calls[0]["pb_dish_diameter"] == expected

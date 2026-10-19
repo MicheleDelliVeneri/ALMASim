@@ -617,6 +617,7 @@ class ImagingTask:
     command: list[str]
     field_ids: tuple[int, ...] = ()
     cube_command: Optional[list[str]] = None
+    dish_diameter: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -645,6 +646,40 @@ def _field_arguments(row: pd.Series) -> list[str]:
     if text.endswith(".0"):  # a single id that pandas read as a float
         text = text[:-2]
     return ["-field", text]
+
+
+def row_dish_diameter(row: pd.Series) -> Optional[float]:
+    """The dish diameter (m) behind a parameter row's ``fov_per_frequency``.
+
+    ``compute_imaging_parameters`` sets it to ALMA_FOV_FACTOR lambda / D of the
+    smallest dish, so D comes back exactly (12 or 7 m for ALMA). None when
+    the row lacks the field of view or the frequency.
+    """
+    from .services.imaging.primary_beam import dish_diameter_from_fov
+
+    try:
+        diameter = dish_diameter_from_fov(
+            float(row["fov_per_frequency"]), float(row["reference_frequency"]), ALMA_FOV_FACTOR
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+    return round(diameter, 2) if math.isfinite(diameter) else None
+
+
+def task_directory(output_directory: Path, row: pd.Series) -> tuple[Path, tuple[int, ...]]:
+    """A parameter row's task directory under ``output_directory`` and its field ids.
+
+    One field per row gets its own directory and markers, so the fields of
+    one window never share an image; rows without a field, or with a list
+    (CSVs from before per-field rows), keep SPW-<n>.
+    """
+    input_filename = Path(row["filename"]).expanduser().absolute()
+    spw = int(row["spectral_window_id"])
+    field_args = _field_arguments(row)
+    field_ids = tuple(int(f) for f in field_args[1].split(",")) if field_args else ()
+    single_field = field_ids[0] if len(field_ids) == 1 else None
+    task_name = f"SPW-{spw}" if single_field is None else f"SPW-{spw}_FIELD-{single_field}"
+    return Path(output_directory) / input_filename.stem / task_name, field_ids
 
 
 def build_imaging_tasks(
@@ -719,14 +754,8 @@ def build_imaging_tasks(
     for _, row in parameters.iterrows():
         input_filename = Path(row["filename"]).expanduser().absolute()
         spw = int(row["spectral_window_id"])
-        field_args = _field_arguments(row)
-        field_ids = tuple(int(f) for f in field_args[1].split(",")) if field_args else ()
-        # One field per row gets its own directory and markers, so the fields
-        # of one window never share an image; rows without a field, or with
-        # a list (CSVs from before per-field rows), keep SPW-<n>.
+        outdir, field_ids = task_directory(output_directory, row)
         single_field = field_ids[0] if len(field_ids) == 1 else None
-        task_name = f"SPW-{spw}" if single_field is None else f"SPW-{spw}_FIELD-{single_field}"
-        outdir = output_directory / input_filename.stem / task_name
         if not overwrite_outputs:
             if is_imaging_complete(outdir, required):
                 skipped += 1
@@ -805,6 +834,7 @@ def build_imaging_tasks(
                 command=wsclean_command("wsclean", False) if continuum else [],
                 field_ids=field_ids,
                 cube_command=wsclean_command(CUBE_NAME, True) if cube is not None else None,
+                dish_diameter=row_dish_diameter(row),
             )
         )
     return tasks, skipped
@@ -888,6 +918,7 @@ def run_imaging_tasks(
     continuum_restart: bool = False,
     cube_line_mask: bool = False,
     noise_products: bool = False,
+    pbcor: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -932,6 +963,7 @@ def run_imaging_tasks(
                         continuum_restart=continuum_restart,
                         cube_line_mask=cube_line_mask,
                         noise_products=noise_products,
+                        pb_dish_diameter=task.dish_diameter if pbcor else None,
                     )
                 )
             except Exception as exc:
@@ -999,6 +1031,7 @@ def run_imaging_tasks(
                 continuum_restart=continuum_restart,
                 cube_line_mask=cube_line_mask,
                 noise_products=noise_products,
+                pb_dish_diameter=task.dish_diameter if pbcor else None,
             )
 
         queued = list(range(len(tasks)))
@@ -1401,6 +1434,16 @@ def image_from_ms(
             "tables in selfcal_gains/ (default)."
         ),
     ),
+    pbcor: bool = typer.Option(
+        False,
+        "--pbcor/--no-pbcor",
+        help=(
+            "Also primary-beam correct the continuum image and the image cube: "
+            "wsclean[-cube]-pb.fits (the beam, CASA's ALMA Airy model, per channel) and "
+            "wsclean[-cube]-image.pbcor.fits (blanked below 0.2). Off by default; "
+            "'image pb-correct' adds them to an existing run."
+        ),
+    ),
     casa_data_root: Optional[Path] = typer.Option(
         None,
         "--casa-data-root",
@@ -1625,6 +1668,7 @@ def image_from_ms(
         continuum_restart=continuum_restart and single_window,
         cube_line_mask=cube_line_mask and cube and single_window,
         noise_products=noise_products,
+        pbcor=pbcor,
     )
     typer.echo(f"Imaged {len(tasks) - len(failures)}/{len(tasks)} task(s), {len(failures)} failed.")
     if failures:
@@ -1687,6 +1731,60 @@ def clean_quality(
     with pd.option_context("display.width", 250, "display.max_columns", None):
         typer.echo(frame.to_string(float_format=lambda value: f"{value:.3g}"))
     typer.echo(f"Wrote {len(results)} quality.json file(s) and {summary_path}")
+
+
+@image_app.command("pb-correct")
+def pb_correct(
+    imaging_parameters: Path = typer.Argument(help="Parameter CSV the outputs were imaged from"),
+    output_directory: Path = typer.Argument(help="The image-from-ms output directory"),
+    cutoff: float = typer.Option(
+        0.2,
+        "--cutoff",
+        min=1e-3,
+        max=0.999,
+        help="Blank the corrected images where the beam's response is below this.",
+    ),
+):
+    """Primary-beam correct the images of an existing image-from-ms run.
+
+    For every row of IMAGING_PARAMETERS whose task finished (a .done marker)
+    writes wsclean[-cube]-pb.fits and wsclean[-cube]-image.pbcor.fits next to
+    its continuum image and image cube, as image-from-ms --pbcor does, without
+    imaging again. The dish diameter comes from the row's fov_per_frequency.
+    """
+    from .services.imaging.archive_imaging import (
+        imaging_log_path,
+        imaging_marker_path,
+        pb_correct_task,
+        pb_note,
+    )
+
+    parameters = pd.read_csv(str(imaging_parameters))
+    root = Path(output_directory).expanduser().absolute()
+    corrected = failed = skipped = 0
+    for _, row in tqdm(list(parameters.iterrows()), desc="pb-correct", unit="task"):
+        outdir, _ = task_directory(root, row)
+        if not imaging_marker_path(outdir).is_file():
+            skipped += 1
+            continue
+        dish_diameter = row_dish_diameter(row)
+        try:
+            if dish_diameter is None:
+                raise ValueError("the row has no fov_per_frequency/reference_frequency")
+            done = pb_correct_task(outdir, dish_diameter, cutoff)
+        except Exception as exc:  # one broken task must not stop the others
+            failed += 1
+            typer.echo(f"  {outdir}: {type(exc).__name__}: {exc}", err=True)
+            continue
+        with imaging_log_path(outdir).open("a", encoding="utf-8") as log:
+            for name, info in done.items():
+                log.write(f"# primary-beam corrected {name} (pb-correct): {pb_note(info)}\n")
+        corrected += 1
+    typer.echo(
+        f"Primary-beam corrected {corrected} task(s); {skipped} not imaged, {failed} failed."
+    )
+    if failed or not corrected:
+        raise typer.Exit(code=1)
 
 
 @image_app.command("batch-image", hidden=True)
@@ -1758,6 +1856,7 @@ def image_set(
         selfcal="",
         selfcal_min_snr=20.0,
         noise_products=True,
+        pbcor=False,
         casa_data_root=None,
         contsub_order=1,
         spectral_sampling=2.0,
