@@ -10,6 +10,9 @@ name: Golden regression
 # - golden:supersede: differences are reported, not failed, and the candidate
 #   baseline is uploaded for the PR to adopt.
 # - golden:skip: no run.
+#
+# The simulation job (T0.17) runs seeded simulations of four source types and
+# compares them with the simulation baseline the same way.
 
 on:
   pull_request:
@@ -162,5 +165,74 @@ jobs:
         with:
           name: golden-candidate-baseline
           path: /tmp/candidate
+          retention-days: 30
+          if-no-files-found: ignore
+
+  simulation:
+    needs: image
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'golden:skip') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: ${{ needs.image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      SUPERSEDE: ${{ contains(github.event.pull_request.labels.*.name, 'golden:supersede') }}
+      SIM_RUN: /tmp/sim-run
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install this checkout into the image environment
+        run: uv sync --frozen --no-default-groups --group test --extra casa --extra ms-casacore
+
+      - name: Run the seeded simulations
+        run: scripts/regression/sim_golden.sh "$SIM_RUN"
+
+      - name: Compare with the simulation baseline
+        run: |
+          read -r url sha < <(python -c "import json; b = json.load(open('ci/golden/baseline.json')).get('simulation_baseline'); print(b['url'], b['sha256']) if b else print('', '')")
+          if [ -z "$url" ]; then
+            echo "::notice::No simulation baseline yet: products packaged as the candidate (artifact golden-candidate-simulation)."
+            exit 0
+          fi
+          curl -fsSL --retry 3 -o /tmp/sim-baseline.tar.gz "$url"
+          echo "$sha  /tmp/sim-baseline.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/sim-baseline && tar -xzf /tmp/sim-baseline.tar.gz -C /tmp/sim-baseline --strip-components 1
+          set +e
+          python -I scripts/regression/compare_products.py tree "$SIM_RUN" /tmp/sim-baseline/products \
+            --map SIM "$SIM_RUN" "$(cat /tmp/sim-baseline/RUN_PREFIX)" \
+            --map REPO "$GITHUB_WORKSPACE" "$(cat /tmp/sim-baseline/REPO_PREFIX)" \
+            --report /tmp/sim-report.md
+          verdict=$?
+          set -e
+          { echo "## Simulation golden"; echo; grep FAIL /tmp/sim-report.md | head -40; tail -1 /tmp/sim-report.md; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$verdict" -ne 0 ] && [ "$SUPERSEDE" = true ]; then
+            echo "::warning::Simulation products differ from the baseline, as declared by golden:supersede."
+            exit 0
+          fi
+          exit "$verdict"
+
+      - name: Package the candidate simulation baseline
+        if: always()
+        run: |
+          [ -d "$SIM_RUN" ] || exit 0
+          stage=/tmp/candidate-sim/golden-simulation-candidate
+          mkdir -p "$stage/products"
+          (cd "$SIM_RUN" && cp -r $(ls -d */ | grep -v '^logs/$') "$stage/products/")
+          echo "$SIM_RUN" > "$stage/RUN_PREFIX"
+          echo "$GITHUB_WORKSPACE" > "$stage/REPO_PREFIX"
+          echo "commit=${{ github.sha }} run=${{ github.run_id }} ref=${{ github.ref }}" > "$stage/PROVENANCE"
+          tar -czf /tmp/candidate-sim/golden-simulation-candidate.tar.gz -C /tmp/candidate-sim golden-simulation-candidate
+          (cd /tmp/candidate-sim && sha256sum golden-simulation-candidate.tar.gz > golden-simulation-candidate.tar.gz.sha256)
+          rm -rf "$stage"
+
+      - name: Upload the candidate simulation baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-candidate-simulation
+          path: /tmp/candidate-sim
           retention-days: 30
           if-no-files-found: ignore
