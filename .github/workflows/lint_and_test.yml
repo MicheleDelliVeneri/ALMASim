@@ -35,7 +35,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Run mypy
-        run: uv run mypy --install-types --non-interactive
+        run: uv run mypy
 
       - name: Create kaggle.json from secret
         env:
