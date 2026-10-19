@@ -231,13 +231,21 @@ def try_asdm_round_trip(trimmed: Path, scratch: Path, args: argparse.Namespace) 
         shutil.rmtree(asdm_dir)
     asdm_dir.mkdir()
     asdm = asdm_dir / f"{UID}.asdm.sdm"
-    # casatasks must not share a process with python-casacore.
+    # casatasks must not share a process with python-casacore. The child sets CASA
+    # up the way the pipeline does (CASASITECONFIG, its own matplotlib cache);
+    # without that the casatools import can hang.
     code = textwrap.dedent(f"""
+        from almasim.services.archive.unpack_ms import configure_casa_environment
+        configure_casa_environment({str(scratch)!r}, {str(CASA_DATA)!r},
+                                   log_file={str(scratch / "casa-exportasdm.log")!r})
         from casatasks import exportasdm
         exportasdm(vis={str(trimmed)!r}, asdm={str(asdm)!r}, datacolumn='DATA')
     """)
-    env = casa_env(scratch)
-    result = subprocess.run([sys.executable, "-c", code], env=env, cwd=scratch)
+    try:
+        result = subprocess.run([sys.executable, "-c", code], cwd=scratch, timeout=3600)
+    except subprocess.TimeoutExpired:
+        log("exportasdm did not finish within an hour; shipping the trimmed MS")
+        return "ms"
     if result.returncode != 0 or not asdm.is_dir():
         log(f"exportasdm failed (exit {result.returncode}); shipping the trimmed MS")
         return "ms"
@@ -279,20 +287,6 @@ def try_asdm_round_trip(trimmed: Path, scratch: Path, args: argparse.Namespace) 
     a.close()
     b.close()
     return "asdm" if same else "ms"
-
-
-def casa_env(scratch: Path) -> dict[str, str]:
-    """Environment for a CASA child process, using the cycle11 CASA data offline."""
-    site = scratch / "casa-site"
-    site.mkdir(exist_ok=True)
-    (site / "casasiteconfig.py").write_text(
-        f"measurespath = {str(CASA_DATA)!r}\n"
-        "measures_auto_update = False\n"
-        "data_auto_update = False\n"
-    )
-    env = dict(os.environ)
-    env["PYTHONPATH"] = f"{site}:{env.get('PYTHONPATH', '')}"
-    return env
 
 
 def write_readme(fixture: Path, raw_kind: str, rows, antennas, args) -> None:
