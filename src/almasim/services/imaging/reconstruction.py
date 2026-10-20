@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from ..products.preview import integrate_cube_preview, load_cube_from_npz  # noqa: F401
 
 
 def regrid_cube_to_match(cube: np.ndarray, target_shape: tuple[int, int, int]) -> np.ndarray:
@@ -68,83 +69,6 @@ def convolve_cube_with_beam(
             )
         ).astype(np.float32)
     return convolved
-
-
-def load_cube_from_npz(npz_path: str | Path) -> tuple[np.ndarray, str]:
-    """Load a cube from an NPZ file and normalize to `(chan, y, x)` layout."""
-    with np.load(npz_path) as data:
-        cube = None
-        cube_name = None
-        for name in [
-            "modelCube",
-            "dirtyCube",
-            "clean_cube",
-            "dirty_cube",
-            "beam_cube",
-            "component_cube",
-            "residual_cube",
-            "restored_cube",
-            "clean_beam_cube",
-            "convolved_reference_cube",
-        ]:
-            if name in data:
-                cube = data[name]
-                cube_name = name
-                break
-        if cube is None:
-            keys = list(data.keys())
-            if not keys:
-                raise ValueError("No arrays found in NPZ file")
-            cube_name = keys[0]
-            cube = data[cube_name]
-
-    cube = np.asarray(cube, dtype=np.float32)
-    if cube.ndim != 3:
-        raise ValueError(f"Expected 3D datacube, got {cube.ndim}D array")
-    if cube.shape[2] <= min(cube.shape[0], cube.shape[1]):
-        cube = np.transpose(cube, (2, 0, 1))
-    return cube, str(cube_name)
-
-
-def integrate_cube_preview(
-    cube: np.ndarray,
-    *,
-    method: str = "sum",
-    cube_name: str = "cube",
-) -> dict[str, Any]:
-    """Convert a channel-first cube into a normalized 2D preview payload."""
-    cube = np.asarray(cube, dtype=np.float32)
-    if cube.ndim != 3:
-        raise ValueError(f"Expected 3D datacube, got {cube.ndim}D array")
-    if method not in {"sum", "mean"}:
-        raise ValueError("method must be 'sum' or 'mean'")
-
-    if method == "sum":
-        integrated = np.sum(cube, axis=0)
-    else:
-        integrated = np.nanmean(cube, axis=0)
-
-    integrated = np.nan_to_num(integrated, nan=0.0, posinf=0.0, neginf=0.0)
-    if integrated.max() > integrated.min():
-        normalized = (
-            (integrated - integrated.min()) / (integrated.max() - integrated.min()) * 255.0
-        ).astype(np.uint8)
-    else:
-        normalized = np.zeros_like(integrated, dtype=np.uint8)
-
-    return {
-        "image": normalized.tolist(),
-        "stats": {
-            "shape": list(cube.shape),
-            "integrated_shape": list(integrated.shape),
-            "min": float(integrated.min()),
-            "max": float(integrated.max()),
-            "mean": float(integrated.mean()),
-            "std": float(integrated.std()),
-            "cube_name": cube_name,
-        },
-        "method": method,
-    }
 
 
 def _insert_shifted_kernel(

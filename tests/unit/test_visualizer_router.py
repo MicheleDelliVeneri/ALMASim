@@ -13,6 +13,8 @@ import pytest
 from astropy.io import fits
 from fastapi.dependencies import utils as fastapi_dependency_utils
 
+from almasim.services.products import preview
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -32,8 +34,8 @@ def test_list_visualizer_files_includes_npz_fits_and_msv2(tmp_path):
     fits.PrimaryHDU(np.ones((2, 3, 4), dtype=np.float32)).writeto(tmp_path / "cube.fits")
     (tmp_path / "example.ms").mkdir()
 
-    listed = visualizer._iter_supported_paths(tmp_path)
-    by_name = {path.name: visualizer._classify_visualizer_path(path) for path in listed}
+    listed = preview.iter_supported_products(tmp_path)
+    by_name = {path.name: preview.classify_product_path(path) for path in listed}
     assert by_name["cube.npz"] == "npz"
     assert by_name["cube.fits"] == "fits"
     assert by_name["example.ms"] == "msv2"
@@ -69,7 +71,7 @@ def test_integrate_server_side_msv2_path(monkeypatch, tmp_path):
         assert path == ms_path
         return np.ones((3, 4, 5), dtype=np.float32), "example.ms: visibility amplitude"
 
-    monkeypatch.setattr(visualizer, "_load_msv2_cube", fake_load_msv2_cube)
+    monkeypatch.setattr(preview, "_load_msv2_cube", fake_load_msv2_cube)
 
     response = visualizer._build_integrated_response(ms_path, "mean")
     payload = json.loads(response.body)
@@ -80,7 +82,7 @@ def test_integrate_server_side_msv2_path(monkeypatch, tmp_path):
 
 def test_complex_component_projection_uses_imaginary_part():
     cube = np.array([[[1 + 2j, 3 + 4j], [5 + 6j, 7 + 8j]]], dtype=np.complex64)
-    projected = visualizer._project_complex_component(cube, complex_component="imag")
+    projected = preview.project_complex_component(cube, complex_component="imag")
     assert projected.tolist() == [[[2.0, 4.0], [6.0, 8.0]]]
 
 
