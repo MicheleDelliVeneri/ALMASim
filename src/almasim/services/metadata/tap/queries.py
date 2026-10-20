@@ -8,6 +8,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from ...instrument.array import derive_array_type
 from .service import (
     ExclusionFilters,
     InclusionFilters,
@@ -80,23 +81,8 @@ ALL_COLUMNS = [
 ]
 
 
-def _derive_array_type(antenna_arrays_str: object) -> str:
-    """Derive a human-readable array type string from the antenna_arrays field.
-
-    Returns a '+'-joined combination of the types present, e.g. '12m', '7m',
-    'TP', '12m+7m', '12m+7m+TP', etc.  DA/DV → 12m, CM → 7m, PM → TP.
-    """
-    if not isinstance(antenna_arrays_str, str) or not antenna_arrays_str:
-        return ""
-    upper = antenna_arrays_str.upper()
-    types = []
-    if "DA" in upper or "DV" in upper:
-        types.append("12m")
-    if "CM" in upper:
-        types.append("7m")
-    if "PM" in upper:
-        types.append("TP")
-    return "+".join(types) if types else ""
+# Kept under its old name for callers and tests of this module.
+_derive_array_type = derive_array_type
 
 
 def _prepare_save_path(save_to: Optional[Path | str]) -> Optional[Path]:

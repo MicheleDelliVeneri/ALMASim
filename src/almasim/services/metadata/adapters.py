@@ -4,23 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Optional, Sequence
 
+from ..instrument.array import derive_array_type
 from .tap.queries import ALL_COLUMNS
 from .tap.service import ExclusionFilters, InclusionFilters
-
-
-def derive_array_type(antenna_arrays_str: object) -> str:
-    """Derive a human-readable array type from the raw antenna array string."""
-    if not isinstance(antenna_arrays_str, str) or not antenna_arrays_str:
-        return ""
-    upper = antenna_arrays_str.upper()
-    types = []
-    if "DA" in upper or "DV" in upper:
-        types.append("12m")
-    if "CM" in upper:
-        types.append("7m")
-    if "PM" in upper:
-        types.append("TP")
-    return "+".join(types) if types else ""
 
 
 def build_inclusion_filters(params: Any) -> InclusionFilters:

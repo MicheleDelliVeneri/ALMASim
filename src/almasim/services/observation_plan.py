@@ -5,31 +5,18 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping, Optional
 
+from .instrument.array import derive_array_type as _derive_array_type
+
 ALMA_LATITUDE_DEG = -23.028
 
 
 def derive_array_type(antenna_array: str) -> str:
-    """Derive a coarse ALMA array type from an antenna string."""
-    upper = (antenna_array or "").upper()
-    has_12m = ("DA" in upper) or ("DV" in upper)
-    has_7m = "CM" in upper
-    has_tp = "PM" in upper
+    """The array type of an antenna string, falling back to "12m" when none is recognised.
 
-    if has_12m and not has_7m and not has_tp:
-        return "12m"
-    if has_7m and not has_12m and not has_tp:
-        return "7m"
-    if has_tp and not has_12m and not has_7m:
-        return "TP"
-    if has_12m and has_7m:
-        return "12m+7m"
-    if has_12m and has_tp:
-        return "12m+TP"
-    if has_7m and has_tp:
-        return "7m+TP"
-    if has_12m and has_7m and has_tp:
-        return "12m+7m+TP"
-    return "12m"
+    The planner needs a type for every configuration, hence the fallback; the
+    rule itself is the shared one in services.instrument.array.
+    """
+    return _derive_array_type(antenna_array) or "12m"
 
 
 def infer_antenna_diameter_m(array_type: str) -> float:
