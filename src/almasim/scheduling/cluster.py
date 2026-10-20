@@ -17,7 +17,10 @@ import socket
 import subprocess
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, ClassVar, Mapping, Sequence
+
+from almasim.services.paths import UnsafePathError, safe_join
 
 try:
     from dask.distributed import Client
@@ -204,23 +207,24 @@ class SlurmDaskClusterSingleton:
     def _resolve_safe_log_directory(raw_log_directory: Any) -> str:
         """Resolve and validate that worker logs stay in a directory under the user's home.
 
-        The path is resolved (``realpath``: ``..`` segments and symlinks) before it
-        is compared with the home directory plus a separator, so neither
-        ``~/../etc`` nor a sibling such as ``/home/user2`` for ``/home/user``
-        passes; CodeQL recognises this normalise-then-prefix check as a
-        path-injection guard (py/path-injection).
+        :func:`~almasim.services.paths.safe_join` resolves ``..`` segments and
+        symlinks before comparing with the home directory plus a separator, so
+        neither ``~/../etc`` nor a sibling such as ``/home/user2`` for
+        ``/home/user`` passes. A relative path is taken from the home directory,
+        and the home directory itself is refused.
         """
         if not isinstance(raw_log_directory, str):
             raise ValueError("log_directory must be a string")
         if not raw_log_directory.strip():
             raise ValueError("log_directory must not be empty")
-
-        safe_log_root = os.path.realpath(os.path.expanduser("~"))
-        prefix = safe_log_root if safe_log_root.endswith(os.sep) else safe_log_root + os.sep
-        log_directory = os.path.realpath(os.path.abspath(os.path.expanduser(raw_log_directory)))
-        if not log_directory.startswith(prefix):
-            raise ValueError("log_directory must be within the user's home directory")
-        return log_directory
+        outside = ValueError("log_directory must be within the user's home directory")
+        try:
+            log_directory = safe_join(Path.home(), raw_log_directory)
+        except UnsafePathError as exc:
+            raise outside from exc
+        if log_directory == Path(os.path.realpath(Path.home())):
+            raise outside
+        return str(log_directory)
 
     def __init__(
         self,

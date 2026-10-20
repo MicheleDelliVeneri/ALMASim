@@ -9,6 +9,7 @@ from database.service import DatabaseService
 
 import almasim.services.simulation as sim_service
 from almasim.services.compute.base import ComputationBackend
+from almasim.services.paths import UnsafePathError, safe_join
 from almasim.services.simulation import SimulationParams
 from app.schemas.simulation import SimulationParamsCreate
 from app.services.status_store import status_store
@@ -63,11 +64,10 @@ class SimulationService:
         """Return a validated output directory that must reside within the configured base."""
         if not user_dir:
             return self.output_dir
-        resolved = Path(user_dir).expanduser().resolve()
-        base = self.output_dir.resolve()
-        if not resolved.is_relative_to(base):
-            raise ValueError("output_dir must be within the configured output directory")
-        return resolved
+        try:
+            return safe_join(self.output_dir, user_dir)
+        except UnsafePathError as exc:
+            raise ValueError("output_dir must be within the configured output directory") from exc
 
     def _persist_log(
         self,
