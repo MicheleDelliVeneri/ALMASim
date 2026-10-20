@@ -1,0 +1,63 @@
+"""When and how often the simulated array observes (MADIV-28 T1.3).
+
+The legacy simulator took the integration time (in hours) as seconds when it
+built the hour-angle track, and then fed that span, in degrees, to
+``sin``/``cos`` as radians: every track came out about 63 times too short
+(a 3.9 h observation spanned 0.016 rad instead of 1.02 rad), close to a
+snapshot. These helpers take seconds and return radians.
+"""
+
+from __future__ import annotations
+
+import math
+
+import astropy.units as U
+from astropy.coordinates import EarthLocation
+from astropy.time import Time
+
+# Scan lengths (s) tried in turn until the track has at most MAX_EPOCHS samples.
+SCAN_TIMES_S = (6.0, 8.064, 18.144, 30.24)
+MAX_EPOCHS = 200
+
+
+def hour_angle_samples(integration_time_s: float) -> tuple[int, float]:
+    """(number of epochs, scan time in s) for an integration time in seconds.
+
+    The shortest scan that keeps the track at ``MAX_EPOCHS`` samples or fewer
+    is used; a longer integration keeps the longest scan. At least one epoch.
+    """
+    for scan_time in SCAN_TIMES_S:
+        n_epochs = int(float(integration_time_s) / scan_time)
+        if n_epochs <= MAX_EPOCHS:
+            break
+    return max(1, n_epochs), scan_time
+
+
+def _wrap(angle_rad: float) -> float:
+    """``angle_rad`` in (-pi, pi]."""
+    wrapped = math.remainder(angle_rad, 2.0 * math.pi)
+    return math.pi if wrapped == -math.pi else wrapped
+
+
+def hour_angle_coverage(
+    observation_date: str,
+    integration_time_s: float,
+    ra_rad: float,
+    location: EarthLocation,
+) -> list[float]:
+    """[start, end] hour angle (rad) of the track, relative to its middle.
+
+    The observation starts at 00:00 UTC on ``observation_date`` and lasts
+    ``integration_time_s``; the track is centred on its middle hour angle,
+    so a one-hour observation spans about +-0.131 rad.
+    """
+    start = Time(observation_date + "T00:00:00", format="isot", scale="utc")
+    duration = float(integration_time_s) * U.s
+    middle, end = start + duration / 2, start + duration
+
+    def hour_angle(time: Time) -> float:
+        lst = time.sidereal_time("apparent", longitude=location.lon)
+        return float(lst.rad) - ra_rad
+
+    ha_middle = hour_angle(middle)
+    return [_wrap(hour_angle(start) - ha_middle), _wrap(hour_angle(end) - ha_middle)]

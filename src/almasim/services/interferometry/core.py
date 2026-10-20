@@ -10,7 +10,6 @@ import astropy.units as U
 import numpy as np
 from astropy.coordinates import EarthLocation
 from astropy.io import fits
-from astropy.time import Time
 
 if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
@@ -25,6 +24,7 @@ from ..instrument.constants import (
 )
 from ..products.cube_export import write_interferometry_products
 from .imaging import image_channel, image_channel_ducc0
+from .observing import hour_angle_coverage, hour_angle_samples
 from .utils import get_channel_wavelength, sampling_to_uv_mask
 from .visibility import assemble_visibility_table
 
@@ -190,7 +190,6 @@ class Interferometer:
         """Initialize calculation variables."""
         self.deg2rad = np.pi / 180.0
         self.rad2deg = 180.0 / np.pi
-        self.second2hour = 1.0 / 3600.0
         self.curzoom = [0, 0, 0, 0]
         self.gamma = 0.5
         self.lfac = 1.0e6
@@ -237,39 +236,17 @@ class Interferometer:
         )
 
     def _get_Hcov(self) -> None:
-        """Calculate hour angle coverage."""
-        self.integration_time = self.integration_time * U.s
-        start_time = Time(self.observation_date + "T00:00:00", format="isot", scale="utc")
-        middle_time = start_time + self.integration_time / 2
-        end_time = start_time + self.integration_time
-        ha_start = self._get_hour_angle(start_time)
-        ha_middle = self._get_hour_angle(middle_time)
-        ha_end = self._get_hour_angle(end_time)
-        start = ha_start - ha_middle
-        end = ha_end - ha_middle
-        self.Hcov = [start, end]
-
-    def _get_hour_angle(self, time: Time) -> float:
-        """Calculate hour angle for given time."""
-        lst = time.sidereal_time("apparent", longitude=self.observing_location.lon)
-        ha = lst.deg - self.ra
-        if ha < 0:
-            ha += 360
-        return ha
+        """Hour-angle coverage [start, end] in radians, centred on the track's middle."""
+        self.Hcov = hour_angle_coverage(
+            self.observation_date,
+            float(self.integration_time) * 3600.0,  # the integration time is in hours
+            self.ra,
+            self.observing_location,
+        )
 
     def _get_nH(self) -> None:
-        """Calculate number of hour angle samples."""
-        self.scan_time = 6
-        self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
-        if self.nH > 200:
-            self.scan_time = 8.064
-            self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
-            if self.nH > 200:
-                self.scan_time = 18.144
-                self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
-                if self.nH > 200:
-                    self.scan_time = 30.24
-                    self.nH = int(self.integration_time / (self.scan_time * self.second2hour))
+        """Number of hour-angle samples (one per scan) and the scan time in seconds."""
+        self.nH, self.scan_time = hour_angle_samples(float(self.integration_time) * 3600.0)
         self.header.append(("EPOCH", self.nH))
 
     def _read_antennas(self) -> None:
