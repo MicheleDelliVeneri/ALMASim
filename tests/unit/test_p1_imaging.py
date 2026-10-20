@@ -8,7 +8,6 @@ from almasim.services.imaging import (
     clean_deconvolve_cube,
     convolve_cube_with_beam,
     feather_merge_cube,
-    integrate_cube_preview,
     regrid_cube_to_match,
     wiener_deconvolve_cube,
 )
@@ -16,6 +15,7 @@ from almasim.services.interferometry.total_power import (
     estimate_tp_beam_fwhm_arcsec,
     simulate_total_power_observation,
 )
+from almasim.services.products.preview import integrate_cube_preview
 
 
 @pytest.mark.unit
