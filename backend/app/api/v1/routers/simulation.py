@@ -53,7 +53,7 @@ class DaskTestResponse(BaseModel):
 
 
 @router.get("/", response_model=SimulationListResponse)
-async def list_simulations(db: Session = Depends(get_db)) -> SimulationListResponse:
+def list_simulations(db: Session = Depends(get_db)) -> SimulationListResponse:
     """List all simulations."""
     from app.schemas.simulation import SimulationSummary
 
@@ -96,7 +96,7 @@ async def list_simulations(db: Session = Depends(get_db)) -> SimulationListRespo
 
 
 @router.post("/", response_model=SimulationResponse, status_code=status.HTTP_201_CREATED)
-async def create_simulation(
+def create_simulation(
     params: SimulationParamsCreate,
     background_tasks: BackgroundTasks,
     default_backend: ComputationBackend = Depends(get_compute_backend),
@@ -201,7 +201,7 @@ async def create_simulation(
 
 
 @router.post("/estimate", response_model=SimulationEstimate)
-async def estimate_simulation(
+def estimate_simulation(
     params: SimulationParamsCreate,
 ) -> SimulationEstimate:
     """Estimate simulation cube dimensions and raw storage footprint."""
@@ -275,7 +275,7 @@ async def estimate_simulation(
 
 
 @router.get("/{simulation_id}/status", response_model=SimulationStatusSchema)
-async def get_simulation_status(
+def get_simulation_status(
     simulation_id: str,
     db: Session = Depends(get_db),
 ) -> SimulationStatusSchema:
@@ -319,7 +319,7 @@ async def get_simulation_status(
 
 
 @router.post("/{simulation_id}/cancel", response_model=SimulationResponse)
-async def cancel_simulation(
+def cancel_simulation(
     simulation_id: str,
     db: Session = Depends(get_db),
 ) -> SimulationResponse:
@@ -420,7 +420,7 @@ async def websocket_status(websocket: WebSocket, simulation_id: str):
 
 
 @router.post("/test-dask", response_model=DaskTestResponse)
-async def test_dask_connection(body: DaskTestRequest):
+def test_dask_connection(body: DaskTestRequest):
     """Test connectivity to a Dask scheduler and return cluster info."""
     from dask.distributed import Client
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 import json
 import sys
@@ -137,7 +136,7 @@ def test_browse_directory_returns_subdirs(tmp_path, monkeypatch):
 
     monkeypatch.setattr(download_router.settings, "HOST_DIR", tmp_path)
 
-    result = asyncio.run(download_router.browse_directory(path=str(tmp_path / "data")))
+    result = download_router.browse_directory(path=str(tmp_path / "data"))
     assert result.current == str(tmp_path / "data")
 
 
@@ -147,7 +146,7 @@ def test_browse_directory_rejects_traversal(tmp_path, monkeypatch):
     monkeypatch.setattr(download_router.settings, "HOST_DIR", tmp_path)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.browse_directory(path="../../etc"))
+        download_router.browse_directory(path="../../etc")
     assert exc_info.value.status_code == 400
 
 
@@ -160,7 +159,7 @@ def test_make_directory_creates_and_returns_result(tmp_path, monkeypatch):
     new_dir = tmp_path / "new_folder"
     monkeypatch.setattr(download_router.settings, "HOST_DIR", tmp_path)
 
-    result = asyncio.run(download_router.make_directory(path=str(new_dir)))
+    result = download_router.make_directory(path=str(new_dir))
     assert new_dir.exists()
     assert result.current == str(new_dir)
 
@@ -171,7 +170,7 @@ def test_make_directory_rejects_traversal(tmp_path, monkeypatch):
     monkeypatch.setattr(download_router.settings, "HOST_DIR", tmp_path)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.make_directory(path="../../etc/bad"))
+        download_router.make_directory(path="../../etc/bad")
     assert exc_info.value.status_code == 400
 
 
@@ -197,7 +196,7 @@ def test_resolve_download_products_returns_product_list(monkeypatch):
 
     body = MagicMock()
     body.member_ous_uids = ["uid://A001/X1"]
-    result = asyncio.run(download_router.resolve_download_products(body))
+    result = download_router.resolve_download_products(body)
 
     assert result.total_count == 1
     assert result.total_size_bytes == 1024
@@ -210,7 +209,7 @@ def test_resolve_download_products_raises_400_for_empty_uids(monkeypatch):
     body.member_ous_uids = []
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.resolve_download_products(body))
+        download_router.resolve_download_products(body)
     assert exc_info.value.status_code == 400
 
 
@@ -224,7 +223,7 @@ def test_resolve_download_products_raises_502_on_network_error(monkeypatch):
     body.member_ous_uids = ["uid://A001/X1"]
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.resolve_download_products(body))
+        download_router.resolve_download_products(body)
     assert exc_info.value.status_code == 502
 
 
@@ -240,7 +239,7 @@ def test_check_disk_space_returns_info(tmp_path, monkeypatch):
     body.path = str(tmp_path)
     body.needed_bytes = 1
 
-    result = asyncio.run(download_router.check_disk_space(body))
+    result = download_router.check_disk_space(body)
     assert result.total_bytes > 0
 
 
@@ -254,7 +253,7 @@ def test_check_disk_space_rejects_traversal(tmp_path, monkeypatch):
     body.needed_bytes = 0
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.check_disk_space(body))
+        download_router.check_disk_space(body)
     assert exc_info.value.status_code == 400
 
 
@@ -270,7 +269,7 @@ def test_start_download_raises_400_for_empty_uids(monkeypatch):
     body.member_ous_uids = []
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.start_download(body=body, background_tasks=MagicMock()))
+        download_router.start_download(body=body, background_tasks=MagicMock())
     assert exc_info.value.status_code == 400
 
 
@@ -282,7 +281,7 @@ def test_start_download_raises_502_on_resolve_error(monkeypatch):
     body.member_ous_uids = ["uid://A001/X1"]
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.start_download(body=body, background_tasks=MagicMock()))
+        download_router.start_download(body=body, background_tasks=MagicMock())
     assert exc_info.value.status_code == 502
 
 
@@ -308,7 +307,7 @@ def test_start_download_raises_404_when_no_products_match_filter(monkeypatch):
     body.product_filter = "raw"
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.start_download(body=body, background_tasks=MagicMock()))
+        download_router.start_download(body=body, background_tasks=MagicMock())
     assert exc_info.value.status_code == 404
 
 
@@ -344,7 +343,7 @@ def test_start_download_creates_job_and_returns_response(monkeypatch):
     body.casa_data_root = None
     body.skip_casa_data_update = False
 
-    result = asyncio.run(download_router.start_download(body=body, background_tasks=bt))
+    result = download_router.start_download(body=body, background_tasks=bt)
     assert result.total_files == 1
     assert result.total_bytes == 2048
     assert result.status == "pending"
@@ -369,7 +368,7 @@ def test_list_download_jobs_with_active_job(monkeypatch):
     store.get.return_value = job
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.list_download_jobs())
+    result = download_router.list_download_jobs()
     assert len(result) == 1
     assert result[0].job_id == "job-1"
     assert result[0].status == "completed"
@@ -383,7 +382,7 @@ def test_list_download_jobs_from_db_when_not_active(monkeypatch):
     store.get.return_value = None
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.list_download_jobs())
+    result = download_router.list_download_jobs()
     assert len(result) == 1
     assert result[0].status == "completed"
 
@@ -400,7 +399,7 @@ def test_get_download_job_returns_active_job(monkeypatch):
     store.get.return_value = job
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.get_download_job("job-1"))
+    result = download_router.get_download_job("job-1")
     assert result.job_id == "job-1"
     assert len(result.files) == 1
 
@@ -413,7 +412,7 @@ def test_get_download_job_falls_back_to_db(monkeypatch):
     store.get_from_db.return_value = rec
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.get_download_job("job-1"))
+    result = download_router.get_download_job("job-1")
     assert result.job_id == "job-1"
     assert result.status == "completed"
 
@@ -427,7 +426,7 @@ def test_get_download_job_raises_404_when_not_found(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.get_download_job("no-such"))
+        download_router.get_download_job("no-such")
     assert exc_info.value.status_code == 404
 
 
@@ -444,7 +443,7 @@ def test_get_download_job_metadata_from_active_job(monkeypatch):
     store.get.return_value = job
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.get_download_job_metadata("job-1"))
+    result = download_router.get_download_job_metadata("job-1")
     assert result.count == 1
 
 
@@ -457,7 +456,7 @@ def test_get_download_job_metadata_from_db(monkeypatch):
     store.get_from_db.return_value = rec
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.get_download_job_metadata("job-1"))
+    result = download_router.get_download_job_metadata("job-1")
     assert result.count == 2
 
 
@@ -470,7 +469,7 @@ def test_get_download_job_metadata_raises_404_when_job_missing(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.get_download_job_metadata("no-such"))
+        download_router.get_download_job_metadata("no-such")
     assert exc_info.value.status_code == 404
 
 
@@ -485,7 +484,7 @@ def test_get_download_job_metadata_raises_404_when_rows_empty(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.get_download_job_metadata("job-1"))
+        download_router.get_download_job_metadata("job-1")
     assert exc_info.value.status_code == 404
 
 
@@ -501,7 +500,7 @@ def test_cancel_download_job_active_job(monkeypatch):
     store.get.return_value = job
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.cancel_download_job("job-1"))
+    result = download_router.cancel_download_job("job-1")
     assert result["status"] == "cancelled"
     store.update.assert_called_once_with("job-1", status="cancelled")
     store.persist.assert_called_once_with("job-1")
@@ -517,7 +516,7 @@ def test_cancel_download_job_raises_400_when_already_finished(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.cancel_download_job("job-1"))
+        download_router.cancel_download_job("job-1")
     assert exc_info.value.status_code == 400
 
 
@@ -529,7 +528,7 @@ def test_cancel_download_job_falls_back_to_db(monkeypatch):
     store.get_from_db.return_value = rec
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.cancel_download_job("job-1"))
+    result = download_router.cancel_download_job("job-1")
     assert result["status"] == "cancelled"
     store.update_in_db.assert_called_once_with("job-1", status="cancelled")
 
@@ -543,7 +542,7 @@ def test_cancel_download_job_raises_404_when_not_found(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.cancel_download_job("no-such"))
+        download_router.cancel_download_job("no-such")
     assert exc_info.value.status_code == 404
 
 
@@ -558,7 +557,7 @@ def test_cancel_download_job_db_record_already_finished_raises_400(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.cancel_download_job("job-1"))
+        download_router.cancel_download_job("job-1")
     assert exc_info.value.status_code == 400
 
 
@@ -582,7 +581,7 @@ def test_delete_download_job_removes_record(tmp_path, monkeypatch):
     store._active = {}
     monkeypatch.setattr(download_router, "download_store", store)
 
-    result = asyncio.run(download_router.delete_download_job("job-1"))
+    result = download_router.delete_download_job("job-1")
     assert result["deleted"] is True
     store.delete_from_db.assert_called_once_with("job-1")
 
@@ -597,7 +596,7 @@ def test_delete_download_job_raises_400_when_active(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.delete_download_job("job-1"))
+        download_router.delete_download_job("job-1")
     assert exc_info.value.status_code == 400
 
 
@@ -610,5 +609,5 @@ def test_delete_download_job_raises_404_when_not_found(monkeypatch):
     monkeypatch.setattr(download_router, "download_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(download_router.delete_download_job("no-such"))
+        download_router.delete_download_job("no-such")
     assert exc_info.value.status_code == 404
