@@ -17,6 +17,7 @@ from .background import generate_background_cube
 from .context import RunContext
 from .geometry import CubeGeometry, resolve_source_pixel_position
 from .params import LogFn, SimulationParams, _clean
+from .rng import stream_entropy
 from .spectral_setup import SpectralSetup
 
 if TYPE_CHECKING:
@@ -107,6 +108,7 @@ def _create_sky_model(
     tng_api_key: Optional[str],
     terminal_logger: Optional[Any],
     client: Optional["Client"],
+    rng: np.random.Generator,
 ) -> Any:
     """Create and return the appropriate sky model based on source type."""
     source_type_handlers = {
@@ -119,9 +121,9 @@ def _create_sky_model(
             **common_params,
             pos_x=int(pos_x),
             pos_y=int(pos_y),
-            fwhm_x=int(np.random.randint(3, 10)),
-            fwhm_y=int(np.random.randint(3, 10)),
-            angle=int(np.random.randint(0, 180)),
+            fwhm_x=int(rng.integers(3, 10)),
+            fwhm_y=int(rng.integers(3, 10)),
+            angle=int(rng.integers(0, 180)),
             n_px=int(n_pix),
             client=client,
         ),
@@ -137,28 +139,33 @@ def _create_sky_model(
             client=client,
             update_progress=common_params["update_progress"],
             terminal=terminal_logger,
+            rng=rng,
         ),
         "diffuse": lambda: usm.DiffuseSkyModel(
             **common_params,
             n_px=int(n_pix),
             client=client,
+            rng=rng,
         ),
         "galaxy-zoo": lambda: usm.GalaxyZooSkyModel(
             **common_params,
             n_px=int(n_pix),
             data_path=os.path.join(params.galaxy_zoo_dir, "images_gz2", "images"),
             client=client,
+            rng=rng,
         ),
         "molecular": lambda: usm.MolecularCloudSkyModel(
             **common_params,
             n_px=int(n_pix),
             client=client,
+            rng=rng,
         ),
         "hubble-100": lambda: usm.HubbleSkyModel(
             **common_params,
             n_px=int(n_pix),
             data_path=os.path.join(params.hubble_dir, "top100"),
             client=client,
+            rng=rng,
         ),
     }
 
@@ -301,6 +308,7 @@ def build_sky_cube(
             tng_api_key=_clean(params.tng_api_key),
             terminal_logger=terminal_logger,
             client=client_for_skymodel,
+            rng=ctx.rng,
         )
         datacube = model.insert()
         header = usm.get_datacube_header(datacube, params.obs_date)
@@ -313,7 +321,11 @@ def build_sky_cube(
         channel_frequencies_hz=channel_frequencies_hz,
         cont_sens_jy=float(cont_sens_jy.value),
         level=params.background_level,
-        seed=params.background_seed,
+        seed=(
+            params.background_seed
+            if params.background_seed is not None
+            else stream_entropy(params.seed, "background")
+        ),
     )
     if np.any(background_cube):
         usm.add_channel_first(datacube, background_cube)
@@ -334,8 +346,8 @@ def build_sky_cube(
     if params.inject_serendipitous and not ctx.stopped():
         ctx.status("Inserting Serendipitous Sources")
         if params.source_type != "gaussian" or fwhm_x is None:
-            fwhm_x = np.random.randint(3, 10)
-            fwhm_y = np.random.randint(3, 10)
+            fwhm_x = int(ctx.rng.integers(3, 10))
+            fwhm_y = int(ctx.rng.integers(3, 10))
         datacube = usm.SerendipitousConfig(
             terminal=terminal_logger,
             client=client_for_skymodel,
@@ -348,11 +360,12 @@ def build_sky_cube(
             line_frequencies=spectral.line_frequency,
             freq_sup=delta_freq.value,
             pos_zs=pos_z,
-            fwhm_x=fwhm_x or np.random.randint(3, 10),
-            fwhm_y=fwhm_y or np.random.randint(3, 10),
+            fwhm_x=fwhm_x or int(ctx.rng.integers(3, 10)),
+            fwhm_y=fwhm_y or int(ctx.rng.integers(3, 10)),
             fwhm_zs=spectral.fwhm_z,
             n_px=n_pix,
             n_chan=n_channels,
+            rng=ctx.rng,
         ).insert()
 
     if not is_external_model:

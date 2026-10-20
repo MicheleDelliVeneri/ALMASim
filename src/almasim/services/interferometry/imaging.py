@@ -18,8 +18,6 @@ from .visibility import build_channel_visibility_rows
 # Threads for ducc0 gridding: $ALMASIM_NTHREADS, else every CPU.
 ALMASIM_NTHREADS = int(os.environ.get("ALMASIM_NTHREADS") or os.cpu_count() or 1)
 
-_rng = np.random.default_rng(0)
-
 
 def _ducc0_with_wgridder_fallback(func, /, **kwargs):
     try:
@@ -67,6 +65,7 @@ def _grid_uv(
     robust: float,
     nH: int,
     imsize: float,
+    rng: np.random.Generator,
 ) -> tuple:
     """Grid visibility measurements onto a discrete UV plane."""
     bas2change = range(Nbas)
@@ -87,7 +86,7 @@ def _grid_uv(
         baseline_phases[nb] = phase_nb
         phase_rms = np.std(phase_nb) if phase_nb.size > 1 else 0.0
         if phase_rms > 0.0:
-            random_phase_error = _rng.normal(scale=phase_rms)
+            random_phase_error = rng.normal(scale=phase_rms)
             Gains[nb] *= np.exp(1j * random_phase_error)
 
         pU = pixU[goodpix] + Nphf
@@ -185,9 +184,12 @@ def _prepare_model(Npix: int, img: np.ndarray, Nphf: int, Np4: int, zooming: int
     return modelim, modelimTrue
 
 
-def add_thermal_noise(img: np.ndarray, noise: float) -> np.ndarray:
+def add_thermal_noise(
+    img: np.ndarray, noise: float, rng: np.random.Generator | None = None
+) -> np.ndarray:
     """Add thermal noise to image."""
-    return img + _rng.normal(loc=0.0, scale=noise, size=np.shape(img))
+    rng = rng if rng is not None else np.random.default_rng()
+    return img + rng.normal(loc=0.0, scale=noise, size=np.shape(img))
 
 
 def set_primary_beam(
@@ -256,8 +258,14 @@ def image_channel(
     header: fits.Header | dict,
     robust: float,
     scan_time_s: float | None = None,
+    rng: np.random.Generator | None = None,
 ) -> tuple:
-    """Process a single channel through interferometric simulation."""
+    """Process a single channel through interferometric simulation.
+
+    ``rng`` draws the visibility noise and the atmospheric phase errors
+    (fresh entropy when None).
+    """
+    rng = rng if rng is not None else np.random.default_rng()
     # Convert header dict back to FITS Header if needed (for pickling compatibility)
     if isinstance(header, dict):
         header = fits.Header(header)
@@ -275,7 +283,7 @@ def image_channel(
     Nbas, B, basnum, basidx, antnum, Gains, Noise, H, u, v, ravelDims = prepare_baselines(
         Nant, nH, Hcov
     )
-    Noise = set_noise(noise, Noise)
+    Noise = set_noise(noise, Noise, rng)
     B, u, v = set_baselines(Nbas, antnum, B, u, v, antPos, trlat, trdec, H, wavelength)
     (
         pixpos,
@@ -299,6 +307,7 @@ def image_channel(
         robust,
         nH,
         imsize,
+        rng,
     )
     beam, beamScale, robustsamp, GrobustNoise, Grobustsamp = set_beam(
         robfac,

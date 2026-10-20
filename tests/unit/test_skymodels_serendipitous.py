@@ -243,13 +243,11 @@ def test_randint_from_empty_range_returns_low(high):
 
 @pytest.mark.unit
 def test_randint_from_matches_numpy_on_a_valid_range():
-    """A valid range draws exactly what numpy's randint does."""
+    """A valid range draws exactly what the generator's integers does."""
     from almasim.skymodels.serendipitous import _randint_from
 
-    np.random.seed(7)
-    expected = np.random.randint(2, 9, 5)
-    np.random.seed(7)
-    assert list(_randint_from(2, 9, 5)) == list(expected)
+    expected = np.random.default_rng(7).integers(2, 9, 5)
+    assert list(_randint_from(2, 9, 5, rng=np.random.default_rng(7))) == list(expected)
 
 
 @pytest.mark.unit

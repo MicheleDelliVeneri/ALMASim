@@ -126,7 +126,10 @@ class SimulationParamsBase(BaseModel):
     )
     seed: Optional[int] = Field(
         default=None,
-        description="Random seed for the total-power noise (none: fresh noise every run)",
+        description=(
+            "Random seed for the whole run: sky, noise and background "
+            "(none: fresh randomness every run)"
+        ),
     )
     external_skymodel_path: Optional[str] = Field(
         default=None,

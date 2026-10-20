@@ -1,10 +1,8 @@
 """Molecular cloud sky model implementation."""
 
-import random
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
-from astropy.utils import NumpyRNGContext
 
 from .base import SkyModel
 
@@ -76,9 +74,8 @@ def make_extended(
     # flag out the bad point to avoid warnings
     rr[rr == 0] = np.nan
 
-    with NumpyRNGContext(randomseed):
-        Np1 = (imsize - 1) // 2 if imsize % 2 != 0 else imsize // 2
-        angles = np.random.uniform(0, 2 * np.pi, size=(imsize, Np1 + 1))
+    Np1 = (imsize - 1) // 2 if imsize % 2 != 0 else imsize // 2
+    angles = np.random.default_rng(randomseed).uniform(0, 2 * np.pi, size=(imsize, Np1 + 1))
 
     phases = np.cos(angles) + 1j * np.sin(angles)
 
@@ -131,17 +128,18 @@ def make_extended(
     return newmap
 
 
-def molecular_cloud(n_px: int) -> np.ndarray:
-    """Generate a molecular cloud image."""
-    powerlaw = random.random() * 3.0 + 1.5
-    ellip = random.random() * 0.5 + 0.5
-    theta = random.random() * 2 * 3.1415927
+def molecular_cloud(n_px: int, rng: Optional[np.random.Generator] = None) -> np.ndarray:
+    """Generate a molecular cloud image; ``rng`` draws its shape (fresh entropy when None)."""
+    rng = rng if rng is not None else np.random.default_rng()
+    powerlaw = rng.random() * 3.0 + 1.5
+    ellip = rng.random() * 0.5 + 0.5
+    theta = rng.random() * 2 * 3.1415927
     im = make_extended(
         n_px,
         powerlaw=powerlaw,
         theta=theta,
         ellip=ellip,
-        randomseed=random.randrange(10000),
+        randomseed=int(rng.integers(10000)),
     )
     return im
 
@@ -151,7 +149,7 @@ class MolecularCloudSkyModel(SkyModel):
 
     def insert(self) -> Any:
         """Insert molecular cloud source into datacube."""
-        im = molecular_cloud(self.n_px)
+        im = molecular_cloud(self.n_px, self.rng)
         im -= np.min(im)
         im *= 1 / np.max(im)
         return self._add_template(im)

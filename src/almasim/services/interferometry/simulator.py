@@ -57,10 +57,18 @@ class ChannelImagingConfig:
     header: dict
     robust: float
     scan_time_s: float
+    # Seeds each channel's noise (MADIV-28 T5.1); None draws fresh entropy.
+    noise_entropy: tuple[int, ...] | None = None
+
+    def channel_rng(self, channel: int) -> np.random.Generator:
+        """The generator of ``channel``: the same whichever worker images it."""
+        if self.noise_entropy is None:
+            return np.random.default_rng()
+        return np.random.default_rng((*self.noise_entropy, int(channel)))
 
 
 def image_configured_channel(
-    config: ChannelImagingConfig, image: Any, wavelength: Any, noise: float
+    config: ChannelImagingConfig, image: Any, wavelength: Any, noise: float, channel: int = 0
 ) -> tuple:
     """:func:`image_channel` of one channel with the shared ``config``."""
     return image_channel(
@@ -86,6 +94,7 @@ def image_configured_channel(
         config.header,
         config.robust,
         config.scan_time_s,
+        rng=config.channel_rng(channel),
     )
 
 
@@ -108,7 +117,7 @@ def image_channels(
     scattered = [backend.scatter(skymodel[i]) for i in range(skymodel.shape[0])]
     delayed = backend.delayed(image_configured_channel)
     tasks = [
-        delayed(config, scattered[i], wavelengths[i], channel_noise(noise, i))
+        delayed(config, scattered[i], wavelengths[i], channel_noise(noise, i), i)
         for i in range(skymodel.shape[0])
     ]
     futures = [backend.compute(task, sync=False) for task in tasks]

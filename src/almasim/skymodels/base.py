@@ -91,6 +91,7 @@ class SkyModel(ABC):
         n_chan: int,
         client: Optional[Client] = None,
         update_progress: Optional[Any] = None,
+        rng: Optional[np.random.Generator] = None,
     ):
         """
         Initialize base sky model.
@@ -115,6 +116,8 @@ class SkyModel(ABC):
             Dask client for parallel processing
         update_progress : Optional[Any]
             Progress emitter callback
+        rng : Optional[np.random.Generator]
+            Draws the model's random shape (MADIV-28 T5.1); fresh entropy when None
         """
         self.datacube = datacube
         self.continuum = continuum
@@ -127,6 +130,7 @@ class SkyModel(ABC):
         # (sync / local backends pass client=None).
         self.client = client if client is not None else _LocalClient()
         self.update_progress = update_progress
+        self.rng = rng if rng is not None else np.random.default_rng()
 
     def spectrum(self) -> np.ndarray:
         """Continuum plus emission lines per channel (Jy): the source's total flux."""

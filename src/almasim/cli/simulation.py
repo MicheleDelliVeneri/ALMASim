@@ -15,6 +15,7 @@ from tqdm.auto import tqdm
 
 from ..services import astro
 from ..services.astro.spectral import sample_given_redshift
+from ..services.simulation.rng import run_rng
 from ..services.compute import create_backend
 from ..services.external_skymodel import EXTERNAL_SOURCE_TYPES, is_external_source_type
 from ..services.simulation import (
@@ -190,6 +191,7 @@ def _build_simulation_params(
         rest_frequency=rest_frequency,
         extended=(source_type == "extended"),
         zmax=None,
+        rng=run_rng(seed, "metadata"),
     )
 
     if row_idx >= len(sampled):
@@ -431,7 +433,6 @@ def simulation_run(
                 run_idx = idx * simulations_per_row + simulation_idx
                 run_seed = seed + run_idx if seed is not None else None
                 if run_seed is not None:
-                    np.random.seed(run_seed)
                     typer.echo(f"Seed: {run_seed}")
                 run_ml_shard_path = (
                     _path_with_suffix(

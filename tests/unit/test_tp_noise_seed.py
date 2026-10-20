@@ -40,8 +40,10 @@ def _generators(monkeypatch, seed):
 
 
 def test_the_tp_noise_generator_is_seeded_from_the_simulation_seed(monkeypatch):
+    from almasim.services.simulation.rng import run_rng
+
     rng = _generators(monkeypatch, 42)[0]
-    expected = np.random.default_rng(42)
+    expected = run_rng(42, "total_power")
     assert rng.bit_generator.state == expected.bit_generator.state
 
 

@@ -107,7 +107,8 @@ class SimulationParams:
     background_mode: str = _coerced(str, default="none")
     background_level: float = _coerced(float, default=1.0)
     background_seed: Optional[int] = _coerced(_optional(int), default=None)
-    # Seeds the total-power noise; None draws fresh noise for every run.
+    # Seeds every random draw of the run (sky, noise, background unless
+    # background_seed is set; MADIV-28 T5.1); None draws fresh entropy.
     seed: Optional[int] = _coerced(_optional(int), default=None)
     external_skymodel_path: Optional[str] = _coerced(_optional(_expand_path), default=None)
     external_component_table_path: Optional[str] = _coerced(_optional(_expand_path), default=None)

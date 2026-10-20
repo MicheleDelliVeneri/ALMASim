@@ -74,7 +74,7 @@ def test_simulation_run_csv_happy_path(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli_simulation,
         "sample_given_redshift",
-        lambda metadata, n, rest_frequency, extended, zmax: metadata,
+        lambda metadata, n, rest_frequency, extended, zmax, rng=None: metadata,
     )
 
     monkeypatch.setattr(

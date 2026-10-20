@@ -1867,7 +1867,7 @@ export interface components {
 			save_mode: string;
 			/**
 			 * Seed
-			 * @description Random seed for the total-power noise (none: fresh noise every run)
+			 * @description Random seed for the whole run: sky, noise and background (none: fresh randomness every run)
 			 */
 			seed?: number | null;
 			/**
