@@ -36,7 +36,6 @@ backend_dir = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from database.config import get_db  # noqa: E402
-from database.models import QueryResult  # noqa: E402
 from database.service import DatabaseService  # noqa: E402
 
 router = APIRouter()
@@ -225,18 +224,14 @@ def list_query_presets(db: Session = Depends(get_db)) -> QueryPresetsResponse:
 def save_query_preset(
     payload: QueryPresetCreate, db: Session = Depends(get_db)
 ) -> QueryPresetResponse:
-    """Save a named query preset to the database."""
+    """Save a named query preset; saving an existing name replaces it."""
     try:
-        row = QueryResult(
-            query_name=payload.name,
-            query_params={"filters": payload.filters},
-            result_count=payload.result_count,
-            observation_ids=[],
+        row = DatabaseService(db).save_query_preset(
+            payload.name,
+            payload.filters,
             description=payload.description,
+            result_count=payload.result_count,
         )
-        db.add(row)
-        db.commit()
-        db.refresh(row)
         return _preset_to_response(row)
     except Exception as e:
         raise HTTPException(

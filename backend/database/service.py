@@ -320,53 +320,65 @@ class DatabaseService:
 
     # Query Results
 
-    def save_query_result(
-        self,
-        query_name: str,
-        observation_ids: List[int],
-        query_params: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None,
-    ) -> QueryResult:
-        """Save a query result for later retrieval."""
-        query_result = QueryResult(
-            query_name=query_name,
-            query_params=query_params,
-            result_count=len(observation_ids),
-            observation_ids=observation_ids,
-            description=description,
-        )
-        self.db.add(query_result)
-        self.db.commit()
-        self.db.refresh(query_result)
-        return query_result
+    # Query presets live in query_results, one row per name. Rows saved before
+    # MADIV-28 T1.10 may repeat a name: reads take the newest, writes fold the rest.
 
-    def get_query_result(self, query_name: str) -> Optional[QueryResult]:
-        """Get a saved query result by name."""
+    def _query_results_named(self, query_name: str) -> List[QueryResult]:
         stmt = (
             select(QueryResult)
             .where(QueryResult.query_name == query_name)
-            .order_by(QueryResult.created_at.desc())
+            .order_by(QueryResult.created_at.desc(), QueryResult.id.desc())
         )
-        return self.db.execute(stmt).scalar_one_or_none()
-
-    def list_query_results(self, limit: int = 50) -> List[QueryResult]:
-        """List all saved query results."""
-        stmt = select(QueryResult).order_by(QueryResult.created_at.desc()).limit(limit)
         return list(self.db.execute(stmt).scalars().all())
 
-    def delete_query_result(self, query_name: str) -> bool:
-        """Delete a saved query result by name. Returns True if deleted."""
-        stmt = (
-            select(QueryResult)
-            .where(QueryResult.query_name == query_name)
-            .order_by(QueryResult.created_at.desc())
-        )
-        row = self.db.execute(stmt).scalar_one_or_none()
-        if row is None:
-            return False
-        self.db.delete(row)
+    def save_query_preset(
+        self,
+        query_name: str,
+        filters: Dict[str, Any],
+        *,
+        description: Optional[str] = None,
+        result_count: int = 0,
+    ) -> QueryResult:
+        """Create the preset, or replace the one already saved under this name."""
+        rows = self._query_results_named(query_name)
+        if rows:
+            row, duplicates = rows[0], rows[1:]
+            for duplicate in duplicates:
+                self.db.delete(duplicate)
+            row.created_at = datetime.utcnow()
+        else:
+            row = QueryResult(query_name=query_name, observation_ids=[])
+            self.db.add(row)
+        row.query_params = {"filters": filters}
+        row.result_count = result_count
+        row.description = description
         self.db.commit()
-        return True
+        self.db.refresh(row)
+        return row
+
+    def get_query_result(self, query_name: str) -> Optional[QueryResult]:
+        """Get a saved query result by name (the newest if the name repeats)."""
+        rows = self._query_results_named(query_name)
+        return rows[0] if rows else None
+
+    def list_query_results(self, limit: int = 50) -> List[QueryResult]:
+        """List saved query results, newest first, one per name."""
+        stmt = select(QueryResult).order_by(QueryResult.created_at.desc(), QueryResult.id.desc())
+        newest: Dict[str, QueryResult] = {}
+        for row in self.db.execute(stmt).scalars():
+            newest.setdefault(row.query_name, row)
+            if len(newest) == limit:
+                break
+        return list(newest.values())
+
+    def delete_query_result(self, query_name: str) -> bool:
+        """Delete every saved query result with this name. Returns True if any existed."""
+        rows = self._query_results_named(query_name)
+        for row in rows:
+            self.db.delete(row)
+        if rows:
+            self.db.commit()
+        return bool(rows)
 
     # Simulation Jobs
 

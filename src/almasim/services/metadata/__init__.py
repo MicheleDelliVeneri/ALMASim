@@ -12,12 +12,9 @@ from .saved_queries import (
     QueryPreset,
     delete_preset,
     list_presets,
-    list_presets_from_db,
     load_preset,
-    load_preset_from_db,
     load_preset_from_path,
     save_preset,
-    save_preset_to_db,
 )
 from .storage import (
     SUPPORTED_METADATA_FORMATS,
@@ -42,9 +39,6 @@ __all__ = [
     "load_preset_from_path",
     "list_presets",
     "delete_preset",
-    "save_preset_to_db",
-    "load_preset_from_db",
-    "list_presets_from_db",
     "SUPPORTED_METADATA_FORMATS",
     "normalize_metadata_format",
     "resolve_metadata_output_path",
