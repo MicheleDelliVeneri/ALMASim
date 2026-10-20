@@ -261,7 +261,10 @@ def metadata_query(
     save_products_csv: Optional[Path] = typer.Option(
         None,
         "--save-products-csv",
-        help="Optional destination CSV for resolved product rows.",
+        help=(
+            "Optional destination CSV for the DataLink product rows of the queried "
+            "member OUS UIDs, ready for `products download --products-csv`."
+        ),
     ),
     product_member_limit: Optional[int] = typer.Option(
         None,
@@ -423,9 +426,14 @@ def metadata_query(
             typer.echo("Queried metadata does not include member_ous_uid values", err=True)
             raise typer.Exit(code=1)
 
-        products = query_products(member_uids)
-        products_csv = save_products_csv.expanduser().resolve()
-        products_csv.parent.mkdir(parents=True, exist_ok=True)
-        products.to_csv(products_csv, index=False)
-        typer.echo(f"Saved products CSV: {products_csv}")
-        typer.echo(f"Product rows: {len(products)}")
+        # DataLink rows, the format `products download --products-csv` reads
+        # (the TAP product rows saved here before could not be downloaded).
+        from . import cli_products
+
+        cli_products._resolve_products_from_inputs(
+            products_csv=None,
+            metadata_csv=None,
+            member_ous_uid=member_uids,
+            member_limit=None,
+            save_products_csv_path=save_products_csv,
+        )
