@@ -688,6 +688,5 @@ async def delete_download_job(job_id: str):
             detail=f"Download job {job_id} not found",
         )
     # Also remove from memory if still lingering
-    with download_store._lock:
-        download_store._active.pop(job_id, None)
+    download_store.remove(job_id)
     return {"job_id": job_id, "deleted": True, "files_deleted": files_deleted}
