@@ -7,6 +7,7 @@
 	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
 	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '#lib/logger.js';
+	import { INITIAL_VIEW, applyView } from '#lib/utils/linkedViews.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { imagingApi, type DeconvolutionResponse, type ImagePreviewPayload } from '#lib/api/imaging.js';
 
@@ -75,97 +76,82 @@
 		resumeStatePath = null;
 	}
 
+	// The panels, in display order; the two references only when the run returns them.
+	const PANEL_SPECS: {
+		key:
+			| 'reference_clean'
+			| 'convolved_reference'
+			| 'dirty'
+			| 'component_model'
+			| 'restored'
+			| 'residual';
+		id: string;
+		title: string;
+		description: string;
+		badgeClass: string;
+	}[] = [
+		{
+			key: 'reference_clean',
+			id: 'reference-clean',
+			title: 'Reference Clean Cube',
+			description: 'Original model/clean cube saved by the simulation',
+			badgeClass: 'bg-emerald-100 text-emerald-800'
+		},
+		{
+			key: 'convolved_reference',
+			id: 'convolved-reference',
+			title: 'Convolved Clean Reference',
+			description:
+				'Original clean cube convolved with the clean beam for apples-to-apples comparison with the restored image',
+			badgeClass: 'bg-teal-100 text-teal-800'
+		},
+		{
+			key: 'dirty',
+			id: 'dirty',
+			title: 'Dirty Cube',
+			description: 'Observed interferometric cube before deconvolution',
+			badgeClass: 'bg-slate-100 text-slate-800'
+		},
+		{
+			key: 'component_model',
+			id: 'component-model',
+			title: 'Component Model',
+			description: 'CLEAN component cube, which should approach the original clean sky model',
+			badgeClass: 'bg-accent-soft text-accent'
+		},
+		{
+			key: 'restored',
+			id: 'restored',
+			title: 'Restored Cube',
+			description: 'Component model convolved with the clean beam and added back to the residual',
+			badgeClass: 'bg-accent-soft text-accent'
+		},
+		{
+			key: 'residual',
+			id: 'residual',
+			title: 'Residual Cube',
+			description: 'Residual cube after subtracting CLEAN components',
+			badgeClass: 'bg-amber-100 text-amber-800'
+		}
+	];
+
 	function buildPanels(response: DeconvolutionResponse): PreviewPanel[] {
-		const built: PreviewPanel[] = [];
-		if (response.reference_clean) {
-			built.push({
-				...response.reference_clean,
-				id: 'reference-clean',
-				title: 'Reference Clean Cube',
-				description: 'Original model/clean cube saved by the simulation',
-				badgeClass: 'bg-emerald-100 text-emerald-800',
-				scale: 1.0,
-				panX: 0,
-				panY: 0
-			});
-		}
-		if (response.convolved_reference) {
-			built.push({
-				...response.convolved_reference,
-				id: 'convolved-reference',
-				title: 'Convolved Clean Reference',
-				description: 'Original clean cube convolved with the clean beam for apples-to-apples comparison with the restored image',
-				badgeClass: 'bg-teal-100 text-teal-800',
-				scale: 1.0,
-				panX: 0,
-				panY: 0
-			});
-		}
-		built.push(
-			{
-				...response.dirty,
-				id: 'dirty',
-				title: 'Dirty Cube',
-				description: 'Observed interferometric cube before deconvolution',
-				badgeClass: 'bg-slate-100 text-slate-800',
-				scale: 1.0,
-				panX: 0,
-				panY: 0
-			},
-			{
-				...response.component_model,
-				id: 'component-model',
-				title: 'Component Model',
-				description: 'CLEAN component cube, which should approach the original clean sky model',
-				badgeClass: 'bg-accent-soft text-accent',
-				scale: 1.0,
-				panX: 0,
-				panY: 0
-			},
-			{
-				...response.restored,
-				id: 'restored',
-				title: 'Restored Cube',
-				description: 'Component model convolved with the clean beam and added back to the residual',
-				badgeClass: 'bg-accent-soft text-accent',
-				scale: 1.0,
-				panX: 0,
-				panY: 0
-			},
-			{
-				...response.residual,
-				id: 'residual',
-				title: 'Residual Cube',
-				description: 'Residual cube after subtracting CLEAN components',
-				badgeClass: 'bg-amber-100 text-amber-800',
-				scale: 1.0,
-				panX: 0,
-				panY: 0
-			}
-		);
-		return built;
+		return PANEL_SPECS.flatMap(({ key, ...spec }) => {
+			const payload = response[key];
+			return payload ? [{ ...payload, ...spec, ...INITIAL_VIEW }] : [];
+		});
 	}
 
-	function updateScale(id: string, newScale: number) {
-		panels = linkedView
-			? panels.map((panel) => ({ ...panel, scale: newScale }))
-			: panels.map((panel) => (panel.id === id ? { ...panel, scale: newScale } : panel));
+	function updateScale(id: string, scale: number) {
+		panels = applyView(panels, id, { scale }, linkedView);
 	}
 
-	function updatePan(id: string, newPanX: number, newPanY: number) {
-		panels = linkedView
-			? panels.map((panel) => ({ ...panel, panX: newPanX, panY: newPanY }))
-			: panels.map((panel) =>
-					panel.id === id ? { ...panel, panX: newPanX, panY: newPanY } : panel
-				);
+	function updatePan(id: string, panX: number, panY: number) {
+		panels = applyView(panels, id, { panX, panY }, linkedView);
 	}
 
 	function handleReset(id: string) {
-		panels = linkedView
-			? panels.map((panel) => ({ ...panel, scale: 1.0, panX: 0, panY: 0 }))
-			: panels.map((panel) =>
-					panel.id === id ? { ...panel, scale: 1.0, panX: 0, panY: 0 } : panel
-				);
+		panels = applyView(panels, id, INITIAL_VIEW, linkedView);
 	}
 
 	async function loadFileList(dir?: string) {
