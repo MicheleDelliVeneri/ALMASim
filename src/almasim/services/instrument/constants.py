@@ -25,3 +25,14 @@ ALMA_ELEVATION_M = 5000.0
 
 DISH_DIAMETER_12M_M = 12.0
 DISH_DIAMETER_7M_M = 7.0
+
+# Rows whose WEIGHT exceeds this are left out of the single-window MS that is
+# imaged, and counted as high-weight rows by the flag summary. The Cycle-11
+# calibrated MSs (2026-09-25, 40/40 sampled) carry 4-58 % of unflagged target
+# rows with WEIGHT ~1e5-1e8 and amplitudes 1e3 too low or 4-26x too high: data
+# the ALMA pipeline had flagged (bad Tsys, antenna or scan) that received
+# garbage gains because the calibration stage did not restore the delivered
+# Pipeline_Final flags. Physical ALMA weights (1/sigma^2 per visibility,
+# calwt) stay below ~1e3; the two populations are separated by more than an
+# order of magnitude on every EB sampled.
+DEFAULT_MAX_WEIGHT = 1.0e4

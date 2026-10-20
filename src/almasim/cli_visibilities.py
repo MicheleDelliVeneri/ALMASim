@@ -9,6 +9,7 @@ import typer
 
 from . import cli_image, cli_products
 from .cli_shared import default_output_path
+from .services.instrument.constants import DEFAULT_MAX_WEIGHT
 
 visibilities_app = typer.Typer(
     help="Visibility processing commands.",
@@ -349,7 +350,7 @@ def flag_summary(
         "*.ms.split.cal", "--pattern", help="Glob for the MeasurementSets inside a folder."
     ),
     max_weight: float = typer.Option(
-        1e4,
+        DEFAULT_MAX_WEIGHT,
         "--max-weight",
         help="Unflagged rows with a WEIGHT above this count as high_weight_rows.",
     ),

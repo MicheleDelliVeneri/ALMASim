@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tarfile
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from time import sleep, time
@@ -14,72 +13,24 @@ import typer
 from tqdm.auto import tqdm
 
 from .cli_shared import dedupe_keep_order, default_output_path, split_csv_values
+from .services.download import (
+    MAX_PARALLEL_PER_MIRROR,
+    MAX_PARALLEL_TOTAL,
+    PRODUCT_TYPES,
+    download_products,
+    filter_products,
+    format_bytes,
+    load_products_csv,
+    resolve_products,
+    save_products_csv,
+)
 from .services.runtime.env import casa_bundled_lib_dir as _casa_bundled_lib_dir
 from .services.runtime.env import casa_library_path
-
-MAX_PARALLEL_PER_MIRROR = 10
-MAX_PARALLEL_TOTAL = 30
-PRODUCT_TYPES = {
-    "all",
-    "raw",
-    "calibration",
-    "scripts",
-    "weblog",
-    "qa_reports",
-    "auxiliary",
-    "cubes",
-    "continuum",
-    "fits",
-    "other",
-}
 
 products_app = typer.Typer(
     help="Data product resolution and download commands.",
     no_args_is_help=True,
 )
-
-
-@lru_cache(maxsize=1)
-def _download_contract() -> dict[str, Any]:
-    from .services.download import (
-        MAX_PARALLEL_PER_MIRROR as _MAX_PARALLEL_PER_MIRROR,
-    )
-    from .services.download import (
-        MAX_PARALLEL_TOTAL as _MAX_PARALLEL_TOTAL,
-    )
-    from .services.download import (
-        PRODUCT_TYPES as _PRODUCT_TYPES,
-    )
-    from .services.download import (
-        download_products as _download_products,
-    )
-    from .services.download import (
-        filter_products as _filter_products,
-    )
-    from .services.download import (
-        format_bytes as _format_bytes,
-    )
-    from .services.download import (
-        load_products_csv as _load_products_csv,
-    )
-    from .services.download import (
-        resolve_products as _resolve_products,
-    )
-    from .services.download import (
-        save_products_csv as _save_products_csv,
-    )
-
-    return {
-        "MAX_PARALLEL_PER_MIRROR": _MAX_PARALLEL_PER_MIRROR,
-        "MAX_PARALLEL_TOTAL": _MAX_PARALLEL_TOTAL,
-        "PRODUCT_TYPES": _PRODUCT_TYPES,
-        "download_products": _download_products,
-        "filter_products": _filter_products,
-        "format_bytes": _format_bytes,
-        "load_products_csv": _load_products_csv,
-        "resolve_products": _resolve_products,
-        "save_products_csv": _save_products_csv,
-    }
 
 
 def create_backend(*args, **kwargs):
@@ -88,34 +39,10 @@ def create_backend(*args, **kwargs):
     return _create_backend(*args, **kwargs)
 
 
-def download_products(*args, **kwargs):
-    return _download_contract()["download_products"](*args, **kwargs)
-
-
-def filter_products(*args, **kwargs):
-    return _download_contract()["filter_products"](*args, **kwargs)
-
-
 def filter_products_by_qa0(*args, **kwargs):
     from .services.archive.qa0 import filter_products_by_qa0 as _filter_products_by_qa0
 
     return _filter_products_by_qa0(*args, **kwargs)
-
-
-def format_bytes(*args, **kwargs):
-    return _download_contract()["format_bytes"](*args, **kwargs)
-
-
-def load_products_csv(*args, **kwargs):
-    return _download_contract()["load_products_csv"](*args, **kwargs)
-
-
-def resolve_products(*args, **kwargs):
-    return _download_contract()["resolve_products"](*args, **kwargs)
-
-
-def save_products_csv(*args, **kwargs):
-    return _download_contract()["save_products_csv"](*args, **kwargs)
 
 
 def _future_status(future: Any) -> str:
@@ -489,18 +416,9 @@ def _read_member_uids_from_metadata(
     return dedupe_keep_order(series.tolist())
 
 
-def _parse_member_uid_options(member_ous_uid: Optional[List[str]]) -> list[str]:
-    parsed = split_csv_values(member_ous_uid)
-    if not parsed:
-        return []
-    return dedupe_keep_order(parsed)
-
-
-def _parse_asdm_uid_options(asdm_uid: Optional[List[str]]) -> list[str]:
-    parsed = split_csv_values(asdm_uid)
-    if not parsed:
-        return []
-    return dedupe_keep_order(parsed)
+def _parse_uid_options(uids: Optional[List[str]]) -> list[str]:
+    """UIDs from repeated or comma-separated options, in order, without duplicates."""
+    return dedupe_keep_order(split_csv_values(uids) or [])
 
 
 def _resolve_products_from_inputs(
@@ -516,7 +434,7 @@ def _resolve_products_from_inputs(
         typer.echo(f"Loaded products CSV: {products_csv.expanduser().resolve()}")
         return loaded
 
-    member_uids = _parse_member_uid_options(member_ous_uid)
+    member_uids = _parse_uid_options(member_ous_uid)
     if metadata_csv is not None:
         member_uids.extend(_read_member_uids_from_metadata(metadata_csv, member_limit))
     member_uids = dedupe_keep_order([uid for uid in member_uids if uid])
@@ -1094,15 +1012,6 @@ def _run_calibrate_jobs(
     return outputs
 
 
-def _archive_stem(archive_path: Path) -> str:
-    """Return the archive name with all recognised compression suffixes stripped."""
-    name = archive_path.name
-    for suffix in (".tar.gz", ".tgz", ".tar"):
-        if name.lower().endswith(suffix):
-            return name[: len(name) - len(suffix)]
-    return archive_path.stem
-
-
 def _safe_extract_tar_archive(archive_path: Path, destination: Path) -> list[Path]:
     """Extract a tarball while refusing absolute or escaping paths.
 
@@ -1402,7 +1311,7 @@ def products_resolve(
     ),
 ) -> None:
     """Extract member_ous_uid values and resolve ALMA DataLink products."""
-    member_uids = _parse_member_uid_options(member_ous_uid)
+    member_uids = _parse_uid_options(member_ous_uid)
     if metadata_csv is not None:
         member_uids.extend(_read_member_uids_from_metadata(metadata_csv, member_limit))
     member_uids = dedupe_keep_order([uid for uid in member_uids if uid])
@@ -2030,7 +1939,7 @@ def products_unpack(
         typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
         raise typer.Exit(code=2)
 
-    parsed_uids = _parse_asdm_uid_options(asdm_uid)
+    parsed_uids = _parse_uid_options(asdm_uid)
     stage_failures: list[StageFailure] = []
     raw_outputs = _run_unpack_jobs(
         input_root=input_root.expanduser().resolve(),
@@ -2163,7 +2072,7 @@ def products_calibrate(
         typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
         raise typer.Exit(code=2)
 
-    parsed_uids = _parse_asdm_uid_options(asdm_uid)
+    parsed_uids = _parse_uid_options(asdm_uid)
     stage_failures: list[StageFailure] = []
     calibrated_outputs = _run_calibrate_jobs(
         input_root=input_root.expanduser().resolve(),

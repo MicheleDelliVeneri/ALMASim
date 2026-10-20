@@ -18,7 +18,7 @@ from astropy.time import Time
 from tqdm import tqdm
 
 from almasim.services.instrument.constants import ARCSEC_PER_RAD as RAD_TO_ARCSEC
-from almasim.services.instrument.constants import SPEED_OF_LIGHT_M_S
+from almasim.services.instrument.constants import DEFAULT_MAX_WEIGHT, SPEED_OF_LIGHT_M_S
 
 MIN_IMAGE_PIXELS = 16
 DAY_IN_SECONDS = 3600 * 24
@@ -1296,7 +1296,7 @@ def image_from_ms(
         ),
     ),
     max_weight: float = typer.Option(
-        10000.0,
+        DEFAULT_MAX_WEIGHT,
         "--max-weight",
         min=0.0,
         help=(
