@@ -195,6 +195,22 @@ def assemble_visibility_table(
     )
 
 
+# Per-row columns of a visibility table; the rest describe the whole table.
+_ROW_COLUMNS = (
+    "uvw_m",
+    "antenna1",
+    "antenna2",
+    "time_mjd_s",
+    "interval_s",
+    "exposure_s",
+    "data",
+    "model_data",
+    "flag",
+    "weight",
+    "sigma",
+)
+
+
 def concatenate_visibility_tables(tables: list[Mapping[str, Any]]) -> dict[str, Any]:
     """Concatenate multiple visibility tables across rows."""
     if not tables:
@@ -204,17 +220,10 @@ def concatenate_visibility_tables(tables: list[Mapping[str, Any]]) -> dict[str, 
 
     first = tables[0]
     return {
-        "uvw_m": np.concatenate([np.asarray(t["uvw_m"]) for t in tables], axis=0),
-        "antenna1": np.concatenate([np.asarray(t["antenna1"]) for t in tables], axis=0),
-        "antenna2": np.concatenate([np.asarray(t["antenna2"]) for t in tables], axis=0),
-        "time_mjd_s": np.concatenate([np.asarray(t["time_mjd_s"]) for t in tables], axis=0),
-        "interval_s": np.concatenate([np.asarray(t["interval_s"]) for t in tables], axis=0),
-        "exposure_s": np.concatenate([np.asarray(t["exposure_s"]) for t in tables], axis=0),
-        "data": np.concatenate([np.asarray(t["data"]) for t in tables], axis=0),
-        "model_data": np.concatenate([np.asarray(t["model_data"]) for t in tables], axis=0),
-        "flag": np.concatenate([np.asarray(t["flag"]) for t in tables], axis=0),
-        "weight": np.concatenate([np.asarray(t["weight"]) for t in tables], axis=0),
-        "sigma": np.concatenate([np.asarray(t["sigma"]) for t in tables], axis=0),
+        **{
+            key: np.concatenate([np.asarray(t[key]) for t in tables], axis=0)
+            for key in _ROW_COLUMNS
+        },
         "channel_freq_hz": np.asarray(first["channel_freq_hz"]),
         "antenna_names": list(first["antenna_names"]),
         "antenna_positions_m": np.asarray(first["antenna_positions_m"]),

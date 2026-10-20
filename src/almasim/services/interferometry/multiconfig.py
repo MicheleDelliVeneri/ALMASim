@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 
+from .combine import normalized_config_weights, single_run_result
 from .utils import sampling_to_uv_mask
 from .visibility import concatenate_visibility_tables
 
@@ -29,21 +30,10 @@ def combine_interferometric_results(
     config_weights: list[float] | None = None,
 ) -> dict[str, Any]:
     """Combine multiple single-pointing interferometric runs into one INT product."""
-    if not per_config_results:
-        raise ValueError("Cannot combine an empty result list")
-    if len(per_config_results) == 1:
-        combined = dict(per_config_results[0])
-        combined["per_config_results"] = per_config_results
-        combined["combined_config_count"] = 1
-        return combined
-
-    if config_weights is None:
-        config_weights = [1.0] * len(per_config_results)
-    weights = np.asarray(config_weights, dtype=float)
-    weights = np.clip(weights, 0.0, None)
-    if not np.any(weights):
-        weights = np.ones_like(weights)
-    normalized = weights / np.sum(weights)
+    single = single_run_result(per_config_results, "interferometric")
+    if single is not None:
+        return single
+    normalized = normalized_config_weights(len(per_config_results), config_weights)
 
     model_cube = np.tensordot(
         normalized,

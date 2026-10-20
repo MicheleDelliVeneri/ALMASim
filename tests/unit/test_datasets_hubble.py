@@ -9,13 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from almasim.skymodels.datasets.hubble import (
-    DEFAULT_HUBBLE_DATASET,
+from almasim.skymodels.datasets._common import (
     _ensure_directory,
     _load_kaggle_api,
     _run_with_c_locale,
-    download_hubble_top100,
 )
+from almasim.skymodels.datasets.hubble import DEFAULT_HUBBLE_DATASET, download_hubble_top100
 
 # ===========================================================================
 # _ensure_directory

@@ -24,7 +24,7 @@ from ..instrument.constants import (
 )
 from ..products.cube_export import write_interferometry_products
 from .imaging import image_channel, image_channel_ducc0
-from .utils import sampling_to_uv_mask
+from .utils import get_channel_wavelength, sampling_to_uv_mask
 from .visibility import assemble_visibility_table
 
 LogFn = Optional[Callable[[str], None]]
@@ -315,8 +315,7 @@ class Interferometer:
 
     def get_channel_wavelength(self, channel: int) -> tuple:
         """Get wavelength and format string for a channel."""
-        wavelength = list(self.obs_wavelengths[channel] * 1e-3)
-        wavelength.append((wavelength[0] + wavelength[1]) / 2.0)
+        wavelength = get_channel_wavelength(self.obs_wavelengths, channel)
         fmtB1 = r"$\lambda = $ %4.1fmm  " % (wavelength[2] * 1.0e6)
         fmtB = (
             fmtB1

@@ -1351,46 +1351,26 @@ def export_results(
                 antenna_config_paths.append(os.path.join(output_dir, output_name))
             exported_results["antenna_config_path"] = antenna_config_paths[0]
             exported_results["antenna_config_paths"] = antenna_config_paths
-            cube_output_paths["int_image_cube_paths"] = save_optional_cube(
-                clean_cube_stage.sim_output_dir,
-                "int-image-cube",
-                params.idx,
-                exported_results.get("int_image_cube"),
-                params.save_mode,
-                clean_cube_stage.header,
+            optional_cubes = (
+                ("int_image_cube", "int-image-cube", exported_results.get("int_image_cube")),
+                ("tp_image_cube", "tp-image-cube", exported_results.get("tp_image_cube")),
+                (
+                    "tp_int_image_cube",
+                    "tp-int-image-cube",
+                    exported_results.get("tp_int_image_cube"),
+                ),
+                ("tp_dirty_cube", "tp-dirty-cube", exported_results.get("tp_dirty_cube")),
+                ("background_cube", "background-cube", clean_cube_stage.background_cube),
             )
-            cube_output_paths["tp_image_cube_paths"] = save_optional_cube(
-                clean_cube_stage.sim_output_dir,
-                "tp-image-cube",
-                params.idx,
-                exported_results.get("tp_image_cube"),
-                params.save_mode,
-                clean_cube_stage.header,
-            )
-            cube_output_paths["tp_int_image_cube_paths"] = save_optional_cube(
-                clean_cube_stage.sim_output_dir,
-                "tp-int-image-cube",
-                params.idx,
-                exported_results.get("tp_int_image_cube"),
-                params.save_mode,
-                clean_cube_stage.header,
-            )
-            cube_output_paths["tp_dirty_cube_paths"] = save_optional_cube(
-                clean_cube_stage.sim_output_dir,
-                "tp-dirty-cube",
-                params.idx,
-                exported_results.get("tp_dirty_cube"),
-                params.save_mode,
-                clean_cube_stage.header,
-            )
-            cube_output_paths["background_cube_paths"] = save_optional_cube(
-                clean_cube_stage.sim_output_dir,
-                "background-cube",
-                params.idx,
-                clean_cube_stage.background_cube,
-                params.save_mode,
-                clean_cube_stage.header,
-            )
+            for key, product, cube in optional_cubes:
+                cube_output_paths[f"{key}_paths"] = save_optional_cube(
+                    clean_cube_stage.sim_output_dir,
+                    product,
+                    params.idx,
+                    cube,
+                    params.save_mode,
+                    clean_cube_stage.header,
+                )
             exported_results.update(
                 {key: value for key, value in cube_output_paths.items() if value}
             )

@@ -16,6 +16,7 @@ from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import WendlandC2Kernel
 
 from .base import _LocalClient
+from .datasets.tng import TNG_SIMULATION
 from .utils import track_progress
 
 
@@ -170,7 +171,7 @@ def insert_tng(
 ) -> MartiniMod:
     """Insert TNG source into datacube."""
     source = TNGSource(
-        simulation="TNG100-1",
+        simulation=TNG_SIMULATION,
         snapNum=snapshot,
         subID=subhalo_id,
         cutout_dir=tngpath,
@@ -269,7 +270,7 @@ class ExtendedSkyModel:
         """Insert extended source into datacube."""
         x_rot = np.random.randint(0, 360) * U.deg
         y_rot = np.random.randint(0, 360) * U.deg
-        tngpath = os.path.join(self.tngpath, "TNG100-1", "output")
+        tngpath = os.path.join(self.tngpath, TNG_SIMULATION, "output")
         redshift = self.redshift * cu.redshift
         distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))
         if self.terminal is not None:
