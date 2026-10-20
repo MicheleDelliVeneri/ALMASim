@@ -1,11 +1,10 @@
 """Utility functions for sky model generation."""
 
-import time
-
 import numpy as np
 from astropy.io import fits
 from scipy.ndimage import zoom
 
+from almasim.services.compute.progress import watch_futures
 from almasim.services.instrument.constants import FWHM_PER_SIGMA
 
 
@@ -17,16 +16,9 @@ def interpolate_array(arr: np.ndarray, n_px: int) -> np.ndarray:
 
 
 def track_progress(update_progress, futures):
-    """Track progress of dask futures and emit progress updates."""
+    """Emit the percentage of ``futures`` done until all are (if anyone listens)."""
     if update_progress is not None:
-        total_tasks = len(futures)
-        completed_tasks = 0
-        # Track progress
-        while completed_tasks < total_tasks:
-            completed_tasks = sum(f.done() for f in futures)
-            progress_value = int((completed_tasks / total_tasks) * 100)
-            update_progress.emit(progress_value)  # Emit progress signal
-            time.sleep(1)  # Check progress every second
+        watch_futures(futures, update_progress.emit)
 
 
 def gaussian(x: np.ndarray, amp: float, cen: float, fwhm: float) -> np.ndarray:

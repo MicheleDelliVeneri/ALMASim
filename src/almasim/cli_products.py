@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tarfile
-from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from time import sleep, time
@@ -13,6 +12,15 @@ import typer
 from tqdm.auto import tqdm
 
 from .cli_shared import dedupe_keep_order, default_output_path, split_csv_values
+from .services.compute.progress import (
+    FAILED_FUTURE_STATES,
+    TaskFailure,
+    error_headline,
+    future_done,
+    future_status,
+    heartbeat_lines,
+    report_failures,
+)
 from .services.download import (
     MAX_PARALLEL_PER_MIRROR,
     MAX_PARALLEL_TOTAL,
@@ -45,42 +53,8 @@ def filter_products_by_qa0(*args, **kwargs):
     return _filter_products_by_qa0(*args, **kwargs)
 
 
-def _future_status(future: Any) -> str:
-    status = getattr(future, "status", None)
-    if callable(status):
-        try:
-            status = status()
-        except TypeError:
-            status = None
-    return str(status).lower() if status is not None else ""
-
-
-def _future_done(future: Any) -> bool:
-    done_attr = getattr(future, "done", None)
-    if callable(done_attr):
-        try:
-            return bool(done_attr())
-        except TypeError:
-            return False
-    if isinstance(done_attr, bool):
-        return done_attr
-
-    status = _future_status(future)
-    return status in {"finished", "done", "error", "failed", "cancelled"}
-
-
 _NO_PROGRESS_TIMEOUT_S = 3600
 _PROGRESS_HEARTBEAT_S = 60.0
-_FAILED_FUTURE_STATES = {"error", "failed", "cancelled", "lost"}
-
-
-@dataclass(frozen=True)
-class StageFailure:
-    """One UID that failed during an unpack/calibrate stage."""
-
-    uid: str
-    error: str
-    log_path: Optional[str] = None
 
 
 def _safe_uid(uid: str) -> str:
@@ -96,49 +70,11 @@ def _stage_log_path(output_root: Any, uid: str, stage: str) -> Path:
     return Path(str(output_root)).expanduser().resolve() / "logs" / f"{_safe_uid(uid)}.{stage}.log"
 
 
-def _tail_log_line(
-    path: Path, max_bytes: int = 4096, modified_since: Optional[float] = None
-) -> Optional[str]:
-    """Return the last non-empty line of ``path`` without reading the whole file.
-
-    Files last modified before ``modified_since`` (a ``time.time()`` stamp) are
-    ignored so that a log left behind by an earlier run is not mistaken for a
-    job that is running now.
-    """
-    try:
-        if modified_since is not None and path.stat().st_mtime < modified_since:
-            return None
-        with path.open("rb") as handle:
-            handle.seek(0, 2)
-            size = handle.tell()
-            handle.seek(max(0, size - max_bytes))
-            chunk = handle.read().decode("utf-8", errors="replace")
-    except OSError:
-        return None
-    lines = [line.strip() for line in chunk.splitlines() if line.strip()]
-    return lines[-1] if lines else None
+def _report_stage_failures(stage_label: str, failures: list[TaskFailure]) -> None:
+    report_failures(stage_label, failures, unit="UID(s)", echo=lambda t: typer.echo(t, err=True))
 
 
-def _error_headline(error: str, limit: int = 240) -> str:
-    """First informative line of an error message, trimmed for console output."""
-    for line in str(error).splitlines():
-        stripped = line.strip()
-        if stripped:
-            return stripped if len(stripped) <= limit else stripped[: limit - 1] + "…"
-    return str(error)[:limit]
-
-
-def _report_stage_failures(stage_label: str, failures: list[StageFailure]) -> None:
-    if not failures:
-        return
-    typer.echo(f"{stage_label}: {len(failures)} UID(s) failed and were skipped:", err=True)
-    for failure in failures:
-        typer.echo(f"  {failure.uid}: {_error_headline(failure.error)}", err=True)
-        if failure.log_path:
-            typer.echo(f"    log: {failure.log_path}", err=True)
-
-
-def _exit_if_failures(stage_label: str, failures: list[StageFailure]) -> None:
+def _exit_if_failures(stage_label: str, failures: list[TaskFailure]) -> None:
     """Print a failure summary and exit non-zero once every UID has been attempted."""
     if not failures:
         return
@@ -155,7 +91,7 @@ def _compute_jobs_with_progress(
     no_progress_timeout: float = _NO_PROGRESS_TIMEOUT_S,
     continue_on_error: bool = False,
     log_paths: Optional[list[Path]] = None,
-    failures: Optional[list[StageFailure]] = None,
+    failures: Optional[list[TaskFailure]] = None,
     heartbeat_interval: float = _PROGRESS_HEARTBEAT_S,
 ) -> list[Any]:
     """Run a stage and show per-UID progress for asynchronous backends.
@@ -185,7 +121,7 @@ def _compute_jobs_with_progress(
         if failures is not None:
             log_path = _log_path(index)
             failures.append(
-                StageFailure(_uid(index), error, str(log_path) if log_path is not None else None)
+                TaskFailure(_uid(index), error, str(log_path) if log_path is not None else None)
             )
 
     completed: set[int] = set()
@@ -201,11 +137,11 @@ def _compute_jobs_with_progress(
                 if index in completed:
                     continue
 
-                state = _future_status(future)
-                if state in _FAILED_FUTURE_STATES:
+                state = future_status(future)
+                if state in FAILED_FUTURE_STATES:
                     failed.add(index)
 
-                if not _future_done(future):
+                if not future_done(future):
                     continue
 
                 completed.add(index)
@@ -222,7 +158,7 @@ def _compute_jobs_with_progress(
                     except Exception:
                         pass
                     _record_failure(index, error_text)
-                    progress_bar.write(f"  {uid} error: {_error_headline(error_text)}")
+                    progress_bar.write(f"  {uid} error: {error_headline(error_text)}")
                     log_path = _log_path(index)
                     if log_path is not None:
                         progress_bar.write(f"  {uid} log: {log_path}")
@@ -244,20 +180,16 @@ def _compute_jobs_with_progress(
                     )
                 if log_paths is not None and now - last_heartbeat_time >= heartbeat_interval:
                     last_heartbeat_time = now
-                    running = 0
-                    for index in range(len(futures)):
-                        if index in completed:
-                            continue
-                        log_path = _log_path(index)
-                        last_line = (
-                            _tail_log_line(log_path, modified_since=stage_started_at - 1.0)
-                            if log_path is not None
-                            else None
-                        )
-                        if last_line is None:
-                            continue
-                        running += 1
-                        progress_bar.write(f"  [{_uid(index)}] {last_line}")
+                    lines, running = heartbeat_lines(
+                        (
+                            (_uid(i), _log_path(i))
+                            for i in range(len(futures))
+                            if i not in completed
+                        ),
+                        started_at=stage_started_at,
+                    )
+                    for line in lines:
+                        progress_bar.write(line)
                     queued = len(futures) - len(completed) - running
                     progress_bar.write(
                         f"{stage_label}: {running} running, {queued} waiting for a worker, "
@@ -292,7 +224,7 @@ def _run_uid_stage(
     stage_label: str,
     log_paths: list[Path],
     continue_on_error: bool,
-    failures: list[StageFailure],
+    failures: list[TaskFailure],
 ) -> list[list[str]]:
     """Run one per-UID task for every UID, returning one output list per UID.
 
@@ -329,9 +261,9 @@ def _run_uid_stage(
         except Exception as exc:
             if not continue_on_error:
                 raise
-            failures.append(StageFailure(uid, str(exc), str(log_path) if log_path else None))
+            failures.append(TaskFailure(uid, str(exc), str(log_path) if log_path else None))
             typer.echo(
-                f"{stage_label} [{index}/{total}] FAILED {uid}: {_error_headline(str(exc))}",
+                f"{stage_label} [{index}/{total}] FAILED {uid}: {error_headline(str(exc))}",
                 err=True,
             )
             outputs.append([])
@@ -773,7 +705,7 @@ def _run_unpack_jobs(
     skip_casa_data_update: bool,
     overwrite_outputs: bool,
     continue_on_error: bool = True,
-    failures: Optional[list[StageFailure]] = None,
+    failures: Optional[list[TaskFailure]] = None,
 ) -> list[str]:
     """Import ASDMs into raw MeasurementSets, one isolated subprocess per UID.
 
@@ -878,7 +810,7 @@ def _run_calibrate_jobs(
     overwrite_outputs: bool,
     clean_intermediate: bool,
     continue_on_error: bool = True,
-    failures: Optional[list[StageFailure]] = None,
+    failures: Optional[list[TaskFailure]] = None,
     keep_working_copies: bool = False,
 ) -> list[str]:
     """Calibrate raw MeasurementSets, one isolated subprocess per UID.
@@ -1157,7 +1089,7 @@ def _run_parallel_archive_jobs(
     skip_casa_data_update: bool,
     overwrite_archive_outputs: bool,
     continue_on_error: bool = True,
-    failures: Optional[list[StageFailure]] = None,
+    failures: Optional[list[TaskFailure]] = None,
     keep_working_copies: bool = False,
 ) -> tuple[list[str], list[str]]:
     if failures is None:
@@ -1647,7 +1579,7 @@ def products_download(
             skip_casa_data_update=skip_casa_data_update,
             logger_fn=typer.echo,
         )
-        stage_failures: list[StageFailure] = []
+        stage_failures: list[TaskFailure] = []
         raw_mss, calibrated_mss = _run_parallel_archive_jobs(
             download_root=Path(summary.destination),
             archive_output_root=archive_root,
@@ -1940,7 +1872,7 @@ def products_unpack(
         raise typer.Exit(code=2)
 
     parsed_uids = _parse_uid_options(asdm_uid)
-    stage_failures: list[StageFailure] = []
+    stage_failures: list[TaskFailure] = []
     raw_outputs = _run_unpack_jobs(
         input_root=input_root.expanduser().resolve(),
         output_root=output_root.expanduser().resolve(),
@@ -2073,7 +2005,7 @@ def products_calibrate(
         raise typer.Exit(code=2)
 
     parsed_uids = _parse_uid_options(asdm_uid)
-    stage_failures: list[StageFailure] = []
+    stage_failures: list[TaskFailure] = []
     calibrated_outputs = _run_calibrate_jobs(
         input_root=input_root.expanduser().resolve(),
         raw_ms_root=raw_ms_root.expanduser().resolve(),
