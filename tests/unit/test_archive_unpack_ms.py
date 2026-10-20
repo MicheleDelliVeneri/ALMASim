@@ -139,19 +139,22 @@ def test_has_casa_runtime_data_nonexistent(tmp_path):
 
 
 @pytest.mark.unit
-def test_report_logs_and_calls_logger_fn(caplog):
-    """report logs the message and passes it to logger_fn; warnings are prefixed."""
+def test_report_passes_to_logger_fn_and_logs_only_at_debug(caplog):
+    """With a sink, report echoes (warnings prefixed) and keeps a DEBUG record (T2.10)."""
     import logging
 
     from almasim.services.utils import report
 
     log = logging.getLogger("almasim.test.report")
     messages = []
-    with caplog.at_level(logging.INFO, logger="almasim.test.report"):
+    with caplog.at_level(logging.DEBUG, logger="almasim.test.report"):
         report(log, messages.append, "hello world")
         report(log, messages.append, "careful", logging.WARNING)
     assert messages == ["hello world", "WARNING: careful"]
-    assert [r.getMessage() for r in caplog.records] == ["hello world", "careful"]
+    assert [(r.getMessage(), r.levelno) for r in caplog.records] == [
+        ("hello world", logging.DEBUG),
+        ("careful", logging.DEBUG),
+    ]
 
 
 @pytest.mark.unit

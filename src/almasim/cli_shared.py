@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import sys
 from pathlib import Path
 from typing import List, NoReturn, Optional
 
@@ -81,3 +83,37 @@ def fail(message: str, code: int = 1) -> NoReturn:
     """Print ``message`` to stderr and exit ``code`` (1): the command could not do its work."""
     typer.echo(message, err=True)
     raise typer.Exit(code=code)
+
+
+class _CurrentStderrHandler(logging.StreamHandler):
+    """A handler writing to whatever ``sys.stderr`` is when a record is emitted."""
+
+    @property  # type: ignore[override]
+    def stream(self):
+        return sys.stderr
+
+    @stream.setter
+    def stream(self, value) -> None:
+        pass
+
+
+class _LevelPrefixFormatter(logging.Formatter):
+    """INFO records as plain lines (as the commands echo them), others as ``LEVEL: message``."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        return message if record.levelno == logging.INFO else f"{record.levelname}: {message}"
+
+
+def configure_logging(level: int = logging.INFO) -> None:
+    """Show the library's log records (``almasim.*``) on stderr, once (MADIV-28 T2.10).
+
+    Messages a command echoes itself are logged at DEBUG by
+    ``services.utils.report``, so nothing is shown twice.
+    """
+    log = logging.getLogger("almasim")
+    log.setLevel(level)
+    if not any(isinstance(handler, _CurrentStderrHandler) for handler in log.handlers):
+        handler = _CurrentStderrHandler()
+        handler.setFormatter(_LevelPrefixFormatter())
+        log.addHandler(handler)

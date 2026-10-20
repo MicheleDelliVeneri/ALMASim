@@ -7,23 +7,34 @@ from typing import Callable, Optional
 
 LogFn = Optional[Callable[[str], None]]
 
+_simulation_log = logging.getLogger("almasim.simulation")
+
 
 def log_message(logger: LogFn, message: str, remote: bool = False) -> None:
-    """Log a message using the logger callback or print."""
-    if remote:
-        print(message)
-    elif logger is not None:
+    """Pass ``message`` to the caller's ``logger`` callback, or log it.
+
+    ``remote`` runs (on a worker, where no callback reaches the caller) always
+    log. They used to print, the one library print besides streamed child
+    output (MADIV-28 T2.10).
+    """
+    if logger is not None and not remote:
         logger(message)
+    else:
+        _simulation_log.info(message)
 
 
 def report(log: logging.Logger, logger_fn: LogFn, message: str, level: int = logging.INFO) -> None:
-    """Log ``message`` and pass it to ``logger_fn`` (the CLI passes ``typer.echo``).
+    """One message to the caller's sink (the CLI passes ``typer.echo``), or to ``log``.
 
-    Warnings reach ``logger_fn`` prefixed with ``WARNING:``.
+    Never both: with a sink the record is only logged at DEBUG, so a CLI that
+    also shows log records prints each line once. Warnings reach the sink
+    prefixed with ``WARNING:``.
     """
-    log.log(level, message)
-    if logger_fn is not None:
-        logger_fn(f"WARNING: {message}" if level >= logging.WARNING else message)
+    if logger_fn is None:
+        log.log(level, message)
+        return
+    log.debug(message)
+    logger_fn(f"WARNING: {message}" if level >= logging.WARNING else message)
 
 
 class ProgressEmitterAdapter:
