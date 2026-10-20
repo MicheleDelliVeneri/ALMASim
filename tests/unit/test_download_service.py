@@ -99,7 +99,7 @@ from contextlib import contextmanager  # noqa: E402
 
 import pytest  # noqa: E402
 
-from almasim.services import download as download_module  # noqa: E402
+from almasim.services.download import transfer as download_module  # noqa: E402
 
 
 class _FakeResponse:
