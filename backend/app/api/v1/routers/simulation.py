@@ -1,8 +1,8 @@
 """Simulation API endpoints."""
 
 import asyncio
-import os
 import uuid
+from pathlib import Path
 
 from database.config import get_db
 from database.service import DatabaseService
@@ -23,6 +23,7 @@ from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
 from app.core.config import settings
 from app.core.dependencies import get_compute_backend
+from app.core.path_utils import resolve_safe_path
 from app.schemas.simulation import (
     SimulationEstimate,
     SimulationListResponse,
@@ -117,19 +118,16 @@ def create_simulation(
                         detail="compute_backend_config.log_directory must be a string",
                     )
 
-                safe_root = os.path.realpath(os.path.expanduser("~"))
-                resolved_log_directory = os.path.realpath(
-                    os.path.abspath(os.path.expanduser(raw_log_directory))
-                )
-                if os.path.commonpath([safe_root, resolved_log_directory]) != safe_root:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
+                backend_config["log_directory"] = str(
+                    resolve_safe_path(
+                        raw_log_directory,
+                        Path.home(),
                         detail=(
                             "compute_backend_config.log_directory must be within "
                             "the user's home directory"
                         ),
                     )
-                backend_config["log_directory"] = resolved_log_directory
+                )
 
             compute_backend = create_backend(params.compute_backend, **backend_config)
         else:
