@@ -1941,8 +1941,40 @@ def predict_single(
     predict_from_model(input_ms=input_ms, model=model, output_ms=output_ms)
 
 
-def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
+# CORR_TYPE codes (casacore Stokes enum) of the parallel hands, where a Stokes I
+# model appears: XX = YY = I and RR = LL = I, since I = (XX + YY) / 2.
+_PARALLEL_HANDS = {5, 8, 9, 12}  # RR, LL, XX, YY
+
+
+def _model_planes(model: Path) -> tuple[np.ndarray, float, float]:
+    """Stokes I planes (nplane, ny, nx) of a FITS model, and its pixel sizes in radians."""
     from astropy.io import fits
+
+    with fits.open(model) as hdul:
+        hdu = cast(fits.PrimaryHDU, hdul[0])
+        if hdu.data is None:
+            raise ValueError(f"FITS primary HDU of {model} contains no image data")
+        header = hdu.header
+        data = np.asarray(hdu.data, dtype=np.float64)
+    # FITS axes (numpy order) are [stokes, freq, y, x]; keep Stokes I.
+    while data.ndim > 3:
+        data = data[0]
+    planes = data.reshape((-1,) + data.shape[-2:])
+    deg2rad = np.pi / 180.0
+    pixsize_x = abs(cast(float, header["CDELT1"])) * deg2rad
+    pixsize_y = abs(cast(float, header["CDELT2"])) * deg2rad
+    return np.ascontiguousarray(planes), pixsize_x, pixsize_y
+
+
+def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
+    """Copy ``input_ms`` to ``output_ms`` and write the model's visibilities to MODEL_DATA.
+
+    The visibilities are predicted with ducc0 at each spectral window's channel
+    frequencies (from the MS). A single-plane model (e.g. WSClean's MFS model)
+    is used for every channel; a cube model must have one plane per channel and
+    each channel is predicted from its own plane. The Stokes I model goes to
+    the parallel hands (XX = YY = I, or RR = LL = I); cross hands are zero.
+    """
     from ducc0.wgridder import dirty2vis
 
     typer.echo(f"Predicting visibilities from model: {model}")
@@ -1952,55 +1984,71 @@ def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
         typer.echo(f"Output MS already exists: {output_ms}", err=True)
         raise typer.Exit(code=1)
 
+    planes, pixsize_x, pixsize_y = _model_planes(model)
     casacore_table = import_casacore_tables()
     shutil.copytree(input_ms, output_ms)
-    main_table = casacore_table(str(output_ms), readonly=False)
+    nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or (os.cpu_count() or 1))
+
+    data_description = casacore_table(str(output_ms / "DATA_DESCRIPTION"), ack=False)
+    spw_of_dd = data_description.getcol("SPECTRAL_WINDOW_ID")
+    pol_of_dd = data_description.getcol("POLARIZATION_ID")
+    data_description.close()
+    spectral_window = casacore_table(str(output_ms / "SPECTRAL_WINDOW"), ack=False)
+    chan_freq = [
+        np.asarray(spectral_window.getcell("CHAN_FREQ", i), dtype=np.float64)
+        for i in range(spectral_window.nrows())
+    ]
+    spectral_window.close()
+    polarization = casacore_table(str(output_ms / "POLARIZATION"), ack=False)
+    corr_types = [
+        np.asarray(polarization.getcell("CORR_TYPE", i)) for i in range(polarization.nrows())
+    ]
+    polarization.close()
+
+    main_table = casacore_table(str(output_ms), readonly=False, ack=False)
     try:
-        nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or (os.cpu_count() or 1))
-        uvw = main_table.getcol("UVW")  # (nrows, 3) metres
-        with fits.open(model) as hdul:
-            main_hdu = cast(fits.PrimaryHDU, hdul[0])
-            header = main_hdu.header
+        if "MODEL_DATA" not in main_table.colnames():
+            from casacore.tables import makearrcoldesc, maketabdesc
 
-            # Pixel sizes: FITS CDELT is in degrees, ducc0 expects radians
-            deg2rad = np.pi / 180.0
-            pixsize_x = abs(cast(float, header["CDELT1"])) * deg2rad
-            pixsize_y = abs(cast(float, header["CDELT2"])) * deg2rad
-
-            # Channel frequencies from the FITS WCS axis 3 (CRVAL3/CDELT3/CRPIX3/NAXIS3)
-            nchans = int(cast(int, header["NAXIS3"]))
-            crval3 = cast(float, header["CRVAL3"])  # reference frequency [Hz]
-            cdelt3 = cast(float, header["CDELT3"])  # frequency increment [Hz]
-            crpix3 = cast(float, header["CRPIX3"])  # reference pixel (1-based)
-            freq = (crval3 + (np.arange(nchans) - (crpix3 - 1)) * cdelt3).astype(np.float64)
-            typer.echo(f"Computed frequency grid from FITS header: nchans={nchans}")
-
-            # Model image: FITS axes are [stokes, freq, y, x]; take first stokes & channel
-            assert main_hdu.data is not None, "FITS primary HDU contains no image data"
-            dirty = np.ascontiguousarray(main_hdu.data[0, 0, :, :].astype(np.float64))
-            typer.echo(f"Input arrays: uvw={uvw.shape}, dirty={dirty.shape}, freq={freq.shape}")
-
-            # Predict visibilities from the model image → shape (nrows, nchan)
-            model_vis = dirty2vis(
-                uvw=uvw.astype(np.float64),
-                dirty=dirty,
-                freq=freq,
-                pixsize_x=pixsize_x,
-                pixsize_y=pixsize_y,
-                do_wgridding=True,
-                epsilon=1e-4,
-                nthreads=nthreads,
+            main_table.addcols(
+                maketabdesc(makearrcoldesc("MODEL_DATA", 0j, ndim=2, valuetype="complex"))
             )
-            typer.echo(f"Predicted visibilities with shape: {model_vis.shape}")
+        ddids = main_table.getcol("DATA_DESC_ID")
+        for dd in np.unique(ddids):
+            freq = chan_freq[int(spw_of_dd[dd])]
+            hands = np.isin(corr_types[int(pol_of_dd[dd])], list(_PARALLEL_HANDS))
+            if len(planes) not in (1, len(freq)):
+                raise ValueError(
+                    f"model {model} has {len(planes)} planes; spectral window "
+                    f"{int(spw_of_dd[dd])} has {len(freq)} channels (need 1 or {len(freq)})"
+                )
+            rows = np.flatnonzero(ddids == dd)
+            selection = main_table.selectrows(rows.tolist())
+            uvw = selection.getcol("UVW").astype(np.float64)
 
-            # Write predicted visibilities to MODEL_DATA (nrows, 4, nchan): XX, XY, YX, YY
-            zeros = np.zeros_like(model_vis)
-            half = model_vis / 2
-            model_vis_col = np.stack(
-                [half, zeros, zeros, half],
-                axis=1,
-            )  # XX=I/2, XY=0, YX=0, YY=I/2
-            main_table.putcol("MODEL_DATA", model_vis_col)
+            def predict(plane: np.ndarray, frequencies: np.ndarray) -> np.ndarray:
+                return dirty2vis(
+                    uvw=uvw,
+                    freq=frequencies,
+                    dirty=plane,
+                    pixsize_x=pixsize_x,
+                    pixsize_y=pixsize_y,
+                    do_wgridding=True,
+                    epsilon=1e-4,
+                    nthreads=nthreads,
+                )
+
+            if len(planes) == 1:
+                vis = predict(planes[0], freq)
+            else:
+                vis = np.stack(
+                    [predict(planes[c], freq[c : c + 1])[:, 0] for c in range(len(freq))],
+                    axis=1,
+                )
+            model_data = np.zeros(vis.shape + (len(hands),), dtype=np.complex64)
+            model_data[:, :, hands] = vis[:, :, None]
+            selection.putcol("MODEL_DATA", model_data)  # (nrows, nchan, ncorr)
+            typer.echo(f"DATA_DESC_ID {int(dd)}: predicted {len(rows)} rows x {len(freq)} channels")
     finally:
         main_table.close()
 
@@ -2042,12 +2090,13 @@ def predict_batch(
     for _, dset_parameter in tqdm(parameters.iterrows(), total=len(parameters)):
         input_filename = Path(dset_parameter["filename"])
         spw_id = int(dset_parameter["spectral_window_id"])
-        model_path = output_directory / input_filename.stem / f"SPW-{spw_id}" / "wsclean-model.fits"
+        # The directory image-from-ms wrote this row's products to (SPW-<n>_FIELD-<f>).
+        model_path = task_directory(output_directory, dset_parameter)[0] / "wsclean-model.fits"
         if not model_path.exists():
             typer.echo(
-                "[debug] missing model FITS, skipping row:"
-                "ms={input_filename} spw={spw_id} path={model_path}",
-                err=False,
+                f"Missing model FITS, skipping row: ms={input_filename} spw={spw_id} "
+                f"path={model_path}",
+                err=True,
             )
             continue
 

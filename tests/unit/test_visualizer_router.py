@@ -129,7 +129,7 @@ def test_list_datacube_files_no_dir_uses_output_dir(monkeypatch, tmp_path):
     np.savez(tmp_path / "cube.npz", clean_cube=np.ones((2, 3, 4), dtype=np.float32))
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
 
-    response = asyncio.run(visualizer.list_datacube_files(dir=None))
+    response = visualizer.list_datacube_files(dir=None)
     payload = json.loads(response.body)
     assert payload["output_dir"] == str(tmp_path.resolve())
     assert any(f["name"] == "cube.npz" for f in payload["files"])
@@ -141,7 +141,7 @@ def test_list_datacube_files_with_valid_subdir(monkeypatch, tmp_path):
     np.savez(subdir / "cube.npz", clean_cube=np.ones((2, 3, 4), dtype=np.float32))
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
 
-    response = asyncio.run(visualizer.list_datacube_files(dir="sub"))
+    response = visualizer.list_datacube_files(dir="sub")
     payload = json.loads(response.body)
     assert any(f["name"] == "cube.npz" for f in payload["files"])
 
@@ -152,14 +152,14 @@ def test_list_datacube_files_traversal_dir_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(visualizer.list_datacube_files(dir="../../etc"))
+        visualizer.list_datacube_files(dir="../../etc")
     assert exc_info.value.status_code == 400
 
 
 def test_list_datacube_files_nonexistent_dir_returns_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path / "nonexistent")
 
-    response = asyncio.run(visualizer.list_datacube_files(dir=None))
+    response = visualizer.list_datacube_files(dir=None)
     payload = json.loads(response.body)
     assert payload["files"] == []
     assert "does not exist" in payload["message"]
@@ -176,7 +176,7 @@ def test_get_datacube_file_returns_fits(monkeypatch, tmp_path):
     fits.PrimaryHDU(cube).writeto(fits_path)
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
 
-    response = asyncio.run(visualizer.get_datacube_file("cube.fits"))
+    response = visualizer.get_datacube_file("cube.fits")
     assert response.path == str(fits_path)
 
 
@@ -186,7 +186,7 @@ def test_get_datacube_file_rejects_traversal(monkeypatch, tmp_path):
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(visualizer.get_datacube_file("../../etc/passwd"))
+        visualizer.get_datacube_file("../../etc/passwd")
     assert exc_info.value.status_code == 400
 
 
@@ -196,7 +196,7 @@ def test_get_datacube_file_not_found(monkeypatch, tmp_path):
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(visualizer.get_datacube_file("nonexistent.fits"))
+        visualizer.get_datacube_file("nonexistent.fits")
     assert exc_info.value.status_code == 404
 
 
@@ -208,7 +208,7 @@ def test_get_datacube_file_with_subdir(monkeypatch, tmp_path):
     fits.PrimaryHDU(cube).writeto(fits_path)
     monkeypatch.setattr(visualizer.settings, "OUTPUT_DIR", tmp_path)
 
-    response = asyncio.run(visualizer.get_datacube_file("cube.fits", dir="sub"))
+    response = visualizer.get_datacube_file("cube.fits", dir="sub")
     assert response.path == str(fits_path)
 
 

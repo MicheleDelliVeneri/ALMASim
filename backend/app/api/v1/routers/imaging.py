@@ -61,7 +61,7 @@ def _derive_output_paths(dirty_path: Path) -> dict[str, Path]:
 
 
 @router.post("/deconvolve", response_model=DeconvolutionResponse)
-async def deconvolve_saved_products(
+def deconvolve_saved_products(
     body: DeconvolutionRequest,
 ) -> DeconvolutionResponse:
     """Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews."""
