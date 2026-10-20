@@ -17,7 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 # loaded without a live PostgreSQL connection. SQLAlchemy itself is a test
 # dependency and is not stubbed (a stub would leak into the SQLite tests).
 _db_stub = MagicMock()
-for _mod in ("database", "database.config", "database.models", "database.service"):
+for _mod in ("app.db", "app.db.config", "app.db.models", "app.db.service"):
     sys.modules.setdefault(_mod, _db_stub)
 
 _ROUTER_PATH = REPO_ROOT / "backend" / "app" / "api" / "v1" / "routers" / "metadata.py"

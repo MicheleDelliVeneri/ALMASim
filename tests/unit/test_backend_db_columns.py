@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, inspect, text  # noqa: E402
 
 @pytest.mark.unit
 def test_add_missing_columns_upgrades_old_tables_once(backend_db):
-    from database.schema_upgrade import ADDED_COLUMNS, add_missing_columns
+    from app.db.schema_upgrade import ADDED_COLUMNS, add_missing_columns
 
     engine = create_engine("sqlite://")
     with engine.begin() as conn:
@@ -33,6 +33,6 @@ def test_add_missing_columns_upgrades_old_tables_once(backend_db):
 
 @pytest.mark.unit
 def test_add_missing_columns_skips_absent_tables(backend_db):
-    from database.schema_upgrade import add_missing_columns
+    from app.db.schema_upgrade import add_missing_columns
 
     assert add_missing_columns(create_engine("sqlite://")) == []

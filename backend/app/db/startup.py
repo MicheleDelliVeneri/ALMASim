@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from .config import SessionLocal, engine, init_db
+from .config import get_engine, init_db, new_session
 from .csv_importer import initialize_database_from_csv
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ def check_database_initialized() -> bool:
         True if database has observations, False otherwise
     """
     try:
-        with SessionLocal() as db:
+        with new_session() as db:
             result = db.execute(text("SELECT COUNT(*) FROM observations"))
             count = result.scalar()
             return count > 0
@@ -31,7 +31,7 @@ def check_database_initialized() -> bool:
 def _drop_not_null_if_exists(columns: list) -> None:
     """Drop NOT NULL constraints from observation columns that may hold NULL from TAP."""
     try:
-        with engine.connect() as conn:
+        with get_engine().connect() as conn:
             for col in columns:
                 conn.execute(text(f"ALTER TABLE observations ALTER COLUMN {col} DROP NOT NULL"))
             conn.commit()
@@ -75,7 +75,7 @@ def initialize_database_on_startup(data_dir: Path) -> None:
             logger.info("Database initialized with empty tables")
             return
 
-        with SessionLocal() as db:
+        with new_session() as db:
             results = initialize_database_from_csv(db, data_dir)
 
             total_imported = sum(results.values())

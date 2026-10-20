@@ -4,8 +4,6 @@ import asyncio
 import uuid
 from pathlib import Path
 
-from database.config import get_db
-from database.service import DatabaseService
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -28,6 +26,8 @@ from app.core.path_utils import (
     require_allowed_scheduler,
     resolve_safe_path,
 )
+from app.db.config import get_db
+from app.db.service import DatabaseService
 from app.schemas.simulation import (
     SimulationEstimate,
     SimulationListResponse,

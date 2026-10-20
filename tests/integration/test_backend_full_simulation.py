@@ -30,6 +30,10 @@ def client():
     """Create a test client."""
     if not BACKEND_AVAILABLE:
         pytest.skip(f"Backend not available: {IMPORT_ERROR}")
+    from ._backend_db import database_driver_missing
+
+    if reason := database_driver_missing():
+        pytest.skip(reason)
     return TestClient(app)
 
 

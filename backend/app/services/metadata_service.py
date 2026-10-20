@@ -1,7 +1,6 @@
 """Metadata business logic service."""
 
 import logging
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -20,17 +19,13 @@ from almasim.services.metadata.tap.queries import (
 from almasim.services.metadata.tap.service import (
     _QA2_STATUS_MAP,
 )
-from app.schemas.metadata import ScienceQueryParams
-
-backend_dir = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(backend_dir))
-
-from database.models import Observation  # noqa: E402
-from database.service import (  # noqa: E402
+from app.db.models import Observation
+from app.db.service import (
     DatabaseService,
     ObservationExclusionParams,
     ObservationQueryParams,
 )
+from app.schemas.metadata import ScienceQueryParams
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +66,7 @@ class MetadataService:
         # Cache the keywords and categories in the database
         if self.db_service:
             try:
-                from database.csv_importer import CSVImporter
+                from app.db.csv_importer import CSVImporter
 
                 importer = CSVImporter(self.db)
 
@@ -209,8 +204,7 @@ class MetadataService:
         """
         # Use an independent session: the request-scoped `self.db` is closed
         # by the time this background task runs.
-        from database.config import get_db_context
-
+        from app.db.config import get_db_context
         from app.services.status_store import query_store
 
         try:
@@ -365,7 +359,7 @@ class MetadataService:
         """
         if not self.db_service or result_df.empty:
             return
-        from database.csv_importer import CSVImporter
+        from app.db.csv_importer import CSVImporter
 
         BATCH_SIZE = 250
         importer = CSVImporter(self.db)

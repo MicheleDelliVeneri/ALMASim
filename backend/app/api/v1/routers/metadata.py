@@ -1,8 +1,6 @@
 """Metadata API endpoints."""
 
-import sys
 import uuid
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -17,6 +15,8 @@ from almasim.services.metadata.storage import (
 )
 from app.core.config import settings
 from app.core.path_utils import resolve_safe_path
+from app.db.config import get_db
+from app.db.service import DatabaseService
 from app.schemas.metadata import (
     MetadataPageResponse,
     MetadataQuery,
@@ -31,19 +31,12 @@ from app.schemas.metadata import (
 from app.services.metadata_service import MetadataService
 from app.services.status_store import query_store
 
-# Import database dependency
-backend_dir = Path(__file__).parent.parent.parent.parent.parent
-sys.path.insert(0, str(backend_dir))
-
-from database.config import get_db  # noqa: E402
-from database.service import DatabaseService  # noqa: E402
-
 router = APIRouter()
 
 
 @router.get("/science-types", response_model=dict)
 def get_science_types(db: Session = Depends(get_db)) -> dict:
-    """Get available science types and categories from database."""
+    """Get available science types and categories from app.db."""
     try:
         service = MetadataService(db=db)
         keywords, categories = service.get_science_types()

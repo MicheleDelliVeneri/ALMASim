@@ -146,9 +146,9 @@ module = [
     "almasim.skymodels.serendipitous",
     # Surfaced when SQLAlchemy joined the test group (T1.12): the models use
     # untyped Column attributes rather than Mapped[].
-    "database.models",
-    "database.service",
-    "database.startup",
+    "app.db.models",
+    "app.db.service",
+    "app.db.startup",
 ]
 ignore_errors = true
 

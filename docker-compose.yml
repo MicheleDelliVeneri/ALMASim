@@ -11,7 +11,7 @@ services:
       - POSTGRES_DB=almasim
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/app/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -48,7 +48,6 @@ services:
       - ./backend/outputs:/app/outputs
       # Mount source code for hot reload (no rebuild needed on code changes)
       - ./backend/app:/app/backend/app
-      - ./backend/database:/app/backend/database
       - ./src:/app/src
       # Mount host home directory so downloads land on the host filesystem
       - ${HOME}:/host_home

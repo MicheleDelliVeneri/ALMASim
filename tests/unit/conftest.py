@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SWAPPED = ("database", "app.services.metadata_service")
+_SWAPPED = ("app.db", "app.services.metadata_service")
 
 
 def _swapped(name: str) -> bool:
@@ -35,8 +35,8 @@ def backend_db(monkeypatch):
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
 
-        models = importlib.import_module("database.models")
-        service = importlib.import_module("database.service")
+        models = importlib.import_module("app.db.models")
+        service = importlib.import_module("app.db.service")
         engine = create_engine("sqlite://")
         models.Base.metadata.create_all(
             engine,

@@ -17,7 +17,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def cache(backend_db):
     """The SQLite cache plus a helper that adds an observation as the importer would."""
-    csv = importlib.import_module("database.csv_importer").CSVImporter(backend_db.session)
+    csv = importlib.import_module("app.db.csv_importer").CSVImporter(backend_db.session)
 
     def add(uid, target="NGC 1068", keywords=("Galaxies",), category="Active galaxies", **row):
         observation = csv.parse_csv_row(
