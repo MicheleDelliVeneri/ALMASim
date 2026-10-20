@@ -10,6 +10,7 @@
 	import type { MetadataResponse } from '#lib/api/metadata.js';
 	import ComputeBackendConfig from '#lib/components/simulations/ComputeBackendConfig.svelte';
 	import SimulationForm from '#lib/components/simulations/SimulationForm.svelte';
+	import { defaultSimulationForm, formRequestFields } from '#lib/utils/simulationForm.js';
 	import MetadataSelector from '#lib/components/simulations/MetadataSelector.svelte';
 	import SelectedRowPreview from '#lib/components/simulations/SelectedRowPreview.svelte';
 	import SimulationStatusDisplay from '#lib/components/simulations/SimulationStatusDisplay.svelte';
@@ -42,26 +43,7 @@
 	let ws: WebSocket | null = null;
 
 	// Simulation form state
-	let nPix = $state<number | null>(null);
-	let nChannels = $state<number | null>(null);
-	let sourceType = $state('point');
-	let simulationName = $state('');
-	let outputDir = $state(BROWSE_ROOT);
-	let snr = $state(1.3);
-	let useMetadataSnr = $state(true);
-	let useMetadataPwv = $state(true);
-	let pwvOverride = $state(1.0);
-	let saveMode = $state('fits');
-	let msSaveMode = $state('msv2');
-	let nLines = $state(0);
-	let robust = $state(0.0);
-	let imagingAlgorithm = $state<'legacy'>('legacy');
-	let numSimulations = $state(1);
-	let sourceOffsetXArcsec = $state(0.0);
-	let sourceOffsetYArcsec = $state(0.0);
-	let backgroundMode = $state('none');
-	let backgroundLevel = $state(1.0);
-	let backgroundSeed = $state<number | null>(null);
+	let form = $state(defaultSimulationForm(BROWSE_ROOT));
 
 	let computeBackend = $state('local');
 	let backendConfig = $state<Record<string, unknown>>({});
@@ -147,10 +129,7 @@
 		return null;
 	}
 
-	function getOptionalNumber(
-		row: Record<string, unknown>,
-		keys: string[]
-	): number | undefined {
+	function getOptionalNumber(row: Record<string, unknown>, keys: string[]): number | undefined {
 		for (const key of keys) {
 			const value = getRowNumber(row, key);
 			if (value !== null) return value;
@@ -216,7 +195,7 @@
 			idx,
 			source_name: getString(['ALMA_source_name', 'source_name'], 'Unknown'),
 			member_ouid: getString(['member_ous_uid', 'member_ouid'], 'unknown'),
-			project_name: simulationName || getString(['proposal_id', 'project_name'], 'ALMASim'),
+			project_name: form.simulationName || getString(['proposal_id', 'project_name'], 'ALMASim'),
 			ra: getNumber(['RA', 'ra'], 0.0),
 			dec: getNumber(['Dec', 'dec'], 0.0),
 			band: getNumber(['Band', 'band'], 3),
@@ -224,7 +203,7 @@
 			vel_res: getNumber(['Vel.res.', 'Vel.res', 'vel_res'], 1.0),
 			fov: getNumber(['FOV', 'fov'], 10.0),
 			obs_date: getString(['Obs.date', 'obs_date'], new Date().toISOString().split('T')[0]),
-			pwv: useMetadataPwv ? getNumber(['PWV', 'pwv'], 1.0) : pwvOverride,
+			pwv: form.useMetadataPwv ? getNumber(['PWV', 'pwv'], 1.0) : form.pwvOverride,
 			int_time: getNumber(['Int.Time', 'int_time'], 3600.0),
 			bandwidth: getNumber(['Bandwidth', 'bandwidth'], 2.0),
 			freq: getNumber(['Freq', 'freq'], 100.0),
@@ -236,21 +215,7 @@
 				row,
 				getNumber(['Int.Time', 'int_time'], 3600.0)
 			),
-			source_type: sourceType,
-			n_pix: nPix ?? undefined,
-			n_channels: nChannels ?? undefined,
-			snr: useMetadataSnr ? undefined : snr,
-			save_mode: saveMode,
-			ms_save_mode: msSaveMode,
-			n_lines: nLines > 0 ? nLines : undefined,
-			robust,
-			imaging_algorithm: imagingAlgorithm,
-			source_offset_x_arcsec: sourceOffsetXArcsec,
-			source_offset_y_arcsec: sourceOffsetYArcsec,
-			background_mode: backgroundMode,
-			background_level: backgroundLevel,
-			background_seed: backgroundSeed ?? undefined,
-			output_dir: outputDir || './outputs',
+			...formRequestFields(form),
 			compute_backend: computeBackend,
 			compute_backend_config: backendConfig
 		};
@@ -304,7 +269,13 @@
 		}
 
 		logger.info(
-			{ sourceType, nPix, nChannels, numSimulations, selectedRowCount: selectedRowIndices.length },
+			{
+				sourceType: form.sourceType,
+				nPix: form.nPix,
+				nChannels: form.nChannels,
+				numSimulations: form.numSimulations,
+				selectedRowCount: selectedRowIndices.length
+			},
 			'Simulation form submitted'
 		);
 
@@ -320,10 +291,10 @@
 		// Determine rows to process
 		const rowsToProcess: Array<Record<string, unknown>> = [];
 
-		if (numSimulations > 1 && selectedRowIndices.length === 1) {
+		if (form.numSimulations > 1 && selectedRowIndices.length === 1) {
 			// Create multiple simulations from the same row
 			const row = data[selectedRowIndices[0]];
-			for (let i = 0; i < numSimulations; i++) {
+			for (let i = 0; i < form.numSimulations; i++) {
 				rowsToProcess.push(row);
 			}
 		} else {
@@ -373,10 +344,16 @@
 
 		if (createdSimulations.length > 0 && errors.length === 0) {
 			message = `Successfully created ${createdSimulations.length} simulation(s)!`;
-			logger.info({ count: createdSimulations.length, ids: createdSimulations }, 'All simulations created successfully');
+			logger.info(
+				{ count: createdSimulations.length, ids: createdSimulations },
+				'All simulations created successfully'
+			);
 		} else if (createdSimulations.length > 0 && errors.length > 0) {
 			message = `Created ${createdSimulations.length} simulation(s) with ${errors.length} error(s). Errors: ${errors.join('; ')}`;
-			logger.warn({ created: createdSimulations.length, failed: errors.length }, 'Some simulations failed to create');
+			logger.warn(
+				{ created: createdSimulations.length, failed: errors.length },
+				'Some simulations failed to create'
+			);
 		} else {
 			message = `Error: Failed to create simulations. ${errors.join('; ')}`;
 			logger.error({ errors }, 'All simulations failed to create');
@@ -410,48 +387,7 @@
 			onConfigChange={(config) => (backendConfig = config)}
 		/>
 
-		<SimulationForm
-			{sourceType}
-			{nPix}
-			{nChannels}
-			{simulationName}
-			{outputDir}
-			{snr}
-			{useMetadataSnr}
-			{useMetadataPwv}
-			{pwvOverride}
-			{saveMode}
-			{msSaveMode}
-			{nLines}
-			{robust}
-			{imagingAlgorithm}
-			{numSimulations}
-			{sourceOffsetXArcsec}
-			{sourceOffsetYArcsec}
-			{backgroundMode}
-			{backgroundLevel}
-			{backgroundSeed}
-			onSourceTypeChange={(type) => (sourceType = type)}
-			onNPixChange={(value) => (nPix = value)}
-			onNChannelsChange={(value) => (nChannels = value)}
-			onSimulationNameChange={(value) => (simulationName = value)}
-			onOutputDirChange={(value) => (outputDir = value)}
-			onSnrChange={(value) => (snr = value)}
-			onUseMetadataSnrChange={(value) => (useMetadataSnr = value)}
-			onUseMetadataPwvChange={(value) => (useMetadataPwv = value)}
-			onPwvOverrideChange={(value) => (pwvOverride = value)}
-			onSaveModeChange={(value) => (saveMode = value)}
-			onMsSaveModeChange={(value) => (msSaveMode = value)}
-			onNLinesChange={(value) => (nLines = value)}
-			onRobustChange={(value) => (robust = value)}
-			onImagingAlgorithmChange={(value) => (imagingAlgorithm = value)}
-			onNumSimulationsChange={(value) => (numSimulations = value)}
-			onSourceOffsetXChange={(value) => (sourceOffsetXArcsec = value)}
-			onSourceOffsetYChange={(value) => (sourceOffsetYArcsec = value)}
-			onBackgroundModeChange={(value) => (backgroundMode = value)}
-			onBackgroundLevelChange={(value) => (backgroundLevel = value)}
-			onBackgroundSeedChange={(value) => (backgroundSeed = value)}
-		/>
+		<SimulationForm bind:values={form} />
 
 		<MetadataSelector
 			{metadata}
@@ -465,25 +401,10 @@
 			row={selectedRow}
 			{getRowValue}
 			{getRowNumber}
-			{sourceType}
-			{nPix}
-			{nChannels}
-			{snr}
-			{useMetadataSnr}
-			{useMetadataPwv}
-			{pwvOverride}
-			{saveMode}
-			{nLines}
-			{robust}
-			{imagingAlgorithm}
-			{sourceOffsetXArcsec}
-			{sourceOffsetYArcsec}
-			{backgroundMode}
-			{backgroundLevel}
-			{backgroundSeed}
+			{form}
 			estimate={simulationEstimate}
 			{estimating}
-			estimateError={estimateError}
+			{estimateError}
 		/>
 
 		<form onsubmit={handleSubmit}>
@@ -497,14 +418,18 @@
 			<p class="mt-2 text-center text-xs text-fg-dim">
 				{!selectedRow
 					? 'Please select a metadata row above'
-					: nPix !== null && nChannels !== null
-						? `Will create ${sourceType} simulation with ${nPix}×${nPix}×${nChannels} cube`
+					: form.nPix !== null && form.nChannels !== null
+						? `Will create ${form.sourceType} simulation with ${form.nPix}×${form.nPix}×${form.nChannels} cube`
 						: 'Will auto-compute cube dimensions from the selected metadata row unless you set overrides above'}
 			</p>
 		</form>
 
 		{#if simulationId}
-			<SimulationStatusDisplay {simulationId} status={simulationStatus} onCancel={cancelActiveSimulation} />
+			<SimulationStatusDisplay
+				{simulationId}
+				status={simulationStatus}
+				onCancel={cancelActiveSimulation}
+			/>
 		{/if}
 
 		<div class="mt-8">
