@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from threading import Event, Thread
 from time import sleep
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -15,53 +15,16 @@ from tqdm.auto import tqdm
 
 from .services import astro
 from .services.astro.spectral import sample_given_redshift
+from .services.compute import create_backend
+from .services.external_skymodel import EXTERNAL_SOURCE_TYPES, is_external_source_type
+from .services.simulation import (
+    SimulationParams,
+    export_results,
+    generate_clean_cube,
+    image_products,
+    simulate_observation,
+)
 from .skymodels.registry import SKYMODELS
-
-if TYPE_CHECKING:
-    from .services.simulation import SimulationParams
-
-
-class _SimulationParamsProxy:
-    """Lazy proxy exposing SimulationParams classmethods for CLI usage/tests."""
-
-    @staticmethod
-    def from_metadata_row(*args, **kwargs):
-        from .services.simulation import SimulationParams as _SimulationParams
-
-        return _SimulationParams.from_metadata_row(*args, **kwargs)
-
-
-def create_backend(*args, **kwargs):
-    from .services.compute import create_backend as _create_backend
-
-    return _create_backend(*args, **kwargs)
-
-
-def generate_clean_cube(*args, **kwargs):
-    from . import generate_clean_cube as _generate_clean_cube
-
-    return _generate_clean_cube(*args, **kwargs)
-
-
-def simulate_observation(*args, **kwargs):
-    from . import simulate_observation as _simulate_observation
-
-    return _simulate_observation(*args, **kwargs)
-
-
-def image_products(*args, **kwargs):
-    from . import image_products as _image_products
-
-    return _image_products(*args, **kwargs)
-
-
-def export_results(*args, **kwargs):
-    from . import export_results as _export_results
-
-    return _export_results(*args, **kwargs)
-
-
-SimulationParams = _SimulationParamsProxy
 
 simulation_app = typer.Typer(
     help="Simulation workflow commands.",
@@ -74,18 +37,6 @@ _BACKEND_TYPES = ["sync", "local"]
 # "ducc0" is disabled until its uv geometry is fixed (MADIV-28 T1.3, T3.7).
 _IMAGING_ALGORITHMS = ["legacy"]
 _EXTERNAL_INPUT_SUFFIXES = {".fits", ".fit", ".fts", ".fz"}
-
-
-def _external_source_types() -> list[str]:
-    from .services.external_skymodel import EXTERNAL_SOURCE_TYPES
-
-    return sorted(EXTERNAL_SOURCE_TYPES)
-
-
-def _is_external_source_type(source_type: str) -> bool:
-    from .services.external_skymodel import is_external_source_type
-
-    return bool(is_external_source_type(source_type))
 
 
 def _path_with_suffix(path: Path, *parts: Any) -> Path:
@@ -230,7 +181,7 @@ def _build_simulation_params(
     output_subdir_name: str | None,
     input_path: Path | None,
     kaggle_token: Path | None = None,
-) -> "SimulationParams":
+) -> SimulationParams:
     rest_frequency, _ = astro.get_line_info(main_dir)
     sampled = sample_given_redshift(
         metadata,
@@ -252,7 +203,7 @@ def _build_simulation_params(
     external_input_path = _resolve_input_path_for_row(input_path, row)
     effective_source_type = (
         source_type
-        if external_input_path is None or _is_external_source_type(source_type)
+        if external_input_path is None or is_external_source_type(source_type)
         else "external-fits-cube"
     )
 
@@ -427,7 +378,7 @@ def simulation_run(
     ),
 ) -> None:
     """Run staged ALMASim simulation from a pre-queried metadata CSV."""
-    source_types = _SOURCE_TYPES + _external_source_types()
+    source_types = _SOURCE_TYPES + sorted(EXTERNAL_SOURCE_TYPES)
 
     source_type_normalized = source_type.lower()
     if source_type_normalized not in source_types:
