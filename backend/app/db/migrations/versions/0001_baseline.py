@@ -180,7 +180,11 @@ def upgrade() -> None:
         sa.Column("lum_infrared", sa.Float(), nullable=True),
         sa.Column("snr", sa.Float(), nullable=True),
         sa.Column("n_lines", sa.Integer(), nullable=True),
-        sa.Column("line_names", postgresql.ARRAY(sa.String()), nullable=True),
+        sa.Column(
+            "line_names",
+            postgresql.ARRAY(sa.String()).with_variant(sa.JSON(), "sqlite"),
+            nullable=True,
+        ),
         sa.Column("save_mode", sa.String(length=20), nullable=True),
         sa.Column("inject_serendipitous", sa.Boolean(), nullable=True),
         sa.Column("ncpu", sa.Integer(), nullable=True),

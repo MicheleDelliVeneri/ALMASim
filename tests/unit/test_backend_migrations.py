@@ -84,3 +84,30 @@ def test_revision_0002_adds_the_columns_older_databases_lack(migrate, tmp_path):
     assert "manifest_path" in {c["name"] for c in inspector.get_columns("download_jobs")}
     with engine.connect() as conn:
         assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
+
+
+def test_a_new_database_is_built_and_torn_down_by_the_revisions(migrate, backend_db, tmp_path):
+    """The whole chain on a new SQLite database, through the online environment."""
+    from alembic import command
+    from sqlalchemy import inspect
+
+    engine = _sqlite_engine(tmp_path)
+    migrate.upgrade_database(engine)
+    tables = set(inspect(engine).get_table_names())
+    assert set(backend_db.models.Base.metadata.tables) <= tables
+
+    config = migrate.alembic_config()
+    config.set_main_option("sqlalchemy.url", str(engine.url))  # no connection: env.py's engine
+    command.downgrade(config, "base")
+    assert set(inspect(engine).get_table_names()) == {"alembic_version"}
+
+
+def test_init_db_upgrades_the_application_database(backend_db, monkeypatch):
+    config = importlib.import_module("app.db.config")
+    migrate = importlib.import_module("app.db.migrate")
+    engine = object()
+    seen = []
+    monkeypatch.setattr(config, "get_engine", lambda: engine)
+    monkeypatch.setattr(migrate, "upgrade_database", seen.append)
+    config.init_db()
+    assert seen == [engine]
