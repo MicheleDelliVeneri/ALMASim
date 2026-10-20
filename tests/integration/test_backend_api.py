@@ -77,21 +77,6 @@ def test_get_science_types(client):
 
 
 @pytest.mark.integration
-def test_query_metadata(client):
-    """Test querying metadata."""
-    query_data = {
-        "science_keyword": ["Galaxies"],
-        "bands": [6],
-    }
-    response = client.post("/api/v1/metadata/query", json=query_data)
-    # May return 200 with empty results or 500 if TAP service unavailable
-    assert response.status_code in [200, 500]
-    if response.status_code == 200:
-        data = response.json()
-        assert "count" in data
-        assert "data" in data
-
-
 @pytest.mark.integration
 def test_load_metadata(client, test_data_dir):
     """Test loading metadata from file."""

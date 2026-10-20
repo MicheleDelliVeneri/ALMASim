@@ -148,10 +148,6 @@ export const metadataApi = {
 		return scienceTypesPromise;
 	},
 
-	query: async (query: MetadataQuery): Promise<MetadataResponse> => {
-		return apiClient.post<MetadataResponse>('/api/v1/metadata/query', query);
-	},
-
 	startQuery: async (query: MetadataQuery): Promise<MetadataQueryStartResponse> => {
 		return apiClient.post<MetadataQueryStartResponse>('/api/v1/metadata/query/start', query);
 	},
@@ -184,10 +180,6 @@ export const metadataApi = {
 
 	savePreset: async (payload: QueryPresetCreate): Promise<QueryPreset> => {
 		return apiClient.post<QueryPreset>('/api/v1/metadata/presets', payload);
-	},
-
-	getPreset: async (name: string): Promise<QueryPreset> => {
-		return apiClient.get<QueryPreset>(`/api/v1/metadata/presets/${encodeURIComponent(name)}`);
 	},
 
 	deletePreset: async (name: string): Promise<void> => {

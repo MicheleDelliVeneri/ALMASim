@@ -58,20 +58,6 @@ def get_science_types(db: Session = Depends(get_db)) -> dict:
         )
 
 
-@router.post("/query", response_model=MetadataResponse)
-def query_metadata(query: MetadataQuery, db: Session = Depends(get_db)) -> MetadataResponse:
-    """Query ALMA metadata from database cache or TAP archive."""
-    try:
-        service = MetadataService(db=db)
-        data = service.query_by_science(query.to_params())
-        return MetadataResponse(count=len(data), data=data)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to query metadata: {str(e)}",
-        )
-
-
 @router.post("/query/start", response_model=MetadataQueryStartResponse)
 def start_query(
     query: MetadataQuery,
@@ -238,19 +224,6 @@ def save_query_preset(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save preset: {str(e)}",
         )
-
-
-@router.get("/presets/{name}", response_model=QueryPresetResponse)
-def get_query_preset(name: str, db: Session = Depends(get_db)) -> QueryPresetResponse:
-    """Load a single saved query preset by name."""
-    svc = DatabaseService(db)
-    row = svc.get_query_result(name)
-    if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Preset '{name}' not found",
-        )
-    return _preset_to_response(row)
 
 
 @router.delete("/presets/{name}", status_code=status.HTTP_204_NO_CONTENT)

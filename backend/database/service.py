@@ -3,7 +3,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
@@ -273,51 +273,6 @@ class DatabaseService:
         )
         return self.db.execute(stmt).scalar_one()
 
-    def count_observations(
-        self,
-        science_keywords: Optional[Sequence[str]] = None,
-        scientific_categories: Optional[Sequence[str]] = None,
-        bands: Optional[Sequence[int]] = None,
-    ) -> int:
-        """Count observations matching the given filters."""
-        stmt = select(func.count(Observation.id))
-
-        filters = []
-
-        if bands:
-            filters.append(Observation.band.in_(bands))
-
-        if scientific_categories:
-            stmt = stmt.join(Observation.scientific_category)
-            filters.append(ScientificCategory.category.in_(scientific_categories))
-
-        if science_keywords:
-            stmt = stmt.join(Observation.science_keywords)
-            filters.append(ScienceKeyword.keyword.in_(science_keywords))
-
-        if filters:
-            stmt = stmt.where(and_(*filters))
-
-        return self.db.execute(stmt).scalar_one()
-
-    def create_observation(self, observation: Observation) -> Observation:
-        """Create a new observation."""
-        self.db.add(observation)
-        self.db.commit()
-        self.db.refresh(observation)
-        return observation
-
-    def bulk_create_observations(self, observations: List[Observation]) -> int:
-        """
-        Bulk create observations.
-
-        Returns:
-            Number of observations created
-        """
-        self.db.add_all(observations)
-        self.db.commit()
-        return len(observations)
-
     # Query Results
 
     # Query presets live in query_results, one row per name. Rows saved before
@@ -476,12 +431,3 @@ class DatabaseService:
         stmt = stmt.offset(offset).limit(limit)
 
         return list(self.db.execute(stmt).scalars().all())
-
-    def count_simulations(self, status: Optional[str] = None) -> int:
-        """Count simulation jobs."""
-        stmt = select(func.count(SimulationJob.id))
-
-        if status:
-            stmt = stmt.where(SimulationJob.status == status)
-
-        return self.db.execute(stmt).scalar_one()

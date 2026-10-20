@@ -50,6 +50,16 @@ def init_db():
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
+    if insp.has_table("observations"):
+        cols = {c["name"] for c in insp.get_columns("observations")}
+        with engine.begin() as conn:
+            for name, sql_type in (
+                ("proposal_abstract", "TEXT"),
+                ("qa2_passed", "VARCHAR(10)"),
+                ("obs_type", "VARCHAR(100)"),
+            ):
+                if name not in cols:
+                    conn.execute(text(f"ALTER TABLE observations ADD COLUMN {name} {sql_type}"))
     if insp.has_table("download_jobs"):
         cols = {c["name"] for c in insp.get_columns("download_jobs")}
         with engine.begin() as conn:

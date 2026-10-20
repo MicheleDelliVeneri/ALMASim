@@ -69,38 +69,6 @@ def test_get_science_types_raises_500_on_error(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# POST /query
-# ---------------------------------------------------------------------------
-
-
-def test_query_metadata_returns_response(monkeypatch):
-    svc = MagicMock()
-    svc.query_by_science.return_value = [{"uid": "a"}, {"uid": "b"}]
-    monkeypatch.setattr(metadata_router, "MetadataService", lambda db: svc)
-
-    query = MagicMock()
-    query.to_params.return_value = {}
-    result = metadata_router.query_metadata(query=query, db=_make_db())
-
-    assert result.count == 2
-    assert len(result.data) == 2
-
-
-def test_query_metadata_raises_500_on_error(monkeypatch):
-    from fastapi import HTTPException
-
-    svc = MagicMock()
-    svc.query_by_science.side_effect = RuntimeError("tap failed")
-    monkeypatch.setattr(metadata_router, "MetadataService", lambda db: svc)
-
-    query = MagicMock()
-    query.to_params.return_value = {}
-    with pytest.raises(HTTPException) as exc_info:
-        metadata_router.query_metadata(query=query, db=_make_db())
-    assert exc_info.value.status_code == 500
-
-
-# ---------------------------------------------------------------------------
 # POST /query/start
 # ---------------------------------------------------------------------------
 
@@ -439,27 +407,6 @@ def test_save_query_preset_raises_500_on_error(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         metadata_router.save_query_preset(payload=payload, db=_make_db())
     assert exc_info.value.status_code == 500
-
-
-def test_get_query_preset_found(monkeypatch):
-    svc = MagicMock()
-    svc.get_query_result.return_value = _make_preset_row("p1")
-    monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
-
-    result = metadata_router.get_query_preset(name="p1", db=_make_db())
-    assert result.name == "p1"
-
-
-def test_get_query_preset_raises_404_when_missing(monkeypatch):
-    from fastapi import HTTPException
-
-    svc = MagicMock()
-    svc.get_query_result.return_value = None
-    monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
-
-    with pytest.raises(HTTPException) as exc_info:
-        metadata_router.get_query_preset(name="no-such", db=_make_db())
-    assert exc_info.value.status_code == 404
 
 
 def test_delete_query_preset_succeeds(monkeypatch):
