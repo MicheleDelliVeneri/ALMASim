@@ -280,9 +280,61 @@ def _count_antennas(antenna_array: str) -> int:
     return max(len(tokens), 2)
 
 
-def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
-    """Estimate cube dimensions and raw storage footprint before running a simulation."""
+def _clean(value: Any) -> Any:
+    """``None`` for a missing value (None or NaN), the value otherwise."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
+@dataclass(frozen=True)
+class CubeGeometry:
+    """The model cube a run simulates, and the observation values that set it.
+
+    One resolver (:func:`resolve_cube_geometry`) serves the footprint estimate
+    and the run, so ``/estimate`` reports the cube a run would make.
+    """
+
+    central_freq: U.Quantity
+    band_range: U.Quantity
+    delta_freq: U.Quantity
+    observation_plan: Any
+    max_baseline: U.Quantity
+    fov: U.Quantity
+    beam_size: U.Quantity
+    cell_size: U.Quantity
+    n_pix: int
+    n_channels: int
+
+
+def resolve_cube_geometry(params: SimulationParams, *, strict: bool = True) -> CubeGeometry:
+    """Frequencies, beam, cell and cube size for a run.
+
+    The cell is a fifth of the synthesised beam unless ``n_pix`` is given, in
+    which case the field of view sets it; the channel count is the spectral
+    window's unless ``n_channels`` is given. An external model in "preserve"
+    header mode keeps its own size. With ``strict=False`` (the estimate) an
+    unreadable external model falls back to the computed size.
+    """
     source_freq = params.freq * U.GHz
+    band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
+        params.freq_support, source_freq
+    )
+    observation_plan = build_single_pointing_observation_plan(params)
+    max_baseline_km = max(
+        ual_antenna.get_max_baseline_from_antenna_array(config.antenna_array, params.main_dir)
+        for config in observation_plan.configs
+    )
+    max_baseline = max_baseline_km * U.km
+    fov = params.fov * 3600 * U.arcsec
+    beam_size = ual_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
+    cell_size = beam_size / 5
+
     external_geometry = None
     if is_external_source_type(params.source_type) and params.external_header_mode == "preserve":
         try:
@@ -292,34 +344,45 @@ def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
                 component_table_path=params.external_component_table_path,
             )
         except Exception:
-            external_geometry = None
-    band_range, central_freq, t_channels, _delta_freq = freq_supp_extractor(
-        params.freq_support, source_freq
-    )
-    observation_plan = build_single_pointing_observation_plan(params)
-    max_baseline_km = max(
-        ual_antenna.get_max_baseline_from_antenna_array(
-            config.antenna_array,
-            params.main_dir,
-        )
-        for config in observation_plan.configs
-    )
-    max_baseline = max_baseline_km * U.km
-    fov = params.fov * 3600 * U.arcsec
-    beam_size = ual_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
-    cell_size = beam_size / 5
+            if strict:
+                raise
 
-    if params.n_pix is None and external_geometry is not None:
+    n_pix = _clean(params.n_pix)
+    if n_pix is None and external_geometry is not None:
         n_pix = int(external_geometry["n_pix"])
-    elif params.n_pix is None:
+    elif n_pix is None:
         n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
     else:
-        n_pix = closest_power_of_2(int(params.n_pix))
+        n_pix = closest_power_of_2(int(n_pix))
+        cell_size = fov / n_pix
 
-    if params.n_channels is None and external_geometry is not None:
+    n_channels = _clean(params.n_channels)
+    if n_channels is None and external_geometry is not None:
         n_channels = int(external_geometry["n_channels"])
+    elif n_channels is None:
+        n_channels = t_channels
     else:
-        n_channels = int(t_channels if params.n_channels is None else params.n_channels)
+        band_range = n_channels * delta_freq
+
+    return CubeGeometry(
+        central_freq=central_freq,
+        band_range=band_range,
+        delta_freq=delta_freq,
+        observation_plan=observation_plan,
+        max_baseline=max_baseline,
+        fov=fov,
+        beam_size=beam_size,
+        cell_size=cell_size,
+        n_pix=n_pix,
+        n_channels=n_channels,
+    )
+
+
+def estimate_simulation_footprint(params: SimulationParams) -> dict[str, Any]:
+    """Estimate cube dimensions and raw storage footprint before running a simulation."""
+    geometry = resolve_cube_geometry(params, strict=False)
+    n_pix, n_channels = int(geometry.n_pix), int(geometry.n_channels)
+    cell_size, beam_size = geometry.cell_size, geometry.beam_size
     voxels = int(n_channels) * int(n_pix) * int(n_pix)
     float32_gb = (voxels * np.dtype(np.float32).itemsize) / float(1024**3)
     complex64_gb = (voxels * np.dtype(np.complex64).itemsize) / float(1024**3)
@@ -576,15 +639,7 @@ def generate_clean_cube(
             return bool(stop_requested())
         return bool(stop_requested)
 
-    def clean(value):
-        if value is None:
-            return None
-        try:
-            if pd.isna(value):
-                return None
-        except Exception:
-            pass
-        return value
+    clean = _clean
 
     line_names = clean(params.line_names)
     if isinstance(line_names, str):
@@ -596,8 +651,6 @@ def generate_clean_cube(
     rest_frequency = clean(params.rest_frequency)
     redshift = clean(params.redshift)
     lum_infrared = clean(params.lum_infrared)
-    n_pix = clean(params.n_pix)
-    n_channels = clean(params.n_channels)
     n_lines = clean(params.n_lines)
     tng_api_key = clean(params.tng_api_key)
 
@@ -607,18 +660,23 @@ def generate_clean_cube(
     progress_adapter = as_progress_emitter(progress_emitter)
     ra = params.ra * U.deg
     dec = params.dec * U.deg
-    fov = params.fov * 3600 * U.arcsec
     ang_res = params.ang_res * U.arcsec
     vel_res = params.vel_res * U.km / U.s
     int_time = params.int_time * U.s
     source_freq = params.freq * U.GHz
 
-    band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(
-        params.freq_support, source_freq
-    )
     if is_stop_requested():
         raise RuntimeError("Simulation cancelled")
-    observation_plan = build_single_pointing_observation_plan(params)
+    status("Computing Max baseline")
+    geometry = resolve_cube_geometry(params)
+    central_freq, band_range, delta_freq = (
+        geometry.central_freq,
+        geometry.band_range,
+        geometry.delta_freq,
+    )
+    observation_plan = geometry.observation_plan
+    fov, beam_size, cell_size = geometry.fov, geometry.beam_size, geometry.cell_size
+    n_pix, n_channels = geometry.n_pix, geometry.n_channels
     output_dir_abs = os.path.abspath(params.output_dir)
     persist_outputs = bool(params.persist and params.save_mode != "memory")
     sim_output_dir = (
@@ -642,15 +700,6 @@ def generate_clean_cube(
         log(f"DEC: {dec}")
         log(f"Integration Time: {int_time}")
 
-    status("Computing Max baseline")
-    max_baseline_km = max(
-        ual_antenna.get_max_baseline_from_antenna_array(
-            config.antenna_array,
-            params.main_dir,
-        )
-        for config in observation_plan.configs
-    )
-    max_baseline = max_baseline_km * U.km
     if progress_adapter is not None:
         progress_adapter.emit(100)
     if remote:
@@ -658,7 +707,6 @@ def generate_clean_cube(
     else:
         log(f"Field of view: {round(fov.value, 3)} arcsec")
 
-    beam_size = ual_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     beam_area = GAUSSIAN_BEAM_AREA * beam_size**2
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
     cont_sens = params.cont_sens * U.mJy / (U.arcsec**2)
@@ -667,30 +715,6 @@ def generate_clean_cube(
         print(f"Minimum detectable continum: {cont_sens_jy}")
     else:
         log(f"Minimum detectable continum: {cont_sens_jy}")
-
-    cell_size = beam_size / 5
-    external_geometry = None
-    if is_external_source_type(params.source_type) and params.external_header_mode == "preserve":
-        external_geometry = infer_external_cube_geometry(
-            source_type=params.source_type,
-            skymodel_path=params.external_skymodel_path,
-            component_table_path=params.external_component_table_path,
-        )
-
-    if n_pix is None and external_geometry is not None:
-        n_pix = int(external_geometry["n_pix"])
-    elif n_pix is None:
-        n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
-    else:
-        n_pix = closest_power_of_2(int(n_pix))
-        cell_size = fov / n_pix
-
-    if n_channels is None and external_geometry is not None:
-        n_channels = int(external_geometry["n_channels"])
-    elif n_channels is None:
-        n_channels = t_channels
-    else:
-        band_range = n_channels * delta_freq
 
     is_external_model = is_external_source_type(params.source_type)
 
