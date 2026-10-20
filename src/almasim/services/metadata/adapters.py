@@ -4,23 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Optional, Sequence
 
+from ..instrument.array import derive_array_type
 from .tap.queries import ALL_COLUMNS
 from .tap.service import ExclusionFilters, InclusionFilters
-
-
-def derive_array_type(antenna_arrays_str: object) -> str:
-    """Derive a human-readable array type from the raw antenna array string."""
-    if not isinstance(antenna_arrays_str, str) or not antenna_arrays_str:
-        return ""
-    upper = antenna_arrays_str.upper()
-    types = []
-    if "DA" in upper or "DV" in upper:
-        types.append("12m")
-    if "CM" in upper:
-        types.append("7m")
-    if "PM" in upper:
-        types.append("TP")
-    return "+".join(types) if types else ""
 
 
 def build_inclusion_filters(params: Any) -> InclusionFilters:
@@ -58,6 +44,17 @@ def build_exclusion_filters(params: Any) -> ExclusionFilters:
     )
 
 
+def _integration_time(observation: Any) -> Any:
+    """Int.Time of a cached observation.
+
+    It is stored in ``t_resolution``; rows cached before MADIV-28 T1.12 hold
+    it in ``t_max`` instead.
+    """
+    if observation.t_resolution is not None:
+        return observation.t_resolution
+    return observation.t_max
+
+
 def observation_to_metadata_record(observation: Any) -> dict[str, Any]:
     """Serialize one observation-like object into canonical metadata columns."""
     return {
@@ -82,7 +79,7 @@ def observation_to_metadata_record(observation: Any) -> dict[str, Any]:
         "RA": observation.ra,
         "Dec": observation.dec,
         "FOV": observation.s_fov,
-        "Int.Time": observation.t_max,
+        "Int.Time": _integration_time(observation),
         "Cont_sens_mJybeam": observation.cont_sensitivity_bandwidth,
         "Line_sens_10kms_mJybeam": observation.sensitivity_10kms,
         "Bandwidth": observation.bandwidth,

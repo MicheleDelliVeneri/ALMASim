@@ -98,7 +98,7 @@ class Observation(Base):
     velocity_resolution = Column(Float)  # km/s
     spatial_resolution = Column(Float)  # arcsec
     s_fov = Column(Float)  # arcsec
-    t_resolution = Column(Float)
+    t_resolution = Column(Float)  # Int.Time: integration time in seconds
     cont_sensitivity_bandwidth = Column(Float)  # mJy/beam
     sensitivity_10kms = Column(Float)  # mJy/beam
 
@@ -109,7 +109,8 @@ class Observation(Base):
 
     # Timing
     obs_release_date = Column(DateTime)
-    t_max = Column(Float)  # Integration time in seconds
+    # Not written any more; rows cached before MADIV-28 T1.12 hold Int.Time here.
+    t_max = Column(Float)
 
     # Arrays and configuration
     antenna_arrays = Column(Text)  # Semicolon-separated (can be long)
@@ -148,7 +149,8 @@ class QueryResult(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Store observation IDs that are part of this query result
-    observation_ids = Column(ARRAY(Integer))
+    # JSON on SQLite only, so the unit tests can create the table; Postgres is unchanged.
+    observation_ids = Column(ARRAY(Integer).with_variant(JSON(), "sqlite"))
 
     # Metadata
     description = Column(Text)

@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from almasim.services.paths import UnsafePathError, safe_join
+
 SUPPORTED_METADATA_FORMATS = {"json", "csv"}
 # Common UI prefixes currently emitted by ALMASim frontend path forms; stripping these normalizes
 # values like data/... and outputs/query_results/... while keeping writes rooted at base_dir.
@@ -64,10 +66,9 @@ def resolve_metadata_output_path(
         parts = parts[1:]
     relative = "/".join(parts) if parts else f"{default_name}{suffix}"
 
-    resolved = (base / relative).resolve()
     try:
-        resolved.relative_to(base)
-    except ValueError as exc:
+        resolved = safe_join(base, relative)
+    except UnsafePathError as exc:
         raise InvalidMetadataPathError(invalid_path_message) from exc
 
     if resolved.suffix.lower() != suffix:

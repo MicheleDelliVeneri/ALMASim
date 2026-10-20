@@ -10,7 +10,6 @@ import astropy.units as U
 import matplotlib.cm as cm
 import numpy as np
 import pandas as pd
-from astropy.constants import c
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord
 from astropy.io import fits
 from astropy.time import Time
@@ -18,6 +17,7 @@ from astropy.time import Time
 if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
 
+from ..instrument.constants import ALMA_LATITUDE_DEG, SPEED_OF_LIGHT_M_S
 from ..products.cube_export import write_interferometry_products
 from .imaging import image_channel, image_channel_ducc0
 from .utils import sampling_to_uv_mask
@@ -184,7 +184,7 @@ class Interferometer:
         self.lfac = 1.0e6
         self._get_nH()
         self.Hmax = np.pi
-        self.lat = -23.028 * self.deg2rad
+        self.lat = ALMA_LATITUDE_DEG * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
         self.Diameters = [self.antenna_diameter_m, 0]
         self.ra = self.ra.value * self.deg2rad
@@ -207,7 +207,7 @@ class Interferometer:
         self.pixsize = self.imsize / self.Npix
         self.UVpixsize = 2.0 / (self.imsize * np.pi / 180.0 / 3600.0)
         self.Xaxmax = self.imsize / 2
-        self.c_ms = c.to(U.m / U.s).value
+        self.c_ms = SPEED_OF_LIGHT_M_S
         self.xx = np.linspace(-self.Xaxmax, self.Xaxmax, self.Npix)
         self.yy = np.ones(self.Npix, dtype=np.float32)
         self.distmat = (

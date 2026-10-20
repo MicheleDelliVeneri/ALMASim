@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -14,17 +13,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-# Pre-inject stubs for heavy dependencies so the router can be loaded without
-# a live PostgreSQL connection or SQLAlchemy installed.
+# Pre-inject stubs for the backend's database package so the router can be
+# loaded without a live PostgreSQL connection. SQLAlchemy itself is a test
+# dependency and is not stubbed (a stub would leak into the SQLite tests).
 _db_stub = MagicMock()
-for _mod in (
-    "sqlalchemy",
-    "sqlalchemy.orm",
-    "database",
-    "database.config",
-    "database.models",
-    "database.service",
-):
+for _mod in ("database", "database.config", "database.models", "database.service"):
     sys.modules.setdefault(_mod, _db_stub)
 
 _ROUTER_PATH = REPO_ROOT / "backend" / "app" / "api" / "v1" / "routers" / "metadata.py"
@@ -59,7 +52,7 @@ def test_get_science_types_returns_keywords_and_categories(monkeypatch):
     svc.get_science_types.return_value = (["Galaxies"], ["Science"])
     monkeypatch.setattr(metadata_router, "MetadataService", lambda db: svc)
 
-    result = asyncio.run(metadata_router.get_science_types(db=_make_db()))
+    result = metadata_router.get_science_types(db=_make_db())
     assert result == {"keywords": ["Galaxies"], "categories": ["Science"]}
 
 
@@ -71,7 +64,7 @@ def test_get_science_types_raises_500_on_error(monkeypatch):
     monkeypatch.setattr(metadata_router, "MetadataService", lambda db: svc)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.get_science_types(db=_make_db()))
+        metadata_router.get_science_types(db=_make_db())
     assert exc_info.value.status_code == 500
 
 
@@ -87,7 +80,7 @@ def test_query_metadata_returns_response(monkeypatch):
 
     query = MagicMock()
     query.to_params.return_value = {}
-    result = asyncio.run(metadata_router.query_metadata(query=query, db=_make_db()))
+    result = metadata_router.query_metadata(query=query, db=_make_db())
 
     assert result.count == 2
     assert len(result.data) == 2
@@ -103,7 +96,7 @@ def test_query_metadata_raises_500_on_error(monkeypatch):
     query = MagicMock()
     query.to_params.return_value = {}
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.query_metadata(query=query, db=_make_db()))
+        metadata_router.query_metadata(query=query, db=_make_db())
     assert exc_info.value.status_code == 500
 
 
@@ -123,9 +116,7 @@ def test_start_query_creates_job_and_schedules_background_task(monkeypatch):
     query = MagicMock()
     query.to_params.return_value = {}
 
-    result = asyncio.run(
-        metadata_router.start_query(query=query, background_tasks=bt, db=_make_db())
-    )
+    result = metadata_router.start_query(query=query, background_tasks=bt, db=_make_db())
 
     assert result.status == "running"
     assert result.query_id
@@ -146,10 +137,8 @@ def test_start_query_raises_500_on_error(monkeypatch):
 
     query = MagicMock()
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            metadata_router.start_query(
-                query=query, background_tasks=_make_background_tasks(), db=_make_db()
-            )
+        metadata_router.start_query(
+            query=query, background_tasks=_make_background_tasks(), db=_make_db()
         )
     assert exc_info.value.status_code == 500
 
@@ -174,7 +163,7 @@ def test_get_query_results_returns_page(monkeypatch):
     }
     monkeypatch.setattr(metadata_router, "query_store", store)
 
-    result = asyncio.run(metadata_router.get_query_results("qid-1"))
+    result = metadata_router.get_query_results("qid-1")
     assert result.query_id == "qid-1"
     assert result.done is True
 
@@ -187,7 +176,7 @@ def test_get_query_results_raises_404_when_job_missing(monkeypatch):
     monkeypatch.setattr(metadata_router, "query_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.get_query_results("no-such-id"))
+        metadata_router.get_query_results("no-such-id")
     assert exc_info.value.status_code == 404
 
 
@@ -201,7 +190,7 @@ def test_cancel_query_succeeds(monkeypatch):
     store.cancel.return_value = True
     monkeypatch.setattr(metadata_router, "query_store", store)
 
-    asyncio.run(metadata_router.cancel_query("qid-1"))
+    metadata_router.cancel_query("qid-1")
     store.cancel.assert_called_once_with("qid-1")
 
 
@@ -213,7 +202,7 @@ def test_cancel_query_raises_404_when_job_missing(monkeypatch):
     monkeypatch.setattr(metadata_router, "query_store", store)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.cancel_query("no-such-id"))
+        metadata_router.cancel_query("no-such-id")
     assert exc_info.value.status_code == 404
 
 
@@ -234,7 +223,7 @@ def test_load_metadata_resolves_from_data_dir(monkeypatch, tmp_path):
     svc.load_metadata.return_value = [{"uid": "a"}]
     monkeypatch.setattr(metadata_router, "MetadataService", lambda db: svc)
 
-    result = asyncio.run(metadata_router.load_metadata("data.csv", db=_make_db()))
+    result = metadata_router.load_metadata("data.csv", db=_make_db())
     assert result.count == 1
 
 
@@ -261,7 +250,7 @@ def test_load_metadata_falls_back_to_output_dir(monkeypatch, tmp_path):
     svc.load_metadata.return_value = []
     monkeypatch.setattr(metadata_router, "MetadataService", lambda db: svc)
 
-    result = asyncio.run(metadata_router.load_metadata("data.csv", db=_make_db()))
+    result = metadata_router.load_metadata("data.csv", db=_make_db())
     assert result.count == 0
     assert call_count["n"] == 2
 
@@ -280,7 +269,7 @@ def test_load_metadata_raises_500_on_service_error(monkeypatch, tmp_path):
     monkeypatch.setattr(metadata_router, "MetadataService", lambda db: svc)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.load_metadata("bad.csv", db=_make_db()))
+        metadata_router.load_metadata("bad.csv", db=_make_db())
     assert exc_info.value.status_code == 500
 
 
@@ -303,7 +292,7 @@ def test_save_metadata_success(monkeypatch, tmp_path):
     payload.path = "out.json"
     payload.data = [{"uid": "a"}, {"uid": "b"}]
 
-    result = asyncio.run(metadata_router.save_metadata(payload))
+    result = metadata_router.save_metadata(payload)
     assert result.count == 2
     assert "successfully" in result.message
 
@@ -325,7 +314,7 @@ def test_save_metadata_raises_400_on_unsupported_format(monkeypatch):
     payload.data = []
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.save_metadata(payload))
+        metadata_router.save_metadata(payload)
     assert exc_info.value.status_code == 400
 
 
@@ -347,7 +336,7 @@ def test_save_metadata_raises_400_on_invalid_path(monkeypatch):
     payload.data = []
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.save_metadata(payload))
+        metadata_router.save_metadata(payload)
     assert exc_info.value.status_code == 400
 
 
@@ -373,7 +362,7 @@ def test_save_metadata_raises_500_on_generic_error(monkeypatch, tmp_path):
     payload.data = [{}]
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.save_metadata(payload))
+        metadata_router.save_metadata(payload)
     assert exc_info.value.status_code == 500
 
 
@@ -399,7 +388,7 @@ def test_list_query_presets_returns_list(monkeypatch):
     svc.list_query_results.return_value = [_make_preset_row("p1"), _make_preset_row("p2")]
     monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
-    result = asyncio.run(metadata_router.list_query_presets(db=_make_db()))
+    result = metadata_router.list_query_presets(db=_make_db())
     assert len(result.presets) == 2
     assert result.presets[0].name == "p1"
 
@@ -412,21 +401,14 @@ def test_list_query_presets_raises_500_on_error(monkeypatch):
     monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.list_query_presets(db=_make_db()))
+        metadata_router.list_query_presets(db=_make_db())
     assert exc_info.value.status_code == 500
 
 
-def test_save_query_preset_creates_row(monkeypatch):
-    db = _make_db()
-    db.add = MagicMock()
-    db.commit = MagicMock()
-    db.refresh = MagicMock(
-        side_effect=lambda r: setattr(r, "created_at", __import__("datetime").datetime(2024, 1, 1))
-    )
-
-    # Patch QueryResult so the router can instantiate it
-    mock_qr = MagicMock(return_value=_make_preset_row("saved"))
-    monkeypatch.setattr(metadata_router, "QueryResult", mock_qr)
+def test_save_query_preset_upserts_by_name(monkeypatch):
+    svc = MagicMock()
+    svc.save_query_preset.return_value = _make_preset_row("saved")
+    monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
     payload = MagicMock()
     payload.name = "saved"
@@ -434,18 +416,19 @@ def test_save_query_preset_creates_row(monkeypatch):
     payload.filters = {"band": [6]}
     payload.result_count = 5
 
-    result = asyncio.run(metadata_router.save_query_preset(payload=payload, db=db))
+    result = metadata_router.save_query_preset(payload=payload, db=_make_db())
     assert result.name == "saved"
+    svc.save_query_preset.assert_called_once_with(
+        "saved", {"band": [6]}, description="a preset", result_count=5
+    )
 
 
 def test_save_query_preset_raises_500_on_error(monkeypatch):
     from fastapi import HTTPException
 
-    db = _make_db()
-    db.add.side_effect = RuntimeError("insert failed")
-
-    mock_qr = MagicMock(return_value=MagicMock())
-    monkeypatch.setattr(metadata_router, "QueryResult", mock_qr)
+    svc = MagicMock()
+    svc.save_query_preset.side_effect = RuntimeError("insert failed")
+    monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
     payload = MagicMock()
     payload.name = "bad"
@@ -454,7 +437,7 @@ def test_save_query_preset_raises_500_on_error(monkeypatch):
     payload.result_count = 0
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.save_query_preset(payload=payload, db=db))
+        metadata_router.save_query_preset(payload=payload, db=_make_db())
     assert exc_info.value.status_code == 500
 
 
@@ -463,7 +446,7 @@ def test_get_query_preset_found(monkeypatch):
     svc.get_query_result.return_value = _make_preset_row("p1")
     monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
-    result = asyncio.run(metadata_router.get_query_preset(name="p1", db=_make_db()))
+    result = metadata_router.get_query_preset(name="p1", db=_make_db())
     assert result.name == "p1"
 
 
@@ -475,7 +458,7 @@ def test_get_query_preset_raises_404_when_missing(monkeypatch):
     monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.get_query_preset(name="no-such", db=_make_db()))
+        metadata_router.get_query_preset(name="no-such", db=_make_db())
     assert exc_info.value.status_code == 404
 
 
@@ -484,7 +467,7 @@ def test_delete_query_preset_succeeds(monkeypatch):
     svc.delete_query_result.return_value = True
     monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
-    asyncio.run(metadata_router.delete_query_preset(name="p1", db=_make_db()))
+    metadata_router.delete_query_preset(name="p1", db=_make_db())
     svc.delete_query_result.assert_called_once_with("p1")
 
 
@@ -496,5 +479,5 @@ def test_delete_query_preset_raises_404_when_missing(monkeypatch):
     monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.delete_query_preset(name="gone", db=_make_db()))
+        metadata_router.delete_query_preset(name="gone", db=_make_db())
     assert exc_info.value.status_code == 404

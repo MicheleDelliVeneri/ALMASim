@@ -36,14 +36,13 @@ backend_dir = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from database.config import get_db  # noqa: E402
-from database.models import QueryResult  # noqa: E402
 from database.service import DatabaseService  # noqa: E402
 
 router = APIRouter()
 
 
 @router.get("/science-types", response_model=dict)
-async def get_science_types(db: Session = Depends(get_db)) -> dict:
+def get_science_types(db: Session = Depends(get_db)) -> dict:
     """Get available science types and categories from database."""
     try:
         service = MetadataService(db=db)
@@ -60,7 +59,7 @@ async def get_science_types(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/query", response_model=MetadataResponse)
-async def query_metadata(query: MetadataQuery, db: Session = Depends(get_db)) -> MetadataResponse:
+def query_metadata(query: MetadataQuery, db: Session = Depends(get_db)) -> MetadataResponse:
     """Query ALMA metadata from database cache or TAP archive."""
     try:
         service = MetadataService(db=db)
@@ -74,7 +73,7 @@ async def query_metadata(query: MetadataQuery, db: Session = Depends(get_db)) ->
 
 
 @router.post("/query/start", response_model=MetadataQueryStartResponse)
-async def start_query(
+def start_query(
     query: MetadataQuery,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -98,7 +97,7 @@ async def start_query(
 
 
 @router.get("/query/{query_id}/results", response_model=MetadataPageResponse)
-async def get_query_results(
+def get_query_results(
     query_id: str,
     page: int = 0,
     page_size: int = 500,
@@ -115,7 +114,7 @@ async def get_query_results(
 
 
 @router.delete("/query/{query_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def cancel_query(query_id: str) -> None:
+def cancel_query(query_id: str) -> None:
     """Cancel a running background TAP query job."""
     cancelled = query_store.cancel(query_id)
     if not cancelled:
@@ -126,7 +125,7 @@ async def cancel_query(query_id: str) -> None:
 
 
 @router.get("/load/{file_path:path}", response_model=MetadataResponse)
-async def load_metadata(file_path: str, db: Session = Depends(get_db)) -> MetadataResponse:
+def load_metadata(file_path: str, db: Session = Depends(get_db)) -> MetadataResponse:
     """Load metadata from a CSV file and cache in database."""
     try:
         # Try DATA_DIR first, fall back to OUTPUT_DIR.
@@ -155,7 +154,7 @@ _SAVE_DETAIL = "Path must be within the outputs/query_results directory."
 
 
 @router.post("/save", response_model=MetadataSaveResponse)
-async def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
+def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
     """Persist metadata records to disk within the ALMASim metadata directory."""
     try:
         fmt = normalize_metadata_format(payload.format)
@@ -208,7 +207,7 @@ def _preset_to_response(row: Any) -> QueryPresetResponse:
 
 
 @router.get("/presets", response_model=QueryPresetsResponse)
-async def list_query_presets(db: Session = Depends(get_db)) -> QueryPresetsResponse:
+def list_query_presets(db: Session = Depends(get_db)) -> QueryPresetsResponse:
     """Return all saved query presets from the database."""
     try:
         svc = DatabaseService(db)
@@ -222,21 +221,17 @@ async def list_query_presets(db: Session = Depends(get_db)) -> QueryPresetsRespo
 
 
 @router.post("/presets", response_model=QueryPresetResponse, status_code=status.HTTP_201_CREATED)
-async def save_query_preset(
+def save_query_preset(
     payload: QueryPresetCreate, db: Session = Depends(get_db)
 ) -> QueryPresetResponse:
-    """Save a named query preset to the database."""
+    """Save a named query preset; saving an existing name replaces it."""
     try:
-        row = QueryResult(
-            query_name=payload.name,
-            query_params={"filters": payload.filters},
-            result_count=payload.result_count,
-            observation_ids=[],
+        row = DatabaseService(db).save_query_preset(
+            payload.name,
+            payload.filters,
             description=payload.description,
+            result_count=payload.result_count,
         )
-        db.add(row)
-        db.commit()
-        db.refresh(row)
         return _preset_to_response(row)
     except Exception as e:
         raise HTTPException(
@@ -246,7 +241,7 @@ async def save_query_preset(
 
 
 @router.get("/presets/{name}", response_model=QueryPresetResponse)
-async def get_query_preset(name: str, db: Session = Depends(get_db)) -> QueryPresetResponse:
+def get_query_preset(name: str, db: Session = Depends(get_db)) -> QueryPresetResponse:
     """Load a single saved query preset by name."""
     svc = DatabaseService(db)
     row = svc.get_query_result(name)
@@ -259,7 +254,7 @@ async def get_query_preset(name: str, db: Session = Depends(get_db)) -> QueryPre
 
 
 @router.delete("/presets/{name}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_query_preset(name: str, db: Session = Depends(get_db)) -> None:
+def delete_query_preset(name: str, db: Session = Depends(get_db)) -> None:
     """Delete a saved query preset by name."""
     svc = DatabaseService(db)
     deleted = svc.delete_query_result(name)

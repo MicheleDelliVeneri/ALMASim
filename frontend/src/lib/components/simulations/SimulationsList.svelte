@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatDate } from '#lib/utils/format.js';
 	import { onMount } from 'svelte';
 	import { createLogger } from '#lib/logger.js';
 	import { simulationApi, type SimulationStatus } from '#lib/api/simulation.js';
@@ -97,11 +98,6 @@
 			default:
 				return 'bg-gray-100 text-gray-800';
 		}
-	}
-
-	function formatDate(dateString: string): string {
-		const date = new Date(dateString);
-		return date.toLocaleString();
 	}
 
 	function handleVisualize(simulationId: string) {

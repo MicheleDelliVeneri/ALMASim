@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-ARCSEC_PER_RAD = 206264.80624709636
+from ..instrument.constants import ARCSEC_PER_RAD, SPEED_OF_LIGHT_M_S
 
 
 def estimate_tp_beam_fwhm_arcsec(
@@ -15,7 +15,7 @@ def estimate_tp_beam_fwhm_arcsec(
 ) -> np.ndarray:
     """Estimate a diffraction-limited TP beam FWHM per channel."""
     freqs_hz = np.asarray(freqs_hz, dtype=float)
-    wavelengths_m = 299792458.0 / np.clip(freqs_hz, 1.0, None)
+    wavelengths_m = SPEED_OF_LIGHT_M_S / np.clip(freqs_hz, 1.0, None)
     fwhm_rad = 1.13 * wavelengths_m / max(float(antenna_diameter_m), 1e-6)
     return fwhm_rad * ARCSEC_PER_RAD
 

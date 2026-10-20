@@ -5,39 +5,29 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping, Optional
 
-ALMA_LATITUDE_DEG = -23.028
+from .instrument.array import derive_array_type as _derive_array_type
+from .instrument.constants import (
+    ALMA_LATITUDE_DEG,
+    DISH_DIAMETER_7M_M,
+    DISH_DIAMETER_12M_M,
+)
 
 
 def derive_array_type(antenna_array: str) -> str:
-    """Derive a coarse ALMA array type from an antenna string."""
-    upper = (antenna_array or "").upper()
-    has_12m = ("DA" in upper) or ("DV" in upper)
-    has_7m = "CM" in upper
-    has_tp = "PM" in upper
+    """The array type of an antenna string, falling back to "12m" when none is recognised.
 
-    if has_12m and not has_7m and not has_tp:
-        return "12m"
-    if has_7m and not has_12m and not has_tp:
-        return "7m"
-    if has_tp and not has_12m and not has_7m:
-        return "TP"
-    if has_12m and has_7m:
-        return "12m+7m"
-    if has_12m and has_tp:
-        return "12m+TP"
-    if has_7m and has_tp:
-        return "7m+TP"
-    if has_12m and has_7m and has_tp:
-        return "12m+7m+TP"
-    return "12m"
+    The planner needs a type for every configuration, hence the fallback; the
+    rule itself is the shared one in services.instrument.array.
+    """
+    return _derive_array_type(antenna_array) or "12m"
 
 
 def infer_antenna_diameter_m(array_type: str) -> float:
     """Infer a representative dish diameter for an ALMA array type."""
     normalized = (array_type or "12m").lower()
     if normalized == "7m":
-        return 7.0
-    return 12.0
+        return DISH_DIAMETER_7M_M
+    return DISH_DIAMETER_12M_M
 
 
 def split_antenna_array_by_type(antenna_array: str) -> list[tuple[str, str]]:
@@ -77,7 +67,7 @@ class ObservationConfig:
     antenna_array: str
     total_time_s: float
     correlator: Optional[str] = None
-    antenna_diameter_m: float = 12.0
+    antenna_diameter_m: float = DISH_DIAMETER_12M_M
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -198,7 +188,7 @@ def build_single_pointing_observation_plan(
     int_like_configs = [cfg for cfg in configs if cfg.array_type != "TP"]
     primary_beam_diameter_m = max(
         (cfg.antenna_diameter_m for cfg in int_like_configs),
-        default=12.0,
+        default=DISH_DIAMETER_12M_M,
     )
     return SinglePointingObservationPlan(
         phase_center_ra_deg=float(params.ra),

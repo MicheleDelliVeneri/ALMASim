@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { selectionStats, type SelectionStats } from '#lib/utils/selectionStats.js';
 
 	interface ImageData {
 		image: number[][];
@@ -13,15 +14,6 @@
 			cube_name: string;
 		};
 		method: string;
-	}
-
-	interface SelectionStats {
-		mean: number;
-		std: number;
-		sum: number;
-		min: number;
-		max: number;
-		count: number;
 	}
 
 	interface SavedSelection {
@@ -133,16 +125,7 @@
 			}
 		}
 
-		if (values.length === 0) return null;
-
-		const sum = values.reduce((a, b) => a + b, 0);
-		const mean = sum / values.length;
-		const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
-		const std = Math.sqrt(variance);
-		const min = Math.min(...values);
-		const max = Math.max(...values);
-
-		return { mean, std, sum, min, max, count: values.length };
+		return selectionStats(values);
 	}
 
 	function drawImage() {
@@ -699,9 +682,17 @@
 	$effect(() => {
 		if (imageData) {
 			// Trigger redraw when data, scale, pan, or selections change
-			const trackedDeps = [scale, panX, panY, imageData, selectionEnd, savedSelections, selectedSelectionId];
+			const trackedDeps = [
+				scale,
+				panX,
+				panY,
+				imageData,
+				selectionEnd,
+				savedSelections,
+				selectedSelectionId
+			];
 			if (trackedDeps.length >= 0) {
-			setTimeout(() => drawImage(), 0);
+				setTimeout(() => drawImage(), 0);
 			}
 		}
 	});
