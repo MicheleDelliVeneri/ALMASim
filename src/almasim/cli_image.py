@@ -17,10 +17,11 @@ import typer
 from astropy.time import Time
 from tqdm import tqdm
 
+from almasim.services.instrument.constants import ARCSEC_PER_RAD as RAD_TO_ARCSEC
+from almasim.services.instrument.constants import SPEED_OF_LIGHT_M_S
+
 ALMA_FOV_FACTOR = 1.12  # Standard primary-beam/FOV approximation: 1.12 * λ / D
-RAD_TO_ARCSEC = 180 / np.pi * 3600
 MIN_IMAGE_PIXELS = 16
-SPEED_OF_LIGHT_M_S = 299_792_458.0
 DAY_IN_SECONDS = 3600 * 24
 TARGET_INTENT = "OBSERVE_TARGET"
 # How long the Slurm driver waits for its workers before it starts anyway.

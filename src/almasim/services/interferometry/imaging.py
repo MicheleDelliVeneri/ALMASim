@@ -8,9 +8,9 @@ import ducc0 as _ducc0
 import numpy as np
 from astropy.io import fits
 from astropy.time import Time
-from scipy.constants import speed_of_light
 from scipy.ndimage import zoom
 
+from ..instrument.constants import SPEED_OF_LIGHT_M_S
 from .baselines import generate_via_astropy, prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
 
@@ -377,7 +377,7 @@ def exact_weighs(uvw, n_pix, pixsize, wavelengths, nthreads=ALMASIM_NTHREADS):
     pixsize_x, pixsize_y = _get_xy_from_single_or_multi(pixsize)
     n_times_baselines = uvw.shape[0]
     n_frequencies = len(wavelengths)
-    frequencies = speed_of_light / wavelengths
+    frequencies = SPEED_OF_LIGHT_M_S / wavelengths
     # Sort frequencies in ascending order as required by ducc0
     freq_sort_idx = np.argsort(frequencies)
     frequencies = frequencies[freq_sort_idx]
@@ -423,7 +423,7 @@ def image_based_predict(
 
     weights = weight_func(uvw, n_pix, pix_size, wavelenghts, nthreads=n_threads)
     wavelenghts = np.asarray(wavelenghts, dtype=np.float64)
-    frequencies = speed_of_light / wavelenghts
+    frequencies = SPEED_OF_LIGHT_M_S / wavelenghts
     # Sort frequencies in ascending order as required by ducc0
     freq_sort_idx = np.argsort(frequencies)
     frequencies = frequencies[freq_sort_idx]
@@ -498,7 +498,7 @@ def image_channel_ducc0(
     pixel_scale_rad = np.deg2rad(pixel_scale_arcsec / 3600.0)
     pixsize_x = pixel_scale_rad
     pixsize_y = pixel_scale_rad
-    frequencies = speed_of_light / np.asarray(wavelengths, dtype=np.float64)
+    frequencies = SPEED_OF_LIGHT_M_S / np.asarray(wavelengths, dtype=np.float64)
     nthreads = int(ALMASIM_NTHREADS)
 
     visibilities, weights = image_based_predict(

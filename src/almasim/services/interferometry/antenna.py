@@ -6,8 +6,9 @@ import os
 import astropy.units as U
 import numpy as np
 import pandas as pd
-from astropy.constants import c
 from astropy.units import Quantity
+
+from ..instrument.constants import SPEED_OF_LIGHT_M_S
 
 
 def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value=True):
@@ -40,7 +41,7 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
         max_baseline_km = max_baseline_km * U.km
 
     # Speed of light in meters per second
-    light_speed = c.to(U.m / U.s).value
+    light_speed = SPEED_OF_LIGHT_M_S
 
     # Convert frequency to Hz
     central_frequency_hz = central_frequency_ghz.to(U.Hz).value
@@ -69,7 +70,7 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
         fov (astropy unit): the field of view in arcseconds
 
     """
-    light_speed = c.to(U.m / U.s).value
+    light_speed = SPEED_OF_LIGHT_M_S
     if band == 1:
         central_freq = 43 * U.GHz
     elif band == 2:

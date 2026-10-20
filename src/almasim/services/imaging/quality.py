@@ -60,6 +60,7 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
+from ..instrument.constants import SPEED_OF_LIGHT_KM_S
 from .archive_imaging import (
     CUBE_NAME,
     IMAGE_FILENAME,
@@ -68,7 +69,6 @@ from .archive_imaging import (
 )
 from .stats import robust_sigma
 
-SPEED_OF_LIGHT_KM_S = 299_792.458
 QUALITY_FILENAME = "quality.json"
 QUALITY_DIRNAME = "quality"
 SUMMARY_FILENAME = "clean-quality.csv"

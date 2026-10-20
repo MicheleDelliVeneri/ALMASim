@@ -6,8 +6,11 @@ from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping, Optional
 
 from .instrument.array import derive_array_type as _derive_array_type
-
-ALMA_LATITUDE_DEG = -23.028
+from .instrument.constants import (
+    ALMA_LATITUDE_DEG,
+    DISH_DIAMETER_7M_M,
+    DISH_DIAMETER_12M_M,
+)
 
 
 def derive_array_type(antenna_array: str) -> str:
@@ -23,8 +26,8 @@ def infer_antenna_diameter_m(array_type: str) -> float:
     """Infer a representative dish diameter for an ALMA array type."""
     normalized = (array_type or "12m").lower()
     if normalized == "7m":
-        return 7.0
-    return 12.0
+        return DISH_DIAMETER_7M_M
+    return DISH_DIAMETER_12M_M
 
 
 def split_antenna_array_by_type(antenna_array: str) -> list[tuple[str, str]]:
@@ -64,7 +67,7 @@ class ObservationConfig:
     antenna_array: str
     total_time_s: float
     correlator: Optional[str] = None
-    antenna_diameter_m: float = 12.0
+    antenna_diameter_m: float = DISH_DIAMETER_12M_M
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -185,7 +188,7 @@ def build_single_pointing_observation_plan(
     int_like_configs = [cfg for cfg in configs if cfg.array_type != "TP"]
     primary_beam_diameter_m = max(
         (cfg.antenna_diameter_m for cfg in int_like_configs),
-        default=12.0,
+        default=DISH_DIAMETER_12M_M,
     )
     return SinglePointingObservationPlan(
         phase_center_ra_deg=float(params.ra),
