@@ -50,7 +50,7 @@ def _job(service, job_id):
     job = service.DownloadJob(
         job_id=job_id, destination="/tmp", member_ous_uids=["uid://A001/X1/X0"]
     )
-    service.download_store._active[job_id] = job
+    service.download_store._active.put(job_id, job)
     return job
 
 

@@ -5,6 +5,7 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 from almasim.services.download.jobs import json_list
+from app.core.clock import as_utc
 
 
 class DataProductInfo(BaseModel):
@@ -220,7 +221,7 @@ def _job_fields(job: Any, *, live: bool) -> dict[str, Any]:
         "error": job.error,
         "member_ous_uids": list(uids),
         "product_filter": job.product_filter or "all",
-        "created_at": job.created_at.isoformat(),
+        "created_at": as_utc(job.created_at).isoformat(),
         "raw_measurement_sets": list(raw),
         "calibrated_measurement_sets": list(calibrated),
         "manifest_path": job.manifest_path,

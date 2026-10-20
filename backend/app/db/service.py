@@ -13,7 +13,9 @@ from almasim.services.metadata.filters import (
     InclusionFilters,
     qa2_codes,
 )
+from app.core.clock import db_now
 
+from .jobs import JobRepository
 from .models import (
     Observation,
     QueryResult,
@@ -265,7 +267,7 @@ class DatabaseService:
             row, duplicates = rows[0], rows[1:]
             for duplicate in duplicates:
                 self.db.delete(duplicate)
-            row.created_at = datetime.utcnow()
+            row.created_at = db_now()
         else:
             row = QueryResult(query_name=query_name, observation_ids=[])
             self.db.add(row)
@@ -314,8 +316,7 @@ class DatabaseService:
 
     def get_simulation_by_id(self, simulation_id: uuid.UUID) -> Optional[SimulationJob]:
         """Get a simulation job by its UUID."""
-        stmt = select(SimulationJob).where(SimulationJob.simulation_id == simulation_id)
-        return self.db.execute(stmt).scalar_one_or_none()
+        return JobRepository(self.db).get(SimulationJob, simulation_id)
 
     def update_simulation_status(
         self,
@@ -343,9 +344,9 @@ class DatabaseService:
 
         # Update timestamps
         if status == "running" and not simulation.started_at:
-            simulation.started_at = datetime.utcnow()
+            simulation.started_at = db_now()
         elif status in ("completed", "failed", "cancelled"):
-            simulation.completed_at = datetime.utcnow()
+            simulation.completed_at = db_now()
 
         self.db.commit()
         self.db.refresh(simulation)
@@ -388,11 +389,9 @@ class DatabaseService:
         offset: int = 0,
     ) -> List[SimulationJob]:
         """List simulation jobs with optional status filter."""
-        stmt = select(SimulationJob).order_by(SimulationJob.created_at.desc())
-
-        if status:
-            stmt = stmt.where(SimulationJob.status == status)
-
-        stmt = stmt.offset(offset).limit(limit)
-
-        return list(self.db.execute(stmt).scalars().all())
+        if offset:
+            stmt = select(SimulationJob).order_by(SimulationJob.created_at.desc())
+            if status:
+                stmt = stmt.where(SimulationJob.status == status)
+            return list(self.db.execute(stmt.offset(offset).limit(limit)).scalars().all())
+        return JobRepository(self.db).list(SimulationJob, status=status, limit=limit)

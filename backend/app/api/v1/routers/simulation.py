@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 import almasim.services.simulation as sim_service
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
+from app.core.clock import as_utc
 from app.core.config import settings
 from app.core.dependencies import get_compute_backend
 from app.core.path_utils import (
@@ -72,8 +73,8 @@ def list_simulations(db: Session = Depends(get_db)) -> SimulationListResponse:
                 status=sim.status,
                 progress=float(sim.progress or 0.0),
                 message=sim.message or "",
-                created_at=sim.created_at,
-                updated_at=sim.updated_at,
+                created_at=as_utc(sim.created_at),
+                updated_at=as_utc(sim.updated_at),
                 error=sim.error,
                 output_dir=sim.output_path,
             )
