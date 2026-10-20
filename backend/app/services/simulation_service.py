@@ -232,6 +232,7 @@ class SimulationService:
                 background_mode=params.background_mode,
                 background_level=params.background_level,
                 background_seed=params.background_seed,
+                seed=params.seed,
                 external_skymodel_path=params.external_skymodel_path,
                 external_component_table_path=params.external_component_table_path,
                 external_alignment_mode=params.external_alignment_mode,

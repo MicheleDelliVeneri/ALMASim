@@ -107,6 +107,10 @@ class SimulationParamsBase(BaseModel):
         default=None,
         description="Optional random seed for reproducible background sky generation",
     )
+    seed: Optional[int] = Field(
+        default=None,
+        description="Random seed for the total-power noise (none: fresh noise every run)",
+    )
     external_skymodel_path: Optional[str] = Field(
         default=None,
         description="Optional path to an external FITS image or FITS cube sky model",

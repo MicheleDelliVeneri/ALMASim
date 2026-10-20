@@ -231,6 +231,7 @@ def _build_simulation_params(
     imaging_algorithm: str,
     background_level: float,
     background_seed: int | None,
+    seed: int | None,
     output_subdir_name: str | None,
     input_path: Path | None,
     kaggle_token: Path | None = None,
@@ -281,6 +282,7 @@ def _build_simulation_params(
         imaging_algorithm=imaging_algorithm,
         background_level=background_level,
         background_seed=background_seed,
+        seed=seed,
         kaggle_token=kaggle_token,
         # Disable MS export by default; requires casatools or python-casacore.
         ms_export=False,
@@ -519,6 +521,7 @@ def simulation_run(
                     imaging_algorithm=imaging_algorithm_normalized,
                     background_level=background_level,
                     background_seed=(background_seed if background_seed is not None else run_seed),
+                    seed=run_seed,
                     output_subdir_name=output_subdir_name,
                     input_path=input_path,
                     kaggle_token=kaggle_token,
