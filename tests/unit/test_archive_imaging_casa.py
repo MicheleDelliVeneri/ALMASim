@@ -416,17 +416,18 @@ def test_run_wsclean_task_self_calibrates_before_imaging(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
-def test_run_wsclean_task_selfcal_needs_casa_data():
+def test_run_wsclean_task_selfcal_needs_casa_data(tmp_path):
     with pytest.raises(ValueError, match="casa_data"):
         ai.run_wsclean_task(
             command=["wsclean"],
-            output_dir="x",
+            output_dir=str(tmp_path / "x"),
             ms_path="x",
             spw=1,
             threads=1,
             single_window=True,
             selfcal_solints=["inf"],
         )
+    assert not (tmp_path / "x").exists(), "a rejected call must not create the output directory"
 
 
 @pytest.mark.unit
