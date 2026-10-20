@@ -17,7 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 # Stub heavy database/service imports so the router can load without a live DB.
 _db_stub = MagicMock()
-for _mod in ("database", "database.config", "database.models", "database.service"):
+for _mod in ("app.db", "app.db.config", "app.db.models", "app.db.service"):
     sys.modules.setdefault(_mod, _db_stub)
 
 _ROUTER_PATH = REPO_ROOT / "backend" / "app" / "api" / "v1" / "routers" / "download.py"

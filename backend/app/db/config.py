@@ -1,51 +1,44 @@
 """Database configuration and session management."""
 
-import os
 from contextlib import contextmanager
+from functools import lru_cache
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import Base
 from .schema_upgrade import add_missing_columns
 
 
-def get_database_url() -> str:
-    """Get database URL from settings or environment."""
-    # Try to import settings, fall back to env variable
-    try:
-        from app.core.config import settings
+@lru_cache(maxsize=1)
+def get_engine() -> Engine:
+    """The database engine, created on first use (at application startup)."""
+    from app.core.config import settings
 
-        return settings.DATABASE_URL
-    except ImportError:
-        return os.getenv(
-            "DATABASE_URL",
-            "postgresql://almasim:almasim_dev_password@localhost:5432/almasim",
-        )
+    url = settings.DATABASE_URL
+    connect_args = {"connect_timeout": 1} if url.startswith("postgresql") else {}
+    return create_engine(
+        url,
+        pool_pre_ping=True,  # Verify connections before using them
+        echo=False,  # Set to True for SQL query logging
+        connect_args=connect_args,
+    )
 
 
-# Get database URL
-DATABASE_URL = get_database_url()
+@lru_cache(maxsize=1)
+def _session_factory() -> sessionmaker:
+    return sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
 
-_connect_args = {}
-if DATABASE_URL.startswith("postgresql"):
-    _connect_args["connect_timeout"] = 1
 
-# Create engine
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,  # Verify connections before using them
-    echo=False,  # Set to True for SQL query logging
-    connect_args=_connect_args,
-)
-
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def new_session() -> Session:
+    """A new database session (the caller closes it)."""
+    return _session_factory()()
 
 
 def init_db():
     """Initialize database tables."""
+    engine = get_engine()
     Base.metadata.create_all(bind=engine)
     add_missing_columns(engine)
 
@@ -59,7 +52,7 @@ def get_db() -> Generator[Session, None, None]:
         def read_items(db: Session = Depends(get_db)):
             return db.query(Item).all()
     """
-    db = SessionLocal()
+    db = new_session()
     try:
         yield db
     except Exception:
@@ -81,7 +74,7 @@ def get_db_context() -> Generator[Session, None, None]:
         with get_db_context() as db:
             db.query(Item).all()
     """
-    db = SessionLocal()
+    db = new_session()
     try:
         yield db
         db.commit()

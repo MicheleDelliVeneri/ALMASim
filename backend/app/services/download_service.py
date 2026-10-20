@@ -57,7 +57,7 @@ class DownloadStore:
 
     @staticmethod
     def _get_db():
-        from database.config import SessionLocal
+        from app.db.config import SessionLocal
 
         return SessionLocal()
 
@@ -66,7 +66,7 @@ class DownloadStore:
         with self._lock:
             self._active[job.job_id] = job
 
-        from database.models import DownloadJobRecord
+        from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:
@@ -146,7 +146,7 @@ class DownloadStore:
         if not job:
             return
 
-        from database.models import DownloadFileRecord, DownloadJobRecord
+        from app.db.models import DownloadFileRecord, DownloadJobRecord
 
         db = self._get_db()
         try:
@@ -192,7 +192,7 @@ class DownloadStore:
 
     def list_all(self) -> list:
         """Return all persisted jobs from the database."""
-        from database.models import DownloadJobRecord
+        from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:
@@ -202,8 +202,9 @@ class DownloadStore:
 
     def get_from_db(self, job_id: str):
         """Return one persisted job, including file records."""
-        from database.models import DownloadJobRecord
         from sqlalchemy.orm import joinedload
+
+        from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:
@@ -218,7 +219,7 @@ class DownloadStore:
 
     def delete_from_db(self, job_id: str) -> bool:
         """Delete one persisted job from the database."""
-        from database.models import DownloadJobRecord
+        from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:
@@ -233,7 +234,7 @@ class DownloadStore:
 
     def update_in_db(self, job_id: str, **kwargs) -> bool:
         """Update a persisted job directly in the database."""
-        from database.models import DownloadJobRecord
+        from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:

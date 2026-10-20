@@ -3,7 +3,6 @@
 import logging
 
 # Import database initialization
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,12 +12,9 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.db.startup import initialize_database_on_startup
 
-# Add backend directory to path for database imports
 backend_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(backend_dir))
-
-from database.startup import initialize_database_on_startup  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

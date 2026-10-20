@@ -20,7 +20,7 @@ def service_module(monkeypatch):
     monkeypatch.syspath_prepend(str(REPO_ROOT / "src"))
     monkeypatch.syspath_prepend(str(REPO_ROOT / "backend"))
     stub = MagicMock()
-    for name in ("database", "database.config", "database.models", "database.service"):
+    for name in ("app.db", "app.db.config", "app.db.models", "app.db.service"):
         if name not in sys.modules:
             monkeypatch.setitem(sys.modules, name, stub)
     return importlib.import_module("app.services.simulation_service")
