@@ -18,6 +18,11 @@ HOST="$(hostname)"
 CPUS="$(nproc)"
 MEM_MB=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 - 1024 ))
 mkdir -p /etc/slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm
+# A container has no systemd/dbus for slurmd's cgroup v2 plugin; process
+# tracking by process group is enough here.
+printf 'CgroupPlugin=disabled\n' > /etc/slurm/cgroup.conf
+# Node line with the real topology (sockets/cores/threads), memory reduced.
+NODE_LINE="$(slurmd -C | head -1 | sed -E "s/RealMemory=[0-9]+/RealMemory=$MEM_MB/")"
 cat > /etc/slurm/slurm.conf <<CONF
 ClusterName=ci
 SlurmctldHost=$HOST
@@ -35,7 +40,7 @@ SelectType=select/cons_tres
 SelectTypeParameters=CR_Core_Memory
 MpiDefault=none
 ReturnToService=2
-NodeName=$HOST CPUs=$CPUS RealMemory=$MEM_MB State=UNKNOWN
+$NODE_LINE State=UNKNOWN
 PartitionName=ci Nodes=$HOST Default=YES MaxTime=INFINITE State=UP
 CONF
 
@@ -46,7 +51,7 @@ chmod 0700 /etc/munge && chmod 0400 /etc/munge/munge.key
 runuser -u munge -- munged --force
 
 slurmctld
-slurmd
+slurmd || { tail -20 /var/log/slurm/slurmd.log; exit 1; }
 for _ in $(seq 60); do
     sinfo -h -o %T 2>/dev/null | grep -qE '^idle' && break
     sleep 2
