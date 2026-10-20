@@ -73,6 +73,7 @@ dev = [
     "uvicorn[standard]",
     "httpx",
     "pydantic-settings",
+    "sqlalchemy>=2.0.0",
     "ipykernel>=7.2.0",
     "marimo[lsp]>=0.10",
     "sphinx>=9.1.0",
@@ -87,6 +88,7 @@ test = [
     "uvicorn[standard]",
     "httpx",
     "pydantic-settings",
+    "sqlalchemy>=2.0.0",
 ]
 
 [build-system]
@@ -146,6 +148,11 @@ module = [
     "almasim.services.simulation",
     "almasim.skymodels.datasets.tng",
     "almasim.skymodels.serendipitous",
+    # Surfaced when SQLAlchemy joined the test group (T1.12): the models use
+    # untyped Column attributes rather than Mapped[].
+    "database.models",
+    "database.service",
+    "database.startup",
 ]
 ignore_errors = true
 

@@ -26,7 +26,11 @@ backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from database.models import Observation  # noqa: E402
-from database.service import DatabaseService  # noqa: E402
+from database.service import (  # noqa: E402
+    DatabaseService,
+    ObservationExclusionParams,
+    ObservationQueryParams,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,32 +122,44 @@ class MetadataService:
         """Attempt to serve results from the DB cache. Returns None on miss or error."""
         if not self.db_service:
             return None
+        if params.observation_date_range:
+            # TAP filters on the observation end time, which the cache does not hold.
+            logger.info("Date-filtered query, querying ALMA TAP")
+            return None
         try:
             if self.db_service.count_observations_with_keywords() == 0:
                 logger.info("No keyword-annotated observations in cache, querying ALMA TAP")
                 return None
             observations = self.db_service.query_observations(
-                target_name=params.source_name,
-                science_keywords=params.science_keyword,
-                scientific_categories=params.scientific_category,
-                bands=params.bands,
-                antenna_arrays=params.antenna_arrays,
-                array_type=params.array_type,
-                array_configuration=params.array_configuration,
-                angular_resolution_range=params.angular_resolution_range,
-                observation_date_range=params.observation_date_range,
-                qa2_status=mapped_qa2,
-                obs_type=params.obs_type,
-                fov_range=params.fov_range,
-                time_resolution_range=params.time_resolution_range,
-                frequency_range=params.frequency_range,
-                proposal_id_prefix=params.proposal_id_prefix,
-                exclude_science_keywords=params.exclude_science_keyword,
-                exclude_scientific_categories=params.exclude_scientific_category,
-                exclude_source_names=params.exclude_source_name,
-                exclude_obs_types=params.exclude_obs_type,
-                exclude_solar=params.exclude_solar,
+                include=ObservationQueryParams(
+                    target_name=params.source_name,
+                    science_keywords=params.science_keyword,
+                    scientific_categories=params.scientific_category,
+                    bands=params.bands,
+                    antenna_arrays=params.antenna_arrays,
+                    array_type=params.array_type,
+                    array_configuration=params.array_configuration,
+                    angular_resolution_range=params.angular_resolution_range,
+                    qa2_status=mapped_qa2,
+                    obs_type=params.obs_type,
+                    fov_range=params.fov_range,
+                    time_resolution_range=params.time_resolution_range,
+                    frequency_range=params.frequency_range,
+                    proposal_id_prefix=params.proposal_id_prefix,
+                ),
+                exclude=ObservationExclusionParams(
+                    science_keywords=params.exclude_science_keyword,
+                    scientific_categories=params.exclude_scientific_category,
+                    source_names=params.exclude_source_name,
+                    obs_types=params.exclude_obs_type,
+                    solar=params.exclude_solar,
+                ),
             )
+            if not observations:
+                # The cache holds only what earlier queries fetched, so an empty
+                # answer says nothing about the archive.
+                logger.info("No cached observations match, querying ALMA TAP")
+                return None
             logger.info(f"Retrieved {len(observations)} observations from database cache")
             records = observations_to_metadata_records(
                 observations,
