@@ -115,8 +115,12 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
     radians_to_arcsec = 180.0 * 3600.0 / np.pi
     expected_max_baseline_size = 13.0
     expected_wavelengths = speed_of_light / expected_frequencies
+    # The primary beam's half-power width (Airy model); the 10 m dish is unblocked.
+    from almasim.services.imaging.primary_beam import airy_fwhm_factor
+
+    smallest = np.min(antenna.getcol("DISH_DIAMETER"))
     expected_fov_per_frequency = (
-        1.12 * expected_wavelengths / np.min(antenna.getcol("DISH_DIAMETER")) * radians_to_arcsec
+        airy_fwhm_factor(float(smallest)) * expected_wavelengths / smallest * radians_to_arcsec
     )
     expected_synthetized_beam_size = (
         expected_wavelengths / expected_max_baseline_size * radians_to_arcsec

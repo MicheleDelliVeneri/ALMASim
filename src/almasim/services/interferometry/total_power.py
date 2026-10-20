@@ -6,18 +6,18 @@ from typing import Any
 
 import numpy as np
 
-from ..instrument.constants import ARCSEC_PER_RAD, FWHM_PER_SIGMA, SPEED_OF_LIGHT_M_S
+from ..instrument.constants import ARCSEC_PER_RAD, FWHM_PER_SIGMA
 
 
 def estimate_tp_beam_fwhm_arcsec(
     freqs_hz: np.ndarray,
     antenna_diameter_m: float = 12.0,
 ) -> np.ndarray:
-    """Estimate a diffraction-limited TP beam FWHM per channel."""
-    freqs_hz = np.asarray(freqs_hz, dtype=float)
-    wavelengths_m = SPEED_OF_LIGHT_M_S / np.clip(freqs_hz, 1.0, None)
-    fwhm_rad = 1.13 * wavelengths_m / max(float(antenna_diameter_m), 1e-6)
-    return fwhm_rad * ARCSEC_PER_RAD
+    """The TP beam FWHM per channel: the primary beam's half-power width."""
+    from ..imaging.primary_beam import primary_beam_fwhm_rad
+
+    freqs_hz = np.clip(np.asarray(freqs_hz, dtype=float), 1.0, None)
+    return primary_beam_fwhm_rad(max(float(antenna_diameter_m), 1e-6), freqs_hz) * ARCSEC_PER_RAD
 
 
 def _gaussian_kernel(shape: tuple[int, int], sigma_pix: float) -> np.ndarray:

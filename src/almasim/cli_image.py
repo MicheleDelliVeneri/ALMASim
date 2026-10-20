@@ -20,7 +20,6 @@ from tqdm import tqdm
 from almasim.services.instrument.constants import ARCSEC_PER_RAD as RAD_TO_ARCSEC
 from almasim.services.instrument.constants import SPEED_OF_LIGHT_M_S
 
-ALMA_FOV_FACTOR = 1.12  # Standard primary-beam/FOV approximation: 1.12 * λ / D
 MIN_IMAGE_PIXELS = 16
 DAY_IN_SECONDS = 3600 * 24
 TARGET_INTENT = "OBSERVE_TARGET"
@@ -378,12 +377,11 @@ def compute_imaging_parameters(
     i, j = np.triu_indices(antenna_pos.shape[0], k=1)
     distance = np.linalg.norm(antenna_pos[j, :] - antenna_pos[i, :], axis=1)
     max_baseline_size = max(distance)
+    # The primary beam's half-power width (the Airy model of primary_beam).
+    from .services.imaging.primary_beam import primary_beam_fwhm_rad
+
     fov_per_frequency = (
-        ALMA_FOV_FACTOR
-        * SPEED_OF_LIGHT_M_S
-        * RAD_TO_ARCSEC
-        / reference_frequencies
-        / min_dish_diameter
+        primary_beam_fwhm_rad(float(min_dish_diameter), reference_frequencies) * RAD_TO_ARCSEC
     )
     synthetized_beam_size = (
         SPEED_OF_LIGHT_M_S * RAD_TO_ARCSEC / reference_frequencies / max_baseline_size
@@ -652,15 +650,15 @@ def _field_arguments(row: pd.Series) -> list[str]:
 def row_dish_diameter(row: pd.Series) -> Optional[float]:
     """The dish diameter (m) behind a parameter row's ``fov_per_frequency``.
 
-    ``compute_imaging_parameters`` sets it to ALMA_FOV_FACTOR lambda / D of the
-    smallest dish, so D comes back exactly (12 or 7 m for ALMA). None when
+    ``compute_imaging_parameters`` sets it to the primary beam's half-power
+    width for the smallest dish, so D comes back exactly (12 or 7 m for ALMA). None when
     the row lacks the field of view or the frequency.
     """
     from .services.imaging.primary_beam import dish_diameter_from_fov
 
     try:
         diameter = dish_diameter_from_fov(
-            float(row["fov_per_frequency"]), float(row["reference_frequency"]), ALMA_FOV_FACTOR
+            float(row["fov_per_frequency"]), float(row["reference_frequency"])
         )
     except (KeyError, TypeError, ValueError):
         return None

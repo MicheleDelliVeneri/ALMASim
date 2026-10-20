@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -176,12 +177,49 @@ def _half_power_radius(dish_diameter: float, frequency_hz: float) -> float:
     return 0.5 * (low + high)
 
 
+@lru_cache(maxsize=None)
+def airy_fwhm_factor(dish_diameter: float) -> float:
+    """Half-power full width of this module's beam model, in units of lambda / D.
+
+    About 1.15 for the 12 m antennas and 1.14 for the 7 m ones (blocked
+    apertures), 1.03 for an unblocked dish of any other diameter. It is the
+    one primary-beam width ALMASim uses: imaging field of view, the
+    simulator's primary beam and the total-power beam (MADIV-28 T2.1).
+    """
+    frequency = 100e9
+    wavelength = SPEED_OF_LIGHT_M_S / frequency
+    return (
+        2.0
+        * _half_power_radius(float(dish_diameter), frequency)
+        * float(dish_diameter)
+        / wavelength
+    )
+
+
+def primary_beam_fwhm_rad(dish_diameter: float, frequency_hz: Any) -> Any:
+    """Half-power full width (rad) of the primary beam at ``frequency_hz``."""
+    wavelength = SPEED_OF_LIGHT_M_S / np.asarray(frequency_hz, dtype=float)
+    return airy_fwhm_factor(float(dish_diameter)) * wavelength / float(dish_diameter)
+
+
 def dish_diameter_from_fov(
-    fov_arcsec: float, reference_frequency_hz: float, fov_factor: float
+    fov_arcsec: float, reference_frequency_hz: float, fov_factor: float | None = None
 ) -> float:
-    """Dish diameter (m) behind a ``fov_per_frequency`` of ``fov_factor`` lambda / D."""
+    """Dish diameter (m) behind a ``fov_per_frequency`` of ``fov_factor`` lambda / D.
+
+    Without ``fov_factor`` the field of view is the beam model's half-power
+    width (:func:`primary_beam_fwhm_rad`): a nominal ALMA dish is returned
+    when it matches, otherwise the unblocked dish that would.
+    """
     if fov_arcsec <= 0 or reference_frequency_hz <= 0:
         raise ValueError("the field of view and the frequency must be positive")
-    return (
-        fov_factor * SPEED_OF_LIGHT_M_S / reference_frequency_hz / math.radians(fov_arcsec / 3600.0)
-    )
+    fov_rad = math.radians(fov_arcsec / 3600.0)
+    wavelength = SPEED_OF_LIGHT_M_S / reference_frequency_hz
+    if fov_factor is not None:
+        return fov_factor * wavelength / fov_rad
+    for nominal in ALMA_AIRY_APERTURES:
+        if math.isclose(
+            float(primary_beam_fwhm_rad(nominal, reference_frequency_hz)), fov_rad, rel_tol=1e-9
+        ):
+            return nominal
+    return airy_fwhm_factor(1.0) * wavelength / fov_rad
