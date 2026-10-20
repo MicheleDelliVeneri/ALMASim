@@ -1,25 +1,22 @@
 """Slurm computation backend using dask-jobqueue."""
 
 from time import monotonic
-from typing import Any, Callable, List, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from almasim.scheduling.cluster import SLURM_DASK_AVAILABLE, SlurmDaskClusterSingleton
 
 try:
-    from dask import delayed as dask_delayed
-
     SLURM_AVAILABLE = SLURM_DASK_AVAILABLE
 except ImportError:
     SLURM_AVAILABLE = False
-    dask_delayed = None
 
-from .base import ComputationBackend
+from .base import DaskClientBackend
 
 # How often wait_for_workers looks at the worker logs for connection failures.
 _UNREACHABLE_CHECK_S = 15.0
 
 
-class SlurmBackend(ComputationBackend):
+class SlurmBackend(DaskClientBackend):
     """Slurm computation backend using dask-jobqueue."""
 
     def __init__(
@@ -164,33 +161,6 @@ class SlurmBackend(ComputationBackend):
                 raise RuntimeError(report)
         return len(self.client.scheduler_info().get("workers", {}))
 
-    def scatter(self, data: Any, broadcast: bool = False) -> Any:
-        """Scatter data to Slurm workers."""
-        if self.client is None:
-            raise RuntimeError("Dask client not initialized")
-        return self.client.scatter(data, broadcast=broadcast)
-
-    def compute(self, tasks: Any, sync: bool = True) -> Any:
-        """Compute tasks using Slurm workers."""
-        if self.client is None:
-            raise RuntimeError("Dask client not initialized")
-        return self.client.compute(tasks, sync=sync)
-
-    def gather(self, futures: Any) -> List[Any]:
-        """Gather results from Slurm workers."""
-        if self.client is None:
-            raise RuntimeError("Dask client not initialized")
-        if isinstance(futures, list):
-            return self.client.gather(futures)
-        else:
-            return [self.client.gather([futures])[0]]
-
-    def delayed(self, func: Callable) -> Callable:
-        """Create a Dask delayed version of a function."""
-        if dask_delayed is None:
-            raise ImportError("Dask delayed is not available")
-        return dask_delayed(func)
-
     def close(self) -> None:
         """Close Slurm cluster and client."""
         if getattr(self, "_cluster_manager", None) is not None:
@@ -198,11 +168,3 @@ class SlurmBackend(ComputationBackend):
             self._cluster_manager = None
         self.client = None
         self.cluster = None
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.close()

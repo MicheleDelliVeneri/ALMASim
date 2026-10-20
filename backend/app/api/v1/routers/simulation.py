@@ -155,8 +155,10 @@ def create_simulation(
                 )
 
             compute_backend = create_backend(params.compute_backend, **backend_config)
+            owns_backend = True
         else:
             compute_backend = default_backend
+            owns_backend = False
 
         # Use settings values for paths (frontend doesn't need to know Docker paths)
         service = SimulationService(
@@ -166,6 +168,7 @@ def create_simulation(
             galaxy_zoo_dir=settings.GALAXY_ZOO_DIR,
             hubble_dir=settings.HUBBLE_DIR,
             compute_backend=compute_backend,
+            owns_backend=owns_backend,
         )
 
         try:

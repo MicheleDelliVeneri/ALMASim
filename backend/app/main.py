@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.dependencies import close_compute_backend, get_compute_backend
 from app.db.startup import initialize_database_on_startup
 
 backend_dir = Path(__file__).parent.parent
@@ -37,10 +38,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize database: {e}", exc_info=True)
         # Don't fail startup, but log the error
 
+    # The default compute backend, once for the application (MADIV-28 T6.5).
+    get_compute_backend()
+
     yield
 
     # Shutdown
     logger.info("Shutting down ALMASim API...")
+    close_compute_backend()
 
 
 app = FastAPI(
