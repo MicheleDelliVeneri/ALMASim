@@ -4,9 +4,9 @@ import math
 import os
 
 import astropy.units as U
-import pandas as pd
 from astropy.units import Quantity
 
+from ..data_paths import DataLayout, antenna_positions, max_baseline_km
 from ..instrument.constants import SPEED_OF_LIGHT_M_S
 
 
@@ -107,12 +107,7 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
 
 def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, output_dir):
     """Generate antenna configuration file from antenna array string."""
-    antenna_coordinates = pd.read_csv(
-        os.path.join(master_path, "antenna_config", "antenna_coordinates.csv")
-    )
-    obs_antennas = antenna_array.split(" ")
-    obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[antenna_coordinates["name"].isin(obs_antennas)]
+    obs_coordinates = antenna_positions(DataLayout(master_path), antenna_array)
     intro_string = "# observatory=ALMA\n# coordsys=LOC (local tangent plane)\n# x y z diam pad#\n"
     with open(os.path.join(output_dir, "antenna.cfg"), "w") as f:
         f.write(intro_string)
@@ -131,19 +126,5 @@ def compute_distance(x1, y1, z1, x2, y2, z2):
 
 
 def get_max_baseline_from_antenna_array(antenna_array, master_path):
-    """Get maximum baseline from antenna array string."""
-    antenna_coordinates = pd.read_csv(
-        os.path.join(master_path, "antenna_config", "antenna_coordinates.csv")
-    )
-    obs_antennas = antenna_array.split(" ")
-    obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
-    obs_coordinates = antenna_coordinates[antenna_coordinates["name"].isin(obs_antennas)].values
-    max_baseline = 0
-    for i in range(len(obs_coordinates)):
-        name, x1, y1, z1 = obs_coordinates[i]
-        for j in range(i + 1, len(obs_coordinates)):
-            name, x2, y2, z2 = obs_coordinates[j]
-            dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
-            if dist > max_baseline:
-                max_baseline = dist
-    return max_baseline
+    """Get maximum baseline (km) from antenna array string."""
+    return max_baseline_km(DataLayout(master_path), antenna_array)

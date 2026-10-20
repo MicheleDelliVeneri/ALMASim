@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import astropy.units as U
 import numpy as np
-import pandas as pd
 from astropy.coordinates import EarthLocation
 from astropy.io import fits
 from astropy.time import Time
@@ -16,6 +15,7 @@ if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
 
 from ..compute.progress import watch_futures
+from ..data_paths import DataLayout, antenna_positions
 from ..instrument.constants import (
     ALMA_ELEVATION_M,
     ALMA_LATITUDE_DEG,
@@ -271,12 +271,7 @@ class Interferometer:
 
     def _read_antennas(self) -> None:
         """Read antenna positions from configuration."""
-        antenna_coordinates = pd.read_csv(
-            os.path.join(self.main_dir, "antenna_config", "antenna_coordinates.csv")
-        )
-        obs_antennas = self.antenna_array.split(" ")
-        obs_antennas = [antenna.split(":")[0] for antenna in obs_antennas]
-        obs_coordinates = antenna_coordinates[antenna_coordinates["name"].isin(obs_antennas)]
+        obs_coordinates = antenna_positions(DataLayout(self.main_dir), self.antenna_array)
         antenna_coordinates = obs_coordinates[["x", "y"]].values
         antPos = []
         Xmax = 0.0
