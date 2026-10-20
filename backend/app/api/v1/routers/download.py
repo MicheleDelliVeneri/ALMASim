@@ -87,7 +87,7 @@ def _browse_path(resolved_path) -> BrowseDirectoryResponse:
 
 
 @router.get("/browse", response_model=BrowseDirectoryResponse)
-async def browse_directory(path: str = "/host_home"):
+def browse_directory(path: str = "/host_home"):
     """List subdirectories of a server-side path for the destination picker.
 
     Only directories are returned (no files), and hidden entries (starting
@@ -109,7 +109,7 @@ async def browse_directory(path: str = "/host_home"):
 
 
 @router.post("/mkdir", response_model=BrowseDirectoryResponse)
-async def make_directory(path: str):
+def make_directory(path: str):
     """Create a new directory and return a browse result for it."""
     host_base = os.path.realpath(str(settings.HOST_DIR))
     candidate = os.path.realpath(os.path.join(host_base, path))
@@ -128,7 +128,7 @@ async def make_directory(path: str):
 
 
 @router.post("/resolve", response_model=ResolveProductsResponse)
-async def resolve_download_products(body: ResolveProductsRequest):
+def resolve_download_products(body: ResolveProductsRequest):
     """Resolve available data products for selected observations via ALMA DataLink.
 
     Returns the full product list with sizes and a per-type breakdown so the
@@ -179,7 +179,7 @@ async def resolve_download_products(body: ResolveProductsRequest):
 
 
 @router.post("/disk-space", response_model=DiskSpaceInfo)
-async def check_disk_space(body: CheckDiskSpaceRequest):
+def check_disk_space(body: CheckDiskSpaceRequest):
     """Check available disk space at a given path."""
     host_base = os.path.realpath(str(settings.HOST_DIR))
     candidate = os.path.realpath(os.path.join(host_base, body.path))
@@ -206,7 +206,7 @@ async def check_disk_space(body: CheckDiskSpaceRequest):
 
 
 @router.post("/start", response_model=StartDownloadResponse)
-async def start_download(body: StartDownloadRequest, background_tasks: BackgroundTasks):
+def start_download(body: StartDownloadRequest, background_tasks: BackgroundTasks):
     """Start downloading selected ALMA data products.
 
     Resolves products, applies the type filter, then launches a background
@@ -283,7 +283,7 @@ async def start_download(body: StartDownloadRequest, background_tasks: Backgroun
 
 
 @router.get("/jobs", response_model=list[DownloadJobSummary])
-async def list_download_jobs():
+def list_download_jobs():
     """List all download jobs (active and historical)."""
     records = download_store.list_all()  # returns DB records, newest first
     result = []
@@ -350,7 +350,7 @@ async def list_download_jobs():
 
 
 @router.get("/jobs/{job_id}", response_model=DownloadJobStatus)
-async def get_download_job(job_id: str):
+def get_download_job(job_id: str):
     """Get detailed status of a download job including per-file progress."""
     # Try active (in-memory) first for live progress
     job = download_store.get(job_id)
@@ -437,7 +437,7 @@ async def get_download_job(job_id: str):
 
 
 @router.get("/jobs/{job_id}/metadata", response_model=MetadataResponse)
-async def get_download_job_metadata(job_id: str):
+def get_download_job_metadata(job_id: str):
     """Load the metadata rows associated with a downloaded data product."""
     job = download_store.get(job_id)
     if job:
@@ -461,7 +461,7 @@ async def get_download_job_metadata(job_id: str):
 
 
 @router.post("/jobs/{job_id}/cancel")
-async def cancel_download_job(job_id: str):
+def cancel_download_job(job_id: str):
     """Cancel a running download job."""
     # Try in-memory first (active jobs)
     job = download_store.get(job_id)
@@ -493,7 +493,7 @@ async def cancel_download_job(job_id: str):
 
 
 @router.post("/jobs/{job_id}/redownload", response_model=StartDownloadResponse)
-async def redownload_job(
+def redownload_job(
     job_id: str,
     background_tasks: BackgroundTasks,
     body: RedownloadRequest = RedownloadRequest(),
@@ -629,7 +629,7 @@ async def redownload_job(
 
 
 @router.delete("/jobs/{job_id}")
-async def delete_download_job(job_id: str):
+def delete_download_job(job_id: str):
     """Delete a download job from history and its files on disk.
 
     Active (running/pending) jobs must be cancelled first.
