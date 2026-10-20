@@ -36,6 +36,9 @@ from ..instrument.constants import SPEED_OF_LIGHT_M_S
 # Nominal dish diameter -> (effective aperture, central blockage) in metres.
 ALMA_AIRY_APERTURES = {12.0: (10.7, 0.75), 7.0: (6.25, 0.75)}
 PB_CUTOFF = 0.2
+# The field-of-view factor (x lambda / D) imaging parameter files used before
+# MADIV-28 T2.1; still recognised when their dish diameter is read back.
+LEGACY_FOV_FACTOR = 1.12
 
 # The response is tabulated over x = pi D theta / lambda and interpolated:
 # a cube needs the beam of every channel on the whole grid.
@@ -209,7 +212,8 @@ def dish_diameter_from_fov(
 
     Without ``fov_factor`` the field of view is the beam model's half-power
     width (:func:`primary_beam_fwhm_rad`): a nominal ALMA dish is returned
-    when it matches, otherwise the unblocked dish that would.
+    when it matches, also for parameter files written before MADIV-28 T2.1
+    with ``LEGACY_FOV_FACTOR``; otherwise the unblocked dish that would.
     """
     if fov_arcsec <= 0 or reference_frequency_hz <= 0:
         raise ValueError("the field of view and the frequency must be positive")
@@ -218,8 +222,7 @@ def dish_diameter_from_fov(
     if fov_factor is not None:
         return fov_factor * wavelength / fov_rad
     for nominal in ALMA_AIRY_APERTURES:
-        if math.isclose(
-            float(primary_beam_fwhm_rad(nominal, reference_frequency_hz)), fov_rad, rel_tol=1e-9
-        ):
-            return nominal
+        for factor in (airy_fwhm_factor(nominal), LEGACY_FOV_FACTOR):
+            if math.isclose(factor * wavelength / nominal, fov_rad, rel_tol=1e-9):
+                return nominal
     return airy_fwhm_factor(1.0) * wavelength / fov_rad

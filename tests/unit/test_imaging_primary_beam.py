@@ -114,6 +114,15 @@ def test_dish_diameter_from_fov_inverts_the_primary_beam_width(dish):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("dish", [12.0, 7.0])
+def test_parameter_files_from_before_the_airy_factor_still_give_their_dish(dish):
+    """Older params CSVs store a 1.12 lambda/D field of view; pbcor must still get 12 or 7 m."""
+    frequency = 107.6e9
+    legacy_fov = 1.12 * C / frequency / dish * 180 / math.pi * 3600
+    assert pbm.dish_diameter_from_fov(legacy_fov, frequency) == dish
+
+
+@pytest.mark.unit
 def test_primary_beam_correct_cube_per_channel(tmp_path):
     image = tmp_path / "cube.fits"
     # 100 and 150 GHz, 1 arcsec pixels: the 12 m beam's FWHM is ~60" at 100 GHz.
