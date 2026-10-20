@@ -15,9 +15,9 @@ if TYPE_CHECKING:
 
 from ..compute.progress import watch_futures
 from ..instrument.constants import ALMA_LATITUDE_DEG, SPEED_OF_LIGHT_M_S
+from ..instrument.spectral_window import SpectralWindow
 from ..products.cube_export import write_interferometry_products
 from .antenna import read_array_layout
-from .frequency import channel_wavelength_edges
 from .observing import alma_location, clip_to_horizon, hour_angle_coverage, hour_angle_samples
 from .simulator import ChannelImagingConfig, image_channels, picklable_header, stack_channels
 from .utils import get_channel_wavelength
@@ -74,6 +74,7 @@ class Interferometer:
         config_name: Optional[str] = None,
         array_type: Optional[str] = None,
         logger: LogFn = None,
+        spectral_window: Optional[SpectralWindow] = None,
     ):
         """
         Initialize interferometer.
@@ -120,6 +121,9 @@ class Interferometer:
             Robustness parameter
         logger : LogFn, optional
             Logger callback function
+        spectral_window : SpectralWindow, optional
+            The cube's channel grid, which the uv sampling and the visibility
+            table use too; by default the band split into the cube's channels
         """
         self.idx = idx
         self.skymodel = skymodel
@@ -137,7 +141,9 @@ class Interferometer:
         self.snr = snr
         self.integration_time = integration_time
         self.observation_date = observation_date
-        self.header = header
+        # Each configuration gets its own copy: _get_nH appends EPOCH, which every
+        # configuration used to add to one shared header (MADIV-28 T1.14).
+        self.header = header.copy() if hasattr(header, "copy") else header
         self.save_mode = save_mode
         self.persist = persist
         self.robust = robust
@@ -155,6 +161,7 @@ class Interferometer:
         self.config_name = config_name
         self.array_type = array_type
         self.logger = logger
+        self.spectral_window = spectral_window
         self.progress_signal = ProgressSignal()
 
         # Initialize variables
@@ -252,10 +259,14 @@ class Interferometer:
         self.Nant = len(self.antPos)
 
     def _get_wavelengths(self) -> None:
-        """Calculate observing wavelengths for each channel."""
-        self.w_min, self.w_max, self.obs_wavelengths = channel_wavelength_edges(
-            self.central_freq, self.bandwidth, self.Nchan, self.c_ms
-        )
+        """Each channel's wavelength range, on the cube's channel grid (T5.4)."""
+        if self.spectral_window is None:
+            self.spectral_window = SpectralWindow.from_band(
+                self.central_freq, self.bandwidth, self.Nchan
+            )
+        self.obs_wavelengths = self.spectral_window.wavelength_edges_m(self.c_ms)
+        self.w_min = float(self.obs_wavelengths.min())
+        self.w_max = float(self.obs_wavelengths.max())
 
     def get_channel_wavelength(self, channel: int) -> tuple:
         """Get wavelength and format string for a channel."""
@@ -306,11 +317,7 @@ class Interferometer:
         u, v = cubes["u"], cubes["v"]
         visibility_table = assemble_visibility_table(
             channel_rows=raw_visibility_rows,
-            channel_freq_hz=np.linspace(
-                self.central_freq - self.bandwidth / 2,
-                self.central_freq + self.bandwidth / 2,
-                self.Nchan,
-            ),
+            channel_freq_hz=self.spectral_window.frequencies_hz(),
             scan_time_s=float(self.scan_time),
             observation_date=self.observation_date,
             antenna_names=self.antNames,

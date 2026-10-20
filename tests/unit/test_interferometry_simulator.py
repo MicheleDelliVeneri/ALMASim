@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import astropy.units as U
 import numpy as np
 import pytest
 from astropy.io import fits
 
 from almasim.services.compute.sync import SyncBackend
+from almasim.services.instrument.spectral_window import SpectralWindow
 from almasim.services.interferometry import simulator
-from almasim.services.interferometry.frequency import channel_wavelength_edges
 from almasim.services.interferometry.observing import alma_location, clip_to_horizon
 
 pytestmark = pytest.mark.unit
@@ -68,11 +69,55 @@ def test_clip_to_horizon_limits_the_track():
     assert clip_to_horizon([-3.0, 3.0], lat, np.radians(-89.0)) == [-3.0, 3.0]  # circumpolar
 
 
-def test_channel_wavelength_edges_split_the_band():
-    w_min, w_max, edges = channel_wavelength_edges(100e9, 2e9, 4, 3e8)
-    assert w_min == pytest.approx(3e8 / 101e9) and w_max == pytest.approx(3e8 / 99e9)
-    assert edges.shape == (4, 2) and edges[0, 0] == w_min and edges[-1, 1] == pytest.approx(w_max)
+def test_one_centred_channel_grid():
+    """Channel i is centred on f0 + (i - (N - 1) / 2) * delta, increasing (T5.4)."""
+    window = SpectralWindow.centred(100e9, 1e6, 4)
+    np.testing.assert_allclose(
+        window.frequencies_hz(), 100e9 + np.array([-1.5, -0.5, 0.5, 1.5]) * 1e6
+    )
+    edges = window.wavelength_edges_m(3e8)
+    assert edges.shape == (4, 2) and np.all(edges[:, 0] < edges[:, 1])
+    np.testing.assert_allclose(edges[0], [3e8 / (100e9 - 1e6), 3e8 / (100e9 - 2e6)])
+    assert np.all(np.diff(edges[:, 0]) < 0), "channel 0 is the lowest frequency, longest wavelength"
+    assert SpectralWindow.from_band(100e9, 4e6, 4) == window
 
 
 def test_alma_location_is_the_site():
     assert alma_location().lat.deg == pytest.approx(-23.03, abs=0.01)
+
+
+def test_each_configuration_appends_epoch_to_its_own_header(monkeypatch):
+    """Two Interferometers on one header no longer stack EPOCH cards on it (T1.14)."""
+    from almasim.services.interferometry import core
+
+    monkeypatch.setattr(
+        core.Interferometer, "_get_Hcov", lambda self: setattr(self, "Hcov", [0, 0])
+    )
+    monkeypatch.setattr(core.Interferometer, "_read_antennas", lambda self: None)
+    shared = fits.Header()
+    shared["OBJECT"] = "src"
+    kwargs = dict(
+        idx=0,
+        skymodel=np.zeros((2, 4, 4)),
+        backend=SyncBackend(),
+        main_dir="",
+        output_dir="/tmp",
+        ra=10 * U.deg,
+        dec=-20 * U.deg,
+        central_freq=100 * U.GHz,
+        bandwidth=1 * U.GHz,
+        fov=10.0,
+        antenna_array="",
+        noise=0.0,
+        snr=1.0,
+        integration_time=1.0,
+        observation_date="2020-01-01",
+        header=shared,
+        save_mode="memory",
+        robust=0.0,
+    )
+    first = core.Interferometer(**kwargs)
+    second = core.Interferometer(**kwargs)
+    assert "EPOCH" not in shared
+    assert list(first.header.keys()).count("EPOCH") == 1
+    assert list(second.header.keys()).count("EPOCH") == 1
