@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MetadataQuery } from '#lib/api/metadata.js';
 	import { createLogger } from '#lib/logger.js';
+	import MultiSelect from '#lib/components/shared/MultiSelect.svelte';
 
 	const logger = createLogger('components/metadata/MetadataQueryForm');
 
@@ -18,85 +19,27 @@
 	const cycleOptions = Array.from({ length: 13 }, (_, i) => ({
 		cycle: i,
 		year: 2012 + i,
-		label: `Cycle ${i} (${2012 + i})`,
+		label: `Cycle ${i} (${2012 + i})`
 	}));
 	let selectedCycles = $state<number[]>([]);
 	const qa2Options = [
 		{ value: 'Pass', label: 'Pass' },
 		{ value: 'SemiPass', label: 'Semi-Pass' },
-		{ value: 'Fail', label: 'Fail' },
+		{ value: 'Fail', label: 'Fail' }
 	];
 
 	// Inclusion multi-select state
 	let selectedKeywords = $state<string[]>([]);
 	let selectedCategories = $state<string[]>([]);
-	let keywordSearch = $state('');
-	let categorySearch = $state('');
-	let keywordDropdownOpen = $state(false);
-	let categoryDropdownOpen = $state(false);
 
 	// Exclusion state
 	let excludeSection = $state(false);
 	let excludeSelectedKeywords = $state<string[]>([]);
 	let excludeSelectedCategories = $state<string[]>([]);
-	let excludeKeywordSearch = $state('');
-	let excludeCategorySearch = $state('');
-	let excludeKeywordDropdownOpen = $state(false);
-	let excludeCategoryDropdownOpen = $state(false);
 	let excludeSolar = $state(false);
 	let publicOnly = $state(true);
 	let scienceOnly = $state(true);
 	let excludeMosaic = $state(true);
-
-	const filteredKeywords = $derived(
-		(scienceTypes?.keywords ?? []).filter(
-			(k) => k.toLowerCase().includes(keywordSearch.toLowerCase())
-		)
-	);
-
-	const filteredCategories = $derived(
-		(scienceTypes?.categories ?? []).filter(
-			(c) => c.toLowerCase().includes(categorySearch.toLowerCase())
-		)
-	);
-
-	const filteredExcludeKeywords = $derived(
-		(scienceTypes?.keywords ?? []).filter(
-			(k) => k.toLowerCase().includes(excludeKeywordSearch.toLowerCase())
-		)
-	);
-
-	const filteredExcludeCategories = $derived(
-		(scienceTypes?.categories ?? []).filter(
-			(c) => c.toLowerCase().includes(excludeCategorySearch.toLowerCase())
-		)
-	);
-
-	function toggleKeyword(keyword: string) {
-		selectedKeywords = selectedKeywords.includes(keyword)
-			? selectedKeywords.filter((k) => k !== keyword)
-			: [...selectedKeywords, keyword];
-		logger.debug({ keyword, selected: selectedKeywords.includes(keyword) }, 'Science keyword toggled');
-	}
-
-	function toggleCategory(category: string) {
-		selectedCategories = selectedCategories.includes(category)
-			? selectedCategories.filter((c) => c !== category)
-			: [...selectedCategories, category];
-		logger.debug({ category, selected: selectedCategories.includes(category) }, 'Science category toggled');
-	}
-
-	function toggleExcludeKeyword(keyword: string) {
-		excludeSelectedKeywords = excludeSelectedKeywords.includes(keyword)
-			? excludeSelectedKeywords.filter((k) => k !== keyword)
-			: [...excludeSelectedKeywords, keyword];
-	}
-
-	function toggleExcludeCategory(category: string) {
-		excludeSelectedCategories = excludeSelectedCategories.includes(category)
-			? excludeSelectedCategories.filter((c) => c !== category)
-			: [...excludeSelectedCategories, category];
-	}
 
 	function handleSubmit(event: Event) {
 		event.preventDefault();
@@ -117,7 +60,10 @@
 
 		const arrayConfig = formData.get('array_configuration') as string;
 		if (arrayConfig?.trim()) {
-			query.array_configuration = arrayConfig.split(',').map((s) => s.trim()).filter(Boolean);
+			query.array_configuration = arrayConfig
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
 		}
 
 		const angResMin = formData.get('ang_res_min');
@@ -174,16 +120,23 @@
 
 		// Exclusion filters
 		if (excludeSelectedKeywords.length) query.exclude_science_keyword = excludeSelectedKeywords;
-		if (excludeSelectedCategories.length) query.exclude_scientific_category = excludeSelectedCategories;
+		if (excludeSelectedCategories.length)
+			query.exclude_scientific_category = excludeSelectedCategories;
 
 		const excludeSourceName = formData.get('exclude_source_name') as string;
 		if (excludeSourceName?.trim()) {
-			query.exclude_source_name = excludeSourceName.split(',').map((s) => s.trim()).filter(Boolean);
+			query.exclude_source_name = excludeSourceName
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
 		}
 
 		const excludeObsType = formData.get('exclude_obs_type') as string;
 		if (excludeObsType?.trim()) {
-			query.exclude_obs_type = excludeObsType.split(',').map((s) => s.trim()).filter(Boolean);
+			query.exclude_obs_type = excludeObsType
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
 		}
 
 		if (excludeSolar) query.exclude_solar = true;
@@ -202,26 +155,13 @@
 				keywordCount: (query.science_keyword ?? []).length,
 				categoryCount: (query.scientific_category ?? []).length,
 				publicOnly,
-				scienceOnly,
+				scienceOnly
 			},
 			'Query form submitted'
 		);
 		onSubmit(query);
 	}
 </script>
-
-<svelte:window
-	onclick={(e) => {
-		if (!(e.target as HTMLElement).closest('[data-dropdown="keyword"]'))
-			keywordDropdownOpen = false;
-		if (!(e.target as HTMLElement).closest('[data-dropdown="category"]'))
-			categoryDropdownOpen = false;
-		if (!(e.target as HTMLElement).closest('[data-dropdown="ex-keyword"]'))
-			excludeKeywordDropdownOpen = false;
-		if (!(e.target as HTMLElement).closest('[data-dropdown="ex-category"]'))
-			excludeCategoryDropdownOpen = false;
-	}}
-/>
 
 <form onsubmit={handleSubmit} class="space-y-4 rounded-lg bg-surface p-6 shadow">
 	<div class="flex items-center justify-between">
@@ -251,90 +191,21 @@
 
 	<!-- Science Keywords & Categories -->
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-
 		<!-- Science Keywords multi-select -->
-		<div data-dropdown="keyword">
-			<span class="text-sm font-medium text-fg-muted">Science Keywords</span>
-			<div class="relative mt-1">
-				<input
-					type="text"
-					placeholder={scienceTypes ? 'Search keywords…' : 'Loading…'}
-					disabled={!scienceTypes}
-					bind:value={keywordSearch}
-					onfocus={() => (keywordDropdownOpen = true)}
-					class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
-				/>
-				{#if keywordDropdownOpen && scienceTypes}
-					<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
-						{#if filteredKeywords.length === 0}
-							<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
-						{:else}
-							{#each filteredKeywords as kw}
-								<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
-									<input type="checkbox" checked={selectedKeywords.includes(kw)} onchange={() => toggleKeyword(kw)} class="rounded border-line" />
-									{kw}
-								</label>
-							{/each}
-						{/if}
-					</div>
-				{/if}
-			</div>
-			{#if selectedKeywords.length > 0}
-				<div class="mt-1 flex flex-wrap gap-1">
-					{#each selectedKeywords as kw}
-						<span class="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">
-							{kw}
-							<button type="button" onclick={() => toggleKeyword(kw)} class="ml-0.5 text-accent hover:text-accent" aria-label="Remove {kw}">✕</button>
-						</span>
-					{/each}
-					<button type="button" onclick={() => (selectedKeywords = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
-				</div>
-			{:else}
-				<p class="mt-0.5 text-xs text-fg-dim">0 selected</p>
-			{/if}
-		</div>
+		<MultiSelect
+			label="Science Keywords"
+			options={scienceTypes?.keywords ?? null}
+			bind:selected={selectedKeywords}
+			placeholder="Search keywords…"
+		/>
 
 		<!-- Science Categories multi-select -->
-		<div data-dropdown="category">
-			<span class="text-sm font-medium text-fg-muted">Science Category</span>
-			<div class="relative mt-1">
-				<input
-					type="text"
-					placeholder={scienceTypes ? 'Search categories…' : 'Loading…'}
-					disabled={!scienceTypes}
-					bind:value={categorySearch}
-					onfocus={() => (categoryDropdownOpen = true)}
-					class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
-				/>
-				{#if categoryDropdownOpen && scienceTypes}
-					<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
-						{#if filteredCategories.length === 0}
-							<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
-						{:else}
-							{#each filteredCategories as cat}
-								<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
-									<input type="checkbox" checked={selectedCategories.includes(cat)} onchange={() => toggleCategory(cat)} class="rounded border-line" />
-									{cat}
-								</label>
-							{/each}
-						{/if}
-					</div>
-				{/if}
-			</div>
-			{#if selectedCategories.length > 0}
-				<div class="mt-1 flex flex-wrap gap-1">
-					{#each selectedCategories as cat}
-						<span class="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-800">
-							{cat}
-							<button type="button" onclick={() => toggleCategory(cat)} class="ml-0.5 text-purple-500 hover:text-purple-700" aria-label="Remove {cat}">✕</button>
-						</span>
-					{/each}
-					<button type="button" onclick={() => (selectedCategories = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
-				</div>
-			{:else}
-				<p class="mt-0.5 text-xs text-fg-dim">0 selected</p>
-			{/if}
-		</div>
+		<MultiSelect
+			label="Science Category"
+			options={scienceTypes?.categories ?? null}
+			bind:selected={selectedCategories}
+			placeholder="Search categories…"
+		/>
 	</div>
 
 	<!-- ALMA Cycle -->
@@ -345,8 +216,8 @@
 				<button
 					type="button"
 					onclick={() => (selectedCycles = [])}
-					class="text-xs text-fg-dim hover:text-gray-600 underline"
-				>Clear all</button>
+					class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button
+				>
 			{/if}
 		</div>
 		<div class="mt-2 flex flex-wrap gap-2">
@@ -417,8 +288,20 @@
 		<div>
 			<span class="block text-sm font-medium text-fg-muted">Angular Resolution (arcsec)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.01" name="ang_res_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
-				<input type="number" step="0.01" name="ang_res_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
+				<input
+					type="number"
+					step="0.01"
+					name="ang_res_min"
+					placeholder="Min"
+					class="w-full rounded-md border border-line p-2"
+				/>
+				<input
+					type="number"
+					step="0.01"
+					name="ang_res_max"
+					placeholder="Max"
+					class="w-full rounded-md border border-line p-2"
+				/>
 			</div>
 		</div>
 		<div>
@@ -437,7 +320,12 @@
 			<div class="mt-2 flex gap-4">
 				{#each qa2Options as qa2}
 					<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
-						<input type="checkbox" name="qa2_status" value={qa2.value} class="rounded border-line" />
+						<input
+							type="checkbox"
+							name="qa2_status"
+							value={qa2.value}
+							class="rounded border-line"
+						/>
 						<span>{qa2.label}</span>
 					</label>
 				{/each}
@@ -473,22 +361,58 @@
 		<div>
 			<span class="block text-sm font-medium text-fg-muted">FOV (arcsec)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.1" name="fov_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
-				<input type="number" step="0.1" name="fov_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
+				<input
+					type="number"
+					step="0.1"
+					name="fov_min"
+					placeholder="Min"
+					class="w-full rounded-md border border-line p-2"
+				/>
+				<input
+					type="number"
+					step="0.1"
+					name="fov_max"
+					placeholder="Max"
+					class="w-full rounded-md border border-line p-2"
+				/>
 			</div>
 		</div>
 		<div>
 			<span class="block text-sm font-medium text-fg-muted">Time Resolution (s)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.1" name="time_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
-				<input type="number" step="0.1" name="time_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
+				<input
+					type="number"
+					step="0.1"
+					name="time_min"
+					placeholder="Min"
+					class="w-full rounded-md border border-line p-2"
+				/>
+				<input
+					type="number"
+					step="0.1"
+					name="time_max"
+					placeholder="Max"
+					class="w-full rounded-md border border-line p-2"
+				/>
 			</div>
 		</div>
 		<div>
 			<span class="block text-sm font-medium text-fg-muted">Frequency (GHz)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.1" name="freq_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
-				<input type="number" step="0.1" name="freq_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
+				<input
+					type="number"
+					step="0.1"
+					name="freq_min"
+					placeholder="Min"
+					class="w-full rounded-md border border-line p-2"
+				/>
+				<input
+					type="number"
+					step="0.1"
+					name="freq_max"
+					placeholder="Max"
+					class="w-full rounded-md border border-line p-2"
+				/>
 			</div>
 		</div>
 	</div>
@@ -504,7 +428,9 @@
 			<svg
 				class="h-4 w-4 transition-transform duration-200"
 				class:rotate-180={excludeSection}
-				fill="none" stroke="currentColor" viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				viewBox="0 0 24 24"
 			>
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 			</svg>
@@ -512,7 +438,6 @@
 
 		{#if excludeSection}
 			<div class="space-y-4 border-t border-line px-4 py-4">
-
 				<!-- Exclude Solar -->
 				<label class="inline-flex items-center gap-2 text-sm text-fg-muted">
 					<input type="checkbox" bind:checked={excludeSolar} class="rounded border-line" />
@@ -522,88 +447,22 @@
 				<!-- Exclude keywords & categories -->
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<!-- Exclude Keywords -->
-					<div data-dropdown="ex-keyword">
-						<span class="text-sm font-medium text-fg-muted">Exclude Science Keywords</span>
-						<div class="relative mt-1">
-							<input
-								type="text"
-								placeholder={scienceTypes ? 'Search keywords…' : 'Loading…'}
-								disabled={!scienceTypes}
-								bind:value={excludeKeywordSearch}
-								onfocus={() => (excludeKeywordDropdownOpen = true)}
-								class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
-							/>
-							{#if excludeKeywordDropdownOpen && scienceTypes}
-								<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
-									{#if filteredExcludeKeywords.length === 0}
-										<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
-									{:else}
-										{#each filteredExcludeKeywords as kw}
-											<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
-												<input type="checkbox" checked={excludeSelectedKeywords.includes(kw)} onchange={() => toggleExcludeKeyword(kw)} class="rounded border-line" />
-												{kw}
-											</label>
-										{/each}
-									{/if}
-								</div>
-							{/if}
-						</div>
-						{#if excludeSelectedKeywords.length > 0}
-							<div class="mt-1 flex flex-wrap gap-1">
-								{#each excludeSelectedKeywords as kw}
-									<span class="inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs text-danger">
-										{kw}
-										<button type="button" onclick={() => toggleExcludeKeyword(kw)} class="ml-0.5 text-danger hover:text-danger" aria-label="Remove {kw}">✕</button>
-									</span>
-								{/each}
-								<button type="button" onclick={() => (excludeSelectedKeywords = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
-							</div>
-						{:else}
-							<p class="mt-0.5 text-xs text-fg-dim">0 excluded</p>
-						{/if}
-					</div>
+					<MultiSelect
+						label="Exclude Science Keywords"
+						options={scienceTypes?.keywords ?? null}
+						bind:selected={excludeSelectedKeywords}
+						placeholder="Search keywords…"
+						tone="danger"
+					/>
 
 					<!-- Exclude Categories -->
-					<div data-dropdown="ex-category">
-						<span class="text-sm font-medium text-fg-muted">Exclude Science Categories</span>
-						<div class="relative mt-1">
-							<input
-								type="text"
-								placeholder={scienceTypes ? 'Search categories…' : 'Loading…'}
-								disabled={!scienceTypes}
-								bind:value={excludeCategorySearch}
-								onfocus={() => (excludeCategoryDropdownOpen = true)}
-								class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
-							/>
-							{#if excludeCategoryDropdownOpen && scienceTypes}
-								<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
-									{#if filteredExcludeCategories.length === 0}
-										<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
-									{:else}
-										{#each filteredExcludeCategories as cat}
-											<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
-												<input type="checkbox" checked={excludeSelectedCategories.includes(cat)} onchange={() => toggleExcludeCategory(cat)} class="rounded border-line" />
-												{cat}
-											</label>
-										{/each}
-									{/if}
-								</div>
-							{/if}
-						</div>
-						{#if excludeSelectedCategories.length > 0}
-							<div class="mt-1 flex flex-wrap gap-1">
-								{#each excludeSelectedCategories as cat}
-									<span class="inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs text-danger">
-										{cat}
-										<button type="button" onclick={() => toggleExcludeCategory(cat)} class="ml-0.5 text-danger hover:text-danger" aria-label="Remove {cat}">✕</button>
-									</span>
-								{/each}
-								<button type="button" onclick={() => (excludeSelectedCategories = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
-							</div>
-						{:else}
-							<p class="mt-0.5 text-xs text-fg-dim">0 excluded</p>
-						{/if}
-					</div>
+					<MultiSelect
+						label="Exclude Science Categories"
+						options={scienceTypes?.categories ?? null}
+						bind:selected={excludeSelectedCategories}
+						placeholder="Search categories…"
+						tone="danger"
+					/>
 				</div>
 
 				<!-- Exclude source name & obs type -->
