@@ -1,9 +1,18 @@
 <script lang="ts">
-	import type { MetadataRow } from '#lib/api/metadata.js';
-	import { formatBytes } from '#lib/utils/format.js';
-	import type { MetadataResponse } from '#lib/api/metadata.js';
-	import { downloadApi } from '#lib/api/download.js';
+	import type { MetadataResponse, MetadataRow } from '#lib/api/metadata.js';
 	import { createLogger } from '#lib/logger.js';
+	import {
+		DEFAULT_COLUMN_ORDER,
+		DEFAULT_HIDDEN,
+		PINNED_COLUMNS,
+		filterRowIndices,
+		formatColumnName,
+		moveColumn,
+		stringifyValue,
+		virtualWindow
+	} from '#lib/utils/resultsTable.js';
+	import ResultsColumnsMenu from './ResultsColumnsMenu.svelte';
+	import SelectionSizeEstimate from './SelectionSizeEstimate.svelte';
 
 	const logger = createLogger('components/metadata/MetadataResultsTable');
 
@@ -24,81 +33,13 @@
 		$props();
 
 	let isCollapsed = $state(false);
-	let columnsMenuOpen = $state(false);
 
-	// Pinned columns — always first, always visible, not reorderable
-	const pinnedColumns = ['proposal_id', 'ALMA_source_name'];
-
-	// All known columns with their display labels (kept in preferred display order)
-	const columnLabels: Record<string, string> = {
-		ALMA_source_name: 'Source Name',
-		Band: 'Band',
-		Array_type: 'Array Type',
-		antenna_arrays: 'Antenna Arrays',
-		'Ang.res.': 'Ang. Res. (arcsec)',
-		'Obs.date': 'Obs. Date',
-		Project_abstract: 'Project Abstract',
-		science_keyword: 'Science Keyword',
-		scientific_category: 'Science Category',
-		QA2_status: 'QA2 Status',
-		Type: 'Project Type',
-		PWV: 'PWV',
-		SB_name: 'SB Name',
-		'Vel.res.': 'Vel. Res. (km/s)',
-		RA: 'R.A. (deg)',
-		Dec: 'Dec (deg)',
-		FOV: 'FOV (arcsec)',
-		'Int.Time': 'Int. Time (s)',
-		Cont_sens_mJybeam: 'Cont. Sens. (mJy/beam)',
-		Line_sens_10kms_mJybeam: 'Line Sens. 10km/s (mJy/beam)',
-		Bandwidth: 'Bandwidth (GHz)',
-		Freq: 'Frequency (GHz)',
-		'Freq.sup.': 'Freq. Support',
-		proposal_id: 'Proposal ID',
-		member_ous_uid: 'Member OUS UID',
-		group_ous_uid: 'Group OUS UID',
-	};
-
-	// Preferred display order (first columns shown in table)
-	const preferredOrder = [
-		'Band',
-		'Array_type',
-		'Ang.res.',
-		'Obs.date',
-		'Project_abstract',
-		'science_keyword',
-		'scientific_category',
-		'QA2_status',
-		'Type',
-	];
-
-	// Default order for reorderable columns (excludes pinned)
-	const defaultColumnOrder = [
-		...preferredOrder,
-		...Object.keys(columnLabels).filter(
-			(c) => !preferredOrder.includes(c) && !pinnedColumns.includes(c)
-		),
-	];
-
-	// User-reorderable column order (mutable)
-	let columnOrder = $state([...defaultColumnOrder]);
-
-	// Columns hidden by default (verbose / less commonly needed)
-	const defaultHidden = new Set([
-		'antenna_arrays',
-		'PWV',
-		'SB_name',
-		'Vel.res.',
-		'Cont_sens_mJybeam',
-		'Line_sens_10kms_mJybeam',
-		'Freq.sup.',
-		'group_ous_uid',
-	]);
-	let hiddenColumns = $state(new Set<string>(defaultHidden));
+	// The reorderable columns' order, and the hidden ones.
+	let columnOrder = $state([...DEFAULT_COLUMN_ORDER]);
+	let hiddenColumns = $state(new Set<string>(DEFAULT_HIDDEN));
 
 	// Client-side column filters (reset on new results)
 	let columnFilters = $state<Record<string, string>>({});
-
 
 	const hasActiveFilters = $derived(Object.values(columnFilters).some((v) => v.length > 0));
 
@@ -109,52 +50,17 @@
 		return new Set(Object.keys(data[0]));
 	});
 
-	// Visible pinned columns (present in data)
-	const pinnedTableColumns = $derived(pinnedColumns.filter((c) => dataColumnSet.has(c)));
-
-	// Visible reorderable columns
+	const pinnedTableColumns = $derived(PINNED_COLUMNS.filter((c) => dataColumnSet.has(c)));
 	const reorderableTableColumns = $derived(
 		columnOrder.filter((c) => !hiddenColumns.has(c) && dataColumnSet.has(c))
 	);
-
-	// Full ordered list of visible columns (pinned first, then reorderable)
 	const tableColumns = $derived([...pinnedTableColumns, ...reorderableTableColumns]);
 
-	// Total column count for display
-	const totalColumnCount = $derived(pinnedColumns.length + columnOrder.length);
-
-	// Apply column filters to data
-	// Supports glob-style wildcards: * matches any sequence of characters.
-	// e.g. "2023*.L" matches anything starting with "2023" and ending with ".L"
-	// Without *, plain substring matching is used.
-	function matchesFilter(cellValue: string, pattern: string): boolean {
-		const cell = cellValue.toLowerCase();
-		const pat = pattern.toLowerCase();
-		if (!pat.includes('*')) return cell.includes(pat);
-		// Convert glob to regex: escape regex chars, replace * with .*
-		const escaped = pat.replace(/([.+?^${}()|[\]\\])/g, '\\$1').replace(/\*/g, '.*');
-		try {
-			return new RegExp(`^${escaped}$`).test(cell);
-		} catch {
-			return cell.includes(pat);
-		}
-	}
-
 	// Positions in results.data of the rows that pass the column filters.
-	const filteredIndices = $derived.by(() => {
-		const data = results?.data ?? [];
-		const active = Object.entries(columnFilters).filter(([, v]) => v.length > 0);
-		const indices: number[] = [];
-		data.forEach((row, index) => {
-			if (active.every(([col, val]) => matchesFilter(String(row[col] ?? ''), val))) {
-				indices.push(index);
-			}
-		});
-		return indices;
-	});
+	const filteredIndices = $derived(filterRowIndices(results?.data ?? [], columnFilters));
 	const filteredData = $derived(filteredIndices.map((index) => (results?.data ?? [])[index]));
 
-	// --- Row selection (must come after filteredData) ---
+	// --- Row selection ---
 	// Positions in results.data, so a selection survives filter changes: an index
 	// into the filtered rows would silently point at other rows once the filter
 	// changed, and the download would then use the wrong member_ous_uids.
@@ -198,92 +104,32 @@
 		}
 	}
 
-	function getSelectedMemberOusUids(): string[] {
+	// The selected rows' distinct member OUS UIDs.
+	const selectedMemberOusUids = $derived.by(() => {
 		const data = results?.data ?? [];
 		const uids: string[] = [];
 		for (const idx of selectedRowIndices) {
 			const row = data[idx];
 			if (row?.member_ous_uid) uids.push(String(row.member_ous_uid));
 		}
-		const unique = [...new Set(uids)];
-		logger.info({ selectedRows: selectedRowIndices.size, uniqueUids: unique.length }, 'Download initiated from table');
-		return unique;
-	}
+		return [...new Set(uids)];
+	});
 
-	function getSelectedMetadataRows(): MetadataRow[] {
-		return [...selectedRowIndices]
+	function download() {
+		const rows = [...selectedRowIndices]
 			.map((idx) => results?.data?.[idx])
 			.filter((row): row is MetadataRow => Boolean(row))
 			.map((row) => ({ ...row }));
+		logger.info(
+			{ selectedRows: selectedRowIndices.size, uniqueUids: selectedMemberOusUids.length },
+			'Download initiated from table'
+		);
+		onDownload(selectedMemberOusUids, rows);
 	}
 
-	// --- Compute total size of selected observations ---
-	let sizeResolving = $state(false);
-	let sizeResolved = $state(0);    // UIDs resolved so far
-	let sizeTotal = $state(0);       // total UIDs to resolve
-	let sizeTotalBytes = $state(0);  // accumulated bytes
-	let sizeTotalFiles = $state(0);  // accumulated file count
-	let sizeError = $state<string>('');
-	let sizeCancelled = $state(false);
-
-	// Reset size result when selection changes
-	$effect(() => {
-		if (selectedRowIndices.size >= 0) {
-		sizeResolved = 0;
-		sizeTotal = 0;
-		sizeTotalBytes = 0;
-		sizeTotalFiles = 0;
-		sizeError = '';
-		sizeCancelled = false;
-		}
-	});
-
-	function cancelSizeComputation() {
-		sizeCancelled = true;
-	}
-
-	async function computeSelectedSize() {
-		const uids = getSelectedMemberOusUids();
-		if (uids.length === 0) return;
-		sizeResolving = true;
-		sizeError = '';
-		sizeResolved = 0;
-		sizeTotal = uids.length;
-		sizeTotalBytes = 0;
-		sizeTotalFiles = 0;
-		sizeCancelled = false;
-
-		try {
-			for (let i = 0; i < uids.length; i++) {
-				if (sizeCancelled) {
-					logger.info({ resolved: i, total: uids.length }, 'Size computation cancelled');
-					break;
-				}
-				const result = await downloadApi.resolveProducts([uids[i]]);
-				sizeTotalBytes += result.products.reduce(
-					(total, product) => total + (product.content_length || 0),
-					0
-				);
-				sizeTotalFiles += result.products.length;
-				sizeResolved = i + 1;
-			}
-			if (!sizeCancelled) {
-				logger.info({ totalSize: formatBytes(sizeTotalBytes), files: sizeTotalFiles }, 'Size computed');
-			}
-		} catch (e) {
-			sizeError = e instanceof Error ? e.message : 'Failed to compute size';
-			logger.error({ err: e }, 'Failed to compute size');
-		} finally {
-			sizeResolving = false;
-		}
-	}
-
-	const sizeFinished = $derived(!sizeResolving && sizeResolved > 0);
-
-
-	// Virtual scrolling constants
-	const ROW_HEIGHT = 36;        // px — matches row height below
-	const OVERSCAN = 15;          // extra rows above/below viewport
+	// Virtual scrolling
+	const ROW_HEIGHT = 36; // px — matches row height below
+	const OVERSCAN = 15; // extra rows above/below viewport
 	const CONTAINER_HEIGHT = 480; // must match max-height in CSS
 
 	// Mirror-scroll: top scrollbar synced to the real scroll container
@@ -292,15 +138,10 @@
 	let tableScrollWidth = $state(0);
 	let scrollTop = $state(0);
 
-	// Virtual window derived from scroll position
-	const totalRows = $derived(filteredData.length);
-	const virtualStart = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
-	const virtualEnd = $derived(
-		Math.min(totalRows, Math.ceil((scrollTop + CONTAINER_HEIGHT) / ROW_HEIGHT) + OVERSCAN)
+	const rowWindow = $derived(
+		virtualWindow(scrollTop, filteredData.length, ROW_HEIGHT, CONTAINER_HEIGHT, OVERSCAN)
 	);
-	const topPad = $derived(virtualStart * ROW_HEIGHT);
-	const bottomPad = $derived(Math.max(0, (totalRows - virtualEnd) * ROW_HEIGHT));
-	const visibleRows = $derived(filteredData.slice(virtualStart, virtualEnd));
+	const visibleRows = $derived(filteredData.slice(rowWindow.start, rowWindow.end));
 
 	$effect(() => {
 		if (!scrollContainer || !mirrorBar) return;
@@ -341,7 +182,7 @@
 		return () => obs.disconnect();
 	});
 
-		const CHECKBOX_COL_WIDTH = 40;
+	const CHECKBOX_COL_WIDTH = 40;
 
 	function pinnedLeft(index: number): number {
 		let left = CHECKBOX_COL_WIDTH; // offset for checkbox column
@@ -360,24 +201,14 @@
 	}
 
 	function onTableColDragOver(col: string, e: DragEvent) {
-		if (!draggedTableCol || pinnedColumns.includes(col)) return;
+		if (!draggedTableCol || PINNED_COLUMNS.includes(col)) return;
 		e.preventDefault();
 		dragOverTableCol = col;
 	}
 
 	function onTableColDrop(col: string) {
-		if (!draggedTableCol || draggedTableCol === col) {
-			draggedTableCol = null;
-			dragOverTableCol = null;
-			return;
-		}
-		const order = [...columnOrder];
-		const fromIdx = order.indexOf(draggedTableCol);
-		const toIdx = order.indexOf(col);
-		if (fromIdx !== -1 && toIdx !== -1) {
-			order.splice(fromIdx, 1);
-			order.splice(toIdx, 0, draggedTableCol);
-			columnOrder = order;
+		if (draggedTableCol && draggedTableCol !== col) {
+			columnOrder = moveColumn(columnOrder, draggedTableCol, col);
 			logger.debug({ from: draggedTableCol, to: col }, 'Table column reordered');
 		}
 		draggedTableCol = null;
@@ -389,84 +220,13 @@
 		dragOverTableCol = null;
 	}
 
-	// --- Drag-and-drop: column selector menu ---
-	let draggedMenuCol = $state<string | null>(null);
-	let dragOverMenuCol = $state<string | null>(null);
-
-	function onMenuDragStart(col: string, e: DragEvent) {
-		draggedMenuCol = col;
-		e.dataTransfer!.effectAllowed = 'move';
-		e.dataTransfer!.setData('text/plain', col);
-	}
-
-	function onMenuDragOver(col: string, e: DragEvent) {
-		if (!draggedMenuCol) return;
-		e.preventDefault();
-		dragOverMenuCol = col;
-	}
-
-	function onMenuDrop(col: string) {
-		if (!draggedMenuCol || draggedMenuCol === col) {
-			draggedMenuCol = null;
-			dragOverMenuCol = null;
-			return;
-		}
-		const order = [...columnOrder];
-		const fromIdx = order.indexOf(draggedMenuCol);
-		const toIdx = order.indexOf(col);
-		if (fromIdx !== -1 && toIdx !== -1) {
-			order.splice(fromIdx, 1);
-			order.splice(toIdx, 0, draggedMenuCol);
-			columnOrder = order;
-		}
-		draggedMenuCol = null;
-		dragOverMenuCol = null;
-	}
-
-	function onMenuDragEnd() {
-		draggedMenuCol = null;
-		dragOverMenuCol = null;
-	}
-
 	const placeholderRows = Array.from({ length: 5 }, (_, i) => i);
-
-	function formatColumnName(column: string) {
-		if (columnLabels[column]) return columnLabels[column];
-		return column
-			.split('_')
-			.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-			.join(' ');
-	}
-
-	function stringifyValue(value: unknown) {
-		if (Array.isArray(value)) return value.join(', ');
-		if (typeof value === 'object' && value) return JSON.stringify(value);
-		return value?.toString() ?? '';
-	}
-
-	function toggleColumn(col: string) {
-		const next = new Set(hiddenColumns);
-		if (next.has(col)) {
-			next.delete(col);
-			logger.debug({ col }, 'Column shown');
-		} else {
-			next.add(col);
-			logger.debug({ col }, 'Column hidden');
-		}
-		hiddenColumns = next;
-	}
 
 	function clearFilters() {
 		logger.debug('Column filters cleared');
 		columnFilters = {};
 	}
 </script>
-
-<svelte:window
-	onclick={(e) => {
-		if (!(e.target as HTMLElement).closest('[data-columns-menu]')) columnsMenuOpen = false;
-	}}
-/>
 
 <section class="rounded-lg bg-surface p-6 shadow">
 	<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -509,78 +269,12 @@
 			</div>
 		</div>
 		<div class="flex flex-wrap gap-2">
-			<!-- Column visibility toggle -->
-			<div class="relative" data-columns-menu>
-				<button
-					type="button"
-					class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
-					onclick={() => (columnsMenuOpen = !columnsMenuOpen)}
-				>
-					Columns ({tableColumns.length}/{totalColumnCount})
-				</button>
-				{#if columnsMenuOpen}
-					<div
-						class="absolute right-0 z-30 mt-1 max-h-96 w-64 overflow-y-auto rounded-md border border-line bg-surface shadow-panel"
-					>
-						<div class="flex items-center justify-between border-b border-line px-3 py-2">
-							<span class="text-xs font-semibold uppercase tracking-wide text-fg-dim"
-								>Show / Hide</span
-							>
-							<div class="flex gap-2">
-								<button
-									type="button"
-									class="text-xs text-accent hover:underline"
-									onclick={() => (hiddenColumns = new Set())}>All</button
-								>
-								<button
-									type="button"
-									class="text-xs text-accent hover:underline"
-									onclick={() => (hiddenColumns = new Set(columnOrder))}>None</button
-								>
-							</div>
-						</div>
-						<!-- Pinned columns (always visible, not reorderable) -->
-						{#each pinnedColumns as col}
-							<div
-								class="flex items-center gap-2 bg-surface px-3 py-1.5 text-sm text-fg-dim"
-							>
-								<svg class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-									<path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-								</svg>
-								{formatColumnName(col)}
-								<span class="ml-auto text-xs text-gray-300">pinned</span>
-							</div>
-						{/each}
-						<!-- Reorderable columns (drag up/down to reorder) -->
-						{#each columnOrder as col}
-							<label
-								class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-fg-muted hover:bg-hover transition-colors"
-								class:text-fg-dim={!dataColumnSet.has(col)}
-								class:border-t-2={dragOverMenuCol === col && draggedMenuCol !== col}
-								class:border-blue-400={dragOverMenuCol === col && draggedMenuCol !== col}
-								draggable="true"
-								ondragstart={(e: DragEvent) => onMenuDragStart(col, e)}
-								ondragover={(e: DragEvent) => onMenuDragOver(col, e)}
-								ondrop={() => onMenuDrop(col)}
-								ondragend={onMenuDragEnd}
-								role="listitem"
-							>
-								<span class="cursor-grab text-gray-300 hover:text-gray-500 select-none" aria-label="Drag to reorder">⠇⠇</span>
-								<input
-									type="checkbox"
-									checked={!hiddenColumns.has(col)}
-									onchange={() => toggleColumn(col)}
-									class="rounded border-line"
-								/>
-								{formatColumnName(col)}
-								{#if !dataColumnSet.has(col)}
-									<span class="ml-auto text-xs text-gray-300">—</span>
-								{/if}
-							</label>
-						{/each}
-					</div>
-				{/if}
-			</div>
+			<ResultsColumnsMenu
+				bind:columnOrder
+				bind:hiddenColumns
+				dataColumns={dataColumnSet}
+				visibleCount={tableColumns.length}
+			/>
 			{#if hasActiveFilters}
 				<button
 					type="button"
@@ -616,54 +310,11 @@
 				</button>
 			{/if}
 			{#if selectedCount > 0}
-				{#if sizeResolving}
-					<span class="inline-flex items-center gap-2 rounded-md border border-accent-line bg-accent-soft px-3 py-2 text-sm font-medium text-accent">
-						<svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
-						</svg>
-						{sizeResolved}/{sizeTotal}
-						{#if sizeTotalBytes > 0}
-							— {formatBytes(sizeTotalBytes)}
-						{/if}
-					</span>
-					<button
-						type="button"
-						class="rounded-md border border-danger-line px-3 py-2 text-sm font-medium text-danger hover:bg-danger-soft"
-						onclick={cancelSizeComputation}
-						title="Stop computing size"
-					>
-						Stop
-					</button>
-				{:else}
-					<button
-						type="button"
-						class="rounded-md border border-accent-line px-4 py-2 text-sm font-medium text-accent hover:bg-accent-soft"
-						onclick={computeSelectedSize}
-						title="Compute total download size for selected observations"
-					>
-						Compute Size ({selectedCount})
-					</button>
-				{/if}
-				{#if sizeFinished}
-					<span class="inline-flex items-center gap-1.5 rounded-md border border-accent-line bg-accent-soft px-3 py-2 text-sm font-medium text-accent">
-						{formatBytes(sizeTotalBytes)} — {sizeTotalFiles} files
-						{#if sizeCancelled}
-							<span class="text-xs text-amber-600">({sizeResolved}/{sizeTotal} resolved)</span>
-						{/if}
-					</span>
-				{:else if sizeError}
-					<span class="inline-flex items-center gap-1.5 rounded-md border border-danger-line bg-danger-soft px-3 py-2 text-xs text-danger">
-						{sizeError}
-						{#if sizeResolved > 0}
-							({sizeResolved}/{sizeTotal} resolved — {formatBytes(sizeTotalBytes)})
-						{/if}
-					</span>
-				{/if}
+				<SelectionSizeEstimate uids={selectedMemberOusUids} count={selectedCount} />
 				<button
 					type="button"
 					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover"
-					onclick={() => onDownload(getSelectedMemberOusUids(), getSelectedMetadataRows())}
+					onclick={download}
 				>
 					Download ({selectedCount})
 				</button>
@@ -761,11 +412,11 @@
 				</thead>
 				<tbody class="bg-surface">
 					{#if !loading && results?.data?.length}
-						<tr style="height: {topPad}px;" aria-hidden="true">
+						<tr style="height: {rowWindow.topPad}px;" aria-hidden="true">
 							<td colspan={tableColumns.length + 1}></td>
 						</tr>
 						{#each visibleRows as row, vi}
-							{@const dataIndex = filteredIndices[virtualStart + vi]}
+							{@const dataIndex = filteredIndices[rowWindow.start + vi]}
 							{@const isSelected = selectedRowIndices.has(dataIndex)}
 							<tr
 								class="group border-b border-line hover:bg-hover"
@@ -813,7 +464,7 @@
 								{/each}
 							</tr>
 						{/each}
-						<tr style="height: {bottomPad}px;" aria-hidden="true">
+						<tr style="height: {rowWindow.bottomPad}px;" aria-hidden="true">
 							<td colspan={tableColumns.length + 1}></td>
 						</tr>
 					{:else if !loading && hasActiveFilters}
