@@ -21,6 +21,7 @@ from almasim.services.imaging.ms.chunks import (
 
 from ...casa import tasks as casa_tasks
 from ...casa import tools as casa_tools
+from ...ms.tables import antenna_names, open_table
 
 
 def _configure_casa(casa_data: str, log_file: str) -> Path:
@@ -67,7 +68,8 @@ def selfcal_prepare(ms_path: str, rows_per_chunk: int | None = None) -> dict[str
         good = has_data & (ant1 != ant2)
     finally:
         ms.close()
-    names = table(f"{ms_path}/ANTENNA", ack=False).getcol("NAME")
+    with open_table(f"{ms_path}/ANTENNA") as antenna:
+        names = antenna_names(antenna)
     counts = np.bincount(ant1[good], minlength=len(names)) + np.bincount(
         ant2[good], minlength=len(names)
     )
@@ -204,7 +206,8 @@ def export_gain_table(caltable: str, csv_path: str) -> dict[str, object]:
         flags = tb.getcol("FLAG")
     finally:
         tb.close()
-    names = table(f"{caltable}/ANTENNA", ack=False).getcol("NAME")
+    with open_table(f"{caltable}/ANTENNA") as antenna:
+        names = antenna_names(antenna)
     rows = 0
     with open(csv_path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)

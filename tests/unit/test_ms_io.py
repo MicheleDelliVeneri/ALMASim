@@ -435,3 +435,57 @@ def test_every_table_spec_writes_only_declared_columns(tmp_path):
         declared = {column.name for column in spec.columns}
         assert set(spec.values) <= declared, spec.name
     assert {spec.name for spec in specs[1:]} == set(specs[0].keywords) - {"MS_VERSION"}
+
+
+# ---------------------------------------------------------------------------
+# services.ms.tables (MADIV-28 T2.7)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_open_table_closes_and_passes_lock_options():
+    from almasim.services.ms import tables
+
+    opened = []
+
+    class Table:
+        def __init__(self, path, **kwargs):
+            self.path, self.kwargs, self.closed = path, kwargs, False
+            opened.append(self)
+
+        def close(self):
+            self.closed = True
+
+    with tables.open_table("x.ms", opener=Table) as tb:
+        assert tb.kwargs == {"ack": False}
+    with tables.open_table("x.ms", readonly=False, shared=True, opener=Table):
+        pass
+    with pytest.raises(RuntimeError):
+        with tables.open_table("x.ms", opener=Table):
+            raise RuntimeError("boom")
+    assert [t.closed for t in opened] == [True, True, True]
+    assert opened[1].kwargs == {"ack": False, "readonly": False, "lockoptions": "usernoread"}
+    with tables.open_table("x.ms", opener=lambda path, **kw: [path]) as rows:
+        assert rows == ["x.ms"]  # an object without close() is fine
+
+
+@pytest.mark.unit
+def test_intent_and_subtable_helpers():
+    from almasim.services.ms import tables
+
+    mode = "CALIBRATE_PHASE#ON_SOURCE, CALIBRATE_WVR#ON_SOURCE"
+    assert tables.intent_tokens(mode) == ["CALIBRATE_PHASE#ON_SOURCE", "CALIBRATE_WVR#ON_SOURCE"]
+    assert tables.intent_names(mode) == {"CALIBRATE_PHASE", "CALIBRATE_WVR"}
+    assert tables.intent_matches(mode, ["CALIBRATE_PHASE"])
+    assert tables.intent_matches(mode, ["CALIBRATE_WVR#ON_SOURCE"])
+    assert not tables.intent_matches(mode, ["CALIBRATE_PHASE#OFF_SOURCE", "OBSERVE_TARGET"])
+
+    dd = MagicMock()
+    dd.getcol.side_effect = lambda name: {"SPECTRAL_WINDOW_ID": [3, 5], "POLARIZATION_ID": [0, 1]}[
+        name
+    ]
+    assert tables.spw_of_data_description(dd) == [3, 5]
+    assert tables.polarization_of_data_description(dd) == [0, 1]
+    antenna = MagicMock()
+    antenna.getcol.return_value = ["DA41", "DV02"]
+    assert tables.antenna_names(antenna) == ["DA41", "DV02"]
