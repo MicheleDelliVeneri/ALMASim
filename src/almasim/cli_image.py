@@ -725,6 +725,8 @@ def build_imaging_tasks(
         is_imaging_complete,
         write_imaging_marker,
     )
+    from .services.imaging.products import SCRATCH_PLACEHOLDER
+    from .services.imaging.wsclean.command import WSCleanCommand
 
     if not continuum and cube is None:
         raise ValueError("Nothing to image: neither the continuum nor a cube was requested")
@@ -772,46 +774,49 @@ def build_imaging_tasks(
             )
             if with_cube and cube_products is not None and "dirty" not in cube_products:
                 command_args.append("-no-dirty")
+            command = WSCleanCommand(
+                wsclean_bin,
+                (
+                    "-name",
+                    str(outdir / name),
+                    "-j",
+                    str(num_cores),
+                    *command_args,
+                    # An absolute limit when the caller knows the worker's
+                    # allocation (WSClean's -mem is a share of the *node*, which
+                    # can be far more than the Slurm job may use); otherwise the
+                    # node share.
+                    *(
+                        ["-abs-mem", f"{task_memory_gb:g}"]
+                        if task_memory_gb
+                        else ["-mem", f"{mem_percent:g}"]
+                    ),
+                    # Reordered visibilities go next to the task output (or into a
+                    # per-task scratch directory), not next to the MS: several
+                    # spectral windows of one MS run at the same time and would
+                    # otherwise clobber each other's <ms>-part*.tmp files.
+                    "-temp-dir",
+                    SCRATCH_PLACEHOLDER if scratch_dir else str(outdir),
+                    # Writing the model back into MODEL_DATA makes concurrent tasks
+                    # write the same MS from different nodes and grows every
+                    # calibrated MS; the model image is on disk anyway.
+                    "-update-model-required" if update_model else "-no-update-model-required",
+                    # -field is needed on the single-window MS too: WSClean images
+                    # field 0 by default and the extracted MS holds the target
+                    # fields under their original ids.
+                    *_field_arguments(row),
+                ),
+                str(input_filename),
+            )
             if single_window:
                 # The wrapper hands WSClean a per-task MS holding only this
-                # window and the target fields, so no -spws/-field selection
-                # and no reordering (WSClean 3.7's reordering reads out of
-                # bounds on multi-window ALMA sets; see extract_single_window_ms).
-                spws_at = command_args.index("-spws")
-                command_args = command_args[:spws_at] + command_args[spws_at + 2 :]
-            return [
-                wsclean_bin,
-                "-name",
-                str(outdir / name),
-                "-j",
-                str(num_cores),
-                *command_args,
-                # An absolute limit when the caller knows the worker's
-                # allocation (WSClean's -mem is a share of the *node*, which
-                # can be far more than the Slurm job may use); otherwise the
-                # node share.
-                *(
-                    ["-abs-mem", f"{task_memory_gb:g}"]
-                    if task_memory_gb
-                    else ["-mem", f"{mem_percent:g}"]
-                ),
-                # Reordered visibilities go next to the task output (or into a
-                # per-task scratch directory), not next to the MS: several
-                # spectral windows of one MS run at the same time and would
-                # otherwise clobber each other's <ms>-part*.tmp files.
-                "-temp-dir",
-                "__SCRATCH__" if scratch_dir else str(outdir),
-                # Writing the model back into MODEL_DATA makes concurrent tasks
-                # write the same MS from different nodes and grows every
-                # calibrated MS; the model image is on disk anyway.
-                "-update-model-required" if update_model else "-no-update-model-required",
-                # -field is needed on the single-window MS too: WSClean images
-                # field 0 by default and the extracted MS holds the target
-                # fields under their original ids.
-                *_field_arguments(row),
-                *(["-no-reorder"] if single_window and not (with_cube and cube_reorder) else []),
-                SINGLE_WINDOW_PLACEHOLDER if single_window else str(input_filename),
-            ]
+                # window and the target fields, so no -spws selection and no
+                # reordering (WSClean 3.7's reordering reads out of bounds on
+                # multi-window ALMA sets; see extract_single_window_ms).
+                command = replace(command.without("-spws"), ms=SINGLE_WINDOW_PLACEHOLDER)
+                if not (with_cube and cube_reorder):
+                    command = command.with_option("-no-reorder")
+            return command.argv()
 
         tasks.append(
             ImagingTask(
