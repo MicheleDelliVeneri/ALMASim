@@ -2,40 +2,19 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import astropy.units as U
 import numpy as np
 import pytest
-from martini import DataCube
 
 from almasim.skymodels.diffuse import DiffuseSkyModel, diffuse_image
+
+from ._fakes import make_datacube, mock_dask_client
 
 # ===========================================================================
 # helpers
 # ===========================================================================
-
-
-def _make_datacube(n_px: int = 16, n_chan: int = 8) -> DataCube:
-    return DataCube(
-        n_px_x=n_px,
-        n_px_y=n_px,
-        n_channels=n_chan,
-        px_size=0.1 * U.arcsec,
-        channel_width=0.1 * U.GHz,
-        spectral_centre=100.0 * U.GHz,
-        ra=0.0 * U.deg,
-        dec=0.0 * U.deg,
-    )
-
-
-def _mock_client(n_px: int, n_chan: int) -> MagicMock:
-    client = MagicMock()
-    client.compute.side_effect = lambda tasks: tasks
-    client.gather.side_effect = lambda futures: [
-        np.random.rand(n_chan, n_px, n_px).astype(np.float32)
-    ]
-    return client
 
 
 def _make_model(
@@ -43,8 +22,8 @@ def _make_model(
     n_chan: int = 8,
     n_lines: int = 2,
 ) -> DiffuseSkyModel:
-    datacube = _make_datacube(n_px, n_chan)
-    client = _mock_client(n_px, n_chan)
+    datacube = make_datacube(n_px, n_chan)
+    client = mock_dask_client(n_px, n_chan)
     return DiffuseSkyModel(
         datacube=datacube,
         continuum=np.ones(n_chan) * 0.01,

@@ -15,6 +15,8 @@ from typer.testing import CliRunner
 
 from almasim import cli, cli_clean, cli_image, cli_metadata, cli_predict, cli_products
 
+from ._fakes import fake_popen
+
 runner = CliRunner()
 
 
@@ -690,22 +692,8 @@ def test_products_calibrate_standalone(monkeypatch):
 
 def test_calibrate_single_uid_streams_logs_and_returns_expected_output(tmp_path, monkeypatch):
     """Calibration worker should stream subprocess logs and return the expected split.cal path."""
-    captured: dict[str, object] = {}
-
-    class _FakeProcess:
-        def __init__(self):
-            self.stdout = iter(["first line\n", "second line\n"])
-
-        def wait(self):
-            return 0
-
-    def _fake_popen(cmd, **kwargs):
-        captured["cmd"] = cmd
-        captured["kwargs"] = kwargs
-        return _FakeProcess()
-
+    calls = fake_popen(monkeypatch, ["first line\n", "second line\n"])
     monkeypatch.setenv("PYTHONPATH", "existing-path")
-    monkeypatch.setattr("subprocess.Popen", _fake_popen)
 
     uid = "uid___A001_X1_X1"
     output_root = tmp_path / "calibrated"
@@ -724,12 +712,11 @@ def test_calibrate_single_uid_streams_logs_and_returns_expected_output(tmp_path,
     )
 
     assert outputs == [str(expected)]
-    cmd = captured["cmd"]
+    cmd, kwargs = calls[0]
     assert isinstance(cmd, list)
     assert "--overwrite-outputs" in cmd
     assert "--skip-casa-data-update" in cmd
 
-    kwargs = captured["kwargs"]
     assert kwargs["cwd"].endswith("ALMASim")
     assert "PYTHONPATH" in kwargs["env"]
     assert kwargs["env"]["PYTHONPATH"].endswith(":existing-path")
@@ -740,14 +727,7 @@ def test_calibrate_single_uid_uses_fallback_glob_when_expected_missing(tmp_path,
     when canonical path is absent.
     """
 
-    class _FakeProcess:
-        def __init__(self):
-            self.stdout = iter(["ok\n"])
-
-        def wait(self):
-            return 0
-
-    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _FakeProcess())
+    fake_popen(monkeypatch, ["ok\n"])
 
     uid = "uid___A001_X1_X2"
     output_root = tmp_path / "calibrated"
@@ -771,14 +751,7 @@ def test_calibrate_single_uid_uses_fallback_glob_when_expected_missing(tmp_path,
 def test_calibrate_single_uid_raises_with_bounded_log_tail(tmp_path, monkeypatch):
     """Calibration worker should include only the recent bounded tail on subprocess failure."""
 
-    class _FakeProcess:
-        def __init__(self):
-            self.stdout = iter([f"line-{idx}\n" for idx in range(205)])
-
-        def wait(self):
-            return 7
-
-    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _FakeProcess())
+    fake_popen(monkeypatch, [f"line-{idx}\n" for idx in range(205)], returncode=7)
 
     uid = "uid___A001_X1_X3"
     output_root = tmp_path / "calibrated"
@@ -1237,20 +1210,7 @@ def test_run_calibrate_jobs_sync_skips_cleanup_when_failures(monkeypatch, tmp_pa
 def test_calibrate_single_uid_writes_per_uid_log_file(tmp_path, monkeypatch):
     """The subprocess wrapper should mirror child output into <output>/logs/<uid>.calibrate.log."""
 
-    class _FakeProcess:
-        def __init__(self):
-            self.stdout = iter(["applying\n", "splitting\n"])
-
-        def wait(self):
-            return 0
-
-    captured: dict[str, object] = {}
-
-    def _fake_popen(cmd, **kwargs):
-        captured["env"] = kwargs["env"]
-        return _FakeProcess()
-
-    monkeypatch.setattr("subprocess.Popen", _fake_popen)
+    calls = fake_popen(monkeypatch, ["applying\n", "splitting\n"])
 
     uid = "uid___A001_X1_X9"
     output_root = tmp_path / "calibrated"
@@ -1271,7 +1231,7 @@ def test_calibrate_single_uid_writes_per_uid_log_file(tmp_path, monkeypatch):
     content = log_path.read_text(encoding="utf-8")
     assert content.startswith("# ")
     assert "applying\nsplitting\n" in content
-    assert captured["env"]["PYTHONUNBUFFERED"] == "1"
+    assert calls[0][1]["env"]["PYTHONUNBUFFERED"] == "1"
 
 
 def test_products_calibrate_exits_nonzero_with_failure_summary(monkeypatch):
@@ -1467,17 +1427,7 @@ def test_run_calibrate_jobs_all_completed_does_nothing(monkeypatch, tmp_path):
 
 def test_calibrate_single_uid_forwards_keep_working_copies(tmp_path, monkeypatch):
     """The worker wrapper should pass --keep-working-copies to the child only when asked."""
-    commands: list[list[str]] = []
-
-    class _FakeProcess:
-        stdout = iter([])
-
-        def wait(self):
-            return 0
-
-    monkeypatch.setattr(
-        "subprocess.Popen", lambda cmd, **kwargs: commands.append(cmd) or _FakeProcess()
-    )
+    calls = fake_popen(monkeypatch)
     output_root = tmp_path / "cal"
     (output_root / "uid___A.ms.split.cal").mkdir(parents=True)
     common = dict(
@@ -1493,8 +1443,8 @@ def test_calibrate_single_uid_forwards_keep_working_copies(tmp_path, monkeypatch
     cli_products._calibrate_single_uid(**common)
     cli_products._calibrate_single_uid(**common, keep_working_copies=True)
 
-    assert "--keep-working-copies" not in commands[0]
-    assert "--keep-working-copies" in commands[1]
+    assert "--keep-working-copies" not in calls[0][0]
+    assert "--keep-working-copies" in calls[1][0]
 
 
 def test_products_calibrate_keep_working_copies_passthrough(monkeypatch):
@@ -1517,17 +1467,7 @@ def test_casa_bundled_lib_dir_precedes_system_paths(tmp_path, monkeypatch):
     CASA extension modules fail with "undefined symbol: pmix_framework_names".
     """
 
-    class _FakeProcess:
-        stdout = iter([])
-
-        def wait(self):
-            return 0
-
-    captured: dict[str, object] = {}
-    monkeypatch.setattr(
-        "subprocess.Popen",
-        lambda cmd, **kwargs: captured.update(kwargs) or _FakeProcess(),
-    )
+    calls = fake_popen(monkeypatch)
     bundled = tmp_path / "site-packages" / "casatools" / "__casac__" / "lib"
     bundled.mkdir(parents=True)
     monkeypatch.setattr(cli_products, "_casa_bundled_lib_dir", lambda: str(bundled))
@@ -1546,7 +1486,7 @@ def test_casa_bundled_lib_dir_precedes_system_paths(tmp_path, monkeypatch):
         clean_intermediate=False,
     )
 
-    entries = captured["env"]["LD_LIBRARY_PATH"].split(":")
+    entries = calls[-1][1]["env"]["LD_LIBRARY_PATH"].split(":")
     assert entries[0] == str(bundled)
     assert entries.index(str(bundled)) < entries.index("/usr/lib64")
     # Inherited (spack) paths still come last.
@@ -1556,16 +1496,7 @@ def test_casa_bundled_lib_dir_precedes_system_paths(tmp_path, monkeypatch):
 def test_casa_bundled_lib_dir_absent_keeps_system_paths(tmp_path, monkeypatch):
     """Without casatools installed the previous system-first ordering is unchanged."""
 
-    class _FakeProcess:
-        stdout = iter([])
-
-        def wait(self):
-            return 0
-
-    captured: dict[str, object] = {}
-    monkeypatch.setattr(
-        "subprocess.Popen", lambda cmd, **kwargs: captured.update(kwargs) or _FakeProcess()
-    )
+    calls = fake_popen(monkeypatch)
     monkeypatch.setattr(cli_products, "_casa_bundled_lib_dir", lambda: None)
     monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
 
@@ -1580,7 +1511,7 @@ def test_casa_bundled_lib_dir_absent_keeps_system_paths(tmp_path, monkeypatch):
         overwrite=False,
     )
 
-    assert captured["env"]["LD_LIBRARY_PATH"].startswith("/lib64:/usr/lib64:")
+    assert calls[-1][1]["env"]["LD_LIBRARY_PATH"].startswith("/lib64:/usr/lib64:")
 
 
 def test_casa_bundled_lib_dir_returns_none_when_not_installed(monkeypatch):
