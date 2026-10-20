@@ -16,7 +16,7 @@ from ..instrument.constants import GAUSSIAN_BEAM_AREA
 from ..utils import as_progress_emitter
 from .context import RunContext
 from .geometry import resolve_cube_geometry
-from .metadata import resolve_snr, sim_params_record, simulation_metadata
+from .metadata import SimParamsRecord, resolve_snr, sim_params_record, simulation_metadata
 from .params import LogFn, SimulationParams, StopFn
 from .planning import noise_reference, plan_observation_runs
 from .skymodel_stage import build_sky_cube
@@ -32,7 +32,7 @@ class CleanCubeStage:
     header: Any
     output_dir_abs: str
     sim_output_dir: Optional[str]
-    sim_params_payload: dict[str, Any]
+    sim_params_payload: SimParamsRecord
     interferometer_kwargs: dict[str, Any]
     interferometer_runs: list[dict[str, Any]]
     total_power_runs: list[dict[str, Any]]

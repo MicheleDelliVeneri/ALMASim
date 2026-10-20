@@ -336,25 +336,24 @@ def build_sky_cube(
         if params.source_type != "gaussian" or fwhm_x is None:
             fwhm_x = np.random.randint(3, 10)
             fwhm_y = np.random.randint(3, 10)
-        datacube = usm.insert_serendipitous(
-            terminal_logger,
-            client_for_skymodel,
-            progress_adapter,
-            datacube,
-            continum,
-            cont_sens.value,
-            line_fluxes,
-            line_names,
-            spectral.line_frequency,
-            delta_freq.value,
-            pos_z,
-            fwhm_x or np.random.randint(3, 10),
-            fwhm_y or np.random.randint(3, 10),
-            spectral.fwhm_z,
-            n_pix,
-            n_channels,
-            None,
-        )
+        datacube = usm.SerendipitousConfig(
+            terminal=terminal_logger,
+            client=client_for_skymodel,
+            update_progress=progress_adapter,
+            datacube=datacube,
+            continum=continum,
+            cont_sens=cont_sens.value,
+            line_fluxes=line_fluxes,
+            line_names=line_names,
+            line_frequencies=spectral.line_frequency,
+            freq_sup=delta_freq.value,
+            pos_zs=pos_z,
+            fwhm_x=fwhm_x or np.random.randint(3, 10),
+            fwhm_y=fwhm_y or np.random.randint(3, 10),
+            fwhm_zs=spectral.fwhm_z,
+            n_px=n_pix,
+            n_chan=n_channels,
+        ).insert()
 
     if not is_external_model:
         header = usm.get_datacube_header(datacube, params.obs_date)

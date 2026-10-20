@@ -16,7 +16,7 @@ from .gaussian import GaussianSkyModel
 from .hubble import HubbleSkyModel
 from .molecular import MolecularCloudSkyModel
 from .pointlike import PointlikeSkyModel
-from .serendipitous import insert_serendipitous
+from .serendipitous import SerendipitousConfig, insert_serendipitous
 from .utils import (
     gaussian,
     get_datacube_header,
@@ -40,6 +40,7 @@ __all__ = [
     "track_progress",
     "gaussian",
     "get_datacube_header",
+    "SerendipitousConfig",
     "insert_serendipitous",
     # Dataset download functions
     "download_galaxy_zoo",
