@@ -327,6 +327,7 @@ class Interferometer:
             field_dec_rad=float(self.dec),
             config_name=self.config_name,
             array_type=self.array_type,
+            antenna_diameters_m=np.full(len(self.antNames), self.antenna_diameter_m),
         ).as_dict()
 
         # Save the results only when explicitly requested.
