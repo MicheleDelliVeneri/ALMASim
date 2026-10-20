@@ -26,6 +26,8 @@ from almasim.services.compute.progress import (
 from almasim.services.instrument.constants import ARCSEC_PER_RAD as RAD_TO_ARCSEC
 from almasim.services.instrument.constants import DEFAULT_MAX_WEIGHT, SPEED_OF_LIGHT_M_S
 
+from .cli_shared import fail, usage_error
+
 MIN_IMAGE_PIXELS = 16
 DAY_IN_SECONDS = 3600 * 24
 TARGET_INTENT = "OBSERVE_TARGET"
@@ -40,12 +42,10 @@ def import_casacore_tables() -> Any:
 
         return table
     except ImportError:
-        typer.echo(
+        fail(
             "Missing optional dependency `python-casacore` required to read metadata from "
-            "the measurement set. Install it with the `ms-casacore` extra.",
-            err=True,
+            "the measurement set. Install it with the `ms-casacore` extra."
         )
-        raise typer.Exit(code=1)
 
 
 image_app = typer.Typer(
@@ -603,8 +603,7 @@ def compute_parameters(
         failed_path.write_text(
             "".join(f"{ms}\t{error}\n" for ms, error in failures), encoding="utf-8"
         )
-        typer.echo(f"{len(failures)} MS(s) could not be read; listed in {failed_path}", err=True)
-        raise typer.Exit(code=1)
+        fail(f"{len(failures)} MS(s) could not be read; listed in {failed_path}")
 
 
 @dataclass(frozen=True)
@@ -974,8 +973,7 @@ def run_imaging_tasks(
             try:
                 ready = wait_for_workers(n_jobs, timeout=_WORKER_WAIT_S)
             except RuntimeError as exc:
-                typer.echo(str(exc), err=True)
-                raise typer.Exit(code=1)
+                fail(str(exc))
             typer.echo(f"{ready} worker(s) registered; starting.")
         slots = max(int(n_jobs), 1) * max(int(node_cores) // max(int(cores_per_task), 1), 1)
 
@@ -1519,8 +1517,7 @@ def image_from_ms(
     """
     backend_kind = postprocess_backend.lower()
     if backend_kind not in {"sync", "slurm"}:
-        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
-        raise typer.Exit(code=2)
+        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     # A 3-sigma stop without a mask left ~3 sigma of source in every channel's
     # residual: stacked over the 3537 line-free channels of uid___A002_X10ded83_X6af4
@@ -1688,8 +1685,7 @@ def clean_quality(
         except Exception as exc:  # one broken task must not hide the others
             typer.echo(f"  {task}: {type(exc).__name__}: {exc}", err=True)
     if not results:
-        typer.echo(f"None of the {len(tasks)} task(s) under {root} could be assessed", err=True)
-        raise typer.Exit(code=1)
+        fail(f"None of the {len(tasks)} task(s) under {root} could be assessed")
     rows = summary_rows(results, root)
     summary_path = summary or root / SUMMARY_FILENAME
     write_summary(rows, summary_path)
@@ -1947,8 +1943,7 @@ def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
     typer.echo(f"Copying measurement set: {input_ms} -> {output_ms}")
 
     if output_ms.exists():
-        typer.echo(f"Output MS already exists: {output_ms}", err=True)
-        raise typer.Exit(code=1)
+        fail(f"Output MS already exists: {output_ms}")
 
     planes, pixsize_x, pixsize_y = _model_planes(model)
     casacore_table = import_casacore_tables()

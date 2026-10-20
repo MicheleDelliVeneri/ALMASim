@@ -11,7 +11,7 @@ from typing import Any, List, Optional, Sequence
 import typer
 from tqdm.auto import tqdm
 
-from .cli_shared import dedupe_keep_order, default_output_path, split_csv_values
+from .cli_shared import dedupe_keep_order, default_output_path, fail, split_csv_values, usage_error
 from .services.compute.progress import (
     FAILED_FUTURE_STATES,
     TaskFailure,
@@ -337,11 +337,7 @@ def _read_member_uids_from_metadata(
 
     metadata = pd.read_csv(metadata_csv.expanduser().resolve())
     if "member_ous_uid" not in metadata.columns:
-        typer.echo(
-            f"Metadata CSV does not contain member_ous_uid: {metadata_csv}",
-            err=True,
-        )
-        raise typer.Exit(code=2)
+        usage_error(f"Metadata CSV does not contain member_ous_uid: {metadata_csv}")
     series = metadata["member_ous_uid"].dropna().astype(str)
     if member_limit is not None:
         series = series.head(member_limit)
@@ -371,11 +367,7 @@ def _resolve_products_from_inputs(
         member_uids.extend(_read_member_uids_from_metadata(metadata_csv, member_limit))
     member_uids = dedupe_keep_order([uid for uid in member_uids if uid])
     if not member_uids:
-        typer.echo(
-            "Provide --products-csv, --metadata-csv, or at least one --member-ous-uid.",
-            err=True,
-        )
-        raise typer.Exit(code=2)
+        usage_error("Provide --products-csv, --metadata-csv, or at least one --member-ous-uid.")
 
     typer.echo(f"Resolving DataLink products for {len(member_uids)} member OUS UID(s)...")
     typer.echo(
@@ -391,8 +383,7 @@ def _resolve_products_from_inputs(
 
     typer.echo(f"Resolved DataLink rows: {len(resolved)}")
     if not resolved:
-        typer.echo("No products were resolved for the requested member_ous_uid values.", err=True)
-        raise typer.Exit(code=1)
+        fail("No products were resolved for the requested member_ous_uid values.")
 
     if save_products_csv_path is not None:
         saved = save_products_csv(resolved, save_products_csv_path)
@@ -723,8 +714,7 @@ def _run_unpack_jobs(
         _extract_asdm_uids_from_download_root(input_root)
     )
     if not effective_uids:
-        typer.echo("No ASDM directories found to unpack.", err=True)
-        raise typer.Exit(code=1)
+        fail("No ASDM directories found to unpack.")
 
     if postprocess_backend == "sync" and len(effective_uids) == 1:
         return [
@@ -833,16 +823,11 @@ def _run_calibrate_jobs(
         failures = []
 
     if clean_intermediate and postprocess_backend == "slurm":
-        typer.echo(
-            "--clean-intermediate-files is not supported with --postprocess-backend=slurm.",
-            err=True,
-        )
-        raise typer.Exit(code=2)
+        usage_error("--clean-intermediate-files is not supported with --postprocess-backend=slurm.")
 
     effective_uids = asdm_uids or dedupe_keep_order(_extract_uids_from_raw_ms_root(raw_ms_root))
     if not effective_uids:
-        typer.echo("No raw MeasurementSets found to calibrate.", err=True)
-        raise typer.Exit(code=1)
+        fail("No raw MeasurementSets found to calibrate.")
 
     if postprocess_backend == "sync" and len(effective_uids) == 1:
         return [
@@ -1106,8 +1091,7 @@ def _run_parallel_archive_jobs(
 
     asdm_uids = dedupe_keep_order(asdm_uids)
     if not asdm_uids:
-        typer.echo("No ASDM/raw-MS inputs found for archive post-processing.", err=True)
-        raise typer.Exit(code=1)
+        fail("No ASDM/raw-MS inputs found for archive post-processing.")
 
     if postprocess_backend_kwargs.get("n_workers") == 0:
         postprocess_backend_kwargs = {
@@ -1248,11 +1232,9 @@ def products_resolve(
         member_uids.extend(_read_member_uids_from_metadata(metadata_csv, member_limit))
     member_uids = dedupe_keep_order([uid for uid in member_uids if uid])
     if not member_uids:
-        typer.echo(
-            "Provide --metadata-csv and/or --member-ous-uid to extract member_ous_uid values.",
-            err=True,
+        usage_error(
+            "Provide --metadata-csv and/or --member-ous-uid to extract member_ous_uid values."
         )
-        raise typer.Exit(code=2)
 
     typer.echo(f"Extracted member_ous_uid values: {len(member_uids)}")
     if save_member_ous_uid_list is not None:
@@ -1486,16 +1468,11 @@ def products_download(
     """Download ALMA products and optionally unpack/calibrate archive data."""
     product_filter_normalized = product_filter.lower()
     if product_filter_normalized not in PRODUCT_TYPES:
-        typer.echo(
-            "Invalid --product-filter. Allowed values: " + ", ".join(sorted(PRODUCT_TYPES)),
-            err=True,
-        )
-        raise typer.Exit(code=2)
+        usage_error("Invalid --product-filter. Allowed values: " + ", ".join(sorted(PRODUCT_TYPES)))
 
     backend_normalized = postprocess_backend.lower()
     if backend_normalized not in {"sync", "slurm"}:
-        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
-        raise typer.Exit(code=2)
+        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     if max_parallel > MAX_PARALLEL_TOTAL:
         typer.echo(
@@ -1513,8 +1490,7 @@ def products_download(
     )
     filtered = filter_products(products, product_filter_normalized)
     if not filtered:
-        typer.echo(f"No products matched --product-filter={product_filter_normalized}", err=True)
-        raise typer.Exit(code=1)
+        fail(f"No products matched --product-filter={product_filter_normalized}")
 
     typer.echo(f"Resolved products: {len(products)}")
     if skip_qa0_semipass:
@@ -1744,21 +1720,18 @@ def products_extract(
     """Extract ALMA archive tarballs as a standalone step."""
     backend_normalized = postprocess_backend.lower()
     if backend_normalized not in {"sync", "slurm"}:
-        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
-        raise typer.Exit(code=2)
+        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     source = source_root.expanduser().resolve()
     if not source.exists() or not source.is_dir():
-        typer.echo(f"--source-root is not a directory: {source}", err=True)
-        raise typer.Exit(code=2)
+        usage_error(f"--source-root is not a directory: {source}")
 
     target = destination.expanduser().resolve() if destination is not None else source
     target.mkdir(parents=True, exist_ok=True)
 
     archives = _find_archives(source, recursive)
     if not archives:
-        typer.echo(f"No .tar/.tgz archives found under {source}", err=True)
-        raise typer.Exit(code=1)
+        fail(f"No .tar/.tgz archives found under {source}")
 
     typer.echo(f"Found {len(archives)} archive(s) to extract.")
     extracted_files, failed_archives = _run_extract_jobs(
@@ -1868,8 +1841,7 @@ def products_unpack(
     """Import ASDM directories into raw MeasurementSets as a standalone step."""
     backend_normalized = postprocess_backend.lower()
     if backend_normalized not in {"sync", "slurm"}:
-        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
-        raise typer.Exit(code=2)
+        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     parsed_uids = _parse_uid_options(asdm_uid)
     stage_failures: list[TaskFailure] = []
@@ -2001,8 +1973,7 @@ def products_calibrate(
     """Create calibrated MeasurementSets as a standalone step."""
     backend_normalized = postprocess_backend.lower()
     if backend_normalized not in {"sync", "slurm"}:
-        typer.echo("--postprocess-backend must be one of: sync, slurm.", err=True)
-        raise typer.Exit(code=2)
+        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     parsed_uids = _parse_uid_options(asdm_uid)
     stage_failures: list[TaskFailure] = []

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, NoReturn, Optional
 
 import typer
 
@@ -69,3 +69,15 @@ def validate_date_range(
         )
         raise typer.Exit(code=2)
     return (start_date, end_date)
+
+
+def usage_error(message: str) -> NoReturn:
+    """Print ``message`` to stderr and exit 2: the command line itself is wrong."""
+    typer.echo(message, err=True)
+    raise typer.Exit(code=2)
+
+
+def fail(message: str, code: int = 1) -> NoReturn:
+    """Print ``message`` to stderr and exit ``code`` (1): the command could not do its work."""
+    typer.echo(message, err=True)
+    raise typer.Exit(code=code)
