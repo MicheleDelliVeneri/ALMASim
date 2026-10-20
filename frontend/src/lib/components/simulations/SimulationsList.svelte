@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { formatDate } from '#lib/utils/format.js';
 	import { onMount } from 'svelte';
+	import StatusBadge from '#lib/components/shared/StatusBadge.svelte';
+	import { isActiveStatus, isTerminalStatus } from '#lib/utils/status.js';
 	import { createLogger } from '#lib/logger.js';
 	import { simulationApi, type SimulationStatus } from '#lib/api/simulation.js';
 
@@ -80,23 +82,6 @@
 			loading = false;
 			refreshing = false;
 			currentRequest = null;
-		}
-	}
-
-	function getStatusColor(status: string): string {
-		switch (status) {
-			case 'completed':
-				return 'bg-ok-soft text-ok';
-			case 'running':
-				return 'bg-accent-soft text-accent';
-			case 'failed':
-				return 'bg-danger-soft text-danger';
-			case 'cancelled':
-				return 'bg-surface text-fg';
-			case 'queued':
-				return 'bg-yellow-100 text-yellow-800';
-			default:
-				return 'bg-surface text-fg';
 		}
 	}
 
@@ -203,7 +188,7 @@
 		try {
 			const status = await simulationApi.getStatus(sim.simulation_id);
 			selectedSimulationStatus = status;
-			if (!['completed', 'failed', 'cancelled'].includes(status.status)) {
+			if (!isTerminalStatus(status.status)) {
 				connectLogSocket(sim.simulation_id);
 			}
 		} catch (err) {
@@ -284,9 +269,7 @@
 								{sim.simulation_id.slice(0, 8)}...
 							</td>
 							<td class="whitespace-nowrap px-4 py-3 text-sm">
-								<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {getStatusColor(sim.status)}">
-									{sim.status}
-								</span>
+								<StatusBadge status={sim.status} />
 							</td>
 							<td class="whitespace-nowrap px-4 py-3 text-sm text-fg">
 								<div class="flex items-center gap-2">
@@ -367,7 +350,7 @@
 										type="button"
 										class="text-danger hover:text-danger disabled:text-gray-400"
 										onclick={() => cancelSimulation(sim)}
-										disabled={!['queued', 'running'].includes(sim.status)}
+										disabled={!isActiveStatus(sim.status)}
 										title="Cancel simulation"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

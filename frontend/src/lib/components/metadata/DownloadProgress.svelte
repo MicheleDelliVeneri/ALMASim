@@ -2,6 +2,7 @@
 	import { formatBytes, formatSpeed } from '#lib/utils/format.js';
 	import type { DownloadJobStatus } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
+	import { isActiveStatus, isTerminalStatus } from '#lib/utils/status.js';
 
 	interface Props {
 		jobId: string;
@@ -14,14 +15,9 @@
 	let error = $state('');
 	let cancelling = $state(false);
 
-	const ACTIVE_STATUSES = new Set(['pending', 'starting', 'running', 'downloading']);
 	const progressPct = $derived(status ? progressPercent(status.progress) : 0);
-	const isRunning = $derived(status ? ACTIVE_STATUSES.has(status.status) : false);
-	const isDone = $derived(
-		status?.status === 'completed' ||
-			status?.status === 'failed' ||
-			status?.status === 'cancelled'
-	);
+	const isRunning = $derived(status ? isActiveStatus(status.status) : false);
+	const isDone = $derived(status ? isTerminalStatus(status.status) : false);
 
 	// --- Speed & ETA tracking ---
 	// Keep a rolling window of (timestamp, bytes_downloaded) samples
@@ -61,10 +57,10 @@
 				const s = await downloadApi.getJobStatus(jobId);
 				if (stopped) return;
 				status = s;
-				if (ACTIVE_STATUSES.has(s.status)) {
+				if (isActiveStatus(s.status)) {
 					updateSpeedAndEta(s.bytes_downloaded, s.total_bytes);
 				}
-				if (s.status === 'completed' || s.status === 'failed' || s.status === 'cancelled') {
+				if (isTerminalStatus(s.status)) {
 					clearInterval(timer);
 					speedBytesPerSec = 0;
 					etaSeconds = null;

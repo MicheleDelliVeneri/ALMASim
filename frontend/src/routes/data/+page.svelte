@@ -1,12 +1,15 @@
 <script lang="ts">
+	import { writeCachedResults } from '#lib/utils/metadataCache.js';
 	import { formatBytes, formatDate } from '#lib/utils/format.js';
 	import type { DownloadJobSummary } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
 	import DownloadProgress from '#lib/components/metadata/DownloadProgress.svelte';
 	import { createLogger } from '#lib/logger.js';
+	import StatusBadge from '#lib/components/shared/StatusBadge.svelte';
+	import { createPoller } from '#lib/utils/poll.js';
+	import { isActiveStatus } from '#lib/utils/status.js';
 
 	const logger = createLogger('routes/data');
-	const RESULTS_CACHE_KEY = 'almasim:metadata-results';
 
 	let jobs = $state<DownloadJobSummary[]>([]);
 	let loading = $state(true);
@@ -26,12 +29,14 @@
 	let redownloadSkipCasaDataUpdate = $state(false);
 	let loadingMetadata = $state<Set<string>>(new Set());
 
-	// Poll interval for active jobs
-	let pollTimer: ReturnType<typeof setInterval> | undefined;
-
-	const ACTIVE_STATUSES = new Set(['pending', 'starting', 'running', 'downloading']);
-	const activeJobs = $derived(jobs.filter((j) => ACTIVE_STATUSES.has(j.status)));
+	const activeJobs = $derived(jobs.filter((j) => isActiveStatus(j.status)));
 	const hasActiveJobs = $derived(activeJobs.length > 0);
+
+	// Refresh the list every 3 s while a download is active.
+	const poller = createPoller(async () => {
+		await fetchJobs();
+		return jobs.some((j) => isActiveStatus(j.status));
+	}, 3000);
 
 	async function fetchJobs() {
 		try {
@@ -44,18 +49,13 @@
 		} finally {
 			loading = false;
 		}
+		if (jobs.some((j) => isActiveStatus(j.status))) poller.start();
 	}
 
-	// Initial load + polling for active jobs
 	$effect(() => {
 		logger.info('Data page mounted');
 		fetchJobs();
-
-		pollTimer = setInterval(fetchJobs, 3000);
-
-		return () => {
-			if (pollTimer) clearInterval(pollTimer);
-		};
+		return () => poller.stop();
 	});
 
 	function openRedownloadOptions(job: DownloadJobSummary) {
@@ -148,10 +148,8 @@
 		loadingMetadata = next;
 		try {
 			const metadata = await downloadApi.loadJobMetadata(job.job_id);
-			if (typeof window !== 'undefined') {
-				window.localStorage.setItem(RESULTS_CACHE_KEY, JSON.stringify(metadata));
-				window.location.href = '/metadata';
-			}
+			writeCachedResults(metadata);
+			if (typeof window !== 'undefined') window.location.href = '/metadata';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load metadata for this download';
 			logger.error({ err: e, jobId: job.job_id }, 'Failed to load stored metadata');
@@ -159,24 +157,6 @@
 			const updated = new Set(loadingMetadata);
 			updated.delete(job.job_id);
 			loadingMetadata = updated;
-		}
-	}
-
-	function statusColor(s: string): string {
-		switch (s) {
-			case 'running':
-			case 'pending':
-			case 'starting':
-			case 'downloading':
-				return 'bg-accent-soft text-accent';
-			case 'completed':
-				return 'bg-ok-soft text-ok';
-			case 'failed':
-				return 'bg-danger-soft text-danger';
-			case 'cancelled':
-				return 'bg-surface text-fg-muted';
-			default:
-				return 'bg-surface text-fg-muted';
 		}
 	}
 
@@ -256,17 +236,13 @@
 					<tbody class="divide-y divide-line">
 						{#each jobs as job (job.job_id)}
 							{@const pct = progressPercent(job.progress)}
-							{@const isActive = ACTIVE_STATUSES.has(job.status)}
+							{@const isActive = isActiveStatus(job.status)}
 							<tr class="hover:bg-hover" class:bg-accent-soft={isActive}>
 								<td class="whitespace-nowrap px-4 py-3 text-fg-muted">
 									{formatDate(job.created_at)}
 								</td>
 								<td class="px-4 py-3">
-									<span
-										class="inline-block rounded-full px-2 py-0.5 text-xs font-medium {statusColor(job.status)}"
-									>
-										{job.status}
-									</span>
+									<StatusBadge status={job.status} />
 								</td>
 								<td class="px-4 py-3 text-fg-muted">
 									{job.files_completed}/{job.total_files}
