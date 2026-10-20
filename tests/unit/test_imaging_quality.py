@@ -235,8 +235,8 @@ def test_noise_history_reads_the_first_run_of_a_name(tmp_path):
 def test_helpers():
     assert math.isnan(q.robust_sigma(np.array([np.nan])))
     assert math.isnan(q._ratio(1.0, 0.0))
-    assert math.isnan(q._beam_pixels(fits.Header()))
-    assert not q._moment_mask(np.zeros((8, 8)), 2.0).any()
+    assert math.isnan(q.beam_pixels(fits.Header()))
+    assert not q.moment_mask(np.zeros((8, 8)), 2.0).any()
     with pytest.raises(TypeError):
         q._json_default(object())
     assert q._json_default(np.float32(1.5)) == 1.5
@@ -305,3 +305,49 @@ def test_clean_quality_when_every_task_fails(tmp_path):
     assert result.exit_code == 1
     assert "None of the 1 task(s)" in result.output
     assert (tmp_path / q.SUMMARY_FILENAME).read_text() == "an earlier summary\n", "left alone"
+
+
+@pytest.mark.unit
+def test_moment_mask_grows_by_one_beam_disk_like_the_fft_convolution():
+    """Dilating by the beam disk equals the line mask's FFT disk convolution > 0.5."""
+    from almasim.services.imaging.stats import moment_mask
+
+    moment = np.zeros((40, 40))
+    moment[10, 12] = moment[25, 30] = 100.0
+    moment += np.random.default_rng(3).normal(0, 0.1, moment.shape)
+    beam = 3.4
+    mask = moment_mask(moment, beam)
+    seed = moment > 3 * q.robust_sigma(moment)
+    radius = int(np.ceil(beam))
+    yy, xx = np.mgrid[-radius : radius + 1, -radius : radius + 1]
+    disk = (np.hypot(yy, xx) <= beam).astype(float)
+    shape = [n + 2 * radius for n in seed.shape]
+    grown = np.fft.irfft2(
+        np.fft.rfft2(seed.astype(float), s=shape) * np.fft.rfft2(disk, s=shape), s=shape
+    )
+    expected = grown[radius : radius + 40, radius : radius + 40] > 0.5
+    np.testing.assert_array_equal(mask, expected)
+
+
+@pytest.mark.unit
+def test_frequency_axis_finds_freq_anywhere_and_falls_back():
+    from almasim.services.imaging.fits_wcs import frequency_axis, velocity_axis
+
+    header = fits.Header(
+        {
+            "NAXIS": 4,
+            "NAXIS3": 1,
+            "CTYPE3": "STOKES",
+            "NAXIS4": 3,
+            "CTYPE4": "FREQ",
+            "CRVAL4": 1e11,
+            "CDELT4": 1e6,
+            "CRPIX4": 2.0,
+        }
+    )
+    axis, freq = frequency_axis(header)
+    assert axis == 4 and freq.tolist() == [1e11 - 1e6, 1e11, 1e11 + 1e6]
+    with pytest.raises(ValueError):
+        frequency_axis(fits.Header({"NAXIS": 2}))
+    velocity, width = velocity_axis(header)
+    assert velocity[1] == 0.0 and width == pytest.approx(2.99792458, rel=1e-6)

@@ -136,26 +136,15 @@ def line_mask_from_channels(
             header = hdus[0].header.copy()
         moment = plane if moment is None else moment + plane
     assert moment is not None  # paths is not empty
-    from almasim.services.imaging.stats import robust_sigma
+    from almasim.services.imaging.fits_io import write_fits_atomic
+    from almasim.services.imaging.fits_wcs import beam_pixels
+    from almasim.services.imaging.stats import moment_mask
 
-    noise = robust_sigma(moment)
-    mask = moment > sigma * noise if noise > 0 else np.zeros(moment.shape, bool)
+    mask = moment_mask(moment, beam_pixels(header, float(np.median(beams))), sigma)
     if not mask.any():
         return 0
-    cell = abs(float(header.get("CDELT2", 0.0)))
-    beam_pixels = float(np.median(beams)) / cell if cell else 0.0
-    if beam_pixels > 0:
-        radius = int(np.ceil(beam_pixels))
-        yy, xx = np.mgrid[-radius : radius + 1, -radius : radius + 1]
-        disk = (np.hypot(yy, xx) <= beam_pixels).astype(float)
-        grown = np.fft.irfft2(
-            np.fft.rfft2(mask.astype(float), s=[n + 2 * radius for n in mask.shape])
-            * np.fft.rfft2(disk, s=[n + 2 * radius for n in mask.shape]),
-            s=[n + 2 * radius for n in mask.shape],
-        )
-        mask = grown[radius : radius + mask.shape[0], radius : radius + mask.shape[1]] > 0.5
-    fits.PrimaryHDU(mask.astype(np.float32)[None, None], header=header).writeto(
-        mask_path, overwrite=True
+    write_fits_atomic(
+        mask_path, [fits.PrimaryHDU(mask.astype(np.float32)[None, None], header=header)]
     )
     return int(mask.sum())
 

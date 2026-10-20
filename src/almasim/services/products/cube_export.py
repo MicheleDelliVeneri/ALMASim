@@ -12,6 +12,8 @@ from astropy.io import fits
 
 from almasim.services.json_safe import json_safe as _json_safe
 
+from ..imaging.fits_io import write_fits_atomic
+
 
 def write_ml_dataset_shard(
     output_path: Path | str,
@@ -61,7 +63,7 @@ def save_optional_cube(
         saved_paths.append(str(h5_path))
     if save_mode in ("fits", "both"):
         fits_path = output_dir_path / f"{stem}_{idx}.fits"
-        fits.PrimaryHDU(header=header.copy(), data=cube).writeto(fits_path, overwrite=True)
+        write_fits_atomic(fits_path, [fits.PrimaryHDU(header=header.copy(), data=cube)])
         saved_paths.append(str(fits_path))
     return saved_paths
 
@@ -75,19 +77,13 @@ def _write_fits_cube(
     fits_header = header.copy() if header is not None else fits.Header()
     fits_header["DATAMAX"] = float(np.max(cube))
     fits_header["DATAMIN"] = float(np.min(cube))
-    fits.PrimaryHDU(header=fits_header, data=cube).writeto(path, overwrite=True)
+    write_fits_atomic(path, [fits.PrimaryHDU(header=fits_header, data=cube)])
 
 
 def _write_fits_complex_cube(output_dir: Path, stem: str, idx: int, cube: np.ndarray) -> None:
     cube = np.asarray(cube)
-    fits.PrimaryHDU(np.real(cube)).writeto(
-        output_dir / f"{stem}_real{idx}.fits",
-        overwrite=True,
-    )
-    fits.PrimaryHDU(np.imag(cube)).writeto(
-        output_dir / f"{stem}_imag{idx}.fits",
-        overwrite=True,
-    )
+    write_fits_atomic(output_dir / f"{stem}_real{idx}.fits", [fits.PrimaryHDU(np.real(cube))])
+    write_fits_atomic(output_dir / f"{stem}_imag{idx}.fits", [fits.PrimaryHDU(np.imag(cube))])
 
 
 def write_interferometry_products(
@@ -144,26 +140,13 @@ def write_interferometry_products(
         _write_fits_cube(output_dir / f"dirty-cube_{idx}.fits", dirty_cube, header)
         _write_fits_complex_cube(output_dir, "dirty-vis-cube", idx, dirty_vis_cube)
         _write_fits_complex_cube(output_dir, "clean-vis-cube", idx, vis_cube)
-        fits.PrimaryHDU(beam_cube).writeto(
-            output_dir / f"beam-cube_{idx}.fits",
-            overwrite=True,
+        write_fits_atomic(output_dir / f"beam-cube_{idx}.fits", [fits.PrimaryHDU(beam_cube)])
+        write_fits_atomic(
+            output_dir / f"totsampling-cube_{idx}.fits", [fits.PrimaryHDU(totsampling_cube)]
         )
-        fits.PrimaryHDU(totsampling_cube).writeto(
-            output_dir / f"totsampling-cube_{idx}.fits",
-            overwrite=True,
-        )
-        fits.PrimaryHDU(uv_mask_cube).writeto(
-            output_dir / f"uv-mask-cube_{idx}.fits",
-            overwrite=True,
-        )
-        fits.PrimaryHDU(u_cube).writeto(
-            output_dir / f"u-cube_{idx}.fits",
-            overwrite=True,
-        )
-        fits.PrimaryHDU(v_cube).writeto(
-            output_dir / f"v-cube_{idx}.fits",
-            overwrite=True,
-        )
+        write_fits_atomic(output_dir / f"uv-mask-cube_{idx}.fits", [fits.PrimaryHDU(uv_mask_cube)])
+        write_fits_atomic(output_dir / f"u-cube_{idx}.fits", [fits.PrimaryHDU(u_cube)])
+        write_fits_atomic(output_dir / f"v-cube_{idx}.fits", [fits.PrimaryHDU(v_cube)])
         return
 
     if save_mode not in ("h5",):
