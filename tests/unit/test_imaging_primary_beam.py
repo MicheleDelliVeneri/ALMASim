@@ -94,6 +94,35 @@ def test_dish_diameter_from_fov_inverts_the_field_of_view():
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(("dish", "factor"), [(12.0, 1.1508), (7.0, 1.1433), (10.0, 1.0290)])
+def test_the_primary_beam_width_is_the_airy_half_power_width(dish, factor):
+    """One PB/FOV factor everywhere (T2.1): the model's half-power width in lambda / D."""
+    assert pbm.airy_fwhm_factor(dish) == pytest.approx(factor, abs=1e-4)
+    frequency = 230e9
+    radius = float(pbm.primary_beam_fwhm_rad(dish, frequency)) / 2
+    assert pbm.primary_beam_response(np.array(radius), frequency, dish) == pytest.approx(
+        0.5, abs=1e-6
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("dish", [12.0, 7.0, 10.0])
+def test_dish_diameter_from_fov_inverts_the_primary_beam_width(dish):
+    frequency = 345e9
+    fov = float(pbm.primary_beam_fwhm_rad(dish, frequency)) * 180 / math.pi * 3600
+    assert pbm.dish_diameter_from_fov(fov, frequency) == pytest.approx(dish)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("dish", [12.0, 7.0])
+def test_parameter_files_from_before_the_airy_factor_still_give_their_dish(dish):
+    """Older params CSVs store a 1.12 lambda/D field of view; pbcor must still get 12 or 7 m."""
+    frequency = 107.6e9
+    legacy_fov = 1.12 * C / frequency / dish * 180 / math.pi * 3600
+    assert pbm.dish_diameter_from_fov(legacy_fov, frequency) == dish
+
+
+@pytest.mark.unit
 def test_primary_beam_correct_cube_per_channel(tmp_path):
     image = tmp_path / "cube.fits"
     # 100 and 150 GHz, 1 arcsec pixels: the 12 m beam's FWHM is ~60" at 100 GHz.
@@ -248,7 +277,10 @@ def _param_row(spw: int, dish: float = 12.0, **overrides) -> dict:
         "filename": "/data/uid___A001_X1_X1.ms.split.cal",
         "spectral_window_id": spw,
         "reference_frequency": frequency,
-        "fov_per_frequency": 1.12 * C / frequency / dish * 180 / math.pi * 3600,
+        "fov_per_frequency": float(pbm.primary_beam_fwhm_rad(dish, frequency))
+        * 180
+        / math.pi
+        * 3600,
         "synthetized_beam_size": 1.0,
         "target_field_ids": "2",
     }

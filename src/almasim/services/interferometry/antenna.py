@@ -94,8 +94,10 @@ def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
     central_freq = central_freq.to(U.Hz).value
     central_freq_s = 1 / central_freq
     wavelength = light_speed * central_freq_s
-    # this is the field of view in Radians
-    fov = 1.22 * wavelength / antenna_diameter
+    # The primary beam's half-power width, in radians (MADIV-28 T2.1).
+    from ..imaging.primary_beam import airy_fwhm_factor
+
+    fov = airy_fwhm_factor(float(antenna_diameter)) * wavelength / antenna_diameter
     # fov in arcsec
     fov = fov * (180 / math.pi) * 3600 * U.arcsec
     if return_value is True:

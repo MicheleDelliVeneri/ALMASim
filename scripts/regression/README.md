@@ -10,7 +10,7 @@ bit** with a versioned baseline.
 |---|---|---|---|
 | 1 | GitHub default runner, every PR that touches pipeline code (`golden-ci.yml`, jobs `tier1` and `simulation`) | The trimmed golden window (release `test-data-v1`) through extract → calibrate → compute-parameters → image → clean-quality (`ci_chain.sh`), plus four seeded simulations (`sim_golden.sh`) | Release `golden-baseline-vN`, as named in `ci/golden/baseline.json` |
 | 2 | GitHub default runner, nightly and on Slurm-related PRs (job `tier2`) | The same chain through a single-node Slurm cluster in the container (`ci_slurm_cluster.sh`, `BACKEND=slurm`) | The tier-1 baseline |
-| 3 | zwicky, submitted with `sbatch` for every pipeline PR (not CI) | The full 13 GB golden window `uid___A002_X113d9b7_Xb670` SPW-31_FIELD-2, including importasdm (`golden_run.sbatch`) | `BASELINE_DIR` in `golden.env` (v1-807e700f: main at 807e700f with `-j 1`; v0 = ms-raw, ms-calibrated-flagged and MADIV-16 is kept as the scientific reference) |
+| 3 | zwicky, submitted with `sbatch` for every pipeline PR (not CI) | The full 13 GB golden window `uid___A002_X113d9b7_Xb670` SPW-31_FIELD-2, through importasdm → calibrate → compute-parameters → image (`golden_run.sbatch`; the imaging parameters are computed, not taken from MADIV-16) | `BASELINE_DIR` in `golden.env` (v2-6cb0829e; v0 = ms-raw, ms-calibrated-flagged and MADIV-16 is kept as the scientific reference) |
 
 Imaging is single-threaded in all tiers. WSClean with `-j N` is not
 bit-reproducible: two `-j 4` runs differ by up to 4e-3 × std. Unpack,
