@@ -5,25 +5,21 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from almasim.services.products.ms_io import (
-    _arr_desc,
-    _CasatoolsBackend,
-    _get_backend,
-    _make_tabledesc,
-    _sca_desc,
-    _vtype,
-    _write_antenna,
-    _write_data_description,
-    _write_field,
-    _write_history,
-    _write_main,
-    _write_observation,
-    _write_polarization,
-    _write_source,
-    _write_spectral_window,
-    _write_state,
-    export_native_ms,
-    read_native_ms,
+from almasim.services.ms.backends import _CasatoolsBackend, _get_backend
+from almasim.services.ms.io import export_native_ms, read_native_ms
+from almasim.services.ms.schema import _arr_desc, _make_tabledesc, _sca_desc, _vtype
+from almasim.services.ms.subtables import (
+    antenna_table,
+    data_description_table,
+    field_table,
+    history_table,
+    main_table,
+    observation_table,
+    polarization_table,
+    source_table,
+    spectral_window_table,
+    state_table,
+    write_table,
 )
 
 # ---------------------------------------------------------------------------
@@ -126,11 +122,11 @@ def test_get_backend_casatools_preferred():
 def test_get_backend_raises_when_nothing_available():
     with (
         patch(
-            "almasim.services.products.ms_io._CasatoolsBackend.__init__",
+            "almasim.services.ms.backends._CasatoolsBackend.__init__",
             side_effect=ImportError,
         ),
         patch(
-            "almasim.services.products.ms_io._CasacoreBackend.__init__",
+            "almasim.services.ms.backends._CasacoreBackend.__init__",
             side_effect=ImportError,
         ),
     ):
@@ -149,8 +145,6 @@ def _mock_backend():
     tb = MagicMock()
     b.create.return_value = tb
     b.open.return_value = tb
-    b.sca.side_effect = _sca_desc
-    b.arr.side_effect = _arr_desc
     # Array layout conversion as casatools does it (the tables' getcol results
     # below are in casatools order).
     b.put.side_effect = _CasatoolsBackend.put
@@ -164,7 +158,7 @@ def test_write_antenna(tmp_path):
     b, tb = _mock_backend()
     names = ["DA41", "DA42", "DV01"]
     positions = np.zeros((3, 3))
-    _write_antenna(b, str(tmp_path / "test.ms"), names, positions, 3)
+    write_table(b, str(tmp_path / "test.ms"), antenna_table(names, positions))
     assert b.create.called
     tb.putcol.assert_any_call("NAME", names)
     tb.flush.assert_called_once()
@@ -175,7 +169,7 @@ def test_write_antenna(tmp_path):
 def test_write_spectral_window_single_channel(tmp_path):
     b, tb = _mock_backend()
     freq = np.array([230e9])
-    _write_spectral_window(b, str(tmp_path / "test.ms"), freq, 1)
+    write_table(b, str(tmp_path / "test.ms"), spectral_window_table(freq, 1))
     tb.putcell.assert_any_call("NUM_CHAN", 0, 1)
     tb.flush.assert_called_once()
 
@@ -184,14 +178,14 @@ def test_write_spectral_window_single_channel(tmp_path):
 def test_write_spectral_window_multi_channel(tmp_path):
     b, tb = _mock_backend()
     freq = np.linspace(230e9, 232e9, 32)
-    _write_spectral_window(b, str(tmp_path / "test.ms"), freq, 32)
+    write_table(b, str(tmp_path / "test.ms"), spectral_window_table(freq, 32))
     tb.putcell.assert_any_call("NUM_CHAN", 0, 32)
 
 
 @pytest.mark.unit
 def test_write_polarization(tmp_path):
     b, tb = _mock_backend()
-    _write_polarization(b, str(tmp_path / "test.ms"), 1)
+    write_table(b, str(tmp_path / "test.ms"), polarization_table(1))
     tb.putcell.assert_any_call("NUM_CORR", 0, 1)
     tb.flush.assert_called_once()
 
@@ -199,7 +193,7 @@ def test_write_polarization(tmp_path):
 @pytest.mark.unit
 def test_write_data_description(tmp_path):
     b, tb = _mock_backend()
-    _write_data_description(b, str(tmp_path / "test.ms"))
+    write_table(b, str(tmp_path / "test.ms"), data_description_table())
     tb.putcell.assert_any_call("SPECTRAL_WINDOW_ID", 0, 0)
     tb.putcell.assert_any_call("POLARIZATION_ID", 0, 0)
 
@@ -208,7 +202,7 @@ def test_write_data_description(tmp_path):
 def test_write_field(tmp_path):
     b, tb = _mock_backend()
     time_range = np.array([5e9, 5.1e9])
-    _write_field(b, str(tmp_path / "test.ms"), "J0001+0001", 0.1, -0.2, time_range)
+    write_table(b, str(tmp_path / "test.ms"), field_table("J0001+0001", 0.1, -0.2, time_range))
     tb.putcell.assert_any_call("NAME", 0, "J0001+0001")
 
 
@@ -216,7 +210,9 @@ def test_write_field(tmp_path):
 def test_write_observation(tmp_path):
     b, tb = _mock_backend()
     time_range = np.array([5e9, 5.1e9])
-    _write_observation(b, str(tmp_path / "test.ms"), "ALMA", "2021.1.00001.S", time_range)
+    write_table(
+        b, str(tmp_path / "test.ms"), observation_table("ALMA", "2021.1.00001.S", time_range)
+    )
     tb.putcell.assert_any_call("TELESCOPE_NAME", 0, "ALMA")
     tb.putcell.assert_any_call("PROJECT", 0, "2021.1.00001.S")
 
@@ -225,14 +221,14 @@ def test_write_observation(tmp_path):
 def test_write_source(tmp_path):
     b, tb = _mock_backend()
     time_range = np.array([5e9, 5.1e9])
-    _write_source(b, str(tmp_path / "test.ms"), "MySource", 1.0, -0.5, time_range)
+    write_table(b, str(tmp_path / "test.ms"), source_table("MySource", 1.0, -0.5, time_range))
     tb.putcell.assert_any_call("NAME", 0, "MySource")
 
 
 @pytest.mark.unit
 def test_write_state(tmp_path):
     b, tb = _mock_backend()
-    _write_state(b, str(tmp_path / "test.ms"))
+    write_table(b, str(tmp_path / "test.ms"), state_table())
     tb.putcell.assert_any_call("OBS_MODE", 0, "ON_SOURCE")
 
 
@@ -240,7 +236,7 @@ def test_write_state(tmp_path):
 def test_write_history(tmp_path):
     b, tb = _mock_backend()
     time_range = np.array([5e9, 5.1e9])
-    _write_history(b, str(tmp_path / "test.ms"), "my_project", time_range)
+    write_table(b, str(tmp_path / "test.ms"), history_table("my_project", time_range))
     tb.putcell.assert_any_call("MESSAGE", 0, "ALMASim MSv2 export")
 
 
@@ -261,7 +257,7 @@ def test_write_main(tmp_path):
         "sigma": np.ones((nrows, ncorr), dtype=np.float32),
     }
     b, tb = _mock_backend()
-    _write_main(b, str(tmp_path / "test.ms"), nrows, vt)
+    write_table(b, str(tmp_path / "test.ms"), main_table(str(tmp_path / "test.ms"), vt))
     tb.putcol.assert_any_call("ANTENNA1", vt["antenna1"])
     tb.putcol.assert_any_call("ANTENNA2", vt["antenna2"])
     tb.putkeyword.assert_any_call("MS_VERSION", 2.0)
@@ -298,7 +294,7 @@ def test_export_native_ms_calls_all_writers(tmp_path):
     vt = _sample_vt()
     b, tb = _mock_backend()
 
-    with patch("almasim.services.products.ms_io._get_backend", return_value=b):
+    with patch("almasim.services.ms.io._get_backend", return_value=b):
         result = export_native_ms(
             ms_path=tmp_path / "out.ms",
             visibility_table=vt,
@@ -316,7 +312,7 @@ def test_export_native_ms_default_telescope(tmp_path):
     vt = _sample_vt()
     b, tb = _mock_backend()
 
-    with patch("almasim.services.products.ms_io._get_backend", return_value=b):
+    with patch("almasim.services.ms.io._get_backend", return_value=b):
         export_native_ms(
             ms_path=tmp_path / "out.ms",
             visibility_table=vt,
@@ -389,7 +385,7 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
     b.open.side_effect = fake_open
     b.get.side_effect = _CasatoolsBackend.get  # the getcol results above are casatools-ordered
 
-    with patch("almasim.services.products.ms_io._get_backend", return_value=b):
+    with patch("almasim.services.ms.io._get_backend", return_value=b):
         result = read_native_ms(tmp_path / "test.ms")
 
     expected_keys = {
@@ -416,3 +412,26 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
     assert expected_keys == set(result.keys())
     assert result["telescope_name"] == "ALMA"
     assert result["data"].shape == (nrows, ncorr, nchan)
+
+
+@pytest.mark.unit
+def test_every_table_spec_writes_only_declared_columns(tmp_path):
+    """Each spec's values name columns of its own table (MADIV-28 T4.9)."""
+    vt = _sample_vt()
+    time_range = np.array([5e9, 5.1e9])
+    specs = [
+        main_table(str(tmp_path / "x.ms"), vt),
+        antenna_table(vt["antenna_names"], vt["antenna_positions_m"]),
+        spectral_window_table(vt["channel_freq_hz"], 4),
+        polarization_table(1),
+        data_description_table(),
+        field_table("S", 0.1, -0.2, time_range),
+        observation_table("ALMA", "P", time_range),
+        source_table("S", 0.1, -0.2, time_range),
+        state_table(),
+        history_table("P", time_range),
+    ]
+    for spec in specs:
+        declared = {column.name for column in spec.columns}
+        assert set(spec.values) <= declared, spec.name
+    assert {spec.name for spec in specs[1:]} == set(specs[0].keywords) - {"MS_VERSION"}

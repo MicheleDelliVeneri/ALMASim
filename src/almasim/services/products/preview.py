@@ -186,7 +186,7 @@ def _grid_visibility_table(
 
 
 def _load_msv2_cube(path: Path) -> tuple[np.ndarray, str]:
-    from almasim.services.products.ms_io import read_native_ms
+    from almasim.services.ms.io import read_native_ms
 
     visibility_table = read_native_ms(path)
     grid_size = _infer_msv2_grid_size(path, visibility_table)
