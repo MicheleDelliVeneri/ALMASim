@@ -7,6 +7,8 @@ import astropy.units as U
 import numpy as np
 from dask.distributed import Client
 
+from .utils import gaussian
+
 
 def channel_first(datacube: Any) -> np.ndarray:
     """The datacube's values as a ``(chan, y, x)`` array, in its own unit.
@@ -125,6 +127,25 @@ class SkyModel(ABC):
         # (sync / local backends pass client=None).
         self.client = client if client is not None else _LocalClient()
         self.update_progress = update_progress
+
+    def spectrum(self) -> np.ndarray:
+        """Continuum plus emission lines per channel (Jy): the source's total flux."""
+        z_idxs = np.arange(0, self.n_chan)
+        lines = np.zeros(self.n_chan)
+        for i in range(len(self.line_fluxes)):
+            lines += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
+        return lines + np.asarray(self.continuum)
+
+    def _add_cube(self, cube: np.ndarray) -> Any:
+        """Add a ``(chan, y, x)`` cube to the datacube and report completion."""
+        add_channel_first(self.datacube, cube)
+        if self.update_progress is not None:
+            self.update_progress.emit(100)
+        return self.datacube
+
+    def _add_template(self, template: np.ndarray) -> Any:
+        """Add the spectrum spread over a fixed 2D ``template`` (``spectrum * template``)."""
+        return self._add_cube(self.spectrum()[:, None, None] * template)
 
     @abstractmethod
     def insert(self) -> Any:

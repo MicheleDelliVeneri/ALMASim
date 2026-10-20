@@ -5,10 +5,8 @@ from typing import Any
 
 import nifty8 as ift
 import numpy as np
-from dask import delayed
 
-from .base import SkyModel, add_channel_first
-from .utils import gaussian, track_progress
+from .base import SkyModel
 
 
 def diffuse_signal(n_px: int) -> np.ndarray:
@@ -33,12 +31,6 @@ def diffuse_signal(n_px: int) -> np.ndarray:
     return normalized_data
 
 
-@delayed
-def diffuse_image(diffuse_signal: np.ndarray, amp: float) -> np.ndarray:
-    """Scale diffuse signal by amplitude."""
-    return diffuse_signal * amp
-
-
 class DiffuseSkyModel(SkyModel):
     """Diffuse sky model using NIFTY."""
 
@@ -48,17 +40,4 @@ class DiffuseSkyModel(SkyModel):
         ts = np.nan_to_num(ts)
         ts -= np.min(ts)
         ts *= 1 / np.max(ts)
-        z_idxs = np.arange(0, self.n_chan)
-        gs = np.zeros(self.n_chan)
-        skymodel = []
-        for i in range(len(self.line_fluxes)):
-            gs += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
-        for z in range(0, self.n_chan):
-            delayed_result = diffuse_image(ts, gs[z] + self.continuum[z])
-            skymodel.append(delayed_result)
-        delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
-        futures = self.client.compute([delayed_skymodel])
-        track_progress(self.update_progress, futures)
-        (skymodel,) = self.client.gather(futures)
-        add_channel_first(self.datacube, skymodel)
-        return self.datacube
+        return self._add_template(ts)

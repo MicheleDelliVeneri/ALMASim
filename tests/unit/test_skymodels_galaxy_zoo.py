@@ -8,7 +8,7 @@ import astropy.units as U
 import numpy as np
 import pytest
 
-from almasim.skymodels.galaxy_zoo import GalaxyZooSkyModel, galaxy_image
+from almasim.skymodels.galaxy_zoo import GalaxyZooSkyModel
 
 from ._fakes import make_datacube, mock_dask_client
 
@@ -53,22 +53,6 @@ def _make_model(
 # ===========================================================================
 
 
-@pytest.mark.unit
-def test_galaxy_image_scales_array():
-    """galaxy_image scales the input array by the amplitude."""
-    arr = np.ones((8, 8)) * 2.0
-    result = galaxy_image(arr, 3.0).compute()
-    np.testing.assert_allclose(result, arr * 3.0)
-
-
-@pytest.mark.unit
-def test_galaxy_image_zero_amplitude():
-    """galaxy_image returns zeros when amplitude is 0."""
-    arr = np.ones((4, 4))
-    result = galaxy_image(arr, 0.0).compute()
-    np.testing.assert_allclose(result, 0.0)
-
-
 # ===========================================================================
 # GalaxyZooSkyModel initialization
 # ===========================================================================
@@ -109,15 +93,6 @@ def test_galaxy_zoo_insert_sets_array_units(tmp_path):
     model = _make_model(tmp_path)
     result = model.insert()
     assert result._array.unit == U.Jy * U.pix**-2
-
-
-@pytest.mark.unit
-def test_galaxy_zoo_insert_calls_dask_client(tmp_path):
-    """insert() computes and gathers the sky model via Dask."""
-    model = _make_model(tmp_path)
-    model.insert()
-    model.client.compute.assert_called_once()
-    model.client.gather.assert_called_once()
 
 
 @pytest.mark.unit

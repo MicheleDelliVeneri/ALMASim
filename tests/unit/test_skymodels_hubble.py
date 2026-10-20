@@ -9,7 +9,7 @@ import astropy.units as U
 import numpy as np
 import pytest
 
-from almasim.skymodels.hubble import HubbleSkyModel, hubble_image
+from almasim.skymodels.hubble import HubbleSkyModel
 
 from ._fakes import make_datacube, mock_dask_client
 
@@ -51,30 +51,6 @@ def _make_model(
 # ===========================================================================
 # hubble_image (delayed helper)
 # ===========================================================================
-
-
-@pytest.mark.unit
-def test_hubble_image_scales_array():
-    """hubble_image scales the input array by amplitude."""
-    arr = np.ones((8, 8)) * 2.0
-    result = hubble_image(arr, 3.0).compute()
-    np.testing.assert_allclose(result, arr * 3.0)
-
-
-@pytest.mark.unit
-def test_hubble_image_negative_amplitude():
-    """hubble_image with negative amplitude negates the array."""
-    arr = np.ones((4, 4))
-    result = hubble_image(arr, -1.0).compute()
-    np.testing.assert_allclose(result, -1.0)
-
-
-@pytest.mark.unit
-def test_hubble_image_zero_amplitude():
-    """hubble_image with zero amplitude returns zeros."""
-    arr = np.ones((4, 4))
-    result = hubble_image(arr, 0.0).compute()
-    np.testing.assert_allclose(result, 0.0)
 
 
 # ===========================================================================
@@ -124,15 +100,6 @@ def test_hubble_insert_sets_units(tmp_path):
     model = _make_model(tmp_path)
     result = model.insert()
     assert result._array.unit == U.Jy * U.pix**-2
-
-
-@pytest.mark.unit
-def test_hubble_insert_calls_dask_client(tmp_path):
-    """insert() computes and gathers via Dask."""
-    model = _make_model(tmp_path)
-    model.insert()
-    model.client.compute.assert_called_once()
-    model.client.gather.assert_called_once()
 
 
 @pytest.mark.unit

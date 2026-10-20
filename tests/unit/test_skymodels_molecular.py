@@ -12,7 +12,6 @@ from almasim.skymodels.molecular import (
     MolecularCloudSkyModel,
     make_extended,
     molecular_cloud,
-    molecular_image,
 )
 
 from ._fakes import make_datacube
@@ -158,19 +157,6 @@ def test_molecular_cloud_shape_matches_n_px():
 # ===========================================================================
 
 
-@pytest.mark.unit
-def test_molecular_image_scales_array():
-    """molecular_image scales the input array by the amplitude."""
-    arr = np.ones((8, 8))
-    # Call the underlying function directly (bypassing @delayed)
-    result = (
-        molecular_image.__wrapped__(arr, 3.0)
-        if hasattr(molecular_image, "__wrapped__")
-        else molecular_image(arr, 3.0).compute()
-    )
-    np.testing.assert_allclose(result, arr * 3.0)
-
-
 # ===========================================================================
 # MolecularCloudSkyModel.insert
 # ===========================================================================
@@ -182,15 +168,6 @@ def test_molecular_cloud_skymodel_insert_returns_datacube():
     model = _make_model(n_px=16, n_chan=4)
     result = model.insert()
     assert result is not None
-
-
-@pytest.mark.unit
-def test_molecular_cloud_skymodel_insert_calls_client_compute():
-    """insert() uses the Dask client to compute the sky model."""
-    model = _make_model(n_px=16, n_chan=4)
-    model.insert()
-    model.client.compute.assert_called_once()
-    model.client.gather.assert_called_once()
 
 
 @pytest.mark.unit
@@ -234,3 +211,18 @@ def test_molecular_cloud_skymodel_no_lines():
     )
     result = model.insert()
     assert result is not None
+
+
+@pytest.mark.unit
+def test_template_cube_equals_the_per_channel_computation_exactly(monkeypatch):
+    """Each channel is template * flux, bit for bit as the old dask loop."""
+    import almasim.skymodels.molecular as molecular
+    from almasim.skymodels import channel_first
+
+    template = np.random.default_rng(1).random((16, 16))
+    monkeypatch.setattr(molecular, "molecular_cloud", lambda n_px: template.copy())
+    model = _make_model(n_px=16, n_chan=8)
+    cube = channel_first(model.insert())
+    normalised = (template - template.min()) * (1 / (template - template.min()).max())
+    for z, flux in enumerate(model.spectrum()):
+        np.testing.assert_array_equal(cube[z], normalised * flux)
