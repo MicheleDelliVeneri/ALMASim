@@ -1395,11 +1395,13 @@ def test_simulation_params_with_background_params(tmp_path, sample_metadata_row_
         background_mode="combined",
         background_level=2.5,
         background_seed=99,
+        seed="7",
     )
 
     assert params.background_mode == "combined"
     assert params.background_level == pytest.approx(2.5)
     assert params.background_seed == 99
+    assert params.seed == 7, "the simulation seed is kept, as an int"
 
 
 @pytest.mark.unit

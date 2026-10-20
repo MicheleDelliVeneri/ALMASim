@@ -96,6 +96,8 @@ class SimulationParams:
     background_mode: str = "none"
     background_level: float = 1.0
     background_seed: Optional[int] = None
+    # Seeds the total-power noise; None draws fresh noise for every run.
+    seed: Optional[int] = None
     external_skymodel_path: Optional[str] = None
     external_component_table_path: Optional[str] = None
     external_alignment_mode: str = "observation"
@@ -161,6 +163,7 @@ class SimulationParams:
         background_mode: str = "none",
         background_level: float = 1.0,
         background_seed: Optional[int] = None,
+        seed: Optional[int] = None,
         external_skymodel_path: Optional[Path | str] = None,
         external_component_table_path: Optional[Path | str] = None,
         external_alignment_mode: str = "observation",
@@ -246,6 +249,7 @@ class SimulationParams:
             background_mode=str(background_mode),
             background_level=float(background_level),
             background_seed=(int(background_seed) if background_seed is not None else None),
+            seed=(int(seed) if seed is not None else None),
             external_skymodel_path=(
                 _expand_path(external_skymodel_path) if external_skymodel_path is not None else None
             ),
@@ -302,6 +306,7 @@ class SimulationParams:
         background_mode: str = "none",
         background_level: float = 1.0,
         background_seed: Optional[int] = None,
+        seed: Optional[int] = None,
         external_skymodel_path: Optional[Path | str] = None,
         external_component_table_path: Optional[Path | str] = None,
         external_alignment_mode: str = "observation",
@@ -427,6 +432,7 @@ class SimulationParams:
             background_mode=background_mode,
             background_level=background_level,
             background_seed=background_seed,
+            seed=seed,
             external_skymodel_path=external_skymodel_path,
             external_component_table_path=external_component_table_path,
             external_alignment_mode=external_alignment_mode,
@@ -460,6 +466,7 @@ class CleanCubeStage:
     cell_size_arcsec: float
     background_cube: Optional[np.ndarray]
     external_input_metadata: Optional[dict[str, Any]]
+    seed: Optional[int] = None
 
 
 # Progress emitter functions moved to services.utils
@@ -1354,6 +1361,7 @@ def generate_clean_cube(
     interferometer_kwargs = interferometer_runs[0] if interferometer_runs else {}
 
     return CleanCubeStage(
+        seed=params.seed,
         datacube=datacube,
         model_cube=model,
         header=header,
@@ -1421,6 +1429,9 @@ def simulate_observation(
         )
 
     tp_per_config_results = []
+    # One generator for every TP configuration, seeded from the simulation seed
+    # (it used to default to default_rng(0): identical noise in every run).
+    tp_rng = np.random.default_rng(clean_cube_stage.seed)
     for tp_run in clean_cube_stage.total_power_runs:
         tp_result = uin.simulate_total_power_observation(
             clean_cube_stage.model_cube,
@@ -1430,6 +1441,7 @@ def simulate_observation(
             antenna_diameter_m=tp_run["antenna_diameter_m"],
             config_name=tp_run["config_name"],
             array_type=tp_run["array_type"],
+            rng=tp_rng,
         )
         tp_per_config_results.append(tp_result)
         if interferometer_progress_callback is not None:
