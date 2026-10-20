@@ -46,7 +46,8 @@ def test_download_store_persists_jobs_in_the_database(sqlite_sessions):
     assert store.list_all() == []
 
 
-def test_get_db_rolls_back_and_closes_on_error(monkeypatch):
+def test_get_db_rolls_back_and_closes_on_error(backend_db, monkeypatch):
+    # backend_db puts the real app.db modules in place of the router tests' stubs.
     config = importlib.import_module("app.db.config")
     session = MagicMock()
     monkeypatch.setattr(config, "new_session", lambda: session)
@@ -59,7 +60,8 @@ def test_get_db_rolls_back_and_closes_on_error(monkeypatch):
     session.close.assert_called_once()
 
 
-def test_get_db_context_commits_on_success(monkeypatch):
+def test_get_db_context_commits_on_success(backend_db, monkeypatch):
+    # backend_db puts the real app.db modules in place of the router tests' stubs.
     config = importlib.import_module("app.db.config")
     session = MagicMock()
     monkeypatch.setattr(config, "new_session", lambda: session)
