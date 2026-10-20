@@ -74,7 +74,7 @@ def test_simulation_run_checks_its_inputs(tmp_path):
     assert result.exit_code == 2 and "--metadata-path not found" in result.output
 
 
-def test_clean_needs_arguments_and_reports_a_wsclean_that_cannot_start(monkeypatch):
+def test_clean_needs_arguments_and_reports_a_wsclean_that_cannot_start(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
     import typer
@@ -89,7 +89,10 @@ def test_clean_needs_arguments_and_reports_a_wsclean_that_cannot_start(monkeypat
         raise OSError("exec format error")
 
     monkeypatch.setattr(cli_clean.subprocess, "run", broken)
-    monkeypatch.setenv("ALMASIM_WSCLEAN_BIN", "/bin/true")
+    wsclean = tmp_path / "wsclean"
+    wsclean.write_text("#!/bin/sh\n")
+    wsclean.chmod(0o755)
+    monkeypatch.setenv("ALMASIM_WSCLEAN_BIN", str(wsclean))
     result = _invoke("clean", "--", "-name", "x", "in.ms")
     assert result.exit_code == 1 and "Failed to start WSClean" in result.output
 
