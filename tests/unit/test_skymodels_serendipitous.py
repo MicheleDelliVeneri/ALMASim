@@ -224,3 +224,29 @@ def test_sample_positions_terminal_callback():
     )
     # terminal.add_log may or may not be called depending on whether a sample was found
     # — just verify no exception was raised
+
+
+# ===========================================================================
+# _randint_from
+# ===========================================================================
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("high", [2, 2.0, 1, 0])
+def test_randint_from_empty_range_returns_low(high):
+    """An upper bound at or below ``low`` (a 2-channel line) draws ``low``."""
+    from almasim.skymodels.serendipitous import _randint_from
+
+    assert list(_randint_from(2, high, 4)) == [2, 2, 2, 2]
+    assert _randint_from(2, high) == 2
+
+
+@pytest.mark.unit
+def test_randint_from_matches_numpy_on_a_valid_range():
+    """A valid range draws exactly what numpy's randint does."""
+    from almasim.skymodels.serendipitous import _randint_from
+
+    np.random.seed(7)
+    expected = np.random.randint(2, 9, 5)
+    np.random.seed(7)
+    assert list(_randint_from(2, 9, 5)) == list(expected)

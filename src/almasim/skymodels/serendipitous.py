@@ -203,6 +203,15 @@ def sample_positions(
     return sample
 
 
+def _randint_from(low: int, high: Any, size: Any = None) -> Any:
+    """``np.random.randint(low, high, size)`` with ``high`` kept above ``low``.
+
+    The widths drawn here are bounded by the central source's, which can be
+    as small as ``low`` (a 2-channel line); numpy rejects an empty range.
+    """
+    return np.random.randint(low, max(low + 1, int(high)), size)
+
+
 def insert_serendipitous(
     terminal: Optional[Any],
     client: Client,
@@ -228,8 +237,8 @@ def insert_serendipitous(
     z_radius = n_chan / 2
     n_sources = np.random.randint(1, 5)
     # Generate fwhm for x and y
-    fwhm_xs = np.random.randint(1, fwhm_x, n_sources)
-    fwhm_ys = np.random.randint(1, fwhm_y, n_sources)
+    fwhm_xs = _randint_from(1, fwhm_x, n_sources)
+    fwhm_ys = _randint_from(1, fwhm_y, n_sources)
     # generate a random number of lines for each serendipitous source
     if len(line_fluxes) == 1:
         n_lines = np.array([1] * n_sources)
@@ -238,13 +247,13 @@ def insert_serendipitous(
     # generate the width of the first line based on the first line of the central source
     if fwhm_zs[0] < 2:
         fwhm_zs[0] = 2
-    s_fwhm_zs = np.random.randint(2, int(fwhm_zs[0]), n_sources)
+    s_fwhm_zs = _randint_from(2, fwhm_zs[0], n_sources)
     # get posx and poy of the centtral source
     pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(
         datacube.ra, datacube.dec, datacube.spectral_centre, 0
     )
     # get a mininum separation based on spatial dimensions
-    sep_x, sep_z = np.random.randint(0, int(xy_radius)), np.random.randint(0, int(z_radius))
+    sep_x, sep_z = _randint_from(0, xy_radius), _randint_from(0, z_radius)
     # get the position of the first line of the central source
     pos_z = pos_zs[0]
     # get maximum continum value
@@ -300,7 +309,7 @@ def insert_serendipitous(
             ]
             fwhmsz = [s_fwhm_zs[0]]
             for _ in range(n_line - 1):
-                fwhmsz.append(np.random.randint(2, np.random.choice(fwhm_zs, 1))[0])
+                fwhmsz.append(_randint_from(2, np.random.choice(fwhm_zs)))
             s_continum = serendipitous_conts[c_id]
             if params_handle is not None:
                 params_handle.write("RA: {}\n".format(s_ra))
