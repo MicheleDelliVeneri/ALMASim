@@ -34,6 +34,10 @@ def client():
     """Create a test client."""
     if not BACKEND_AVAILABLE:
         pytest.skip("Backend not available for testing")
+    from ._backend_db import database_driver_missing
+
+    if reason := database_driver_missing():
+        pytest.skip(reason)
     return TestClient(app)
 
 
@@ -97,7 +101,7 @@ def test_load_metadata(client, test_data_dir):
 @pytest.mark.integration
 def test_save_and_load_metadata_json_round_trip(client, tmp_path):
     """Test saving metadata as JSON and loading it back through the API."""
-    from backend.app.core.config import settings
+    from app.core.config import settings
 
     original_data_dir = settings.DATA_DIR
     settings.DATA_DIR = tmp_path
