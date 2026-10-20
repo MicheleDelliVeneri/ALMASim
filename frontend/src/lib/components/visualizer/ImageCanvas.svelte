@@ -700,12 +700,12 @@
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
-		<h2 class="text-lg font-semibold text-gray-900">Integrated Image</h2>
-		<div class="flex items-center space-x-4 text-sm text-gray-600">
+		<h2 class="text-lg font-semibold text-fg">Integrated Image</h2>
+		<div class="flex items-center space-x-4 text-sm text-fg-muted">
 			<span>Zoom: {(scale * 100).toFixed(0)}%</span>
 			<button
 				onclick={onReset}
-				class="rounded-md bg-gray-100 px-3 py-1 transition-colors hover:bg-gray-200"
+				class="rounded-md bg-surface px-3 py-1 transition-colors hover:bg-gray-200"
 			>
 				Reset View
 			</button>
@@ -713,16 +713,16 @@
 	</div>
 
 	<!-- Selection Tools -->
-	<div class="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-3">
-		<span class="text-sm font-medium text-gray-700">Selection Tool:</span>
+	<div class="flex items-center justify-between rounded-md border border-line bg-surface p-3">
+		<span class="text-sm font-medium text-fg-muted">Selection Tool:</span>
 		<div class="flex items-center space-x-2">
 			<button
 				onclick={() => {
 					selectionMode = 'none';
 				}}
 				class="rounded px-3 py-1 text-sm transition-colors {selectionMode === 'none'
-					? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-300'
-					: 'text-gray-600 hover:text-gray-900'}"
+					? 'bg-surface text-fg shadow-panel ring-1 ring-gray-300'
+					: 'text-fg-muted hover:text-gray-900'}"
 				title="Pan mode"
 			>
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -739,8 +739,8 @@
 					selectionMode = 'rectangle';
 				}}
 				class="rounded px-3 py-1 text-sm transition-colors {selectionMode === 'rectangle'
-					? 'bg-white text-gray-900 shadow-sm ring-1 ring-blue-500'
-					: 'text-gray-600 hover:text-gray-900'}"
+					? 'bg-surface text-fg shadow-panel ring-1 ring-blue-500'
+					: 'text-fg-muted hover:text-gray-900'}"
 				title="Rectangle selection"
 			>
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -752,8 +752,8 @@
 					selectionMode = 'circle';
 				}}
 				class="rounded px-3 py-1 text-sm transition-colors {selectionMode === 'circle'
-					? 'bg-white text-gray-900 shadow-sm ring-1 ring-blue-500'
-					: 'text-gray-600 hover:text-gray-900'}"
+					? 'bg-surface text-fg shadow-panel ring-1 ring-blue-500'
+					: 'text-fg-muted hover:text-gray-900'}"
 				title="Circle selection"
 			>
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -763,7 +763,7 @@
 			{#if selectedSelectionId}
 				<button
 					onclick={deleteSelectedSelection}
-					class="rounded bg-red-100 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-200"
+					class="rounded bg-danger-soft px-3 py-1 text-xs text-danger transition-colors hover:bg-red-200"
 					title="Delete selected region"
 				>
 					Delete
@@ -776,7 +776,7 @@
 						selectedSelectionId = null;
 						drawImage();
 					}}
-					class="rounded bg-gray-200 px-3 py-1 text-xs text-gray-700 transition-colors hover:bg-gray-300"
+					class="rounded bg-gray-200 px-3 py-1 text-xs text-fg-muted transition-colors hover:bg-gray-300"
 					title="Clear all selections"
 				>
 					Clear All
@@ -795,36 +795,36 @@
 				</h3>
 				<div class="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
 					<div>
-						<span class="text-gray-600">Pixels:</span>
-						<span class="ml-2 font-medium text-gray-900">{selectedSelection.stats.count}</span>
+						<span class="text-fg-muted">Pixels:</span>
+						<span class="ml-2 font-medium text-fg">{selectedSelection.stats.count}</span>
 					</div>
 					<div>
-						<span class="text-gray-600">Sum:</span>
-						<span class="ml-2 font-medium text-gray-900"
+						<span class="text-fg-muted">Sum:</span>
+						<span class="ml-2 font-medium text-fg"
 							>{selectedSelection.stats.sum.toFixed(2)}</span
 						>
 					</div>
 					<div>
-						<span class="text-gray-600">Mean:</span>
-						<span class="ml-2 font-medium text-gray-900"
+						<span class="text-fg-muted">Mean:</span>
+						<span class="ml-2 font-medium text-fg"
 							>{selectedSelection.stats.mean.toFixed(2)}</span
 						>
 					</div>
 					<div>
-						<span class="text-gray-600">Std Dev:</span>
-						<span class="ml-2 font-medium text-gray-900"
+						<span class="text-fg-muted">Std Dev:</span>
+						<span class="ml-2 font-medium text-fg"
 							>{selectedSelection.stats.std.toFixed(2)}</span
 						>
 					</div>
 					<div>
-						<span class="text-gray-600">Min:</span>
-						<span class="ml-2 font-medium text-gray-900"
+						<span class="text-fg-muted">Min:</span>
+						<span class="ml-2 font-medium text-fg"
 							>{selectedSelection.stats.min.toFixed(2)}</span
 						>
 					</div>
 					<div>
-						<span class="text-gray-600">Max:</span>
-						<span class="ml-2 font-medium text-gray-900"
+						<span class="text-fg-muted">Max:</span>
+						<span class="ml-2 font-medium text-fg"
 							>{selectedSelection.stats.max.toFixed(2)}</span
 						>
 					</div>
@@ -834,14 +834,14 @@
 	{/if}
 
 	<div
-		class="flex items-center justify-center overflow-hidden rounded-md border border-gray-300 bg-gray-100"
+		class="flex items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
 		style="touch-action: none; height: 400px; min-height: 400px;"
 	>
 		<canvas bind:this={canvasRef} class="block" style="cursor: {cursorStyle}; user-select: none;">
 		</canvas>
 	</div>
 
-	<div class="space-y-1 text-xs text-gray-500">
+	<div class="space-y-1 text-xs text-fg-dim">
 		<p>• Scroll to zoom in/out</p>
 		<p>• Click and drag to pan</p>
 		<p>• Right-click and drag (or middle mouse button) to pan</p>

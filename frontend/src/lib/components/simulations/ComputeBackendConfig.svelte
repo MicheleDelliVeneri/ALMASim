@@ -71,13 +71,13 @@
 	}
 </script>
 
-<section class="space-y-4 rounded-lg bg-white p-6 shadow-md">
-	<h2 class="text-xl font-semibold text-gray-900">Compute Backend</h2>
-	<p class="text-sm text-gray-600">Select the computation backend and configure its parameters.</p>
+<section class="space-y-4 rounded-lg bg-surface p-6 shadow-panel">
+	<h2 class="text-xl font-semibold text-fg">Compute Backend</h2>
+	<p class="text-sm text-fg-muted">Select the computation backend and configure its parameters.</p>
 
 	<div class="space-y-4">
 		<div>
-			<label for="compute_backend" class="mb-1 block text-sm font-medium text-gray-700">
+			<label for="compute_backend" class="mb-1 block text-sm font-medium text-fg-muted">
 				Backend Type
 			</label>
 			<select
@@ -87,7 +87,7 @@
 					onBackendTypeChange(e.currentTarget.value);
 					onConfigChange({}); // Reset config when backend changes
 				}}
-				class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+				class="w-full rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
 			>
 				<option value="local">Local</option>
 				<option value="dask">Dask (Distributed)</option>
@@ -97,11 +97,11 @@
 		</div>
 
 		{#if backendType === 'local'}
-			<div class="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-4">
-				<h3 class="text-sm font-semibold text-gray-800">Local Backend Configuration</h3>
+			<div class="space-y-3 rounded-md border border-line bg-surface p-4">
+				<h3 class="text-sm font-semibold text-fg">Local Backend Configuration</h3>
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
-						<label for="local_n_workers" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="local_n_workers" class="mb-1 block text-xs font-medium text-fg-muted">
 							Number of Worker Processes
 						</label>
 						<input
@@ -119,17 +119,17 @@
 								}
 							}}
 							placeholder="Auto (CPU count)"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 				</div>
 			</div>
 		{:else if backendType === 'dask'}
-			<div class="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-4">
-				<h3 class="text-sm font-semibold text-gray-800">Dask Backend Configuration</h3>
+			<div class="space-y-3 rounded-md border border-line bg-surface p-4">
+				<h3 class="text-sm font-semibold text-fg">Dask Backend Configuration</h3>
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
-						<label for="dask_scheduler" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="dask_scheduler" class="mb-1 block text-xs font-medium text-fg-muted">
 							Scheduler Address
 						</label>
 						<div class="flex gap-2">
@@ -145,13 +145,13 @@
 									daskTestError = null;
 								}}
 								placeholder="tcp://localhost:8786"
-								class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								class="flex-1 rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 							/>
 							<button
 								type="button"
 								onclick={testDaskConnection}
 								disabled={daskTesting}
-								class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+								class="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-50"
 								title="Test connection"
 							>
 								{#if daskTesting}
@@ -164,7 +164,7 @@
 								{/if}
 							</button>
 						</div>
-						<p class="mt-1 text-xs text-gray-500">
+						<p class="mt-1 text-xs text-fg-dim">
 							Scheduler port is <span class="font-mono">8786</span>; dashboard is on <span class="font-mono">8787</span>. Leave empty for a local cluster.
 						</p>
 
@@ -188,9 +188,9 @@
 
 						<!-- Connection test result -->
 						{#if daskResult?.ok}
-							<div class="mt-2 flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2">
+							<div class="mt-2 flex items-center gap-2 rounded-md border border-ok-line bg-ok-soft px-3 py-2">
 								<span class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
-								<span class="text-xs font-medium text-green-800">
+								<span class="text-xs font-medium text-ok">
 									Connected — {daskResult.workers} worker{daskResult.workers !== 1 ? 's' : ''}, {daskResult.total_threads} threads, {daskResult.total_memory_gb} GB
 								</span>
 								<button
@@ -209,13 +209,13 @@
 								</button>
 							</div>
 						{:else if daskTestError}
-							<div class="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+							<div class="mt-2 rounded-md border border-danger-line bg-danger-soft px-3 py-2">
 								<div class="flex items-center gap-2">
 									<span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500"></span>
-									<span class="text-xs font-medium text-red-800">{daskTestError}</span>
+									<span class="text-xs font-medium text-danger">{daskTestError}</span>
 								</div>
 								{#if /localhost/.test(daskSchedulerAddr) && /timeout|refused|connect/i.test(daskTestError)}
-									<p class="mt-1 pl-4 text-xs text-red-700">
+									<p class="mt-1 pl-4 text-xs text-danger">
 										Tip: try <span class="font-mono font-semibold">tcp://host.docker.internal:8786</span> — the backend runs inside Docker and cannot reach your host via <span class="font-mono">localhost</span>.
 									</p>
 								{/if}
@@ -223,7 +223,7 @@
 						{/if}
 					</div>
 					<div>
-						<label for="dask_n_workers" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="dask_n_workers" class="mb-1 block text-xs font-medium text-fg-muted">
 							Number of Workers
 						</label>
 						<input
@@ -236,20 +236,20 @@
 								updateConfig('n_workers', isNaN(val) ? undefined : val);
 							}}
 							placeholder="Auto"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
-						<p class="mt-1 text-xs text-gray-500">
+						<p class="mt-1 text-xs text-fg-dim">
 							Only used for local Dask cluster (ignored when using external scheduler).
 						</p>
 					</div>
 				</div>
 			</div>
 		{:else if backendType === 'slurm'}
-			<div class="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-4">
-				<h3 class="text-sm font-semibold text-gray-800">Slurm Backend Configuration</h3>
+			<div class="space-y-3 rounded-md border border-line bg-surface p-4">
+				<h3 class="text-sm font-semibold text-fg">Slurm Backend Configuration</h3>
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
-						<label for="slurm_queue" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="slurm_queue" class="mb-1 block text-xs font-medium text-fg-muted">
 							Queue Name
 						</label>
 						<input
@@ -257,11 +257,11 @@
 							id="slurm_queue"
 							value={(backendConfig.queue as string) || 'normal'}
 							oninput={(e) => updateConfig('queue', e.currentTarget.value)}
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="slurm_project" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="slurm_project" class="mb-1 block text-xs font-medium text-fg-muted">
 							Project/Account (optional)
 						</label>
 						<input
@@ -273,11 +273,11 @@
 								updateConfig('project', val || undefined);
 							}}
 							placeholder="Optional"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="slurm_walltime" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="slurm_walltime" class="mb-1 block text-xs font-medium text-fg-muted">
 							Walltime (HH:MM:SS)
 						</label>
 						<input
@@ -286,11 +286,11 @@
 							value={(backendConfig.walltime as string) || '02:00:00'}
 							oninput={(e) => updateConfig('walltime', e.currentTarget.value)}
 							placeholder="02:00:00"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="slurm_cores" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="slurm_cores" class="mb-1 block text-xs font-medium text-fg-muted">
 							Cores per Worker
 						</label>
 						<input
@@ -302,11 +302,11 @@
 								const val = parseInt(e.currentTarget.value);
 								updateConfig('cores', isNaN(val) ? 1 : val);
 							}}
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="slurm_memory" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="slurm_memory" class="mb-1 block text-xs font-medium text-fg-muted">
 							Memory per Worker
 						</label>
 						<input
@@ -315,11 +315,11 @@
 							value={(backendConfig.memory as string) || '4GB'}
 							oninput={(e) => updateConfig('memory', e.currentTarget.value)}
 							placeholder="4GB"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="slurm_n_workers" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="slurm_n_workers" class="mb-1 block text-xs font-medium text-fg-muted">
 							Number of Workers
 						</label>
 						<input
@@ -331,17 +331,17 @@
 								const val = parseInt(e.currentTarget.value);
 								updateConfig('n_workers', isNaN(val) ? 4 : val);
 							}}
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 				</div>
 			</div>
 		{:else if backendType === 'kubernetes'}
-			<div class="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-4">
-				<h3 class="text-sm font-semibold text-gray-800">Kubernetes Backend Configuration</h3>
+			<div class="space-y-3 rounded-md border border-line bg-surface p-4">
+				<h3 class="text-sm font-semibold text-fg">Kubernetes Backend Configuration</h3>
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
-						<label for="k8s_namespace" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="k8s_namespace" class="mb-1 block text-xs font-medium text-fg-muted">
 							Namespace (optional)
 						</label>
 						<input
@@ -353,11 +353,11 @@
 								updateConfig('namespace', val || undefined);
 							}}
 							placeholder="default"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="k8s_n_workers" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="k8s_n_workers" class="mb-1 block text-xs font-medium text-fg-muted">
 							Number of Workers
 						</label>
 						<input
@@ -369,11 +369,11 @@
 								const val = parseInt(e.currentTarget.value);
 								updateConfig('n_workers', isNaN(val) ? 4 : val);
 							}}
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="k8s_image" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="k8s_image" class="mb-1 block text-xs font-medium text-fg-muted">
 							Docker Image (optional)
 						</label>
 						<input
@@ -385,11 +385,11 @@
 								updateConfig('image', val || undefined);
 							}}
 							placeholder="daskdev/dask:latest"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
 					<div>
-						<label for="k8s_resources" class="mb-1 block text-xs font-medium text-gray-700">
+						<label for="k8s_resources" class="mb-1 block text-xs font-medium text-fg-muted">
 							Resources (JSON, optional)
 						</label>
 						<textarea
@@ -406,9 +406,9 @@
 								}
 							}}
 							placeholder={`{"requests": {"cpu": "1", "memory": "2Gi"}}`}
-							class="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						></textarea>
-						<p class="mt-1 text-xs text-gray-500">JSON format for resource requests/limits</p>
+						<p class="mt-1 text-xs text-fg-dim">JSON format for resource requests/limits</p>
 					</div>
 				</div>
 			</div>

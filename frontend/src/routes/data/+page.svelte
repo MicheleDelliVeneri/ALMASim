@@ -168,15 +168,15 @@
 			case 'pending':
 			case 'starting':
 			case 'downloading':
-				return 'bg-blue-100 text-blue-700';
+				return 'bg-accent-soft text-accent';
 			case 'completed':
-				return 'bg-green-100 text-green-700';
+				return 'bg-ok-soft text-ok';
 			case 'failed':
-				return 'bg-red-100 text-red-700';
+				return 'bg-danger-soft text-danger';
 			case 'cancelled':
-				return 'bg-gray-100 text-gray-600';
+				return 'bg-surface text-fg-muted';
 			default:
-				return 'bg-gray-100 text-gray-600';
+				return 'bg-surface text-fg-muted';
 		}
 	}
 
@@ -188,14 +188,14 @@
 
 <div class="space-y-6">
 	<header>
-		<h1 class="text-3xl font-bold text-gray-900">Data</h1>
-		<p class="mt-2 text-gray-600">
+		<h1 class="text-3xl font-bold text-fg">Data</h1>
+		<p class="mt-2 text-fg-muted">
 			View download history, monitor active downloads, and re-download previous jobs.
 		</p>
 	</header>
 
 	{#if error}
-		<div class="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+		<div class="rounded-md border border-danger-line bg-danger-soft p-4 text-sm text-danger">
 			{error}
 			<button type="button" class="ml-2 underline" onclick={() => (error = '')}>dismiss</button>
 		</div>
@@ -203,8 +203,8 @@
 
 	<!-- Active downloads summary -->
 	{#if hasActiveJobs}
-		<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
-			<h2 class="text-sm font-semibold text-blue-800">
+		<div class="rounded-lg border border-accent-line bg-accent-soft p-4">
+			<h2 class="text-sm font-semibold text-accent">
 				{activeJobs.length} active download{activeJobs.length > 1 ? 's' : ''}
 			</h2>
 			<div class="mt-3 space-y-3">
@@ -216,13 +216,13 @@
 	{/if}
 
 	<!-- Download history table -->
-	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-		<div class="border-b border-gray-200 px-4 py-3">
+	<div class="overflow-hidden rounded-lg border border-line bg-surface shadow-panel">
+		<div class="border-b border-line px-4 py-3">
 			<div class="flex items-center justify-between">
-				<h2 class="text-lg font-semibold text-gray-800">Download History</h2>
+				<h2 class="text-lg font-semibold text-fg">Download History</h2>
 				<button
 					type="button"
-					class="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+					class="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-hover"
 					onclick={fetchJobs}
 				>
 					Refresh
@@ -231,17 +231,17 @@
 		</div>
 
 		{#if loading}
-			<div class="p-8 text-center text-sm text-gray-400">Loading download history…</div>
+			<div class="p-8 text-center text-sm text-fg-dim">Loading download history…</div>
 		{:else if jobs.length === 0}
-			<div class="p-8 text-center text-sm text-gray-400">
+			<div class="p-8 text-center text-sm text-fg-dim">
 				No downloads yet. Start downloading from the
-				<a href="/metadata" class="text-blue-600 underline hover:text-blue-700">Metadata</a>
+				<a href="/metadata" class="text-accent underline hover:text-accent">Metadata</a>
 				page.
 			</div>
 		{:else}
 			<div class="overflow-x-auto">
 				<table class="w-full text-sm">
-					<thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+					<thead class="bg-surface text-left text-xs uppercase text-fg-dim">
 						<tr>
 							<th class="px-4 py-3 font-medium">Date</th>
 							<th class="px-4 py-3 font-medium">Status</th>
@@ -253,12 +253,12 @@
 							<th class="px-4 py-3 font-medium text-right">Actions</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-100">
+					<tbody class="divide-y divide-line">
 						{#each jobs as job (job.job_id)}
 							{@const pct = progressPercent(job.progress)}
 							{@const isActive = ACTIVE_STATUSES.has(job.status)}
-							<tr class="hover:bg-gray-50" class:bg-blue-50={isActive}>
-								<td class="whitespace-nowrap px-4 py-3 text-gray-600">
+							<tr class="hover:bg-hover" class:bg-accent-soft={isActive}>
+								<td class="whitespace-nowrap px-4 py-3 text-fg-muted">
 									{formatDate(job.created_at)}
 								</td>
 								<td class="px-4 py-3">
@@ -268,13 +268,13 @@
 										{job.status}
 									</span>
 								</td>
-								<td class="px-4 py-3 text-gray-700">
+								<td class="px-4 py-3 text-fg-muted">
 									{job.files_completed}/{job.total_files}
 									{#if job.files_failed > 0}
-										<span class="text-red-500">({job.files_failed} failed)</span>
+										<span class="text-danger">({job.files_failed} failed)</span>
 									{/if}
 								</td>
-								<td class="whitespace-nowrap px-4 py-3 text-gray-600">
+								<td class="whitespace-nowrap px-4 py-3 text-fg-muted">
 									{formatBytes(job.total_bytes)}
 								</td>
 								<td class="px-4 py-3">
@@ -289,14 +289,14 @@
 												style="width: {pct}%"
 											></div>
 										</div>
-										<span class="text-xs text-gray-500">{pct}%</span>
+										<span class="text-xs text-fg-dim">{pct}%</span>
 									</div>
 								</td>
-								<td class="max-w-[200px] truncate px-4 py-3 text-gray-500" title={job.destination}>
+								<td class="max-w-[200px] truncate px-4 py-3 text-fg-dim" title={job.destination}>
 									{job.destination}
 								</td>
 								<td class="px-4 py-3">
-									<span class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+									<span class="rounded bg-surface px-1.5 py-0.5 text-xs text-fg-muted">
 										{job.product_filter}
 									</span>
 								</td>
@@ -305,18 +305,18 @@
 										{#if isActive}
 											<button
 												type="button"
-												class="rounded-md border border-red-300 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+												class="rounded-md border border-danger-line px-2.5 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
 												onclick={() => cancelJob(job.job_id)}
 											>
 												Cancel
 											</button>
 										{:else}
 											{#if job.error}
-												<span class="text-xs text-red-500" title={job.error}>⚠</span>
+												<span class="text-xs text-danger" title={job.error}>⚠</span>
 											{/if}
 											<button
 												type="button"
-												class="rounded-md border border-blue-300 px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+												class="rounded-md border border-accent-line px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent-soft disabled:opacity-50"
 												disabled={redownloading.has(job.job_id)}
 												title="Download these products again (overwrites existing files)"
 												onclick={() => openRedownloadOptions(job)}
@@ -326,7 +326,7 @@
 											{#if job.has_metadata}
 												<button
 													type="button"
-													class="rounded-md border border-indigo-300 px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+													class="rounded-md border border-accent-line px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent-soft disabled:opacity-50"
 													disabled={loadingMetadata.has(job.job_id)}
 													title="Load the metadata associated with this download"
 													onclick={() => loadMetadata(job)}
@@ -336,7 +336,7 @@
 											{/if}
 											<button
 												type="button"
-												class="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+												class="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-fg-dim hover:bg-danger-soft hover:text-danger hover:border-danger-line"
 												title="Remove from history"
 												onclick={() => deleteJob(job.job_id)}
 											>
@@ -357,23 +357,23 @@
 
 {#if redownloadOptionsOpen && redownloadTarget}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
-		<div class="alma-panel w-full max-w-xl rounded-lg shadow-xl">
-			<header class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+		<div class="alma-panel w-full max-w-xl rounded-lg shadow-panel">
+			<header class="flex items-center justify-between border-b border-line px-5 py-4">
 				<div>
 					<h2 class="text-lg font-semibold text-gray-100">Re-download products</h2>
-					<p class="mt-1 text-xs text-gray-400">{redownloadTarget.total_files} files to {redownloadTarget.destination}</p>
+					<p class="mt-1 text-xs text-fg-dim">{redownloadTarget.total_files} files to {redownloadTarget.destination}</p>
 				</div>
-				<button type="button" class="text-gray-400 hover:text-gray-100" aria-label="Close" onclick={() => (redownloadOptionsOpen = false)}>✕</button>
+				<button type="button" class="text-fg-dim hover:text-gray-100" aria-label="Close" onclick={() => (redownloadOptionsOpen = false)}>✕</button>
 			</header>
 
 			<div class="space-y-5 px-5 py-5">
 				<div>
 					<label class="block text-sm font-medium text-gray-300" for="redownload-parallel">Parallel streams</label>
 					<input id="redownload-parallel" type="range" min="1" max="30" bind:value={redownloadMaxParallel} class="mt-2 w-full" />
-					<p class="mt-1 text-xs text-gray-500">{redownloadMaxParallel} simultaneous files (balanced across ESO, NRAO and NAOJ mirrors, capped at 10 per mirror)</p>
+					<p class="mt-1 text-xs text-fg-dim">{redownloadMaxParallel} simultaneous files (balanced across ESO, NRAO and NAOJ mirrors, capped at 10 per mirror)</p>
 				</div>
 
-				<div class="grid gap-3 rounded border border-gray-200 p-3">
+				<div class="grid gap-3 rounded border border-line p-3">
 					<label class="flex items-center gap-2 text-sm text-gray-300">
 						<input type="checkbox" bind:checked={redownloadExtractTar} disabled={redownloadUnpackMs || redownloadCalibrated} />
 						Extract tar archives
@@ -393,8 +393,8 @@
 				</div>
 
 				<div class="grid gap-3 sm:grid-cols-2">
-					<input type="text" bind:value={redownloadArchiveOutputRoot} class="rounded border border-gray-300 px-3 py-2 text-sm" placeholder="Archive output root (optional)" />
-					<input type="text" bind:value={redownloadCasaDataRoot} class="rounded border border-gray-300 px-3 py-2 text-sm" placeholder="CASA data root (optional)" />
+					<input type="text" bind:value={redownloadArchiveOutputRoot} class="rounded border border-line px-3 py-2 text-sm" placeholder="Archive output root (optional)" />
+					<input type="text" bind:value={redownloadCasaDataRoot} class="rounded border border-line px-3 py-2 text-sm" placeholder="CASA data root (optional)" />
 				</div>
 
 				<label class="flex items-center gap-2 text-sm text-gray-300">
@@ -403,9 +403,9 @@
 				</label>
 			</div>
 
-			<footer class="flex justify-end gap-3 border-t border-gray-200 px-5 py-4">
-				<button type="button" class="rounded border border-gray-300 px-4 py-2 text-sm text-gray-300 hover:bg-gray-50" onclick={() => (redownloadOptionsOpen = false)}>Cancel</button>
-				<button type="button" class="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50" disabled={redownloading.has(redownloadTarget.job_id)} onclick={redownload}>
+			<footer class="flex justify-end gap-3 border-t border-line px-5 py-4">
+				<button type="button" class="rounded border border-line px-4 py-2 text-sm text-gray-300 hover:bg-hover" onclick={() => (redownloadOptionsOpen = false)}>Cancel</button>
+				<button type="button" class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50" disabled={redownloading.has(redownloadTarget.job_id)} onclick={redownload}>
 					{redownloading.has(redownloadTarget.job_id) ? 'Starting…' : 'Start re-download'}
 				</button>
 			</footer>

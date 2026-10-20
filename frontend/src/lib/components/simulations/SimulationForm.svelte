@@ -91,9 +91,9 @@
 	}: Props = $props();
 
 	const controlClass =
-		'w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500';
+		'w-full rounded-md border border-slate-600 bg-sunk px-3 py-2 text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500';
 	const disabledControlClass =
-		'w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-slate-400 placeholder:text-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-cyan-500';
+		'w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-fg-dim placeholder:text-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-cyan-500';
 
 	// Directory browser state
 	let browserOpen = $state(false);
@@ -156,7 +156,7 @@
 	}
 </script>
 
-<section class="space-y-4 rounded-lg border border-slate-700 bg-slate-950 p-6 shadow-md">
+<section class="space-y-4 rounded-lg border border-slate-700 bg-slate-950 p-6 shadow-panel">
 	<h2 class="text-xl font-semibold text-slate-100">Simulation Configuration</h2>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -203,7 +203,7 @@
 				}}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">
+			<p class="mt-1 text-xs text-fg-dim">
 				{#if nPix !== null}
 					Override active: {nPix} × {nPix} pixels
 				{:else}
@@ -235,7 +235,7 @@
 				}}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">
+			<p class="mt-1 text-xs text-fg-dim">
 				{#if nChannels !== null}
 					Override active: {nChannels} channels
 				{:else}
@@ -258,7 +258,7 @@
 				placeholder="My Simulation"
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Name for this simulation run</p>
+			<p class="mt-1 text-xs text-fg-dim">Name for this simulation run</p>
 		</div>
 
 		<div>
@@ -277,7 +277,7 @@
 				<button
 					type="button"
 					onclick={openBrowser}
-					class="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+					class="rounded-md border border-slate-600 bg-sunk px-3 py-2 text-sm font-medium text-fg-muted hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
 					title="Browse for directory"
 				>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -285,7 +285,7 @@
 					</svg>
 				</button>
 			</div>
-			<p class="mt-1 text-xs text-slate-400">Directory to save results (optional)</p>
+			<p class="mt-1 text-xs text-fg-dim">Directory to save results (optional)</p>
 		</div>
 
 		<div>
@@ -302,7 +302,7 @@
 				oninput={(e) => onNumSimulationsChange(parseInt(e.currentTarget.value) || 1)}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Run multiple simulations</p>
+			<p class="mt-1 text-xs text-fg-dim">Run multiple simulations</p>
 		</div>
 	</div>
 
@@ -320,7 +320,7 @@
 				<option value="metadata">Auto from Metadata</option>
 				<option value="manual">Manual Override</option>
 			</select>
-			<p class="mt-1 text-xs text-slate-400">Default: derive from metadata sensitivities</p>
+			<p class="mt-1 text-xs text-fg-dim">Default: derive from metadata sensitivities</p>
 		</div>
 
 		<div>
@@ -338,7 +338,7 @@
 				oninput={(e) => onSnrChange(parseFloat(e.currentTarget.value) || 1.3)}
 				class={disabledControlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">
+			<p class="mt-1 text-xs text-fg-dim">
 				{useMetadataSnr ? 'Disabled while using metadata-derived SNR' : 'Manual SNR override'}
 			</p>
 		</div>
@@ -356,7 +356,7 @@
 				<option value="metadata">Use Metadata Row</option>
 				<option value="manual">Manual Override</option>
 			</select>
-			<p class="mt-1 text-xs text-slate-400">Default: metadata row PWV</p>
+			<p class="mt-1 text-xs text-fg-dim">Default: metadata row PWV</p>
 		</div>
 
 		<div>
@@ -374,7 +374,7 @@
 				oninput={(e) => onPwvOverrideChange(parseFloat(e.currentTarget.value) || 1.0)}
 				class={disabledControlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">
+			<p class="mt-1 text-xs text-fg-dim">
 				{useMetadataPwv ? 'Disabled while using metadata PWV' : 'Used for all selected rows'}
 			</p>
 		</div>
@@ -393,7 +393,7 @@
 				<option value="fits">FITS</option>
 				<option value="both">Both</option>
 			</select>
-			<p class="mt-1 text-xs text-slate-400">Output format for image cubes</p>
+			<p class="mt-1 text-xs text-fg-dim">Output format for image cubes</p>
 		</div>
 
 		<div>
@@ -410,7 +410,7 @@
 				<option value="msv2">MSv2 (CASA)</option>
 				<option value="both">Both</option>
 			</select>
-			<p class="mt-1 text-xs text-slate-400">Output format for visibility data</p>
+			<p class="mt-1 text-xs text-fg-dim">Output format for visibility data</p>
 		</div>
 
 		<div>
@@ -427,7 +427,7 @@
 				oninput={(e) => onNLinesChange(parseInt(e.currentTarget.value) || 0)}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Spectral lines (0 for auto)</p>
+			<p class="mt-1 text-xs text-fg-dim">Spectral lines (0 for auto)</p>
 		</div>
 
 		<div>
@@ -444,7 +444,7 @@
 				oninput={(e) => onRobustChange(parseFloat(e.currentTarget.value) || 0.0)}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Range: -2 to 2 (default: 0)</p>
+			<p class="mt-1 text-xs text-fg-dim">Range: -2 to 2 (default: 0)</p>
 		</div>
 
 		<div>
@@ -460,7 +460,7 @@
 			>
 				<option value="legacy">Legacy</option>
 			</select>
-			<p class="mt-1 text-xs text-slate-400">Select the interferometric channel imaging backend</p>
+			<p class="mt-1 text-xs text-fg-dim">Select the interferometric channel imaging backend</p>
 		</div>
 	</div>
 
@@ -477,7 +477,7 @@
 				oninput={(e) => onSourceOffsetXChange(parseFloat(e.currentTarget.value) || 0.0)}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Arcsec from phase center. Default: 0</p>
+			<p class="mt-1 text-xs text-fg-dim">Arcsec from phase center. Default: 0</p>
 		</div>
 
 		<div>
@@ -492,7 +492,7 @@
 				oninput={(e) => onSourceOffsetYChange(parseFloat(e.currentTarget.value) || 0.0)}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Arcsec from phase center. Default: 0</p>
+			<p class="mt-1 text-xs text-fg-dim">Arcsec from phase center. Default: 0</p>
 		</div>
 
 		<div>
@@ -510,7 +510,7 @@
 				<option value="dusty_diffuse">Diffuse Dust</option>
 				<option value="combined">Combined</option>
 			</select>
-			<p class="mt-1 text-xs text-slate-400">ALMA-band additive sky background</p>
+			<p class="mt-1 text-xs text-fg-dim">ALMA-band additive sky background</p>
 		</div>
 
 		<div>
@@ -527,7 +527,7 @@
 				oninput={(e) => onBackgroundLevelChange(parseFloat(e.currentTarget.value) || 0.0)}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Relative amplitude scaling</p>
+			<p class="mt-1 text-xs text-fg-dim">Relative amplitude scaling</p>
 		</div>
 
 		<div>
@@ -551,7 +551,7 @@
 				}}
 				class={controlClass}
 			/>
-			<p class="mt-1 text-xs text-slate-400">Optional reproducible background seed</p>
+			<p class="mt-1 text-xs text-fg-dim">Optional reproducible background seed</p>
 		</div>
 	</div>
 </section>
@@ -562,15 +562,15 @@
 		role="dialog"
 		aria-modal="true"
 	>
-		<div class="w-full max-w-lg rounded-lg border border-slate-700 bg-slate-950 shadow-2xl">
+		<div class="w-full max-w-lg rounded-lg border border-slate-700 bg-slate-950 shadow-panel">
 			<header class="flex items-center justify-between border-b border-slate-700 px-5 py-3">
 				<h3 class="text-sm font-semibold text-slate-100">Choose Output Folder</h3>
-				<button type="button" class="text-slate-400 hover:text-slate-200" aria-label="Close" onclick={closeBrowser}>✕</button>
+				<button type="button" class="text-fg-dim hover:text-slate-200" aria-label="Close" onclick={closeBrowser}>✕</button>
 			</header>
 
 			<div class="space-y-3 px-5 py-4">
 				{#if browsing && !browseResult}
-					<div class="flex items-center justify-center gap-2 py-6 text-sm text-slate-400">
+					<div class="flex items-center justify-center gap-2 py-6 text-sm text-fg-dim">
 						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
 							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
 							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
@@ -581,10 +581,10 @@
 					<div class="rounded-md border border-red-700 bg-red-950/60 px-4 py-3 text-sm text-red-300">{browseError}</div>
 				{:else if browseResult}
 					<!-- Current path -->
-					<div class="flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2">
+					<div class="flex items-center gap-2 rounded-md bg-sunk px-3 py-2">
 						<span class="truncate font-mono text-xs text-slate-300">{browseResult.current}</span>
 						{#if browsing}
-							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none">
+							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-fg-dim" viewBox="0 0 24 24" fill="none">
 								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
 								<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
 							</svg>
@@ -592,11 +592,11 @@
 					</div>
 
 					<!-- Directory listing -->
-					<ul class="max-h-56 overflow-y-auto rounded-md border border-slate-700 bg-slate-900">
+					<ul class="max-h-56 overflow-y-auto rounded-md border border-slate-700 bg-sunk">
 						{#if browseResult.parent}
 							<li class="border-b border-slate-700">
 								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-slate-800" onclick={() => browseDir(browseResult!.parent!)}>
-									<span class="text-slate-400">↩</span>
+									<span class="text-fg-dim">↩</span>
 									<span class="text-slate-300">..</span>
 								</button>
 							</li>
@@ -605,11 +605,11 @@
 							<li class="border-b border-slate-700 last:border-b-0">
 								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-slate-800" onclick={() => browseDir(entry.path)}>
 									<span class="text-amber-400">📁</span>
-									<span class="truncate text-slate-200">{entry.name}</span>
+									<span class="truncate text-fg-muted">{entry.name}</span>
 								</button>
 							</li>
 						{:else}
-							<li class="px-3 py-4 text-center text-sm italic text-slate-400">No subdirectories</li>
+							<li class="px-3 py-4 text-center text-sm italic text-fg-dim">No subdirectories</li>
 						{/each}
 					</ul>
 
@@ -619,14 +619,14 @@
 							type="text"
 							bind:value={newFolderName}
 							placeholder="New folder name…"
-							class="flex-1 rounded-md border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+							class="flex-1 rounded-md border border-slate-600 bg-sunk px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
 							onkeydown={(e) => e.key === 'Enter' && createFolder()}
 						/>
 						<button
 							type="button"
 							disabled={!newFolderName.trim() || creatingFolder}
 							onclick={createFolder}
-							class="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+							class="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-slate-700 disabled:opacity-50"
 						>
 							{creatingFolder ? '…' : '+ Create'}
 						</button>
@@ -635,7 +635,7 @@
 			</div>
 
 			<footer class="flex items-center justify-end gap-3 border-t border-slate-700 px-5 py-3">
-				<button type="button" class="rounded-md border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800" onclick={closeBrowser}>Cancel</button>
+				<button type="button" class="rounded-md border border-slate-600 px-4 py-2 text-sm font-medium text-fg-muted hover:bg-slate-800" onclick={closeBrowser}>Cancel</button>
 				<button
 					type="button"
 					disabled={!browseResult}

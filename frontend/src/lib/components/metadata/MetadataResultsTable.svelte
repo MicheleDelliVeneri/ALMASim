@@ -467,12 +467,12 @@
 	}}
 />
 
-<section class="rounded-lg bg-white p-6 shadow">
+<section class="rounded-lg bg-surface p-6 shadow">
 	<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 		<div class="flex items-center gap-3">
 			<button
 				type="button"
-				class="text-gray-500 hover:text-gray-700"
+				class="text-fg-dim hover:text-gray-700"
 				onclick={() => (isCollapsed = !isCollapsed)}
 				aria-label={isCollapsed ? 'Expand table' : 'Collapse table'}
 			>
@@ -487,8 +487,8 @@
 				</svg>
 			</button>
 			<div>
-				<h2 class="text-xl font-semibold text-gray-900">Results</h2>
-				<span class="text-sm text-gray-600">
+				<h2 class="text-xl font-semibold text-fg">Results</h2>
+				<span class="text-sm text-fg-muted">
 					{#if fetching}
 						{results?.data?.length
 							? `${results.data.length} rows — fetching more…`
@@ -512,28 +512,28 @@
 			<div class="relative" data-columns-menu>
 				<button
 					type="button"
-					class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+					class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
 					onclick={() => (columnsMenuOpen = !columnsMenuOpen)}
 				>
 					Columns ({tableColumns.length}/{totalColumnCount})
 				</button>
 				{#if columnsMenuOpen}
 					<div
-						class="absolute right-0 z-30 mt-1 max-h-96 w-64 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+						class="absolute right-0 z-30 mt-1 max-h-96 w-64 overflow-y-auto rounded-md border border-line bg-surface shadow-panel"
 					>
-						<div class="flex items-center justify-between border-b border-gray-100 px-3 py-2">
-							<span class="text-xs font-semibold uppercase tracking-wide text-gray-500"
+						<div class="flex items-center justify-between border-b border-line px-3 py-2">
+							<span class="text-xs font-semibold uppercase tracking-wide text-fg-dim"
 								>Show / Hide</span
 							>
 							<div class="flex gap-2">
 								<button
 									type="button"
-									class="text-xs text-blue-600 hover:underline"
+									class="text-xs text-accent hover:underline"
 									onclick={() => (hiddenColumns = new Set())}>All</button
 								>
 								<button
 									type="button"
-									class="text-xs text-blue-600 hover:underline"
+									class="text-xs text-accent hover:underline"
 									onclick={() => (hiddenColumns = new Set(columnOrder))}>None</button
 								>
 							</div>
@@ -541,7 +541,7 @@
 						<!-- Pinned columns (always visible, not reorderable) -->
 						{#each pinnedColumns as col}
 							<div
-								class="flex items-center gap-2 bg-gray-50 px-3 py-1.5 text-sm text-gray-500"
+								class="flex items-center gap-2 bg-surface px-3 py-1.5 text-sm text-fg-dim"
 							>
 								<svg class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
 									<path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
@@ -553,8 +553,8 @@
 						<!-- Reorderable columns (drag up/down to reorder) -->
 						{#each columnOrder as col}
 							<label
-								class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-								class:text-gray-400={!dataColumnSet.has(col)}
+								class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-fg-muted hover:bg-hover transition-colors"
+								class:text-fg-dim={!dataColumnSet.has(col)}
 								class:border-t-2={dragOverMenuCol === col && draggedMenuCol !== col}
 								class:border-blue-400={dragOverMenuCol === col && draggedMenuCol !== col}
 								draggable="true"
@@ -569,7 +569,7 @@
 									type="checkbox"
 									checked={!hiddenColumns.has(col)}
 									onchange={() => toggleColumn(col)}
-									class="rounded border-gray-300"
+									class="rounded border-line"
 								/>
 								{formatColumnName(col)}
 								{#if !dataColumnSet.has(col)}
@@ -591,7 +591,7 @@
 			{/if}
 			<button
 				type="button"
-				class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed"
+				class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover disabled:cursor-not-allowed"
 				onclick={onClear}
 				disabled={loading || !results}
 			>
@@ -599,7 +599,7 @@
 			</button>
 			<button
 				type="button"
-				class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+				class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
 				onclick={onLoad}
 			>
 				Load Metadata
@@ -607,7 +607,7 @@
 			{#if results?.data?.length}
 				<button
 					type="button"
-					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300"
+					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-blue-300"
 					disabled={saving}
 					onclick={onSave}
 				>
@@ -616,7 +616,7 @@
 			{/if}
 			{#if selectedCount > 0}
 				{#if sizeResolving}
-					<span class="inline-flex items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800">
+					<span class="inline-flex items-center gap-2 rounded-md border border-accent-line bg-accent-soft px-3 py-2 text-sm font-medium text-accent">
 						<svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
 							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
 							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
@@ -628,7 +628,7 @@
 					</span>
 					<button
 						type="button"
-						class="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+						class="rounded-md border border-danger-line px-3 py-2 text-sm font-medium text-danger hover:bg-danger-soft"
 						onclick={cancelSizeComputation}
 						title="Stop computing size"
 					>
@@ -637,7 +637,7 @@
 				{:else}
 					<button
 						type="button"
-						class="rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+						class="rounded-md border border-accent-line px-4 py-2 text-sm font-medium text-accent hover:bg-accent-soft"
 						onclick={computeSelectedSize}
 						title="Compute total download size for selected observations"
 					>
@@ -645,14 +645,14 @@
 					</button>
 				{/if}
 				{#if sizeFinished}
-					<span class="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800">
+					<span class="inline-flex items-center gap-1.5 rounded-md border border-accent-line bg-accent-soft px-3 py-2 text-sm font-medium text-accent">
 						{formatBytes(sizeTotalBytes)} — {sizeTotalFiles} files
 						{#if sizeCancelled}
 							<span class="text-xs text-amber-600">({sizeResolved}/{sizeTotal} resolved)</span>
 						{/if}
 					</span>
 				{:else if sizeError}
-					<span class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+					<span class="inline-flex items-center gap-1.5 rounded-md border border-danger-line bg-danger-soft px-3 py-2 text-xs text-danger">
 						{sizeError}
 						{#if sizeResolved > 0}
 							({sizeResolved}/{sizeTotal} resolved — {formatBytes(sizeTotalBytes)})
@@ -661,7 +661,7 @@
 				{/if}
 				<button
 					type="button"
-					class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover"
 					onclick={() => onDownload(getSelectedMemberOusUids(), getSelectedMetadataRows())}
 				>
 					Download ({selectedCount})
@@ -674,7 +674,7 @@
 		<!-- Top mirror scrollbar: scrolls horizontally in sync with the table below -->
 		<div
 			bind:this={mirrorBar}
-			class="mt-4 overflow-x-scroll overflow-y-hidden border-b border-gray-100"
+			class="mt-4 overflow-x-scroll overflow-y-hidden border-b border-line"
 			style="height: 14px;"
 		>
 			<div style="height: 1px; width: {tableScrollWidth}px;"></div>
@@ -682,21 +682,21 @@
 
 		<!-- Main scroll container: vertical (capped height) + horizontal -->
 		<div bind:this={scrollContainer} class="overflow-auto" style="max-height: {CONTAINER_HEIGHT}px; overscroll-behavior: contain;">
-			<table class="divide-y divide-gray-200 text-sm" style="min-width: max-content; width: 100%;">
+			<table class="divide-y divide-line text-sm" style="min-width: max-content; width: 100%;">
 				<thead class="sticky top-0 z-10">
 					<!-- Column header row -->
-					<tr class="bg-gray-50">
+					<tr class="bg-surface">
 						<!-- Selection checkbox header -->
 						<th
 							scope="col"
-							class="sticky left-0 z-20 w-10 bg-gray-50 px-2 py-2 text-center border-r border-gray-200"
+							class="sticky left-0 z-20 w-10 bg-surface px-2 py-2 text-center border-r border-line"
 						>
 							{#if results?.data?.length}
 								<input
 									type="checkbox"
 									checked={allFilteredSelected}
 									onchange={toggleSelectAll}
-									class="rounded border-gray-300"
+									class="rounded border-line"
 									title="Select all"
 								/>
 							{/if}
@@ -705,7 +705,7 @@
 							<th
 								bind:this={pinnedColEls[i]}
 								scope="col"
-								class="sticky z-20 whitespace-nowrap bg-gray-50 px-4 py-2 text-left font-semibold text-gray-700 border-r border-gray-200"
+								class="sticky z-20 whitespace-nowrap bg-surface px-4 py-2 text-left font-semibold text-fg-muted border-r border-line"
 								style="left: {pinnedLeft(i)}px;"
 							>
 								{formatColumnName(col)}
@@ -714,8 +714,8 @@
 						{#each reorderableTableColumns as column}
 							<th
 								scope="col"
-								class="whitespace-nowrap px-4 py-2 text-left font-semibold text-gray-700 cursor-grab select-none"
-								class:bg-blue-100={dragOverTableCol === column && draggedTableCol !== column}
+								class="whitespace-nowrap px-4 py-2 text-left font-semibold text-fg-muted cursor-grab select-none"
+								class:bg-accent-soft={dragOverTableCol === column && draggedTableCol !== column}
 								draggable="true"
 								ondragstart={(e: DragEvent) => onTableColDragStart(column, e)}
 								ondragover={(e: DragEvent) => onTableColDragOver(column, e)}
@@ -728,18 +728,18 @@
 					</tr>
 					<!-- Filter row — only shown when there is data -->
 					{#if results?.data?.length}
-						<tr class="bg-white shadow-sm">
+						<tr class="bg-surface shadow-panel">
 							<!-- Empty cell for checkbox column -->
-							<th scope="col" class="sticky left-0 z-20 bg-white px-2 py-1 border-r border-gray-200"></th>
+							<th scope="col" class="sticky left-0 z-20 bg-surface px-2 py-1 border-r border-line"></th>
 							{#each pinnedTableColumns as column, i}
-								<th scope="col" class="sticky z-20 bg-white px-2 py-1 border-r border-gray-200" style="left: {pinnedLeft(i)}px;">
+								<th scope="col" class="sticky z-20 bg-surface px-2 py-1 border-r border-line" style="left: {pinnedLeft(i)}px;">
 									<input
 										type="text"
 										placeholder="filter (* = wildcard)"
 										bind:value={columnFilters[column]}
-										class="w-full min-w-16 rounded border border-gray-200 px-1.5 py-0.5 text-xs font-normal text-gray-700 placeholder-gray-300 focus:border-blue-400 focus:outline-none"
+										class="w-full min-w-16 rounded border border-line px-1.5 py-0.5 text-xs font-normal text-fg-muted placeholder-gray-300 focus:border-blue-400 focus:outline-none"
 										class:border-blue-400={columnFilters[column]?.length > 0}
-										class:bg-blue-50={columnFilters[column]?.length > 0}
+										class:bg-accent-soft={columnFilters[column]?.length > 0}
 									/>
 								</th>
 							{/each}
@@ -749,16 +749,16 @@
 										type="text"
 										placeholder="filter (* = wildcard)"
 										bind:value={columnFilters[column]}
-										class="w-full min-w-16 rounded border border-gray-200 px-1.5 py-0.5 text-xs font-normal text-gray-700 placeholder-gray-300 focus:border-blue-400 focus:outline-none"
+										class="w-full min-w-16 rounded border border-line px-1.5 py-0.5 text-xs font-normal text-fg-muted placeholder-gray-300 focus:border-blue-400 focus:outline-none"
 										class:border-blue-400={columnFilters[column]?.length > 0}
-										class:bg-blue-50={columnFilters[column]?.length > 0}
+										class:bg-accent-soft={columnFilters[column]?.length > 0}
 									/>
 								</th>
 							{/each}
 						</tr>
 					{/if}
 				</thead>
-				<tbody class="bg-white">
+				<tbody class="bg-surface">
 					{#if !loading && results?.data?.length}
 						<tr style="height: {topPad}px;" aria-hidden="true">
 							<td colspan={tableColumns.length + 1}></td>
@@ -767,30 +767,30 @@
 							{@const dataIndex = filteredIndices[virtualStart + vi]}
 							{@const isSelected = selectedRowIndices.has(dataIndex)}
 							<tr
-								class="group border-b border-gray-100 hover:bg-gray-50"
-								class:bg-blue-50={isSelected}
+								class="group border-b border-line hover:bg-hover"
+								class:bg-accent-soft={isSelected}
 								style="height: {ROW_HEIGHT}px;"
 							>
 								<!-- Selection checkbox -->
 								<td
-									class="sticky left-0 z-[5] bg-white px-2 text-center align-middle border-r border-gray-200 group-hover:bg-gray-50"
-									class:bg-blue-50={isSelected}
+									class="sticky left-0 z-[5] bg-surface px-2 text-center align-middle border-r border-line group-hover:bg-gray-50"
+									class:bg-accent-soft={isSelected}
 								>
 									<input
 										type="checkbox"
 										checked={isSelected}
 										onchange={() => toggleRowSelection(dataIndex)}
-										class="rounded border-gray-300"
+										class="rounded border-line"
 									/>
 								</td>
 								{#each pinnedTableColumns as column, i}
 									{@const displayValue = stringifyValue(row[column])}
 									<td
-										class="sticky z-[5] bg-white px-4 align-middle border-r border-gray-200 group-hover:bg-gray-50"
+										class="sticky z-[5] bg-surface px-4 align-middle border-r border-line group-hover:bg-gray-50"
 										style="left: {pinnedLeft(i)}px;"
 									>
 										<div
-											class="whitespace-nowrap text-gray-800"
+											class="whitespace-nowrap text-fg"
 											style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;"
 											title={displayValue}
 										>
@@ -802,7 +802,7 @@
 									{@const displayValue = stringifyValue(row[column])}
 									<td class="px-4 align-middle">
 										<div
-											class="whitespace-nowrap text-gray-800"
+											class="whitespace-nowrap text-fg"
 											style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;"
 											title={displayValue}
 										>
@@ -817,13 +817,13 @@
 						</tr>
 					{:else if !loading && hasActiveFilters}
 						<tr>
-							<td colspan={tableColumns.length + 1} class="px-4 py-8 text-center text-sm text-gray-400">
+							<td colspan={tableColumns.length + 1} class="px-4 py-8 text-center text-sm text-fg-dim">
 								No rows match the current filters.
 							</td>
 						</tr>
 					{:else}
 						{#each placeholderRows as placeholder}
-							<tr class="animate-pulse border-b border-gray-100">
+							<tr class="animate-pulse border-b border-line">
 								{#each tableColumns as column}
 									<td class="px-4 py-3">
 										<div class="h-4 w-32 rounded bg-gray-200/80" aria-hidden={placeholder !== null && column.length >= 0}></div>

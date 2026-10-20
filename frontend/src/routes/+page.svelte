@@ -75,17 +75,17 @@
 				</p>
 			</div>
 			<div class="mt-8 flex flex-wrap gap-3">
-				<a href="/metadata" class="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+				<a href="/metadata" class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover">
 					Start from Metadata
 				</a>
-				<a href="/simulations" class="rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-50">
+				<a href="/simulations" class="rounded border border-line px-4 py-2 text-sm font-semibold text-gray-200 hover:bg-hover">
 					Open Simulations
 				</a>
 			</div>
 		</div>
 
 		<div class="alma-panel rounded-lg p-6">
-			<div class="border-b border-gray-200 pb-4">
+			<div class="border-b border-line pb-4">
 				<div class="flex items-start justify-between gap-4">
 					<div class="min-w-0">
 						<div class="alma-kicker">Connection</div>
@@ -94,22 +94,22 @@
 					<span
 						class="shrink-0 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wide"
 						class:alma-chip={healthTone === 'secondary'}
-						class:bg-red-100={healthTone === 'error'}
-						class:text-red-700={healthTone === 'error'}
+						class:bg-danger-soft={healthTone === 'error'}
+						class:text-danger={healthTone === 'error'}
 					>
 						{healthStatus}
 					</span>
 				</div>
 			</div>
 			<div class="mt-5 space-y-3">
-				<p class="text-sm leading-6 text-gray-400">
+				<p class="text-sm leading-6 text-fg-dim">
 					This only reports whether the frontend can reach the ALMASim backend API.
 				</p>
 				<div class="grid gap-2">
 					{#each workflowLinks as link}
-						<a href={link.href} class="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm text-gray-300 hover:bg-gray-50">
+						<a href={link.href} class="flex items-center justify-between rounded border border-line px-3 py-2 text-sm text-gray-300 hover:bg-hover">
 							<span>{link.label}</span>
-							<span class="text-gray-500">Open</span>
+							<span class="text-fg-dim">Open</span>
 						</a>
 					{/each}
 				</div>
@@ -119,14 +119,14 @@
 
 	<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 		{#each modules as module}
-			<a href={module.href} class="alma-panel group rounded-lg p-5 transition hover:border-cyan-300/50 hover:bg-white/10">
+			<a href={module.href} class="alma-panel group rounded-lg p-5 transition hover:border-cyan-300/50 hover:bg-hover">
 				<div class="flex items-center justify-between">
-					<span class="font-mono text-xs text-gray-500">{module.code}</span>
+					<span class="font-mono text-xs text-fg-dim">{module.code}</span>
 					<span class="alma-chip rounded px-2 py-1 text-xs font-semibold">{module.metric}</span>
 				</div>
 				<h2 class="mt-5 text-xl font-semibold text-gray-100">{module.title}</h2>
-				<p class="mt-3 text-sm leading-6 text-gray-400">{module.description}</p>
-				<div class="mt-5 text-sm font-semibold text-blue-600 group-hover:text-cyan-200">Open module</div>
+				<p class="mt-3 text-sm leading-6 text-fg-dim">{module.description}</p>
+				<div class="mt-5 text-sm font-semibold text-accent group-hover:text-cyan-200">Open module</div>
 			</a>
 		{/each}
 	</section>

@@ -130,7 +130,7 @@
 				id: 'component-model',
 				title: 'Component Model',
 				description: 'CLEAN component cube, which should approach the original clean sky model',
-				badgeClass: 'bg-indigo-100 text-indigo-800',
+				badgeClass: 'bg-accent-soft text-accent',
 				scale: 1.0,
 				panX: 0,
 				panY: 0
@@ -140,7 +140,7 @@
 				id: 'restored',
 				title: 'Restored Cube',
 				description: 'Component model convolved with the clean beam and added back to the residual',
-				badgeClass: 'bg-blue-100 text-blue-800',
+				badgeClass: 'bg-accent-soft text-accent',
 				scale: 1.0,
 				panX: 0,
 				panY: 0
@@ -338,10 +338,10 @@
 
 <div class="container mx-auto px-4 py-8">
 	<div class="mx-auto max-w-7xl space-y-6">
-		<div class="rounded-lg bg-white p-6 shadow-md">
+		<div class="rounded-lg bg-surface p-6 shadow-panel">
 			<div class="mb-4">
-				<h1 class="text-2xl font-bold text-gray-900">Imaging</h1>
-				<p class="mt-2 text-gray-600">
+				<h1 class="text-2xl font-bold text-fg">Imaging</h1>
+				<p class="mt-2 text-fg-muted">
 					Run the iterative deconvolution stage on saved dirty and beam cubes, inspect the restored cube, and compare it against the simulation clean cube and residuals.
 				</p>
 			</div>
@@ -362,57 +362,57 @@
 					/>
 				</div>
 
-				<div class="space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+				<div class="space-y-4 rounded-lg border border-line bg-surface p-4">
 					<div>
-						<h2 class="text-sm font-semibold text-gray-900">Selected Imaging Inputs</h2>
+						<h2 class="text-sm font-semibold text-fg">Selected Imaging Inputs</h2>
 						<div class="mt-3 space-y-2 text-sm">
 							<div>
-								<p class="text-gray-500">Dirty Cube</p>
-								<p class="truncate font-mono text-xs text-gray-900">{selectedDirtyPath || 'Not selected'}</p>
+								<p class="text-fg-dim">Dirty Cube</p>
+								<p class="truncate font-mono text-xs text-fg">{selectedDirtyPath || 'Not selected'}</p>
 							</div>
 							<div>
-								<p class="text-gray-500">Beam Cube</p>
-								<p class="truncate font-mono text-xs text-gray-900">{matchedBeamPath || 'No matching beam cube found'}</p>
+								<p class="text-fg-dim">Beam Cube</p>
+								<p class="truncate font-mono text-xs text-fg">{matchedBeamPath || 'No matching beam cube found'}</p>
 							</div>
 							<div>
-								<p class="text-gray-500">Reference Clean Cube</p>
-								<p class="truncate font-mono text-xs text-gray-900">{matchedCleanPath || 'No matching clean cube found'}</p>
+								<p class="text-fg-dim">Reference Clean Cube</p>
+								<p class="truncate font-mono text-xs text-fg">{matchedCleanPath || 'No matching clean cube found'}</p>
 							</div>
 						</div>
 					</div>
 
 					<div class="grid gap-4 md:grid-cols-2">
 						<label class="space-y-2">
-							<span class="text-sm font-medium text-gray-700">Cycles</span>
+							<span class="text-sm font-medium text-fg-muted">Cycles</span>
 							<input
 								type="number"
 								min="0"
 								max="5000"
 								step="10"
 								bind:value={cycles}
-								class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
 							/>
 						</label>
 
 						<label class="space-y-2">
-							<span class="text-sm font-medium text-gray-700">Gain</span>
+							<span class="text-sm font-medium text-fg-muted">Gain</span>
 							<input
 								type="number"
 								min="0.01"
 								max="1"
 								step="0.01"
 								bind:value={gain}
-								class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
 							/>
 						</label>
 					</div>
 
 					<div class="grid gap-4 md:grid-cols-2">
 						<label class="space-y-2">
-							<span class="text-sm font-medium text-gray-700">Integration</span>
+							<span class="text-sm font-medium text-fg-muted">Integration</span>
 							<select
 								bind:value={integrationMethod}
-								class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
 							>
 								<option value="sum">Sum</option>
 								<option value="mean">Mean</option>
@@ -420,11 +420,11 @@
 						</label>
 
 						<div class="space-y-2">
-							<label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+							<label class="flex items-center gap-2 text-sm font-medium text-fg-muted">
 								<input
 									type="checkbox"
 									bind:checked={useThreshold}
-									class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+									class="h-4 w-4 rounded border-line text-accent focus:ring-blue-500"
 								/>
 								<span>Use Threshold</span>
 							</label>
@@ -434,17 +434,17 @@
 								step="0.0001"
 								bind:value={threshold}
 								disabled={!useThreshold}
-								class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100"
+								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100"
 							/>
 						</div>
 					</div>
 
 					<div class="flex flex-wrap items-center gap-3">
-						<label class="flex items-center gap-2 text-sm text-gray-700">
+						<label class="flex items-center gap-2 text-sm text-fg-muted">
 							<input
 								type="checkbox"
 								bind:checked={linkedView}
-								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+								class="h-4 w-4 rounded border-line text-accent focus:ring-blue-500"
 							/>
 							<span>Link Pan/Zoom</span>
 						</label>
@@ -453,20 +453,20 @@
 							type="button"
 							onclick={runImaging}
 							disabled={running || !selectedDirtyPath || !matchedBeamPath}
-							class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+							class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-blue-300"
 						>
 							{running ? 'Running…' : resumeStatePath ? 'Run More Cycles' : 'Run Deconvolution'}
 						</button>
 					</div>
 
 					{#if runMetadata}
-						<div class="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+						<div class="rounded-md border border-accent-line bg-accent-soft p-3 text-sm text-accent">
 							<p>
 								Total cycles completed: <span class="font-semibold">{runMetadata.cycles_completed}</span>
 								{#if runMetadata.resumed}
-									<span class="ml-1 text-blue-700">(added {runMetadata.cycles_added} more)</span>
+									<span class="ml-1 text-accent">(added {runMetadata.cycles_added} more)</span>
 								{:else}
-									<span class="ml-1 text-blue-700">(initial run added {runMetadata.cycles_added})</span>
+									<span class="ml-1 text-accent">(initial run added {runMetadata.cycles_added})</span>
 								{/if}
 							</p>
 							<p class="mt-1">
@@ -476,7 +476,7 @@
 					{/if}
 
 					{#if error}
-						<div class="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+						<div class="rounded-md border border-danger-line bg-danger-soft p-3 text-sm text-danger">
 							{error}
 						</div>
 					{/if}
@@ -487,13 +487,13 @@
 		{#if panels.length > 0}
 			<div class="grid gap-6 md:grid-cols-2">
 				{#each panels as panel (panel.id)}
-					<div class="rounded-lg bg-white p-6 shadow-md">
+					<div class="rounded-lg bg-surface p-6 shadow-panel">
 						<div class="mb-4 flex items-start justify-between gap-3">
 							<div class="min-w-0">
 								<span class={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${panel.badgeClass}`}>
 									{panel.title}
 								</span>
-								<p class="mt-2 text-sm text-gray-600">{panel.description}</p>
+								<p class="mt-2 text-sm text-fg-muted">{panel.description}</p>
 							</div>
 						</div>
 
@@ -519,35 +519,35 @@
 
 {#if dirBrowserOpen}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
-		<div class="w-full max-w-lg rounded-lg bg-white shadow-2xl">
+		<div class="w-full max-w-lg rounded-lg bg-surface shadow-panel">
 			<header class="flex items-center justify-between border-b px-5 py-3">
-				<h2 class="text-sm font-semibold text-gray-900">Select Imaging Directory</h2>
+				<h2 class="text-sm font-semibold text-fg">Select Imaging Directory</h2>
 			</header>
 
 			<div class="space-y-3 px-5 py-4">
 				{#if dirBrowsing && !dirBrowseResult}
-					<div class="flex items-center justify-center gap-2 py-6 text-sm text-gray-500">Loading…</div>
+					<div class="flex items-center justify-center gap-2 py-6 text-sm text-fg-dim">Loading…</div>
 				{:else if dirBrowseError}
-					<div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{dirBrowseError}</div>
+					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{dirBrowseError}</div>
 				{:else if dirBrowseResult}
-					<div class="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2">
-						<span class="truncate font-mono text-xs text-gray-600">{dirBrowseResult.current}</span>
+					<div class="flex items-center gap-2 rounded-md bg-surface px-3 py-2">
+						<span class="truncate font-mono text-xs text-fg-muted">{dirBrowseResult.current}</span>
 					</div>
 
-					<ul class="max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white">
+					<ul class="max-h-56 overflow-y-auto rounded-md border border-line bg-surface">
 						{#if dirBrowseResult.parent}
-							<li class="border-b border-gray-100">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50" onclick={() => dirBrowseResult?.parent && browseDir(dirBrowseResult.parent)}>
-									<span class="text-gray-400">↩</span>
-									<span class="text-gray-500">..</span>
+							<li class="border-b border-line">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-hover" onclick={() => dirBrowseResult?.parent && browseDir(dirBrowseResult.parent)}>
+									<span class="text-fg-dim">↩</span>
+									<span class="text-fg-dim">..</span>
 								</button>
 							</li>
 						{/if}
 						{#each dirBrowseResult.entries as entry}
-							<li class="border-b border-gray-100 last:border-b-0">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-blue-50" onclick={() => browseDir(entry.path)}>
+							<li class="border-b border-line last:border-b-0">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent-soft" onclick={() => browseDir(entry.path)}>
 									<span class="text-yellow-500">📁</span>
-									<span class="truncate text-gray-700">{entry.name}</span>
+									<span class="truncate text-fg-muted">{entry.name}</span>
 								</button>
 							</li>
 						{/each}
@@ -556,11 +556,11 @@
 			</div>
 
 			<footer class="flex justify-end gap-3 border-t px-5 py-3">
-				<button type="button" class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" onclick={closeDirBrowser}>Cancel</button>
+				<button type="button" class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover" onclick={closeDirBrowser}>Cancel</button>
 				<button
 					type="button"
 					disabled={!dirBrowseResult}
-					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-blue-300"
 					onclick={selectDir}
 				>
 					Select This Directory

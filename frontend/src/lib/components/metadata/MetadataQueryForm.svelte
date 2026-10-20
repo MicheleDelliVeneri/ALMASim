@@ -223,15 +223,15 @@
 	}}
 />
 
-<form onsubmit={handleSubmit} class="space-y-4 rounded-lg bg-white p-6 shadow">
+<form onsubmit={handleSubmit} class="space-y-4 rounded-lg bg-surface p-6 shadow">
 	<div class="flex items-center justify-between">
-		<h2 class="text-xl font-semibold text-gray-900">Query Builder</h2>
+		<h2 class="text-xl font-semibold text-fg">Query Builder</h2>
 	</div>
 
 	<!-- Quick-filter toggles -->
 	<div class="flex flex-wrap gap-x-6 gap-y-2">
-		<label class="inline-flex items-center gap-2 text-sm text-gray-700">
-			<input type="checkbox" bind:checked={publicOnly} class="rounded border-gray-300" />
+		<label class="inline-flex items-center gap-2 text-sm text-fg-muted">
+			<input type="checkbox" bind:checked={publicOnly} class="rounded border-line" />
 			<span>Public data only</span>
 		</label>
 	</div>
@@ -239,12 +239,12 @@
 	<!-- Source Name -->
 	<div>
 		<label class="block">
-			<span class="text-sm font-medium text-gray-700">Source Name</span>
+			<span class="text-sm font-medium text-fg-muted">Source Name</span>
 			<input
 				type="text"
 				name="source_name"
 				placeholder="e.g. NGC 1068"
-				class="mt-1 w-full rounded-md border border-gray-300 p-2"
+				class="mt-1 w-full rounded-md border border-line p-2"
 			/>
 		</label>
 	</div>
@@ -254,7 +254,7 @@
 
 		<!-- Science Keywords multi-select -->
 		<div data-dropdown="keyword">
-			<span class="text-sm font-medium text-gray-700">Science Keywords</span>
+			<span class="text-sm font-medium text-fg-muted">Science Keywords</span>
 			<div class="relative mt-1">
 				<input
 					type="text"
@@ -262,16 +262,16 @@
 					disabled={!scienceTypes}
 					bind:value={keywordSearch}
 					onfocus={() => (keywordDropdownOpen = true)}
-					class="w-full rounded-md border border-gray-300 p-2 text-sm disabled:bg-gray-50"
+					class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
 				/>
 				{#if keywordDropdownOpen && scienceTypes}
-					<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+					<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
 						{#if filteredKeywords.length === 0}
-							<p class="px-3 py-2 text-sm text-gray-400">No results</p>
+							<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
 						{:else}
 							{#each filteredKeywords as kw}
-								<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-sm">
-									<input type="checkbox" checked={selectedKeywords.includes(kw)} onchange={() => toggleKeyword(kw)} class="rounded border-gray-300" />
+								<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
+									<input type="checkbox" checked={selectedKeywords.includes(kw)} onchange={() => toggleKeyword(kw)} class="rounded border-line" />
 									{kw}
 								</label>
 							{/each}
@@ -282,21 +282,21 @@
 			{#if selectedKeywords.length > 0}
 				<div class="mt-1 flex flex-wrap gap-1">
 					{#each selectedKeywords as kw}
-						<span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+						<span class="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">
 							{kw}
-							<button type="button" onclick={() => toggleKeyword(kw)} class="ml-0.5 text-blue-500 hover:text-blue-700" aria-label="Remove {kw}">✕</button>
+							<button type="button" onclick={() => toggleKeyword(kw)} class="ml-0.5 text-accent hover:text-accent" aria-label="Remove {kw}">✕</button>
 						</span>
 					{/each}
-					<button type="button" onclick={() => (selectedKeywords = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+					<button type="button" onclick={() => (selectedKeywords = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
 				</div>
 			{:else}
-				<p class="mt-0.5 text-xs text-gray-400">0 selected</p>
+				<p class="mt-0.5 text-xs text-fg-dim">0 selected</p>
 			{/if}
 		</div>
 
 		<!-- Science Categories multi-select -->
 		<div data-dropdown="category">
-			<span class="text-sm font-medium text-gray-700">Science Category</span>
+			<span class="text-sm font-medium text-fg-muted">Science Category</span>
 			<div class="relative mt-1">
 				<input
 					type="text"
@@ -304,16 +304,16 @@
 					disabled={!scienceTypes}
 					bind:value={categorySearch}
 					onfocus={() => (categoryDropdownOpen = true)}
-					class="w-full rounded-md border border-gray-300 p-2 text-sm disabled:bg-gray-50"
+					class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
 				/>
 				{#if categoryDropdownOpen && scienceTypes}
-					<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+					<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
 						{#if filteredCategories.length === 0}
-							<p class="px-3 py-2 text-sm text-gray-400">No results</p>
+							<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
 						{:else}
 							{#each filteredCategories as cat}
-								<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-sm">
-									<input type="checkbox" checked={selectedCategories.includes(cat)} onchange={() => toggleCategory(cat)} class="rounded border-gray-300" />
+								<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
+									<input type="checkbox" checked={selectedCategories.includes(cat)} onchange={() => toggleCategory(cat)} class="rounded border-line" />
 									{cat}
 								</label>
 							{/each}
@@ -329,10 +329,10 @@
 							<button type="button" onclick={() => toggleCategory(cat)} class="ml-0.5 text-purple-500 hover:text-purple-700" aria-label="Remove {cat}">✕</button>
 						</span>
 					{/each}
-					<button type="button" onclick={() => (selectedCategories = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+					<button type="button" onclick={() => (selectedCategories = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
 				</div>
 			{:else}
-				<p class="mt-0.5 text-xs text-gray-400">0 selected</p>
+				<p class="mt-0.5 text-xs text-fg-dim">0 selected</p>
 			{/if}
 		</div>
 	</div>
@@ -340,18 +340,18 @@
 	<!-- ALMA Cycle -->
 	<div>
 		<div class="flex items-center justify-between">
-			<span class="text-sm font-medium text-gray-700">ALMA Cycle</span>
+			<span class="text-sm font-medium text-fg-muted">ALMA Cycle</span>
 			{#if selectedCycles.length > 0}
 				<button
 					type="button"
 					onclick={() => (selectedCycles = [])}
-					class="text-xs text-gray-400 hover:text-gray-600 underline"
+					class="text-xs text-fg-dim hover:text-gray-600 underline"
 				>Clear all</button>
 			{/if}
 		</div>
 		<div class="mt-2 flex flex-wrap gap-2">
 			{#each cycleOptions as opt}
-				<label class="inline-flex items-center space-x-1 text-sm text-gray-700">
+				<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
 					<input
 						type="checkbox"
 						checked={selectedCycles.includes(opt.cycle)}
@@ -360,13 +360,13 @@
 								? selectedCycles.filter((c) => c !== opt.cycle)
 								: [...selectedCycles, opt.cycle];
 						}}
-						class="rounded border-gray-300"
+						class="rounded border-line"
 					/>
 					<span>{opt.label}</span>
 				</label>
 			{/each}
 		</div>
-		<p class="mt-0.5 text-xs text-gray-400">
+		<p class="mt-0.5 text-xs text-fg-dim">
 			{selectedCycles.length > 0
 				? `Filtering by ${selectedCycles.length} cycle(s): proposal_id prefix ${selectedCycles.map((c) => `${2012 + c}.`).join(', ')}`
 				: 'All cycles (no filter)'}
@@ -375,11 +375,11 @@
 
 	<!-- Bands -->
 	<div>
-		<span class="text-sm font-medium text-gray-700">Band</span>
+		<span class="text-sm font-medium text-fg-muted">Band</span>
 		<div class="mt-2 flex flex-wrap gap-2">
 			{#each bandOptions as band}
-				<label class="inline-flex items-center space-x-1 text-sm text-gray-700">
-					<input type="checkbox" name="bands" value={band} class="rounded border-gray-300" />
+				<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
+					<input type="checkbox" name="bands" value={band} class="rounded border-line" />
 					<span>Band {band}</span>
 				</label>
 			{/each}
@@ -389,11 +389,11 @@
 	<!-- Array Type & Array Configuration -->
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 		<div>
-			<span class="text-sm font-medium text-gray-700">Array Type</span>
+			<span class="text-sm font-medium text-fg-muted">Array Type</span>
 			<div class="mt-2 flex gap-4">
 				{#each arrayTypeOptions as atype}
-					<label class="inline-flex items-center space-x-1 text-sm text-gray-700">
-						<input type="checkbox" name="array_type" value={atype} class="rounded border-gray-300" />
+					<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
+						<input type="checkbox" name="array_type" value={atype} class="rounded border-line" />
 						<span>{atype}</span>
 					</label>
 				{/each}
@@ -401,12 +401,12 @@
 		</div>
 		<div>
 			<label class="block">
-				<span class="text-sm font-medium text-gray-700">Array Configuration</span>
+				<span class="text-sm font-medium text-fg-muted">Array Configuration</span>
 				<input
 					type="text"
 					name="array_configuration"
 					placeholder="e.g. C-1, C-2 (comma-separated)"
-					class="mt-1 w-full rounded-md border border-gray-300 p-2"
+					class="mt-1 w-full rounded-md border border-line p-2"
 				/>
 			</label>
 		</div>
@@ -415,17 +415,17 @@
 	<!-- Angular Resolution & Observation Date -->
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 		<div>
-			<span class="block text-sm font-medium text-gray-700">Angular Resolution (arcsec)</span>
+			<span class="block text-sm font-medium text-fg-muted">Angular Resolution (arcsec)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.01" name="ang_res_min" placeholder="Min" class="w-full rounded-md border border-gray-300 p-2" />
-				<input type="number" step="0.01" name="ang_res_max" placeholder="Max" class="w-full rounded-md border border-gray-300 p-2" />
+				<input type="number" step="0.01" name="ang_res_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
+				<input type="number" step="0.01" name="ang_res_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
 			</div>
 		</div>
 		<div>
-			<span class="block text-sm font-medium text-gray-700">Observation Date</span>
+			<span class="block text-sm font-medium text-fg-muted">Observation Date</span>
 			<div class="mt-1 flex gap-2">
-				<input type="date" name="obs_date_min" class="w-full rounded-md border border-gray-300 p-2" />
-				<input type="date" name="obs_date_max" class="w-full rounded-md border border-gray-300 p-2" />
+				<input type="date" name="obs_date_min" class="w-full rounded-md border border-line p-2" />
+				<input type="date" name="obs_date_max" class="w-full rounded-md border border-line p-2" />
 			</div>
 		</div>
 	</div>
@@ -433,11 +433,11 @@
 	<!-- QA2 Status & Type -->
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 		<div>
-			<span class="text-sm font-medium text-gray-700">QA2 Status</span>
+			<span class="text-sm font-medium text-fg-muted">QA2 Status</span>
 			<div class="mt-2 flex gap-4">
 				{#each qa2Options as qa2}
-					<label class="inline-flex items-center space-x-1 text-sm text-gray-700">
-						<input type="checkbox" name="qa2_status" value={qa2.value} class="rounded border-gray-300" />
+					<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
+						<input type="checkbox" name="qa2_status" value={qa2.value} class="rounded border-line" />
 						<span>{qa2.label}</span>
 					</label>
 				{/each}
@@ -445,23 +445,23 @@
 		</div>
 		<div>
 			<div>
-				<span class="text-sm font-medium text-gray-700">Project Type</span>
+				<span class="text-sm font-medium text-fg-muted">Project Type</span>
 				<div class="mt-2 flex flex-wrap gap-3">
 					{#each [['S', 'Science'], ['L', 'Large'], ['SV', 'Science Verification'], ['V', 'VLBI'], ['T', 'Target of Opportunity'], ['P', 'Phased Array']] as [val, lbl]}
-						<label class="inline-flex items-center space-x-1 text-sm text-gray-700">
-							<input type="checkbox" name="obs_type" value={val} class="rounded border-gray-300" />
+						<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
+							<input type="checkbox" name="obs_type" value={val} class="rounded border-line" />
 							<span>{val} ({lbl})</span>
 						</label>
 					{/each}
 				</div>
 			</div>
 			<div class="mt-2 flex gap-4">
-				<label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
-					<input type="checkbox" bind:checked={scienceOnly} class="rounded border-gray-300" />
+				<label class="inline-flex items-center gap-1.5 text-sm text-fg-muted">
+					<input type="checkbox" bind:checked={scienceOnly} class="rounded border-line" />
 					<span>Science only</span>
 				</label>
-				<label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
-					<input type="checkbox" bind:checked={excludeMosaic} class="rounded border-gray-300" />
+				<label class="inline-flex items-center gap-1.5 text-sm text-fg-muted">
+					<input type="checkbox" bind:checked={excludeMosaic} class="rounded border-line" />
 					<span>Exclude mosaics</span>
 				</label>
 			</div>
@@ -471,33 +471,33 @@
 	<!-- FOV, Time Resolution, Frequency -->
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 		<div>
-			<span class="block text-sm font-medium text-gray-700">FOV (arcsec)</span>
+			<span class="block text-sm font-medium text-fg-muted">FOV (arcsec)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.1" name="fov_min" placeholder="Min" class="w-full rounded-md border border-gray-300 p-2" />
-				<input type="number" step="0.1" name="fov_max" placeholder="Max" class="w-full rounded-md border border-gray-300 p-2" />
+				<input type="number" step="0.1" name="fov_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
+				<input type="number" step="0.1" name="fov_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
 			</div>
 		</div>
 		<div>
-			<span class="block text-sm font-medium text-gray-700">Time Resolution (s)</span>
+			<span class="block text-sm font-medium text-fg-muted">Time Resolution (s)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.1" name="time_min" placeholder="Min" class="w-full rounded-md border border-gray-300 p-2" />
-				<input type="number" step="0.1" name="time_max" placeholder="Max" class="w-full rounded-md border border-gray-300 p-2" />
+				<input type="number" step="0.1" name="time_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
+				<input type="number" step="0.1" name="time_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
 			</div>
 		</div>
 		<div>
-			<span class="block text-sm font-medium text-gray-700">Frequency (GHz)</span>
+			<span class="block text-sm font-medium text-fg-muted">Frequency (GHz)</span>
 			<div class="mt-1 flex gap-2">
-				<input type="number" step="0.1" name="freq_min" placeholder="Min" class="w-full rounded-md border border-gray-300 p-2" />
-				<input type="number" step="0.1" name="freq_max" placeholder="Max" class="w-full rounded-md border border-gray-300 p-2" />
+				<input type="number" step="0.1" name="freq_min" placeholder="Min" class="w-full rounded-md border border-line p-2" />
+				<input type="number" step="0.1" name="freq_max" placeholder="Max" class="w-full rounded-md border border-line p-2" />
 			</div>
 		</div>
 	</div>
 
 	<!-- Exclusion Filters (collapsible) -->
-	<div class="rounded-md border border-gray-200">
+	<div class="rounded-md border border-line">
 		<button
 			type="button"
-			class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50"
+			class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-fg-muted hover:bg-hover"
 			onclick={() => (excludeSection = !excludeSection)}
 		>
 			<span>Exclusion Filters</span>
@@ -511,11 +511,11 @@
 		</button>
 
 		{#if excludeSection}
-			<div class="space-y-4 border-t border-gray-200 px-4 py-4">
+			<div class="space-y-4 border-t border-line px-4 py-4">
 
 				<!-- Exclude Solar -->
-				<label class="inline-flex items-center gap-2 text-sm text-gray-700">
-					<input type="checkbox" bind:checked={excludeSolar} class="rounded border-gray-300" />
+				<label class="inline-flex items-center gap-2 text-sm text-fg-muted">
+					<input type="checkbox" bind:checked={excludeSolar} class="rounded border-line" />
 					<span>Exclude solar observations (target / keyword / category contains "sun")</span>
 				</label>
 
@@ -523,7 +523,7 @@
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<!-- Exclude Keywords -->
 					<div data-dropdown="ex-keyword">
-						<span class="text-sm font-medium text-gray-700">Exclude Science Keywords</span>
+						<span class="text-sm font-medium text-fg-muted">Exclude Science Keywords</span>
 						<div class="relative mt-1">
 							<input
 								type="text"
@@ -531,16 +531,16 @@
 								disabled={!scienceTypes}
 								bind:value={excludeKeywordSearch}
 								onfocus={() => (excludeKeywordDropdownOpen = true)}
-								class="w-full rounded-md border border-gray-300 p-2 text-sm disabled:bg-gray-50"
+								class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
 							/>
 							{#if excludeKeywordDropdownOpen && scienceTypes}
-								<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+								<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
 									{#if filteredExcludeKeywords.length === 0}
-										<p class="px-3 py-2 text-sm text-gray-400">No results</p>
+										<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
 									{:else}
 										{#each filteredExcludeKeywords as kw}
-											<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-sm">
-												<input type="checkbox" checked={excludeSelectedKeywords.includes(kw)} onchange={() => toggleExcludeKeyword(kw)} class="rounded border-gray-300" />
+											<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
+												<input type="checkbox" checked={excludeSelectedKeywords.includes(kw)} onchange={() => toggleExcludeKeyword(kw)} class="rounded border-line" />
 												{kw}
 											</label>
 										{/each}
@@ -551,21 +551,21 @@
 						{#if excludeSelectedKeywords.length > 0}
 							<div class="mt-1 flex flex-wrap gap-1">
 								{#each excludeSelectedKeywords as kw}
-									<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
+									<span class="inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs text-danger">
 										{kw}
-										<button type="button" onclick={() => toggleExcludeKeyword(kw)} class="ml-0.5 text-red-500 hover:text-red-700" aria-label="Remove {kw}">✕</button>
+										<button type="button" onclick={() => toggleExcludeKeyword(kw)} class="ml-0.5 text-danger hover:text-danger" aria-label="Remove {kw}">✕</button>
 									</span>
 								{/each}
-								<button type="button" onclick={() => (excludeSelectedKeywords = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+								<button type="button" onclick={() => (excludeSelectedKeywords = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
 							</div>
 						{:else}
-							<p class="mt-0.5 text-xs text-gray-400">0 excluded</p>
+							<p class="mt-0.5 text-xs text-fg-dim">0 excluded</p>
 						{/if}
 					</div>
 
 					<!-- Exclude Categories -->
 					<div data-dropdown="ex-category">
-						<span class="text-sm font-medium text-gray-700">Exclude Science Categories</span>
+						<span class="text-sm font-medium text-fg-muted">Exclude Science Categories</span>
 						<div class="relative mt-1">
 							<input
 								type="text"
@@ -573,16 +573,16 @@
 								disabled={!scienceTypes}
 								bind:value={excludeCategorySearch}
 								onfocus={() => (excludeCategoryDropdownOpen = true)}
-								class="w-full rounded-md border border-gray-300 p-2 text-sm disabled:bg-gray-50"
+								class="w-full rounded-md border border-line p-2 text-sm disabled:bg-gray-50"
 							/>
 							{#if excludeCategoryDropdownOpen && scienceTypes}
-								<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+								<div class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-surface shadow-panel">
 									{#if filteredExcludeCategories.length === 0}
-										<p class="px-3 py-2 text-sm text-gray-400">No results</p>
+										<p class="px-3 py-2 text-sm text-fg-dim">No results</p>
 									{:else}
 										{#each filteredExcludeCategories as cat}
-											<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-sm">
-												<input type="checkbox" checked={excludeSelectedCategories.includes(cat)} onchange={() => toggleExcludeCategory(cat)} class="rounded border-gray-300" />
+											<label class="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-hover text-sm">
+												<input type="checkbox" checked={excludeSelectedCategories.includes(cat)} onchange={() => toggleExcludeCategory(cat)} class="rounded border-line" />
 												{cat}
 											</label>
 										{/each}
@@ -593,15 +593,15 @@
 						{#if excludeSelectedCategories.length > 0}
 							<div class="mt-1 flex flex-wrap gap-1">
 								{#each excludeSelectedCategories as cat}
-									<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
+									<span class="inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs text-danger">
 										{cat}
-										<button type="button" onclick={() => toggleExcludeCategory(cat)} class="ml-0.5 text-red-500 hover:text-red-700" aria-label="Remove {cat}">✕</button>
+										<button type="button" onclick={() => toggleExcludeCategory(cat)} class="ml-0.5 text-danger hover:text-danger" aria-label="Remove {cat}">✕</button>
 									</span>
 								{/each}
-								<button type="button" onclick={() => (excludeSelectedCategories = [])} class="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
+								<button type="button" onclick={() => (excludeSelectedCategories = [])} class="text-xs text-fg-dim hover:text-gray-600 underline">Clear all</button>
 							</div>
 						{:else}
-							<p class="mt-0.5 text-xs text-gray-400">0 excluded</p>
+							<p class="mt-0.5 text-xs text-fg-dim">0 excluded</p>
 						{/if}
 					</div>
 				</div>
@@ -610,23 +610,23 @@
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
 						<label class="block">
-							<span class="text-sm font-medium text-gray-700">Exclude Source Names</span>
+							<span class="text-sm font-medium text-fg-muted">Exclude Source Names</span>
 							<input
 								type="text"
 								name="exclude_source_name"
 								placeholder="e.g. Sun, Moon (comma-separated)"
-								class="mt-1 w-full rounded-md border border-gray-300 p-2"
+								class="mt-1 w-full rounded-md border border-line p-2"
 							/>
 						</label>
 					</div>
 					<div>
 						<label class="block">
-							<span class="text-sm font-medium text-gray-700">Exclude Types</span>
+							<span class="text-sm font-medium text-fg-muted">Exclude Types</span>
 							<input
 								type="text"
 								name="exclude_obs_type"
 								placeholder="e.g. TP (comma-separated)"
-								class="mt-1 w-full rounded-md border border-gray-300 p-2"
+								class="mt-1 w-full rounded-md border border-line p-2"
 							/>
 						</label>
 					</div>
@@ -639,7 +639,7 @@
 		<button
 			type="submit"
 			disabled={loading}
-			class="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+			class="rounded-md bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-gray-400"
 		>
 			{loading ? 'Running...' : 'Run Query'}
 		</button>

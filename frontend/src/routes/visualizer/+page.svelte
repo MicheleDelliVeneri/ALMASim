@@ -310,9 +310,9 @@
 
 <div class="container mx-auto px-4 py-8">
 	<div class="mx-auto max-w-6xl space-y-6">
-		<div class="rounded-lg bg-white p-6 shadow-md">
-			<h1 class="mb-4 text-2xl font-bold text-gray-900">Product Visualizer</h1>
-			<p class="mb-4 text-sm text-gray-600">
+		<div class="rounded-lg bg-surface p-6 shadow-panel">
+			<h1 class="mb-4 text-2xl font-bold text-fg">Product Visualizer</h1>
+			<p class="mb-4 text-sm text-fg-muted">
 				Load ALMASim `.npz`, FITS, or MSv2 (`.ms`) outputs for quick inspection.
 			</p>
 
@@ -341,15 +341,15 @@
 				/>
 
 				{#if error}
-					<div class="rounded-md border border-red-200 bg-red-50 p-3">
-						<p class="text-sm text-red-800">{error}</p>
+					<div class="rounded-md border border-danger-line bg-danger-soft p-3">
+						<p class="text-sm text-danger">{error}</p>
 					</div>
 				{/if}
 
 				{#if loading}
 					<div class="py-4 text-center">
-						<p class="text-gray-600">Processing file...</p>
-						<p class="mt-1 text-sm text-gray-500">
+						<p class="text-fg-muted">Processing file...</p>
+						<p class="mt-1 text-sm text-fg-dim">
 							MSv2 products can take up to 2 minutes to open.
 						</p>
 					</div>
@@ -358,11 +358,11 @@
 		</div>
 
 		{#if loadedImages.length > 0}
-			<div class="rounded-lg bg-white p-4 shadow-md">
+			<div class="rounded-lg bg-surface p-4 shadow-panel">
 				<div
 					class="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0"
 				>
-					<h2 class="text-lg font-semibold text-gray-900">
+					<h2 class="text-lg font-semibold text-fg">
 						Loaded Images ({loadedImages.length})
 					</h2>
 
@@ -372,20 +372,20 @@
 							<input
 								type="checkbox"
 								bind:checked={linkedView}
-								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+								class="h-4 w-4 rounded border-line text-accent focus:ring-blue-500"
 							/>
-							<span class="text-gray-700">Link Pan/Zoom</span>
+							<span class="text-fg-muted">Link Pan/Zoom</span>
 						</label>
 
 						<!-- Grid Layout Toggle -->
 						<div
-							class="flex items-center space-x-2 rounded-md border border-gray-300 bg-gray-50 p-1"
+							class="flex items-center space-x-2 rounded-md border border-line bg-surface p-1"
 						>
 							<button
 								onclick={() => (gridLayout = 'horizontal')}
 								class="rounded px-3 py-1 text-sm transition-colors {gridLayout === 'horizontal'
-									? 'bg-white text-gray-900 shadow-sm'
-									: 'text-gray-600 hover:text-gray-900'}"
+									? 'bg-surface text-fg shadow-panel'
+									: 'text-fg-muted hover:text-gray-900'}"
 								title="Horizontal grid"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -398,8 +398,8 @@
 							<button
 								onclick={() => (gridLayout = 'vertical')}
 								class="rounded px-3 py-1 text-sm transition-colors {gridLayout === 'vertical'
-									? 'bg-white text-gray-900 shadow-sm'
-									: 'text-gray-600 hover:text-gray-900'}"
+									? 'bg-surface text-fg shadow-panel'
+									: 'text-fg-muted hover:text-gray-900'}"
 								title="Vertical stack"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -411,7 +411,7 @@
 
 						<button
 							onclick={clearAll}
-							class="rounded-md bg-red-100 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-200"
+							class="rounded-md bg-danger-soft px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-red-200"
 						>
 							Clear All
 						</button>
@@ -429,17 +429,17 @@
 							: 'md:grid-cols-2 lg:grid-cols-3'}"
 			>
 				{#each loadedImages as image (image.id)}
-					<div class="rounded-lg bg-white p-6 shadow-md">
+					<div class="rounded-lg bg-surface p-6 shadow-panel">
 						<div class="mb-4 flex items-center justify-between">
 							<h3
-								class="text-sm font-semibold text-gray-700 truncate"
+								class="text-sm font-semibold text-fg-muted truncate"
 								title={image.stats.cube_name}
 							>
 								{image.stats.cube_name}
 							</h3>
 							<button
 								onclick={() => removeImage(image.id)}
-								class="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-red-100 hover:text-red-700"
+								class="rounded-md bg-surface px-2 py-1 text-xs text-fg-muted transition-colors hover:bg-danger-soft hover:text-danger"
 								title="Remove this image"
 							>
 								✕
@@ -472,14 +472,14 @@
 		role="dialog"
 		aria-modal="true"
 	>
-		<div class="w-full max-w-lg rounded-lg bg-white shadow-2xl">
+		<div class="w-full max-w-lg rounded-lg bg-surface shadow-panel">
 			<header class="flex items-center justify-between border-b px-5 py-3">
-				<h2 class="text-sm font-semibold text-gray-900">Select Directory</h2>
+				<h2 class="text-sm font-semibold text-fg">Select Directory</h2>
 			</header>
 
 			<div class="space-y-3 px-5 py-4">
 				{#if dirBrowsing && !dirBrowseResult}
-					<div class="flex items-center justify-center gap-2 py-6 text-sm text-gray-500">
+					<div class="flex items-center justify-center gap-2 py-6 text-sm text-fg-dim">
 						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
 							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
 							<path fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 100 10h-2A8 8 0 014 12z" class="opacity-75" />
@@ -487,48 +487,48 @@
 						Loading…
 					</div>
 				{:else if dirBrowseError}
-					<div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{dirBrowseError}</div>
+					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{dirBrowseError}</div>
 				{:else if dirBrowseResult}
-					<div class="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2">
-						<span class="truncate font-mono text-xs text-gray-600">{dirBrowseResult.current}</span>
+					<div class="flex items-center gap-2 rounded-md bg-surface px-3 py-2">
+						<span class="truncate font-mono text-xs text-fg-muted">{dirBrowseResult.current}</span>
 						{#if dirBrowsing}
-							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
+							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-fg-dim" viewBox="0 0 24 24" fill="none">
 								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
 								<path fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 100 10h-2A8 8 0 014 12z" class="opacity-75" />
 							</svg>
 						{/if}
 					</div>
 
-					<ul class="max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white">
+					<ul class="max-h-56 overflow-y-auto rounded-md border border-line bg-surface">
 						{#if dirBrowseResult.parent}
-							<li class="border-b border-gray-100">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50" onclick={() => browseDir(dirBrowseResult!.parent!)}>
-									<span class="text-gray-400">↩</span>
-									<span class="text-gray-500">..</span>
+							<li class="border-b border-line">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-hover" onclick={() => browseDir(dirBrowseResult!.parent!)}>
+									<span class="text-fg-dim">↩</span>
+									<span class="text-fg-dim">..</span>
 								</button>
 							</li>
 						{/if}
 						{#each dirBrowseResult.entries as entry}
-							<li class="border-b border-gray-100 last:border-b-0">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-blue-50" onclick={() => browseDir(entry.path)}>
+							<li class="border-b border-line last:border-b-0">
+								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent-soft" onclick={() => browseDir(entry.path)}>
 									<span class="text-yellow-500">📁</span>
-									<span class="truncate text-gray-700">{entry.name}</span>
+									<span class="truncate text-fg-muted">{entry.name}</span>
 								</button>
 							</li>
 						{/each}
 						{#if dirBrowseResult.entries.length === 0 && !dirBrowseResult.parent}
-							<li class="px-3 py-4 text-center text-sm text-gray-400">No subdirectories</li>
+							<li class="px-3 py-4 text-center text-sm text-fg-dim">No subdirectories</li>
 						{/if}
 					</ul>
 				{/if}
 			</div>
 
 			<footer class="flex justify-end gap-3 border-t px-5 py-3">
-				<button type="button" class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" onclick={closeDirBrowser}>Cancel</button>
+				<button type="button" class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover" onclick={closeDirBrowser}>Cancel</button>
 				<button
 					type="button"
 					disabled={!dirBrowseResult}
-					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-blue-300"
 					onclick={selectDir}
 				>
 					Select This Directory

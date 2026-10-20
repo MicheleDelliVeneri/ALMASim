@@ -25,7 +25,7 @@
 					/>
 					<div>
 						<div class="text-2xl font-bold tracking-tight text-gray-100">ALMASim</div>
-						<div class="text-xs text-gray-400">A simulator for a more civilized age </div>
+						<div class="text-xs text-fg-dim">A simulator for a more civilized age </div>
 					</div>
 				</div>
 			</div>
@@ -34,7 +34,7 @@
 				{#each navItems as item}
 					<a
 						href={item.href}
-						class="group mb-2 flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-white/10 hover:text-white"
+						class="group mb-2 flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-hover hover:text-white"
 						data-sveltekit-preload-data
 					>
 						<span class="w-10 rounded border border-gray-200/20 bg-black/20 px-2 py-1 text-center font-mono text-[10px] text-cyan-200 group-hover:border-cyan-200/50">
@@ -50,7 +50,7 @@
 					<div class="font-semibold uppercase tracking-wide">Runtime</div>
 					<div class="mt-1 text-gray-300">Simulation and data services</div>
 				</div>
-				<div class="mt-4 text-xs text-gray-500">© {new Date().getFullYear()} ALMASim</div>
+				<div class="mt-4 text-xs text-fg-dim">© {new Date().getFullYear()} ALMASim</div>
 			</div>
 		</aside>
 
