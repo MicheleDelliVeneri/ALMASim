@@ -75,3 +75,19 @@ def test_no_seed_means_fresh_noise(service_module, tmp_path):
         hubble_dir=tmp_path,
     )
     assert service._simulation_params(_request()).seed is None
+
+
+def test_to_sim_params_uses_the_server_directories(service_module, tmp_path):
+    request = _request(main_dir="/elsewhere", tng_dir="/elsewhere", seed=3)
+    params = service_module.to_sim_params(
+        request,
+        main_dir=tmp_path / "main",
+        output_dir=tmp_path / "out",
+        tng_dir=tmp_path / "tng",
+        galaxy_zoo_dir=tmp_path / "gz",
+        hubble_dir=tmp_path / "hubble",
+    )
+    assert params.main_dir == str((tmp_path / "main").resolve())
+    assert params.tng_dir == str((tmp_path / "tng").resolve())
+    assert params.seed == 3
+    assert params.remote is False
