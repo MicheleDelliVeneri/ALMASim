@@ -399,7 +399,7 @@ def _extract_asdm_uids_from_download_root(download_root: Path) -> list[str]:
 
 
 def _extract_uids_from_raw_ms_root(raw_ms_root: Path) -> list[str]:
-    from .services.archive.calibrate_ms import find_raw_ms_directories
+    from .services.archive.calibration import find_raw_ms_directories
 
     return [path.name.removesuffix(".ms") for path in find_raw_ms_directories(raw_ms_root)]
 
@@ -499,7 +499,7 @@ def _unpack_single_uid(
         # handler never runs. This is the only place a marker can be written for
         # that case -- and without one, the half-written MS directory left behind
         # looks finished to the next run.
-        from .services.archive.unpack_ms import write_raw_ms_failure_marker
+        from .services.archive.unpack import write_raw_ms_failure_marker
 
         error = _worker_failure(return_code, tail_lines)
         try:
@@ -588,7 +588,7 @@ def _calibrate_single_uid(
         # in-process handler never runs: this is the only place a marker can be
         # written for that class of failure, and the only place the abandoned
         # working copy can be reclaimed.
-        from .services.archive.calibrate_ms import write_calibration_failure_marker
+        from .services.archive.calibration import write_calibration_failure_marker
 
         error = _worker_failure(return_code, tail_lines)
         try:
@@ -630,10 +630,7 @@ def _preflight_casa_data(
     downloaded once from the submit node and written to a shared filesystem path
     that all workers can read. Returns the directory the workers should use.
     """
-    from .services.archive.unpack_ms import (
-        ensure_casa_runtime_data,
-        find_existing_casa_data,
-    )
+    from .services.casa.runtime_data import ensure_casa_runtime_data, find_existing_casa_data
 
     casa_data = find_existing_casa_data(output_root, output_root, casa_data_root)
     typer.echo(f"Preflight: ensuring CASA runtime data at {casa_data} …")

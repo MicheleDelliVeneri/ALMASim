@@ -505,7 +505,7 @@ def test_preflight_casa_data_uses_resolved_path(monkeypatch, tmp_path):
     )
     monkeypatch.setitem(
         __import__("sys").modules,
-        "almasim.services.archive.unpack_ms",
+        "almasim.services.casa.runtime_data",
         fake_unpack_mod,
     )
 

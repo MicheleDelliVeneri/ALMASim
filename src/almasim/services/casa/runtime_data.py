@@ -5,16 +5,10 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Callable
+
+from ..utils import LogFn, report
 
 logger = logging.getLogger(__name__)
-
-LogFn = Callable[[str], None] | None
-
-
-def _emit(logger_fn: LogFn, message: str) -> None:
-    if logger_fn is not None:
-        logger_fn(message)
 
 
 def has_casa_runtime_data(path: str | os.PathLike[str]) -> bool:
@@ -56,8 +50,7 @@ def ensure_casa_runtime_data(
 ) -> None:
     """Populate CASA runtime data when needed."""
     if has_casa_runtime_data(casa_data):
-        logger.info("Using CASA runtime data: %s", casa_data)
-        _emit(logger_fn, f"Using CASA runtime data: {casa_data}")
+        report(logger, logger_fn, f"Using CASA runtime data: {casa_data}")
         return
 
     if skip_update:
@@ -67,8 +60,7 @@ def ensure_casa_runtime_data(
             "populated data directory.".format(casa_data)
         )
 
-    logger.info("Populating CASA runtime data: %s", casa_data)
-    _emit(logger_fn, f"Populating CASA runtime data: {casa_data}")
+    report(logger, logger_fn, f"Populating CASA runtime data: {casa_data}")
     from casaconfig import update_all
 
     # casaconfig expects a CASA logsink object, not a Python logger — pass None
