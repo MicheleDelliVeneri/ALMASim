@@ -6,32 +6,11 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-import astropy.units as U
 import h5py
 import numpy as np
 from astropy.io import fits
 
-
-def _json_safe(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, (np.integer, np.floating)):
-        return value.item()
-    if isinstance(value, U.Quantity):
-        return {"value": value.value, "unit": str(value.unit)}
-    if isinstance(value, Path):
-        return str(value)
-    # Handle astropy StringArray and any other array-like with a tolist()
-    if hasattr(value, "tolist"):
-        return _json_safe(value.tolist())
-    # Last resort: convert to string so JSON serialization never fails
-    if not isinstance(value, (str, int, float, bool, type(None))):
-        return str(value)
-    return value
+from almasim.services.json_safe import json_safe as _json_safe
 
 
 def write_ml_dataset_shard(

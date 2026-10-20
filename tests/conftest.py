@@ -50,8 +50,29 @@ faulthandler.enable()
 os.environ["LC_ALL"] = "C"
 
 
+TIER_BY_DIRECTORY = {"unit": "unit", "component": "component", "integration": "integration"}
+
+
+@pytest.hookimpl(tryfirst=True)  # before -m deselects by marker
 def pytest_collection_modifyitems(config, items):
-    """Skip network-marked tests unless explicitly enabled."""
+    """Mark every test with its tier and skip network tests unless enabled.
+
+    The tier comes from the directory (tests/unit, tests/component,
+    tests/integration), so ``pytest -m unit`` selects every unit test whether
+    or not the file marks itself; the legacy tests directly under tests/ run
+    real computations and count as component tests.
+    """
+    tests_root = Path(__file__).resolve().parent
+    for item in items:
+        try:
+            first = Path(item.fspath).resolve().relative_to(tests_root).parts[0]
+        except ValueError:
+            continue
+        tier = TIER_BY_DIRECTORY.get(first, "component")
+        # Not "tier in item.keywords": keywords include package names such as "unit".
+        if item.get_closest_marker(tier) is None:
+            item.add_marker(getattr(pytest.mark, tier))
+
     if os.environ.get("ALMASIM_RUN_NETWORK_TESTS") == "1":
         return
 

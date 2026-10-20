@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from time import sleep, time
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence
 
 import typer
 from tqdm.auto import tqdm
@@ -588,6 +588,47 @@ def _casa_bundled_lib_dir() -> Optional[str]:
     return lib_dir if os.path.isdir(lib_dir) else None
 
 
+def _stage_child_env() -> tuple[Path, dict[str, str]]:
+    """The project root and environment for an unpack or calibrate worker child.
+
+    ``PYTHONPATH`` finds this checkout's sources, ``PYTHONUNBUFFERED`` keeps
+    the streamed log live, and ``LD_LIBRARY_PATH`` puts the system libraries
+    first (GLIBC conflicts with spack builds) but casatools' bundled libraries
+    ahead of them: the system libpmix otherwise shadows the bundled one and
+    breaks the CASA extension modules.
+    """
+    import os
+
+    project_root = Path(__file__).resolve().parents[2]
+    src_root = project_root / "src"
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
+    )
+    search_dirs = ["/lib64", "/usr/lib64", "/usr/local/lib64", "/lib", "/usr/lib", "/usr/local/lib"]
+    casa_lib_dir = _casa_bundled_lib_dir()
+    if casa_lib_dir is not None:
+        search_dirs.insert(0, casa_lib_dir)
+    ld_library_path = ":".join(search_dirs)
+    existing_ld = env.get("LD_LIBRARY_PATH", "")
+    if existing_ld:
+        ld_library_path = f"{ld_library_path}:{existing_ld}"
+    env["LD_LIBRARY_PATH"] = ld_library_path
+    env["PYTHONUNBUFFERED"] = "1"
+    return project_root, env
+
+
+def _worker_failure(return_code: int, tail_lines: Sequence[str]) -> str:
+    """``Worker exited with return code N``, plus the last crash line if there is one."""
+    error = f"Worker exited with return code {return_code}"
+    crash = next(
+        (line for line in reversed(tail_lines) if "what():" in line or "Error:" in line),
+        "",
+    ).strip()
+    return f"{error}: {crash}" if crash else error
+
+
 def _unpack_single_uid(
     *,
     input_root: str,
@@ -604,11 +645,10 @@ def _unpack_single_uid(
     a clean CASA environment for every UID, matching the approach used by
     _calibrate_single_uid.
     """
-    import os
-    import subprocess
     import sys
-    from collections import deque
     from pathlib import Path as _Path
+
+    from .services.runtime.child import run_stage_subprocess
 
     # Point workers at the pre-downloaded CASA runtime data so they never try
     # to download it themselves (compute nodes typically have no internet).
@@ -635,57 +675,14 @@ def _unpack_single_uid(
     if overwrite:
         cmd.append("--overwrite-outputs")
 
-    project_root = _Path(__file__).resolve().parents[2]
-    src_root = project_root / "src"
-    env = os.environ.copy()
-    existing_pythonpath = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = (
-        f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
-    )
-
-    # Prioritize system libraries to avoid GLIBC version conflicts with spack binaries,
-    # but keep casatools' own bundled libraries ahead of them: the system libpmix
-    # otherwise shadows the bundled one and breaks the CASA extension modules.
-    search_dirs = ["/lib64", "/usr/lib64", "/usr/local/lib64", "/lib", "/usr/lib", "/usr/local/lib"]
-    casa_lib_dir = _casa_bundled_lib_dir()
-    if casa_lib_dir is not None:
-        search_dirs.insert(0, casa_lib_dir)
-    ld_library_path = ":".join(search_dirs)
-    existing_ld = env.get("LD_LIBRARY_PATH", "")
-    if existing_ld:
-        ld_library_path = f"{ld_library_path}:{existing_ld}"
-    env["LD_LIBRARY_PATH"] = ld_library_path
-    # Make the child's Python output line-buffered through the pipe so progress is live.
-    env["PYTHONUNBUFFERED"] = "1"
+    project_root, env = _stage_child_env()
 
     # Mirror everything the child prints into a per-UID log on the (shared) output
     # filesystem so the run can be followed with ``tail -f`` even on Slurm.
     log_path = _stage_log_path(raw_output_root, asdm_uid, "unpack")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        errors="replace",
-        bufsize=1,
-        cwd=str(project_root),
-        env=env,
-    )
-
-    # Stream child output as it arrives so long CASA logs never accumulate in memory.
-    tail_lines: deque[str] = deque(maxlen=200)
-    assert process.stdout is not None
-    with log_path.open("w", encoding="utf-8") as log_file:
-        log_file.write("# " + " ".join(cmd) + "\n")
-        for line in process.stdout:
-            print(line, end="", flush=True)
-            log_file.write(line)
-            log_file.flush()
-            tail_lines.append(line.rstrip("\n"))
-
-    return_code = process.wait()
+    return_code, tail_lines = run_stage_subprocess(cmd, log_path, cwd=project_root, env=env)
     if return_code != 0:
         tail_text = "\n".join(tail_lines)
         # importasdm can be killed outright (OOM, walltime), so the in-process
@@ -694,13 +691,7 @@ def _unpack_single_uid(
         # looks finished to the next run.
         from .services.archive.unpack_ms import write_raw_ms_failure_marker
 
-        error = f"Worker exited with return code {return_code}"
-        crash = next(
-            (line for line in reversed(tail_lines) if "what():" in line or "Error:" in line),
-            "",
-        ).strip()
-        if crash:
-            error = f"{error}: {crash}"
+        error = _worker_failure(return_code, tail_lines)
         try:
             write_raw_ms_failure_marker(raw_output_root, asdm_uid, error, log_path=log_path)
         except OSError as marker_error:  # never mask the unpack failure
@@ -739,11 +730,10 @@ def _calibrate_single_uid(
     reset between calls in the same Python process. Running as a subprocess
     guarantees a clean CASA environment for every UID.
     """
-    import os
-    import subprocess
     import sys
-    from collections import deque
     from pathlib import Path as _Path
+
+    from .services.runtime.child import run_stage_subprocess
 
     # Point workers at the pre-downloaded CASA runtime data so they never try
     # to download it themselves (compute nodes typically have no internet).
@@ -774,57 +764,14 @@ def _calibrate_single_uid(
     if keep_working_copies:
         cmd.append("--keep-working-copies")
 
-    project_root = _Path(__file__).resolve().parents[2]
-    src_root = project_root / "src"
-    env = os.environ.copy()
-    existing_pythonpath = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = (
-        f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
-    )
-
-    # Prioritize system libraries to avoid GLIBC version conflicts with spack binaries,
-    # but keep casatools' own bundled libraries ahead of them: the system libpmix
-    # otherwise shadows the bundled one and breaks the CASA extension modules.
-    search_dirs = ["/lib64", "/usr/lib64", "/usr/local/lib64", "/lib", "/usr/lib", "/usr/local/lib"]
-    casa_lib_dir = _casa_bundled_lib_dir()
-    if casa_lib_dir is not None:
-        search_dirs.insert(0, casa_lib_dir)
-    ld_library_path = ":".join(search_dirs)
-    existing_ld = env.get("LD_LIBRARY_PATH", "")
-    if existing_ld:
-        ld_library_path = f"{ld_library_path}:{existing_ld}"
-    env["LD_LIBRARY_PATH"] = ld_library_path
-    # Make the child's Python output line-buffered through the pipe so progress is live.
-    env["PYTHONUNBUFFERED"] = "1"
+    project_root, env = _stage_child_env()
 
     # Mirror everything the child prints into a per-UID log on the (shared) output
     # filesystem so the run can be followed with ``tail -f`` even on Slurm.
     log_path = _stage_log_path(calibrated_output_root, asdm_uid, "calibrate")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        errors="replace",
-        bufsize=1,
-        cwd=str(project_root),
-        env=env,
-    )
-
-    # Stream child output as it arrives so long CASA logs never accumulate in memory.
-    tail_lines: deque[str] = deque(maxlen=200)
-    assert process.stdout is not None
-    with log_path.open("w", encoding="utf-8") as log_file:
-        log_file.write("# " + " ".join(cmd) + "\n")
-        for line in process.stdout:
-            print(line, end="", flush=True)
-            log_file.write(line)
-            log_file.flush()
-            tail_lines.append(line.rstrip("\n"))
-
-    return_code = process.wait()
+    return_code, tail_lines = run_stage_subprocess(cmd, log_path, cwd=project_root, env=env)
     if return_code != 0:
         tail_text = "\n".join(tail_lines)
         # An uncaught casacore C++ exception kills the child outright, so the
@@ -833,13 +780,7 @@ def _calibrate_single_uid(
         # working copy can be reclaimed.
         from .services.archive.calibrate_ms import write_calibration_failure_marker
 
-        error = f"Worker exited with return code {return_code}"
-        crash = next(
-            (line for line in reversed(tail_lines) if "what():" in line or "Error:" in line),
-            "",
-        ).strip()
-        if crash:
-            error = f"{error}: {crash}"
+        error = _worker_failure(return_code, tail_lines)
         try:
             write_calibration_failure_marker(
                 calibrated_output_root, asdm_uid, error, log_path=log_path

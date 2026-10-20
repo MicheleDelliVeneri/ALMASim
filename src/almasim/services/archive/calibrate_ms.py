@@ -9,16 +9,15 @@ then writes the science-only calibrated MS with ``casatasks.mstransform``.
 from __future__ import annotations
 
 import ast
-import json
 import logging
 import os
 import shutil
 import tarfile
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from ..markers import StageMarkers
 from .unpack_ms import (
     LogFn,
     _emit,
@@ -117,14 +116,6 @@ def find_raw_ms_directories(
     return sorted(raw_mss)
 
 
-def _find_input_casa_data(input_path: Path) -> Path | None:
-    """Return the first populated CASA runtime data directory under ``input_path``."""
-    for candidate in input_path.rglob(".casa-data"):
-        if candidate.is_dir() and has_casa_runtime_data(candidate):
-            return candidate.resolve()
-    return None
-
-
 def _prepare_casa_environment(
     input_path: Path,
     output_path: Path,
@@ -137,13 +128,10 @@ def _prepare_casa_environment(
         resolved = Path(casa_data_root).expanduser().resolve()
         return resolved, workspace_root
 
+    # Searches the output root, then the input tree (one walk; it is slow on NFS).
     existing = find_existing_casa_data(input_path, output_path)
     if has_casa_runtime_data(existing):
         return existing.resolve(), workspace_root
-
-    existing = _find_input_casa_data(input_path)
-    if existing is not None:
-        return existing, workspace_root
 
     return workspace_root / ".casa-data", workspace_root
 
@@ -421,23 +409,17 @@ def has_calibration_failed(output_root: str | os.PathLike[str], uid: str) -> boo
     return calibration_failure_marker_path(output_root, uid).is_file()
 
 
-def write_calibration_marker(output_root: str | os.PathLike[str], uid: str) -> Path:
-    marker = calibration_marker_path(output_root, uid)
-    marker.write_text(
-        json.dumps(
-            {
-                "uid": uid,
-                "output": str(calibrated_output_path(output_root, uid)),
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+def _calibration_markers(output_root: str | os.PathLike[str], uid: str) -> StageMarkers:
+    return StageMarkers(
+        calibration_marker_path(output_root, uid),
+        calibration_failure_marker_path(output_root, uid),
     )
-    # A UID that succeeds now must not keep looking failed to the next run.
-    calibration_failure_marker_path(output_root, uid).unlink(missing_ok=True)
-    return marker
+
+
+def write_calibration_marker(output_root: str | os.PathLike[str], uid: str) -> Path:
+    return _calibration_markers(output_root, uid).write_done(
+        uid=uid, output=str(calibrated_output_path(output_root, uid))
+    )
 
 
 def write_calibration_failure_marker(
@@ -454,18 +436,9 @@ def write_calibration_failure_marker(
     (no delivered calibration tables) from a transient one (a truncated read)
     without re-reading the driver log, which is per-job and easily lost.
     """
-    marker = calibration_failure_marker_path(output_root, uid)
-    payload = {
-        "uid": uid,
-        "stage": stage,
-        "error": error,
-        "failed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if log_path is not None:
-        payload["log"] = str(log_path)
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return marker
+    return _calibration_markers(output_root, uid).write_failed(
+        error, stage=stage, log_path=log_path, uid=uid
+    )
 
 
 def split_calibrated_science_ms(
