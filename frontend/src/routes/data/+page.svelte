@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { writeCachedResults } from '#lib/utils/metadataCache.js';
 	import { formatBytes, formatDate } from '#lib/utils/format.js';
 	import type { DownloadJobSummary } from '#lib/api/download.js';
@@ -149,7 +151,7 @@
 		try {
 			const metadata = await downloadApi.loadJobMetadata(job.job_id);
 			writeCachedResults(metadata);
-			if (typeof window !== 'undefined') window.location.href = '/metadata';
+			void goto(resolve('/metadata'));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load metadata for this download';
 			logger.error({ err: e, jobId: job.job_id }, 'Failed to load stored metadata');

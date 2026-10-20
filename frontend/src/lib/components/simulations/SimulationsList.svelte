@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { formatDate } from '#lib/utils/format.js';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import StatusBadge from '#lib/components/shared/StatusBadge.svelte';
 	import { isActiveStatus, isTerminalStatus } from '#lib/utils/status.js';
@@ -24,6 +26,7 @@
 	let selectedLogSimulation = $state<SimulationSummary | null>(null);
 	let selectedSimulationStatus = $state<SimulationStatus | null>(null);
 	let logSocket: WebSocket | null = null;
+	let outputLocation = $state<string | null>(null);
 	const SIMULATIONS_FETCH_TIMEOUT_MS = 20_000;
 	const SIMULATIONS_REFRESH_INTERVAL_MS = 10_000;
 
@@ -69,19 +72,19 @@
 		const sim = simulations.find((entry) => entry.simulation_id === simulationId);
 		const query = sim?.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
 		logger.info({ simulationId, outputDir: sim?.output_dir }, 'Navigating to visualizer');
-		window.location.href = `/visualizer${query}`;
+		void goto(resolve('/visualizer') + query);
 	}
 
 	function handleCombination(sim: SimulationSummary) {
 		const query = sim.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
 		logger.info({ simulationId: sim.simulation_id, outputDir: sim.output_dir }, 'Navigating to combination');
-		window.location.href = `/combination${query}`;
+		void goto(resolve('/combination') + query);
 	}
 
 	function handleImaging(sim: SimulationSummary) {
 		const query = sim.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
 		logger.info({ simulationId: sim.simulation_id, outputDir: sim.output_dir }, 'Navigating to imaging');
-		window.location.href = `/imaging${query}`;
+		void goto(resolve('/imaging') + query);
 	}
 
 	function handleLocate(sim: SimulationSummary) {
@@ -89,7 +92,7 @@
 			? `${sim.output_dir}/${sim.simulation_id}`
 			: `(output directory not recorded)`;
 		logger.info({ simulationId: sim.simulation_id, path }, 'Locate simulation output');
-		alert(`Simulation output location:\n${path}`);
+		outputLocation = path;
 	}
 
 	function closeLogSocket() {
@@ -199,6 +202,21 @@
 			Refresh
 		</button>
 	</div>
+
+	{#if outputLocation}
+		<div
+			class="mb-4 flex items-start justify-between gap-3 rounded-md border border-accent-line bg-accent-soft px-4 py-2 text-sm text-fg"
+			role="status"
+		>
+			<span>Simulation output location: <code class="font-mono">{outputLocation}</code></span>
+			<button
+				type="button"
+				class="text-fg-dim hover:text-fg"
+				aria-label="Dismiss"
+				onclick={() => (outputLocation = null)}>✕</button
+			>
+		</div>
+	{/if}
 
 	{#if loading && simulations.length === 0}
 		<div class="flex items-center justify-center py-8">

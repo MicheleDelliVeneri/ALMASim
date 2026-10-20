@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { BROWSE_ROOT } from '#lib/constants.js';
 	import { onMount } from 'svelte';
 	import DatacubeFileList from '#lib/components/visualizer/DatacubeFileList.svelte';
 	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
@@ -60,11 +61,11 @@
 	);
 
 	async function loadFileList(dir?: string) {
-		const targetDir = dir || '/host_home';
+		const targetDir = dir || BROWSE_ROOT;
 		logger.debug({ dir: targetDir }, 'Loading combination file list');
 		fileListLoading = true;
 		outputDir = targetDir;
-		if (targetDir === '/host_home') {
+		if (targetDir === BROWSE_ROOT) {
 			allFiles = [];
 			fileListLoading = false;
 			return;
@@ -163,7 +164,7 @@
 				? new URLSearchParams(window.location.search).get('dir')
 				: null;
 		if (requestedDir) return requestedDir;
-		return '/host_home';
+		return BROWSE_ROOT;
 	}
 
 	onMount(async () => {
@@ -337,7 +338,7 @@
 
 {#if dirBrowserOpen}
 	<DirectoryPicker
-		startPath={outputDir || '/host_home'}
+		startPath={outputDir || BROWSE_ROOT}
 		title="Select Combination Directory"
 		selectLabel="Select This Directory"
 		onSelect={selectDir}

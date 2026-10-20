@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { BROWSE_ROOT } from '#lib/constants.js';
 	import { ApiTimeoutError } from '#lib/api/client.js';
 	import { visualizerApi, type DatacubeFile } from '#lib/api/visualizer.js';
 	import { onMount } from 'svelte';
@@ -168,11 +169,11 @@
 	}
 
 	async function loadFileList(dir?: string) {
-		const targetDir = dir || '/host_home';
+		const targetDir = dir || BROWSE_ROOT;
 		loadingFiles = true;
 		error = null;
 		outputDir = targetDir;
-		if (targetDir === '/host_home') {
+		if (targetDir === BROWSE_ROOT) {
 			allFiles = [];
 			selectedDirtyPath = '';
 			matchedBeamPath = '';
@@ -276,7 +277,7 @@
 				? new URLSearchParams(window.location.search).get('dir')
 				: null;
 		if (requestedDir) return requestedDir;
-		return '/host_home';
+		return BROWSE_ROOT;
 	}
 
 	onMount(async () => {
@@ -468,7 +469,7 @@
 
 {#if dirBrowserOpen}
 	<DirectoryPicker
-		startPath={outputDir || '/host_home'}
+		startPath={outputDir || BROWSE_ROOT}
 		title="Select Imaging Directory"
 		selectLabel="Select This Directory"
 		onSelect={selectDir}

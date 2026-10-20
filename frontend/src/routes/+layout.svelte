@@ -1,5 +1,8 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import '../app.css';
+
+	let { children }: { children: Snippet } = $props();
 
 	const navItems = [
 		{ href: '/', label: 'Overview', code: 'OVR' },
@@ -81,7 +84,7 @@
 
 			<main class="min-w-0 flex-1 overflow-y-auto">
 				<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-					<slot />
+					{@render children()}
 				</div>
 			</main>
 		</div>

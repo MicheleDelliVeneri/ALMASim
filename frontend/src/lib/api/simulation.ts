@@ -59,11 +59,8 @@ export interface SimulationParams {
 
 export interface SimulationParamsCreate extends SimulationParams {
 	idx: number;
-	main_dir: string;
+	/** Inside the server's output directory; the other data directories are the server's. */
 	output_dir: string;
-	tng_dir: string;
-	galaxy_zoo_dir: string;
-	hubble_dir: string;
 }
 
 export interface SimulationResponse {

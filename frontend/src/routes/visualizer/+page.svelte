@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { BROWSE_ROOT } from '#lib/constants.js';
 	import { onMount } from 'svelte';
 	import DatacubeFileList from '#lib/components/visualizer/DatacubeFileList.svelte';
 	import DatacubeUpload from '#lib/components/visualizer/DatacubeUpload.svelte';
@@ -51,11 +52,11 @@
 	}
 
 	async function loadFileList(dir?: string) {
-		const targetDir = dir || '/host_home';
+		const targetDir = dir || BROWSE_ROOT;
 		logger.debug({ dir: targetDir }, 'Loading file list');
 		fileListLoading = true;
 		outputDir = targetDir;
-		if (targetDir === '/host_home') {
+		if (targetDir === BROWSE_ROOT) {
 			fileList = [];
 			fileListLoading = false;
 			return;
@@ -212,7 +213,7 @@
 			typeof window !== 'undefined'
 				? new URLSearchParams(window.location.search).get('dir')
 				: null;
-		void loadFileList(requestedDir || '/host_home');
+		void loadFileList(requestedDir || BROWSE_ROOT);
 	});
 </script>
 
@@ -376,7 +377,7 @@
 
 {#if dirBrowserOpen}
 	<DirectoryPicker
-		startPath={outputDir || '/host_home'}
+		startPath={outputDir || BROWSE_ROOT}
 		selectLabel="Select This Directory"
 		onSelect={selectDir}
 		onClose={() => (dirBrowserOpen = false)}

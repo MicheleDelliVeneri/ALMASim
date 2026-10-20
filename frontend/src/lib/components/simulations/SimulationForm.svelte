@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { BROWSE_ROOT } from '#lib/constants.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { createLogger } from '#lib/logger.js';
 
@@ -224,7 +225,7 @@
 					id="output_dir"
 					value={outputDir}
 					oninput={(e) => onOutputDirChange(e.currentTarget.value)}
-					placeholder="/host_home"
+					placeholder={BROWSE_ROOT}
 					class={`flex-1 ${controlClass}`}
 				/>
 				<button
@@ -511,7 +512,7 @@
 
 {#if browserOpen}
 	<DirectoryPicker
-		startPath={outputDir || '/host_home'}
+		startPath={outputDir || BROWSE_ROOT}
 		title="Choose Output Folder"
 		allowCreate
 		onSelect={selectOutputDir}

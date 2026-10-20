@@ -135,14 +135,6 @@ export class ApiClient {
 		return this.request<T>(endpoint, { method: 'POST', body: form }, options);
 	}
 
-	async put<T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> {
-		return this.request<T>(
-			endpoint,
-			{ method: 'PUT', body: data ? JSON.stringify(data) : undefined },
-			options
-		);
-	}
-
 	async delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {
 		return this.request<T>(endpoint, { method: 'DELETE' }, options);
 	}
