@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatBytes, formatDate } from '#lib/utils/format.js';
 	import type { DownloadJobSummary } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
 	import DownloadProgress from '#lib/components/metadata/DownloadProgress.svelte';
@@ -158,21 +159,6 @@
 			const updated = new Set(loadingMetadata);
 			updated.delete(job.job_id);
 			loadingMetadata = updated;
-		}
-	}
-
-	function formatBytes(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-	}
-
-	function formatDate(iso: string): string {
-		try {
-			return new Date(iso).toLocaleString();
-		} catch {
-			return iso;
 		}
 	}
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatBytes, formatSpeed } from '#lib/utils/format.js';
 	import type { DownloadJobStatus } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
 
@@ -93,20 +94,6 @@
 		} finally {
 			cancelling = false;
 		}
-	}
-
-	function formatBytes(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-	}
-
-	function formatSpeed(bytesPerSec: number): string {
-		if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
-		if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
-		if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
-		return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(2)} GB/s`;
 	}
 
 	function formatEta(seconds: number): string {
