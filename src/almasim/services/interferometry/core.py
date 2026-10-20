@@ -137,7 +137,9 @@ class Interferometer:
         self.snr = snr
         self.integration_time = integration_time
         self.observation_date = observation_date
-        self.header = header
+        # Each configuration gets its own copy: _get_nH appends EPOCH, which every
+        # configuration used to add to one shared header (MADIV-28 T1.14).
+        self.header = header.copy() if hasattr(header, "copy") else header
         self.save_mode = save_mode
         self.persist = persist
         self.robust = robust
