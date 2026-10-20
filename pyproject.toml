@@ -137,7 +137,6 @@ module = [
     "almasim.services.imaging.selfcal.loop",  # moved out of archive_imaging
     "almasim.services.imaging.task",  # moved out of archive_imaging
     "almasim.services.imaging.ms.chunks",  # moved out of archive_imaging
-    "almasim.services.imaging.reconstruction",
     "almasim.services.interferometry.core",
     "almasim.services.interferometry.imaging",
     "almasim.services.interferometry.utils",
