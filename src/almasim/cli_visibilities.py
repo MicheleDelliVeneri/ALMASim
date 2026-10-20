@@ -8,6 +8,7 @@ from typing import List
 import typer
 
 from . import cli_image, cli_products
+from .cli_shared import fail
 from .services.instrument.constants import DEFAULT_MAX_WEIGHT
 
 visibilities_app = typer.Typer(
@@ -80,8 +81,7 @@ def flag_summary(
             mss.append(item)
             continue
         if not item.is_dir():
-            typer.echo(f"Not a MeasurementSet or folder: {item}", err=True)
-            raise typer.Exit(code=1)
+            fail(f"Not a MeasurementSet or folder: {item}")
         found = sorted(p for p in item.glob(pattern) if p.is_dir())
         if require_done_marker:
             with_marker = [ms for ms in found if ms.with_name(ms.name + ".done").is_file()]
@@ -128,5 +128,4 @@ def flag_summary(
     if failures:
         failed_path = output_csv.with_name(output_csv.name + ".failed.tsv")
         failed_path.write_text("".join(f"{ms}\t{error}\n" for ms, error in failures))
-        typer.echo(f"{len(failures)} MS(s) could not be read; see {failed_path}", err=True)
-        raise typer.Exit(code=1)
+        fail(f"{len(failures)} MS(s) could not be read; see {failed_path}")

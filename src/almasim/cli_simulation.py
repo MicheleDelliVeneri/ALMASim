@@ -13,6 +13,7 @@ import pandas as pd
 import typer
 from tqdm.auto import tqdm
 
+from .cli_shared import usage_error
 from .services import astro
 from .services.astro.spectral import sample_given_redshift
 from .services.compute import create_backend
@@ -192,11 +193,7 @@ def _build_simulation_params(
     )
 
     if row_idx >= len(sampled):
-        typer.echo(
-            f"--row-idx {row_idx} is out of range for {len(sampled)} metadata rows",
-            err=True,
-        )
-        raise typer.Exit(code=2)
+        usage_error(f"--row-idx {row_idx} is out of range for {len(sampled)} metadata rows")
 
     row = sampled.iloc[row_idx]
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -382,36 +379,26 @@ def simulation_run(
 
     source_type_normalized = source_type.lower()
     if source_type_normalized not in source_types:
-        typer.echo("--source-type must be one of: " + ", ".join(source_types), err=True)
-        raise typer.Exit(code=2)
+        usage_error("--source-type must be one of: " + ", ".join(source_types))
 
     save_mode_normalized = save_mode.lower()
     if save_mode_normalized not in _SAVE_MODES:
-        typer.echo("--save-mode must be one of: " + ", ".join(_SAVE_MODES), err=True)
-        raise typer.Exit(code=2)
+        usage_error("--save-mode must be one of: " + ", ".join(_SAVE_MODES))
 
     backend_normalized = backend.lower()
     if backend_normalized not in _BACKEND_TYPES:
-        typer.echo("--backend must be one of: " + ", ".join(_BACKEND_TYPES), err=True)
-        raise typer.Exit(code=2)
+        usage_error("--backend must be one of: " + ", ".join(_BACKEND_TYPES))
 
     imaging_algorithm_normalized = imaging_algorithm.lower()
     if imaging_algorithm_normalized not in _IMAGING_ALGORITHMS:
-        typer.echo(
-            "--imaging-algorithm must be one of: " + ", ".join(_IMAGING_ALGORITHMS),
-            err=True,
-        )
-        raise typer.Exit(code=2)
+        usage_error("--imaging-algorithm must be one of: " + ", ".join(_IMAGING_ALGORITHMS))
 
     if not metadata_path.exists():
-        typer.echo(f"--metadata-path not found: {metadata_path}", err=True)
-        raise typer.Exit(code=2)
+        usage_error(f"--metadata-path not found: {metadata_path}")
     if input_path is not None and not input_path.expanduser().exists():
-        typer.echo(f"--input not found: {input_path}", err=True)
-        raise typer.Exit(code=2)
+        usage_error(f"--input not found: {input_path}")
     if kaggle_token is not None and not kaggle_token.expanduser().exists():
-        typer.echo(f"--kaggle-token not found: {kaggle_token}", err=True)
-        raise typer.Exit(code=2)
+        usage_error(f"--kaggle-token not found: {kaggle_token}")
 
     metadata = pd.read_csv(metadata_path)
     total_rows = len(metadata)

@@ -10,6 +10,8 @@ from pathlib import Path
 
 import typer
 
+from .cli_shared import fail, usage_error
+
 
 def _bundled_wsclean_candidates() -> list[Path]:
     repo_root = Path(__file__).resolve().parents[2]
@@ -41,11 +43,9 @@ def clean_command(
     forwarded_args = list(ctx.args)
 
     if not forwarded_args:
-        typer.echo(
-            "No WSClean arguments provided. Use 'almasim clean -- --help' to see WSClean options.",
-            err=True,
+        usage_error(
+            "No WSClean arguments provided. Use 'almasim clean -- --help' to see WSClean options."
         )
-        raise typer.Exit(code=2)
 
     requested_executable = os.environ.get("ALMASIM_WSCLEAN_BIN", wsclean_bin)
     executable = requested_executable
@@ -82,8 +82,7 @@ def clean_command(
             check=False,
         )
     except OSError as exc:
-        typer.echo(f"Failed to start WSClean: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        fail(f"Failed to start WSClean: {exc}")
 
     if completed.returncode != 0:
         raise typer.Exit(code=completed.returncode)

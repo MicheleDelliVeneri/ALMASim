@@ -9,7 +9,9 @@ import typer
 
 from .cli_shared import (
     default_output_path,
+    fail,
     split_csv_values,
+    usage_error,
     validate_date_range,
     validate_range,
 )
@@ -275,13 +277,11 @@ def metadata_query(
         value for value in (array_types or []) if value not in {"12m", "7m", "TP"}
     ]
     if invalid_array_types:
-        typer.echo(
+        usage_error(
             "Invalid --array-type values: "
             + ", ".join(invalid_array_types)
-            + ". Allowed values: 12m, 7m, TP.",
-            err=True,
+            + ". Allowed values: 12m, 7m, TP."
         )
-        raise typer.Exit(code=2)
 
     invalid_columns = [column for column in (output_columns or []) if column not in all_columns]
     if invalid_columns:
@@ -289,8 +289,7 @@ def metadata_query(
             "Invalid --visible-column values: " + ", ".join(invalid_columns) + ".",
             err=True,
         )
-        typer.echo("Allowed columns: " + ", ".join(all_columns), err=True)
-        raise typer.Exit(code=2)
+        usage_error("Allowed columns: " + ", ".join(all_columns))
 
     angular_resolution_range = validate_range(
         min_value=angular_resolution_min,
@@ -363,8 +362,7 @@ def metadata_query(
         visible_columns=output_columns,
     )
     if metadata.empty:
-        typer.echo("No metadata rows matched the requested filters", err=True)
-        raise typer.Exit(code=1)
+        fail("No metadata rows matched the requested filters")
 
     if limit is not None:
         metadata = metadata.head(limit).reset_index(drop=True)
@@ -387,16 +385,14 @@ def metadata_query(
 
     if save_products_csv is not None:
         if "member_ous_uid" not in metadata.columns:
-            typer.echo("Queried metadata does not include member_ous_uid values", err=True)
-            raise typer.Exit(code=1)
+            fail("Queried metadata does not include member_ous_uid values")
 
         member_series = metadata["member_ous_uid"].dropna().astype(str)
         if product_member_limit is not None:
             member_series = member_series.head(product_member_limit)
         member_uids = member_series.tolist()
         if not member_uids:
-            typer.echo("Queried metadata does not include member_ous_uid values", err=True)
-            raise typer.Exit(code=1)
+            fail("Queried metadata does not include member_ous_uid values")
 
         # DataLink rows, the format `products download --products-csv` reads
         # (the TAP product rows saved here before could not be downloaded).
