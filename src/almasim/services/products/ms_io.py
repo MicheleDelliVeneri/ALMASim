@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -79,9 +80,18 @@ def _make_tabledesc(coldesc_list: list[tuple[str, dict]]) -> dict:
     return desc
 
 
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Backend abstraction
 # ---------------------------------------------------------------------------
+
+
+# Array layout. The writers and readers below use python-casacore's row-major
+# convention: a column is (nrows, *cell_shape) and a cell is in C order, e.g.
+# DATA (nrows, nchan, ncorr), UVW (nrows, 3), PHASE_DIR (npoly + 1, 2).
+# casatools uses the reverse (Fortran) order, e.g. DATA (ncorr, nchan, nrows),
+# so its backend reverses the axes on the way in and out.
 
 
 class _CasatoolsBackend:
@@ -89,6 +99,18 @@ class _CasatoolsBackend:
         import casatools as _ct
 
         self._ct = _ct
+
+    @staticmethod
+    def put(tb, name: str, value) -> None:
+        tb.putcol(name, np.asarray(value).transpose())
+
+    @staticmethod
+    def put_cell(tb, name: str, row: int, value) -> None:
+        tb.putcell(name, row, np.asarray(value).transpose())
+
+    @staticmethod
+    def get(tb, name: str) -> np.ndarray:
+        return np.asarray(tb.getcol(name)).transpose()
 
     def create(self, path: str, coldesc_list: list, nrow: int):
         desc = _make_tabledesc(coldesc_list)
@@ -114,6 +136,18 @@ class _CasacoreBackend:
     def __init__(self):
         from casacore import tables as _  # noqa: F401 — fail fast if not installed
 
+    @staticmethod
+    def put(tb, name: str, value) -> None:
+        tb.putcol(name, np.asarray(value))
+
+    @staticmethod
+    def put_cell(tb, name: str, row: int, value) -> None:
+        tb.putcell(name, row, np.asarray(value))
+
+    @staticmethod
+    def get(tb, name: str) -> np.ndarray:
+        return np.asarray(tb.getcol(name))
+
     def create(self, path: str, coldesc_list: list, nrow: int):
         from casacore.tables import table
 
@@ -138,8 +172,17 @@ def _get_backend():
     for cls in (_CasatoolsBackend, _CasacoreBackend):
         try:
             return cls()
-        except Exception:
-            continue
+        except ImportError as exc:
+            logger.debug("MS backend %s not installed: %s", cls.__name__, exc)
+        except Exception as exc:
+            # Installed but failing to import (e.g. casatools' runtime libraries):
+            # say why before falling back instead of hiding it.
+            logger.warning(
+                "MS backend %s failed to load (%s: %s); trying the next one",
+                cls.__name__,
+                type(exc).__name__,
+                exc,
+            )
     raise ImportError(
         "MS export requires casatools or python-casacore.\n"
         "  pip install casatools        (requires Python ≤ 3.12)\n"
@@ -198,18 +241,18 @@ def read_native_ms(ms_path: str | Path) -> dict[str, Any]:
     ms_path = str(Path(ms_path).expanduser().resolve())  # lgtm[py/path-injection]
 
     tb = backend.open(ms_path, readonly=True)
-    # casatools/casacore both return (col_shape, nrows) — transpose to (nrows, ...)
-    data = tb.getcol("DATA").transpose(2, 0, 1).astype(np.complex64)
-    model_data = tb.getcol("MODEL_DATA").transpose(2, 0, 1).astype(np.complex64)
-    flag = tb.getcol("FLAG").transpose(2, 0, 1)
-    uvw_m = tb.getcol("UVW").T.astype(np.float64)
+    # Visibility tables use (nrows, ncorr, nchan); the MS stores (nrows, nchan, ncorr).
+    data = backend.get(tb, "DATA").transpose(0, 2, 1).astype(np.complex64)
+    model_data = backend.get(tb, "MODEL_DATA").transpose(0, 2, 1).astype(np.complex64)
+    flag = backend.get(tb, "FLAG").transpose(0, 2, 1)
+    uvw_m = backend.get(tb, "UVW").astype(np.float64)
     antenna1 = tb.getcol("ANTENNA1").astype(np.int32)
     antenna2 = tb.getcol("ANTENNA2").astype(np.int32)
     time_mjd_s = tb.getcol("TIME").astype(np.float64)
     interval_s = tb.getcol("INTERVAL").astype(np.float64)
     exposure_s = tb.getcol("EXPOSURE").astype(np.float64)
-    weight = tb.getcol("WEIGHT").T.astype(np.float32)
-    sigma = tb.getcol("SIGMA").T.astype(np.float32)
+    weight = backend.get(tb, "WEIGHT").astype(np.float32)
+    sigma = backend.get(tb, "SIGMA").astype(np.float32)
     tb.close()
 
     spw = backend.open(os.path.join(ms_path, "SPECTRAL_WINDOW"), readonly=True)
@@ -218,7 +261,7 @@ def read_native_ms(ms_path: str | Path) -> dict[str, Any]:
 
     ant = backend.open(os.path.join(ms_path, "ANTENNA"), readonly=True)
     antenna_names = list(ant.getcol("NAME"))
-    antenna_positions_m = ant.getcol("POSITION").T.astype(np.float64)
+    antenna_positions_m = backend.get(ant, "POSITION").astype(np.float64)
     ant.close()
 
     fld = backend.open(os.path.join(ms_path, "FIELD"), readonly=True)
@@ -282,8 +325,8 @@ def _write_antenna(backend, ms_path, antenna_names, antenna_positions_m, nant):
     tb.putcol("MOUNT", ["alt-az"] * nant)
     tb.putcol("DISH_DIAMETER", np.full(nant, 12.0))
     tb.putcol("FLAG_ROW", np.zeros(nant, dtype=bool))
-    tb.putcol("POSITION", antenna_positions_m.T)  # (3, nant)
-    tb.putcol("OFFSET", np.zeros((3, nant)))
+    backend.put(tb, "POSITION", antenna_positions_m)  # (nant, 3)
+    backend.put(tb, "OFFSET", np.zeros((nant, 3)))
     tb.flush()
     tb.close()
 
@@ -335,7 +378,7 @@ def _write_polarization(backend, ms_path, ncorr):
     )
     tb.putcell("NUM_CORR", 0, int(ncorr))
     tb.putcell("CORR_TYPE", 0, np.array([9], dtype=np.int32))  # Stokes I
-    tb.putcell("CORR_PRODUCT", 0, np.array([[0], [0]], dtype=np.int32))
+    backend.put_cell(tb, "CORR_PRODUCT", 0, np.array([[0, 0]], dtype=np.int32))  # (ncorr, 2)
     tb.putcell("FLAG_ROW", 0, False)
     tb.flush()
     tb.close()
@@ -381,9 +424,9 @@ def _write_field(backend, ms_path, source_name, ra_rad, dec_rad, time_range):
     tb.putcell("SOURCE_ID", 0, 0)
     tb.putcell("TIME", 0, float(np.mean(time_range)))
     tb.putcell("FLAG_ROW", 0, False)
-    tb.putcell("DELAY_DIR", 0, direction_3d)
-    tb.putcell("PHASE_DIR", 0, direction_3d)
-    tb.putcell("REFERENCE_DIR", 0, direction_3d)
+    backend.put_cell(tb, "DELAY_DIR", 0, direction_3d)
+    backend.put_cell(tb, "PHASE_DIR", 0, direction_3d)
+    backend.put_cell(tb, "REFERENCE_DIR", 0, direction_3d)
     tb.flush()
     tb.close()
 
@@ -556,13 +599,14 @@ def _write_main(backend, ms_path, nrows, vt):
     tb.putcol("STATE_ID", np.zeros(nrows, dtype=np.int32))
     tb.putcol("FLAG_ROW", np.all(flag, axis=(1, 2)))
 
-    # Array columns: CASA convention is (col_shape..., nrows)
-    tb.putcol("UVW", uvw_m.T)  # (3, nrows)
-    tb.putcol("DATA", data.transpose(1, 2, 0))  # (ncorr, nchan, nrows)
-    tb.putcol("MODEL_DATA", model_data.transpose(1, 2, 0))
-    tb.putcol("FLAG", flag.transpose(1, 2, 0))
-    tb.putcol("WEIGHT", weight.T)  # (ncorr, nrows)
-    tb.putcol("SIGMA", sigma.T)
+    # Array columns, row-major (see the layout note above the backends); the
+    # visibility table's (nrows, ncorr, nchan) becomes the MS's (nrows, nchan, ncorr).
+    backend.put(tb, "UVW", uvw_m)
+    backend.put(tb, "DATA", data.transpose(0, 2, 1))
+    backend.put(tb, "MODEL_DATA", model_data.transpose(0, 2, 1))
+    backend.put(tb, "FLAG", flag.transpose(0, 2, 1))
+    backend.put(tb, "WEIGHT", weight)  # (nrows, ncorr)
+    backend.put(tb, "SIGMA", sigma)
 
     tb.putkeyword("MS_VERSION", 2.0)
     tb.putinfo({"type": "Measurement Set", "subType": "ALMASim"})
