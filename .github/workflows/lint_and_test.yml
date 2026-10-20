@@ -55,6 +55,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: API types are current
+        run: npm run gen:api && git diff --exit-code src/lib/api/schema.d.ts
+
       - name: Type check
         run: npm run check
 

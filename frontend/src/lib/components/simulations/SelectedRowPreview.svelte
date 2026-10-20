@@ -1,11 +1,12 @@
 <script lang="ts">
+	import type { MetadataRow } from '#lib/api/metadata.js';
 	import { deriveArrayType, inferObservationConfigsFromMetadataRow } from '#lib/utils/observationPlan.js';
 	import type { SimulationEstimate } from '#lib/api/simulation.js';
 
 	interface Props {
-		row: Record<string, unknown> | null;
-		getRowValue: (row: Record<string, unknown>, key: string) => string;
-		getRowNumber: (row: Record<string, unknown>, key: string) => number | null;
+		row: MetadataRow | null;
+		getRowValue: (row: MetadataRow, key: string) => string;
+		getRowNumber: (row: MetadataRow, key: string) => number | null;
 		sourceType: string;
 		nPix: number | null;
 		nChannels: number | null;
@@ -16,7 +17,7 @@
 		saveMode: string;
 		nLines: number;
 		robust: number;
-		imagingAlgorithm: 'legacy' | 'ducc0';
+		imagingAlgorithm: 'legacy';
 		sourceOffsetXArcsec: number;
 		sourceOffsetYArcsec: number;
 		backgroundMode: string;
@@ -29,7 +30,7 @@
 
 	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataSnr, useMetadataPwv, pwvOverride, saveMode, nLines, robust, imagingAlgorithm, sourceOffsetXArcsec, sourceOffsetYArcsec, backgroundMode, backgroundLevel, backgroundSeed, estimate, estimating, estimateError }: Props = $props();
 
-	function derivePreviewSnr(targetRow: Record<string, unknown>): string {
+	function derivePreviewSnr(targetRow: MetadataRow): string {
 		if (!useMetadataSnr) return `${snr.toFixed(2)} (manual)`;
 		const contSens = getRowNumber(targetRow, 'Cont_sens_mJybeam') ?? getRowNumber(targetRow, 'Cont_sens') ?? getRowNumber(targetRow, 'cont_sens');
 		const lineSens = getRowNumber(targetRow, 'Line_sens_10kms_mJybeam');

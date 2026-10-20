@@ -3,7 +3,24 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class ObservationConfigInput(BaseModel):
+    """One configuration of a multi-configuration observation plan.
+
+    Any field left out takes the observation's value (``observation_plan``);
+    other keys the library accepts (``antennalist``) pass through.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    name: Optional[str] = None
+    array_type: Optional[Literal["12m", "7m", "TP"]] = None
+    antenna_array: Optional[str] = None
+    total_time_s: Optional[float] = None
+    correlator: Optional[str] = None
+    antenna_diameter_m: Optional[float] = None
 
 
 class SimulationParamsBase(BaseModel):
@@ -30,7 +47,7 @@ class SimulationParamsBase(BaseModel):
         description="Optional 10 km/s line sensitivity in mJy/beam",
     )
     antenna_array: str = Field(..., description="Antenna array configuration")
-    observation_configs: Optional[list[dict[str, Any]]] = Field(
+    observation_configs: Optional[list[ObservationConfigInput]] = Field(
         default=None,
         description="Optional multi-configuration single-pointing observation plan",
     )

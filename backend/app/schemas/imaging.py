@@ -1,6 +1,6 @@
 """Schemas for imaging/deconvolution API endpoints."""
 
-from typing import Any, Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,12 +32,44 @@ class DeconvolutionRequest(BaseModel):
     )
 
 
+class PreviewStats(BaseModel):
+    """Statistics of an integrated cube preview (``products.preview``)."""
+
+    shape: list[int]
+    integrated_shape: list[int]
+    min: float
+    max: float
+    mean: float
+    std: float
+    cube_name: str
+
+
 class ImagePreviewPayload(BaseModel):
     """Normalized 2D preview and statistics for a cube product."""
 
     image: list[list[int]]
-    stats: dict[str, Any]
+    stats: PreviewStats
     method: str
+
+
+class DeconvolutionMetadata(BaseModel):
+    """Where a deconvolution run read and wrote its cubes, and how far it got."""
+
+    dirty_cube_path: str
+    beam_cube_path: str
+    beam_cube_name: str
+    clean_cube_path: Optional[str] = None
+    cycles_requested: int
+    cycles_completed: int
+    cycles_added: int
+    gain: float
+    threshold: Optional[float] = None
+    state_path: str
+    component_cube_path: str
+    restored_cube_path: str
+    residual_cube_path: str
+    convolved_reference_path: Optional[str] = None
+    resumed: bool
 
 
 class DeconvolutionResponse(BaseModel):
@@ -49,4 +81,4 @@ class DeconvolutionResponse(BaseModel):
     residual: ImagePreviewPayload
     reference_clean: ImagePreviewPayload | None = None
     convolved_reference: ImagePreviewPayload | None = None
-    metadata: dict[str, Any]
+    metadata: DeconvolutionMetadata

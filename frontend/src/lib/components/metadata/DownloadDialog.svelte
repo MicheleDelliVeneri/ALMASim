@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { MetadataRow } from '#lib/api/metadata.js';
 	import type { ResolveProductsResponse, DiskSpaceInfo } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
@@ -9,7 +10,7 @@
 	interface Props {
 		open: boolean;
 		memberOusUids: string[];
-		metadataRows?: Record<string, unknown>[];
+		metadataRows?: MetadataRow[];
 		onClose: () => void;
 		onStarted: (jobId: string) => void;
 	}

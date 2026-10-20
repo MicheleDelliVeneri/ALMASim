@@ -1,117 +1,28 @@
 /** Download API types and functions */
+import type { components } from './schema';
 import { apiClient } from './client';
-import type { MetadataResponse } from './metadata';
+import type { MetadataResponse, MetadataRow } from './metadata';
 
-export interface DataProductInfo {
-	access_url: string;
-	uid: string;
-	filename: string;
-	content_length: number;
-	content_type: string;
-	product_type: string;
-	size_mb: number;
-}
+// Generated from the backend's OpenAPI schema (npm run gen:api, MADIV-28 T7.4).
+type Schemas = components['schemas'];
 
-export interface ResolveProductsResponse {
-	products: DataProductInfo[];
-	total_count: number;
-	total_size_bytes: number;
-	total_size_display: string;
-	by_type: Record<string, { count: number; size_bytes: number; size_display: string }>;
-}
+export type DataProductInfo = Schemas['DataProductInfo'];
 
-export interface DiskSpaceInfo {
-	path: string;
-	total_bytes: number;
-	used_bytes: number;
-	free_bytes: number;
-	total_display: string;
-	used_display: string;
-	free_display: string;
-	sufficient: boolean;
-}
+export type ResolveProductsResponse = Schemas['ResolveProductsResponse'];
 
-export interface StartDownloadResponse {
-	job_id: string;
-	status: string;
-	total_files: number;
-	total_bytes: number;
-	total_size_display: string;
-	destination: string;
-}
+export type DiskSpaceInfo = Schemas['DiskSpaceInfo'];
 
-export interface FileStatus {
-	filename: string;
-	content_length: number;
-	bytes_downloaded: number;
-	status: string;
-	error: string | null;
-	progress: number;
-}
+export type StartDownloadResponse = Schemas['StartDownloadResponse'];
 
-export interface DownloadJobStatus {
-	job_id: string;
-	status: string;
-	destination: string;
-	total_files: number;
-	files_completed: number;
-	files_failed: number;
-	total_bytes: number;
-	bytes_downloaded: number;
-	progress: number;
-	error: string | null;
-	files: FileStatus[];
-	raw_measurement_sets: string[];
-	calibrated_measurement_sets: string[];
-	manifest_path: string | null;
-	has_metadata: boolean;
-	metadata_count: number;
-	unpack_ms: boolean;
-	generate_calibrated_visibilities: boolean;
-	clean_intermediate_files: boolean;
-	archive_output_root: string | null;
-	casa_data_root: string | null;
-	skip_casa_data_update: boolean;
-}
+export type FileStatus = Schemas['FileStatus'];
 
-export interface DownloadJobSummary {
-	job_id: string;
-	status: string;
-	destination: string;
-	total_files: number;
-	files_completed: number;
-	files_failed: number;
-	progress: number;
-	created_at: string;
-	member_ous_uids: string[];
-	product_filter: string;
-	total_bytes: number;
-	bytes_downloaded: number;
-	error: string | null;
-	raw_measurement_sets: string[];
-	calibrated_measurement_sets: string[];
-	manifest_path: string | null;
-	has_metadata: boolean;
-	metadata_count: number;
-	unpack_ms: boolean;
-	generate_calibrated_visibilities: boolean;
-	clean_intermediate_files: boolean;
-	archive_output_root: string | null;
-	casa_data_root: string | null;
-	skip_casa_data_update: boolean;
-}
+export type DownloadJobStatus = Schemas['DownloadJobStatus'];
 
-export interface BrowseDirectoryEntry {
-	name: string;
-	path: string;
-	is_dir: boolean;
-}
+export type DownloadJobSummary = Schemas['DownloadJobSummary'];
 
-export interface BrowseDirectoryResponse {
-	current: string;
-	parent: string | null;
-	entries: BrowseDirectoryEntry[];
-}
+export type BrowseDirectoryEntry = Schemas['BrowseDirectoryEntry'];
+
+export type BrowseDirectoryResponse = Schemas['BrowseDirectoryResponse'];
 
 export const downloadApi = {
 	/** Browse server-side directories */
@@ -156,7 +67,7 @@ export const downloadApi = {
 		archiveOutputRoot?: string;
 		casaDataRoot?: string;
 		skipCasaDataUpdate?: boolean;
-		selectedMetadata?: Record<string, unknown>[];
+		selectedMetadata?: MetadataRow[];
 	}): Promise<StartDownloadResponse> {
 		return apiClient.post<StartDownloadResponse>('/api/v1/downloads/start', {
 			member_ous_uids: params.memberOusUids,

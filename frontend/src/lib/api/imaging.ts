@@ -1,45 +1,13 @@
 /** Imaging API types and functions */
+import type { components } from './schema';
 import { apiClient } from './client';
 
-export interface ImagePreviewPayload {
-	image: number[][];
-	stats: {
-		shape: number[];
-		integrated_shape: number[];
-		min: number;
-		max: number;
-		mean: number;
-		std: number;
-		cube_name: string;
-	};
-	method: string;
-}
+// Generated from the backend's OpenAPI schema (npm run gen:api, MADIV-28 T7.4).
+type Schemas = components['schemas'];
 
-export interface DeconvolutionResponse {
-	dirty: ImagePreviewPayload;
-	component_model: ImagePreviewPayload;
-	restored: ImagePreviewPayload;
-	residual: ImagePreviewPayload;
-	reference_clean: ImagePreviewPayload | null;
-	convolved_reference: ImagePreviewPayload | null;
-	metadata: {
-		dirty_cube_path: string;
-		beam_cube_path: string;
-		beam_cube_name: string;
-		clean_cube_path: string | null;
-		cycles_requested: number;
-		cycles_completed: number;
-		cycles_added: number;
-		gain: number;
-		threshold: number | null;
-		state_path: string;
-		component_cube_path: string;
-		restored_cube_path: string;
-		residual_cube_path: string;
-		convolved_reference_path: string | null;
-		resumed: boolean;
-	};
-}
+export type ImagePreviewPayload = Schemas['ImagePreviewPayload'];
+
+export type DeconvolutionResponse = Schemas['DeconvolutionResponse'];
 
 export const imagingApi = {
 	deconvolve(params: {
