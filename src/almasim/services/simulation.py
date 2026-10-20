@@ -17,6 +17,7 @@ import pandas as pd
 from almasim.services.json_safe import json_safe as _json_safe
 
 from .. import skymodels as usm
+from ..skymodels.registry import SKYMODELS
 from . import astro as uas
 from . import interferometry as uin
 from .astro.spectral import process_spectral_data
@@ -519,7 +520,8 @@ def _ensure_morphology_dataset(params: "SimulationParams", log: LogFn = None) ->
             except Exception:
                 pass
 
-    if st == "galaxy-zoo":
+    dataset = SKYMODELS[st].dataset if st in SKYMODELS else None
+    if dataset == "galaxy-zoo":
         data_path = os.path.join(params.galaxy_zoo_dir, "images_gz2", "images")
         if os.path.isdir(data_path) and os.listdir(data_path):
             return
@@ -527,7 +529,7 @@ def _ensure_morphology_dataset(params: "SimulationParams", log: LogFn = None) ->
 
         _say(f"Fetching Galaxy Zoo 2 images into {params.galaxy_zoo_dir}")
         download_galaxy_zoo(params.galaxy_zoo_dir, token=params.kaggle_token)
-    elif st in ("hubble-100", "hubble"):
+    elif dataset == "hubble-100":
         data_path = os.path.join(params.hubble_dir, "top100")
         if os.path.isdir(data_path) and os.listdir(data_path):
             return

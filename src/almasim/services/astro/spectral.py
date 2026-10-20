@@ -12,6 +12,7 @@ import pandas as pd
 from astropy.constants import c
 from astropy.cosmology import FlatLambdaCDM
 
+from ...skymodels.registry import skymodel_spec
 from ..data_paths import DataLayout, calibrated_lines, read_table
 from .redshift import compute_redshift
 from .tng import redshift_to_snapshot
@@ -169,17 +170,12 @@ def sed_reading(
 ):
     """Load and normalize SED templates for the requested source type."""
     cosmo = FlatLambdaCDM(H0=70 * U.km / U.s / U.Mpc, Tcmb0=2.725 * U.K, Om0=0.3)
-    path = Path(path)
-    if source_type in {"extended", "diffuse", "molecular", "galaxy-zoo", "hubble-100"}:
-        file_path = path / "SED_low_z_warm_star_forming_galaxy.dat"
-        redshift = redshift or 10 ** (-4)
-        lum_infrared = lum_infrared or 1e12
-    elif source_type in {"point", "gaussian"}:
-        file_path = path / "SED_low_z_type2_AGN.dat"
-        redshift = redshift or 0.05
-        lum_infrared = lum_infrared or 1e12
-    else:
-        raise ValueError("Not valid source type for SED selection")
+    spec = skymodel_spec(source_type)
+    if spec.sed_template is None:
+        raise ValueError(f"{source_type} takes its spectrum from the input, not an SED template")
+    file_path = Path(path) / spec.sed_template
+    redshift = redshift or spec.default_redshift
+    lum_infrared = lum_infrared or 1e12
 
     distance_Mpc = cosmo.luminosity_distance(redshift).value
     distance_cm = distance_Mpc * 3.086e24
