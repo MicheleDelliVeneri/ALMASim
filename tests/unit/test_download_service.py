@@ -361,13 +361,19 @@ def test_archive_stages_run_one_process_per_uid(tmp_path, monkeypatch):
 
     def _stages(download_root, archive_root, **kwargs):
         seen.update(kwargs, download_root=download_root, archive_root=archive_root)
+        kwargs["echo"]("calibrating uid___A")
         return pipeline.ArchiveStageResult(["/raw/a.ms"], ["/cal/a.ms.split.cal"])
 
     monkeypatch.setattr(pipeline, "run_archive_stages", _stages)
     destination = tmp_path / "downloads"
+    messages: list[str] = []
     summary = download_products(
-        _existing_product(destination), destination, generate_calibrated_visibilities=True
+        _existing_product(destination),
+        destination,
+        generate_calibrated_visibilities=True,
+        logger_fn=messages.append,
     )
+    assert "calibrating uid___A" in messages
 
     assert seen["unpack_ms"] is True and seen["calibrate"] is True
     assert seen["archive_root"] == destination / "archive_ms"
@@ -398,3 +404,35 @@ def test_failed_archive_uids_fail_the_download_after_the_manifest(tmp_path, monk
     manifest = json.loads((destination / "download_manifest.json").read_text())
     assert manifest["archive_failures"] == ["uid___B: Worker exited with return code -6"]
     assert manifest["raw_measurement_sets"] == ["/raw/a.ms"]
+
+
+def test_archive_stage_messages_and_cleanup(tmp_path, monkeypatch, caplog):
+    """Without a logger_fn the stages log; a fully calibrated run cleans its intermediates."""
+    import logging
+
+    from almasim.services import archive
+    from almasim.services.archive import pipeline
+
+    def _stages(download_root, archive_root, **kwargs):
+        kwargs["echo"]("unpacking")
+        kwargs["echo"]("one UID failed", err=True)
+        return pipeline.ArchiveStageResult(["/raw/a.ms"], ["/cal/a.ms.split.cal"])
+
+    cleaned = {}
+    monkeypatch.setattr(pipeline, "run_archive_stages", _stages)
+    monkeypatch.setattr(
+        archive,
+        "cleanup_intermediate_calibration_data",
+        lambda raw, cal, outputs, logger_fn=None: cleaned.update(raw=raw, outputs=outputs),
+    )
+    destination = tmp_path / "downloads"
+    with caplog.at_level(logging.INFO, logger="almasim"):
+        download_products(
+            _existing_product(destination),
+            destination,
+            generate_calibrated_visibilities=True,
+            clean_intermediate_files=True,
+        )
+    assert "unpacking" in caplog.text and "one UID failed" in caplog.text
+    assert cleaned["raw"] == destination / "archive_ms" / "raw_ms"
+    assert [str(p) for p in cleaned["outputs"]] == ["/cal/a.ms.split.cal"]
