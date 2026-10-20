@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass, fields
+from typing import Any, Optional
 
 import astropy.units as U
 import numpy as np
@@ -10,6 +11,51 @@ import numpy as np
 from .. import interferometry as uin
 from .geometry import CubeGeometry
 from .params import SimulationParams
+
+
+@dataclass(frozen=True)
+class InterferometerRun:
+    """One interferometric configuration of a run: what its Interferometer is built from
+    (MADIV-28 T5.8)."""
+
+    idx: int
+    skymodel: np.ndarray
+    main_dir: str
+    output_dir: str
+    ra: U.Quantity
+    dec: U.Quantity
+    central_freq: U.Quantity
+    bandwidth: U.Quantity
+    fov: float
+    antenna_array: str
+    noise: Any
+    snr: float
+    integration_time: float  # hours
+    observation_date: str
+    header: Any
+    save_mode: str
+    persist: bool
+    antenna_diameter_m: float
+    config_name: Optional[str]
+    array_type: Optional[str]
+    imaging_algorithm: str
+    spectral_window: Any
+
+    def interferometer_kwargs(self) -> dict[str, Any]:
+        """The run as ``Interferometer`` keyword arguments."""
+        return {f.name: getattr(self, f.name) for f in fields(self)}
+
+
+@dataclass(frozen=True)
+class TotalPowerRun:
+    """One total-power configuration of a run (MADIV-28 T5.8)."""
+
+    config_name: Optional[str]
+    array_type: str
+    antenna_array: str
+    antenna_diameter_m: float
+    integration_time_s: float
+    noise: Any
 
 
 def _count_antennas(antenna_array: str) -> int:
@@ -38,8 +84,8 @@ def plan_observation_runs(
     base_noise_reference: float,
     output_dir_abs: str,
     persist_outputs: bool,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """The Interferometer keyword arguments and total-power runs, one per configuration."""
+) -> tuple[list[InterferometerRun], list[TotalPowerRun]]:
+    """The interferometric and total-power runs, one per configuration."""
     observation_plan = geometry.observation_plan
     interferometer_runs = []
     total_power_runs = []
@@ -62,40 +108,40 @@ def plan_observation_runs(
         )
         if config.array_type == "TP":
             total_power_runs.append(
-                {
-                    "config_name": config.name,
-                    "array_type": config.array_type,
-                    "antenna_array": config.antenna_array,
-                    "antenna_diameter_m": config.antenna_diameter_m,
-                    "integration_time_s": config.total_time_s,
-                    "noise": noise_profile,
-                }
+                TotalPowerRun(
+                    config_name=config.name,
+                    array_type=config.array_type,
+                    antenna_array=config.antenna_array,
+                    antenna_diameter_m=config.antenna_diameter_m,
+                    integration_time_s=config.total_time_s,
+                    noise=noise_profile,
+                )
             )
         else:
             interferometer_runs.append(
-                {
-                    "idx": params.idx,
-                    "skymodel": model_cube,
-                    "main_dir": params.main_dir,
-                    "output_dir": output_dir_abs,
-                    "ra": params.ra * U.deg,
-                    "dec": params.dec * U.deg,
-                    "central_freq": geometry.central_freq,
-                    "bandwidth": geometry.band_range,
-                    "fov": geometry.fov.value,
-                    "antenna_array": config.antenna_array,
-                    "noise": noise_profile,
-                    "snr": effective_snr,
-                    "integration_time": config.total_time_s / 3600.0,
-                    "observation_date": params.obs_date,
-                    "header": header,
-                    "save_mode": params.save_mode,
-                    "persist": persist_outputs,
-                    "antenna_diameter_m": config.antenna_diameter_m,
-                    "config_name": config.name,
-                    "array_type": config.array_type,
-                    "imaging_algorithm": params.imaging_algorithm,
-                    "spectral_window": geometry.spectral_window(),
-                }
+                InterferometerRun(
+                    idx=params.idx,
+                    skymodel=model_cube,
+                    main_dir=params.main_dir,
+                    output_dir=output_dir_abs,
+                    ra=params.ra * U.deg,
+                    dec=params.dec * U.deg,
+                    central_freq=geometry.central_freq,
+                    bandwidth=geometry.band_range,
+                    fov=geometry.fov.value,
+                    antenna_array=config.antenna_array,
+                    noise=noise_profile,
+                    snr=effective_snr,
+                    integration_time=config.total_time_s / 3600.0,
+                    observation_date=params.obs_date,
+                    header=header,
+                    save_mode=params.save_mode,
+                    persist=persist_outputs,
+                    antenna_diameter_m=config.antenna_diameter_m,
+                    config_name=config.name,
+                    array_type=config.array_type,
+                    imaging_algorithm=params.imaging_algorithm,
+                    spectral_window=geometry.spectral_window(),
+                )
             )
     return interferometer_runs, total_power_runs

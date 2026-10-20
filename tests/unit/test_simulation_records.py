@@ -97,3 +97,21 @@ def test_spectral_result_is_a_tuple_with_names():
     assert result.continuum == 0
     assert result.lum_infrared == 11
     assert tuple(result) == tuple(range(12))
+
+
+def test_interferometer_run_gives_the_interferometer_keywords():
+    import astropy.units as U
+
+    from almasim.services.simulation.planning import InterferometerRun
+
+    run = InterferometerRun(
+        idx=0, skymodel=np.zeros((2, 4, 4)), main_dir="/m", output_dir="/o", ra=1 * U.deg,
+        dec=2 * U.deg, central_freq=100 * U.GHz, bandwidth=1 * U.GHz, fov=10.0,
+        antenna_array="A001 A002", noise=0.1, snr=5.0, integration_time=1.0,
+        observation_date="2024-01-01", header=None, save_mode="npz", persist=False,
+        antenna_diameter_m=7.0, config_name="7m", array_type="7m",
+        imaging_algorithm="legacy", spectral_window=None,
+    )  # fmt: skip
+    kwargs = run.interferometer_kwargs()
+    assert kwargs["antenna_diameter_m"] == 7.0 and kwargs["config_name"] == "7m"
+    assert len(kwargs) == 22

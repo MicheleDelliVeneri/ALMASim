@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from almasim.services import simulation
+from almasim.services.simulation.planning import TotalPowerRun
 
 pytestmark = pytest.mark.unit
 
@@ -20,7 +21,14 @@ def _stage(seed, n_tp=2):
     stage.seed = seed
     stage.interferometer_runs = []
     stage.total_power_runs = [
-        {"noise": 0.0, "antenna_diameter_m": 12.0, "config_name": f"tp{i}", "array_type": "TP"}
+        TotalPowerRun(
+            config_name=f"tp{i}",
+            array_type="TP",
+            antenna_array="",
+            antenna_diameter_m=12.0,
+            integration_time_s=60.0,
+            noise=0.0,
+        )
         for i in range(n_tp)
     ]
     return stage
