@@ -4,15 +4,15 @@
     "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
   },
   "baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v6/golden-baseline-v6.tar.gz",
-    "sha256": "8d902865f099af8d54706e56aef0b3c5fa465f18e90a4b35d00ef79c66e89e60",
-    "version": "v6",
-    "source": "workflow run 39446318758, commit 22615e13; T1.1/T1.2: sky models add to the cube, so the serendipitous case keeps its central source"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v7/golden-baseline-v7.tar.gz",
+    "sha256": "ab8788508ca4a2384c00f9edeaa2dd94db9d0a9001f801a081fbbaadd3b118e3",
+    "version": "v7",
+    "source": "workflow run 39475555005, commit 11eed5d6; T1.3 (#347): hour-angle tracks in the right units; uv coverage and every uv-dependent product change, sky models unchanged"
   },
   "simulation_baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v6/golden-simulation-v6.tar.gz",
-    "sha256": "6ee34f1d070f483c73df5ec0b44b21bb4f4907e832e656bf63c3a198ab786c80",
-    "version": "v6",
-    "source": "workflow run 39446318758, commit 22615e13; T1.1/T1.2: sky models add to the cube, so the serendipitous case keeps its central source"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v7/golden-simulation-v7.tar.gz",
+    "sha256": "aeb52df7d699253ebd9115430855d263290899576aa1a821143485de73fc8250",
+    "version": "v7",
+    "source": "workflow run 39475555005, commit 11eed5d6; T1.3 (#347): hour-angle tracks in the right units; uv coverage and every uv-dependent product change, sky models unchanged"
   }
 }
