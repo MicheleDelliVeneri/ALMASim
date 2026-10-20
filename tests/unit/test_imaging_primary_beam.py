@@ -364,3 +364,40 @@ def test_pb_correct_command_succeeds_when_everything_is_corrected(tmp_path):
     result = runner.invoke(cli.app, ["image", "pb-correct", str(csv), str(root)])
     assert result.exit_code == 0, result.output
     assert (directory / ai.PB_FILENAME).is_file()
+
+
+def _broken(*args, **kwargs):
+    raise ValueError("uneven channels")
+
+
+@pytest.mark.unit
+def test_run_and_mark_keeps_the_cause_of_a_stacking_failure(tmp_path, monkeypatch):
+    import almasim.services.imaging.task as task
+
+    kwargs = _mark_inputs(tmp_path)
+    kwargs["required"] = [ai.CUBE_IMAGE_FILENAME]
+    patch_everywhere(monkeypatch, ai, "_run_with_retries", lambda *a: 1)
+    monkeypatch.setattr(task, "stack_channel_images", _broken)
+    with pytest.raises(RuntimeError, match="Could not stack the channel images") as info:
+        ai._run_and_mark(**kwargs)
+    assert isinstance(info.value.__cause__, ValueError)
+
+
+@pytest.mark.unit
+def test_run_and_mark_keeps_the_cause_of_a_cube_continuum_failure(tmp_path, monkeypatch):
+    import almasim.services.imaging.task as task
+
+    kwargs = _mark_inputs(tmp_path)
+    kwargs["required"] = [ai.CUBE_IMAGE_FILENAME]
+    patch_everywhere(monkeypatch, ai, "_run_with_retries", lambda *a: 1)
+    monkeypatch.setattr(
+        task,
+        "stack_channel_images",
+        lambda out, prefix, keep: (out / ai.CUBE_IMAGE_FILENAME).write_bytes(b"x") and {},
+    )
+    monkeypatch.setattr(task, "subtract_continuum", _broken)
+    with pytest.raises(
+        RuntimeError, match="Could not subtract the continuum from the cube"
+    ) as info:
+        ai._run_and_mark(**kwargs, contsub_order=1)
+    assert isinstance(info.value.__cause__, ValueError)

@@ -250,3 +250,13 @@ def test_randint_from_matches_numpy_on_a_valid_range():
     expected = np.random.randint(2, 9, 5)
     np.random.seed(7)
     assert list(_randint_from(2, 9, 5)) == list(expected)
+
+
+@pytest.mark.unit
+def test_get_iou_rejects_empty_boxes():
+    """A box without positive area is an error, also under python -O."""
+    good = {"x1": 0, "x2": 2, "y1": 0, "y2": 2}
+    with pytest.raises(ValueError, match="positive area"):
+        get_iou(good, {"x1": 1, "x2": 1, "y1": 0, "y2": 2})
+    with pytest.raises(ValueError, match="positive length"):
+        get_iou_1d({"z1": 0, "z2": 2}, {"z1": 3, "z2": 3})
