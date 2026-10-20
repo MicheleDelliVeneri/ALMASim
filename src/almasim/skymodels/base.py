@@ -3,8 +3,34 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
+import astropy.units as U
 import numpy as np
 from dask.distributed import Client
+
+
+def channel_first(datacube: Any) -> np.ndarray:
+    """The datacube's values as a ``(chan, y, x)`` array, in its own unit.
+
+    martini's ``DataCube`` stores ``(x, y, chan)``; this and
+    :func:`add_channel_first` are the only places that know it (MADIV-28
+    T1.2), so no caller guesses the layout from the shape, which is
+    ambiguous when the cube has as many pixels per side as channels.
+    """
+    array = datacube._array
+    return np.asarray(array.to_value(array.unit)).T
+
+
+def add_channel_first(datacube: Any, cube: np.ndarray) -> None:
+    """Add a ``(chan, y, x)`` cube in Jy / pix^2 to the datacube's values.
+
+    Sky models add to the cube rather than replace it, so sources inserted
+    one after another (serendipitous ones, a background) all stay in it.
+    """
+    cube = np.asarray(cube)
+    expected = datacube._array.shape[::-1]
+    if cube.shape != expected:
+        raise ValueError(f"expected a (chan, y, x) cube of shape {expected}, got {cube.shape}")
+    datacube._array += cube.T * U.Jy * U.pix**-2
 
 
 class _ImmediateFuture:

@@ -2,7 +2,7 @@
 
 from martini import DataCube
 
-from .base import SkyModel
+from .base import SkyModel, add_channel_first, channel_first
 from .datasets import (
     RemoteMachine,
     download_galaxy_zoo,
@@ -27,6 +27,8 @@ from .utils import (
 __all__ = [
     "DataCube",
     "SkyModel",
+    "add_channel_first",
+    "channel_first",
     "PointlikeSkyModel",
     "GaussianSkyModel",
     "GalaxyZooSkyModel",

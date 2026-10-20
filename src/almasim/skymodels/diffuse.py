@@ -3,12 +3,11 @@
 import random
 from typing import Any
 
-import astropy.units as U
 import nifty8 as ift
 import numpy as np
 from dask import delayed
 
-from .base import SkyModel
+from .base import SkyModel, add_channel_first
 from .utils import gaussian, track_progress
 
 
@@ -60,6 +59,6 @@ class DiffuseSkyModel(SkyModel):
         delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
         futures = self.client.compute([delayed_skymodel])
         track_progress(self.update_progress, futures)
-        skymodel = self.client.gather(futures)
-        self.datacube._array = skymodel * U.Jy * U.pix**-2
+        (skymodel,) = self.client.gather(futures)
+        add_channel_first(self.datacube, skymodel)
         return self.datacube

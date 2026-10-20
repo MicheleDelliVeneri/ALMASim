@@ -75,5 +75,5 @@ class PointlikeSkyModel(SkyModel):
             self.pos_x,
             self.pos_y,
             :,
-        ] = (self.continuum + gs) * U.Jy * U.pix**-2
+        ] += (self.continuum + gs) * U.Jy * U.pix**-2
         return self.datacube
