@@ -114,3 +114,16 @@ def patch_everywhere(monkeypatch, module, name, value):
             getattr(mod, name, None) is original
         ):
             monkeypatch.setattr(mod, name, value)
+
+
+class FakeTask:
+    """A TaskRun stand-in: ``run(cmd, log)`` calls ``run(cmd)``; ``fail`` builds the error."""
+
+    def __init__(self, out, run=lambda cmd: 1, fail=RuntimeError, timeout=None):
+        self.out = out
+        self._run = run
+        self.fail = fail
+        self.timeout = timeout
+
+    def run(self, cmd, log):
+        return self._run(cmd)

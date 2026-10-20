@@ -9,7 +9,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
 from almasim.services.imaging.cube import (
     stack_channel_images,
@@ -39,6 +39,9 @@ from almasim.services.runtime.env import (
     casa_environment,
     wsclean_environment,
 )
+
+if TYPE_CHECKING:
+    from almasim.services.imaging.task_run import TaskRun
 
 
 def _call_in_child(
@@ -110,20 +113,18 @@ def self_calibrate(
     ms_path: Path,
     continuum_command: list[str],
     *,
-    out: Path,
+    task: TaskRun,
     log,
     solints: Sequence[str],
     min_snr: float,
-    run: Callable[[list[str]], int],
-    fail: Callable[..., RuntimeError],
     casa_data: str,
-    timeout: float | None = None,
     restart: bool = False,
     keep_gains: bool = True,
 ) -> dict[str, object]:
     """Self-calibrate ``ms_path`` against its own continuum, round by round.
 
-    The continuum is imaged (``continuum_command`` into ``selfcal-0``, writing
+    The continuum is imaged (``continuum_command`` into ``selfcal-0`` under
+    ``task.out``, writing
     MODEL_DATA); below ``min_snr`` (peak over residual noise) nothing is
     done. Each round (``parse_selfcal_rounds``: ``inf``, ``30s`` for phase,
     ``ap:inf`` for amplitude and phase) then solves gains of DATA against the
@@ -145,6 +146,7 @@ def self_calibrate(
     ALMASim's own StefCal-style solver gave the same S/N within ~1 % on four
     cycle11 cubes and was dropped for CASA (2026-10-17).
     """
+    out, timeout, fail = task.out, task.timeout, task.fail
     plan = parse_selfcal_rounds(solints)
     rounds: list[dict[str, object]] = []
     casa_log = str(out / "casa-selfcal.log")
@@ -153,9 +155,9 @@ def self_calibrate(
     def image(index: int) -> tuple[float, float]:
         name = f"selfcal-{index}"
         command = _selfcal_command(continuum_command, out, name)
-        run(command)
+        task.run(command, log)
         if restart:
-            run(WSCleanCommand.parse(command).continued().argv())
+            task.run(WSCleanCommand.parse(command).continued().argv(), log)
         image_path = out / f"{name}-image.fits"
         return image_snr(image_path, out / f"{name}-residual.fits"), image_peak(image_path)
 
@@ -300,11 +302,8 @@ def _selfcal_noise_products(
     continuum_command: Sequence[str] | None,
     cube_command: Sequence[str] | None,
     fit: dict[str, object] | None,
-    out: Path,
+    task: TaskRun,
     log,
-    run: Callable[[list[str]], int],
-    fail: Callable[..., RuntimeError],
-    timeout: float | None = None,
 ) -> list[str]:
     """Image what self-calibration removed and form the total residuals.
 
@@ -317,6 +316,7 @@ def _selfcal_noise_products(
     self-calibration minus the model, everything the final model does not
     explain: ``wsclean[-cube]-residual-total.fits``. Returns the files written.
     """
+    out, fail = task.out, task.fail
     split = fit is not None
     try:
         _call_in_child(
@@ -327,7 +327,7 @@ def _selfcal_noise_products(
                 "order": fit["order"] if fit is not None else 1,
             },
             what="selfcal_correction_columns",
-            timeout=timeout,
+            timeout=task.timeout,
             log_path=log.name,
         )
     except Exception as exc:
@@ -355,7 +355,7 @@ def _selfcal_noise_products(
         if not command:
             continue
         name = f"{prefix}-selfcal-correction"
-        run(_dirty_command(command, out, name, split_column if split else SELFCAL_COLUMN))
+        task.run(_dirty_command(command, out, name, split_column if split else SELFCAL_COLUMN), log)
         image: Path | None = None
         if is_cube:
             try:

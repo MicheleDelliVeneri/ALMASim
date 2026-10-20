@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 from almasim import cli, cli_image
 from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging import primary_beam as pbm
+from almasim.services.imaging.task_run import TaskRun
 
 from ._fakes import patch_everywhere
 
@@ -195,7 +196,7 @@ def test_run_wsclean_task_primary_beam_corrects_and_logs(tmp_path, monkeypatch):
     stale.write_bytes(b"old")
     seen = {}
 
-    def _fake_run_and_mark(**kwargs):
+    def _fake_run_and_mark(task, **kwargs):
         seen["stale_left"] = stale.exists()
         seen.update(kwargs)
         return {"ok": True}
@@ -219,24 +220,17 @@ def _mark_inputs(tmp_path: Path) -> dict:
     log = ai.imaging_log_path(out)
     log.write_text("")
     return dict(
+        task=TaskRun(out=out, log_path=log, ms_path="in.ms", spw=1),
         commands=[["wsclean", "-name", str(out / "wsclean"), "in.ms"]],
         required=[ai.IMAGE_FILENAME],
-        out=out,
-        log_path=log,
-        env={},
-        ms_path="in.ms",
-        spw=1,
-        timeout=None,
-        tail=None,
         started=0.0,
-        fail=lambda error, code=None: RuntimeError(error),
     )
 
 
 @pytest.mark.unit
 def test_run_and_mark_writes_the_primary_beam_products(tmp_path, monkeypatch):
     kwargs = _mark_inputs(tmp_path)
-    out = kwargs["out"]
+    out = kwargs["task"].out
     patch_everywhere(
         monkeypatch,
         ai,
@@ -246,14 +240,14 @@ def test_run_and_mark_writes_the_primary_beam_products(tmp_path, monkeypatch):
     ai._run_and_mark(**kwargs, pb_dish_diameter=12.0)
     assert (out / ai.PB_FILENAME).is_file() and (out / ai.PBCOR_FILENAME).is_file()
     assert ai.imaging_marker_path(out).is_file()
-    log = kwargs["log_path"].read_text()
+    log = kwargs["task"].log_path.read_text()
     assert "# primary-beam corrected wsclean-image.fits: Airy 10.7 m" in log
 
 
 @pytest.mark.unit
 def test_run_and_mark_fails_the_task_when_the_correction_fails(tmp_path, monkeypatch):
     kwargs = _mark_inputs(tmp_path)
-    out = kwargs["out"]
+    out = kwargs["task"].out
     patch_everywhere(
         monkeypatch,
         ai,
@@ -401,3 +395,15 @@ def test_run_and_mark_keeps_the_cause_of_a_cube_continuum_failure(tmp_path, monk
     ) as info:
         ai._run_and_mark(**kwargs, contsub_order=1)
     assert isinstance(info.value.__cause__, ValueError)
+
+
+@pytest.mark.unit
+def test_task_run_fail_writes_the_failure_marker(tmp_path):
+    log = tmp_path / "task.log"
+    task = TaskRun(out=tmp_path, log_path=log, ms_path="in.ms", spw=3, retries=-2)
+
+    error = task.fail("WSClean exited with return code 1", 1)
+
+    assert task.retries == 0
+    assert str(error) == f"WSClean exited with return code 1\nFull log: {log}"
+    assert ai.imaging_failure_marker_path(tmp_path).is_file()

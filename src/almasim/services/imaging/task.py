@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 import shutil
 import time
-from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -50,6 +49,7 @@ from almasim.services.imaging.products import (
     TOTAL_RESIDUAL_FILENAME,
 )
 from almasim.services.imaging.selfcal.loop import _selfcal_noise_products, self_calibrate
+from almasim.services.imaging.task_run import TaskRun
 from almasim.services.imaging.uv_contsub import (
     subtract_uv_continuum_subprocess,
 )
@@ -58,10 +58,7 @@ from almasim.services.imaging.wsclean.command import (
     _with_data_column,
     continuum_restart_commands,
 )
-from almasim.services.imaging.wsclean.runner import (
-    _remove_reorder_files,
-    _run_with_retries,
-)
+from almasim.services.imaging.wsclean.runner import _remove_reorder_files
 from almasim.services.runtime.env import (
     wsclean_environment,
 )
@@ -238,20 +235,16 @@ def run_wsclean_task(
             WSCleanCommand.parse(c).substituted(SCRATCH_PLACEHOLDER, scratch_dir).argv()
             for c in commands
         ]
-    env = wsclean_environment(threads)
-    tail: deque[str] = deque(maxlen=60)
+    task = TaskRun(
+        out=out,
+        log_path=log_path,
+        ms_path=ms_path,
+        spw=spw,
+        env=wsclean_environment(threads),
+        timeout=timeout,
+        retries=retries,
+    )
     started = time.time()
-
-    def _fail(error: str, returncode: int | None = None) -> RuntimeError:
-        write_imaging_failure_marker(
-            out,
-            ms_path=ms_path,
-            spw=spw,
-            error=error,
-            log_path=log_path,
-            returncode=returncode,
-        )
-        return RuntimeError(f"{error}\nFull log: {log_path}")
 
     try:
         selfcal: dict[str, object] = {}
@@ -262,16 +255,11 @@ def run_wsclean_task(
                     selfcal = self_calibrate(
                         single_window_ms,
                         commands[0],
-                        out=out,
+                        task=task,
                         log=log,
                         solints=selfcal_solints,
                         min_snr=selfcal_min_snr,
-                        run=lambda cmd: _run_with_retries(
-                            cmd, out, log, env, timeout, tail, _fail, max(int(retries), 0)
-                        ),
-                        fail=_fail,
                         casa_data=str(casa_data),
-                        timeout=timeout,
                         restart=continuum_restart,
                         keep_gains=noise_products,
                     )
@@ -281,9 +269,8 @@ def run_wsclean_task(
                         commands,
                         has_continuum=bool(command),
                         order=uv_contsub_order,
+                        task=task,
                         log=log,
-                        fail=_fail,
-                        timeout=timeout,
                     )
         after_images = None
         if noise_products and selfcal.get("applied") and single_window_ms is not None:
@@ -296,28 +283,15 @@ def run_wsclean_task(
                         continuum_command=final_commands[0] if command else None,
                         cube_command=final_commands[-1] if cube_command else None,
                         fit=final_fit,
-                        out=out,
+                        task=task,
                         log=log,
-                        run=lambda cmd: _run_with_retries(
-                            cmd, out, log, env, timeout, tail, _fail, max(int(retries), 0)
-                        ),
-                        fail=_fail,
-                        timeout=timeout,
                     )
 
         return _run_and_mark(
+            task,
             commands=commands,
             required=required,
-            out=out,
-            log_path=log_path,
-            env=env,
-            ms_path=ms_path,
-            spw=spw,
-            timeout=timeout,
-            tail=tail,
             started=started,
-            fail=_fail,
-            retries=max(int(retries), 0),
             cube_products=cube_products,
             contsub_order=contsub_order,
             cube_line_mask=bool(cube_line_mask and cube_command),
@@ -332,37 +306,30 @@ def run_wsclean_task(
 
 
 def _run_and_mark(
+    task: TaskRun,
     *,
     commands: list[list[str]],
     required: Sequence[str],
-    out: Path,
-    log_path: Path,
-    env: dict[str, str],
-    ms_path: str,
-    spw: int,
-    timeout: float | None,
-    tail: deque[str],
     started: float,
-    fail: Callable[..., RuntimeError],
-    retries: int = 0,
     cube_products: Sequence[str] | None = None,
     contsub_order: int | None = None,
     cube_line_mask: bool = False,
     after_images: Callable[[], None] | None = None,
     pb_dish_diameter: float | None = None,
 ) -> dict[str, object]:
+    out, log_path, fail = task.out, task.log_path, task.fail
     attempts = 0
     commands = list(commands)
     # run_wsclean_task truncated the log; for a single-window task it already
     # holds the extraction notes, so append.
     with log_path.open("a", encoding="utf-8") as log:
         for cmd in list(commands):
-            attempts = _run_with_retries(cmd, out, log, env, timeout, tail, fail, retries)
+            attempts = task.run(cmd, log)
         if cube_line_mask:
             second = _line_mask_pass(commands[-1], out, log)
             if second:
                 commands.append(second)
-                attempts = _run_with_retries(second, out, log, env, timeout, tail, fail, retries)
+                attempts = task.run(second, log)
     cube_channels: dict[str, int] = {}
     if CUBE_IMAGE_FILENAME in required:
         try:
@@ -405,8 +372,8 @@ def _run_and_mark(
     elapsed = time.time() - started
     write_imaging_marker(
         out,
-        ms_path=ms_path,
-        spw=spw,
+        ms_path=task.ms_path,
+        spw=task.spw,
         command=commands[0] if len(commands) == 1 else None,
         commands=commands if len(commands) > 1 else None,
         seconds=elapsed,
@@ -414,8 +381,8 @@ def _run_and_mark(
     )
     first = out / required[0]
     return {
-        "ms": ms_path,
-        "spw": int(spw),
+        "ms": task.ms_path,
+        "spw": int(task.spw),
         "output": str(out),
         "image": str(first),
         "seconds": round(elapsed, 1),
@@ -464,9 +431,8 @@ def _subtract_uv_continuum_step(
     *,
     has_continuum: bool,
     order: int,
+    task: TaskRun,
     log,
-    fail: Callable[..., RuntimeError],
-    timeout: float | None = None,
 ) -> tuple[list[list[str]], dict[str, object] | None]:
     """Run ``subtract_uv_continuum`` and point the commands at its columns.
 
@@ -474,10 +440,10 @@ def _subtract_uv_continuum_step(
     """
     try:
         fit = subtract_uv_continuum_subprocess(
-            ms_path, order=order, timeout=timeout, log_path=log.name
+            ms_path, order=order, timeout=task.timeout, log_path=log.name
         )
     except Exception as exc:
-        raise fail(f"Could not subtract the continuum from the visibilities: {exc}") from exc
+        raise task.fail(f"Could not subtract the continuum from the visibilities: {exc}") from exc
     if fit.get("skipped"):
         log.write(
             f"# continuum NOT subtracted from the visibilities: {fit['skipped']}; "

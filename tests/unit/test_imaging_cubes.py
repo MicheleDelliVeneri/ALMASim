@@ -18,7 +18,7 @@ from almasim import cli, cli_image
 from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging import cube as cube_module
 
-from ._fakes import patch_everywhere
+from ._fakes import FakeTask, patch_everywhere
 
 runner = CliRunner()
 
@@ -671,12 +671,10 @@ def _run_selfcal(
         result = ai.self_calibrate(
             tmp_path / "spw.ms",
             ["wsclean", "-name", str(tmp_path / "wsclean"), "-no-update-model-required", "ms"],
-            out=tmp_path,
+            task=FakeTask(tmp_path, run=fake_run, fail=RuntimeError),
             log=log,
             solints=solints,
             min_snr=min_snr,
-            run=fake_run,
-            fail=RuntimeError,
             casa_data="/casa-data",
             restart=restart,
             **kwargs,
