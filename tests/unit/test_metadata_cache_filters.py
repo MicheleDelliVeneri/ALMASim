@@ -1,83 +1,38 @@
 """The metadata cache answers with the same filters as TAP (MADIV-28 T1.12).
 
-Runs DatabaseService and MetadataService against an in-memory SQLite cache.
-Other test modules replace the ``database`` package with stubs at import time,
-so the fixture swaps the real modules in for each test and restores the stubs.
+Runs DatabaseService and MetadataService against an in-memory SQLite cache
+(the ``backend_db`` fixture in conftest.py).
 """
 
 from __future__ import annotations
 
 import importlib
-import sys
 from datetime import datetime
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 pytestmark = pytest.mark.unit
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-_SWAPPED = ("database", "app.services.metadata_service")
-
-
-def _swapped(name: str) -> bool:
-    return any(name == prefix or name.startswith(prefix + ".") for prefix in _SWAPPED)
-
 
 @pytest.fixture
-def cache(monkeypatch):
-    """Real database modules, a SQLite session, and a seeding helper."""
-    pytest.importorskip("sqlalchemy")
-    monkeypatch.syspath_prepend(str(REPO_ROOT / "src"))
-    monkeypatch.syspath_prepend(str(REPO_ROOT / "backend"))
-    saved = {name: module for name, module in sys.modules.items() if _swapped(name)}
-    for name in saved:
-        del sys.modules[name]
-    try:
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import sessionmaker
+def cache(backend_db):
+    """The SQLite cache plus a helper that adds an observation as the importer would."""
+    csv = importlib.import_module("database.csv_importer").CSVImporter(backend_db.session)
 
-        models = importlib.import_module("database.models")
-        service = importlib.import_module("database.service")
-        importer = importlib.import_module("database.csv_importer")
-
-        engine = create_engine("sqlite://")
-        # Only the cache's tables: others use Postgres-only column types.
-        cache_tables = [
-            models.Observation.__table__,
-            models.ScienceKeyword.__table__,
-            models.ScientificCategory.__table__,
-            models.observation_keywords,
-        ]
-        models.Base.metadata.create_all(engine, tables=cache_tables)
-        session = sessionmaker(bind=engine)()
-        csv = importer.CSVImporter(session)
-
-        def add(uid, target="NGC 1068", keywords=("Galaxies",), category="Active galaxies", **row):
-            observation = csv.parse_csv_row(
-                {"member_ous_uid": uid, "ALMA_source_name": target, "Band": "6", **row},
-                "test",
-            )
-            for keyword in keywords:
-                observation.science_keywords.append(csv.get_or_create_keyword(keyword))
-            observation.scientific_category = csv.get_or_create_category(category)
-            session.add(observation)
-            session.commit()
-            return observation
-
-        yield SimpleNamespace(
-            models=models,
-            service=service,
-            session=session,
-            add=add,
-            db=service.DatabaseService(session),
+    def add(uid, target="NGC 1068", keywords=("Galaxies",), category="Active galaxies", **row):
+        observation = csv.parse_csv_row(
+            {"member_ous_uid": uid, "ALMA_source_name": target, "Band": "6", **row},
+            "test",
         )
-        session.close()
-    finally:
-        for name in [name for name in sys.modules if _swapped(name)]:
-            del sys.modules[name]
-        sys.modules.update(saved)
+        for keyword in keywords:
+            observation.science_keywords.append(csv.get_or_create_keyword(keyword))
+        observation.scientific_category = csv.get_or_create_category(category)
+        backend_db.session.add(observation)
+        backend_db.session.commit()
+        return observation
+
+    backend_db.add = add
+    return backend_db
 
 
 def _uids(observations):

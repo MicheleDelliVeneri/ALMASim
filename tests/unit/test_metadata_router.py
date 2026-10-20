@@ -14,17 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-# Pre-inject stubs for heavy dependencies so the router can be loaded without
-# a live PostgreSQL connection or SQLAlchemy installed.
+# Pre-inject stubs for the backend's database package so the router can be
+# loaded without a live PostgreSQL connection. SQLAlchemy itself is a test
+# dependency and is not stubbed (a stub would leak into the SQLite tests).
 _db_stub = MagicMock()
-for _mod in (
-    "sqlalchemy",
-    "sqlalchemy.orm",
-    "database",
-    "database.config",
-    "database.models",
-    "database.service",
-):
+for _mod in ("database", "database.config", "database.models", "database.service"):
     sys.modules.setdefault(_mod, _db_stub)
 
 _ROUTER_PATH = REPO_ROOT / "backend" / "app" / "api" / "v1" / "routers" / "metadata.py"
@@ -416,17 +410,10 @@ def test_list_query_presets_raises_500_on_error(monkeypatch):
     assert exc_info.value.status_code == 500
 
 
-def test_save_query_preset_creates_row(monkeypatch):
-    db = _make_db()
-    db.add = MagicMock()
-    db.commit = MagicMock()
-    db.refresh = MagicMock(
-        side_effect=lambda r: setattr(r, "created_at", __import__("datetime").datetime(2024, 1, 1))
-    )
-
-    # Patch QueryResult so the router can instantiate it
-    mock_qr = MagicMock(return_value=_make_preset_row("saved"))
-    monkeypatch.setattr(metadata_router, "QueryResult", mock_qr)
+def test_save_query_preset_upserts_by_name(monkeypatch):
+    svc = MagicMock()
+    svc.save_query_preset.return_value = _make_preset_row("saved")
+    monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
     payload = MagicMock()
     payload.name = "saved"
@@ -434,18 +421,19 @@ def test_save_query_preset_creates_row(monkeypatch):
     payload.filters = {"band": [6]}
     payload.result_count = 5
 
-    result = asyncio.run(metadata_router.save_query_preset(payload=payload, db=db))
+    result = asyncio.run(metadata_router.save_query_preset(payload=payload, db=_make_db()))
     assert result.name == "saved"
+    svc.save_query_preset.assert_called_once_with(
+        "saved", {"band": [6]}, description="a preset", result_count=5
+    )
 
 
 def test_save_query_preset_raises_500_on_error(monkeypatch):
     from fastapi import HTTPException
 
-    db = _make_db()
-    db.add.side_effect = RuntimeError("insert failed")
-
-    mock_qr = MagicMock(return_value=MagicMock())
-    monkeypatch.setattr(metadata_router, "QueryResult", mock_qr)
+    svc = MagicMock()
+    svc.save_query_preset.side_effect = RuntimeError("insert failed")
+    monkeypatch.setattr(metadata_router, "DatabaseService", lambda db: svc)
 
     payload = MagicMock()
     payload.name = "bad"
@@ -454,7 +442,7 @@ def test_save_query_preset_raises_500_on_error(monkeypatch):
     payload.result_count = 0
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(metadata_router.save_query_preset(payload=payload, db=db))
+        asyncio.run(metadata_router.save_query_preset(payload=payload, db=_make_db()))
     assert exc_info.value.status_code == 500
 
 

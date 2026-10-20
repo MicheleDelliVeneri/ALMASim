@@ -1,8 +1,7 @@
 """Persist and recall named query filter presets.
 
-Works standalone via JSON files (no backend required) and can optionally
-mirror saves to / loads from a :class:`DatabaseService` instance when
-running inside the backend.
+These are the CLI's presets, kept as JSON files (no backend required). The
+web UI keeps its presets in the backend database (``DatabaseService``).
 
 JSON file format::
 
@@ -128,70 +127,3 @@ def delete_preset(name: str, directory: Path | str) -> bool:
         path.unlink()
         return True
     return False
-
-
-# ------------------------------------------------------------------
-# Optional database bridge (requires backend DatabaseService)
-# ------------------------------------------------------------------
-
-
-def save_preset_to_db(preset: QueryPreset, db_service: Any) -> None:  # type: ignore[type-arg]
-    """Persist *preset* to the database via *db_service* (a DatabaseService).
-
-    Does nothing if *db_service* is None so callers don't need to guard.
-    """
-    if db_service is None:
-        return
-    db_service.save_query_result(
-        query_name=preset.name,
-        observation_ids=[],
-        query_params=preset.to_dict(),
-        description=preset.description,
-    )
-
-
-def load_preset_from_db(name: str, db_service: Any) -> QueryPreset | None:  # type: ignore[type-arg]
-    """Load a preset from the database.  Returns *None* if not found."""
-    if db_service is None:
-        return None
-    row = db_service.get_query_result(name)
-    if row is None:
-        return None
-    params = row.query_params or {}
-    return (
-        QueryPreset.from_dict(params)
-        if "name" in params
-        else QueryPreset(
-            name=row.query_name,
-            filters=params,
-            description=row.description or "",
-            result_count=row.result_count,
-            created_at=row.created_at.isoformat()
-            if row.created_at
-            else datetime.utcnow().isoformat(),
-        )
-    )
-
-
-def list_presets_from_db(db_service: Any) -> list[QueryPreset]:  # type: ignore[type-arg]
-    """Return all query presets stored in the database."""
-    if db_service is None:
-        return []
-    rows = db_service.list_query_results()
-    presets = []
-    for row in rows:
-        params = row.query_params or {}
-        presets.append(
-            QueryPreset.from_dict(params)
-            if "name" in params
-            else QueryPreset(
-                name=row.query_name,
-                filters=params,
-                description=row.description or "",
-                result_count=row.result_count,
-                created_at=(
-                    row.created_at.isoformat() if row.created_at else datetime.utcnow().isoformat()
-                ),
-            )
-        )
-    return presets

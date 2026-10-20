@@ -149,7 +149,8 @@ class QueryResult(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Store observation IDs that are part of this query result
-    observation_ids = Column(ARRAY(Integer))
+    # JSON on SQLite only, so the unit tests can create the table; Postgres is unchanged.
+    observation_ids = Column(ARRAY(Integer).with_variant(JSON(), "sqlite"))
 
     # Metadata
     description = Column(Text)
