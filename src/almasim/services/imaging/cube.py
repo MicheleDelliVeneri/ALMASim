@@ -136,7 +136,7 @@ def line_mask_from_channels(
             beams.append(float(hdus[0].header.get("BMAJ", 0.0)))
             header = hdus[0].header.copy()
         moment = plane if moment is None else moment + plane
-    if moment is None:  # not reached: paths is not empty
+    if moment is None:  # pragma: no cover - paths is not empty
         return 0
     from almasim.services.imaging.fits_io import write_fits_atomic
     from almasim.services.imaging.fits_wcs import beam_pixels
