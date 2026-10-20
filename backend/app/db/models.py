@@ -185,7 +185,7 @@ class SimulationJob(Base):
     lum_infrared = Column(Float)
     snr = Column(Float)
     n_lines = Column(Integer)
-    line_names = Column(ARRAY(String))
+    line_names = Column(ARRAY(String).with_variant(JSON(), "sqlite"))
 
     # Configuration
     save_mode = Column(String(20))  # npz, fits
