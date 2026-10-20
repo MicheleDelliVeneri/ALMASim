@@ -87,12 +87,9 @@ def _load_npz_cube(path: Path) -> tuple[np.ndarray, str]:
 
 
 def _load_fits_cube(path: Path) -> tuple[np.ndarray, str]:
-    from astropy.io import fits
+    from almasim.services.imaging.fits_io import read_image
 
-    data = fits.getdata(path, memmap=False)
-    if data is None:
-        raise ValueError("FITS file does not contain image data")
-    return _coerce_regular_cube(np.asarray(data)), path.name
+    return _coerce_regular_cube(np.asarray(read_image(path, memmap=False))), path.name
 
 
 def _frequency_to_hz(channel_freq: np.ndarray) -> np.ndarray:

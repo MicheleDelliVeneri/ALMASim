@@ -11,6 +11,7 @@ from astropy.table import Table
 from scipy.ndimage import zoom
 
 from ..skymodels.registry import SKYMODELS
+from .imaging.fits_io import read_cube, read_image
 
 EXTERNAL_SOURCE_TYPES = {name for name, spec in SKYMODELS.items() if spec.external}
 
@@ -45,8 +46,7 @@ def infer_external_cube_geometry(
     if skymodel_path is None:
         raise ValueError("external_skymodel_path is required for external FITS inputs")
 
-    data, _header = fits.getdata(skymodel_path, header=True)
-    cube = _coerce_fits_to_channel_first(np.asarray(data), source_type=source_type)
+    cube = _coerce_fits_to_channel_first(read_image(skymodel_path), source_type=source_type)
     return {
         "n_channels": int(cube.shape[0]),
         "n_pix_y": int(cube.shape[1]),
@@ -99,8 +99,9 @@ def load_external_sky_model(
     else:
         if skymodel_path is None:
             raise ValueError("external_skymodel_path is required for external FITS inputs")
-        raw_data, input_header = fits.getdata(skymodel_path, header=True)
-        cube = _coerce_fits_to_channel_first(np.asarray(raw_data), source_type=source_type)
+        fits_input = read_cube(skymodel_path)
+        input_header = fits_input.header
+        cube = _coerce_fits_to_channel_first(fits_input.data, source_type=source_type)
         metadata = {
             "input_kind": "fits",
             "input_path": str(skymodel_path),
