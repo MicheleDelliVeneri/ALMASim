@@ -4,15 +4,15 @@
     "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
   },
   "baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v5/golden-baseline-v5.tar.gz",
-    "sha256": "441655bc2a3c4f8a096aff73907bc5723d5528e855b32b5b22859e9000ec44b6",
-    "version": "v5",
-    "source": "workflow run 39438906906, commit 8f3803a1; T1.1 part 1: new serendipitous simulation case (records today's replace-the-cube behaviour)"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v6/golden-baseline-v6.tar.gz",
+    "sha256": "8d902865f099af8d54706e56aef0b3c5fa465f18e90a4b35d00ef79c66e89e60",
+    "version": "v6",
+    "source": "workflow run 39446318758, commit 22615e13; T1.1/T1.2: sky models add to the cube, so the serendipitous case keeps its central source"
   },
   "simulation_baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v5/golden-simulation-v5.tar.gz",
-    "sha256": "cc79f89838c597a39d57679eeb9dc280216029260825798fb2bce8111499f421",
-    "version": "v5",
-    "source": "workflow run 39438906906, commit 8f3803a1; T1.1 part 1: new serendipitous simulation case (records today's replace-the-cube behaviour)"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v6/golden-simulation-v6.tar.gz",
+    "sha256": "6ee34f1d070f483c73df5ec0b44b21bb4f4907e832e656bf63c3a198ab786c80",
+    "version": "v6",
+    "source": "workflow run 39446318758, commit 22615e13; T1.1/T1.2: sky models add to the cube, so the serendipitous case keeps its central source"
   }
 }
