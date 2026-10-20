@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from ..instrument.constants import ARCSEC_PER_RAD, SPEED_OF_LIGHT_M_S
+from ..instrument.constants import ARCSEC_PER_RAD, FWHM_PER_SIGMA, SPEED_OF_LIGHT_M_S
 
 
 def estimate_tp_beam_fwhm_arcsec(
@@ -73,7 +73,7 @@ def simulate_total_power_observation(
         freqs_hz,
         antenna_diameter_m=antenna_diameter_m,
     )
-    sigma_pix = beam_fwhm_arcsec / (2.354820045 * max(float(cell_size_arcsec), 1e-6))
+    sigma_pix = beam_fwhm_arcsec / (FWHM_PER_SIGMA * max(float(cell_size_arcsec), 1e-6))
 
     tp_model_cube = np.zeros_like(model_cube, dtype=np.float32)
     tp_dirty_cube = np.zeros_like(model_cube, dtype=np.float32)
