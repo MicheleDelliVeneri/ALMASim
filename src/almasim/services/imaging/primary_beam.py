@@ -83,16 +83,13 @@ def _radius_grid(header) -> np.ndarray:
 
 def _channel_frequencies(header) -> tuple[int, np.ndarray]:
     """(numpy axis, frequency per plane) of the image's FREQ axis."""
-    naxis = int(header["NAXIS"])
-    for fits_axis in range(3, naxis + 1):
-        if str(header.get(f"CTYPE{fits_axis}", "")).upper() == "FREQ":
-            n = int(header[f"NAXIS{fits_axis}"])
-            pixels = np.arange(n) + 1.0 - float(header.get(f"CRPIX{fits_axis}", 1.0))
-            frequencies = float(header[f"CRVAL{fits_axis}"]) + pixels * float(
-                header.get(f"CDELT{fits_axis}", 0.0)
-            )
-            return naxis - fits_axis, frequencies
-    raise ValueError("the image has no FREQ axis to take the beam's frequency from")
+    from .fits_wcs import frequency_axis
+
+    try:
+        fits_axis, frequencies = frequency_axis(header)
+    except ValueError:
+        raise ValueError("the image has no FREQ axis to take the beam's frequency from") from None
+    return int(header["NAXIS"]) - fits_axis, frequencies
 
 
 def primary_beam_correct(

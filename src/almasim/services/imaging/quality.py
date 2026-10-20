@@ -60,8 +60,9 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
-from ..instrument.constants import SPEED_OF_LIGHT_KM_S
 from .archive_imaging import line_free_channels
+from .fits_io import write_fits_atomic
+from .fits_wcs import beam_pixels, velocity_axis
 from .products import (
     CUBE_IMAGE_FILENAME,
     IMAGE_FILENAME,
@@ -69,7 +70,7 @@ from .products import (
     continuum_product,
     cube_product,
 )
-from .stats import robust_sigma
+from .stats import moment_mask, robust_sigma
 
 QUALITY_FILENAME = "quality.json"
 QUALITY_DIRNAME = "quality"
@@ -89,11 +90,6 @@ def _plane(data: np.ndarray) -> np.ndarray:
 
 def _ratio(numerator: float, denominator: float) -> float:
     return float(numerator / denominator) if denominator else math.nan
-
-
-def _beam_pixels(header) -> float:
-    cell = abs(float(header.get("CDELT2", 0.0)))
-    return float(header.get("BMAJ", 0.0)) / cell if cell else math.nan
 
 
 def _source_geometry(image: np.ndarray, beam_pixels: float) -> tuple[int, int, np.ndarray]:
@@ -148,7 +144,7 @@ def continuum_quality(task_dir: Path) -> dict[str, Any] | None:
     image = _plane(fits.getdata(paths["image"]))
     residual = _plane(fits.getdata(paths["residual"]))
     model = _plane(fits.getdata(paths["model"]))
-    beam = _beam_pixels(header)
+    beam = beam_pixels(header)
     sy, sx, r = _source_geometry(image, beam)
     sigma = robust_sigma(residual[r >= 2.5])
     one, two = r <= 1, r <= 2
@@ -217,30 +213,6 @@ def _logged_line_channels(task_dir: Path, n_channels: int) -> np.ndarray | None:
     return line
 
 
-def _moment_mask(moment: np.ndarray, beam_pixels: float, sigma: float = 3.0) -> np.ndarray:
-    """``moment`` above ``sigma`` times its robust noise, grown by one beam."""
-    noise = robust_sigma(moment)
-    mask = moment > sigma * noise if noise > 0 else np.zeros(moment.shape, bool)
-    if mask.any() and np.isfinite(beam_pixels) and beam_pixels > 0:
-        from scipy import ndimage
-
-        radius = int(np.ceil(beam_pixels))
-        yy, xx = np.mgrid[-radius : radius + 1, -radius : radius + 1]
-        mask = ndimage.binary_dilation(mask, structure=np.hypot(yy, xx) <= beam_pixels)
-    return mask
-
-
-def _velocity_axis(header, n_channels: int) -> tuple[np.ndarray, float]:
-    """Channel velocities (km/s, radio convention) and the channel width in km/s."""
-    freq = float(header.get("CRVAL3", 0.0)) + (
-        np.arange(n_channels) + 1 - float(header.get("CRPIX3", 1.0))
-    ) * float(header.get("CDELT3", 0.0))
-    rest = float(header.get("RESTFRQ", 0.0) or freq[n_channels // 2] or 1.0)
-    velocity = SPEED_OF_LIGHT_KM_S * (rest - freq) / rest
-    width = abs(float(header.get("CDELT3", 0.0))) / rest * SPEED_OF_LIGHT_KM_S
-    return velocity, width
-
-
 def cube_quality(task_dir: Path, *, write_moments: bool = True) -> dict[str, Any] | None:
     """Cube statistics (and moment maps) of one task, or None without its cubes."""
     from astropy.io import fits
@@ -258,7 +230,7 @@ def cube_quality(task_dir: Path, *, write_moments: bool = True) -> dict[str, Any
         n_channels = image.shape[-3]
         planes = image.reshape(-1, n_channels, *image.shape[-2:])[0]
         residual_planes = residual.reshape(-1, n_channels, *residual.shape[-2:])[0]
-        beam = _beam_pixels(header)
+        beam = beam_pixels(header)
         stacked_image = np.zeros(planes.shape[1:])
         for c in range(n_channels):
             stacked_image += np.nan_to_num(np.asarray(planes[c], dtype=np.float64))
@@ -297,7 +269,7 @@ def cube_quality(task_dir: Path, *, write_moments: bool = True) -> dict[str, Any
                 for c in range(0, n_channels, max(n_channels // 64, 1))
             ]
         )
-        velocity, width_km_s = _velocity_axis(header, n_channels)
+        velocity, width_km_s = velocity_axis(header, fallback_axis=3)
         sums = {
             name: (np.zeros(planes.shape[1:]), np.zeros(planes.shape[1:]))
             for name in ("line", "linefree")
@@ -322,7 +294,7 @@ def cube_quality(task_dir: Path, *, write_moments: bool = True) -> dict[str, Any
     if mask_path.is_file():
         line_mask = _plane(fits.getdata(mask_path)).astype(bool)
     else:
-        line_mask = _moment_mask(sums["line"][0] if line.any() else stacked_image, beam)
+        line_mask = moment_mask(sums["line"][0] if line.any() else stacked_image, beam)
     off_mask = ~line_mask & (r >= 2.5)
     stats: dict[str, Any] = {
         "channels": int(n_channels),
@@ -412,8 +384,8 @@ def _write_moments(task_dir: Path, header, *, line_any: bool, **maps: np.ndarray
             continue
         plane_header["BUNIT"] = units[name]
         path = out / f"cube-{name.replace('_', '-')}.fits"
-        fits.PrimaryHDU(np.asarray(data, dtype=np.float32), header=plane_header).writeto(
-            path, overwrite=True
+        write_fits_atomic(
+            path, [fits.PrimaryHDU(np.asarray(data, dtype=np.float32), header=plane_header)]
         )
         written.append(path.name)
     return written
