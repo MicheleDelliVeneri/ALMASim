@@ -4,7 +4,6 @@ import math
 import os
 
 import astropy.units as U
-import numpy as np
 import pandas as pd
 from astropy.units import Quantity
 
@@ -129,34 +128,6 @@ def generate_antenna_config_file_from_antenna_array(antenna_array, master_path, 
 def compute_distance(x1, y1, z1, x2, y2, z2):
     """Compute Euclidean distance between two 3D points."""
     return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
-
-
-def get_max_baseline_from_antenna_config(update_progress, antenna_config):
-    """Get maximum baseline from antenna configuration file."""
-    positions = []
-    with open(antenna_config, "r") as f:
-        lines = f.readlines()
-        for line in lines:
-            if not line.strip().startswith("#"):
-                if "\t" in line:
-                    row = [x for x in line.split("\t")][:3]
-                else:
-                    row = [x for x in line.split(" ")][:3]
-                positions.append([float(x) for x in row])
-    positions = np.array(positions)
-    max_baseline = 0
-
-    for i in range(len(positions)):
-        x1, y1, z1 = positions[i]
-        for j in range(i + 1, len(positions)):
-            x2, y2, z2 = positions[j]
-            dist = compute_distance(x1, y1, z1, x2, y2, z2) / 1000
-            if dist > max_baseline:
-                max_baseline = dist
-        if update_progress is not None:
-            update_progress.emit((i / len(positions) * 100))
-
-    return max_baseline
 
 
 def get_max_baseline_from_antenna_array(antenna_array, master_path):

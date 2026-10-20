@@ -6,7 +6,6 @@ from .antenna import (
     generate_antenna_config_file_from_antenna_array,
     get_fov_from_band,
     get_max_baseline_from_antenna_array,
-    get_max_baseline_from_antenna_config,
 )
 from .baselines import (
     generate_via_astropy,
@@ -78,7 +77,6 @@ __all__ = [
     "get_fov_from_band",
     "generate_antenna_config_file_from_antenna_array",
     "compute_distance",
-    "get_max_baseline_from_antenna_config",
     "get_max_baseline_from_antenna_array",
     "freq_supp_extractor",
     "remove_non_numeric",
