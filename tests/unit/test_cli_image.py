@@ -593,7 +593,10 @@ def test_predict_batch_skips_when_model_is_missing(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert "[debug] missing model FITS, skipping row" in result.output
+    assert "Missing model FITS, skipping row" in result.output
+    # The values are filled in (the message used to print "{input_filename}").
+    assert "{input_filename}" not in result.output
+    assert f"ms={ms_path}" in result.output
     assert len(calls) == 0
 
 
