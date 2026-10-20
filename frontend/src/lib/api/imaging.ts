@@ -7,29 +7,24 @@ type Schemas = components['schemas'];
 
 export type ImagePreviewPayload = Schemas['ImagePreviewPayload'];
 
-export type DeconvolutionResponse = Schemas['DeconvolutionResponse'];
+export type WienerPreviewResponse = Schemas['WienerPreviewResponse'];
 
 export const imagingApi = {
-	deconvolve(params: {
+	/** A Wiener preview of saved dirty/beam cubes (MADIV-28 T5.12). */
+	preview(params: {
 		directory: string;
 		dirtyCubePath: string;
 		beamCubePath: string;
 		cleanCubePath?: string | null;
-		cycles?: number;
-		gain?: number;
-		threshold?: number | null;
-		statePath?: string | null;
+		epsilon?: number;
 		method?: 'sum' | 'mean';
-	}): Promise<DeconvolutionResponse> {
-		return apiClient.post<DeconvolutionResponse>('/api/v1/imaging/deconvolve', {
+	}): Promise<WienerPreviewResponse> {
+		return apiClient.post<WienerPreviewResponse>('/api/v1/imaging/preview', {
 			directory: params.directory,
 			dirty_cube_path: params.dirtyCubePath,
 			beam_cube_path: params.beamCubePath,
 			clean_cube_path: params.cleanCubePath ?? null,
-			cycles: params.cycles ?? 100,
-			gain: params.gain ?? 0.1,
-			threshold: params.threshold ?? null,
-			state_path: params.statePath ?? null,
+			epsilon: params.epsilon ?? 1e-3,
 			method: params.method ?? 'sum'
 		});
 	}

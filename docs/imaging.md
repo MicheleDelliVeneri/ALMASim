@@ -14,7 +14,7 @@ ALMASim can produce:
 - total-power image cubes
 - TP+INT combined image cubes
 
-These are built by `build_image_products()` in [`reconstruction.py`](../src/almasim/services/imaging/reconstruction.py).
+These are built by `build_image_products()` in [`reconstruction/`](../src/almasim/services/imaging/reconstruction).
 
 ## Deterministic Reconstruction
 
@@ -25,23 +25,28 @@ The current deterministic image-domain tools include:
 - cube regridding
 - cube-to-image previews
 
-## CLEAN-Style Deconvolution
+## Wiener preview
 
-ALMASim also provides iterative CLEAN-style deconvolution.
+`wiener_preview()` (in `services/imaging/reconstruction`) is the interactive
+preview behind the backend's `POST /api/v1/imaging/preview` and the `Imaging`
+page. Per spectral slice it returns:
 
-Current behavior:
+- the Wiener model (`wiener_deconvolve_cube`, regularised by `epsilon`)
+- the residual: the dirty cube minus the model convolved with the dirty beam
+- the restored cube: the model convolved with a Gaussian clean beam fitted to
+  the dirty beam's central lobe, plus the residual
+- with a reference clean cube, that cube convolved with the same clean beam
 
-- operates per spectral slice
-- supports resumable state
-- distinguishes:
-  - component model
-  - restored cube
-  - residual cube
-  - clean-beam-convolved reference
+The iterative Hogbom `clean_deconvolve_cube` was retired (MADIV-28 T5.12).
 
-## Edge Handling
+## Reference imaging of simulations
 
-The current CLEAN implementation pads slices before deconvolution and crops afterward, so edge and corner sources are handled more robustly than before.
+WSClean on the simulated MeasurementSet is the reference imaging for
+simulations. The MS writer records the `OBSERVE_TARGET#ON_SOURCE` intent, each
+antenna's dish diameter and Stokes I as XX = YY, so the archive commands below
+(`compute-parameters`, `image-from-ms`, `clean-quality`) run on a simulated MS
+as they do on archive data. The in-memory dirty and Wiener products stay
+available for machine-learning work.
 
 ## Imaging archive MeasurementSets with WSClean
 
@@ -104,7 +109,7 @@ time in the current process, which is handy for a smoke test on one MS.
 The frontend exposes:
 
 - `Combination` page for TP/INT comparison products
-- `Imaging` page for deconvolution workflows
+- `Imaging` page for the Wiener preview of a simulation's dirty and beam cubes
 - `Visualizer` page for general product inspection
 
 ## Example

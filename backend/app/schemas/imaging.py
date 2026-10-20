@@ -1,12 +1,12 @@
-"""Schemas for imaging/deconvolution API endpoints."""
+"""Schemas for the imaging preview endpoint (MADIV-28 T5.12)."""
 
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
-class DeconvolutionRequest(BaseModel):
-    """Request body for iterative deconvolution from saved cube products."""
+class WienerPreviewRequest(BaseModel):
+    """Request body for a Wiener preview of saved cube products (MADIV-28 T5.12)."""
 
     directory: str = Field(..., description="Base directory for relative file paths")
     dirty_cube_path: str = Field(..., description="Relative or absolute path to the dirty cube")
@@ -15,16 +15,11 @@ class DeconvolutionRequest(BaseModel):
         default=None,
         description="Optional reference clean/model cube for visual comparison",
     )
-    cycles: int = Field(default=100, ge=0, le=5000, description="Number of CLEAN cycles")
-    gain: float = Field(default=0.1, gt=0.0, le=1.0, description="Loop gain")
-    threshold: float | None = Field(
-        default=None,
-        ge=0.0,
-        description="Optional absolute stopping threshold on the residual peak",
-    )
-    state_path: str | None = Field(
-        default=None,
-        description=("Optional deconvolution state NPZ path for resuming with additional cycles"),
+    epsilon: float = Field(
+        default=1e-3,
+        gt=0.0,
+        le=1.0,
+        description="Wiener regularisation: larger is smoother and less noisy",
     )
     method: Literal["sum", "mean"] = Field(
         default="sum",
@@ -52,33 +47,27 @@ class ImagePreviewPayload(BaseModel):
     method: str
 
 
-class DeconvolutionMetadata(BaseModel):
-    """Where a deconvolution run read and wrote its cubes, and how far it got."""
+class WienerPreviewMetadata(BaseModel):
+    """Where a Wiener preview read and wrote its cubes."""
 
     dirty_cube_path: str
     beam_cube_path: str
     beam_cube_name: str
     clean_cube_path: Optional[str] = None
-    cycles_requested: int
-    cycles_completed: int
-    cycles_added: int
-    gain: float
-    threshold: Optional[float] = None
-    state_path: str
-    component_cube_path: str
+    epsilon: float
+    model_cube_path: str
     restored_cube_path: str
     residual_cube_path: str
     convolved_reference_path: Optional[str] = None
-    resumed: bool
 
 
-class DeconvolutionResponse(BaseModel):
-    """Frontend response payload for iterative deconvolution previews."""
+class WienerPreviewResponse(BaseModel):
+    """Frontend response payload for a Wiener preview."""
 
     dirty: ImagePreviewPayload
-    component_model: ImagePreviewPayload
+    model: ImagePreviewPayload
     restored: ImagePreviewPayload
     residual: ImagePreviewPayload
     reference_clean: ImagePreviewPayload | None = None
     convolved_reference: ImagePreviewPayload | None = None
-    metadata: DeconvolutionMetadata
+    metadata: WienerPreviewMetadata

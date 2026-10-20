@@ -243,7 +243,7 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/api/v1/imaging/deconvolve': {
+	'/api/v1/imaging/preview': {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -253,10 +253,10 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/**
-		 * Deconvolve Saved Products
-		 * @description Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews.
+		 * Wiener Preview Saved Products
+		 * @description Wiener-deconvolve saved dirty/beam cubes and return previews of the results.
 		 */
-		post: operations['deconvolve_saved_products_api_v1_imaging_deconvolve_post'];
+		post: operations['wiener_preview_saved_products_api_v1_imaging_preview_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -746,110 +746,6 @@ export interface components {
 			 * @description member_ous_uid
 			 */
 			uid: string;
-		};
-		/**
-		 * DeconvolutionMetadata
-		 * @description Where a deconvolution run read and wrote its cubes, and how far it got.
-		 */
-		DeconvolutionMetadata: {
-			/** Beam Cube Name */
-			beam_cube_name: string;
-			/** Beam Cube Path */
-			beam_cube_path: string;
-			/** Clean Cube Path */
-			clean_cube_path?: string | null;
-			/** Component Cube Path */
-			component_cube_path: string;
-			/** Convolved Reference Path */
-			convolved_reference_path?: string | null;
-			/** Cycles Added */
-			cycles_added: number;
-			/** Cycles Completed */
-			cycles_completed: number;
-			/** Cycles Requested */
-			cycles_requested: number;
-			/** Dirty Cube Path */
-			dirty_cube_path: string;
-			/** Gain */
-			gain: number;
-			/** Residual Cube Path */
-			residual_cube_path: string;
-			/** Restored Cube Path */
-			restored_cube_path: string;
-			/** Resumed */
-			resumed: boolean;
-			/** State Path */
-			state_path: string;
-			/** Threshold */
-			threshold?: number | null;
-		};
-		/**
-		 * DeconvolutionRequest
-		 * @description Request body for iterative deconvolution from saved cube products.
-		 */
-		DeconvolutionRequest: {
-			/**
-			 * Beam Cube Path
-			 * @description Relative or absolute path to the beam cube
-			 */
-			beam_cube_path: string;
-			/**
-			 * Clean Cube Path
-			 * @description Optional reference clean/model cube for visual comparison
-			 */
-			clean_cube_path?: string | null;
-			/**
-			 * Cycles
-			 * @description Number of CLEAN cycles
-			 * @default 100
-			 */
-			cycles: number;
-			/**
-			 * Directory
-			 * @description Base directory for relative file paths
-			 */
-			directory: string;
-			/**
-			 * Dirty Cube Path
-			 * @description Relative or absolute path to the dirty cube
-			 */
-			dirty_cube_path: string;
-			/**
-			 * Gain
-			 * @description Loop gain
-			 * @default 0.1
-			 */
-			gain: number;
-			/**
-			 * Method
-			 * @description Integration method for the 2D preview images
-			 * @default sum
-			 * @enum {string}
-			 */
-			method: 'sum' | 'mean';
-			/**
-			 * State Path
-			 * @description Optional deconvolution state NPZ path for resuming with additional cycles
-			 */
-			state_path?: string | null;
-			/**
-			 * Threshold
-			 * @description Optional absolute stopping threshold on the residual peak
-			 */
-			threshold?: number | null;
-		};
-		/**
-		 * DeconvolutionResponse
-		 * @description Frontend response payload for iterative deconvolution previews.
-		 */
-		DeconvolutionResponse: {
-			component_model: components['schemas']['ImagePreviewPayload'];
-			convolved_reference?: components['schemas']['ImagePreviewPayload'] | null;
-			dirty: components['schemas']['ImagePreviewPayload'];
-			metadata: components['schemas']['DeconvolutionMetadata'];
-			reference_clean?: components['schemas']['ImagePreviewPayload'] | null;
-			residual: components['schemas']['ImagePreviewPayload'];
-			restored: components['schemas']['ImagePreviewPayload'];
 		};
 		/**
 		 * DiskSpaceInfo
@@ -2137,6 +2033,82 @@ export interface components {
 			/** Error Type */
 			type: string;
 		};
+		/**
+		 * WienerPreviewMetadata
+		 * @description Where a Wiener preview read and wrote its cubes.
+		 */
+		WienerPreviewMetadata: {
+			/** Beam Cube Name */
+			beam_cube_name: string;
+			/** Beam Cube Path */
+			beam_cube_path: string;
+			/** Clean Cube Path */
+			clean_cube_path?: string | null;
+			/** Convolved Reference Path */
+			convolved_reference_path?: string | null;
+			/** Dirty Cube Path */
+			dirty_cube_path: string;
+			/** Epsilon */
+			epsilon: number;
+			/** Model Cube Path */
+			model_cube_path: string;
+			/** Residual Cube Path */
+			residual_cube_path: string;
+			/** Restored Cube Path */
+			restored_cube_path: string;
+		};
+		/**
+		 * WienerPreviewRequest
+		 * @description Request body for a Wiener preview of saved cube products (MADIV-28 T5.12).
+		 */
+		WienerPreviewRequest: {
+			/**
+			 * Beam Cube Path
+			 * @description Relative or absolute path to the beam cube
+			 */
+			beam_cube_path: string;
+			/**
+			 * Clean Cube Path
+			 * @description Optional reference clean/model cube for visual comparison
+			 */
+			clean_cube_path?: string | null;
+			/**
+			 * Directory
+			 * @description Base directory for relative file paths
+			 */
+			directory: string;
+			/**
+			 * Dirty Cube Path
+			 * @description Relative or absolute path to the dirty cube
+			 */
+			dirty_cube_path: string;
+			/**
+			 * Epsilon
+			 * @description Wiener regularisation: larger is smoother and less noisy
+			 * @default 0.001
+			 */
+			epsilon: number;
+			/**
+			 * Method
+			 * @description Integration method for the 2D preview images
+			 * @default sum
+			 * @enum {string}
+			 */
+			method: 'sum' | 'mean';
+		};
+		/**
+		 * WienerPreviewResponse
+		 * @description Frontend response payload for a Wiener preview.
+		 */
+		WienerPreviewResponse: {
+			convolved_reference?: components['schemas']['ImagePreviewPayload'] | null;
+			dirty: components['schemas']['ImagePreviewPayload'];
+			metadata: components['schemas']['WienerPreviewMetadata'];
+			model: components['schemas']['ImagePreviewPayload'];
+			reference_clean?: components['schemas']['ImagePreviewPayload'] | null;
+			residual: components['schemas']['ImagePreviewPayload'];
+			restored: components['schemas']['ImagePreviewPayload'];
+		};
 	};
 	responses: never;
 	parameters: never;
@@ -2506,7 +2478,7 @@ export interface operations {
 			};
 		};
 	};
-	deconvolve_saved_products_api_v1_imaging_deconvolve_post: {
+	wiener_preview_saved_products_api_v1_imaging_preview_post: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -2515,7 +2487,7 @@ export interface operations {
 		};
 		requestBody: {
 			content: {
-				'application/json': components['schemas']['DeconvolutionRequest'];
+				'application/json': components['schemas']['WienerPreviewRequest'];
 			};
 		};
 		responses: {
@@ -2525,7 +2497,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['DeconvolutionResponse'];
+					'application/json': components['schemas']['WienerPreviewResponse'];
 				};
 			};
 			/** @description Validation Error */
