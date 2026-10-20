@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -14,44 +13,18 @@ from .cli_shared import (
     validate_date_range,
     validate_range,
 )
+from .services.metadata.storage import save_dataframe_csv
+from .services.metadata.tap import (
+    ALL_COLUMNS,
+    ExclusionFilters,
+    InclusionFilters,
+    query_metadata_by_science,
+)
 
 metadata_app = typer.Typer(
     help="Metadata query commands.",
     no_args_is_help=True,
 )
-
-
-@lru_cache(maxsize=1)
-def _tap_contract() -> dict[str, Any]:
-    from .services.metadata.tap import (
-        ALL_COLUMNS,
-        ExclusionFilters,
-        InclusionFilters,
-        query_metadata_by_science,
-        query_products,
-    )
-
-    return {
-        "ALL_COLUMNS": ALL_COLUMNS,
-        "ExclusionFilters": ExclusionFilters,
-        "InclusionFilters": InclusionFilters,
-        "query_metadata_by_science": query_metadata_by_science,
-        "query_products": query_products,
-    }
-
-
-def save_dataframe_csv(*args, **kwargs):
-    from .services.metadata.storage import save_dataframe_csv as _save_dataframe_csv
-
-    return _save_dataframe_csv(*args, **kwargs)
-
-
-def query_metadata_by_science(*args, **kwargs):
-    return _tap_contract()["query_metadata_by_science"](*args, **kwargs)
-
-
-def query_products(*args, **kwargs):
-    return _tap_contract()["query_products"](*args, **kwargs)
 
 
 def _build_query_summary(
@@ -282,10 +255,9 @@ def metadata_query(
     ),
 ) -> None:
     """Query ALMA metadata from TAP and save normalized CSV results."""
-    tap = _tap_contract()
-    all_columns = tap["ALL_COLUMNS"]
-    inclusion_filters = tap["InclusionFilters"]
-    exclusion_filters = tap["ExclusionFilters"]
+    all_columns = ALL_COLUMNS
+    inclusion_filters = InclusionFilters
+    exclusion_filters = ExclusionFilters
 
     science_keywords = split_csv_values(science_keyword)
     scientific_categories = split_csv_values(scientific_category)

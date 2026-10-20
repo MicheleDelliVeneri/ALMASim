@@ -832,19 +832,11 @@ def test_clean_passthrough_runs_wsclean(monkeypatch):
     ]
 
 
-def test_metadata_wrappers_delegate(monkeypatch):
-    """Metadata wrapper helpers should delegate through the TAP contract."""
-    monkeypatch.setattr(
-        cli_metadata,
-        "_tap_contract",
-        lambda: {
-            "query_metadata_by_science": lambda *args, **kwargs: ("meta", args, kwargs),
-            "query_products": lambda *args, **kwargs: ("products", args, kwargs),
-        },
-    )
+def test_metadata_cli_uses_the_tap_service_directly():
+    """No lazy contract: the CLI's names are the TAP service's own functions."""
+    from almasim.services.metadata import tap
 
-    assert cli_metadata.query_metadata_by_science(science_keyword=["Galaxies"])[0] == "meta"
-    assert cli_metadata.query_products(["uid://A"])[0] == "products"
+    assert cli_metadata.query_metadata_by_science is tap.query_metadata_by_science
 
 
 def test_metadata_query_invalid_visible_column_shows_allowed_columns():
