@@ -1,7 +1,6 @@
 """SQLAlchemy database models for ALMASim."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import (
     JSON,
@@ -17,6 +16,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
+
+from app.core.clock import db_now
 
 
 class Base(DeclarativeBase):
@@ -51,7 +52,7 @@ class ScienceKeyword(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     keyword = Column(String(255), unique=True, nullable=False, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=db_now)
 
     # Relationship
     observations = relationship(
@@ -66,7 +67,7 @@ class ScientificCategory(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     category = Column(String(255), unique=True, nullable=False, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=db_now)
 
     # Relationship
     observations = relationship("Observation", back_populates="scientific_category")
@@ -122,8 +123,8 @@ class Observation(Base):
     obs_type = Column(String(100))  # TAP 'type' field (renamed to avoid Python keyword conflict)
 
     # Metadata
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=db_now)
+    updated_at = Column(DateTime, nullable=False, default=db_now, onupdate=db_now)
     source_file = Column(String(255))  # CSV file that imported this record
 
     # Foreign keys
@@ -146,7 +147,7 @@ class QueryResult(Base):
     query_name = Column(String(255), nullable=False, index=True)
     query_params = Column(JSON)  # Store the query parameters used
     result_count = Column(Integer, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=db_now)
 
     # Store observation IDs that are part of this query result
     # JSON on SQLite only, so the unit tests can create the table; Postgres is unchanged.
@@ -205,8 +206,8 @@ class SimulationJob(Base):
     output_path = Column(String(512))
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=db_now, index=True)
+    updated_at = Column(DateTime, nullable=False, default=db_now, onupdate=db_now)
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
 
@@ -228,7 +229,7 @@ class SimulationLog(Base):
         index=True,
     )
 
-    timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, nullable=False, default=db_now, index=True)
     level = Column(String(20), default="INFO")  # DEBUG, INFO, WARNING, ERROR
     message = Column(Text, nullable=False)
 
@@ -265,8 +266,8 @@ class DownloadJobRecord(Base):
         String(20), nullable=False, default="pending"
     )  # pending, running, completed, failed, cancelled
     error = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=db_now)
+    updated_at = Column(DateTime, nullable=False, default=db_now, onupdate=db_now)
 
     # Relationships
     files = relationship("DownloadFileRecord", back_populates="job", cascade="all, delete-orphan")

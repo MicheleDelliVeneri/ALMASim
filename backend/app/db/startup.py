@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from .config import get_engine, init_db, new_session
 from .csv_importer import initialize_database_from_csv
+from .jobs import JobRepository
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,13 @@ def initialize_database_on_startup(data_dir: Path) -> None:
 
         # Drop legacy NOT NULL constraints that reject incomplete TAP rows
         _drop_not_null_if_exists(["ra", "dec", "target_name"])
+
+        # Jobs the previous server left running died with it (MADIV-28 T6.4).
+        try:
+            with new_session() as db:
+                JobRepository(db).reconcile_stale_jobs()
+        except Exception as e:
+            logger.warning(f"Could not mark interrupted jobs as failed: {e}")
 
         # Check if database is already initialized
         if check_database_initialized():

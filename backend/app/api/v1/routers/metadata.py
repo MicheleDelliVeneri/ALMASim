@@ -13,6 +13,7 @@ from almasim.services.metadata.storage import (
     resolve_metadata_output_path,
     save_metadata_records,
 )
+from app.core.clock import as_utc
 from app.core.config import settings
 from app.core.path_utils import resolve_safe_path
 from app.db.config import get_db
@@ -181,7 +182,7 @@ def _preset_to_response(row: Any) -> QueryPresetResponse:
         description=row.description or "",
         filters=params.get("filters", params),
         result_count=row.result_count or 0,
-        created_at=row.created_at.isoformat() if row.created_at else "",
+        created_at=as_utc(row.created_at).isoformat() if row.created_at is not None else "",
     )
 
 

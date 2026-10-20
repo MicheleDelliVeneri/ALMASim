@@ -2,7 +2,6 @@
 
 import json
 import logging
-import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
@@ -14,6 +13,8 @@ from almasim.services.download import (
     filter_products,
     resolve_products,
 )
+from app.core.clock import db_now, utc_now
+from app.services.live_progress import LiveProgress
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +45,15 @@ class DownloadJob:
     status: str = "pending"
     files: List[FileDownloadStatus] = field(default_factory=list)
     error: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
 
 
 class DownloadStore:
     """Thread-safe store mirroring active jobs in memory and the database."""
 
     def __init__(self):
-        self._active = {}
-        self._lock = threading.Lock()
+        self._active: LiveProgress[DownloadJob] = LiveProgress()
 
     @staticmethod
     def _get_db():
@@ -63,8 +63,7 @@ class DownloadStore:
 
     def create(self, job: DownloadJob) -> DownloadJob:
         """Register a new job and persist the initial record to DB."""
-        with self._lock:
-            self._active[job.job_id] = job
+        self._active.put(job.job_id, job)
 
         from app.db.models import DownloadJobRecord
 
@@ -97,19 +96,16 @@ class DownloadStore:
 
     def get(self, job_id: str) -> Optional[DownloadJob]:
         """Return an active job from memory."""
-        with self._lock:
-            return self._active.get(job_id)
+        return self._active.get(job_id)
 
     def update(self, job_id: str, **kwargs) -> Optional[DownloadJob]:
         """Update an active job in memory."""
-        with self._lock:
-            job = self._active.get(job_id)
+        with self._active.editing(job_id) as job:
             if not job:
                 return None
             for key, value in kwargs.items():
                 if hasattr(job, key):
                     setattr(job, key, value)
-            job.updated_at = datetime.now()
             return job
 
     def apply_file_update(self, job_id: str, file_status: FileDownloadStatus) -> None:
@@ -119,8 +115,7 @@ class DownloadStore:
         access_url to spread downloads over the ALMA mirrors, so the URL is not
         a stable key (keying on it listed most files twice).
         """
-        with self._lock:
-            job = self._active.get(job_id)
+        with self._active.editing(job_id) as job:
             if not job:
                 return
             for index, current in enumerate(job.files):
@@ -132,17 +127,14 @@ class DownloadStore:
             job.bytes_downloaded = sum(f.bytes_downloaded for f in job.files)
             job.files_completed = sum(1 for f in job.files if f.status == "completed")
             job.files_failed = sum(1 for f in job.files if f.status == "failed")
-            job.updated_at = datetime.now()
 
     def remove(self, job_id: str) -> None:
         """Drop a job from memory (its database record is kept)."""
-        with self._lock:
-            self._active.pop(job_id, None)
+        self._active.pop(job_id)
 
     def persist(self, job_id: str) -> None:
         """Flush the current in-memory state to the database."""
-        with self._lock:
-            job = self._active.get(job_id)
+        job = self._active.get(job_id)
         if not job:
             return
 
@@ -164,7 +156,7 @@ class DownloadStore:
             rec.raw_measurement_sets = json.dumps(job.raw_measurement_sets)
             rec.calibrated_measurement_sets = json.dumps(job.calibrated_measurement_sets)
             rec.manifest_path = job.manifest_path
-            rec.updated_at = datetime.now()
+            rec.updated_at = db_now()
 
             if job.files:
                 db.query(DownloadFileRecord).filter(DownloadFileRecord.job_id == job_id).delete()
@@ -192,11 +184,12 @@ class DownloadStore:
 
     def list_all(self) -> list:
         """Return all persisted jobs from the database."""
+        from app.db.jobs import JobRepository
         from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:
-            return db.query(DownloadJobRecord).order_by(DownloadJobRecord.created_at.desc()).all()
+            return JobRepository(db).list(DownloadJobRecord, limit=10_000)
         finally:
             db.close()
 
@@ -219,34 +212,24 @@ class DownloadStore:
 
     def delete_from_db(self, job_id: str) -> bool:
         """Delete one persisted job from the database."""
+        from app.db.jobs import JobRepository
         from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:
-            rec = db.query(DownloadJobRecord).filter(DownloadJobRecord.job_id == job_id).first()
-            if not rec:
-                return False
-            db.delete(rec)
-            db.commit()
-            return True
+            return JobRepository(db).delete(DownloadJobRecord, job_id)
         finally:
             db.close()
 
     def update_in_db(self, job_id: str, **kwargs) -> bool:
         """Update a persisted job directly in the database."""
+        from app.db.jobs import JobRepository
         from app.db.models import DownloadJobRecord
 
+        fields = {key: value for key, value in kwargs.items() if hasattr(DownloadJobRecord, key)}
         db = self._get_db()
         try:
-            rec = db.query(DownloadJobRecord).filter(DownloadJobRecord.job_id == job_id).first()
-            if not rec:
-                return False
-            for key, value in kwargs.items():
-                if hasattr(rec, key):
-                    setattr(rec, key, value)
-            rec.updated_at = datetime.now()
-            db.commit()
-            return True
+            return JobRepository(db).update(DownloadJobRecord, job_id, **fields)
         finally:
             db.close()
 
