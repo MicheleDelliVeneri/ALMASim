@@ -136,7 +136,9 @@ def line_mask_from_channels(
             header = hdus[0].header.copy()
         moment = plane if moment is None else moment + plane
     assert moment is not None
-    noise = 1.4826 * np.median(np.abs(moment - np.median(moment)))
+    from almasim.services.imaging.stats import robust_sigma
+
+    noise = robust_sigma(moment)
     mask = moment > sigma * noise if noise > 0 else np.zeros(moment.shape, bool)
     if not mask.any():
         return 0
