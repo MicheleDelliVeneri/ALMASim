@@ -13,6 +13,11 @@ name: Golden regression
 #
 # The simulation job (T0.17) runs seeded simulations of four source types and
 # compares them with the simulation baseline the same way.
+#
+# Tier 2 (T0.14) runs the same chain through a single-node Slurm cluster in
+# the container and requires products identical to the tier-1 baseline. It
+# runs nightly, on dispatch, on PRs labelled "slurm" and on PRs that change
+# Slurm-related code.
 
 on:
   pull_request:
@@ -38,6 +43,8 @@ on:
       - .github/workflows/golden-ci.yml
       - .github/workflows/ci-image.yml
   workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"  # nightly, for tier 2 (Slurm in Docker)
 
 concurrency:
   group: golden-${{ github.event.pull_request.number || github.ref }}
@@ -240,4 +247,103 @@ jobs:
           name: golden-candidate-simulation
           path: /tmp/candidate-sim
           retention-days: 30
+          if-no-files-found: ignore
+
+  slurm-scope:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.scope.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: |
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(src/almasim/(services/compute/|scheduling/|services/archive/|services/imaging/archive_imaging.py|cli_products.py|cli_image.py|cli_visibilities.py)|scripts/regression/|ci/|\.github/workflows/golden-ci.yml)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  tier2:
+    needs: [image, slurm-scope]
+    if: >-
+      ${{ always() && needs.image.result == 'success' && (
+          github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+          contains(github.event.pull_request.labels.*.name, 'slurm') ||
+          needs.slurm-scope.outputs.relevant == 'true') &&
+        !contains(github.event.pull_request.labels.*.name, 'golden:skip') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    container:
+      image: ${{ needs.image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      # slurmd manages its own cgroups under the runner VM's cgroup tree. --init runs
+      # tini as PID 1 to reap orphaned job processes: without it the zombies keep the
+      # job's process group alive, the kill "fails" and Slurm drains the only node.
+      options: --privileged --cgroupns=host --init
+    env:
+      SUPERSEDE: ${{ contains(github.event.pull_request.labels.*.name, 'golden:supersede') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install this checkout into the image environment
+        run: uv sync --frozen --no-default-groups --group test --extra casa --extra ms-casacore
+
+      - name: Start a single-node Slurm cluster
+        run: scripts/regression/ci_slurm_cluster.sh
+
+      - name: Download and verify the fixture and baseline
+        run: |
+          read -r f_url f_sha b_url b_sha < <(python -c "import json; b = json.load(open('ci/golden/baseline.json')); print(b['fixture']['url'], b['fixture']['sha256'], *((b['baseline']['url'], b['baseline']['sha256']) if b.get('baseline') else ('-', '-')))")
+          fetch() {
+            curl -fsSL --retry 3 -o "/tmp/$(basename "$1")" "$1"
+            echo "$2  /tmp/$(basename "$1")" | sha256sum -c -
+            rm -rf "$3" && mkdir -p "$3" && tar -xzf "/tmp/$(basename "$1")" -C "$3" --strip-components 1
+          }
+          fetch "$f_url" "$f_sha" /tmp/fixture
+          [ "$b_url" = - ] || fetch "$b_url" "$b_sha" /tmp/baseline
+
+      - name: Run the pipeline chain through Slurm
+        run: BACKEND=slurm SCHEDULER_HOST=127.0.0.1 scripts/regression/ci_chain.sh /tmp/fixture "$RUN"
+
+      - name: Compare with the tier-1 baseline
+        run: |
+          if [ ! -d /tmp/baseline ]; then
+            echo "::notice::No baseline yet; tier 2 only checked that the chain runs through Slurm."
+            exit 0
+          fi
+          source /tmp/baseline/prefixes.env
+          task="$(cat /tmp/baseline/TASK)"
+          set +e
+          python -I scripts/regression/compare_products.py golden --run "$RUN" --uid "$UID_EB" \
+            --task "$task" --ref-raw /tmp/baseline/raw.json --ref-cal /tmp/baseline/cal.json \
+            --ref-task "/tmp/baseline/cubes/$UID_EB.ms.split/$task" \
+            --map RAW "$RUN/raw_ms" "$BASELINE_PREFIX_RAW" --map CAL "$RUN/cal" "$BASELINE_PREFIX_CAL" \
+            --map CUBES "$RUN/cubes" "/tmp/baseline/cubes,$BASELINE_PREFIX_CUBES" \
+            --map ASDM "$RUN/asdm" "$BASELINE_PREFIX_ASDM" --report "$RUN/report.md"
+          verdict=$?
+          set -e
+          { echo "## Golden regression (tier 2, Slurm)"; echo; { grep FAIL "$RUN/report.md" || true; } | head -50; tail -1 "$RUN/report.md"; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$verdict" -ne 0 ] && [ "$SUPERSEDE" = true ]; then
+            echo "::warning::Products differ from the baseline, as declared by golden:supersede."
+            exit 0
+          fi
+          exit "$verdict"
+
+      - name: Upload the run and Slurm logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-run-slurm
+          path: |
+            ${{ env.RUN }}/report.md
+            ${{ env.RUN }}/logs
+            /var/log/slurm
+          retention-days: 14
           if-no-files-found: ignore
