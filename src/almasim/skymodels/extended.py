@@ -168,8 +168,9 @@ def insert_tng(
     ra: U.Quantity,
     dec: U.Quantity,
     api_key: Optional[str],
+    px_size: U.Quantity,
 ) -> MartiniMod:
-    """Insert TNG source into datacube."""
+    """Insert TNG source into a cube of ``n_px`` pixels of ``px_size``."""
     source = TNGSource(
         simulation=TNG_SIMULATION,
         snapNum=snapshot,
@@ -186,7 +187,7 @@ def insert_tng(
         n_px_x=n_px,
         n_px_y=n_px,
         n_channels=n_channels,
-        px_size=10 * U.arcsec,
+        px_size=px_size,
         channel_width=freq_sup,
         spectral_centre=source.vsys,
         ra=source.ra,
@@ -207,6 +208,9 @@ def insert_tng(
         terminal,
     )
     return M
+
+
+_MIN_TNG_DISTANCE_MPC = 1.0
 
 
 class ExtendedSkyModel:
@@ -272,12 +276,14 @@ class ExtendedSkyModel:
         y_rot = np.random.randint(0, 360) * U.deg
         tngpath = os.path.join(self.tngpath, TNG_SIMULATION, "output")
         redshift = self.redshift * cu.redshift
-        distance = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))
+        computed = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))
+        # Start at the source's comoving distance (at least 1 Mpc, so a zero
+        # redshift cannot stall the loop below that moves it further out).
+        distance = max(float(computed.to_value(U.Mpc)), _MIN_TNG_DISTANCE_MPC)
         if self.terminal is not None:
             self.terminal.add_log(
-                "Computed a distance of {} for redshift {}".format(distance, redshift)
+                "Computed a distance of {} for redshift {}".format(computed, redshift)
             )
-        distance = 50
         M = insert_tng(
             self.client,
             self.update_progress,
@@ -294,6 +300,7 @@ class ExtendedSkyModel:
             self.ra,
             self.dec,
             self.api_key,
+            self.datacube.px_size,
         )
         initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
         if self.terminal is not None:
@@ -326,6 +333,7 @@ class ExtendedSkyModel:
                 self.ra,
                 self.dec,
                 self.api_key,
+                self.datacube.px_size,
             )
             mass_ratio = M.inserted_mass / M.source.input_mass * 100
             if self.terminal is not None:
