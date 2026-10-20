@@ -459,7 +459,6 @@
 				class={controlClass}
 			>
 				<option value="legacy">Legacy</option>
-				<option value="ducc0">ducc0</option>
 			</select>
 			<p class="mt-1 text-xs text-slate-400">Select the interferometric channel imaging backend</p>
 		</div>

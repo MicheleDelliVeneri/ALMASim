@@ -245,9 +245,7 @@ def test_set_primary_beam(sample_header, sample_wavelength):
     assert modelfft.shape == (Npix, Npix)
     assert len(modelim_out) == 1
     assert modelim_out[0].shape == (Npix, Npix)
-    assert "BMAJ" in sample_header
-    assert "BMIN" in sample_header
-    assert "BPA" in sample_header
+    assert "BMAJ" not in sample_header, "the dead, wrong primary-beam BMAJ was removed (T1.3)"
 
 
 @pytest.mark.unit

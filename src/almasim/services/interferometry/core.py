@@ -140,6 +140,15 @@ class Interferometer:
         self.persist = persist
         self.robust = robust
         self.imaging_algorithm = str(imaging_algorithm).lower()
+        if self.imaging_algorithm == "ducc0":
+            # MADIV-28 T1.3: the ducc0 channel imager reads the local (x, y)
+            # antenna offsets in km as (lat, lon) in degrees, so its uv distances
+            # are ~1e5 too large; it also images one snapshot instead of the
+            # hour-angle track. Disabled until the shared predictor (T3.7).
+            raise ValueError(
+                "imaging_algorithm='ducc0' is disabled: its uv geometry is wrong "
+                "(see MADIV-28 T1.3); use 'legacy'"
+            )
         self.antenna_diameter_m = float(antenna_diameter_m)
         self.config_name = config_name
         self.array_type = array_type

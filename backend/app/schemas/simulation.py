@@ -64,9 +64,9 @@ class SimulationParamsBase(BaseModel):
     )
     inject_serendipitous: bool = Field(default=False, description="Inject serendipitous sources")
     robust: float = Field(default=0.0, description="Robustness parameter")
-    imaging_algorithm: Literal["legacy", "ducc0"] = Field(
+    imaging_algorithm: Literal["legacy"] = Field(
         default="legacy",
-        description="Imaging implementation: legacy or ducc0",
+        description="Imaging implementation (ducc0 is disabled until its uv geometry is fixed)",
     )
     compute_backend: Optional[str] = Field(
         default="local",

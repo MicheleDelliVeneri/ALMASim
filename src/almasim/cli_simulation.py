@@ -77,7 +77,8 @@ _SOURCE_TYPES = [
 ]
 _SAVE_MODES = ["memory", "npz", "h5", "fits"]
 _BACKEND_TYPES = ["sync", "local"]
-_IMAGING_ALGORITHMS = ["legacy", "ducc0"]
+# "ducc0" is disabled until its uv geometry is fixed (MADIV-28 T1.3, T3.7).
+_IMAGING_ALGORITHMS = ["legacy"]
 _EXTERNAL_INPUT_SUFFIXES = {".fits", ".fit", ".fts", ".fz"}
 
 
