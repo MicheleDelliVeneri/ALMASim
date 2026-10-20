@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import time
 from typing import TYPE_CHECKING, Callable, Optional
 
 import astropy.units as U
@@ -17,6 +16,7 @@ from astropy.time import Time
 if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
 
+from ..compute.progress import watch_futures
 from ..instrument.constants import (
     ALMA_ELEVATION_M,
     ALMA_LATITUDE_DEG,
@@ -574,12 +574,5 @@ class Interferometer:
         return simulation_results
 
     def track_progress(self, futures: list) -> None:
-        """Track progress of computation futures."""
-        total_tasks = len(futures)
-        completed_tasks = 0
-        while completed_tasks < total_tasks:
-            # Check if futures have a done() method (Dask futures) or are already results
-            completed_tasks = sum(f.done() if hasattr(f, "done") else True for f in futures)
-            progress_value = int((completed_tasks / total_tasks) * 100)
-            self.progress_signal.emit(progress_value)
-            time.sleep(1)
+        """Emit the percentage of the channel futures done until all are."""
+        watch_futures(futures, self.progress_signal.emit)

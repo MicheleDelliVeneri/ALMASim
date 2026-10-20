@@ -383,7 +383,7 @@ def test_products_download_sync_cleanup_only_when_no_failures(tmp_path, monkeypa
         return (["/raw/a.ms"], ["/cal/a.ms.split.cal"])
 
     def _stages_failing(**kwargs):
-        kwargs["failures"].append(cli_products.StageFailure("uid___B", "boom"))
+        kwargs["failures"].append(cli_products.TaskFailure("uid___B", "boom"))
         return (["/raw/a.ms"], ["/cal/a.ms.split.cal"])
 
     args = [
@@ -977,7 +977,7 @@ def test_compute_jobs_with_progress_continue_on_error_skips_failed(monkeypatch):
     futures = [_FakeFuture(done_after=1), _FakeFailingFuture("boom on B"), _FakeFuture()]
     backend = _FakePerFutureBackend(futures, results=[["a.ms"], None, ["c.ms"]])
     monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: None)
-    failures: list[cli_products.StageFailure] = []
+    failures: list[cli_products.TaskFailure] = []
 
     results = cli_products._compute_jobs_with_progress(
         backend=backend,
@@ -990,7 +990,7 @@ def test_compute_jobs_with_progress_continue_on_error_skips_failed(monkeypatch):
     )
 
     assert results == [["a.ms"], None, ["c.ms"]]
-    assert [failure.uid for failure in failures] == ["uid://B"]
+    assert [failure.label for failure in failures] == ["uid://B"]
     assert "boom on B" in failures[0].error
     assert failures[0].log_path == "/logs/b.log"
 
@@ -1068,7 +1068,7 @@ def test_run_uid_stage_sync_continues_after_failure(monkeypatch, tmp_path):
             raise RuntimeError("Calibration failed for uid://B.\nReturn code: 134")
         return [f"/out/{asdm_uid}.ms.split.cal"]
 
-    failures: list[cli_products.StageFailure] = []
+    failures: list[cli_products.TaskFailure] = []
     uids = ["uid://A", "uid://B", "uid://C"]
     results = cli_products._run_uid_stage(
         backend=None,
@@ -1084,7 +1084,7 @@ def test_run_uid_stage_sync_continues_after_failure(monkeypatch, tmp_path):
 
     assert calls == uids
     assert results == [["/out/uid://A.ms.split.cal"], [], ["/out/uid://C.ms.split.cal"]]
-    assert [failure.uid for failure in failures] == ["uid://B"]
+    assert [failure.label for failure in failures] == ["uid://B"]
     assert failures[0].log_path == str(tmp_path / "1.log")
 
 
@@ -1126,7 +1126,7 @@ def test_run_calibrate_jobs_sync_multi_uid_isolates_each_uid(monkeypatch, tmp_pa
         cli_products, "_extract_uids_from_raw_ms_root", lambda *_: ["uid___A", "uid___B", "uid___C"]
     )
 
-    failures: list[cli_products.StageFailure] = []
+    failures: list[cli_products.TaskFailure] = []
     outputs = cli_products._run_calibrate_jobs(
         input_root=tmp_path / "input",
         raw_ms_root=tmp_path / "raw",
@@ -1148,7 +1148,7 @@ def test_run_calibrate_jobs_sync_multi_uid_isolates_each_uid(monkeypatch, tmp_pa
         str(tmp_path / "out" / "uid___A.ms.split.cal"),
         str(tmp_path / "out" / "uid___C.ms.split.cal"),
     ]
-    assert [failure.uid for failure in failures] == ["uid___B"]
+    assert [failure.label for failure in failures] == ["uid___B"]
 
 
 def test_run_calibrate_jobs_sync_single_uid_runs_in_process(monkeypatch, tmp_path):
@@ -1206,7 +1206,7 @@ def test_run_calibrate_jobs_sync_skips_cleanup_when_failures(monkeypatch, tmp_pa
         lambda *a, **k: pytest.fail("cleanup must be skipped after failures"),
     )
 
-    failures: list[cli_products.StageFailure] = []
+    failures: list[cli_products.TaskFailure] = []
     cli_products._run_calibrate_jobs(
         input_root=tmp_path / "input",
         raw_ms_root=tmp_path / "raw",
@@ -1220,7 +1220,7 @@ def test_run_calibrate_jobs_sync_skips_cleanup_when_failures(monkeypatch, tmp_pa
         clean_intermediate=True,
         failures=failures,
     )
-    assert [failure.uid for failure in failures] == ["uid___B"]
+    assert [failure.label for failure in failures] == ["uid___B"]
 
 
 def test_calibrate_single_uid_writes_per_uid_log_file(tmp_path, monkeypatch):
@@ -1255,7 +1255,7 @@ def test_products_calibrate_exits_nonzero_with_failure_summary(monkeypatch):
 
     def _fake_run(**kwargs):
         kwargs["failures"].append(
-            cli_products.StageFailure("uid___B", "Calibration failed for uid___B.", "/logs/b.log")
+            cli_products.TaskFailure("uid___B", "Calibration failed for uid___B.", "/logs/b.log")
         )
         assert kwargs["continue_on_error"] is True
         return ["/tmp/cal-a.ms"]
@@ -1307,13 +1307,13 @@ def test_run_parallel_archive_jobs_skips_calibration_for_failed_unpack(monkeypat
     def _fake_stage(**kwargs):
         stages.append((kwargs["stage_label"], list(kwargs["job_uids"])))
         if kwargs["stage_label"].endswith("unpack"):
-            kwargs["failures"].append(cli_products.StageFailure("uid___B", "importasdm crashed"))
+            kwargs["failures"].append(cli_products.TaskFailure("uid___B", "importasdm crashed"))
             return [["/raw/uid___A.ms"], []]
         return [["/cal/uid___A.ms.split.cal"]]
 
     monkeypatch.setattr(cli_products, "_run_uid_stage", _fake_stage)
 
-    failures: list[cli_products.StageFailure] = []
+    failures: list[cli_products.TaskFailure] = []
     raw, cal = cli_products._run_parallel_archive_jobs(
         download_root=tmp_path / "dl",
         archive_output_root=tmp_path / "archive",
@@ -1330,7 +1330,7 @@ def test_run_parallel_archive_jobs_skips_calibration_for_failed_unpack(monkeypat
     assert raw == ["/raw/uid___A.ms"]
     assert cal == ["/cal/uid___A.ms.split.cal"]
     assert stages == [("Slurm unpack", ["uid___A", "uid___B"]), ("Slurm calibrate", ["uid___A"])]
-    assert [failure.uid for failure in failures] == ["uid___B"]
+    assert [failure.label for failure in failures] == ["uid___B"]
 
 
 def test_tail_log_line_ignores_stale_logs(tmp_path):
@@ -1341,9 +1341,11 @@ def test_tail_log_line_ignores_stale_logs(tmp_path):
     log_path.write_text("first\nlast line\n", encoding="utf-8")
     os.utime(log_path, (time() - 3600, time() - 3600))
 
-    assert cli_products._tail_log_line(log_path) == "last line"
-    assert cli_products._tail_log_line(log_path, modified_since=time() - 60) is None
-    assert cli_products._tail_log_line(tmp_path / "missing.log") is None
+    from almasim.services.compute.progress import tail_line
+
+    assert tail_line(log_path) == "last line"
+    assert tail_line(log_path, modified_since=time() - 60) is None
+    assert tail_line(tmp_path / "missing.log") is None
 
 
 # ---------------------------------------------------------------------------

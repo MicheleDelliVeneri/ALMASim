@@ -924,7 +924,7 @@ def test_run_imaging_tasks_continues_past_failures_and_marks_lost_tasks(tmp_path
     backend = _FakeBackend(
         [{"ok": 0}, RuntimeError("WSClean exited with return code 1"), {"ok": 2}]
     )
-    failures: list[cli_image.ImagingFailure] = []
+    failures: list[cli_image.TaskFailure] = []
 
     results = _run(tasks, backend, monkeypatch, failures=failures)
 
@@ -996,7 +996,7 @@ def test_run_imaging_tasks_waits_for_workers_and_fills_only_free_slots(tmp_path,
 def test_run_imaging_tasks_fail_fast_stops_and_cancels(tmp_path, monkeypatch):
     tasks = _tasks(tmp_path, 2)
     backend = _FakeBackend([RuntimeError("boom"), {"ok": 1}])
-    failures: list[cli_image.ImagingFailure] = []
+    failures: list[cli_image.TaskFailure] = []
 
     with pytest.raises(typer.Exit) as exc:
         _run(tasks, backend, monkeypatch, failures=failures, continue_on_error=False)
@@ -1016,7 +1016,7 @@ def test_run_imaging_tasks_sync_backend_runs_in_process(tmp_path, monkeypatch):
         return {"spw": kwargs["spw"]}
 
     patch_everywhere(monkeypatch, ai, "run_wsclean_task", _fake_task)
-    failures: list[cli_image.ImagingFailure] = []
+    failures: list[cli_image.TaskFailure] = []
     results = _run(tasks, None, monkeypatch, backend_kind="sync", failures=failures)
 
     assert results == [{"spw": 1}]
@@ -1031,7 +1031,7 @@ def test_image_from_ms_reports_failures_and_exits_one(monkeypatch, tmp_path):
 
     def _fake_run(tasks, *, failures, **kwargs):
         failures.append(
-            cli_image.ImagingFailure(tasks[0].label, "WSClean exited with return code 1", "/l")
+            cli_image.TaskFailure(tasks[0].label, "WSClean exited with return code 1", "/l")
         )
         return [{"ok": 1}]
 

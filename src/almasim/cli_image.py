@@ -17,6 +17,12 @@ import typer
 from astropy.time import Time
 from tqdm import tqdm
 
+from almasim.services.compute.progress import (
+    TaskFailure,
+    error_headline,
+    heartbeat_lines,
+    report_failures,
+)
 from almasim.services.instrument.constants import ARCSEC_PER_RAD as RAD_TO_ARCSEC
 from almasim.services.instrument.constants import DEFAULT_MAX_WEIGHT, SPEED_OF_LIGHT_M_S
 
@@ -619,21 +625,6 @@ class ImagingTask:
     dish_diameter: Optional[float] = None
 
 
-@dataclass(frozen=True)
-class ImagingFailure:
-    label: str
-    error: str
-    log_path: Optional[str] = None
-
-
-def _error_headline(error: str, limit: int = 240) -> str:
-    for line in str(error).splitlines():
-        stripped = line.strip()
-        if stripped:
-            return stripped if len(stripped) <= limit else stripped[: limit - 1] + "…"
-    return str(error)[:limit]
-
-
 def _field_arguments(row: pd.Series) -> list[str]:
     """``-field`` selection from the ``target_field_ids`` column, if the CSV has one."""
     value = row.get("target_field_ids") if hasattr(row, "get") else None
@@ -839,22 +830,7 @@ def build_imaging_tasks(
     return tasks, skipped
 
 
-def _tail_line(path: Path, modified_since: float, max_bytes: int = 2048) -> Optional[str]:
-    try:
-        if path.stat().st_mtime < modified_since:
-            return None
-        with path.open("rb") as handle:
-            handle.seek(0, 2)
-            size = handle.tell()
-            handle.seek(max(0, size - max_bytes))
-            chunk = handle.read().decode("utf-8", errors="replace")
-    except OSError:
-        return None
-    lines = [line.strip() for line in chunk.splitlines() if line.strip()]
-    return lines[-1] if lines else None
-
-
-def _record_imaging_failure(task: ImagingTask, error: str, failures: list[ImagingFailure]) -> None:
+def _record_imaging_failure(task: ImagingTask, error: str, failures: list[TaskFailure]) -> None:
     """Record a failed task and make sure a ``.failed`` marker exists for it.
 
     The worker-side wrapper writes the marker itself; this covers the cases
@@ -882,9 +858,7 @@ def _record_imaging_failure(task: ImagingTask, error: str, failures: list[Imagin
             )
         except OSError:
             pass
-    failures.append(
-        ImagingFailure(task.label, error, str(log_path) if log_path.is_file() else None)
-    )
+    failures.append(TaskFailure(task.label, error, str(log_path) if log_path.is_file() else None))
 
 
 def run_imaging_tasks(
@@ -902,7 +876,7 @@ def run_imaging_tasks(
     scheduler_interface: str | None,
     task_timeout: float | None,
     continue_on_error: bool = True,
-    failures: Optional[list[ImagingFailure]] = None,
+    failures: Optional[list[TaskFailure]] = None,
     heartbeat_interval: float = _IMAGING_HEARTBEAT_S,
     scratch_root: str | None = None,
     task_retries: int = 3,
@@ -967,7 +941,7 @@ def run_imaging_tasks(
                 )
             except Exception as exc:
                 _record_imaging_failure(task, str(exc), failures)
-                typer.echo(f"  FAILED {task.label}: {_error_headline(str(exc))}", err=True)
+                typer.echo(f"  FAILED {task.label}: {error_headline(str(exc))}", err=True)
                 if not continue_on_error:
                     raise typer.Exit(code=1)
         return results
@@ -1068,7 +1042,7 @@ def run_imaging_tasks(
                         bar.write(f"{stage_label} completed {task.label}")
                         continue
                     _record_imaging_failure(task, error, failures)
-                    bar.write(f"  {task.label} FAILED: {_error_headline(error)}")
+                    bar.write(f"  {task.label} FAILED: {error_headline(error)}")
                     if not continue_on_error:
                         for other in pending.values():
                             cancel = getattr(other, "cancel", None)
@@ -1082,15 +1056,15 @@ def run_imaging_tasks(
                 now = time()
                 if now - last_heartbeat >= heartbeat_interval:
                     last_heartbeat = now
-                    running = 0
-                    for index in pending:
-                        last_line = _tail_line(
-                            imaging_log_path(tasks[index].output_dir), started_at - 1.0
-                        )
-                        if last_line is None:
-                            continue
-                        running += 1
-                        bar.write(f"  [{tasks[index].label}] {last_line}")
+                    lines, running = heartbeat_lines(
+                        (
+                            (tasks[index].label, imaging_log_path(tasks[index].output_dir))
+                            for index in pending
+                        ),
+                        started_at=started_at,
+                    )
+                    for line in lines:
+                        bar.write(line)
                     bar.write(
                         f"{stage_label}: {running} running, "
                         f"{len(pending) - running + len(queued)} waiting, "
@@ -1163,14 +1137,8 @@ def _echo_cube_plan(
     )
 
 
-def _report_imaging_failures(failures: list[ImagingFailure]) -> None:
-    if not failures:
-        return
-    typer.echo(f"Image: {len(failures)} task(s) failed and were skipped:", err=True)
-    for failure in failures:
-        typer.echo(f"  {failure.label}: {_error_headline(failure.error)}", err=True)
-        if failure.log_path:
-            typer.echo(f"    log: {failure.log_path}", err=True)
+def _report_imaging_failures(failures: list[TaskFailure]) -> None:
+    report_failures("Image", failures, echo=lambda t: typer.echo(t, err=True))
 
 
 def _prepare_selfcal_casa_data(output_directory: Path, casa_data_root: Path | None) -> Path:
@@ -1638,7 +1606,7 @@ def image_from_ms(
         "per-task logs: <output>/<ms>/SPW-<n>[_FIELD-<id>].log"
     )
 
-    failures: list[ImagingFailure] = []
+    failures: list[TaskFailure] = []
     run_imaging_tasks(
         tasks,
         backend_kind=backend_kind,
