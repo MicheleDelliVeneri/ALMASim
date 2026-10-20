@@ -1709,3 +1709,24 @@ def test_unpack_single_uid_hard_abort_writes_failure_marker(tmp_path, monkeypatc
     payload = json.loads(marker.read_text())
     assert "return code -9" in payload["error"]
     assert not (output_root / "working" / f"{uid}.ms.done").exists()
+
+
+def test_cli_modules_are_the_package_modules():
+    """``almasim.cli_<group>`` names the module in ``almasim.cli`` (MADIV-28 T3.1)."""
+    import almasim.cli.image
+    import almasim.cli.simulation
+    import almasim.cli_image
+    import almasim.cli_simulation
+
+    assert almasim.cli_image is almasim.cli.image
+    assert almasim.cli_simulation is almasim.cli.simulation
+
+
+def test_simulation_main_dir_defaults_to_the_package_data():
+    """The default ``--main-dir`` is ``src/almasim``, where the data directories live."""
+    import inspect
+
+    from almasim.cli import simulation
+
+    default = inspect.signature(simulation.simulation_run).parameters["main_dir"].default.default
+    assert (default / "cli").is_dir() and default.name == "almasim"

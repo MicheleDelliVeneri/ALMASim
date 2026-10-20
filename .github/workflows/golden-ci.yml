@@ -262,7 +262,7 @@ jobs:
         run: |
           changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
           echo "$changed"
-          if echo "$changed" | grep -qE '^(src/almasim/(services/compute/|scheduling/|services/archive/|services/imaging/archive_imaging.py|cli_products.py|cli_image.py|cli_visibilities.py)|scripts/regression/|ci/|\.github/workflows/golden-ci.yml)'; then
+          if echo "$changed" | grep -qE '^(src/almasim/(services/compute/|scheduling/|services/archive/|services/imaging/archive_imaging.py|cli_products.py|cli_image.py|cli_visibilities.py|cli/(products|image|visibilities).py)|scripts/regression/|ci/|\.github/workflows/golden-ci.yml)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
