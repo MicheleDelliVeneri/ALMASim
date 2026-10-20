@@ -14,18 +14,11 @@ from astropy.cosmology import FlatLambdaCDM
 
 from ...skymodels.registry import skymodel_spec
 from ..data_paths import DataLayout, calibrated_lines, read_table
+from ..utils import log_message
 from .redshift import compute_redshift
 from .tng import redshift_to_snapshot
 
 LogFn = Optional[Callable[[str], None]]
-
-
-def _log(logger: LogFn, message: str, remote: bool = False) -> None:
-    """Log a message using the logger callback or print."""
-    if remote:
-        print(message)
-    elif logger is not None:
-        logger(message)
 
 
 def sample_given_redshift(
@@ -46,10 +39,10 @@ def sample_given_redshift(
 
     freqs = metadata["Freq"].values
     if logger is not None:
-        _log(logger, f"Max frequency recorded in metadata: {np.max(freqs)} GHz")
-        _log(logger, f"Min frequency recorded in metadata: {np.min(freqs)} GHz")
-        _log(logger, "Filtering metadata based on line catalogue...")
-        _log(logger, f"Remaining metadata: {len(metadata)}")
+        log_message(logger, f"Max frequency recorded in metadata: {np.max(freqs)} GHz")
+        log_message(logger, f"Min frequency recorded in metadata: {np.min(freqs)} GHz")
+        log_message(logger, "Filtering metadata based on line catalogue...")
+        log_message(logger, f"Remaining metadata: {len(metadata)}")
 
     closest_rest_frequencies = []
     for freq in freqs:
@@ -68,7 +61,7 @@ def sample_given_redshift(
 
     n_metadata = 0
     z_save = zmax
-    _log(logger, "Computing redshifts")
+    log_message(logger, "Computing redshifts")
     while n_metadata < ceil(n / 10):
         s_metadata = n_metadata
         if zmax is not None:
@@ -83,11 +76,11 @@ def sample_given_redshift(
     else:
         metadata = metadata[metadata["redshift"] >= 0]
     if z_save != zmax:
-        _log(
+        log_message(
             logger,
             f"Max redshift has been adjusted fit metadata, new max redshift: {round(zmax, 3)}",
         )
-    _log(logger, f"Remaining metadata: {len(metadata)}")
+    log_message(logger, f"Remaining metadata: {len(metadata)}")
     metadata["snapshot"] = [
         redshift_to_snapshot(redshift) for redshift in metadata["redshift"].values
     ]
@@ -131,8 +124,8 @@ def normalize_sed(
     lum_infrared_erg_s = lum_infrared * so_to_erg_s
     sed["Jy"] = lum_infrared_erg_s * sed["erg/s/Hz"] * 1e23 / solid_angle
     min_ = _min_continuum_flux(sed, freq_min, freq_max)
-    _log(logger, f"Minimum continum flux: {min_:.2e}", remote=remote)
-    _log(logger, f"Continum sensitivity: {cont_sens:.2e}", remote=remote)
+    log_message(logger, f"Minimum continum flux: {min_:.2e}", remote=remote)
+    log_message(logger, f"Continum sensitivity: {cont_sens:.2e}", remote=remote)
     lum_save = lum_infrared
 
     if min_ < cont_sens:
@@ -143,12 +136,12 @@ def normalize_sed(
             min_ = _min_continuum_flux(sed, freq_min, freq_max)
 
     if lum_save != lum_infrared:
-        _log(
+        log_message(
             logger,
             f"To observe the source, luminosity has been set to {lum_infrared:.2e}",
             remote=remote,
         )
-        _log(logger, "# ------------------------------------- #\n", remote=remote)
+        log_message(logger, "# ------------------------------------- #\n", remote=remote)
     return sed, lum_infrared_erg_s, lum_infrared
 
 
@@ -351,7 +344,7 @@ def process_spectral_data(
         )
         * U.GHz
     )
-    _log(
+    log_message(
         logger,
         f"Line Velocities: {filtered_lines['delta_v'].values} Km/s",
         remote=remote,

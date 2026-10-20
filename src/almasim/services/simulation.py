@@ -685,30 +685,19 @@ def generate_clean_cube(
     if sim_output_dir is not None:
         os.makedirs(sim_output_dir, exist_ok=True)
 
-    if remote:
-        print(f"RA: {ra}")
-        print(f"DEC: {dec}")
-        print(f"Integration Time: {int_time}")
-    else:
-        log(f"RA: {ra}")
-        log(f"DEC: {dec}")
-        log(f"Integration Time: {int_time}")
+    log(f"RA: {ra}")
+    log(f"DEC: {dec}")
+    log(f"Integration Time: {int_time}")
 
     if progress_adapter is not None:
         progress_adapter.emit(100)
-    if remote:
-        print(f"Field of view: {round(fov.value, 3)} arcsec")
-    else:
-        log(f"Field of view: {round(fov.value, 3)} arcsec")
+    log(f"Field of view: {round(fov.value, 3)} arcsec")
 
     beam_area = GAUSSIAN_BEAM_AREA * beam_size**2
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
     cont_sens = params.cont_sens * U.mJy / (U.arcsec**2)
     cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
-    if remote:
-        print(f"Minimum detectable continum: {cont_sens_jy}")
-    else:
-        log(f"Minimum detectable continum: {cont_sens_jy}")
+    log(f"Minimum detectable continum: {cont_sens_jy}")
 
     is_external_model = is_external_source_type(params.source_type)
 
@@ -786,30 +775,17 @@ def generate_clean_cube(
             remote,
         )
 
-    if remote:
-        print(f"Beam size: {round(beam_size.value, 4)} arcsec\n")
-        print(f"Central Frequency: {central_freq}\n")
-        print(f"Spectral Window: {round(band_range.value, 3)} GHz\n")
-        print(f"Freq Support: {delta_freq}\n")
-        print(f"Cube Dimensions: {n_pix} x {n_pix} x {n_channels}\n")
-        print(f"Redshift: {round(redshift, 3)}\n")
-        print(f"Source frequency: {round(source_freq.value, 2)} GHz\n")
-        print(f"Band: {params.band}\n")
-        print(f"Velocity resolution: {round(vel_res.value, 2)} Km/s\n")
-        print(f"Angular resolution: {round(ang_res.value, 3)} arcsec\n")
-        print(f"Infrared Luminosity: {lum_infrared:.2e}\n")
-    else:
-        log(f"Central Frequency: {central_freq}")
-        log(f"Beam size: {round(beam_size.value, 4)} arcsec")
-        log(f"Spectral Window: {band_range}")
-        log(f"Freq Support: {delta_freq}")
-        log(f"Cube Dimensions: {n_pix} x {n_pix} x {n_channels}")
-        log(f"Redshift: {round(redshift, 3)}")
-        log(f"Source frequency: {round(source_freq.value, 2)} GHz")
-        log(f"Band: {params.band}")
-        log(f"Velocity resolution: {round(vel_res.value, 2)} Km/s")
-        log(f"Angular resolution: {round(ang_res.value, 3)} arcsec")
-        log(f"Infrared Luminosity: {lum_infrared:.2e}")
+    log(f"Central Frequency: {central_freq}")
+    log(f"Beam size: {round(beam_size.value, 4)} arcsec")
+    log(f"Spectral Window: {band_range}")
+    log(f"Freq Support: {delta_freq}")
+    log(f"Cube Dimensions: {n_pix} x {n_pix} x {n_channels}")
+    log(f"Redshift: {round(redshift, 3)}")
+    log(f"Source frequency: {round(source_freq.value, 2)} GHz")
+    log(f"Band: {params.band}")
+    log(f"Velocity resolution: {round(vel_res.value, 2)} Km/s")
+    log(f"Angular resolution: {round(ang_res.value, 3)} arcsec")
+    log(f"Infrared Luminosity: {lum_infrared:.2e}")
 
     if params.source_type == "extended":
         snapshot = uas.redshift_to_snapshot(redshift)
@@ -824,14 +800,9 @@ def generate_clean_cube(
     elif line_names is not None:
         log(f"Simulating Line {line_names} Flux: {line_fluxes[0]} at z {redshift}")
 
-    if remote:
-        print(f"Simulating Continum Flux: {np.mean(continum):.2e}")
-        print(f"Continuum Sensitity: {cont_sens}")
-        print("Generating skymodel cube ...\n")
-    else:
-        log(f"Simulating Continum Flux: {np.mean(continum):.2e}")
-        log(f"Continuum Sensitity: {cont_sens}")
-        log("Generating skymodel cube ...")
+    log(f"Simulating Continum Flux: {np.mean(continum):.2e}")
+    log(f"Continuum Sensitity: {cont_sens}")
+    log("Generating skymodel cube ...")
 
     datacube = usm.DataCube(
         n_px_x=n_pix,
@@ -986,12 +957,8 @@ def generate_clean_cube(
         header = usm.get_datacube_header(datacube, params.obs_date)
     model = usm.channel_first(datacube) / beam_area.value
     totflux = np.sum(model)
-    if remote:
-        print(f"Total Flux injected in model cube: {round(totflux, 3)} Jy")
-        print("Observing with ALMA")
-    else:
-        log(f"Total Flux injected in model cube: {round(totflux, 3)} Jy")
-        log("Observing with ALMA")
+    log(f"Total Flux injected in model cube: {round(totflux, 3)} Jy")
+    log("Observing with ALMA")
 
     line_flux_magnitudes = np.abs(np.asarray(line_fluxes, dtype=float))
     nonzero_line_fluxes = line_flux_magnitudes[line_flux_magnitudes > 0]
@@ -1509,10 +1476,7 @@ def run_simulation(
     if is_stop_requested():
         raise RuntimeError("Simulation cancelled")
 
-    if remote:
-        print("Finished")
-    else:
-        log("Finished")
+    log("Finished")
     stop = time.time()
     log("Execution took {} seconds".format(strftime("%H:%M:%S", gmtime(stop - start))))
     return exported_results
