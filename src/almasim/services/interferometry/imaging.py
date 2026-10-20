@@ -198,9 +198,6 @@ def set_primary_beam(
 ) -> tuple:
     """Set primary beam and calculate model FFT."""
     PB = 2.0 * (1220.0 * 180.0 / np.pi * 3600.0 * wavelength[2] / Diameters[0] / 2.3548) ** 2.0
-    header.append(("BMAJ", 180.0 * np.sqrt(PB) / np.pi, "Beam FWHM along major axis [deg]"))
-    header.append(("BMIN", 180.0 * np.sqrt(PB) / np.pi, "Beam FWHM along minor axis [deg]"))
-    header.append(("BPA", 0.0, "Beam position angle [deg]"))
     beamImg = np.exp(distmat / PB)
     modelim[0][:] = modelimTrue * beamImg
     modelfft = np.fft.fft2(np.fft.fftshift(modelim[0]))
