@@ -290,3 +290,35 @@ def test_insert_source_needs_initialised_spectra():
     model = SimpleNamespace(spectral_model=SimpleNamespace(spectra=None))
     with pytest.raises(RuntimeError, match="no spectra"):
         MartiniMod._insert_source_in_cube(model, client=None)
+
+
+@pytest.mark.unit
+def test_extended_insert_uses_the_cube_cell_and_the_source_distance():
+    """The TNG cube takes the run's pixel size, and the source starts at its own distance."""
+    model, _ = _build_extended_model_with_mocked_insert_tng([60.0])
+    model.datacube.px_size = 0.25 * U.arcsec
+    mock_M = MagicMock()
+    mock_M.inserted_mass = 60.0 * U.Msun
+    mock_M.source.input_mass = 100.0 * U.Msun
+
+    with patch("almasim.skymodels.extended.insert_tng", return_value=mock_M) as mock_tng:
+        model.insert()
+
+    args = mock_tng.call_args.args
+    assert args[-1] == 0.25 * U.arcsec
+    distance = args[8]
+    assert 1000 < distance < 1400, "comoving distance of z = 0.3, not a fixed 50 Mpc"
+
+
+@pytest.mark.unit
+def test_extended_insert_starts_at_least_one_megaparsec_away():
+    model, _ = _build_extended_model_with_mocked_insert_tng([60.0])
+    model.redshift = 0.0
+    mock_M = MagicMock()
+    mock_M.inserted_mass = 60.0 * U.Msun
+    mock_M.source.input_mass = 100.0 * U.Msun
+
+    with patch("almasim.skymodels.extended.insert_tng", return_value=mock_M) as mock_tng:
+        model.insert()
+
+    assert mock_tng.call_args.args[8] == 1.0
