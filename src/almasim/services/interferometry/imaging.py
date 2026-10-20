@@ -15,7 +15,8 @@ from ..instrument.constants import ARCSEC_PER_RAD, FWHM_PER_SIGMA, SPEED_OF_LIGH
 from .baselines import generate_via_astropy, prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
 
-ALMASIM_NTHREADS = os.environ.get("ALMASIM_NTHREADS", os.cpu_count())
+# Threads for ducc0 gridding: $ALMASIM_NTHREADS, else every CPU.
+ALMASIM_NTHREADS = int(os.environ.get("ALMASIM_NTHREADS") or os.cpu_count() or 1)
 
 _rng = np.random.default_rng(0)
 
@@ -356,13 +357,6 @@ def image_channel(
     )
 
 
-# Lets keep it simple
-def get_n_threads():
-    import os
-
-    return os.environ.get("ALMASIM_NTHREADS", 10)
-
-
 def _get_xy_from_single_or_multi(couple_or_value):
     if isinstance(couple_or_value, numbers.Number):
         return couple_or_value, couple_or_value
@@ -508,7 +502,7 @@ def image_channel_ducc0(
     pixsize_x = pixel_scale_rad
     pixsize_y = pixel_scale_rad
     frequencies = SPEED_OF_LIGHT_M_S / np.asarray(wavelengths, dtype=np.float64)
-    nthreads = int(ALMASIM_NTHREADS)
+    nthreads = ALMASIM_NTHREADS
 
     visibilities, weights = image_based_predict(
         uvw,

@@ -278,3 +278,15 @@ def test_extended_skymodel_insert_distance_scaling_low_mass_ratio():
 
     assert call_count["n"] >= 3
     assert result is not None
+
+
+@pytest.mark.unit
+def test_insert_source_needs_initialised_spectra():
+    """Inserting before the spectra exist is an error, also under python -O."""
+    from types import SimpleNamespace
+
+    from almasim.skymodels.extended import MartiniMod
+
+    model = SimpleNamespace(spectral_model=SimpleNamespace(spectra=None))
+    with pytest.raises(RuntimeError, match="no spectra"):
+        MartiniMod._insert_source_in_cube(model, client=None)

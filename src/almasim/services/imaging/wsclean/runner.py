@@ -55,7 +55,7 @@ def _run_once(
         killer.daemon = True
         killer.start()
 
-    assert process.stdout is not None
+    assert process.stdout is not None  # stdout=PIPE
     try:
         for line in process.stdout:
             log.write(line)

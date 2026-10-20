@@ -368,7 +368,7 @@ def _run_and_mark(
         try:
             cube_channels = stack_channel_images(out, prefix=CUBE_NAME, keep=cube_products)
         except Exception as exc:
-            raise fail(f"Could not stack the channel images into cubes: {exc}")
+            raise fail(f"Could not stack the channel images into cubes: {exc}") from exc
         # WSClean also writes a <name>-MFS-<product>.fits for a -channels-out
         # run: a copy of the continuum the continuum run already made.
         for duplicate in out.glob(f"{CUBE_NAME}-MFS-*.fits"):
@@ -382,7 +382,7 @@ def _run_and_mark(
                     out / CUBE_IMAGE_FILENAME, out / CONTSUB_FILENAME, order=contsub_order
                 )
             except Exception as exc:
-                raise fail(f"Could not subtract the continuum from the cube: {exc}")
+                raise fail(f"Could not subtract the continuum from the cube: {exc}") from exc
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(
                     f"# continuum-subtracted cube (order {contsub_order}): "
@@ -397,7 +397,7 @@ def _run_and_mark(
         try:
             corrected = pb_correct_task(out, pb_dish_diameter)
         except Exception as exc:
-            raise fail(f"Could not primary-beam correct the images: {exc}")
+            raise fail(f"Could not primary-beam correct the images: {exc}") from exc
         with log_path.open("a", encoding="utf-8") as log:
             for name, info in corrected.items():
                 log.write(f"# primary-beam corrected {name}: {pb_note(info)}\n")
@@ -477,7 +477,7 @@ def _subtract_uv_continuum_step(
             ms_path, order=order, timeout=timeout, log_path=log.name
         )
     except Exception as exc:
-        raise fail(f"Could not subtract the continuum from the visibilities: {exc}")
+        raise fail(f"Could not subtract the continuum from the visibilities: {exc}") from exc
     if fit.get("skipped"):
         log.write(
             f"# continuum NOT subtracted from the visibilities: {fit['skipped']}; "

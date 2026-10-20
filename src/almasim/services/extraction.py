@@ -74,7 +74,8 @@ def _member_name_is_safe(member: tarfile.TarInfo) -> bool:
     return not (member_path.is_absolute() or ".." in member_path.parts)
 
 
-def _member_is_safe(member: tarfile.TarInfo, extract_root: Path) -> bool:
+def member_is_safe(member: tarfile.TarInfo, extract_root: Path) -> bool:
+    """True if ``member`` extracts inside ``extract_root`` (no absolute or escaping path)."""
     if not _member_name_is_safe(member):
         return False
     resolved = (extract_root / member.name).resolve()
@@ -162,7 +163,7 @@ def extract_tar_atomically(
                 final_root = dest
 
             for member in members:
-                if not _member_is_safe(member, extract_root):
+                if not member_is_safe(member, extract_root):
                     if on_skipped_member is not None:
                         on_skipped_member(member.name)
                     continue

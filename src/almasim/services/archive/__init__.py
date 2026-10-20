@@ -7,7 +7,6 @@ from .calibrate_ms import (
     cleanup_intermediate_calibration_data,
     create_calibrated_measurement_sets,
     is_calibration_complete,
-    restore_calibrated_measurement_sets,
     restore_pipeline_flags,
     write_calibration_failure_marker,
     write_calibration_marker,
@@ -74,6 +73,5 @@ __all__ = [
     "parse_qa0_report_text",
     "qa0_report_path",
     "read_qa0_report",
-    "restore_calibrated_measurement_sets",
     "restore_pipeline_flags",
 ]

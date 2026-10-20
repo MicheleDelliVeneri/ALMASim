@@ -842,3 +842,55 @@ def test_run_wsclean_task_clears_stale_noise_products(
 
     assert not any(present(group) for group in gone)
     assert all(present(group) for group in kept)
+
+
+@pytest.mark.unit
+def test_selfcal_noise_products_keep_the_cause_of_a_failure(tmp_path, monkeypatch):
+    import almasim.services.imaging.selfcal.loop as loop
+
+    def broken(*args, **kwargs):
+        raise ValueError("bad planes")
+
+    patch_everywhere(monkeypatch, ai, "_call_in_child", lambda f, kw, **_: {})
+    monkeypatch.setattr(loop, "stack_channel_images", broken)
+    cube = ["wsclean", "-name", "c", "-channels-out", "3", "x.ms"]
+    with (
+        (tmp_path / "l").open("w") as log,
+        pytest.raises(RuntimeError, match="self-calibration correction cube") as info,
+    ):
+        ai._selfcal_noise_products(
+            Path("x.ms"),
+            continuum_command=None,
+            cube_command=cube,
+            fit=None,
+            out=tmp_path,
+            log=log,
+            run=lambda c: 1,
+            fail=RuntimeError,
+        )
+    assert isinstance(info.value.__cause__, ValueError)
+
+    fits.PrimaryHDU(np.ones((1, 1, 4, 4), np.float32)).writeto(tmp_path / "wsclean-residual.fits")
+
+    def run(cmd):
+        name = Path(cmd[cmd.index("-name") + 1]).name
+        fits.PrimaryHDU(np.ones((1, 1, 4, 4), np.float32)).writeto(tmp_path / f"{name}-dirty.fits")
+        return 1
+
+    monkeypatch.setattr(loop, "add_images", broken)
+    continuum = ["wsclean", "-name", "w", "-niter", "9", "x.ms"]
+    with (
+        (tmp_path / "l2").open("w") as log,
+        pytest.raises(RuntimeError, match="Could not form") as info,
+    ):
+        ai._selfcal_noise_products(
+            Path("x.ms"),
+            continuum_command=continuum,
+            cube_command=None,
+            fit=None,
+            out=tmp_path,
+            log=log,
+            run=run,
+            fail=RuntimeError,
+        )
+    assert isinstance(info.value.__cause__, ValueError)
