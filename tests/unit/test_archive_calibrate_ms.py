@@ -92,15 +92,24 @@ def _make_raw_ms(tmp_path: Path, uid: str = "uid___A001_X1_X1") -> Path:
     return ms_dir
 
 
-def _mock_casatools():
+def _mock_casatools(spws=(0, 1, 2), nchan=lambda spw: 128 if spw in [0, 2] else 2):
     """Return a MagicMock that looks like casatools with msmetadata."""
     mock_msmd = MagicMock()
-    mock_msmd.spwsforintent.return_value = [0, 1, 2]
-    mock_msmd.nchan.side_effect = lambda spw: 128 if spw in [0, 2] else 2
+    mock_msmd.spwsforintent.return_value = list(spws)
+    mock_msmd.nchan.side_effect = nchan
     mock_msmd.intents.return_value = ["OBSERVE_TARGET#ON_SOURCE"]
     mock_casatools = MagicMock()
     mock_casatools.msmetadata.return_value = mock_msmd
     return mock_casatools, mock_msmd
+
+
+def _fake_casatasks(applycal):
+    """A casatasks module whose applycal is *applycal*."""
+    fake_casatasks = MagicMock()
+    fake_casatasks.applycal = applycal
+    fake_casatasks.clearcal = MagicMock()
+    fake_casatasks.mstransform = MagicMock()
+    return fake_casatasks
 
 
 # ===========================================================================
@@ -672,11 +681,7 @@ def test_science_spws_no_science_spws_raises(tmp_path):
     ms_path = tmp_path / "test.ms"
     ms_path.mkdir()
 
-    mock_msmd = MagicMock()
-    mock_msmd.spwsforintent.return_value = [0, 1]
-    mock_msmd.nchan.return_value = 1  # all <= 4
-    mock_casatools = MagicMock()
-    mock_casatools.msmetadata.return_value = mock_msmd
+    mock_casatools, _ = _mock_casatools(spws=(0, 1), nchan=lambda spw: 1)  # all <= 4
 
     with patch.dict(sys.modules, {"casatools": mock_casatools}):
         with pytest.raises(RuntimeError, match="No science SPWs found"):
@@ -816,10 +821,7 @@ def test_create_calibrated_measurement_sets_uses_temp_workspace_when_no_casa_roo
     scratch_root.mkdir()
     mock_mkdtemp.return_value = str(scratch_root)
 
-    fake_casatasks = MagicMock()
-    fake_casatasks.applycal = mock_apply
-    fake_casatasks.clearcal = MagicMock()
-    fake_casatasks.mstransform = MagicMock()
+    fake_casatasks = _fake_casatasks(mock_apply)
 
     with patch.dict(sys.modules, {"casatasks": fake_casatasks}):
         results = create_calibrated_measurement_sets(
@@ -874,10 +876,7 @@ def test_create_calibrated_measurement_sets_reuses_preflighted_output_casa_data(
     mock_apply.return_value = raw_ms
     mock_split.return_value = output_root / f"{raw_ms.name}.split.cal"
 
-    fake_casatasks = MagicMock()
-    fake_casatasks.applycal = mock_apply
-    fake_casatasks.clearcal = MagicMock()
-    fake_casatasks.mstransform = MagicMock()
+    fake_casatasks = _fake_casatasks(mock_apply)
 
     scratch_root = tmp_path / "scratch"
     mock_mkdtemp.return_value = str(scratch_root)
@@ -983,10 +982,7 @@ def test_create_calibrated_measurement_sets_cleans_intermediate_paths(
     scratch_root.mkdir()
     mock_mkdtemp.return_value = str(scratch_root)
 
-    fake_casatasks = MagicMock()
-    fake_casatasks.applycal = mock_apply
-    fake_casatasks.clearcal = MagicMock()
-    fake_casatasks.mstransform = MagicMock()
+    fake_casatasks = _fake_casatasks(mock_apply)
 
     with patch.dict(sys.modules, {"casatasks": fake_casatasks}):
         results = create_calibrated_measurement_sets(
