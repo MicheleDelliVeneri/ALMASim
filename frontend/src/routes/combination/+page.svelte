@@ -5,6 +5,7 @@
 	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
 	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '#lib/logger.js';
+	import { INITIAL_VIEW, applyView } from '#lib/utils/linkedViews.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { visualizerApi, type DatacubeFile, type IntegratedImage } from '#lib/api/visualizer.js';
 
@@ -136,26 +137,16 @@
 		loadedImages = [];
 	}
 
-	function updateScale(id: string, newScale: number) {
-		loadedImages = linkedView
-			? loadedImages.map((img) => ({ ...img, scale: newScale }))
-			: loadedImages.map((img) => (img.id === id ? { ...img, scale: newScale } : img));
+	function updateScale(id: string, scale: number) {
+		loadedImages = applyView(loadedImages, id, { scale }, linkedView);
 	}
 
-	function updatePan(id: string, newPanX: number, newPanY: number) {
-		loadedImages = linkedView
-			? loadedImages.map((img) => ({ ...img, panX: newPanX, panY: newPanY }))
-			: loadedImages.map((img) =>
-					img.id === id ? { ...img, panX: newPanX, panY: newPanY } : img
-				);
+	function updatePan(id: string, panX: number, panY: number) {
+		loadedImages = applyView(loadedImages, id, { panX, panY }, linkedView);
 	}
 
 	function handleReset(id: string) {
-		loadedImages = linkedView
-			? loadedImages.map((img) => ({ ...img, scale: 1.0, panX: 0, panY: 0 }))
-			: loadedImages.map((img) =>
-					img.id === id ? { ...img, scale: 1.0, panX: 0, panY: 0 } : img
-				);
+		loadedImages = applyView(loadedImages, id, INITIAL_VIEW, linkedView);
 	}
 
 	async function getDefaultOutputDir(): Promise<string | undefined> {

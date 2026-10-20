@@ -6,6 +6,7 @@
 	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
 	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '#lib/logger.js';
+	import { INITIAL_VIEW, applyView } from '#lib/utils/linkedViews.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { ApiTimeoutError } from '#lib/api/client.js';
 	import { visualizerApi, type DatacubeFile, type IntegratedImage } from '#lib/api/visualizer.js';
@@ -170,41 +171,16 @@
 		await processFile(filePath);
 	}
 
-	// Update scale for a specific image (or all if linked)
-	function updateScale(id: string, newScale: number) {
-		if (linkedView) {
-			// Update all images
-			loadedImages = loadedImages.map((img) => ({ ...img, scale: newScale }));
-		} else {
-			// Update only the specific image
-			loadedImages = loadedImages.map((img) => (img.id === id ? { ...img, scale: newScale } : img));
-		}
+	function updateScale(id: string, scale: number) {
+		loadedImages = applyView(loadedImages, id, { scale }, linkedView);
 	}
 
-	// Update pan for a specific image (or all if linked)
-	function updatePan(id: string, newPanX: number, newPanY: number) {
-		if (linkedView) {
-			// Update all images
-			loadedImages = loadedImages.map((img) => ({ ...img, panX: newPanX, panY: newPanY }));
-		} else {
-			// Update only the specific image
-			loadedImages = loadedImages.map((img) =>
-				img.id === id ? { ...img, panX: newPanX, panY: newPanY } : img
-			);
-		}
+	function updatePan(id: string, panX: number, panY: number) {
+		loadedImages = applyView(loadedImages, id, { panX, panY }, linkedView);
 	}
 
-	// Reset view for a specific image (or all if linked)
 	function handleReset(id: string) {
-		if (linkedView) {
-			// Reset all images
-			loadedImages = loadedImages.map((img) => ({ ...img, scale: 1.0, panX: 0, panY: 0 }));
-		} else {
-			// Reset only the specific image
-			loadedImages = loadedImages.map((img) =>
-				img.id === id ? { ...img, scale: 1.0, panX: 0, panY: 0 } : img
-			);
-		}
+		loadedImages = applyView(loadedImages, id, INITIAL_VIEW, linkedView);
 	}
 
 	onMount(async () => {
