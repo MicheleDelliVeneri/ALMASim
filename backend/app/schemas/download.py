@@ -1,9 +1,10 @@
 """Download-related schemas."""
 
-import json
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
+
+from almasim.services.download.jobs import json_list
 
 
 class DataProductInfo(BaseModel):
@@ -186,17 +187,6 @@ class StartDownloadResponse(BaseModel):
     total_bytes: int
     total_size_display: str
     destination: str
-
-
-def json_list(value: Any) -> list:
-    """A list stored as JSON text in a database column ([] when empty or not a list)."""
-    if not value:
-        return []
-    try:
-        parsed = json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    return parsed if isinstance(parsed, list) else []
 
 
 def _fraction(done: float, total: float) -> float:
