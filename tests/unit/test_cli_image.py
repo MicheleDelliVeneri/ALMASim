@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -17,21 +19,9 @@ from typer.testing import CliRunner
 
 from almasim import cli, cli_image
 
+from ._fakes import FakeTable, patch_everywhere
+
 runner = CliRunner()
-
-
-class _FakeTable:
-    def __init__(self, columns: dict[str, np.ndarray]):
-        self._columns = columns
-
-    def getcol(self, name: str) -> np.ndarray:
-        return self._columns[name]
-
-    def getcell(self, name: str, row: int) -> np.ndarray:
-        return self._columns[name][row]
-
-    def nrows(self) -> int:
-        return len(next(iter(self._columns.values())))
 
 
 @pytest.mark.unit
@@ -66,7 +56,7 @@ def test_import_casacore_tables_raises_when_casacore_missing(monkeypatch):
 def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
     """compute_imaging_parameters should populate expected imaging columns."""
 
-    spectral_window = _FakeTable(
+    spectral_window = FakeTable(
         {
             "REF_FREQUENCY": np.array([100.0e9, 200.0e9]),
             "NUM_CHAN": np.array([4, 2]),
@@ -75,7 +65,7 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
             "TOTAL_BANDWIDTH": np.array([2.0e6, 31.25e6]),
         }
     )
-    antenna = _FakeTable(
+    antenna = FakeTable(
         {
             "DISH_DIAMETER": np.array([12.0, 10.0]),
             "POSITION": np.array(
@@ -103,7 +93,7 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
         if table_name.endswith("::OBSERVATION"):
             return fake_observation
         if table_name.endswith("::FIELD"):
-            return _FakeTable({"NAME": np.array(["cal", "x", "target"])})
+            return FakeTable({"NAME": np.array(["cal", "x", "target"])})
 
     monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
     monkeypatch.setattr(
@@ -684,7 +674,7 @@ def test_wsclean_environment_pins_openblas_to_one_thread():
 @pytest.mark.unit
 def test_run_wsclean_task_success_writes_done_marker_and_log(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
 
     result = ai.run_wsclean_task(
@@ -710,7 +700,7 @@ def test_run_wsclean_task_hard_abort_writes_failure_marker(tmp_path, monkeypatch
         "terminate called after throwing an instance of 'std::bad_alloc'",
         "  what():  std::bad_alloc",
     ]
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=-6, lines=lines))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=-6, lines=lines))
     outdir = tmp_path / "ms" / "SPW-1"
 
     with pytest.raises(RuntimeError, match="return code -6"):
@@ -731,7 +721,7 @@ def test_run_wsclean_task_hard_abort_writes_failure_marker(tmp_path, monkeypatch
 @pytest.mark.unit
 def test_run_wsclean_task_removes_stale_files_of_a_previous_attempt(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
     outdir.mkdir(parents=True)
     # What a crashed or killed attempt leaves behind: WSClean's reorder files
@@ -754,7 +744,7 @@ def test_run_wsclean_task_removes_stale_files_of_a_previous_attempt(tmp_path, mo
 
 @pytest.mark.unit
 def test_run_wsclean_task_without_image_is_a_failure(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=0, write_image=False))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=0, write_image=False))
     outdir = tmp_path / "ms" / "SPW-2"
 
     with pytest.raises(RuntimeError, match="wrote no wsclean-image.fits"):
@@ -769,7 +759,7 @@ def test_run_wsclean_task_missing_binary_is_a_failure(tmp_path, monkeypatch):
     def _no_binary(*args, **kwargs):
         raise FileNotFoundError("wsclean")
 
-    monkeypatch.setattr(ai.subprocess, "Popen", _no_binary)
+    monkeypatch.setattr(subprocess, "Popen", _no_binary)
     outdir = tmp_path / "ms" / "SPW-2"
     with pytest.raises(RuntimeError, match="Could not start wsclean"):
         ai.run_wsclean_task(
@@ -784,7 +774,7 @@ def test_run_wsclean_task_replaces_stale_markers(tmp_path, monkeypatch):
     outdir = tmp_path / "ms" / "SPW-1"
     outdir.mkdir(parents=True)
     ai.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=0))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=0))
 
     ai.run_wsclean_task(
         command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=1
@@ -1018,7 +1008,7 @@ def test_run_imaging_tasks_sync_backend_runs_in_process(tmp_path, monkeypatch):
             raise RuntimeError("no image")
         return {"spw": kwargs["spw"]}
 
-    monkeypatch.setattr(ai, "run_wsclean_task", _fake_task)
+    patch_everywhere(monkeypatch, ai, "run_wsclean_task", _fake_task)
     failures: list[cli_image.ImagingFailure] = []
     results = _run(tasks, None, monkeypatch, backend_kind="sync", failures=failures)
 
@@ -1207,7 +1197,7 @@ def test_build_imaging_tasks_abs_mem_and_scratch_placeholder(tmp_path):
 @pytest.mark.unit
 def test_run_wsclean_task_uses_and_removes_scratch_dir(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
     scratch_root = tmp_path / "scratch"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
@@ -1229,7 +1219,7 @@ def test_run_wsclean_task_uses_and_removes_scratch_dir(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 def test_run_wsclean_task_removes_scratch_dir_on_failure(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=-11))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=-11))
     outdir = tmp_path / "ms" / "SPW-1"
     scratch_root = tmp_path / "scratch"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
@@ -1269,7 +1259,7 @@ class _FlakyWsclean:
 @pytest.mark.unit
 def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
     flaky = _FlakyWsclean(crashes=2)
-    monkeypatch.setattr(ai.subprocess, "Popen", flaky)
+    monkeypatch.setattr(subprocess, "Popen", flaky)
     outdir = tmp_path / "ms" / "SPW-1"
 
     result = ai.run_wsclean_task(
@@ -1294,7 +1284,7 @@ def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
 @pytest.mark.unit
 def test_run_wsclean_task_gives_up_after_retries(tmp_path, monkeypatch):
     flaky = _FlakyWsclean(crashes=10)
-    monkeypatch.setattr(ai.subprocess, "Popen", flaky)
+    monkeypatch.setattr(subprocess, "Popen", flaky)
     outdir = tmp_path / "ms" / "SPW-1"
     with pytest.raises(RuntimeError, match="after 3 attempts"):
         ai.run_wsclean_task(
@@ -1313,7 +1303,7 @@ def test_run_wsclean_task_gives_up_after_retries(tmp_path, monkeypatch):
 @pytest.mark.unit
 def test_run_wsclean_task_does_not_retry_error_exits(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=255, lines=["+ >>> Error opening meta file"])
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
     with pytest.raises(RuntimeError, match="return code 255"):
         ai.run_wsclean_task(
@@ -1359,7 +1349,7 @@ def test_build_imaging_tasks_single_window_default(tmp_path):
 @pytest.mark.unit
 def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     calls = []
 
     def fake_extract(
@@ -1376,7 +1366,7 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
             "max_weight": max_weight,
         }
 
-    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", fake_extract)
+    patch_everywhere(monkeypatch, ai, "extract_single_window_ms_subprocess", fake_extract)
     outdir = tmp_path / "ms" / "SPW-5"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-no-reorder", ai.SINGLE_WINDOW_PLACEHOLDER]
 
@@ -1405,8 +1395,8 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
     def failing_extract(*args, **kwargs):
         raise RuntimeError("No visibilities for spectral window 5")
 
-    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", failing_extract)
-    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
+    patch_everywhere(monkeypatch, ai, "extract_single_window_ms_subprocess", failing_extract)
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
     outdir = tmp_path / "ms" / "SPW-5"
     with pytest.raises(RuntimeError, match="Could not extract spectral window 5"):
         ai.run_wsclean_task(
@@ -1444,8 +1434,8 @@ def test_extract_single_window_ms_retries_lock_file_errors_in_a_new_process(tmp_
             return _Child(1, stderr=_LOCK_FILE_STDERR)
         return _Child(0, stdout='{"rows": 1, "bytes": 1, "data_desc_ids": [5]}')
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
-    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
     log_path = tmp_path / "SPW-5.log"
     result = ai.extract_single_window_ms_subprocess(
         "in.ms", 5, [2], tmp_path / "out.ms", log_path=log_path, attempts=5, retry_seconds=0
@@ -1462,8 +1452,8 @@ def test_extract_single_window_ms_gives_up_after_the_last_lock_file_attempt(tmp_
         children.append(cmd)
         return _Child(1, stderr=_LOCK_FILE_STDERR)
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
-    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
     with pytest.raises(RuntimeError, match="LockFile.cc"):
         ai.extract_single_window_ms_subprocess(
             "in.ms", 5, [2], tmp_path / "out.ms", attempts=3, retry_seconds=0
@@ -1479,7 +1469,7 @@ def test_extract_single_window_ms_does_not_retry_other_errors(tmp_path, monkeypa
         children.append(cmd)
         return _Child(1, stderr="RuntimeError: No visibilities for spectral window 5\n")
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(RuntimeError, match="No visibilities"):
         ai.extract_single_window_ms_subprocess(
             "in.ms", 5, [2], tmp_path / "out.ms", attempts=5, retry_seconds=0
@@ -1514,17 +1504,20 @@ def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, 
         seen.update(kwargs)
         return _Done()
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     result = ai.extract_single_window_ms_subprocess(
         "/data/in.ms", 5, [2, 3], tmp_path / "out.ms", timeout=30, max_weight=500.0
     )
-    assert seen["cmd"][0] == ai.sys.executable and seen["cmd"][1] == "-c"
+    assert seen["cmd"][0] == sys.executable and seen["cmd"][1] == "-c"
     assert json.loads(seen["cmd"][3]) == {
-        "ms": "/data/in.ms",
-        "spw": 5,
-        "fields": [2, 3],
-        "out": str(tmp_path / "out.ms"),
-        "max_weight": 500.0,
+        "target": "almasim.services.imaging.archive_imaging:extract_single_window_ms",
+        "kwargs": {
+            "ms_path": "/data/in.ms",
+            "spw": 5,
+            "field_ids": [2, 3],
+            "out_path": str(tmp_path / "out.ms"),
+            "max_weight": 500.0,
+        },
     }
     assert seen["timeout"] == 30 and seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
     assert result["rows"] == 12 and "seconds" in result
@@ -1560,7 +1553,7 @@ def test_build_imaging_tasks_makes_relative_paths_absolute(tmp_path, monkeypatch
 
 def _geometry_tables(names):
     tables = {
-        "::SPECTRAL_WINDOW": _FakeTable(
+        "::SPECTRAL_WINDOW": FakeTable(
             {
                 "REF_FREQUENCY": np.array([100.0e9, 200.0e9, 230.0e9]),
                 "NUM_CHAN": np.array([128, 3840, 480]),
@@ -1569,14 +1562,14 @@ def _geometry_tables(names):
                 "TOTAL_BANDWIDTH": np.array([128e6, 3840e6, 480e6]),
             }
         ),
-        "::ANTENNA": _FakeTable(
+        "::ANTENNA": FakeTable(
             {
                 "DISH_DIAMETER": np.array([12.0, 12.0]),
                 "POSITION": np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]]),
             }
         ),
         "::OBSERVATION": [{"TIME_RANGE": [57000 * 86400.0, 57000.1 * 86400.0]}],
-        "::FIELD": _FakeTable({"NAME": np.array(names)}),
+        "::FIELD": FakeTable({"NAME": np.array(names)}),
     }
     return lambda name, ack=False: next(t for k, t in tables.items() if name.endswith(k))
 
@@ -1818,6 +1811,8 @@ def test_run_imaging_tasks_passes_the_dish_diameter_when_correcting(
     assert backend.submitted[0]["pb_dish_diameter"] == expected
 
     calls = []
-    monkeypatch.setattr(ai, "run_wsclean_task", lambda **kwargs: calls.append(kwargs) or {})
+    patch_everywhere(
+        monkeypatch, ai, "run_wsclean_task", lambda **kwargs: calls.append(kwargs) or {}
+    )
     _run(tasks, None, monkeypatch, backend_kind="sync", pbcor=pbcor)
     assert calls[0]["pb_dish_diameter"] == expected

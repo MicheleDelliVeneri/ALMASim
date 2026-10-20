@@ -6,6 +6,8 @@ from typing import List
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from almasim.__version__ import __version__ as almasim_version
+
 
 class Settings(BaseSettings):
     """Application settings."""
@@ -17,7 +19,7 @@ class Settings(BaseSettings):
     )
 
     PROJECT_NAME: str = "ALMASim API"
-    VERSION: str = "2.1.10"
+    VERSION: str = almasim_version
     API_V1_STR: str = "/api/v1"
 
     # CORS

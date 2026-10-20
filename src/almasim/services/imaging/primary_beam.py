@@ -108,6 +108,8 @@ def primary_beam_correct(
     """
     from astropy.io import fits
 
+    from .fits_io import write_fits_atomic
+
     if not 0.0 < cutoff < 1.0:
         raise ValueError(f"the primary-beam cutoff must be in (0, 1), not {cutoff}")
     aperture, blockage = airy_aperture(dish_diameter)
@@ -148,11 +150,7 @@ def primary_beam_correct(
         out_header["PBDISH"] = (float(dish_diameter), "nominal dish diameter (m)")
         out_header["PBCUTOFF"] = (float(cutoff), "corrected image blanked below this response")
         out_header.add_history(f"ALMASim: {note} ({model}) of {Path(image_path).name}")
-        partial = target.with_name(target.name + ".partial")
-        fits.HDUList([fits.PrimaryHDU(values, header=out_header), *extensions]).writeto(
-            partial, overwrite=True
-        )
-        partial.replace(target)
+        write_fits_atomic(target, [fits.PrimaryHDU(values, header=out_header), *extensions])
     centre = frequencies[len(frequencies) // 2]
     fwhm_arcsec = math.degrees(2.0 * _half_power_radius(dish_diameter, centre)) * 3600.0
     return {

@@ -3,6 +3,7 @@ from pathlib import Path
 import astropy.units as U
 import numpy as np
 import pandas as pd
+import pytest
 
 from almasim import skymodels
 from almasim.services import astro
@@ -55,6 +56,7 @@ def _load_metadata_row():
     return main_dir, sample.iloc[0]
 
 
+@pytest.mark.slow
 def test_interferometer_runs(tmp_path):
     main_dir, metadata = _load_metadata_row()
     antenna_array = metadata["antenna_arrays"]

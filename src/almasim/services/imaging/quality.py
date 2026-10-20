@@ -67,6 +67,7 @@ from .archive_imaging import (
     LINE_MASK_FILENAME,
     line_free_channels,
 )
+from .stats import robust_sigma
 
 QUALITY_FILENAME = "quality.json"
 QUALITY_DIRNAME = "quality"
@@ -78,15 +79,6 @@ _LINE_RANGES = re.compile(
     r"(?:(\d+) of (\d+) channels line-free(?: \((\d+) in the window\))?, )?"
     r"lines in channels ([\d~;]+|none)"
 )
-
-
-def robust_sigma(values: np.ndarray) -> float:
-    """1.4826 x the median absolute deviation of the finite values (nan if none)."""
-    finite = np.asarray(values, dtype=np.float64)
-    finite = finite[np.isfinite(finite)]
-    if not finite.size:
-        return math.nan
-    return float(1.4826 * np.median(np.abs(finite - np.median(finite))))
 
 
 def _plane(data: np.ndarray) -> np.ndarray:
