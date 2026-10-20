@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { writeCachedResults } from '#lib/utils/metadataCache.js';
 	import { formatBytes, formatDate } from '#lib/utils/format.js';
 	import type { DownloadJobSummary } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
@@ -9,7 +10,6 @@
 	import { isActiveStatus } from '#lib/utils/status.js';
 
 	const logger = createLogger('routes/data');
-	const RESULTS_CACHE_KEY = 'almasim:metadata-results';
 
 	let jobs = $state<DownloadJobSummary[]>([]);
 	let loading = $state(true);
@@ -148,10 +148,8 @@
 		loadingMetadata = next;
 		try {
 			const metadata = await downloadApi.loadJobMetadata(job.job_id);
-			if (typeof window !== 'undefined') {
-				window.localStorage.setItem(RESULTS_CACHE_KEY, JSON.stringify(metadata));
-				window.location.href = '/metadata';
-			}
+			writeCachedResults(metadata);
+			if (typeof window !== 'undefined') window.location.href = '/metadata';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load metadata for this download';
 			logger.error({ err: e, jobId: job.job_id }, 'Failed to load stored metadata');

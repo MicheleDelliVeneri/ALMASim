@@ -1,4 +1,9 @@
 <script lang="ts">
+	import {
+		clearCachedResults,
+		readCachedResults,
+		writeCachedResults
+	} from '#lib/utils/metadataCache.js';
 	import { resolve } from '$app/paths';
 	import { onDestroy, onMount } from 'svelte';
 	import {
@@ -16,7 +21,6 @@
 	import { createLogger } from '#lib/logger.js';
 	import { formatDateStamp, supportsFilePicker } from '#lib/utils.js';
 
-	const RESULTS_CACHE_KEY = 'almasim:metadata-results';
 	const DEFAULT_METADATA_PATH = 'data';
 	const logger = createLogger('routes/metadata');
 
@@ -31,36 +35,6 @@
 	type SaveFilePickerOptions = {
 		suggestedName?: string;
 		types?: { description?: string; accept: Record<string, string[]> }[];
-	};
-
-	// Columns required in cached data — if any are missing the cache is stale and discarded.
-	const REQUIRED_CACHE_COLUMNS = ['Project_abstract', 'QA2_status', 'Type'];
-
-	const getCachedResults = (): MetadataResponse | null => {
-		if (typeof window === 'undefined') return null;
-		try {
-			const raw = window.localStorage.getItem(RESULTS_CACHE_KEY);
-			if (!raw) return null;
-			const parsed = JSON.parse(raw) as MetadataResponse;
-			// Invalidate cache if it predates required columns
-			const sample = parsed?.data?.[0];
-			if (sample && REQUIRED_CACHE_COLUMNS.some((col) => !(col in sample))) {
-				window.localStorage.removeItem(RESULTS_CACHE_KEY);
-				return null;
-			}
-			return parsed;
-		} catch {
-			return null;
-		}
-	};
-
-	const persistResults = (data: MetadataResponse) => {
-		if (typeof window === 'undefined') return;
-		try {
-			window.localStorage.setItem(RESULTS_CACHE_KEY, JSON.stringify(data));
-		} catch {
-			/* ignore storage write failures */
-		}
 	};
 
 	const snapshotMetadata = (data: MetadataResponse): MetadataResponse => ({
@@ -301,7 +275,7 @@
 			initialLoading = false;
 		}
 
-		const cached = getCachedResults();
+		const cached = readCachedResults();
 		if (cached) {
 			loadedResults = cached;
 			setStatus(`Loaded cached metadata (${cached.count ?? cached.data.length} rows)`);
@@ -454,7 +428,7 @@
 					updateJob(queryId, { rows: newRows, page: newPage, status: 'done', message: msg, pollTimer: null });
 					if (newRows.length > 0) {
 						const merged = jobs.flatMap((j) => (j.id === queryId ? newRows : j.rows));
-						persistResults({ data: merged, count: merged.length });
+						writeCachedResults({ data: merged, count: merged.length });
 					}
 					logger.info({ queryId, totalRows: newRows.length }, 'Query job complete');
 					return;
@@ -560,7 +534,7 @@
 
 			loadedResults = data;
 			jobs = [];  // clear query jobs so loaded data is shown
-			persistResults(data);
+			writeCachedResults(data);
 			loadModalOpen = false;
 			formElement.reset();
 			setStatus(`Loaded ${data.count} rows from ${file instanceof File ? 'local file' : filePath}`);
@@ -689,9 +663,7 @@
 		selectedJobId = null;
 		loadedResults = null;
 		setStatus('Metadata cleared.');
-		if (typeof window !== 'undefined') {
-			window.localStorage.removeItem(RESULTS_CACHE_KEY);
-		}
+		clearCachedResults();
 	}
 
 	function handleDownload(memberOusUids: string[], metadataRows: Record<string, unknown>[]) {

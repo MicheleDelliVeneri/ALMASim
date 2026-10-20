@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readCachedResults } from '#lib/utils/metadataCache.js';
 	import { onMount, onDestroy } from 'svelte';
 	import {
 		simulationApi,
@@ -27,18 +28,6 @@
 		logs: string[];
 		error?: string;
 	}
-
-	const RESULTS_CACHE_KEY = 'almasim:metadata-results';
-
-	const getCachedResults = (): MetadataResponse | null => {
-		if (typeof window === 'undefined') return null;
-		try {
-			const raw = window.localStorage.getItem(RESULTS_CACHE_KEY);
-			return raw ? (JSON.parse(raw) as MetadataResponse) : null;
-		} catch {
-			return null;
-		}
-	};
 
 	let loading = $state(false);
 	let message = $state('');
@@ -79,7 +68,7 @@
 
 	onMount(() => {
 		logger.info('Simulations page mounted');
-		const cached = getCachedResults();
+		const cached = readCachedResults();
 		if (cached) {
 			metadata = cached;
 			logger.debug({ rowCount: cached.data.length }, 'Loaded cached metadata');
