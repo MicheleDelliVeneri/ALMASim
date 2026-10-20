@@ -17,21 +17,9 @@ from typer.testing import CliRunner
 
 from almasim import cli, cli_image
 
+from ._fakes import FakeTable
+
 runner = CliRunner()
-
-
-class _FakeTable:
-    def __init__(self, columns: dict[str, np.ndarray]):
-        self._columns = columns
-
-    def getcol(self, name: str) -> np.ndarray:
-        return self._columns[name]
-
-    def getcell(self, name: str, row: int) -> np.ndarray:
-        return self._columns[name][row]
-
-    def nrows(self) -> int:
-        return len(next(iter(self._columns.values())))
 
 
 @pytest.mark.unit
@@ -66,7 +54,7 @@ def test_import_casacore_tables_raises_when_casacore_missing(monkeypatch):
 def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
     """compute_imaging_parameters should populate expected imaging columns."""
 
-    spectral_window = _FakeTable(
+    spectral_window = FakeTable(
         {
             "REF_FREQUENCY": np.array([100.0e9, 200.0e9]),
             "NUM_CHAN": np.array([4, 2]),
@@ -75,7 +63,7 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
             "TOTAL_BANDWIDTH": np.array([2.0e6, 31.25e6]),
         }
     )
-    antenna = _FakeTable(
+    antenna = FakeTable(
         {
             "DISH_DIAMETER": np.array([12.0, 10.0]),
             "POSITION": np.array(
@@ -103,7 +91,7 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
         if table_name.endswith("::OBSERVATION"):
             return fake_observation
         if table_name.endswith("::FIELD"):
-            return _FakeTable({"NAME": np.array(["cal", "x", "target"])})
+            return FakeTable({"NAME": np.array(["cal", "x", "target"])})
 
     monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
     monkeypatch.setattr(
@@ -1560,7 +1548,7 @@ def test_build_imaging_tasks_makes_relative_paths_absolute(tmp_path, monkeypatch
 
 def _geometry_tables(names):
     tables = {
-        "::SPECTRAL_WINDOW": _FakeTable(
+        "::SPECTRAL_WINDOW": FakeTable(
             {
                 "REF_FREQUENCY": np.array([100.0e9, 200.0e9, 230.0e9]),
                 "NUM_CHAN": np.array([128, 3840, 480]),
@@ -1569,14 +1557,14 @@ def _geometry_tables(names):
                 "TOTAL_BANDWIDTH": np.array([128e6, 3840e6, 480e6]),
             }
         ),
-        "::ANTENNA": _FakeTable(
+        "::ANTENNA": FakeTable(
             {
                 "DISH_DIAMETER": np.array([12.0, 12.0]),
                 "POSITION": np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]]),
             }
         ),
         "::OBSERVATION": [{"TIME_RANGE": [57000 * 86400.0, 57000.1 * 86400.0]}],
-        "::FIELD": _FakeTable({"NAME": np.array(names)}),
+        "::FIELD": FakeTable({"NAME": np.array(names)}),
     }
     return lambda name, ack=False: next(t for k, t in tables.items() if name.endswith(k))
 

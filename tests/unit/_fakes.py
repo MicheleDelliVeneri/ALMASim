@@ -27,6 +27,68 @@ def make_datacube(n_px: int = 16, n_chan: int = 8) -> DataCube:
     )
 
 
+class FakeTable:
+    """The subset of ``casacore.tables.table`` the imaging and CLI code use."""
+
+    def __init__(self, columns: dict[str, np.ndarray]):
+        self.columns = columns
+        self.closed = False
+
+    def colnames(self):
+        return list(self.columns)
+
+    def nrows(self):
+        return len(next(iter(self.columns.values())))
+
+    def iscelldefined(self, name, row):
+        return name in self.columns
+
+    def getcell(self, name, row):
+        return self.columns[name][row]
+
+    def getcol(self, name, startrow=0, nrow=-1):
+        column = self.columns[name]
+        return column[startrow:] if nrow < 0 else column[startrow : startrow + nrow]
+
+    def putcol(self, name, value, startrow=0, nrow=-1):
+        self.columns[name][startrow : startrow + len(value)] = value
+
+    def getcoldesc(self, name):
+        return {"source": name}
+
+    def addcols(self, desc):
+        self.columns[desc["name"]] = np.zeros_like(self.columns[desc["source"]])
+
+    def removecols(self, name):
+        del self.columns[name]
+
+    def close(self):
+        self.closed = True
+
+
+class FakeProcess:
+    """A ``subprocess.Popen`` that prints ``lines`` and exits with ``returncode``."""
+
+    def __init__(self, lines=(), returncode=0):
+        self.stdout = iter(lines)
+        self.returncode = returncode
+
+    def wait(self):
+        return self.returncode
+
+
+def fake_popen(monkeypatch, lines=(), returncode=0) -> list:
+    """Replace ``subprocess.Popen``; returns the ``(cmd, kwargs)`` of every call."""
+    calls: list = []
+
+    def popen(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return FakeProcess(lines, returncode)
+
+    monkeypatch.setattr("subprocess.Popen", popen)
+    return calls
+
+
 def mock_dask_client(n_px: int, n_chan: int) -> MagicMock:
     """A Dask client stand-in: compute passes tasks through, gather returns a random cube."""
     client = MagicMock()
