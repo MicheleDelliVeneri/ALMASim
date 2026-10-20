@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { ApiTimeoutError } from '#lib/api/client.js';
+	import { visualizerApi, type DatacubeFile } from '#lib/api/visualizer.js';
 	import { onMount } from 'svelte';
 	import DatacubeFileList from '#lib/components/visualizer/DatacubeFileList.svelte';
 	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
@@ -6,24 +8,11 @@
 	import { createLogger } from '#lib/logger.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { imagingApi, type DeconvolutionResponse, type ImagePreviewPayload } from '#lib/api/imaging.js';
-	import { API_BASE_URL } from '#lib/config.js';
 
 	const logger = createLogger('routes/imaging');
 	const DIRTY_PREFIX = 'dirty-cube_';
 	const BEAM_PREFIX = 'beam-cube_';
 	const CLEAN_PREFIX = 'clean-cube_';
-
-	interface DatacubeFile {
-		name: string;
-		path: string;
-		size: number;
-		modified: number;
-	}
-
-	interface FileListResponse {
-		files: DatacubeFile[];
-		output_dir: string;
-	}
 
 	interface PreviewPanel extends ImagePreviewPayload {
 		id: string;
@@ -192,20 +181,8 @@
 			loadingFiles = false;
 			return;
 		}
-		let timeoutId: number | undefined;
 		try {
-			const controller = new AbortController();
-			timeoutId = window.setTimeout(() => controller.abort(), 5000);
-			const response = await fetch(
-				`${API_BASE_URL}/api/v1/visualizer/files?dir=${encodeURIComponent(targetDir)}`,
-				{
-					signal: controller.signal
-				}
-			);
-			if (!response.ok) {
-				throw new Error('Failed to load imaging file list');
-			}
-			const data: FileListResponse = await response.json();
+			const data = await visualizerApi.listFiles(targetDir, { timeoutMs: 5000 });
 			outputDir = data.output_dir;
 			allFiles = data.files.filter((file) =>
 				[DIRTY_PREFIX, BEAM_PREFIX, CLEAN_PREFIX].some((prefix) => file.name.startsWith(prefix))
@@ -218,7 +195,7 @@
 			}
 			logger.info({ outputDir: data.output_dir, count: allFiles.length }, 'Imaging file list loaded');
 		} catch (err) {
-			if (err instanceof DOMException && err.name === 'AbortError') {
+			if (err instanceof ApiTimeoutError) {
 				error = 'Timed out while loading imaging files';
 			} else {
 				error = err instanceof Error ? err.message : 'Failed to load imaging file list';
@@ -226,9 +203,6 @@
 			allFiles = [];
 			logger.error({ err }, 'Failed to load imaging file list');
 		} finally {
-			if (timeoutId !== undefined) {
-				window.clearTimeout(timeoutId);
-			}
 			loadingFiles = false;
 		}
 	}

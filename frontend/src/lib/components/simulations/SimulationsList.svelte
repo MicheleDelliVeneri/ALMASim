@@ -4,24 +4,13 @@
 	import StatusBadge from '#lib/components/shared/StatusBadge.svelte';
 	import { isActiveStatus, isTerminalStatus } from '#lib/utils/status.js';
 	import { createLogger } from '#lib/logger.js';
-	import { simulationApi, type SimulationStatus } from '#lib/api/simulation.js';
+	import { isAbortError, ApiTimeoutError } from '#lib/api/client.js';
+	import {
+		simulationApi,
+		type SimulationStatus,
+		type SimulationSummary
+	} from '#lib/api/simulation.js';
 
-	interface SimulationSummary {
-		simulation_id: string;
-		status: string;
-		progress: number;
-		message: string;
-		created_at: string;
-		updated_at: string;
-		error?: string;
-		output_dir?: string;
-	}
-
-	interface Props {
-		apiUrl?: string;
-	}
-
-	let { apiUrl = 'http://localhost:8000' }: Props = $props();
 	const logger = createLogger('components/SimulationsList');
 
 	let simulations = $state<SimulationSummary[]>([]);
@@ -43,7 +32,6 @@
 			return;
 		}
 
-		let timeoutId: number | undefined;
 		try {
 			refreshing = true;
 			if (simulations.length === 0) {
@@ -52,33 +40,25 @@
 			error = null;
 			currentRequest?.abort();
 			const controller = new AbortController();
-			timeoutId = window.setTimeout(() => controller.abort('timeout'), SIMULATIONS_FETCH_TIMEOUT_MS);
 			currentRequest = controller;
-			const response = await fetch(`${apiUrl}/api/v1/simulations/`, {
-				signal: controller.signal
+			simulations = await simulationApi.list({
+				signal: controller.signal,
+				timeoutMs: SIMULATIONS_FETCH_TIMEOUT_MS
 			});
-			if (!response.ok) {
-				throw new Error(`Failed to fetch simulations: ${response.statusText}`);
-			}
-			const data = await response.json();
-			simulations = data.simulations || [];
 			logger.debug({ count: simulations.length }, 'Simulations list refreshed');
 		} catch (err) {
-			if (err instanceof DOMException && err.name === 'AbortError') {
-				if (currentRequest?.signal?.reason === 'timeout') {
-					error = 'Timed out while loading simulations';
-				} else {
-					// Request was superseded or component unmounted; avoid noisy user-facing errors.
-					error = null;
-				}
+			if (err instanceof ApiTimeoutError) {
+				error = 'Timed out while loading simulations';
+				return;
+			}
+			if (isAbortError(err)) {
+				// Request was superseded or component unmounted; avoid noisy user-facing errors.
+				error = null;
 				return;
 			}
 			error = err instanceof Error ? err.message : 'Failed to load simulations';
-			logger.error({ err, apiUrl }, 'Error fetching simulations');
+			logger.error({ err }, 'Error fetching simulations');
 		} finally {
-			if (timeoutId !== undefined) {
-				window.clearTimeout(timeoutId);
-			}
 			loading = false;
 			refreshing = false;
 			currentRequest = null;
@@ -153,18 +133,14 @@
 
 	function connectLogSocket(simulationId: string) {
 		closeLogSocket();
-		const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-		const socket = new WebSocket(`${wsUrl}/api/v1/simulations/${simulationId}/ws`);
-
-		socket.onmessage = (event) => {
-			try {
-				const status: SimulationStatus = JSON.parse(event.data);
+		const socket = simulationApi.openStatusSocket(
+			simulationId,
+			(status) => {
 				selectedSimulationStatus = status;
 				logError = null;
-			} catch (err) {
-				logger.error({ err, simulationId }, 'Failed to parse simulation log websocket payload');
-			}
-		};
+			},
+			(err) => logger.error({ err, simulationId }, 'Failed to parse simulation log websocket payload')
+		);
 
 		socket.onerror = () => {
 			logError = 'Log stream disconnected';

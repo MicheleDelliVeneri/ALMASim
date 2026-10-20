@@ -40,6 +40,25 @@ export function formatErrorDetail(detail: unknown): string {
 	return '';
 }
 
+/** The request took longer than its `timeoutMs`. */
+export class ApiTimeoutError extends Error {
+	constructor(readonly timeoutMs: number) {
+		super(`Timed out after ${Math.round(timeoutMs / 1000)} s`);
+		this.name = 'ApiTimeoutError';
+	}
+}
+
+/** Per-request options: a caller's abort signal and a timeout. */
+export interface RequestOptions {
+	signal?: AbortSignal;
+	timeoutMs?: number;
+}
+
+/** True when a request was aborted by its caller's signal (not by a timeout). */
+export function isAbortError(error: unknown): boolean {
+	return error instanceof DOMException && error.name === 'AbortError';
+}
+
 export class ApiClient {
 	private baseUrl: string;
 
@@ -47,50 +66,85 @@ export class ApiClient {
 		this.baseUrl = baseUrl;
 	}
 
-	private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+	/** WebSocket URL of an endpoint (ws:// or wss:// to match the API base). */
+	socketUrl(endpoint: string): string {
+		return `${this.baseUrl.replace(/^http/, 'ws')}${endpoint}`;
+	}
+
+	private async request<T>(
+		endpoint: string,
+		init: RequestInit,
+		{ signal, timeoutMs }: RequestOptions = {}
+	): Promise<T> {
 		const url = `${this.baseUrl}${endpoint}`;
-		const response = await fetch(url, {
-			...options,
-			headers: {
-				'Content-Type': 'application/json',
-				...options.headers
+		const controller = new AbortController();
+		const forwardAbort = () => controller.abort(signal?.reason);
+		if (signal?.aborted) forwardAbort();
+		signal?.addEventListener('abort', forwardAbort, { once: true });
+		let timedOut = false;
+		const timer =
+			timeoutMs === undefined
+				? undefined
+				: setTimeout(() => {
+						timedOut = true;
+						controller.abort();
+					}, timeoutMs);
+		const headers =
+			init.body instanceof FormData
+				? init.headers
+				: { 'Content-Type': 'application/json', ...init.headers };
+
+		try {
+			const response = await fetch(url, { ...init, headers, signal: controller.signal });
+
+			if (!response.ok) {
+				const body: ApiError = await response.json().catch(() => ({
+					detail: `HTTP ${response.status}: ${response.statusText}`
+				}));
+				const message = formatErrorDetail(body?.detail) || `HTTP ${response.status}`;
+				throw new ApiRequestError(message, response.status, body);
 			}
-		});
 
-		if (!response.ok) {
-			const body: ApiError = await response.json().catch(() => ({
-				detail: `HTTP ${response.status}: ${response.statusText}`
-			}));
-			const message = formatErrorDetail(body?.detail) || `HTTP ${response.status}`;
-			throw new ApiRequestError(message, response.status, body);
+			if (response.status === 204 || response.headers.get('content-length') === '0') {
+				return undefined as T;
+			}
+			return await response.json();
+		} catch (error) {
+			if (timedOut && timeoutMs !== undefined) throw new ApiTimeoutError(timeoutMs);
+			throw error;
+		} finally {
+			if (timer !== undefined) clearTimeout(timer);
+			signal?.removeEventListener('abort', forwardAbort);
 		}
-
-		if (response.status === 204 || response.headers.get('content-length') === '0') {
-			return undefined as T;
-		}
-		return response.json();
 	}
 
-	async get<T>(endpoint: string): Promise<T> {
-		return this.request<T>(endpoint, { method: 'GET' });
+	async get<T>(endpoint: string, options?: RequestOptions): Promise<T> {
+		return this.request<T>(endpoint, { method: 'GET' }, options);
 	}
 
-	async post<T>(endpoint: string, data?: unknown): Promise<T> {
-		return this.request<T>(endpoint, {
-			method: 'POST',
-			body: data ? JSON.stringify(data) : undefined
-		});
+	async post<T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> {
+		return this.request<T>(
+			endpoint,
+			{ method: 'POST', body: data ? JSON.stringify(data) : undefined },
+			options
+		);
 	}
 
-	async put<T>(endpoint: string, data?: unknown): Promise<T> {
-		return this.request<T>(endpoint, {
-			method: 'PUT',
-			body: data ? JSON.stringify(data) : undefined
-		});
+	/** POST a multipart form (file uploads); the browser sets the content type. */
+	async postForm<T>(endpoint: string, form: FormData, options?: RequestOptions): Promise<T> {
+		return this.request<T>(endpoint, { method: 'POST', body: form }, options);
 	}
 
-	async delete<T>(endpoint: string): Promise<T> {
-		return this.request<T>(endpoint, { method: 'DELETE' });
+	async put<T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> {
+		return this.request<T>(
+			endpoint,
+			{ method: 'PUT', body: data ? JSON.stringify(data) : undefined },
+			options
+		);
+	}
+
+	async delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {
+		return this.request<T>(endpoint, { method: 'DELETE' }, options);
 	}
 }
 

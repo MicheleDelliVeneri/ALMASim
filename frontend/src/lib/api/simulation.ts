@@ -1,5 +1,5 @@
 /** Simulation API types and functions */
-import { apiClient } from './client';
+import { apiClient, type RequestOptions } from './client';
 
 export interface ObservationConfigInput {
 	name: string;
@@ -83,6 +83,17 @@ export interface SimulationStatus {
 	error?: string;
 }
 
+export interface SimulationSummary {
+	simulation_id: string;
+	status: string;
+	progress: number;
+	message: string;
+	created_at: string;
+	updated_at: string;
+	error?: string;
+	output_dir?: string;
+}
+
 export interface SimulationEstimate {
 	n_pix: number;
 	n_channels: number;
@@ -121,6 +132,31 @@ export const simulationApi = {
 
 	getStatus: async (simulationId: string): Promise<SimulationStatus> => {
 		return apiClient.get<SimulationStatus>(`/api/v1/simulations/${simulationId}/status`);
+	},
+
+	list: async (options?: RequestOptions): Promise<SimulationSummary[]> => {
+		const data = await apiClient.get<{ simulations?: SimulationSummary[] }>(
+			'/api/v1/simulations/',
+			options
+		);
+		return data.simulations ?? [];
+	},
+
+	/** Live status of a simulation; the socket closes when the simulation ends. */
+	openStatusSocket: (
+		simulationId: string,
+		onStatus: (status: SimulationStatus) => void,
+		onError?: (error: unknown) => void
+	): WebSocket => {
+		const socket = new WebSocket(apiClient.socketUrl(`/api/v1/simulations/${simulationId}/ws`));
+		socket.onmessage = (event) => {
+			try {
+				onStatus(JSON.parse(event.data) as SimulationStatus);
+			} catch (error) {
+				onError?.(error);
+			}
+		};
+		return socket;
 	},
 
 	testDask: async (scheduler: string): Promise<DaskTestResult> => {

@@ -15,7 +15,6 @@
 	import SimulationsList from '#lib/components/simulations/SimulationsList.svelte';
 	import { createLogger } from '#lib/logger.js';
 	import { inferObservationConfigsFromMetadataRow } from '#lib/utils/observationPlan.js';
-	import { API_BASE_URL } from '#lib/config.js';
 
 	const logger = createLogger('routes/simulations');
 
@@ -88,20 +87,16 @@
 			ws.close();
 			ws = null;
 		}
-		const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
-		const socket = new WebSocket(`${wsUrl}/api/v1/simulations/${id}/ws`);
+		const socket = simulationApi.openStatusSocket(
+			id,
+			(status) => {
+				simulationStatus = status as SimulationStatus;
+			},
+			(e) => logger.error({ err: e, simulationId: id }, 'Failed to parse WebSocket message')
+		);
 
 		socket.onopen = () => {
 			logger.info({ simulationId: id }, 'WebSocket connected');
-		};
-
-		socket.onmessage = (event) => {
-			try {
-				const status: SimulationStatus = JSON.parse(event.data);
-				simulationStatus = status;
-			} catch (e) {
-				logger.error({ err: e, simulationId: id }, 'Failed to parse WebSocket message');
-			}
 		};
 
 		socket.onerror = (error) => {
@@ -516,7 +511,7 @@
 		{/if}
 
 		<div class="mt-8">
-			<SimulationsList apiUrl={API_BASE_URL} />
+			<SimulationsList />
 		</div>
 	</div>
 </div>
