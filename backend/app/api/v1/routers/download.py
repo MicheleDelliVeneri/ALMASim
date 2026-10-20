@@ -8,7 +8,11 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from almasim.services.download import format_bytes
-from almasim.services.paths import UnsafePathError, safe_join
+from almasim.services.download.jobs import (
+    delete_job_files,
+    redownload_options,
+    stored_products,
+)
 from app.core.config import settings
 from app.core.path_utils import require_allowed_path, resolve_safe_path
 from app.schemas.download import (
@@ -28,7 +32,6 @@ from app.schemas.download import (
 )
 from app.schemas.metadata import MetadataResponse
 from app.services.download_service import (
-    DataProduct,
     DownloadJob,
     download_store,
     filter_products,
@@ -364,27 +367,10 @@ def redownload_job(
     needed.  Existing files at the destination are overwritten.
     """
     rec = _record_or_404(job_id)
-
-    import json
-
-    try:
-        uids = json.loads(rec.member_ous_uids) if rec.member_ous_uids else []
-    except (json.JSONDecodeError, TypeError):
-        uids = []
+    uids = json_list(rec.member_ous_uids)
 
     if rec.files:
-        # Build DataProduct list from stored file records
-        products = [
-            DataProduct(
-                access_url=f.access_url,
-                uid="",
-                filename=f.filename,
-                content_length=int(f.content_length),
-                content_type="",
-                product_type="other",
-            )
-            for f in rec.files
-        ]
+        products = stored_products(rec)
     elif uids:
         # No file records (e.g. early cancellation) – re-resolve from DataLink
         try:
@@ -406,46 +392,17 @@ def redownload_job(
             detail="No file records or UIDs stored for this job – cannot re-download",
         )
 
-    max_parallel = body.max_parallel if body.max_parallel is not None else 3
-    unpack_ms = body.unpack_ms if body.unpack_ms is not None else bool(rec.unpack_ms)
-    generate_calibrated = (
-        body.generate_calibrated_visibilities
-        if body.generate_calibrated_visibilities is not None
-        else bool(rec.generate_calibrated_visibilities)
-    )
-    clean_intermediate = (
-        body.clean_intermediate_files
-        if body.clean_intermediate_files is not None
-        else bool(rec.clean_intermediate_files)
-    )
-    extract_tar = (
-        (
-            body.extract_tar
-            if body.extract_tar is not None
-            else bool(rec.unpack_ms) or bool(rec.generate_calibrated_visibilities)
-        )
-        or unpack_ms
-        or generate_calibrated
-    )
-    archive_output_root = (
-        body.archive_output_root
-        if body.archive_output_root is not None
-        else rec.archive_output_root
-    )
-    casa_data_root = body.casa_data_root if body.casa_data_root is not None else rec.casa_data_root
+    options = redownload_options(rec, body)
     # Checked again: the request may override them, and older jobs predate the check.
     destination = str(require_allowed_path(rec.destination, field="destination"))
+    archive_output_root = options.archive_output_root
     if archive_output_root:
         archive_output_root = str(
             require_allowed_path(archive_output_root, field="archive_output_root")
         )
+    casa_data_root = options.casa_data_root
     if casa_data_root:
         casa_data_root = str(require_allowed_path(casa_data_root, field="casa_data_root"))
-    skip_casa_data_update = (
-        body.skip_casa_data_update
-        if body.skip_casa_data_update is not None
-        else bool(rec.skip_casa_data_update)
-    )
 
     total_bytes = sum(p.content_length for p in products)
     new_job_id = str(uuid.uuid4())
@@ -455,12 +412,12 @@ def redownload_job(
         member_ous_uids=uids,
         metadata_rows=json_list(rec.metadata_json),
         product_filter=rec.product_filter or "all",
-        unpack_ms=unpack_ms or generate_calibrated,
-        generate_calibrated_visibilities=generate_calibrated,
-        clean_intermediate_files=clean_intermediate,
+        unpack_ms=options.unpack_ms,
+        generate_calibrated_visibilities=options.generate_calibrated_visibilities,
+        clean_intermediate_files=options.clean_intermediate_files,
         archive_output_root=archive_output_root,
         casa_data_root=casa_data_root,
-        skip_casa_data_update=skip_casa_data_update,
+        skip_casa_data_update=options.skip_casa_data_update,
         total_files=len(products),
         total_bytes=total_bytes,
     )
@@ -471,14 +428,14 @@ def redownload_job(
         job_id=new_job_id,
         products=products,
         destination=destination,
-        max_parallel=max_parallel,
-        extract_tar=extract_tar,
-        unpack_ms=unpack_ms or generate_calibrated,
-        generate_calibrated_visibilities=generate_calibrated,
-        clean_intermediate_files=clean_intermediate,
+        max_parallel=options.max_parallel,
+        extract_tar=options.extract_tar,
+        unpack_ms=options.unpack_ms,
+        generate_calibrated_visibilities=options.generate_calibrated_visibilities,
+        clean_intermediate_files=options.clean_intermediate_files,
         archive_output_root=archive_output_root,
         casa_data_root=casa_data_root,
-        skip_casa_data_update=skip_casa_data_update,
+        skip_casa_data_update=options.skip_casa_data_update,
     )
 
     return StartDownloadResponse(
@@ -497,7 +454,6 @@ def delete_download_job(job_id: str):
 
     Active (running/pending) jobs must be cancelled first.
     """
-    from pathlib import Path
 
     active = download_store.get(job_id)
     if active and active.status in ("pending", "running"):
@@ -509,47 +465,8 @@ def delete_download_job(job_id: str):
     # Look up the job (with file records) before deleting from DB
     rec = _record_or_404(job_id)
 
-    # Delete downloaded files (and any leftover .part files) from disk. Only
-    # paths inside the job's own destination are removed (T1.9): a stored
-    # filename or generated path pointing elsewhere is left alone.
-    dest = Path(rec.destination)
-    files_deleted = 0
-    skipped = 0
-    for file_rec in rec.files:
-        for name in (file_rec.filename, file_rec.filename + ".part"):
-            try:
-                path = safe_join(dest, name)
-            except UnsafePathError:
-                skipped += 1
-                continue
-            try:
-                if path.is_file():
-                    path.unlink()
-                    files_deleted += 1
-            except OSError:
-                pass  # best-effort; don't fail the delete if a file is gone
-
-    generated_paths = [
-        *(json_list(rec.raw_measurement_sets)),
-        *(json_list(rec.calibrated_measurement_sets)),
-    ]
-    if rec.manifest_path:
-        generated_paths.append(rec.manifest_path)
-    for generated in generated_paths:
-        try:
-            path = safe_join(dest, generated)
-        except UnsafePathError:
-            skipped += 1
-            continue
-        try:
-            if path.is_dir():
-                shutil.rmtree(path)
-                files_deleted += 1
-            elif path.is_file():
-                path.unlink()
-                files_deleted += 1
-        except OSError:
-            pass
+    # Only paths inside the job's own destination are removed (T1.9).
+    files_deleted, skipped = delete_job_files(rec)
 
     deleted = download_store.delete_from_db(job_id)
     if not deleted:
