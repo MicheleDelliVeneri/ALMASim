@@ -506,7 +506,7 @@ def derive_parameters(
         help="Source of the measurement set",
     ),
 ):
-
+    """Print the spectral-window summary for one MeasurementSet."""
     derived_parameters = compute_imaging_parameters(input_ms)
 
     typer.echo(derived_parameters.to_string(index=False))
