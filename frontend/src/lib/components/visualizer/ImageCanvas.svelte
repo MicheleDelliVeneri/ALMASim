@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { selectionStats, type SelectionStats } from '#lib/utils/selectionStats.js';
+	import {
+		imageToScreen,
+		screenToImage,
+		selectionValues,
+		type CanvasView,
+		type Point
+	} from '#lib/utils/canvasGeometry.js';
 
 	interface ImageData {
 		image: number[][];
@@ -16,11 +23,13 @@
 		method: string;
 	}
 
+	// A saved selection's corners are in image pixels (MADIV-28 T1.14): it stays on
+	// the same pixels when the view is zoomed or panned.
 	interface SavedSelection {
 		id: string;
 		type: 'rectangle' | 'circle';
-		start: { x: number; y: number };
-		end: { x: number; y: number };
+		start: Point;
+		end: Point;
 		stats: SelectionStats;
 	}
 
@@ -57,75 +66,48 @@
 	let dragOffset = $state({ x: 0, y: 0 });
 	let cursorStyle = $state('grab');
 
-	function screenToImageCoords(screenX: number, screenY: number): { x: number; y: number } | null {
+	function currentView(): CanvasView | null {
 		const canvas = canvasRef;
 		if (!canvas || !imageData) return null;
-
 		const image = imageData.image;
-		const height = image.length;
-		const width = image[0]?.length || 0;
+		return {
+			displayWidth: canvas.width / (window.devicePixelRatio || 1),
+			displayHeight: canvas.height / (window.devicePixelRatio || 1),
+			imageWidth: image[0]?.length || 0,
+			imageHeight: image.length,
+			scale,
+			panX,
+			panY
+		};
+	}
 
-		const displayWidth = canvas.width / (window.devicePixelRatio || 1);
-		const displayHeight = canvas.height / (window.devicePixelRatio || 1);
-		const centerX = displayWidth / 2;
-		const centerY = displayHeight / 2;
+	function toImage(point: Point): Point | null {
+		const view = currentView();
+		return view ? screenToImage(view, point) : null;
+	}
 
-		const fitScale = Math.min(displayWidth / width, displayHeight / height);
-		const totalScale = scale * fitScale;
+	/** The selection with its corners on the screen, for drawing and hit tests. */
+	function onScreen(selection: SavedSelection): SavedSelection {
+		const view = currentView();
+		if (!view) return selection;
+		return {
+			...selection,
+			start: imageToScreen(view, selection.start),
+			end: imageToScreen(view, selection.end)
+		};
+	}
 
-		// Reverse the transform
-		const worldX = (screenX - centerX - panX) / totalScale + width / 2;
-		const worldY = (screenY - centerY - panY) / totalScale + height / 2;
-
-		return { x: Math.floor(worldX), y: Math.floor(worldY) };
+	function statsFor(type: 'rectangle' | 'circle', start: Point, end: Point): SelectionStats | null {
+		if (!imageData) return null;
+		return selectionStats(selectionValues(imageData.image, type, start, end));
 	}
 
 	function calculateSelectionStats(): SelectionStats | null {
-		if (!imageData || !isSelecting) return null;
-
-		const image = imageData.image;
-		const height = image.length;
-		const width = image[0]?.length || 0;
-
-		const start = screenToImageCoords(selectionStart.x, selectionStart.y);
-		const end = screenToImageCoords(selectionEnd.x, selectionEnd.y);
-
+		if (!isSelecting || selectionMode === 'none') return null;
+		const start = toImage(selectionStart);
+		const end = toImage(selectionEnd);
 		if (!start || !end) return null;
-
-		let values: number[] = [];
-
-		if (selectionMode === 'rectangle') {
-			const x1 = Math.max(0, Math.min(start.x, end.x));
-			const x2 = Math.min(width - 1, Math.max(start.x, end.x));
-			const y1 = Math.max(0, Math.min(start.y, end.y));
-			const y2 = Math.min(height - 1, Math.max(start.y, end.y));
-
-			for (let y = y1; y <= y2; y++) {
-				for (let x = x1; x <= x2; x++) {
-					values.push(image[y][x]);
-				}
-			}
-		} else if (selectionMode === 'circle') {
-			const centerX = (start.x + end.x) / 2;
-			const centerY = (start.y + end.y) / 2;
-			const radius = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)) / 2;
-
-			const x1 = Math.max(0, Math.floor(centerX - radius));
-			const x2 = Math.min(width - 1, Math.ceil(centerX + radius));
-			const y1 = Math.max(0, Math.floor(centerY - radius));
-			const y2 = Math.min(height - 1, Math.ceil(centerY + radius));
-
-			for (let y = y1; y <= y2; y++) {
-				for (let x = x1; x <= x2; x++) {
-					const dist = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
-					if (dist <= radius) {
-						values.push(image[y][x]);
-					}
-				}
-			}
-		}
-
-		return selectionStats(values);
+		return statsFor(selectionMode, start, end);
 	}
 
 	function drawImage() {
@@ -218,7 +200,8 @@
 		ctx.restore();
 
 		// Draw all saved selections
-		for (const selection of savedSelections) {
+		for (const saved of savedSelections) {
+			const selection = onScreen(saved);
 			ctx.save();
 			const isSelected = selection.id === selectedSelectionId;
 			ctx.strokeStyle = isSelected ? 'rgba(255, 165, 0, 0.9)' : 'rgba(0, 123, 255, 0.8)';
@@ -329,7 +312,7 @@
 			if (selectedSelectionId) {
 				const selectedSelection = savedSelections.find((s) => s.id === selectedSelectionId);
 				if (selectedSelection) {
-					const handle = getResizeHandle(mouseX, mouseY, selectedSelection);
+					const handle = getResizeHandle(mouseX, mouseY, onScreen(selectedSelection));
 					if (handle) {
 						// Start resizing
 						isResizingSelection = true;
@@ -342,7 +325,7 @@
 			// Check if clicking on an existing selection (in reverse order to get topmost)
 			let clickedSelection: SavedSelection | null = null;
 			for (let i = savedSelections.length - 1; i >= 0; i--) {
-				if (isPointInSelection(mouseX, mouseY, savedSelections[i])) {
+				if (isPointInSelection(mouseX, mouseY, onScreen(savedSelections[i]))) {
 					clickedSelection = savedSelections[i];
 					break;
 				}
@@ -352,9 +335,10 @@
 				// Select the clicked selection and prepare to move it
 				selectedSelectionId = clickedSelection.id;
 				isDraggingSelection = true;
+				const grabbed = toImage({ x: mouseX, y: mouseY }) ?? clickedSelection.start;
 				dragOffset = {
-					x: mouseX - clickedSelection.start.x,
-					y: mouseY - clickedSelection.start.y
+					x: grabbed.x - clickedSelection.start.x,
+					y: grabbed.y - clickedSelection.start.y
 				};
 				drawImage();
 			} else if (selectionMode !== 'none') {
@@ -386,7 +370,7 @@
 			if (selectedSelectionId) {
 				const selectedSelection = savedSelections.find((s) => s.id === selectedSelectionId);
 				if (selectedSelection) {
-					const handle = getResizeHandle(mouseX, mouseY, selectedSelection);
+					const handle = getResizeHandle(mouseX, mouseY, onScreen(selectedSelection));
 					if (handle) {
 						// Set cursor based on resize handle
 						const cursors: Record<string, string> = {
@@ -400,7 +384,7 @@
 							w: 'w-resize'
 						};
 						cursorStyle = cursors[handle] || 'grab';
-					} else if (isPointInSelection(mouseX, mouseY, selectedSelection)) {
+					} else if (isPointInSelection(mouseX, mouseY, onScreen(selectedSelection))) {
 						cursorStyle = 'move';
 					} else {
 						cursorStyle = selectionMode !== 'none' ? 'crosshair' : 'grab';
@@ -420,21 +404,17 @@
 		if (isDraggingSelection && selectedSelectionId) {
 			// Move selection
 			const selection = savedSelections.find((s) => s.id === selectedSelectionId);
-			if (selection) {
-				const newStartX = mouseX - dragOffset.x;
-				const newStartY = mouseY - dragOffset.y;
-				const dx = newStartX - selection.start.x;
-				const dy = newStartY - selection.start.y;
+			const pointer = toImage({ x: mouseX, y: mouseY });
+			if (selection && pointer) {
+				const dx = pointer.x - dragOffset.x - selection.start.x;
+				const dy = pointer.y - dragOffset.y - selection.start.y;
 
-				savedSelections = savedSelections.map((s) =>
-					s.id === selectedSelectionId
-						? {
-								...s,
-								start: { x: s.start.x + dx, y: s.start.y + dy },
-								end: { x: s.end.x + dx, y: s.end.y + dy }
-							}
-						: s
-				);
+				savedSelections = savedSelections.map((s) => {
+					if (s.id !== selectedSelectionId) return s;
+					const start = { x: s.start.x + dx, y: s.start.y + dy };
+					const end = { x: s.end.x + dx, y: s.end.y + dy };
+					return { ...s, start, end, stats: statsFor(s.type, start, end) ?? s.stats };
+				});
 				drawImage();
 			}
 		} else if (isResizingSelection && selectedSelectionId && resizeHandle) {
@@ -442,8 +422,9 @@
 			const selection = savedSelections.find((s) => s.id === selectedSelectionId);
 			if (selection) {
 				const activeResizeHandle = resizeHandle;
-				savedSelections = savedSelections.map((s) => {
-					if (s.id !== selectedSelectionId) return s;
+				savedSelections = savedSelections.map((saved) => {
+					if (saved.id !== selectedSelectionId) return saved;
+					const s = onScreen(saved);
 
 					let newStart = { ...s.start };
 					let newEnd = { ...s.end };
@@ -481,21 +462,11 @@
 						newEnd = { x: centerX + newRadius, y: centerY + newRadius };
 					}
 
-					// Recalculate stats
-					const imageCoords1 = screenToImageCoords(newStart.x, newStart.y);
-					const imageCoords2 = screenToImageCoords(newEnd.x, newEnd.y);
-
-					if (imageCoords1 && imageCoords2) {
-						// Create temporary selection for stats calculation
-						selectionStart = newStart;
-						selectionEnd = newEnd;
-						const stats = calculateSelectionStats();
-						if (stats) {
-							return { ...s, start: newStart, end: newEnd, stats };
-						}
-					}
-
-					return { ...s, start: newStart, end: newEnd };
+					// Back to image pixels, with the stats of the new extent
+					const start = toImage(newStart);
+					const end = toImage(newEnd);
+					if (!start || !end) return saved;
+					return { ...saved, start, end, stats: statsFor(saved.type, start, end) ?? saved.stats };
 				});
 				drawImage();
 			}
@@ -514,15 +485,19 @@
 			// Finalize selection and save it
 			const stats = calculateSelectionStats();
 			if (stats) {
-				const newSelection: SavedSelection = {
-					id: `selection-${Date.now()}`,
-					type: selectionMode,
-					start: { ...selectionStart },
-					end: { ...selectionEnd },
-					stats
-				};
-				savedSelections = [...savedSelections, newSelection];
-				selectedSelectionId = newSelection.id;
+				const start = toImage(selectionStart);
+				const end = toImage(selectionEnd);
+				if (start && end) {
+					const newSelection: SavedSelection = {
+						id: `selection-${Date.now()}`,
+						type: selectionMode,
+						start,
+						end,
+						stats
+					};
+					savedSelections = [...savedSelections, newSelection];
+					selectedSelectionId = newSelection.id;
+				}
 			}
 			isSelecting = false;
 			drawImage();
@@ -800,33 +775,23 @@
 					</div>
 					<div>
 						<span class="text-fg-muted">Sum:</span>
-						<span class="ml-2 font-medium text-fg"
-							>{selectedSelection.stats.sum.toFixed(2)}</span
-						>
+						<span class="ml-2 font-medium text-fg">{selectedSelection.stats.sum.toFixed(2)}</span>
 					</div>
 					<div>
 						<span class="text-fg-muted">Mean:</span>
-						<span class="ml-2 font-medium text-fg"
-							>{selectedSelection.stats.mean.toFixed(2)}</span
-						>
+						<span class="ml-2 font-medium text-fg">{selectedSelection.stats.mean.toFixed(2)}</span>
 					</div>
 					<div>
 						<span class="text-fg-muted">Std Dev:</span>
-						<span class="ml-2 font-medium text-fg"
-							>{selectedSelection.stats.std.toFixed(2)}</span
-						>
+						<span class="ml-2 font-medium text-fg">{selectedSelection.stats.std.toFixed(2)}</span>
 					</div>
 					<div>
 						<span class="text-fg-muted">Min:</span>
-						<span class="ml-2 font-medium text-fg"
-							>{selectedSelection.stats.min.toFixed(2)}</span
-						>
+						<span class="ml-2 font-medium text-fg">{selectedSelection.stats.min.toFixed(2)}</span>
 					</div>
 					<div>
 						<span class="text-fg-muted">Max:</span>
-						<span class="ml-2 font-medium text-fg"
-							>{selectedSelection.stats.max.toFixed(2)}</span
-						>
+						<span class="ml-2 font-medium text-fg">{selectedSelection.stats.max.toFixed(2)}</span>
 					</div>
 				</div>
 			</div>
