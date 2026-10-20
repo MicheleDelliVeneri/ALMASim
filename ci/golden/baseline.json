@@ -4,15 +4,15 @@
     "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
   },
   "baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v7/golden-baseline-v7.tar.gz",
-    "sha256": "ab8788508ca4a2384c00f9edeaa2dd94db9d0a9001f801a081fbbaadd3b118e3",
-    "version": "v7",
-    "source": "workflow run 39475555005, commit 11eed5d6; T1.3 (#347): hour-angle tracks in the right units; uv coverage and every uv-dependent product change, sky models unchanged"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v8/golden-baseline-v8.tar.gz",
+    "sha256": "1b322e92bb718b382f1e91d883212ea22a122ad2211d2a5bf1ccaf4375bc5c97",
+    "version": "v8",
+    "source": "workflow run 39493661909, commit fc10dcdd; T4.5 (#356): CASA Airy primary beam for simulator and TP, and the beam width no longer scales with the pixel size; every beam-attenuated product changes, uv coverage and PSF unchanged"
   },
   "simulation_baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v7/golden-simulation-v7.tar.gz",
-    "sha256": "aeb52df7d699253ebd9115430855d263290899576aa1a821143485de73fc8250",
-    "version": "v7",
-    "source": "workflow run 39475555005, commit 11eed5d6; T1.3 (#347): hour-angle tracks in the right units; uv coverage and every uv-dependent product change, sky models unchanged"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v8/golden-simulation-v8.tar.gz",
+    "sha256": "138b4e4b3ce3d6bff3eabe6deb6278da42cd73a5b9aed2a926183565eb5740b9",
+    "version": "v8",
+    "source": "workflow run 39493661909, commit fc10dcdd; T4.5 (#356): CASA Airy primary beam for simulator and TP, and the beam width no longer scales with the pixel size; every beam-attenuated product changes, uv coverage and PSF unchanged"
   }
 }

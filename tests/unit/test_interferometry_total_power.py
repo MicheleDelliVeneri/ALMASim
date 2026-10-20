@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from almasim.services.interferometry.total_power import (
+    _beam_kernel,
     _fft_convolve2d,
-    _gaussian_kernel,
     combine_total_power_results,
     estimate_tp_beam_fwhm_arcsec,
     simulate_total_power_observation,
@@ -55,38 +55,34 @@ def test_estimate_tp_beam_fwhm_zero_freq_clipped():
 
 
 # ===========================================================================
-# _gaussian_kernel
+# _beam_kernel (the instrument's Airy model, MADIV-28 T4.5)
 # ===========================================================================
 
 
 @pytest.mark.unit
-def test_gaussian_kernel_sum_one():
-    """Gaussian kernel sums to 1."""
-    kernel = _gaussian_kernel((16, 16), sigma_pix=2.0)
+def test_beam_kernel_sums_to_one_and_peaks_at_the_centre():
+    kernel = _beam_kernel((17, 17), 2.0, 230e9, 12.0)
     np.testing.assert_allclose(np.sum(kernel), 1.0, rtol=1e-5)
+    assert np.unravel_index(np.argmax(kernel), kernel.shape) == (8, 8)
+    assert _beam_kernel((12, 8), 2.0, 230e9, 12.0).shape == (12, 8)
 
 
 @pytest.mark.unit
-def test_gaussian_kernel_shape():
-    """Kernel has the requested shape."""
-    kernel = _gaussian_kernel((12, 8), sigma_pix=1.5)
-    assert kernel.shape == (12, 8)
+def test_beam_kernel_half_power_width_is_the_primary_beam_fwhm():
+    freq, cell = 230e9, 0.25
+    kernel = _beam_kernel((401, 401), cell, freq, 12.0)
+    profile = kernel[200] / kernel[200, 200]
+    radius = np.abs(np.arange(401) - 200) * cell
+    measured = 2 * radius[profile >= 0.5].max()
+    expected = estimate_tp_beam_fwhm_arcsec(np.array([freq]), 12.0)[0]
+    assert measured == pytest.approx(expected, abs=2 * cell)
 
 
 @pytest.mark.unit
-def test_gaussian_kernel_peak_at_center():
-    """Kernel peak is at the center pixel."""
-    kernel = _gaussian_kernel((17, 17), sigma_pix=2.0)
-    peak = np.unravel_index(np.argmax(kernel), kernel.shape)
-    assert peak == (8, 8)
-
-
-@pytest.mark.unit
-def test_gaussian_kernel_zero_sigma_delta():
-    """sigma_pix=0 produces a delta function at center."""
-    kernel = _gaussian_kernel((8, 8), sigma_pix=0.0)
-    assert kernel[4, 4] == pytest.approx(1.0)
-    assert np.sum(kernel) == pytest.approx(1.0)
+def test_beam_kernel_coarser_than_the_beam_is_a_delta():
+    """A cell far wider than the beam leaves all the response in the centre pixel."""
+    kernel = _beam_kernel((9, 9), 3600.0, 230e9, 12.0)
+    assert kernel[4, 4] == pytest.approx(1.0, abs=1e-6)
 
 
 # ===========================================================================
@@ -109,7 +105,7 @@ def test_fft_convolve2d_delta_is_identity():
 def test_fft_convolve2d_shape_preserved():
     """Output shape matches input image shape."""
     image = np.ones((16, 16), dtype=np.float32)
-    kernel = _gaussian_kernel((16, 16), sigma_pix=1.0)
+    kernel = _beam_kernel((16, 16), 2.0, 230e9, 12.0)
     result = _fft_convolve2d(image, kernel)
     assert result.shape == (16, 16)
 
@@ -118,7 +114,7 @@ def test_fft_convolve2d_shape_preserved():
 def test_fft_convolve2d_constant_image():
     """Convolving a constant image with a normalized kernel leaves it unchanged."""
     image = np.full((16, 16), 5.0, dtype=np.float32)
-    kernel = _gaussian_kernel((16, 16), sigma_pix=2.0)
+    kernel = _beam_kernel((16, 16), 4.0, 230e9, 12.0)
     result = _fft_convolve2d(image, kernel)
     # Interior pixels away from edges should be ~5.0
     np.testing.assert_allclose(result[4:-4, 4:-4], 5.0, atol=0.1)

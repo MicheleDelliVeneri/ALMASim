@@ -10,8 +10,8 @@ from astropy.io import fits
 from astropy.time import Time
 from scipy.ndimage import zoom
 
-from ..imaging.primary_beam import airy_fwhm_factor
-from ..instrument.constants import ARCSEC_PER_RAD, FWHM_PER_SIGMA, SPEED_OF_LIGHT_M_S
+from ..instrument.constants import ARCSEC_PER_RAD, SPEED_OF_LIGHT_M_S
+from ..instrument.primary_beam import primary_beam_response
 from .baselines import generate_via_astropy, prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
 
@@ -198,20 +198,15 @@ def set_primary_beam(
     modelim: list,
     modelimTrue: np.ndarray,
 ) -> tuple:
-    """Set primary beam and calculate model FFT."""
-    PB = (
-        2.0
-        * (
-            airy_fwhm_factor(Diameters[0])
-            * ARCSEC_PER_RAD
-            * wavelength[2]
-            * 1e3  # wavelengths are in km here, the diameter in m
-            / Diameters[0]
-            / FWHM_PER_SIGMA
-        )
-        ** 2.0
-    )
-    beamImg = np.exp(distmat / PB)
+    """Apply the primary beam to the model and return the model FFT.
+
+    ``distmat`` is minus the squared distance (arcsec^2) of every pixel from
+    the pointing centre; the response is the instrument's Airy model at the
+    channel's wavelength (``wavelength[2]``, in km) for ``Diameters[0]`` m.
+    """
+    radius_rad = np.sqrt(np.maximum(-distmat, 0.0)) / ARCSEC_PER_RAD
+    frequency_hz = SPEED_OF_LIGHT_M_S / (wavelength[2] * 1e3)  # wavelengths are in km here
+    beamImg = primary_beam_response(radius_rad, frequency_hz, Diameters[0])
     modelim[0][:] = modelimTrue * beamImg
     modelfft = np.fft.fft2(np.fft.fftshift(modelim[0]))
     return modelfft, modelim
