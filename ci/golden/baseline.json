@@ -4,15 +4,15 @@
     "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
   },
   "baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v9/golden-baseline-v9.tar.gz",
-    "sha256": "c000042d19e2a9b14fc318dba79f577ffbb79706e72707e66761e9fff13da762",
-    "version": "v9",
-    "source": "workflow run 39507992171, commit cfbff460; T5.4 (#369): uv sampling and exported CHAN_FREQ on the cube centred channel grid; per-configuration FITS headers (no EPOCH)"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v10/golden-baseline-v10.tar.gz",
+    "sha256": "535b25c380a007451d29a594e67b7ff49df8c178d3296cfa64056fa1c0f0a282",
+    "version": "v10",
+    "source": "workflow run 39515723760, commit 23ef5cde; T5.1 (#381): one seed drives every random draw; independent streams; the metadata stream picks a different row per CI case"
   },
   "simulation_baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v9/golden-simulation-v9.tar.gz",
-    "sha256": "96b9596047e3a3f0ea7eb06503e25d0ca2a9d68e8aa1258871292101263eb831",
-    "version": "v9",
-    "source": "workflow run 39507992171, commit cfbff460; T5.4 (#369): uv sampling and exported CHAN_FREQ on the cube centred channel grid; per-configuration FITS headers (no EPOCH)"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v10/golden-simulation-v10.tar.gz",
+    "sha256": "d7b97633faf3f9ff5e828543ecdf8f1e11eb816e2a49b9692971bc65a3b96552",
+    "version": "v10",
+    "source": "workflow run 39515723760, commit 23ef5cde; T5.1 (#381): one seed drives every random draw; independent streams; the metadata stream picks a different row per CI case"
   }
 }
