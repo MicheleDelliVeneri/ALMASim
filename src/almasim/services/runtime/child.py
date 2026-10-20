@@ -123,7 +123,8 @@ def run_stage_subprocess(
         env=dict(env),
     )
     tail_lines: deque[str] = deque(maxlen=tail)
-    assert process.stdout is not None
+    if process.stdout is None:
+        raise RuntimeError("child process started without a stdout pipe")
     with Path(log_path).open("w", encoding="utf-8") as log_file:
         log_file.write("# " + " ".join(cmd) + "\n")
         for line in process.stdout:

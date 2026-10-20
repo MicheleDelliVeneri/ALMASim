@@ -39,10 +39,9 @@ def get_iou(bb1: dict, bb2: dict) -> float:
     float
         in [0, 1]
     """
-    assert bb1["x1"] < bb1["x2"]
-    assert bb1["y1"] < bb1["y2"]
-    assert bb2["x1"] < bb2["x2"]
-    assert bb2["y1"] < bb2["y2"]
+    for bb in (bb1, bb2):
+        if not (bb["x1"] < bb["x2"] and bb["y1"] < bb["y2"]):
+            raise ValueError(f"not a box with positive area: {bb}")
 
     # determine the coordinates of the intersection rectangle
     x_left = max(bb1["x1"], bb2["x1"])
@@ -65,15 +64,14 @@ def get_iou(bb1: dict, bb2: dict) -> float:
     # area and dividing it by the sum of prediction + ground-truth
     # areas - the interesection area
     iou = intersection_area / float(bb1_area + bb2_area - intersection_area)
-    assert iou >= 0.0
-    assert iou <= 1.0
     return iou
 
 
 def get_iou_1d(bb1: dict, bb2: dict) -> float:
     """Calculate 1D IoU."""
-    assert bb1["z1"] < bb1["z2"]
-    assert bb2["z1"] < bb2["z2"]
+    for bb in (bb1, bb2):
+        if not bb["z1"] < bb["z2"]:
+            raise ValueError(f"not an interval with positive length: {bb}")
     z_left = max(bb1["z1"], bb2["z1"])
     z_right = min(bb1["z2"], bb2["z2"])
     if z_right < z_left:

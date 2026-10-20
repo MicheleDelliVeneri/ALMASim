@@ -133,6 +133,8 @@ from almasim.services.runtime.env import (  # noqa: F401  (moved; re-exported)
 )
 
 __all__ = [
+    "pb_correct_task",
+    "pb_note",
     "CONTINUUM_COLUMN",
     "CUBE_SELFCAL_CORRECTION_FILENAME",
     "CUBE_TOTAL_RESIDUAL_FILENAME",

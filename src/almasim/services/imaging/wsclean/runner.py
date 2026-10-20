@@ -55,7 +55,8 @@ def _run_once(
         killer.daemon = True
         killer.start()
 
-    assert process.stdout is not None
+    if process.stdout is None:
+        raise RuntimeError("WSClean started without a stdout pipe")
     try:
         for line in process.stdout:
             log.write(line)

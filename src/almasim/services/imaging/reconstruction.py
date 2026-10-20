@@ -275,7 +275,6 @@ def clean_deconvolve_cube(
         cycles_added = max(cycles_added, channel_cycles)
 
     return {
-        "clean_cube": restored_cube,
         "restored_cube": restored_cube,
         "component_cube": component_cube,
         "residual_cube": residual_cube,

@@ -132,7 +132,7 @@ def test_clean_deconvolve_cube_improves_blurred_point_source():
     dirty_cube = np.real(np.fft.ifft2(dirty_fft)).astype(np.float32)[None, ...]
 
     result = clean_deconvolve_cube(dirty_cube, beam_cube, n_cycles=120, gain=0.12)
-    restored = result["clean_cube"]
+    restored = result["restored_cube"]
     residual = result["residual_cube"]
 
     dirty_error = np.mean((dirty_cube - model_cube) ** 2)

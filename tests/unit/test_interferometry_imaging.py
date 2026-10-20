@@ -12,7 +12,6 @@ from almasim.services.interferometry.imaging import (
     add_thermal_noise,
     check_lfac,
     exact_weighs,
-    get_n_threads,
     image_channel,
     image_channel_ducc0,
     observe,
@@ -365,20 +364,6 @@ def test_exact_weighs_real_valued_branch(monkeypatch):
 
     result = exact_weighs(uvw, n_pix, pixsize, wavelengths)
     assert result.dtype == np.float32
-
-
-@pytest.mark.unit
-def test_get_n_threads_default(monkeypatch):
-    """get_n_threads returns env var value or default 10."""
-    monkeypatch.delenv("ALMASIM_NTHREADS", raising=False)
-    assert get_n_threads() == 10
-
-
-@pytest.mark.unit
-def test_get_n_threads_env_override(monkeypatch):
-    """get_n_threads reads ALMASIM_NTHREADS env var."""
-    monkeypatch.setenv("ALMASIM_NTHREADS", "4")
-    assert get_n_threads() == "4"
 
 
 @pytest.mark.unit

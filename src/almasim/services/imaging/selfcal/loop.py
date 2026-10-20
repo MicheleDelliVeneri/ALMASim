@@ -169,7 +169,7 @@ def self_calibrate(
                 casa=function.startswith("casa_"),
             )
         except Exception as exc:
-            raise fail(f"Self-calibration failed: {exc}")
+            raise fail(f"Self-calibration failed: {exc}") from exc
 
     def solve(gains: Path, calmode: str, solint: str, pre_apply: list[Path]) -> dict:
         return call(
@@ -330,7 +330,7 @@ def _selfcal_noise_products(
             log_path=log.name,
         )
     except Exception as exc:
-        raise fail(f"Could not write the self-calibration correction: {exc}")
+        raise fail(f"Could not write the self-calibration correction: {exc}") from exc
     written: list[str] = []
     products = (
         (
@@ -360,7 +360,7 @@ def _selfcal_noise_products(
             try:
                 stacked = stack_channel_images(out, prefix=name, keep=("dirty", "image"))
             except Exception as exc:
-                raise fail(f"Could not stack the self-calibration correction cube: {exc}")
+                raise fail(f"Could not stack the self-calibration correction cube: {exc}") from exc
             for duplicate in out.glob(f"{name}-MFS-*.fits"):
                 duplicate.unlink(missing_ok=True)
             image = next(
@@ -388,7 +388,7 @@ def _selfcal_noise_products(
                     "ALMASim total residual: residual + self-calibration correction",
                 )
             except Exception as exc:
-                raise fail(f"Could not form {total_name}: {exc}")
+                raise fail(f"Could not form {total_name}: {exc}") from exc
             written.append(total_name)
     log.write(f"# self-calibration noise products: {', '.join(written) or 'none'}\n")
     log.flush()

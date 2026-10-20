@@ -30,7 +30,6 @@ from almasim.services.archive.calibrate_ms import (
     create_calibrated_measurement_sets,
     find_calibration_directory,
     find_raw_ms_directories,
-    restore_calibrated_measurement_sets,
     science_spws,
     split_calibrated_science_ms,
 )
@@ -759,23 +758,6 @@ def test_split_calibrated_science_ms_overwrite_removes_old(tmp_path):
             fake_mstransform, calibrated_ms, output_root, overwrite=True
         )
     assert result == existing_out
-
-
-# ===========================================================================
-# restore_calibrated_measurement_sets (smoke test)
-# ===========================================================================
-
-
-@pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.create_calibrated_measurement_sets")
-def test_restore_calibrated_measurement_sets_delegates(mock_create, tmp_path):
-    """restore_calibrated_measurement_sets calls create_calibrated_measurement_sets."""
-    mock_create.return_value = [tmp_path / "result.ms"]
-    results = restore_calibrated_measurement_sets(
-        tmp_path / "input", tmp_path / "raw", tmp_path / "output"
-    )
-    mock_create.assert_called_once()
-    assert results == [tmp_path / "result.ms"]
 
 
 @pytest.mark.unit

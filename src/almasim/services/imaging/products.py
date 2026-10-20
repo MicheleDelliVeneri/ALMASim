@@ -80,3 +80,13 @@ SELFCAL_GAINS_DIRNAME = "selfcal_gains"
 # Placeholder in a task command for the per-task single-window MS that the
 # wrapper extracts on the worker (see ``extract_single_window_ms``).
 SINGLE_WINDOW_PLACEHOLDER = "__SINGLE_WINDOW_MS__"
+
+
+def continuum_product(kind: str) -> str:
+    """File name of a continuum WSClean product ("image", "residual", "model", ...)."""
+    return f"wsclean-{kind}.fits"
+
+
+def cube_product(kind: str) -> str:
+    """File name of a cube WSClean product ("image", "residual", "model", ...)."""
+    return f"{CUBE_NAME}-{kind}.fits"

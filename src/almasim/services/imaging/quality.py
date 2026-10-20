@@ -61,11 +61,13 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 from ..instrument.constants import SPEED_OF_LIGHT_KM_S
-from .archive_imaging import (
-    CUBE_NAME,
+from .archive_imaging import line_free_channels
+from .products import (
+    CUBE_IMAGE_FILENAME,
     IMAGE_FILENAME,
     LINE_MASK_FILENAME,
-    line_free_channels,
+    continuum_product,
+    cube_product,
 )
 from .stats import robust_sigma
 
@@ -139,7 +141,7 @@ def continuum_quality(task_dir: Path) -> dict[str, Any] | None:
     """Continuum statistics of one task, or None without its three images."""
     from astropy.io import fits
 
-    paths = {kind: task_dir / f"wsclean-{kind}.fits" for kind in ("image", "residual", "model")}
+    paths = {kind: task_dir / continuum_product(kind) for kind in ("image", "residual", "model")}
     if not all(path.is_file() for path in paths.values()):
         return None
     header = fits.getheader(paths["image"])
@@ -243,7 +245,7 @@ def cube_quality(task_dir: Path, *, write_moments: bool = True) -> dict[str, Any
     """Cube statistics (and moment maps) of one task, or None without its cubes."""
     from astropy.io import fits
 
-    paths = {kind: task_dir / f"{CUBE_NAME}-{kind}.fits" for kind in ("image", "residual", "model")}
+    paths = {kind: task_dir / cube_product(kind) for kind in ("image", "residual", "model")}
     if not (paths["image"].is_file() and paths["residual"].is_file()):
         return None
     with (
@@ -420,7 +422,7 @@ def _write_moments(task_dir: Path, header, *, line_any: bool, **maps: np.ndarray
 def find_task_dirs(root: Path) -> list[Path]:
     """Every directory under ``root`` (``root`` included) holding a continuum or cube image."""
     root = Path(root)
-    names = (IMAGE_FILENAME, f"{CUBE_NAME}-image.fits")
+    names = (IMAGE_FILENAME, CUBE_IMAGE_FILENAME)
     found = {path.parent for name in names for path in root.rglob(name)}
     return sorted(found)
 

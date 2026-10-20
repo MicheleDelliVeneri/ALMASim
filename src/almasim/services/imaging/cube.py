@@ -135,7 +135,8 @@ def line_mask_from_channels(
             beams.append(float(hdus[0].header.get("BMAJ", 0.0)))
             header = hdus[0].header.copy()
         moment = plane if moment is None else moment + plane
-    assert moment is not None
+    if moment is None:
+        raise RuntimeError("no channel images to stack")
     from almasim.services.imaging.stats import robust_sigma
 
     noise = robust_sigma(moment)

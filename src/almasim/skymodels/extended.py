@@ -66,7 +66,8 @@ class MartiniMod(Martini):
         terminal: Optional[Any] = None,
     ):
         """Insert source into cube using parallel processing."""
-        assert self.spectral_model.spectra is not None
+        if self.spectral_model.spectra is None:
+            raise RuntimeError("the spectral model has no spectra; call init_spectra first")
         self.sph_kernel._confirm_validation(noraise=True, quiet=True)
 
         # Scatter the datacube array across the workers

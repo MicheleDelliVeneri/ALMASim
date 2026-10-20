@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
+from ..extraction import member_is_safe
 from ..markers import StageMarkers
 from .unpack_ms import (
     LogFn,
@@ -38,17 +39,12 @@ def _safe_extract_tar(tar_path: Path, destination: Path) -> list[Path]:
     with tarfile.open(tar_path, "r:*") as archive:
         members = archive.getmembers()
         for member in members:
-            member_path = Path(member.name)
-            if member_path.is_absolute() or ".." in member_path.parts:
+            if not member_is_safe(member, destination):
                 logger.warning("Skipping unsafe tar member: %s", member.name)
-                continue
-            resolved = (destination / member.name).resolve()
-            if not str(resolved).startswith(str(destination.resolve())):
-                logger.warning("Skipping escaping tar member: %s", member.name)
                 continue
             archive.extract(member, destination, filter="data")
             if not member.isdir():
-                extracted.append(resolved)
+                extracted.append((destination / member.name).resolve())
     return extracted
 
 
@@ -680,18 +676,3 @@ def create_calibrated_measurement_sets(
     finally:
         if workspace_root is not None:
             shutil.rmtree(workspace_root, ignore_errors=True)
-
-
-def restore_calibrated_measurement_sets(
-    input_root: str | os.PathLike[str],
-    raw_ms_root: str | os.PathLike[str],
-    output_root: str | os.PathLike[str],
-    **kwargs: Any,
-) -> list[Path]:
-    """Compatibility wrapper for the PI-script restore concept.
-
-    The standalone ``casatasks`` package used by ALMASim does not expose
-    ``hifa_restoredata``. This wrapper therefore creates the calibrated MS by
-    applying the delivered calibration tables and splitting science SPWs.
-    """
-    return create_calibrated_measurement_sets(input_root, raw_ms_root, output_root, **kwargs)
