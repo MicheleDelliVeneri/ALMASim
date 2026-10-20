@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { onDestroy, onMount } from 'svelte';
 	import {
 		metadataApi,
@@ -231,6 +232,13 @@
 	let loadModalOpen = $state(false);
 	let saveModalOpen = $state(false);
 	let statusMessage = $state('');
+	let statusLink = $state<{ route: '/data'; label: string } | null>(null);
+
+	/** Show a status line, optionally followed by a link. */
+	function setStatus(message: string, link: { route: '/data'; label: string } | null = null) {
+		statusMessage = message;
+		statusLink = link;
+	}
 	let localSaveFileName = $state('');
 	let loadFormRef = $state<HTMLFormElement>();
 	let saveFormRef = $state<HTMLFormElement>();
@@ -262,6 +270,12 @@
 	const results = $derived<MetadataResponse | null>(
 		queryRows.length > 0 ? { data: queryRows, count: queryRows.length } : loadedResults
 	);
+	// What the table shows, stable while a query streams more rows into it.
+	const resultsKey = $derived<unknown>(
+		queryRows.length > 0
+			? `jobs:${selectedJobId ?? jobs.map((j) => j.id).join(',')}`
+			: loadedResults
+	);
 
 	function updateJob(id: string, patch: Partial<QueryJob>) {
 		jobs = jobs.map((j) => (j.id === id ? { ...j, ...patch } : j));
@@ -290,7 +304,7 @@
 		const cached = getCachedResults();
 		if (cached) {
 			loadedResults = cached;
-			statusMessage = `Loaded cached metadata (${cached.count ?? cached.data.length} rows)`;
+			setStatus(`Loaded cached metadata (${cached.count ?? cached.data.length} rows)`);
 			logger.debug({ rowCount: cached.count ?? cached.data.length }, 'Restored metadata from cache');
 		}
 
@@ -329,7 +343,7 @@
 				result_count: job.rows.length,
 			});
 			presets = [saved, ...presets.filter((p) => p.name !== saved.name)];
-			statusMessage = `Preset "${saved.name}" saved.`;
+			setStatus(`Preset "${saved.name}" saved.`);
 			presetSaveOpen = false;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to save preset';
@@ -341,14 +355,14 @@
 
 	function applyPreset(preset: QueryPreset) {
 		runQuery(preset.filters);
-		statusMessage = `Running preset "${preset.name}"…`;
+		setStatus(`Running preset "${preset.name}"…`);
 	}
 
 	async function handleDeletePreset(name: string) {
 		try {
 			await metadataApi.deletePreset(name);
 			presets = presets.filter((p) => p.name !== name);
-			statusMessage = `Preset "${name}" deleted.`;
+			setStatus(`Preset "${name}" deleted.`);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to delete preset';
 			logger.error({ err, name }, 'Failed to delete query preset');
@@ -549,7 +563,7 @@
 			persistResults(data);
 			loadModalOpen = false;
 			formElement.reset();
-			statusMessage = `Loaded ${data.count} rows from ${file instanceof File ? 'local file' : filePath}`;
+			setStatus(`Loaded ${data.count} rows from ${file instanceof File ? 'local file' : filePath}`);
 			logger.info({ rowCount: data.count, source }, 'Metadata loaded successfully');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unable to load metadata file';
@@ -583,7 +597,7 @@
 		try {
 			await metadataApi.save({ path: backendPath, data: snapshot.data, format });
 			backendSucceeded = true;
-			statusMessage = `Saved ${snapshot.count} rows to backend path ${backendPath}`;
+			setStatus(`Saved ${snapshot.count} rows to backend path ${backendPath}`);
 			logger.info(
 				{ rowCount: snapshot.count, backendPath, format },
 				'Metadata saved to backend'
@@ -617,10 +631,10 @@
 				const mime = format === 'csv' ? 'text/csv' : 'application/json';
 				await writable.write(new Blob([body], { type: mime }));
 				await writable.close();
-				statusMessage = `Saved locally to ${localSaveFileName || localSaveHandle.name || `metadata.${format}`}${backendSucceeded ? ' (backend copy updated too)' : ''}`;
+				setStatus(`Saved locally to ${localSaveFileName || localSaveHandle.name || `metadata.${format}`}${backendSucceeded ? ' (backend copy updated too)' : ''}`);
 			} else if (needsLocalFallback) {
 				downloadMetadata(snapshot, backendPath, format);
-				statusMessage = `Downloaded metadata snapshot (${snapshot.count} rows, ${format.toUpperCase()})`;
+				setStatus(`Downloaded metadata snapshot (${snapshot.count} rows, ${format.toUpperCase()})`);
 			}
 		} catch (localError) {
 			logger.error({ err: localError }, 'Unable to write metadata locally');
@@ -657,7 +671,7 @@
 			});
 			localSaveHandle = handle;
 			localSaveFileName = handle.name || '';
-			statusMessage = `Local save target selected: ${handle.name || 'metadata.json'}`;
+			setStatus(`Local save target selected: ${handle.name || 'metadata.json'}`);
 		} catch (err) {
 			if (err instanceof DOMException && err.name === 'AbortError') {
 				return;
@@ -674,7 +688,7 @@
 		jobs = [];
 		selectedJobId = null;
 		loadedResults = null;
-		statusMessage = 'Metadata cleared.';
+		setStatus('Metadata cleared.');
 		if (typeof window !== 'undefined') {
 			window.localStorage.removeItem(RESULTS_CACHE_KEY);
 		}
@@ -689,7 +703,10 @@
 
 	function handleDownloadStarted(jobId: string) {
 		logger.info({ jobId }, 'Download job started');
-		statusMessage = `Download started (job ${jobId.slice(0, 8)}…). Track progress on the <a href="/data" class="underline font-medium">Data</a> page.`;
+		setStatus(`Download started (job ${jobId.slice(0, 8)}…). Track progress on the`, {
+			route: '/data',
+			label: 'Data page'
+		});
 	}
 </script>
 
@@ -744,6 +761,9 @@
 		{#if statusMessage}
 			<div class="whitespace-pre-wrap rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
 				{statusMessage}
+				{#if statusLink}
+					<a href={resolve(statusLink.route)} class="font-medium underline">{statusLink.label}</a>.
+				{/if}
 			</div>
 		{/if}
 
@@ -812,6 +832,7 @@
 
 		<MetadataResultsTable
 			{results}
+			{resultsKey}
 			loading={starting}
 			{fetching}
 			onClear={clearMetadata}
