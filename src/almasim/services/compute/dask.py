@@ -5,10 +5,9 @@ import logging
 import os
 import tempfile
 import zipfile
-from typing import Any, Callable, List, Optional
+from typing import Optional
 
 try:
-    from dask import delayed as dask_delayed
     from dask.distributed import Client, LocalCluster
 
     DASK_AVAILABLE = True
@@ -16,15 +15,13 @@ except ImportError:
     DASK_AVAILABLE = False
     Client = None
     LocalCluster = None
-    dask_delayed = None
 
-from .base import ComputationBackend
+from .base import DaskClientBackend
 
 logger = logging.getLogger(__name__)
-_CLIENT_NOT_INITIALIZED = "Dask client not initialized"
 
 
-class DaskBackend(ComputationBackend):
+class DaskBackend(DaskClientBackend):
     """Dask computation backend for distributed computing."""
 
     def __init__(
@@ -159,39 +156,6 @@ class DaskBackend(ComputationBackend):
             self.cluster = LocalCluster(**cluster_kwargs)
             self.client = Client(self.cluster)
 
-    def scatter(self, data: Any, broadcast: bool = False) -> Any:
-        """Scatter data to Dask workers."""
-        if self.client is None:
-            raise RuntimeError(_CLIENT_NOT_INITIALIZED)
-        return self.client.scatter(data, broadcast=broadcast)
-
-    def compute(self, tasks: Any, sync: bool = True) -> Any:
-        """Compute tasks using Dask."""
-        if self.client is None:
-            raise RuntimeError(_CLIENT_NOT_INITIALIZED)
-        return self.client.compute(tasks, sync=sync)
-
-    def gather(self, futures: Any) -> List[Any]:
-        """Gather results from Dask futures."""
-        if self.client is None:
-            raise RuntimeError(_CLIENT_NOT_INITIALIZED)
-        if isinstance(futures, list):
-            return self.client.gather(futures)
-        else:
-            return [self.client.gather([futures])[0]]
-
-    def delayed(self, func: Callable) -> Callable:
-        """Create a Dask delayed version of a function.
-
-        Returns a decorator that can be used to wrap function calls.
-        """
-        if dask_delayed is None:
-            raise ImportError("Dask delayed is not available")
-        # dask.delayed can be used as a decorator or function
-        # When used as decorator: @delayed, when used as function: delayed(func)(*args)
-        # We return it directly as it supports both patterns
-        return dask_delayed(func)
-
     def close(self) -> None:
         """Close Dask client and cluster."""
         if self.client:
@@ -200,11 +164,3 @@ class DaskBackend(ComputationBackend):
         if self.cluster:
             self.cluster.close()
             self.cluster = None
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.close()

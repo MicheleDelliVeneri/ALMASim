@@ -26,14 +26,20 @@ class SimulationService:
         galaxy_zoo_dir: Path,
         hubble_dir: Path,
         compute_backend: Optional[ComputationBackend] = None,
+        owns_backend: bool = False,
     ):
-        """Initialize simulation service."""
+        """Initialize simulation service.
+
+        With ``owns_backend`` the backend was made for this one job and is
+        closed when the job ends; the application's default one is shared.
+        """
         self.main_dir = main_dir
         self.output_dir = output_dir
         self.tng_dir = tng_dir
         self.galaxy_zoo_dir = galaxy_zoo_dir
         self.hubble_dir = hubble_dir
         self.compute_backend = compute_backend
+        self.owns_backend = owns_backend
 
     def _persist_status(
         self,
@@ -268,6 +274,9 @@ class SimulationService:
             )
             log_callback(f"ERROR: {error_msg}")
             raise
+        finally:
+            if self.owns_backend and self.compute_backend is not None:
+                self.compute_backend.close()
 
 
 # The request's own directory fields are not used: the server's configured

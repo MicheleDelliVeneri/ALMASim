@@ -436,10 +436,11 @@ def test_slurm_backend_delegates_to_client_methods():
 @pytest.mark.unit
 def test_slurm_backend_delayed_raises_when_dask_delayed_missing(monkeypatch):
     """SlurmBackend.delayed raises when dask.delayed is unavailable."""
+    import almasim.services.compute.base as base_mod
     import almasim.services.compute.slurm as slurm_mod
 
     backend = slurm_mod.SlurmBackend.__new__(slurm_mod.SlurmBackend)
-    monkeypatch.setattr(slurm_mod, "dask_delayed", None)
+    monkeypatch.setattr(base_mod, "dask_delayed", None)
 
     with pytest.raises(ImportError, match="Dask delayed is not available"):
         backend.delayed(lambda x: x)

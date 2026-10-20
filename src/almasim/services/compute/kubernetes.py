@@ -1,9 +1,8 @@
 """Kubernetes computation backend using dask-kubernetes."""
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 try:
-    from dask import delayed as dask_delayed
     from dask.distributed import Client
     from dask_kubernetes import KubeCluster
 
@@ -12,12 +11,11 @@ except ImportError:
     KUBERNETES_AVAILABLE = False
     KubeCluster = None
     Client = None
-    dask_delayed = None
 
-from .base import ComputationBackend
+from .base import DaskClientBackend
 
 
-class KubernetesBackend(ComputationBackend):
+class KubernetesBackend(DaskClientBackend):
     """Kubernetes computation backend using dask-kubernetes."""
 
     def __init__(
@@ -75,33 +73,6 @@ class KubernetesBackend(ComputationBackend):
         self.cluster.scale(self.n_workers)
         self.client = Client(self.cluster)
 
-    def scatter(self, data: Any, broadcast: bool = False) -> Any:
-        """Scatter data to Kubernetes workers."""
-        if self.client is None:
-            raise RuntimeError("Dask client not initialized")
-        return self.client.scatter(data, broadcast=broadcast)
-
-    def compute(self, tasks: Any, sync: bool = True) -> Any:
-        """Compute tasks using Kubernetes workers."""
-        if self.client is None:
-            raise RuntimeError("Dask client not initialized")
-        return self.client.compute(tasks, sync=sync)
-
-    def gather(self, futures: Any) -> List[Any]:
-        """Gather results from Kubernetes workers."""
-        if self.client is None:
-            raise RuntimeError("Dask client not initialized")
-        if isinstance(futures, list):
-            return self.client.gather(futures)
-        else:
-            return [self.client.gather([futures])[0]]
-
-    def delayed(self, func: Callable) -> Callable:
-        """Create a Dask delayed version of a function."""
-        if dask_delayed is None:
-            raise ImportError("Dask delayed is not available")
-        return dask_delayed(func)
-
     def close(self) -> None:
         """Close Kubernetes cluster and client."""
         if self.client:
@@ -110,11 +81,3 @@ class KubernetesBackend(ComputationBackend):
         if self.cluster:
             self.cluster.close()
             self.cluster = None
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.close()
