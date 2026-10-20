@@ -1,10 +1,6 @@
-export interface ObservationConfigInput {
-	name: string;
-	array_type: '12m' | '7m' | 'TP';
-	antenna_array: string;
-	total_time_s: number;
-	correlator?: string;
-}
+import type { ObservationConfigInput } from '../api/simulation';
+
+export type { ObservationConfigInput };
 
 export function deriveArrayType(antennaArray: string): string {
 	const upper = (antennaArray || '').toUpperCase();
@@ -22,7 +18,9 @@ export function deriveArrayType(antennaArray: string): string {
 	return '12m';
 }
 
-export function splitAntennaArrayByType(antennaArray: string): Array<[ObservationConfigInput['array_type'], string]> {
+export function splitAntennaArrayByType(
+	antennaArray: string
+): Array<[ObservationConfigInput['array_type'], string]> {
 	const tokens = (antennaArray || '')
 		.split(/\s+/)
 		.map((token) => token.trim())

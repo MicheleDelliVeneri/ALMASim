@@ -19,7 +19,7 @@
 		msSaveMode: string;
 		nLines: number;
 		robust: number;
-		imagingAlgorithm: 'legacy' | 'ducc0';
+		imagingAlgorithm: 'legacy';
 		numSimulations: number;
 		sourceOffsetXArcsec: number;
 		sourceOffsetYArcsec: number;
@@ -39,7 +39,7 @@
 		onMsSaveModeChange: (value: string) => void;
 		onNLinesChange: (value: number) => void;
 		onRobustChange: (value: number) => void;
-		onImagingAlgorithmChange: (value: 'legacy' | 'ducc0') => void;
+		onImagingAlgorithmChange: (value: 'legacy') => void;
 		onNumSimulationsChange: (value: number) => void;
 		onSourceOffsetXChange: (value: number) => void;
 		onSourceOffsetYChange: (value: number) => void;
@@ -409,7 +409,7 @@
 				id="imaging_algorithm"
 				value={imagingAlgorithm}
 				onchange={(e) =>
-					onImagingAlgorithmChange(e.currentTarget.value as 'legacy' | 'ducc0')}
+					onImagingAlgorithmChange(e.currentTarget.value as 'legacy')}
 				class={controlClass}
 			>
 				<option value="legacy">Legacy</option>

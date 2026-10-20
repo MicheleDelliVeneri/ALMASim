@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { MetadataRow } from '#lib/api/metadata.js';
 	import { formatBytes } from '#lib/utils/format.js';
 	import type { MetadataResponse } from '#lib/api/metadata.js';
 	import { downloadApi } from '#lib/api/download.js';
@@ -16,7 +17,7 @@
 		onLoad: () => void;
 		onSave: () => void;
 		saving: boolean;
-		onDownload: (memberOusUids: string[], metadataRows: Record<string, unknown>[]) => void;
+		onDownload: (memberOusUids: string[], metadataRows: MetadataRow[]) => void;
 	}
 
 	let { results, resultsKey, loading, fetching, onClear, onLoad, onSave, saving, onDownload }: Props =
@@ -209,10 +210,10 @@
 		return unique;
 	}
 
-	function getSelectedMetadataRows(): Record<string, unknown>[] {
+	function getSelectedMetadataRows(): MetadataRow[] {
 		return [...selectedRowIndices]
 			.map((idx) => results?.data?.[idx])
-			.filter((row): row is Record<string, unknown> => Boolean(row))
+			.filter((row): row is MetadataRow => Boolean(row))
 			.map((row) => ({ ...row }));
 	}
 

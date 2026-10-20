@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { MetadataRow } from '#lib/api/metadata.js';
 	import type { MetadataResponse } from '#lib/api/metadata.js';
 	import { deriveArrayType } from '#lib/utils/observationPlan.js';
 
@@ -6,8 +7,8 @@
 		metadata: MetadataResponse | null;
 		selectedIndices: number[];
 		onSelect: (indices: number[]) => void;
-		getRowValue: (row: Record<string, unknown>, key: string) => string;
-		getRowNumber: (row: Record<string, unknown>, key: string) => number | null;
+		getRowValue: (row: MetadataRow, key: string) => string;
+		getRowNumber: (row: MetadataRow, key: string) => number | null;
 	}
 
 	let { metadata, selectedIndices, onSelect, getRowValue, getRowNumber }: Props = $props();

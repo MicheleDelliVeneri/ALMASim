@@ -1,13 +1,17 @@
 /** Simulation API types and functions */
+import type { components } from './schema';
 import { apiClient, type RequestOptions } from './client';
 
-export interface ObservationConfigInput {
+// Generated from the backend's OpenAPI schema (npm run gen:api, MADIV-28 T7.4).
+type Schemas = components['schemas'];
+
+export type ObservationConfigInput = {
 	name: string;
 	array_type: '12m' | '7m' | 'TP';
 	antenna_array: string;
 	total_time_s: number;
 	correlator?: string;
-}
+};
 
 export interface SimulationParams {
 	source_name: string;
@@ -57,52 +61,16 @@ export interface SimulationParams {
 	background_seed?: number;
 }
 
-export interface SimulationParamsCreate extends SimulationParams {
-	idx: number;
-	/** Inside the server's output directory; the other data directories are the server's. */
-	output_dir: string;
-}
+// A request may leave out the fields the server has defaults for.
+export type SimulationParamsCreate = Partial<Schemas['SimulationParamsCreate']>;
 
-export interface SimulationResponse {
-	simulation_id: string;
-	status: string;
-	output_path?: string;
-	message?: string;
-}
+export type SimulationResponse = Schemas['SimulationResponse'];
 
-export interface SimulationStatus {
-	simulation_id: string;
-	status: string;
-	progress?: number;
-	message?: string;
-	current_step?: string;
-	logs?: string[];
-	error?: string;
-}
+export type SimulationStatus = Schemas['SimulationStatus'];
 
-export interface SimulationSummary {
-	simulation_id: string;
-	status: string;
-	progress: number;
-	message: string;
-	created_at: string;
-	updated_at: string;
-	error?: string;
-	output_dir?: string;
-}
+export type SimulationSummary = Schemas['SimulationSummary'];
 
-export interface SimulationEstimate {
-	n_pix: number;
-	n_channels: number;
-	cube_shape: number[];
-	cube_voxels: number;
-	cell_size_arcsec: number;
-	beam_size_arcsec: number;
-	raw_single_cube_gb: number;
-	raw_complex_cube_gb: number;
-	estimated_standard_output_gb: number;
-	note: string;
-}
+export type SimulationEstimate = Schemas['SimulationEstimate'];
 
 export interface DaskTestResult {
 	ok: boolean;

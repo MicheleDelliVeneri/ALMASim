@@ -55,7 +55,7 @@
 	let msSaveMode = $state('msv2');
 	let nLines = $state(0);
 	let robust = $state(0.0);
-	let imagingAlgorithm = $state<'legacy' | 'ducc0'>('legacy');
+	let imagingAlgorithm = $state<'legacy'>('legacy');
 	let numSimulations = $state(1);
 	let sourceOffsetXArcsec = $state(0.0);
 	let sourceOffsetYArcsec = $state(0.0);

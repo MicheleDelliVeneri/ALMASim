@@ -1,6 +1,6 @@
 """Download-related schemas."""
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -50,6 +50,14 @@ class ResolveProductsRequest(BaseModel):
     )
 
 
+class ProductTypeSummary(BaseModel):
+    """How many products of one type, and their total size."""
+
+    count: int
+    size_bytes: float
+    size_display: str
+
+
 class ResolveProductsResponse(BaseModel):
     """Response listing available products and size breakdown."""
 
@@ -57,9 +65,8 @@ class ResolveProductsResponse(BaseModel):
     total_count: int
     total_size_bytes: int
     total_size_display: str = Field(..., description="Human-friendly size string")
-    by_type: dict = Field(
-        default_factory=dict,
-        description="Breakdown: {type: {count, size_bytes, size_display}}",
+    by_type: Dict[str, ProductTypeSummary] = Field(
+        ..., description="Count and size of the products of each type"
     )
 
 

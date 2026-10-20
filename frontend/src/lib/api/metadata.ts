@@ -1,84 +1,67 @@
 /** Metadata API types and functions */
+import type { components } from './schema';
 import { apiClient } from './client';
 
-export interface MetadataQuery {
-	// Inclusion filters
-	source_name?: string;
-	science_keyword?: string[];
-	scientific_category?: string[];
-	bands?: number[];
-	antenna_arrays?: string;
-	array_type?: string[];
-	array_configuration?: string[];
-	angular_resolution_range?: [number, number];
-	observation_date_range?: [string, string];
-	qa2_status?: string[];
-	obs_type?: string[];
-	fov_range?: [number, number];
-	time_resolution_range?: [number, number];
-	frequency_range?: [number, number];
-	// Exclusion filters
-	exclude_science_keyword?: string[];
-	exclude_scientific_category?: string[];
-	exclude_source_name?: string[];
-	exclude_obs_type?: string[];
-	exclude_solar?: boolean;
-	// Cycle filtering: ALMA cycle numbers (e.g. [4, 5, 6]).
-	// Cycle N → year 2012+N → proposal_id prefix "{year}."
-	cycles?: number[];
-	// Data rights
-	public_only?: boolean;
-	// Observation type
-	science_only?: boolean;
-	exclude_mosaic?: boolean;
-	// Output control
-	visible_columns?: string[];
-}
+// Generated from the backend's OpenAPI schema (npm run gen:api, MADIV-28 T7.4).
+type Schemas = components['schemas'];
 
-export interface MetadataResponse {
-	count: number;
-	data: Record<string, unknown>[];
-}
+// A request may leave out every field; the server fills in the defaults.
+export type MetadataQuery = Partial<Schemas['MetadataQuery']>;
+
+/**
+ * One metadata row: the archive columns the backend returns
+ * (``almasim.services.metadata.tap.queries.ALL_COLUMNS``), plus any others.
+ */
+export type MetadataRow = {
+	ALMA_source_name?: string;
+	Band?: number | string;
+	Array_type?: string;
+	antenna_arrays?: string;
+	'Ang.res.'?: number;
+	'Obs.date'?: string;
+	Project_abstract?: string;
+	science_keyword?: string;
+	scientific_category?: string;
+	QA2_status?: string;
+	Type?: string;
+	PWV?: number;
+	SB_name?: string;
+	'Vel.res.'?: number;
+	RA?: number;
+	Dec?: number;
+	FOV?: number;
+	'Int.Time'?: number;
+	Cont_sens_mJybeam?: number;
+	Line_sens_10kms_mJybeam?: number;
+	Bandwidth?: number;
+	Freq?: number;
+	'Freq.sup.'?: string;
+	proposal_id?: string;
+	member_ous_uid?: string;
+	group_ous_uid?: string;
+	[column: string]: unknown;
+};
+
+export type MetadataResponse = Omit<Schemas['MetadataResponse'], 'data'> & {
+	data: MetadataRow[];
+};
 
 export interface ScienceTypes {
 	keywords: string[];
 	categories: string[];
 }
 
-export interface MetadataQueryStartResponse {
-	query_id: string;
-	status: string;
-}
+export type MetadataQueryStartResponse = Schemas['MetadataQueryStartResponse'];
 
-export interface MetadataPageResponse {
-	query_id: string;
-	page: number;
-	rows: Record<string, unknown>[];
-	page_size: number;
-	total_fetched: number;
-	done: boolean;
-	status?: string;
-	error?: string;
-}
+export type MetadataPageResponse = Omit<Schemas['MetadataPageResponse'], 'rows'> & {
+	rows: MetadataRow[];
+};
 
-export interface MetadataSaveRequest {
-	path: string;
-	data: Record<string, unknown>[];
-	format?: 'json' | 'csv';
-}
+export type MetadataSaveRequest = Schemas['MetadataSaveRequest'];
 
-export interface MetadataSaveResponse {
-	path: string;
-	count: number;
-	message?: string;
-}
+export type MetadataSaveResponse = Schemas['MetadataSaveResponse'];
 
-export interface QueryPresetCreate {
-	name: string;
-	description?: string;
-	filters: MetadataQuery;
-	result_count?: number;
-}
+export type QueryPresetCreate = Schemas['QueryPresetCreate'];
 
 export interface QueryPreset {
 	name: string;
@@ -88,6 +71,7 @@ export interface QueryPreset {
 	created_at: string;
 }
 
+// The backend stores a preset's filters as a plain object; they are a MetadataQuery.
 export interface QueryPresetsResponse {
 	presets: QueryPreset[];
 }
@@ -184,5 +168,5 @@ export const metadataApi = {
 
 	deletePreset: async (name: string): Promise<void> => {
 		return apiClient.delete(`/api/v1/metadata/presets/${encodeURIComponent(name)}`);
-	},
+	}
 };
