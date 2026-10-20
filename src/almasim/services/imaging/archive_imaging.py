@@ -543,7 +543,6 @@ def run_wsclean_task(
     ``wsclean[-cube]-image.pbcor.fits``.
     """
     out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
     log_path = imaging_log_path(out)
     commands = [[str(part) for part in c] for c in (command, cube_command or []) if c]
     if not commands:
@@ -567,6 +566,8 @@ def run_wsclean_task(
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
+    # Only after the arguments are checked, so a rejected call leaves no directory.
+    out.mkdir(parents=True, exist_ok=True)
     imaging_marker_path(out).unlink(missing_ok=True)
     imaging_failure_marker_path(out).unlink(missing_ok=True)
     for name in required:

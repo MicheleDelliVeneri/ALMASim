@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 import astropy.units as U
 import numpy as np
 import pytest
-from martini import DataCube
 
 from almasim.skymodels.molecular import (
     MolecularCloudSkyModel,
@@ -16,27 +15,16 @@ from almasim.skymodels.molecular import (
     molecular_image,
 )
 
+from ._fakes import make_datacube
+
 # ===========================================================================
 # helpers
 # ===========================================================================
 
 
-def _make_datacube(n_px: int = 32, n_chan: int = 16) -> DataCube:
-    return DataCube(
-        n_px_x=n_px,
-        n_px_y=n_px,
-        n_channels=n_chan,
-        px_size=0.1 * U.arcsec,
-        channel_width=0.1 * U.GHz,
-        spectral_centre=100.0 * U.GHz,
-        ra=0.0 * U.deg,
-        dec=0.0 * U.deg,
-    )
-
-
 def _make_model(n_px: int = 32, n_chan: int = 8) -> MolecularCloudSkyModel:
     """Build a minimal MolecularCloudSkyModel with a mock Dask client."""
-    datacube = _make_datacube(n_px, n_chan)
+    datacube = make_datacube(n_px, n_chan)
     mock_client = MagicMock()
     # client.compute() returns a list of futures; client.gather() returns the cube
     mock_client.compute.side_effect = lambda tasks: tasks
@@ -228,7 +216,7 @@ def test_molecular_cloud_skymodel_multiple_lines():
 def test_molecular_cloud_skymodel_no_lines():
     """Model with zero emission lines still runs."""
     n_px, n_chan = 16, 4
-    datacube = _make_datacube(n_px, n_chan)
+    datacube = make_datacube(n_px, n_chan)
     mock_client = MagicMock()
     mock_client.compute.side_effect = lambda tasks: tasks
     mock_client.gather.side_effect = lambda futures: [

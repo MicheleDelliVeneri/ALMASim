@@ -18,6 +18,29 @@ except ImportError:  # pragma: no cover - optional dependency
     DASK_DISTRIBUTED_AVAILABLE = False
 
 
+# Fakes for dask-jobqueue's SLURMCluster and distributed's Client, shared by the
+# singleton tests (each test used to define its own copy).
+
+
+class DummyCluster:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def scale(self, n_jobs):
+        self.n_jobs = n_jobs
+
+    def close(self):
+        return None
+
+
+class DummyClient:
+    def __init__(self, cluster):
+        self.cluster = cluster
+
+    def close(self):
+        return None
+
+
 @pytest.fixture(autouse=True)
 def _reset_singleton():
     """Ensure singleton state is clean for each test."""
@@ -217,23 +240,6 @@ def test_singleton_get_instance_reuses_existing(monkeypatch):
 def test_singleton_rejects_different_reconfiguration(monkeypatch):
     """A second call with different config should fail."""
 
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
-
-    class DummyClient:
-        def __init__(self, cluster):
-            self.cluster = cluster
-
-        def close(self):
-            return None
-
     monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
     monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
     monkeypatch.setattr(cluster_mod, "Client", DummyClient)
@@ -247,16 +253,6 @@ def test_singleton_rejects_different_reconfiguration(monkeypatch):
 @pytest.mark.unit
 def test_submit_subcommand_passes_resource_constraints(monkeypatch):
     """submit_subcommand should submit with CPU resources equal to cores."""
-
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
 
     class DummyClient:
         def __init__(self, cluster):
@@ -289,23 +285,6 @@ def test_submit_subcommand_passes_resource_constraints(monkeypatch):
 def test_submit_subcommand_rejects_invalid_cores(monkeypatch):
     """submit_subcommand should reject cores >= node_cores."""
 
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
-
-    class DummyClient:
-        def __init__(self, cluster):
-            self.cluster = cluster
-
-        def close(self):
-            return None
-
     monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
     monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
     monkeypatch.setattr(cluster_mod, "Client", DummyClient)
@@ -319,23 +298,6 @@ def test_submit_subcommand_rejects_invalid_cores(monkeypatch):
 @pytest.mark.unit
 def test_singleton_passes_hostname_to_job_script_prologue(monkeypatch):
     """Cluster init should export submit HOSTNAME in worker job prologue."""
-
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
-
-    class DummyClient:
-        def __init__(self, cluster):
-            self.cluster = cluster
-
-        def close(self):
-            return None
 
     monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
     monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
@@ -352,23 +314,6 @@ def test_singleton_passes_hostname_to_job_script_prologue(monkeypatch):
 def test_singleton_sets_scheduler_host_from_hostname(monkeypatch):
     """Scheduler host should default to submit-side HOSTNAME."""
 
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
-
-    class DummyClient:
-        def __init__(self, cluster):
-            self.cluster = cluster
-
-        def close(self):
-            return None
-
     monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
     monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
     monkeypatch.setattr(cluster_mod, "Client", DummyClient)
@@ -382,23 +327,6 @@ def test_singleton_sets_scheduler_host_from_hostname(monkeypatch):
 @pytest.mark.unit
 def test_singleton_allows_explicit_scheduler_host_override(monkeypatch):
     """Explicit scheduler_host should override HOSTNAME-derived default."""
-
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
-
-    class DummyClient:
-        def __init__(self, cluster):
-            self.cluster = cluster
-
-        def close(self):
-            return None
 
     monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
     monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
@@ -417,23 +345,6 @@ def test_singleton_allows_explicit_scheduler_host_override(monkeypatch):
 @pytest.mark.unit
 def test_singleton_resolves_log_directory_within_home(monkeypatch, tmp_path):
     """Custom log_directory under HOME should be accepted and normalized."""
-
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
-
-    class DummyClient:
-        def __init__(self, cluster):
-            self.cluster = cluster
-
-        def close(self):
-            return None
 
     home_dir = tmp_path / "home"
     home_dir.mkdir()
@@ -454,23 +365,6 @@ def test_singleton_resolves_log_directory_within_home(monkeypatch, tmp_path):
 @pytest.mark.unit
 def test_singleton_rejects_log_directory_outside_home(monkeypatch, tmp_path):
     """Custom log_directory outside HOME should be rejected."""
-
-    class DummyCluster:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def scale(self, n_jobs):
-            self.n_jobs = n_jobs
-
-        def close(self):
-            return None
-
-    class DummyClient:
-        def __init__(self, cluster):
-            self.cluster = cluster
-
-        def close(self):
-            return None
 
     home_dir = tmp_path / "home"
     outside_dir = tmp_path / "outside"
