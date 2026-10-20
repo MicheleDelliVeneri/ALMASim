@@ -33,7 +33,7 @@ def _generators(monkeypatch, seed):
         seen.append(rng)
         raise StopIteration  # nothing past the TP call matters here
 
-    monkeypatch.setattr(simulation.uin, "simulate_total_power_observation", fake_tp)
+    monkeypatch.setattr(simulation.stages.uin, "simulate_total_power_observation", fake_tp)
     with pytest.raises(StopIteration):
         simulation.simulate_observation(_stage(seed))
     return seen

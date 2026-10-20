@@ -43,7 +43,7 @@ class GaussianSkyModel(SkyModel):
         angle: int,
         n_px: int,
         n_chan: int,
-        client: Client,
+        client: Optional[Client],
         update_progress: Optional[Any] = None,
     ):
         """

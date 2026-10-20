@@ -212,7 +212,7 @@ def _randint_from(low: int, high: Any, size: Any = None) -> Any:
 
 def insert_serendipitous(
     terminal: Optional[Any],
-    client: Client,
+    client: Optional[Client],
     update_progress: Optional[Any],
     datacube: Any,
     continum: np.ndarray,

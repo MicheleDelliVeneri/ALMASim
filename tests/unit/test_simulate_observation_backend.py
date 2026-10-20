@@ -23,7 +23,7 @@ def _backend_used(monkeypatch, compute_backend):
         seen.append(backend)
         raise StopIteration  # nothing past construction matters here
 
-    monkeypatch.setattr(simulation.uin, "Interferometer", fake_interferometer)
+    monkeypatch.setattr(simulation.stages.uin, "Interferometer", fake_interferometer)
     stage = MagicMock()
     stage.interferometer_runs = [{}]
     stage.total_power_runs = []

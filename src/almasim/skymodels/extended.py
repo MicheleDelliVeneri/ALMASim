@@ -62,7 +62,7 @@ class MartiniMod(Martini):
 
     def _insert_source_in_cube(
         self,
-        client: Client,
+        client: Client | _LocalClient,
         update_progress: Optional[Any] = None,
         terminal: Optional[Any] = None,
     ):
@@ -153,7 +153,7 @@ class MartiniMod(Martini):
 
 
 def insert_tng(
-    client: Client,
+    client: Client | _LocalClient,
     update_progress: Optional[Any],
     terminal: Optional[Any],
     n_px: int,
@@ -226,7 +226,7 @@ class ExtendedSkyModel:
         ra: U.Quantity,
         dec: U.Quantity,
         api_key: Optional[str],
-        client: Client,
+        client: Optional[Client],
         update_progress: Optional[Any] = None,
         terminal: Optional[Any] = None,
     ):
