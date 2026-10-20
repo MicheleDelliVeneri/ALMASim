@@ -9,6 +9,8 @@
 #
 # Tools come from the environment (defaults suit the CI image):
 #   PYTHON, WSCLEAN_BIN, CASA_DATA, CORES, TASK_MEMORY_GB, SELFCAL_MIN_SNR
+# BACKEND=slurm runs calibrate and image through Slurm (partition SLURM_QUEUE,
+# default "ci", as set up by ci_slurm_cluster.sh) instead of in this process.
 set -euo pipefail
 FIXTURE="$(cd "${1:?usage: ci_chain.sh FIXTURE_DIR RUN_DIR}" && pwd)"
 RUN="${2:?usage: ci_chain.sh FIXTURE_DIR RUN_DIR}"
@@ -24,9 +26,31 @@ TASK_MEMORY_GB="${TASK_MEMORY_GB:-12}"
 # The trimmed data has a much lower S/N than the full window; a low threshold
 # keeps the self-calibration path exercised.
 SELFCAL_MIN_SNR="${SELFCAL_MIN_SNR:-3}"
+BACKEND="${BACKEND:-sync}"
+SLURM_QUEUE="${SLURM_QUEUE:-ci}"
 export OPENBLAS_NUM_THREADS=1
+if [ "$BACKEND" = slurm ]; then
+    CALIBRATE_BACKEND=(--postprocess-backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-cores 2
+        --slurm-memory 6GB --slurm-workers 1 --slurm-walltime 01:00:00)
+    IMAGE_BACKEND=(--postprocess-backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-memory 10GB
+        --slurm-n-jobs 1 --slurm-walltime 01:00:00)
+    # Without SCHEDULER_HOST the pipeline picks the address the workers can reach.
+    if [ -n "${SCHEDULER_HOST:-}" ]; then
+        CALIBRATE_BACKEND+=(--slurm-scheduler-host "$SCHEDULER_HOST")
+        IMAGE_BACKEND+=(--scheduler-host "$SCHEDULER_HOST")
+    fi
+else
+    CALIBRATE_BACKEND=(--postprocess-backend sync)
+    IMAGE_BACKEND=(--postprocess-backend sync)
+fi
 
 mkdir -p "$RUN/logs" "$RUN/archives"
+if [ "$BACKEND" = slurm ]; then
+    # What the queue looked like, every 30 s: why a job is pending shows up here.
+    ( while true; do date -u +%T; squeue -h -o "%i %j %T %C %m %r" || true; sleep 30; done ) \
+        > "$RUN/logs/squeue.log" 2>&1 &
+    trap 'kill %1 2>/dev/null || true' EXIT
+fi
 RUN="$(cd "$RUN" && pwd)"
 declare -A STAGE_SECONDS
 stage() {  # stage NAME COMMAND...
@@ -57,7 +81,7 @@ else
     stage extract tar -xf "$raw_tar" -C "$RUN/raw_ms/working"
 fi
 
-stage calibrate "$PYTHON" -m almasim.cli visibilities calibrate --postprocess-backend sync \
+stage calibrate "$PYTHON" -m almasim.cli visibilities calibrate "${CALIBRATE_BACKEND[@]}" \
     --input-root "$FIXTURE/auxiliary" --raw-ms-root "$RUN/raw_ms/working" \
     --output-root "$RUN/cal" --asdm-uid "$UID_EB" \
     --casa-data-root "$CASA_DATA" --skip-casa-data-update
@@ -66,7 +90,7 @@ stage compute-parameters "$PYTHON" -m almasim.cli image compute-parameters \
     "$RUN/cal" "$RUN/params.csv"
 
 stage image "$PYTHON" -m almasim.cli image image-from-ms "$RUN/params.csv" "$RUN/cubes" \
-    --postprocess-backend sync --wsclean-bin "$WSCLEAN_BIN" \
+    "${IMAGE_BACKEND[@]}" --wsclean-bin "$WSCLEAN_BIN" \
     --num-cores "$CORES" --task-memory-gb "$TASK_MEMORY_GB" --task-timeout 3600 \
     --cube --uv-contsub --selfcal inf,30s,ap:inf --selfcal-min-snr "$SELFCAL_MIN_SNR" \
     --noise-products --casa-data-root "$CASA_DATA"
