@@ -232,6 +232,7 @@ def _build_simulation_params(
     background_level: float,
     background_seed: int | None,
     seed: int | None,
+    inject_serendipitous: bool,
     output_subdir_name: str | None,
     input_path: Path | None,
     kaggle_token: Path | None = None,
@@ -283,6 +284,7 @@ def _build_simulation_params(
         background_level=background_level,
         background_seed=background_seed,
         seed=seed,
+        inject_serendipitous=inject_serendipitous,
         kaggle_token=kaggle_token,
         # Disable MS export by default; requires casatools or python-casacore.
         ms_export=False,
@@ -385,6 +387,11 @@ def simulation_run(
         None,
         "--background-seed",
         help="Random seed for background sky generation.",
+    ),
+    inject_serendipitous: bool = typer.Option(
+        False,
+        "--inject-serendipitous",
+        help="Add a few random serendipitous sources around the target.",
     ),
     save_mode: str = typer.Option(
         "memory",
@@ -522,6 +529,7 @@ def simulation_run(
                     background_level=background_level,
                     background_seed=(background_seed if background_seed is not None else run_seed),
                     seed=run_seed,
+                    inject_serendipitous=inject_serendipitous,
                     output_subdir_name=output_subdir_name,
                     input_path=input_path,
                     kaggle_token=kaggle_token,
