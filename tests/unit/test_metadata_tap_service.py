@@ -17,6 +17,7 @@ from almasim.services.metadata.tap.service import (
     query_by_science_type,
     query_observations,
     query_products_for_members,
+    reset_tap_service,
     search_with_retry,
 )
 
@@ -358,6 +359,13 @@ def test_search_with_retry_calls_service():
     svc.search.assert_called_once()
 
 
+@pytest.fixture(autouse=True)
+def _fresh_tap_service():
+    reset_tap_service()
+    yield
+    reset_tap_service()
+
+
 @pytest.mark.unit
 def test_get_tap_service_returns_on_first_success():
     mock_svc = MagicMock()
@@ -365,6 +373,27 @@ def test_get_tap_service_returns_on_first_success():
         mock_pyvo.dal.TAPService.return_value = mock_svc
         result = get_tap_service()
     assert result is mock_svc
+
+
+@pytest.mark.unit
+def test_get_tap_service_reuses_the_connected_mirror():
+    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+        first = get_tap_service()
+        second = get_tap_service()
+    assert first is second
+    assert mock_pyvo.dal.TAPService.call_count == 1
+
+
+@pytest.mark.unit
+def test_a_failed_query_forgets_the_mirror():
+    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+        service = get_tap_service()
+        service.search.side_effect = RuntimeError("mirror down")
+        with pytest.raises(Exception):
+            search_with_retry.retry_with(stop=lambda _: True)(service, "SELECT 1")
+        service.search.side_effect = None
+        get_tap_service()
+    assert mock_pyvo.dal.TAPService.call_count == 2
 
 
 @pytest.mark.unit
@@ -481,3 +510,25 @@ def test_query_products_for_members_list_of_uids():
     query_str = mock_svc.search.call_args[0][0]
     assert "uid://A001/X1/X1" in query_str
     assert "uid://A001/X2/X2" in query_str
+
+
+@pytest.mark.unit
+def test_get_tap_service_raises_when_every_mirror_fails():
+    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+        mock_pyvo.dal.TAPService.return_value.search.side_effect = RuntimeError("down")
+        with pytest.raises(RuntimeError, match="All ALMA TAP mirrors unreachable"):
+            get_tap_service(max_rounds=1)
+
+
+@pytest.mark.unit
+def test_get_science_types_forgets_the_mirror_on_a_query_error():
+    import pyvo
+
+    from almasim.services.metadata.tap import service as tap
+
+    failing = MagicMock()
+    failing.search.side_effect = pyvo.dal.exceptions.DALServiceError("boom")
+    tap._connected_service = failing
+    with pytest.raises(pyvo.dal.exceptions.DALServiceError):
+        tap.get_science_types.retry_with(stop=lambda _: True, reraise=True)()
+    assert tap._connected_service is None

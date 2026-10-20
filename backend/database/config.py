@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import Base
+from .schema_upgrade import add_missing_columns
 
 
 def get_database_url() -> str:
@@ -46,86 +47,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db():
     """Initialize database tables."""
     Base.metadata.create_all(bind=engine)
-    # Add columns that may be missing from older schemas
-    from sqlalchemy import inspect, text
-
-    insp = inspect(engine)
-    if insp.has_table("download_jobs"):
-        cols = {c["name"] for c in insp.get_columns("download_jobs")}
-        with engine.begin() as conn:
-            if "member_ous_uids" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN member_ous_uids TEXT NOT NULL DEFAULT ''"
-                    )
-                )
-            if "product_filter" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN product_filter VARCHAR(20) NOT NULL DEFAULT 'all'"
-                    )
-                )
-            if "metadata_json" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '[]'"
-                    )
-                )
-            if "unpack_ms" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN unpack_ms BOOLEAN NOT NULL DEFAULT FALSE"
-                    )
-                )
-            if "generate_calibrated_visibilities" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN generate_calibrated_visibilities "
-                        "BOOLEAN NOT NULL DEFAULT FALSE"
-                    )
-                )
-            if "clean_intermediate_files" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN clean_intermediate_files "
-                        "BOOLEAN NOT NULL DEFAULT FALSE"
-                    )
-                )
-            if "archive_output_root" not in cols:
-                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN archive_output_root TEXT"))
-            if "casa_data_root" not in cols:
-                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN casa_data_root TEXT"))
-            if "skip_casa_data_update" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN skip_casa_data_update "
-                        "BOOLEAN NOT NULL DEFAULT FALSE"
-                    )
-                )
-            if "raw_measurement_sets" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN raw_measurement_sets TEXT NOT NULL DEFAULT '[]'"
-                    )
-                )
-            if "calibrated_measurement_sets" not in cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE download_jobs "
-                        "ADD COLUMN calibrated_measurement_sets "
-                        "TEXT NOT NULL DEFAULT '[]'"
-                    )
-                )
-            if "manifest_path" not in cols:
-                conn.execute(text("ALTER TABLE download_jobs ADD COLUMN manifest_path TEXT"))
+    add_missing_columns(engine)
 
 
 def get_db() -> Generator[Session, None, None]:

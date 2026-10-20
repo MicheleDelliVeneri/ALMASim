@@ -17,12 +17,14 @@ from .service import (
     query_by_science_type,
     query_observations,
     query_products_for_members,
+    reset_tap_service,
     search_with_retry,
 )
 
 __all__ = [
     # Service layer
     "get_tap_service",
+    "reset_tap_service",
     "search_with_retry",
     "get_science_types",
     "query_observations",
