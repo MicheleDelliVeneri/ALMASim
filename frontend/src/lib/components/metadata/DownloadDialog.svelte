@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { ResolveProductsResponse, DiskSpaceInfo, BrowseDirectoryResponse } from '#lib/api/download.js';
+	import type { ResolveProductsResponse, DiskSpaceInfo } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
+	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/metadata/DownloadDialog');
@@ -58,32 +59,15 @@
 
 	// Directory browser state
 	let browserOpen = $state(false);
-	let browsing = $state(false);
-	let browseResult = $state<BrowseDirectoryResponse | null>(null);
-	let browseError = $state('');
-
-	async function browseDir(path: string) {
-		browsing = true;
-		browseError = '';
-		try {
-			browseResult = await downloadApi.browseDirectory(path);
-		} catch (e) {
-			browseError = e instanceof Error ? e.message : 'Failed to browse directory';
-		} finally {
-			browsing = false;
-		}
-	}
 
 	function openBrowser() {
 		browserOpen = true;
-		browseDir(destination || '/');
 	}
 
 	function selectDirectory(path: string) {
 		logger.debug({ path }, 'Download destination selected');
 		destination = path;
 		browserOpen = false;
-		browseResult = null;
 	}
 
 	// Filtered size/count
@@ -132,8 +116,6 @@
 			casaDataRoot = '';
 			skipCasaDataUpdate = false;
 			browserOpen = false;
-			browseResult = null;
-			browseError = '';
 		}
 	});
 
@@ -457,98 +439,11 @@
 
 <!-- Browse directory popup -->
 {#if browserOpen}
-	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4"
-		role="dialog"
-		aria-modal="true"
-	>
-		<div class="w-full max-w-lg rounded-lg bg-surface shadow-panel">
-			<header class="flex items-center justify-between border-b px-5 py-3">
-				<h3 class="text-sm font-semibold text-fg">Choose Download Folder</h3>
-				<button
-					type="button"
-					class="text-fg-dim hover:text-gray-700"
-					aria-label="Close"
-					onclick={() => { browserOpen = false; browseResult = null; browseError = ''; }}
-				>
-					✕
-				</button>
-			</header>
-
-			<div class="px-5 py-4">
-				{#if browsing && !browseResult}
-					<div class="flex items-center gap-2 py-6 justify-center text-sm text-fg-dim">
-						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
-							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
-						</svg>
-						Loading…
-					</div>
-				{:else if browseError}
-					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{browseError}</div>
-				{:else if browseResult}
-					<!-- Current path breadcrumb -->
-					<div class="mb-3 flex items-center gap-2 rounded-md bg-surface px-3 py-2">
-						<span class="truncate font-mono text-xs text-fg-muted" title={browseResult.current}>
-							{browseResult.current}
-						</span>
-						{#if browsing}
-							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-fg-dim" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
-								<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
-							</svg>
-						{/if}
-					</div>
-
-					<!-- Directory listing -->
-					<ul class="max-h-64 overflow-y-auto rounded-md border border-line bg-surface">
-						{#if browseResult.parent}
-							<li class="border-b border-line">
-								<button
-									type="button"
-									class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-hover"
-									onclick={() => browseDir(browseResult!.parent!)}
-								>
-									<span class="text-fg-dim">↩</span>
-									<span class="text-fg-dim">..</span>
-								</button>
-							</li>
-						{/if}
-						{#each browseResult.entries as entry}
-							<li class="border-b border-line last:border-b-0">
-								<button
-									type="button"
-									class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent-soft"
-									onclick={() => browseDir(entry.path)}
-								>
-									<span class="text-yellow-500">📁</span>
-									<span class="truncate text-fg-muted">{entry.name}</span>
-								</button>
-							</li>
-						{:else}
-							<li class="px-3 py-4 text-center text-sm text-fg-dim italic">No subdirectories</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-
-			<footer class="flex items-center justify-end gap-3 border-t px-5 py-3">
-				<button
-					type="button"
-					class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
-					onclick={() => { browserOpen = false; browseResult = null; browseError = ''; }}
-				>
-					Cancel
-				</button>
-				<button
-					type="button"
-					disabled={!browseResult}
-					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-blue-300 disabled:cursor-not-allowed"
-					onclick={() => browseResult && selectDirectory(browseResult.current)}
-				>
-					Select this folder
-				</button>
-			</footer>
-		</div>
-	</div>
+	<DirectoryPicker
+		startPath={destination || '/'}
+		title="Choose Download Folder"
+		layer="z-[60]"
+		onSelect={selectDirectory}
+		onClose={() => (browserOpen = false)}
+	/>
 {/if}

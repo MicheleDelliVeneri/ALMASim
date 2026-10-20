@@ -4,7 +4,7 @@
 	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
 	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '#lib/logger.js';
-	import { downloadApi, type BrowseDirectoryResponse } from '#lib/api/download.js';
+	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { API_BASE_URL } from '#lib/config.js';
 
 	const logger = createLogger('routes/combination');
@@ -54,9 +54,6 @@
 	let productFilter = $state<ProductFilter>('all');
 
 	let dirBrowserOpen = $state(false);
-	let dirBrowsing = $state(false);
-	let dirBrowseResult = $state<BrowseDirectoryResponse | null>(null);
-	let dirBrowseError = $state('');
 
 	let linkedView = $state(false);
 	let gridLayout = $state<'horizontal' | 'vertical'>('horizontal');
@@ -116,34 +113,12 @@
 		}
 	}
 
-	async function browseDir(path: string) {
-		dirBrowsing = true;
-		dirBrowseError = '';
-		try {
-			dirBrowseResult = await downloadApi.browseDirectory(path);
-		} catch (e) {
-			dirBrowseError = e instanceof Error ? e.message : 'Failed to browse directory';
-			logger.error({ path, err: e }, 'Failed to browse combination directory');
-		} finally {
-			dirBrowsing = false;
-		}
-	}
-
 	function openDirBrowser() {
 		dirBrowserOpen = true;
-		browseDir(outputDir || '/host_home');
 	}
 
-	function closeDirBrowser() {
+	function selectDir(selectedDir: string) {
 		dirBrowserOpen = false;
-		dirBrowseResult = null;
-		dirBrowseError = '';
-	}
-
-	function selectDir() {
-		if (!dirBrowseResult) return;
-		const selectedDir = dirBrowseResult.current;
-		closeDirBrowser();
 		loadFileList(selectedDir);
 	}
 
@@ -409,54 +384,11 @@
 </div>
 
 {#if dirBrowserOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
-		<div class="w-full max-w-lg rounded-lg bg-surface shadow-panel">
-			<header class="flex items-center justify-between border-b px-5 py-3">
-				<h2 class="text-sm font-semibold text-fg">Select Combination Directory</h2>
-			</header>
-
-			<div class="space-y-3 px-5 py-4">
-				{#if dirBrowsing && !dirBrowseResult}
-					<div class="flex items-center justify-center gap-2 py-6 text-sm text-fg-dim">Loading…</div>
-				{:else if dirBrowseError}
-					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{dirBrowseError}</div>
-				{:else if dirBrowseResult}
-					<div class="flex items-center gap-2 rounded-md bg-surface px-3 py-2">
-						<span class="truncate font-mono text-xs text-fg-muted">{dirBrowseResult.current}</span>
-					</div>
-
-					<ul class="max-h-56 overflow-y-auto rounded-md border border-line bg-surface">
-						{#if dirBrowseResult.parent}
-							<li class="border-b border-line">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-hover" onclick={() => dirBrowseResult?.parent && browseDir(dirBrowseResult.parent)}>
-									<span class="text-fg-dim">↩</span>
-									<span class="text-fg-dim">..</span>
-								</button>
-							</li>
-						{/if}
-						{#each dirBrowseResult.entries as entry}
-							<li class="border-b border-line last:border-b-0">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent-soft" onclick={() => browseDir(entry.path)}>
-									<span class="text-yellow-500">📁</span>
-									<span class="truncate text-fg-muted">{entry.name}</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-
-			<footer class="flex justify-end gap-3 border-t px-5 py-3">
-				<button type="button" class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover" onclick={closeDirBrowser}>Cancel</button>
-				<button
-					type="button"
-					disabled={!dirBrowseResult}
-					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-blue-300"
-					onclick={selectDir}
-				>
-					Select This Directory
-				</button>
-			</footer>
-		</div>
-	</div>
+	<DirectoryPicker
+		startPath={outputDir || '/host_home'}
+		title="Select Combination Directory"
+		selectLabel="Select This Directory"
+		onSelect={selectDir}
+		onClose={() => (dirBrowserOpen = false)}
+	/>
 {/if}
