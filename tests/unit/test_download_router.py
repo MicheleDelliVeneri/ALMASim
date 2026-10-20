@@ -27,6 +27,12 @@ download_router = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(download_router)
 
 
+@pytest.fixture(autouse=True)
+def _allow_tmp_paths(monkeypatch):
+    """Request paths must lie under an allowed root (T1.9); these tests use /tmp."""
+    monkeypatch.setattr(download_router.settings, "ALLOWED_ROOTS", [Path("/tmp")])
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -584,6 +590,47 @@ def test_delete_download_job_removes_record(tmp_path, monkeypatch):
     result = download_router.delete_download_job("job-1")
     assert result["deleted"] is True
     store.delete_from_db.assert_called_once_with("job-1")
+
+
+def test_delete_download_job_leaves_paths_outside_its_destination(tmp_path, monkeypatch):
+    """A stored filename or generated path outside the job's destination is not removed."""
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    inside = dest / "a.tar"
+    inside.write_bytes(b"x")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("keep")
+
+    rec = _make_db_rec()
+    rec.destination = str(dest)
+    rec.files = [MagicMock(filename="a.tar"), MagicMock(filename="../elsewhere/keep.txt")]
+    rec.manifest_path = None
+    rec.raw_measurement_sets = json.dumps([str(outside)])
+    rec.calibrated_measurement_sets = json.dumps([])
+
+    store = MagicMock()
+    store.get.return_value = None
+    store.get_from_db.return_value = rec
+    store.delete_from_db.return_value = True
+    monkeypatch.setattr(download_router, "download_store", store)
+
+    result = download_router.delete_download_job("job-1")
+    assert not inside.exists()
+    assert (outside / "keep.txt").read_text() == "keep"
+    assert result["skipped_outside_destination"] >= 2
+
+
+def test_start_download_rejects_a_destination_outside_the_allowed_roots(monkeypatch):
+    from fastapi import HTTPException
+
+    body = MagicMock()
+    body.member_ous_uids = ["uid://A001/X1"]
+    body.destination = "/etc/almasim"
+    with pytest.raises(HTTPException) as exc_info:
+        download_router.start_download(body=body, background_tasks=MagicMock())
+    assert exc_info.value.status_code == 400
+    assert "destination must be inside" in exc_info.value.detail
 
 
 def test_delete_download_job_raises_400_when_active(monkeypatch):
