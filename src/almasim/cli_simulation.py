@@ -15,6 +15,7 @@ from tqdm.auto import tqdm
 
 from .services import astro
 from .services.astro.spectral import sample_given_redshift
+from .skymodels.registry import SKYMODELS
 
 if TYPE_CHECKING:
     from .services.simulation import SimulationParams
@@ -67,14 +68,7 @@ simulation_app = typer.Typer(
     no_args_is_help=True,
 )
 
-_SOURCE_TYPES = [
-    "point",
-    "gaussian",
-    "diffuse",
-    "galaxy-zoo",
-    "molecular",
-    "hubble-100",
-]
+_SOURCE_TYPES = [name for name, spec in SKYMODELS.items() if spec.in_cli and not spec.external]
 _SAVE_MODES = ["memory", "npz", "h5", "fits"]
 _BACKEND_TYPES = ["sync", "local"]
 # "ducc0" is disabled until its uv geometry is fixed (MADIV-28 T1.3, T3.7).

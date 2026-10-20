@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SimulationParamsBase(BaseModel):
@@ -34,7 +34,7 @@ class SimulationParamsBase(BaseModel):
         default=None,
         description="Optional multi-configuration single-pointing observation plan",
     )
-    source_type: str = Field(default="point", description="Source type")
+    source_type: str = Field(default="point", description="Source type (see almasim SKYMODELS)")
     n_pix: Optional[int] = Field(None, description="Number of pixels")
     n_channels: Optional[int] = Field(None, description="Number of channels")
     tng_api_key: Optional[str] = Field(None, description="TNG API key")
@@ -141,6 +141,15 @@ class SimulationParamsBase(BaseModel):
         default=None,
         description=("Optional target directory for the native MeasurementSet `.ms` export"),
     )
+
+    @field_validator("source_type")
+    @classmethod
+    def _known_source_type(cls, value: str) -> str:
+        """Reject an unknown sky-model family up front (422) instead of mid-run."""
+        from almasim.skymodels.registry import skymodel_spec
+
+        skymodel_spec(value)
+        return value.lower()
 
 
 class SimulationParamsCreate(SimulationParamsBase):

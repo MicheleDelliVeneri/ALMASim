@@ -10,11 +10,9 @@ from astropy.io import fits
 from astropy.table import Table
 from scipy.ndimage import zoom
 
-EXTERNAL_SOURCE_TYPES = {
-    "external-fits-image",
-    "external-fits-cube",
-    "external-components",
-}
+from ..skymodels.registry import SKYMODELS
+
+EXTERNAL_SOURCE_TYPES = {name for name, spec in SKYMODELS.items() if spec.external}
 
 
 @dataclass
