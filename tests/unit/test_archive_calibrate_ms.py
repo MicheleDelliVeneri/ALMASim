@@ -1,4 +1,4 @@
-"""Unit tests for almasim.services.archive.calibrate_ms.
+"""Unit tests for almasim.services.archive.calibration.
 
 CASA dependencies (casatools, casatasks) are mocked at the function level
 using patch.dict(sys.modules) so that the module-level sys.modules state is
@@ -19,13 +19,7 @@ import pytest
 # Import only the pure-Python helpers that don't require CASA at import time.
 # Functions that call `from casatools import ...` inside their body are tested
 # with explicit patch.dict(sys.modules) in each test.
-from almasim.services.archive.calibrate_ms import (
-    _is_relative_to,
-    _parse_applycal_calls,
-    _prepare_casa_environment,
-    _prepare_working_directory,
-    _remove_tree_after_success,
-    _safe_extract_tar,
+from almasim.services.archive.calibration import (
     apply_delivered_calibration,
     create_calibrated_measurement_sets,
     find_calibration_directory,
@@ -33,6 +27,16 @@ from almasim.services.archive.calibrate_ms import (
     science_spws,
     split_calibrated_science_ms,
 )
+from almasim.services.archive.calibration.apply import (
+    _prepare_working_directory,
+    _safe_extract_tar,
+)
+from almasim.services.archive.calibration.cleanup import (
+    _is_relative_to,
+    _remove_tree_after_success,
+)
+from almasim.services.archive.calibration.discovery import _parse_applycal_calls
+from almasim.services.archive.calibration.run import _prepare_casa_environment
 
 
 @pytest.fixture(autouse=True)
@@ -44,7 +48,7 @@ def _skip_raw_ms_row_check():
     patch ``verify_measurement_set`` themselves; their patch applies inside this
     one and wins.
     """
-    with patch("almasim.services.archive.calibrate_ms.verify_measurement_set", return_value=1):
+    with patch("almasim.services.archive.calibration.run.verify_measurement_set", return_value=1):
         yield
 
 
@@ -316,7 +320,7 @@ def test_find_input_casa_data_returns_populated_runtime_dir(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
 def test_prepare_casa_environment_honors_explicit_casa_data_root(mock_mkdtemp, tmp_path):
     """Explicit casa_data_root should be used directly with an isolated workspace."""
     input_root = tmp_path / "input"
@@ -336,7 +340,7 @@ def test_prepare_casa_environment_honors_explicit_casa_data_root(mock_mkdtemp, t
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
 def test_prepare_casa_environment_falls_back_to_input_runtime_data(
     mock_mkdtemp,
     tmp_path,
@@ -487,7 +491,7 @@ def test_apply_delivered_calibration_calls_applycal(tmp_path):
     mock_flagmanager = manager.flagmanager
 
     with patch(
-        "almasim.services.archive.calibrate_ms._normalize_intent",
+        "almasim.services.archive.calibration.apply._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
         result = apply_delivered_calibration(
@@ -545,7 +549,7 @@ def test_apply_delivered_calibration_can_skip_missing_flags_when_told(tmp_path):
     mock_flagmanager = MagicMock()
     messages = []
     with patch(
-        "almasim.services.archive.calibrate_ms._normalize_intent",
+        "almasim.services.archive.calibration.apply._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
         apply_delivered_calibration(
@@ -565,7 +569,7 @@ def test_apply_delivered_calibration_can_skip_missing_flags_when_told(tmp_path):
 
 @pytest.mark.unit
 def test_restore_pipeline_flags_rejects_a_tarball_without_the_version(tmp_path):
-    from almasim.services.archive.calibrate_ms import restore_pipeline_flags
+    from almasim.services.archive.calibration import restore_pipeline_flags
 
     uid = "uid___A001_X1_X1"
     cal_dir = tmp_path / "calibration"
@@ -603,7 +607,7 @@ def test_apply_delivered_calibration_emits_log(tmp_path):
     mock_clearcal = MagicMock()
 
     with patch(
-        "almasim.services.archive.calibrate_ms._normalize_intent",
+        "almasim.services.archive.calibration.apply._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
         apply_delivered_calibration(
@@ -635,7 +639,7 @@ def test_apply_delivered_calibration_resolves_relative_callib(tmp_path):
 
     mock_applycal = MagicMock()
     with patch(
-        "almasim.services.archive.calibrate_ms._normalize_intent",
+        "almasim.services.archive.calibration.apply._normalize_intent",
         side_effect=lambda intent, ms_path: intent,
     ):
         apply_delivered_calibration(
@@ -701,7 +705,7 @@ def test_split_calibrated_science_ms_calls_mstransform_and_returns_path(tmp_path
     def fake_mstransform(vis, outputvis, spw, reindex):
         Path(outputvis).mkdir(parents=True)
 
-    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0,1,2"):
+    with patch("almasim.services.archive.calibration.split.science_spws", return_value="0,1,2"):
         result = split_calibrated_science_ms(fake_mstransform, calibrated_ms, output_root)
 
     expected = output_root / f"{uid}.ms.split.cal"
@@ -719,7 +723,7 @@ def test_split_calibrated_science_ms_raises_if_output_not_created(tmp_path):
     def bad_mstransform(vis, outputvis, spw, reindex):
         pass  # intentionally does NOT create outputvis
 
-    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0,1"):
+    with patch("almasim.services.archive.calibration.split.science_spws", return_value="0,1"):
         with pytest.raises(RuntimeError, match="Expected calibrated MS was not created"):
             split_calibrated_science_ms(bad_mstransform, calibrated_ms, output_root)
 
@@ -734,7 +738,7 @@ def test_split_calibrated_science_ms_raises_when_exists_no_overwrite(tmp_path):
     output_root.mkdir()
     (output_root / f"{uid}.ms.split.cal").mkdir()
 
-    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0"):
+    with patch("almasim.services.archive.calibration.split.science_spws", return_value="0"):
         with pytest.raises(RuntimeError, match="Calibrated output MS already exists"):
             split_calibrated_science_ms(MagicMock(), calibrated_ms, output_root, overwrite=False)
 
@@ -753,7 +757,7 @@ def test_split_calibrated_science_ms_overwrite_removes_old(tmp_path):
     def fake_mstransform(vis, outputvis, spw, reindex):
         Path(outputvis).mkdir(parents=True, exist_ok=True)
 
-    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0"):
+    with patch("almasim.services.archive.calibration.split.science_spws", return_value="0"):
         result = split_calibrated_science_ms(
             fake_mstransform, calibrated_ms, output_root, overwrite=True
         )
@@ -761,13 +765,13 @@ def test_split_calibrated_science_ms_overwrite_removes_old(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_create_calibrated_measurement_sets_uses_temp_workspace_when_no_casa_root(
     mock_apply,
     mock_split,
@@ -817,13 +821,13 @@ def test_create_calibrated_measurement_sets_uses_temp_workspace_when_no_casa_roo
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_create_calibrated_measurement_sets_reuses_preflighted_output_casa_data(
     mock_apply,
     mock_split,
@@ -877,11 +881,11 @@ def test_create_calibrated_measurement_sets_reuses_preflighted_output_casa_data(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.shutil.rmtree")
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.shutil.rmtree")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
 def test_create_calibrated_measurement_sets_cleans_workspace_on_failure(
     mock_find_raw,
     mock_ensure_casa,
@@ -917,14 +921,14 @@ def test_create_calibrated_measurement_sets_cleans_workspace_on_failure(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms._remove_tree_after_success")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.cleanup._remove_tree_after_success")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_create_calibrated_measurement_sets_cleans_intermediate_paths(
     mock_apply,
     mock_split,
@@ -982,13 +986,13 @@ def test_create_calibrated_measurement_sets_cleans_intermediate_paths(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_create_calibrated_measurement_sets_continue_on_error_skips_failed_uid(
     mock_apply,
     mock_split,
@@ -1048,12 +1052,12 @@ def test_create_calibrated_measurement_sets_continue_on_error_skips_failed_uid(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_create_calibrated_measurement_sets_fail_fast_by_default(
     mock_apply,
     mock_find_raw,
@@ -1087,7 +1091,7 @@ def test_create_calibrated_measurement_sets_fail_fast_by_default(
 @pytest.mark.unit
 def test_calibration_marker_helpers(tmp_path):
     """Completion requires both the output directory and the marker; empty markers count."""
-    from almasim.services.archive.calibrate_ms import (
+    from almasim.services.archive.calibration import (
         calibration_marker_path,
         is_calibration_complete,
         write_calibration_marker,
@@ -1114,7 +1118,7 @@ def test_calibration_marker_helpers(tmp_path):
 @pytest.mark.unit
 def test_split_calibrated_science_ms_writes_marker(tmp_path):
     """A successful split leaves a completion marker next to the output."""
-    from almasim.services.archive.calibrate_ms import split_calibrated_science_ms
+    from almasim.services.archive.calibration import split_calibrated_science_ms
 
     working_ms = tmp_path / "working" / "uid___A.ms"
     working_ms.mkdir(parents=True)
@@ -1123,7 +1127,7 @@ def test_split_calibrated_science_ms_writes_marker(tmp_path):
     def _mstransform(vis, outputvis, spw, reindex):
         Path(outputvis).mkdir(parents=True)
 
-    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0,1"):
+    with patch("almasim.services.archive.calibration.split.science_spws", return_value="0,1"):
         result = split_calibrated_science_ms(_mstransform, working_ms, output_root)
 
     assert result == output_root / "uid___A.ms.split.cal"
@@ -1133,7 +1137,7 @@ def test_split_calibrated_science_ms_writes_marker(tmp_path):
 @pytest.mark.unit
 def test_split_calibrated_science_ms_clears_stale_marker_on_overwrite(tmp_path):
     """Overwriting removes the old marker before the new split runs."""
-    from almasim.services.archive.calibrate_ms import split_calibrated_science_ms
+    from almasim.services.archive.calibration import split_calibrated_science_ms
 
     working_ms = tmp_path / "working" / "uid___A.ms"
     working_ms.mkdir(parents=True)
@@ -1144,7 +1148,7 @@ def test_split_calibrated_science_ms_clears_stale_marker_on_overwrite(tmp_path):
     def _failing_mstransform(vis, outputvis, spw, reindex):
         raise RuntimeError("mstransform crashed")
 
-    with patch("almasim.services.archive.calibrate_ms.science_spws", return_value="0"):
+    with patch("almasim.services.archive.calibration.split.science_spws", return_value="0"):
         with pytest.raises(RuntimeError, match="mstransform crashed"):
             split_calibrated_science_ms(
                 _failing_mstransform, working_ms, output_root, overwrite=True
@@ -1155,13 +1159,13 @@ def test_split_calibrated_science_ms_clears_stale_marker_on_overwrite(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_create_calibrated_measurement_sets_skips_complete_and_redoes_stale(
     mock_apply,
     mock_split,
@@ -1173,7 +1177,7 @@ def test_create_calibrated_measurement_sets_skips_complete_and_redoes_stale(
     tmp_path,
 ):
     """Marked outputs are skipped; unmarked leftovers are redone with overwrite semantics."""
-    from almasim.services.archive.calibrate_ms import write_calibration_marker
+    from almasim.services.archive.calibration import write_calibration_marker
 
     raw_ms_root = tmp_path / "raw"
     output_root = tmp_path / "output"
@@ -1226,13 +1230,13 @@ def test_create_calibrated_measurement_sets_skips_complete_and_redoes_stale(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_create_calibrated_measurement_sets_keeps_working_copy_when_asked(
     mock_apply,
     mock_split,
@@ -1278,7 +1282,7 @@ def test_create_calibrated_measurement_sets_keeps_working_copy_when_asked(
 @pytest.mark.unit
 def test_calibration_failure_marker_helpers(tmp_path):
     """The failure marker records the error and is cleared once the UID succeeds."""
-    from almasim.services.archive.calibrate_ms import (
+    from almasim.services.archive.calibration import (
         calibration_failure_marker_path,
         has_calibration_failed,
         write_calibration_failure_marker,
@@ -1309,12 +1313,12 @@ def test_calibration_failure_marker_helpers(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_failed_uid_writes_marker_and_reclaims_working_copy(
     mock_apply,
     mock_find_raw,
@@ -1325,7 +1329,7 @@ def test_failed_uid_writes_marker_and_reclaims_working_copy(
     tmp_path,
 ):
     """A failed UID leaves a .failed marker and no multi-GB working copy behind."""
-    from almasim.services.archive.calibrate_ms import has_calibration_failed
+    from almasim.services.archive.calibration import has_calibration_failed
 
     raw_ms_root = tmp_path / "raw"
     output_root = tmp_path / "output"
@@ -1362,13 +1366,13 @@ def test_failed_uid_writes_marker_and_reclaims_working_copy(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.split_calibrated_science_ms")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.split_calibrated_science_ms")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_stale_failure_marker_cleared_when_uid_is_retried(
     mock_apply,
     mock_split,
@@ -1380,7 +1384,7 @@ def test_stale_failure_marker_cleared_when_uid_is_retried(
     tmp_path,
 ):
     """A retry that succeeds removes the marker left by the previous attempt."""
-    from almasim.services.archive.calibrate_ms import (
+    from almasim.services.archive.calibration import (
         has_calibration_failed,
         write_calibration_failure_marker,
     )
@@ -1415,13 +1419,13 @@ def test_stale_failure_marker_cleared_when_uid_is_retried(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.configure_casa_environment")
-@patch("almasim.services.archive.calibrate_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.calibrate_ms.verify_measurement_set")
-@patch("almasim.services.archive.calibrate_ms.find_calibration_directory")
-@patch("almasim.services.archive.calibrate_ms.find_raw_ms_directories")
-@patch("almasim.services.archive.calibrate_ms.apply_delivered_calibration")
+@patch("almasim.services.archive.calibration.run.tempfile.mkdtemp")
+@patch("almasim.services.archive.calibration.run.configure_casa_environment")
+@patch("almasim.services.archive.calibration.run.ensure_casa_runtime_data")
+@patch("almasim.services.archive.calibration.run.verify_measurement_set")
+@patch("almasim.services.archive.calibration.run.find_calibration_directory")
+@patch("almasim.services.archive.calibration.run.find_raw_ms_directories")
+@patch("almasim.services.archive.calibration.run.apply_delivered_calibration")
 def test_truncated_raw_ms_fails_cleanly_instead_of_aborting_casa(
     mock_apply,
     mock_find_raw,
@@ -1433,7 +1437,7 @@ def test_truncated_raw_ms_fails_cleanly_instead_of_aborting_casa(
     tmp_path,
 ):
     """A 0-row raw MS is rejected before clearcal can abort the whole process."""
-    from almasim.services.archive.calibrate_ms import has_calibration_failed
+    from almasim.services.archive.calibration import has_calibration_failed
 
     raw_ms_root = tmp_path / "raw"
     output_root = tmp_path / "output"

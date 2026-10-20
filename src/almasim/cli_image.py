@@ -1145,10 +1145,8 @@ def _prepare_selfcal_casa_data(output_directory: Path, casa_data_root: Path | No
     The calibration stage's preflight: the tasks would otherwise each try to
     download it, or fail to import casatools without it.
     """
-    from .services.archive.unpack_ms import (
-        configure_casa_environment,
-        ensure_casa_runtime_data,
-    )
+    from .services.casa.environment import configure_casa_environment
+    from .services.casa.runtime_data import ensure_casa_runtime_data
 
     output_directory = Path(output_directory).expanduser().absolute()
     casa_data = (

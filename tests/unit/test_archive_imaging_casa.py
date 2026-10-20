@@ -18,7 +18,8 @@ import pytest
 from astropy.io import fits
 
 from almasim import cli_image
-from almasim.services.archive import unpack_ms
+from almasim.services.casa import environment as casa_environment
+from almasim.services.casa import runtime_data as casa_runtime_data
 from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging.ms import chunks as chunks_module
 
@@ -219,7 +220,7 @@ def fake_casa(monkeypatch):
     monkeypatch.setitem(sys.modules, "casatasks", tasks)
     monkeypatch.setitem(sys.modules, "casatools", tools)
     monkeypatch.setattr(
-        unpack_ms,
+        casa_environment,
         "configure_casa_environment",
         lambda root, data, **kwargs: calls["configure"].append((data, kwargs["log_file"])),
     )
@@ -441,12 +442,12 @@ def test_run_wsclean_task_fails_when_the_uv_subtraction_fails(tmp_path, monkeypa
 def test_prepare_selfcal_casa_data_populates_once(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        unpack_ms,
+        casa_environment,
         "configure_casa_environment",
         lambda root, data, **kwargs: calls.append(("configure", Path(data))),
     )
     monkeypatch.setattr(
-        unpack_ms,
+        casa_runtime_data,
         "ensure_casa_runtime_data",
         lambda data, **kwargs: calls.append(("ensure", Path(data))),
     )

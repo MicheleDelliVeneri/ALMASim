@@ -28,7 +28,7 @@ def _configure_casa(casa_data: str, log_file: str) -> Path:
     import atexit
     import tempfile
 
-    from almasim.services.archive.unpack_ms import configure_casa_environment
+    from almasim.services.casa.environment import configure_casa_environment
 
     workspace = Path(tempfile.mkdtemp(prefix="almasim-selfcal-casa-"))
     atexit.register(shutil.rmtree, workspace, True)

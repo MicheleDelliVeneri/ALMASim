@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from almasim.services.archive.unpack_ms import (
-    _emit,
     asdm_name,
     configure_casa_environment,
     create_measurement_set,
@@ -48,7 +47,7 @@ def _skip_subtable_check():
     Tests that care about it patch ``empty_required_subtables`` themselves; their
     patch applies inside this one and wins.
     """
-    with patch("almasim.services.archive.unpack_ms.empty_required_subtables", return_value=[]):
+    with patch("almasim.services.ms.verify.empty_required_subtables", return_value=[]):
         yield
 
 
@@ -135,22 +134,35 @@ def test_has_casa_runtime_data_nonexistent(tmp_path):
 
 
 # ===========================================================================
-# _emit
+# report (replaced _emit, MADIV-28 T4.8)
 # ===========================================================================
 
 
 @pytest.mark.unit
-def test_emit_calls_logger_fn():
-    """_emit should call the provided callable with the message."""
+def test_report_logs_and_calls_logger_fn(caplog):
+    """report logs the message and passes it to logger_fn; warnings are prefixed."""
+    import logging
+
+    from almasim.services.utils import report
+
+    log = logging.getLogger("almasim.test.report")
     messages = []
-    _emit(messages.append, "hello world")
-    assert messages == ["hello world"]
+    with caplog.at_level(logging.INFO, logger="almasim.test.report"):
+        report(log, messages.append, "hello world")
+        report(log, messages.append, "careful", logging.WARNING)
+    assert messages == ["hello world", "WARNING: careful"]
+    assert [r.getMessage() for r in caplog.records] == ["hello world", "careful"]
 
 
 @pytest.mark.unit
-def test_emit_none_logger_fn():
-    """_emit with None logger_fn should not raise."""
-    _emit(None, "hello world")  # no exception
+def test_report_without_logger_fn_only_logs(caplog):
+    import logging
+
+    from almasim.services.utils import report
+
+    with caplog.at_level(logging.INFO, logger="almasim.test.report"):
+        report(logging.getLogger("almasim.test.report"), None, "hello world")
+    assert caplog.records[-1].getMessage() == "hello world"
 
 
 # ===========================================================================
@@ -293,7 +305,7 @@ def test_ensure_casa_runtime_data_calls_update_all_when_missing(tmp_path):
     casa_data.mkdir()
     mock_update_all = MagicMock()
     with patch.dict(sys.modules, {"casaconfig": MagicMock(update_all=mock_update_all)}):
-        with patch("almasim.services.archive.unpack_ms.has_casa_runtime_data", return_value=False):
+        with patch("almasim.services.casa.runtime_data.has_casa_runtime_data", return_value=False):
             with patch("casaconfig.update_all", mock_update_all):
                 try:
                     ensure_casa_runtime_data(casa_data, skip_update=False)
@@ -364,7 +376,7 @@ def test_asdm_name_strips_suffix(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=1234)
 def test_create_measurement_set_calls_importasdm_and_returns_path(mock_rows, tmp_path):
     """create_measurement_set calls importasdm and returns the expected path."""
     asdm = _make_asdm(tmp_path / "input")
@@ -381,7 +393,7 @@ def test_create_measurement_set_calls_importasdm_and_returns_path(mock_rows, tmp
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=1234)
 def test_create_measurement_set_skips_when_exists(mock_rows, tmp_path):
     """An existing MS is skipped once verified, and gains a marker."""
     asdm = _make_asdm(tmp_path / "input")
@@ -399,7 +411,7 @@ def test_create_measurement_set_skips_when_exists(mock_rows, tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=1234)
 def test_create_measurement_set_overwrite_true(mock_rows, tmp_path):
     """When overwrite=True, importasdm is called even if MS exists."""
     asdm = _make_asdm(tmp_path / "input")
@@ -437,7 +449,7 @@ def test_create_measurement_set_importasdm_failure_raises(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=1234)
 def test_create_measurement_set_emits_log_messages(mock_rows, tmp_path):
     """create_measurement_set emits log messages via logger_fn."""
     asdm = _make_asdm(tmp_path / "input")
@@ -458,10 +470,10 @@ def test_create_measurement_set_emits_log_messages(mock_rows, tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.find_existing_casa_data")
-@patch("almasim.services.archive.unpack_ms.configure_casa_environment")
-@patch("almasim.services.archive.unpack_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+@patch("almasim.services.archive.unpack.find_existing_casa_data")
+@patch("almasim.services.archive.unpack.configure_casa_environment")
+@patch("almasim.services.archive.unpack.ensure_casa_runtime_data")
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=1234)
 def test_create_measurement_sets_returns_list(
     mock_rows, mock_ensure, mock_configure, mock_find, tmp_path
 ):
@@ -488,9 +500,9 @@ def test_create_measurement_sets_returns_list(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.find_existing_casa_data")
-@patch("almasim.services.archive.unpack_ms.configure_casa_environment")
-@patch("almasim.services.archive.unpack_ms.ensure_casa_runtime_data")
+@patch("almasim.services.archive.unpack.find_existing_casa_data")
+@patch("almasim.services.archive.unpack.configure_casa_environment")
+@patch("almasim.services.archive.unpack.ensure_casa_runtime_data")
 def test_create_measurement_sets_skips_marked_uids_without_touching_casa(
     mock_ensure, mock_configure, mock_find, tmp_path
 ):
@@ -515,10 +527,10 @@ def test_create_measurement_sets_skips_marked_uids_without_touching_casa(
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.find_existing_casa_data")
-@patch("almasim.services.archive.unpack_ms.configure_casa_environment")
-@patch("almasim.services.archive.unpack_ms.ensure_casa_runtime_data")
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=7)
+@patch("almasim.services.archive.unpack.find_existing_casa_data")
+@patch("almasim.services.archive.unpack.configure_casa_environment")
+@patch("almasim.services.archive.unpack.ensure_casa_runtime_data")
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=7)
 def test_create_measurement_sets_mixes_finished_and_pending_uids(
     mock_rows, mock_ensure, mock_configure, mock_find, tmp_path
 ):
@@ -614,7 +626,7 @@ def test_raw_ms_marker_helpers(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count")
+@patch("almasim.services.ms.verify.measurement_set_row_count")
 def test_verify_measurement_set_rejects_zero_rows(mock_rows, tmp_path):
     """A 0-row MS is the signature of a killed importasdm and must not pass."""
     from almasim.services.archive.unpack_ms import verify_measurement_set
@@ -634,7 +646,7 @@ def test_verify_measurement_set_rejects_zero_rows(mock_rows, tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=0)
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=0)
 def test_truncated_existing_ms_is_reimported_not_skipped(mock_rows, tmp_path):
     """The bug that let 511 truncated MSs through: existence alone meant 'done'."""
     asdm = _make_asdm(tmp_path / "input")
@@ -659,7 +671,7 @@ def test_truncated_existing_ms_is_reimported_not_skipped(mock_rows, tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=0)
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=0)
 def test_failed_import_writes_failure_marker_and_no_done_marker(mock_rows, tmp_path):
     """An import that produces an empty MS is a failure, and is recorded as one."""
     asdm = _make_asdm(tmp_path / "input")
@@ -679,7 +691,7 @@ def test_failed_import_writes_failure_marker_and_no_done_marker(mock_rows, tmp_p
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count")
+@patch("almasim.services.ms.verify.measurement_set_row_count")
 def test_marked_ms_is_skipped_without_reopening_it(mock_rows, tmp_path):
     """Once marked, the fast path must not pay to reopen a multi-GB MS."""
     from almasim.services.archive.unpack_ms import write_raw_ms_marker
@@ -771,7 +783,7 @@ def test_find_asdm_directories_ignores_extraction_staging(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=1234)
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=1234)
 def test_create_measurement_set_refuses_incomplete_asdm(mock_rows, tmp_path):
     """A half-extracted ASDM is a recorded failure, and importasdm is never run."""
     asdm = _make_asdm(tmp_path / "input")
@@ -791,8 +803,8 @@ def test_create_measurement_set_refuses_incomplete_asdm(mock_rows, tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.empty_required_subtables")
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=67182920)
+@patch("almasim.services.ms.verify.empty_required_subtables")
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=67182920)
 def test_existing_ms_with_empty_subtables_is_reimported(mock_rows, mock_empty, tmp_path):
     """MAIN rows matched but ANTENNA etc. had 0 rows (uid___A002_X10f3768_Xb604).
 
@@ -821,8 +833,8 @@ def test_existing_ms_with_empty_subtables_is_reimported(mock_rows, mock_empty, t
 
 
 @pytest.mark.unit
-@patch("almasim.services.archive.unpack_ms.empty_required_subtables", return_value=["ANTENNA"])
-@patch("almasim.services.archive.unpack_ms.measurement_set_row_count", return_value=7)
+@patch("almasim.services.ms.verify.empty_required_subtables", return_value=["ANTENNA"])
+@patch("almasim.services.ms.verify.measurement_set_row_count", return_value=7)
 def test_verify_measurement_set_rejects_empty_subtables(mock_rows, mock_empty, tmp_path):
     from almasim.services.archive.unpack_ms import verify_measurement_set
 
