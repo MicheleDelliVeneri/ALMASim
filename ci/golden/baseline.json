@@ -4,15 +4,15 @@
     "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
   },
   "baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v4/golden-baseline-v4.tar.gz",
-    "sha256": "b112171904021febea8bb3b6a4d236647a3d0313d807379426faeced47efbb72",
-    "version": "v4",
-    "source": "workflow run 39417369580, commit 6cb0829e; T2.1: one primary-beam width from the Airy model; tier-1 field now self-calibrates (#317)"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v5/golden-baseline-v5.tar.gz",
+    "sha256": "441655bc2a3c4f8a096aff73907bc5723d5528e855b32b5b22859e9000ec44b6",
+    "version": "v5",
+    "source": "workflow run 39438906906, commit 8f3803a1; T1.1 part 1: new serendipitous simulation case (records today's replace-the-cube behaviour)"
   },
   "simulation_baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v4/golden-simulation-v4.tar.gz",
-    "sha256": "3ec63a7bbc140141d0cb10146569e40526c0926714b40caf2f22174263668b50",
-    "version": "v4",
-    "source": "workflow run 39417369580, commit 6cb0829e; T2.1: one primary-beam width from the Airy model; tier-1 field now self-calibrates (#317)"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v5/golden-simulation-v5.tar.gz",
+    "sha256": "cc79f89838c597a39d57679eeb9dc280216029260825798fb2bce8111499f421",
+    "version": "v5",
+    "source": "workflow run 39438906906, commit 8f3803a1; T1.1 part 1: new serendipitous simulation case (records today's replace-the-cube behaviour)"
   }
 }
