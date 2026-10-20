@@ -5,10 +5,8 @@ from typing import Any
 
 import numpy as np
 from astropy.utils import NumpyRNGContext
-from dask import delayed
 
-from .base import SkyModel, add_channel_first
-from .utils import gaussian, track_progress
+from .base import SkyModel
 
 
 def make_extended(
@@ -148,12 +146,6 @@ def molecular_cloud(n_px: int) -> np.ndarray:
     return im
 
 
-@delayed
-def molecular_image(molecular_cld: np.ndarray, amp: float) -> np.ndarray:
-    """Scale molecular cloud image by amplitude."""
-    return molecular_cld * amp
-
-
 class MolecularCloudSkyModel(SkyModel):
     """Molecular cloud sky model."""
 
@@ -162,17 +154,4 @@ class MolecularCloudSkyModel(SkyModel):
         im = molecular_cloud(self.n_px)
         im -= np.min(im)
         im *= 1 / np.max(im)
-        z_idxs = np.arange(0, self.n_chan)
-        gs = np.zeros(self.n_chan)
-        skymodel = []
-        for i in range(len(self.line_fluxes)):
-            gs += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
-        for z in range(0, self.n_chan):
-            delayed_result = molecular_image(im, gs[z] + self.continuum[z])
-            skymodel.append(delayed_result)
-        delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
-        futures = self.client.compute([delayed_skymodel])
-        track_progress(self.update_progress, futures)
-        (skymodel,) = self.client.gather(futures)
-        add_channel_first(self.datacube, skymodel)
-        return self.datacube
+        return self._add_template(im)

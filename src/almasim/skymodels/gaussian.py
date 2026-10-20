@@ -4,48 +4,26 @@ import math
 from typing import Any, Optional
 
 import numpy as np
-from dask import delayed
 from dask.distributed import Client
 
 from almasim.services.instrument.constants import FWHM_PER_SIGMA
 
-from .base import SkyModel, add_channel_first
-from .utils import gaussian, track_progress
+from .base import SkyModel
 
 
-@delayed
-def gaussian2d(amp, x, y, n_px, cen_x, cen_y, fwhm_x, fwhm_y, angle):
-    """
-    Generates a 2D Gaussian given the following input parameters:
-
-    Parameters
-    ----------
-    x, y : np.ndarray
-        Position arrays
-    amp : float
-        Amplitude
-    cen_x, cen_y : float
-        Center positions
-    fwhm_x, fwhm_y : float
-        FWHMs (full width at half maximum) along x and y axes
-    angle : float
-        Angle of rotation (in degrees)
-    """
+def gaussian2d(n_px: int, cen_x: float, cen_y: float, fwhm_x: float, fwhm_y: float, angle: float):
+    """Unnormalised 2D Gaussian on an ``n_px`` square grid, rotated by ``angle`` degrees."""
+    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
     angle_rad = math.radians(angle)
     # Rotate coordinates
     xp = (x - cen_x) * np.cos(angle_rad) - (y - cen_y) * np.sin(angle_rad) + cen_x
     yp = (x - cen_x) * np.sin(angle_rad) + (y - cen_y) * np.cos(angle_rad) + cen_y
-
-    gaussian = np.exp(
+    return np.exp(
         -(
             (xp - cen_x) ** 2 / (2 * (fwhm_x / FWHM_PER_SIGMA) ** 2)
             + (yp - cen_y) ** 2 / (2 * (fwhm_y / FWHM_PER_SIGMA) ** 2)
         )
     )
-    norm = amp / np.sum(gaussian)
-
-    result = norm * gaussian
-    return result
 
 
 class GaussianSkyModel(SkyModel):
@@ -121,28 +99,6 @@ class GaussianSkyModel(SkyModel):
 
     def insert(self) -> Any:
         """Insert Gaussian source into datacube."""
-        z_idxs = np.arange(0, self.n_chan)
-        x, y = np.meshgrid(np.arange(self.n_px), np.arange(self.n_px))
-        gs = np.zeros(self.n_chan)
-        skymodel = []
-        for i in range(len(self.line_fluxes)):
-            gs += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
-        for z in range(0, self.n_chan):
-            delayed_result = gaussian2d(
-                gs[z] + self.continuum[z],
-                x,
-                y,
-                self.n_px,
-                self.pos_x,
-                self.pos_y,
-                self.fwhm_x,
-                self.fwhm_y,
-                self.angle,
-            )
-            skymodel.append(delayed_result)
-        delayed_skymodel = delayed(np.stack)(skymodel, axis=0)
-        futures = self.client.compute([delayed_skymodel])
-        track_progress(self.update_progress, futures)
-        (skymodel,) = self.client.gather(futures)
-        add_channel_first(self.datacube, skymodel)
-        return self.datacube
+        shape = gaussian2d(self.n_px, self.pos_x, self.pos_y, self.fwhm_x, self.fwhm_y, self.angle)
+        # Each channel holds its flux, spread as the normalised Gaussian.
+        return self._add_cube((self.spectrum() / np.sum(shape))[:, None, None] * shape)

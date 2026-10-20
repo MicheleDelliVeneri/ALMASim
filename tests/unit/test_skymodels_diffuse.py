@@ -8,7 +8,7 @@ import astropy.units as U
 import numpy as np
 import pytest
 
-from almasim.skymodels.diffuse import DiffuseSkyModel, diffuse_image
+from almasim.skymodels.diffuse import DiffuseSkyModel
 
 from ._fakes import make_datacube, mock_dask_client
 
@@ -49,38 +49,6 @@ def _fake_diffuse_signal(n_px: int) -> np.ndarray:
 # ===========================================================================
 
 
-@pytest.mark.unit
-def test_diffuse_image_scales_signal():
-    """diffuse_image scales the array by the amplitude."""
-    arr = np.ones((8, 8)) * 2.0
-    result = diffuse_image(arr, 3.0).compute()
-    np.testing.assert_allclose(result, arr * 3.0)
-
-
-@pytest.mark.unit
-def test_diffuse_image_zero_amplitude():
-    """diffuse_image with zero amplitude returns zeros."""
-    arr = np.ones((4, 4))
-    result = diffuse_image(arr, 0.0).compute()
-    np.testing.assert_allclose(result, 0.0)
-
-
-@pytest.mark.unit
-def test_diffuse_image_negative_amplitude():
-    """diffuse_image with negative amplitude negates the array."""
-    arr = np.ones((4, 4))
-    result = diffuse_image(arr, -1.0).compute()
-    np.testing.assert_allclose(result, -1.0)
-
-
-@pytest.mark.unit
-def test_diffuse_image_returns_delayed():
-    """diffuse_image returns a Delayed object."""
-    arr = np.ones((8, 8))
-    result = diffuse_image(arr, 1.0)
-    assert hasattr(result, "compute")
-
-
 # ===========================================================================
 # DiffuseSkyModel.insert (mocking diffuse_signal to avoid nifty8)
 # ===========================================================================
@@ -102,16 +70,6 @@ def test_diffuse_insert_sets_units():
     with patch("almasim.skymodels.diffuse.diffuse_signal", side_effect=_fake_diffuse_signal):
         result = model.insert()
     assert result._array.unit == U.Jy * U.pix**-2
-
-
-@pytest.mark.unit
-def test_diffuse_insert_calls_dask_client():
-    """insert() calls compute and gather on the Dask client."""
-    model = _make_model()
-    with patch("almasim.skymodels.diffuse.diffuse_signal", side_effect=_fake_diffuse_signal):
-        model.insert()
-    model.client.compute.assert_called_once()
-    model.client.gather.assert_called_once()
 
 
 @pytest.mark.unit

@@ -45,59 +45,6 @@ def _make_model(
 # ===========================================================================
 
 
-@pytest.mark.unit
-def test_gaussian2d_returns_delayed():
-    """gaussian2d returns a Delayed object (has .compute())."""
-    n_px = 16
-    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
-    result = gaussian2d(1.0, x, y, n_px, n_px // 2, n_px // 2, 4, 4, 0)
-    assert hasattr(result, "compute")
-
-
-@pytest.mark.unit
-def test_gaussian2d_peak_at_center():
-    """The 2D Gaussian peak is at the specified center pixel."""
-    n_px = 32
-    cx, cy = 16, 16
-    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
-    result = gaussian2d(1.0, x, y, n_px, cx, cy, 6, 6, 0).compute()
-    peak_idx = np.unravel_index(np.argmax(result), result.shape)
-    # Peak should be at or very near (cy, cx) — within 1 pixel
-    assert abs(peak_idx[0] - cy) <= 1
-    assert abs(peak_idx[1] - cx) <= 1
-
-
-@pytest.mark.unit
-def test_gaussian2d_output_shape():
-    """gaussian2d output has the same shape as the input x/y grids."""
-    n_px = 16
-    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
-    result = gaussian2d(1.0, x, y, n_px, n_px // 2, n_px // 2, 4, 4, 0).compute()
-    assert result.shape == (n_px, n_px)
-
-
-@pytest.mark.unit
-def test_gaussian2d_amplitude_scales_sum():
-    """Larger amplitude scales total flux proportionally."""
-    n_px = 16
-    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
-    r1 = gaussian2d(1.0, x, y, n_px, n_px // 2, n_px // 2, 4, 4, 0).compute()
-    r2 = gaussian2d(2.0, x, y, n_px, n_px // 2, n_px // 2, 4, 4, 0).compute()
-    np.testing.assert_allclose(np.sum(r2), 2 * np.sum(r1), rtol=1e-5)
-
-
-@pytest.mark.unit
-def test_gaussian2d_angle_rotation():
-    """Non-zero rotation angle produces a different (but still valid) Gaussian."""
-    n_px = 32
-    x, y = np.meshgrid(np.arange(n_px), np.arange(n_px))
-    r0 = gaussian2d(1.0, x, y, n_px, n_px // 2, n_px // 2, 4, 8, 0).compute()
-    r45 = gaussian2d(1.0, x, y, n_px, n_px // 2, n_px // 2, 4, 8, 45).compute()
-    # Both have same total flux but different distribution
-    np.testing.assert_allclose(np.sum(r0), np.sum(r45), rtol=1e-4)
-    assert not np.allclose(r0, r45)
-
-
 # ===========================================================================
 # GaussianSkyModel initialization
 # ===========================================================================
@@ -158,15 +105,6 @@ def test_gaussian_insert_sets_units():
 
 
 @pytest.mark.unit
-def test_gaussian_insert_calls_dask_client():
-    """insert() calls compute and gather on the Dask client."""
-    model = _make_model(n_px=16, n_chan=8)
-    model.insert()
-    model.client.compute.assert_called_once()
-    model.client.gather.assert_called_once()
-
-
-@pytest.mark.unit
 def test_gaussian_insert_no_lines():
     """insert() works when there are no emission lines."""
     model = _make_model(n_lines=0)
@@ -208,3 +146,23 @@ def test_gaussian_insert_angled():
     )
     result = model.insert()
     assert result is not None
+
+
+@pytest.mark.unit
+def test_gaussian2d_peaks_at_its_centre_and_rotates():
+    shape = gaussian2d(32, 20, 12, 6, 6, 0)
+    assert shape.shape == (32, 32)
+    assert np.unravel_index(np.argmax(shape), shape.shape) == (12, 20)
+    assert not np.allclose(gaussian2d(32, 16, 16, 4, 8, 0), gaussian2d(32, 16, 16, 4, 8, 45))
+
+
+@pytest.mark.unit
+def test_gaussian_cube_equals_the_per_channel_computation_exactly():
+    """Each channel is (flux / sum(shape)) * shape, bit for bit as the old dask loop."""
+    from almasim.skymodels import channel_first
+
+    model = _make_model(n_px=16, n_chan=8)
+    cube = channel_first(model.insert())
+    shape = gaussian2d(16, model.pos_x, model.pos_y, model.fwhm_x, model.fwhm_y, model.angle)
+    for z, flux in enumerate(model.spectrum()):
+        np.testing.assert_array_equal(cube[z], (flux / np.sum(shape)) * shape)

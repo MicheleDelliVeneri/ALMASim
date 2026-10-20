@@ -6,7 +6,6 @@ import astropy.units as U
 import numpy as np
 
 from .base import SkyModel
-from .utils import gaussian
 
 
 class PointlikeSkyModel(SkyModel):
@@ -64,16 +63,11 @@ class PointlikeSkyModel(SkyModel):
 
     def insert(self) -> Any:
         """Insert point source into datacube."""
-        z_idxs = np.arange(0, self.n_chan)
-        gs = np.zeros(self.n_chan)
-        for i in range(len(self.line_fluxes)):
-            gs += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
-            if self.update_progress is not None:
-                self.update_progress.emit(i / len(self.line_fluxes) * 100)
-
         self.datacube._array[
             self.pos_x,
             self.pos_y,
             :,
-        ] += (self.continuum + gs) * U.Jy * U.pix**-2
+        ] += self.spectrum() * U.Jy * U.pix**-2
+        if self.update_progress is not None:
+            self.update_progress.emit(100)
         return self.datacube
