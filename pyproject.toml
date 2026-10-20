@@ -19,35 +19,29 @@ classifiers = [
 ]
 dependencies = [
     "astropy",
-    "asyncssh",
     "httpx",
     "pyvo",
     "numpy",
     "pandas",
     "matplotlib",
-    "seaborn",
     "tqdm",
     "scipy",
     "h5py",
     "kaggle",
     "kagglehub",
     "dask",
-    "dask-expr",
     "dask-jobqueue",
     "distributed",
     "astromartini",
-    "Hdecompose",
+    "Hdecompose",  # not imported directly: martini needs it for TNG sources
     "paramiko",
     "pysftp",
     "tenacity",
     "nifty8",
-    "setuptools",
-    "multiprocess",
     "scikit-image",
-    "imagecodecs",
+    "imagecodecs",  # not imported directly: image decoding for the dataset sky models
     "ducc0",
     "typer",
-    "bokeh>=3.9.0",
     "pypdf>=6.19.0",
 ]
 
@@ -55,6 +49,8 @@ dependencies = [
 almasim = "almasim.cli:main"
 
 [project.optional-dependencies]
+# The Dask dashboard the CLI links to (distributed serves it only with bokeh).
+dashboard = ["bokeh>=3.9.0"]
 casa = ["casatools", "casatasks"]
 ms-casacore = ["python-casacore"]
 
@@ -73,6 +69,7 @@ dev = [
     "uvicorn[standard]",
     "httpx",
     "pydantic-settings",
+    "sqlalchemy>=2.0.0",
     "ipykernel>=7.2.0",
     "marimo[lsp]>=0.10",
     "sphinx>=9.1.0",
@@ -87,6 +84,7 @@ test = [
     "uvicorn[standard]",
     "httpx",
     "pydantic-settings",
+    "sqlalchemy>=2.0.0",
 ]
 
 [build-system]
@@ -146,6 +144,11 @@ module = [
     "almasim.services.simulation",
     "almasim.skymodels.datasets.tng",
     "almasim.skymodels.serendipitous",
+    # Surfaced when SQLAlchemy joined the test group (T1.12): the models use
+    # untyped Column attributes rather than Mapped[].
+    "database.models",
+    "database.service",
+    "database.startup",
 ]
 ignore_errors = true
 

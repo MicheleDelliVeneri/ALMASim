@@ -177,7 +177,8 @@ def _make_obs(**kwargs):
     obs.ra = 12.3
     obs.dec = -45.6
     obs.s_fov = 30.0
-    obs.t_max = 3600.0
+    obs.t_resolution = 3600.0
+    obs.t_max = None
     obs.cont_sensitivity_bandwidth = 0.1
     obs.sensitivity_10kms = 0.05
     obs.bandwidth = 7.5

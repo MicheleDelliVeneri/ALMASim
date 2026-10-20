@@ -104,7 +104,8 @@ class CSVImporter:
                 velocity_resolution=(float(row["Vel.res."]) if row.get("Vel.res.") else None),
                 spatial_resolution=(float(row["Ang.res."]) if row.get("Ang.res.") else None),
                 s_fov=float(row["FOV"]) if row.get("FOV") else None,
-                t_resolution=None,  # Not in CSV
+                # TAP's t_resolution, renamed Int.Time by the metadata query.
+                t_resolution=float(row["Int.Time"]) if row.get("Int.Time") else None,
                 cont_sensitivity_bandwidth=(
                     float(row["Cont_sens_mJybeam"]) if row.get("Cont_sens_mJybeam") else None
                 ),
@@ -117,7 +118,6 @@ class CSVImporter:
                 bandwidth=float(row["Bandwidth"]) if row.get("Bandwidth") else None,
                 frequency_support=row.get("Freq.sup."),
                 obs_release_date=obs_date,
-                t_max=float(row["Int.Time"]) if row.get("Int.Time") else None,
                 antenna_arrays=row.get("antenna_arrays"),
                 band_list=str(band) if band else None,
                 proposal_abstract=row.get("Project_abstract"),

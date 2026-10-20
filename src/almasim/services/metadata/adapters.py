@@ -44,6 +44,17 @@ def build_exclusion_filters(params: Any) -> ExclusionFilters:
     )
 
 
+def _integration_time(observation: Any) -> Any:
+    """Int.Time of a cached observation.
+
+    It is stored in ``t_resolution``; rows cached before MADIV-28 T1.12 hold
+    it in ``t_max`` instead.
+    """
+    if observation.t_resolution is not None:
+        return observation.t_resolution
+    return observation.t_max
+
+
 def observation_to_metadata_record(observation: Any) -> dict[str, Any]:
     """Serialize one observation-like object into canonical metadata columns."""
     return {
@@ -68,7 +79,7 @@ def observation_to_metadata_record(observation: Any) -> dict[str, Any]:
         "RA": observation.ra,
         "Dec": observation.dec,
         "FOV": observation.s_fov,
-        "Int.Time": observation.t_max,
+        "Int.Time": _integration_time(observation),
         "Cont_sens_mJybeam": observation.cont_sensitivity_bandwidth,
         "Line_sens_10kms_mJybeam": observation.sensitivity_10kms,
         "Bandwidth": observation.bandwidth,

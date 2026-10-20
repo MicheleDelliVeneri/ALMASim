@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -193,8 +194,8 @@ def query_observations(member_ous_uid, target_name):
     query = f"""
             SELECT {columns_str}
             FROM ivoa.obscore
-            WHERE member_ous_uid = '{member_ous_uid}'
-            AND target_name = '{target_name}'
+            WHERE member_ous_uid = {_adql_str(member_ous_uid)}
+            AND target_name = {_adql_str(target_name)}
             AND is_mosaic = 'F'
             AND science_observation = 'T'
             """
@@ -255,11 +256,33 @@ _SCIENCE_COLUMNS = [
 ]
 
 
+def _adql_str(value: object) -> str:
+    """An ADQL string literal for *value*: quoted, with embedded quotes doubled.
+
+    User text goes into the WHERE clause, so a quote in it must not end the
+    literal (``O'Brien`` broke the query; ``x' OR 'a'='a`` rewrote it).
+    """
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _adql_in(values) -> str:
+    """An ADQL ``('a', 'b')`` list of string literals."""
+    return "(" + ", ".join(_adql_str(value) for value in values) + ")"
+
+
+def _adql_num(value: object) -> str:
+    """*value* written into ADQL, after checking it is a finite number."""
+    number = float(value)  # type: ignore[arg-type]
+    if not math.isfinite(number):
+        raise ValueError(f"Not a finite number: {value!r}")
+    return str(value)
+
+
 def _like_or_clause(column: str, values: list, negate: bool = False) -> str:
     """Build a (col LIKE '%v1%' OR col LIKE '%v2%') clause."""
     op = "NOT LIKE" if negate else "LIKE"
     join_op = " AND " if negate else " OR "
-    clauses = [f"{column} {op} '%{v}%'" for v in values]
+    clauses = [f"{column} {op} {_adql_str(f'%{v}%')}" for v in values]
     return f"({join_op.join(clauses)})"
 
 
@@ -277,15 +300,15 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
         conds.append(_like_or_clause("band_list", [str(b) for b in f.band]))
 
     if f.source_name:
-        conds.append(f"target_name LIKE '%{f.source_name}%'")
+        conds.append(f"target_name LIKE {_adql_str(f'%{f.source_name}%')}")
 
     if f.antenna_arrays:
-        conds.append(f"antenna_arrays LIKE '%{f.antenna_arrays}%'")
+        conds.append(f"antenna_arrays LIKE {_adql_str(f'%{f.antenna_arrays}%')}")
 
     # Array type: 12m → DA/DV antennas, 7m → CM antennas, TP → PM antennas
     if f.array_type:
         type_clauses = [
-            f"antenna_arrays LIKE '{pattern}'"
+            f"antenna_arrays LIKE {_adql_str(pattern)}"
             for atype in f.array_type
             for pattern in _ARRAY_TYPE_ANTENNA_PATTERNS.get(atype, [f"%{atype}%"])
         ]
@@ -293,12 +316,14 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
 
     # Array configuration matched against schedblock_name (e.g. 'C-1', 'C-2')
     if f.array_configuration:
-        conf_clauses = [f"schedblock_name LIKE '%{c}%'" for c in f.array_configuration]
+        conf_clauses = [
+            f"schedblock_name LIKE {_adql_str(f'%{c}%')}" for c in f.array_configuration
+        ]
         conds.append(f"({' OR '.join(conf_clauses)})")
 
     if f.angular_resolution_range:
         lo, hi = f.angular_resolution_range
-        conds.append(f"spatial_resolution BETWEEN {lo} AND {hi}")
+        conds.append(f"spatial_resolution BETWEEN {_adql_num(lo)} AND {_adql_num(hi)}")
 
     if f.observation_date_range:
         mjd_min = Time(f.observation_date_range[0], format="iso", scale="utc").mjd
@@ -308,30 +333,30 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
     # QA2 status: map human-friendly labels to TAP-stored single-char values
     if f.qa2_status:
         mapped = [_QA2_STATUS_MAP.get(s, s) for s in f.qa2_status]
-        statuses = "', '".join(mapped)
-        conds.append(f"qa2_passed IN ('{statuses}')")
+        conds.append(f"qa2_passed IN {_adql_in(mapped)}")
 
     if f.obs_type:
-        clauses = " OR ".join(f"type LIKE '%{t}%'" for t in f.obs_type)
+        clauses = " OR ".join(f"type LIKE {_adql_str(f'%{t}%')}" for t in f.obs_type)
         conds.append(f"({clauses})")
 
     if f.fov_range:
-        conds.append(f"s_fov BETWEEN {f.fov_range[0]} AND {f.fov_range[1]}")
+        lo, hi = f.fov_range
+        conds.append(f"s_fov BETWEEN {_adql_num(lo)} AND {_adql_num(hi)}")
 
     if f.time_resolution_range:
         lo, hi = f.time_resolution_range
-        conds.append(f"t_resolution BETWEEN {lo} AND {hi}")
+        conds.append(f"t_resolution BETWEEN {_adql_num(lo)} AND {_adql_num(hi)}")
 
     if f.frequency_range:
-        conds.append(f"frequency BETWEEN {f.frequency_range[0]} AND {f.frequency_range[1]}")
+        lo, hi = f.frequency_range
+        conds.append(f"frequency BETWEEN {_adql_num(lo)} AND {_adql_num(hi)}")
 
     if f.proposal_id_prefix:
-        prefix_clauses = [f"proposal_id LIKE '{p}%'" for p in f.proposal_id_prefix]
+        prefix_clauses = [f"proposal_id LIKE {_adql_str(f'{p}%')}" for p in f.proposal_id_prefix]
         conds.append(f"({' OR '.join(prefix_clauses)})")
 
     if f.proposal_id:
-        codes = "', '".join(f.proposal_id)
-        conds.append(f"proposal_id IN ('{codes}')")
+        conds.append(f"proposal_id IN {_adql_in(f.proposal_id)}")
 
     if f.public_only:
         conds.append("data_rights = 'Public'")
@@ -351,19 +376,19 @@ def _build_exclusion_conditions(f: ExclusionFilters) -> list:
 
     if f.science_keyword:
         for kw in f.science_keyword:
-            conds.append(f"science_keyword NOT LIKE '%{kw}%'")
+            conds.append(f"science_keyword NOT LIKE {_adql_str(f'%{kw}%')}")
 
     if f.scientific_category:
         for cat in f.scientific_category:
-            conds.append(f"scientific_category NOT LIKE '%{cat}%'")
+            conds.append(f"scientific_category NOT LIKE {_adql_str(f'%{cat}%')}")
 
     if f.source_name:
         for name in f.source_name:
-            conds.append(f"LOWER(target_name) NOT LIKE LOWER('%{name}%')")
+            conds.append(f"LOWER(target_name) NOT LIKE LOWER({_adql_str(f'%{name}%')})")
 
     if f.obs_type:
         for t in f.obs_type:
-            conds.append(f"type NOT LIKE '%{t}%'")
+            conds.append(f"type NOT LIKE {_adql_str(f'%{t}%')}")
 
     # Solar exclusion: all three fields must not mention 'sun' (case-insensitive)
     if f.solar:
@@ -429,7 +454,6 @@ def query_products_for_members(member_ous_uids):
     service = get_tap_service()
     if isinstance(member_ous_uids, str):
         member_ous_uids = [member_ous_uids]
-    uid_list = "', '".join(member_ous_uids)
     product_columns = [
         "member_ous_uid",
         "target_name",
@@ -445,7 +469,7 @@ def query_products_for_members(member_ous_uids):
     query = f"""
             SELECT {columns_str}
             FROM ivoa.obscore
-            WHERE member_ous_uid IN ('{uid_list}')
+            WHERE member_ous_uid IN {_adql_in(member_ous_uids)}
             AND science_observation = 'T'
             """
     return search_with_retry(service, query)
