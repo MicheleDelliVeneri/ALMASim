@@ -19,7 +19,7 @@ from typer.testing import CliRunner
 
 from almasim import cli, cli_image
 
-from ._fakes import FakeTable
+from ._fakes import FakeTable, patch_everywhere
 
 runner = CliRunner()
 
@@ -1008,7 +1008,7 @@ def test_run_imaging_tasks_sync_backend_runs_in_process(tmp_path, monkeypatch):
             raise RuntimeError("no image")
         return {"spw": kwargs["spw"]}
 
-    monkeypatch.setattr(ai, "run_wsclean_task", _fake_task)
+    patch_everywhere(monkeypatch, ai, "run_wsclean_task", _fake_task)
     failures: list[cli_image.ImagingFailure] = []
     results = _run(tasks, None, monkeypatch, backend_kind="sync", failures=failures)
 
@@ -1366,7 +1366,7 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
             "max_weight": max_weight,
         }
 
-    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", fake_extract)
+    patch_everywhere(monkeypatch, ai, "extract_single_window_ms_subprocess", fake_extract)
     outdir = tmp_path / "ms" / "SPW-5"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-no-reorder", ai.SINGLE_WINDOW_PLACEHOLDER]
 
@@ -1395,7 +1395,7 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
     def failing_extract(*args, **kwargs):
         raise RuntimeError("No visibilities for spectral window 5")
 
-    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", failing_extract)
+    patch_everywhere(monkeypatch, ai, "extract_single_window_ms_subprocess", failing_extract)
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
     outdir = tmp_path / "ms" / "SPW-5"
     with pytest.raises(RuntimeError, match="Could not extract spectral window 5"):
@@ -1811,6 +1811,8 @@ def test_run_imaging_tasks_passes_the_dish_diameter_when_correcting(
     assert backend.submitted[0]["pb_dish_diameter"] == expected
 
     calls = []
-    monkeypatch.setattr(ai, "run_wsclean_task", lambda **kwargs: calls.append(kwargs) or {})
+    patch_everywhere(
+        monkeypatch, ai, "run_wsclean_task", lambda **kwargs: calls.append(kwargs) or {}
+    )
     _run(tasks, None, monkeypatch, backend_kind="sync", pbcor=pbcor)
     assert calls[0]["pb_dish_diameter"] == expected
