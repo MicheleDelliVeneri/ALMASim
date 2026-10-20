@@ -26,6 +26,27 @@ from almasim.services.simulation import (
 )
 
 
+def _shared_patch(name, *modules):
+    """Patch ``name`` with one mock in every simulation submodule that looks it up.
+
+    The mock is passed to the test like ``@patch`` would pass it.
+    """
+    shared = MagicMock()
+
+    def fresh():
+        shared.reset_mock(return_value=True, side_effect=True)
+        return shared
+
+    first, *rest = modules
+
+    def decorator(func):
+        for module in rest:
+            func = patch(f"almasim.services.simulation.{module}.{name}", new=shared)(func)
+        return patch(f"almasim.services.simulation.{first}.{name}", new_callable=fresh)(func)
+
+    return decorator
+
+
 @pytest.fixture
 def sample_metadata_row_dict():
     """Create a sample metadata row as dictionary."""
@@ -347,9 +368,9 @@ def test_simulation_params_overrides(tmp_path, sample_metadata_row_dict):
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.process_spectral_data")
-@patch("almasim.services.simulation.usm")
-@patch("almasim.services.simulation.uin")
+@patch("almasim.services.simulation.spectral_setup.process_spectral_data")
+@_shared_patch("usm", "stages", "skymodel_stage")
+@_shared_patch("uin", "stages", "planning")
 def test_run_simulation_point_source(
     mock_interferometry,
     mock_skymodels,
@@ -438,9 +459,9 @@ def test_run_simulation_point_source(
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.process_spectral_data")
-@patch("almasim.services.simulation.usm")
-@patch("almasim.services.simulation.uin")
+@patch("almasim.services.simulation.spectral_setup.process_spectral_data")
+@_shared_patch("usm", "stages", "skymodel_stage")
+@_shared_patch("uin", "stages", "planning")
 def test_run_simulation_gaussian_source(
     mock_interferometry,
     mock_skymodels,
@@ -638,7 +659,7 @@ def test_write_ml_dataset_shard(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.export_native_ms")
+@patch("almasim.services.simulation.export.export_native_ms")
 def test_export_results_triggers_ms_export(mock_export_native_ms, tmp_path):
     """Native MeasurementSet export should be triggered when requested."""
     mock_export_native_ms.return_value = str(tmp_path / "demo.ms")
@@ -735,9 +756,9 @@ def test_export_results_triggers_ms_export(mock_export_native_ms, tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.export_results")
-@patch("almasim.services.simulation.simulate_observation")
-@patch("almasim.services.simulation.generate_clean_cube")
+@patch("almasim.services.simulation.pipeline.export_results")
+@patch("almasim.services.simulation.pipeline.simulate_observation")
+@patch("almasim.services.simulation.pipeline.generate_clean_cube")
 def test_run_simulation_memory_mode(
     mock_generate_clean_cube,
     mock_simulate_observation,
@@ -779,9 +800,9 @@ def test_run_simulation_memory_mode(
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.process_spectral_data")
-@patch("almasim.services.simulation.usm")
-@patch("almasim.services.simulation.uin")
+@patch("almasim.services.simulation.spectral_setup.process_spectral_data")
+@_shared_patch("usm", "stages", "skymodel_stage")
+@_shared_patch("uin", "stages", "planning")
 def test_run_simulation_negative_line_flux_keeps_noise_non_negative(
     mock_interferometry,
     mock_skymodels,
@@ -1040,10 +1061,10 @@ def test_compute_channel_noise_increases_with_pwv():
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.uin.combine_interferometric_results")
-@patch("almasim.services.simulation.process_spectral_data")
-@patch("almasim.services.simulation.usm")
-@patch("almasim.services.simulation.uin")
+@patch("almasim.services.simulation.stages.uin.combine_interferometric_results")
+@patch("almasim.services.simulation.spectral_setup.process_spectral_data")
+@_shared_patch("usm", "stages", "skymodel_stage")
+@_shared_patch("uin", "stages", "planning")
 def test_run_simulation_multiconfig_single_pointing(
     mock_interferometry_module,
     mock_skymodels,
@@ -1149,9 +1170,9 @@ def test_run_simulation_multiconfig_single_pointing(
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.process_spectral_data")
-@patch("almasim.services.simulation.usm")
-@patch("almasim.services.simulation.uin")
+@patch("almasim.services.simulation.spectral_setup.process_spectral_data")
+@_shared_patch("usm", "stages", "skymodel_stage")
+@_shared_patch("uin", "stages", "planning")
 def test_run_simulation_p1_tp_and_reconstruction_outputs(
     mock_interferometry_module,
     mock_skymodels,
@@ -1478,9 +1499,9 @@ def test_write_ml_dataset_shard_creates_parent_dirs(tmp_path):
 
 
 @pytest.mark.unit
-@patch("almasim.services.simulation.export_results")
-@patch("almasim.services.simulation.simulate_observation")
-@patch("almasim.services.simulation.generate_clean_cube")
+@patch("almasim.services.simulation.pipeline.export_results")
+@patch("almasim.services.simulation.pipeline.simulate_observation")
+@patch("almasim.services.simulation.pipeline.generate_clean_cube")
 def test_run_simulation_with_background_mode(
     mock_generate_clean_cube,
     mock_simulate_observation,

@@ -1,0 +1,166 @@
+"""Write a run's products to disk (MADIV-28 T5.7)."""
+
+from __future__ import annotations
+
+import os
+from typing import Any, Callable, Optional
+
+import numpy as np
+
+from .. import astro as uas
+from ..interferometry import antenna as ual_antenna
+from ..products.cube_export import save_optional_cube, write_ml_dataset_shard
+from ..products.ms_io import export_native_ms
+from .context import RunContext
+from .params import LogFn, SimulationParams
+from .stages import CleanCubeStage
+
+
+def export_results(
+    params: SimulationParams,
+    clean_cube_stage: CleanCubeStage,
+    simulation_results: dict[str, Any],
+    *,
+    logger: LogFn = None,
+    status_callback: Optional[Callable[[str], None]] = None,
+) -> dict[str, Any]:
+    """Persist optional file exports for simulation results."""
+    ctx = RunContext(logger, status_callback, remote=bool(params.remote))
+    log, status = ctx.log, ctx.status
+
+    exported_results = dict(simulation_results)
+    exported_results["background_cube"] = clean_cube_stage.background_cube
+    persist_outputs = bool(params.persist and params.save_mode != "memory")
+
+    status("Exporting results")
+    if persist_outputs:
+        if clean_cube_stage.sim_output_dir is not None:
+            antenna_config_paths = []
+            cube_output_paths: dict[str, list[str]] = {}
+            for index, observation_config in enumerate(
+                clean_cube_stage.observation_plan["configs"]
+            ):
+                if len(clean_cube_stage.observation_plan["configs"]) == 1:
+                    output_dir = clean_cube_stage.sim_output_dir
+                    output_name = "antenna.cfg"
+                else:
+                    output_dir = os.path.join(
+                        clean_cube_stage.sim_output_dir,
+                        f"config_{index}",
+                    )
+                    os.makedirs(output_dir, exist_ok=True)
+                    output_name = "antenna.cfg"
+                ual_antenna.generate_antenna_config_file_from_antenna_array(
+                    observation_config["antenna_array"],
+                    params.main_dir,
+                    output_dir,
+                )
+                antenna_config_paths.append(os.path.join(output_dir, output_name))
+            exported_results["antenna_config_path"] = antenna_config_paths[0]
+            exported_results["antenna_config_paths"] = antenna_config_paths
+            optional_cubes = (
+                ("int_image_cube", "int-image-cube", exported_results.get("int_image_cube")),
+                ("tp_image_cube", "tp-image-cube", exported_results.get("tp_image_cube")),
+                (
+                    "tp_int_image_cube",
+                    "tp-int-image-cube",
+                    exported_results.get("tp_int_image_cube"),
+                ),
+                ("tp_dirty_cube", "tp-dirty-cube", exported_results.get("tp_dirty_cube")),
+                ("background_cube", "background-cube", clean_cube_stage.background_cube),
+            )
+            for key, product, cube in optional_cubes:
+                cube_output_paths[f"{key}_paths"] = save_optional_cube(
+                    clean_cube_stage.sim_output_dir,
+                    product,
+                    params.idx,
+                    cube,
+                    params.save_mode,
+                    clean_cube_stage.header,
+                )
+            exported_results.update(
+                {key: value for key, value in cube_output_paths.items() if value}
+            )
+
+        payload = clean_cube_stage.sim_params_payload
+        uas.write_sim_parameters(
+            payload["sim_params_path"],
+            payload["source_name"],
+            payload["member_ouid"],
+            payload["ra"],
+            payload["dec"],
+            payload["ang_res"],
+            payload["vel_res"],
+            payload["int_time"],
+            payload["band"],
+            payload["band_range"],
+            payload["central_freq"],
+            payload["redshift"],
+            payload["line_fluxes"],
+            payload["line_names"],
+            payload["line_frequency"],
+            payload["continuum"],
+            payload["fov"],
+            payload["beam_size"],
+            payload["cell_size"],
+            payload["n_pix"],
+            payload["n_channels"],
+            payload["snapshot"],
+            payload["tng_subhaloid"],
+            payload["lum_infrared"],
+            payload["fwhm_z"],
+            payload["source_type"],
+            payload["fwhm_x"],
+            payload["fwhm_y"],
+            payload["angle"],
+        )
+        exported_results["sim_params_path"] = payload["sim_params_path"]
+    else:
+        log("Skipping on-disk simulation exports (pure Python mode)")
+
+    visibility_table = exported_results.get("visibility_table")
+    _ms_mode = (
+        params.ms_save_mode
+        if params.ms_save_mode != "none"
+        else ("msv2" if params.ms_export else "none")
+    )
+    if _ms_mode != "none":
+        if visibility_table is None:
+            raise RuntimeError(
+                "MS/visibility export requested, but no visibility table is available"
+            )
+        _out_dir = (
+            clean_cube_stage.sim_output_dir
+            if clean_cube_stage.sim_output_dir is not None
+            else clean_cube_stage.output_dir_abs
+        )
+        _base = os.path.join(_out_dir, f"{params.project_name}_{params.idx}")
+        if _ms_mode in ("npz", "both"):
+            vis_npz_path = _base + "_vis.npz"
+            arrays: dict[str, Any] = {
+                k: np.asarray(v) if hasattr(v, "__len__") else v
+                for k, v in visibility_table.items()
+            }
+            np.savez_compressed(vis_npz_path, **arrays)
+            exported_results["vis_npz_path"] = vis_npz_path
+        if _ms_mode in ("msv2", "both"):
+            ms_path = params.ms_export_dir if params.ms_export_dir is not None else _base + ".ms"
+            exported_results["ms_path"] = export_native_ms(
+                ms_path=ms_path,
+                visibility_table=visibility_table,
+                project_name=params.project_name,
+                source_name=params.source_name,
+            )
+
+    if params.ml_dataset_path:
+        ml_dataset_path = write_ml_dataset_shard(
+            params.ml_dataset_path,
+            clean_cube=exported_results["model_cube"],
+            dirty_cube=exported_results["dirty_cube"],
+            dirty_vis=exported_results["dirty_vis"],
+            uv_mask_cube=exported_results["uv_mask_cube"],
+            metadata=clean_cube_stage.metadata,
+        )
+        exported_results["ml_dataset_path"] = ml_dataset_path
+
+    return exported_results

@@ -6,7 +6,21 @@ This page describes the main ALMASim simulation workflow.
 
 ALMASim simulates a single-pointing ALMA observation from a clean sky cube through measurement-space products and image-domain products.
 
-The central service lives in [`src/almasim/services/simulation.py`](../src/almasim/services/simulation.py).
+The central service is the package [`src/almasim/services/simulation/`](../src/almasim/services/simulation/):
+
+| Module | Holds |
+|---|---|
+| `params.py` | `SimulationParams` and its coercion |
+| `context.py` | `RunContext`: log, status and cancellation callbacks |
+| `geometry.py` | `CubeGeometry`, `resolve_cube_geometry()`, `estimate_simulation_footprint()` |
+| `spectral_setup.py` | redshift, rest frequency, continuum and line fluxes |
+| `skymodel_stage.py` | the model cube: sky model, background, serendipitous sources |
+| `background.py` | `generate_background_cube()` |
+| `metadata.py` | the parameter record, run metadata and effective SNR |
+| `planning.py` | one interferometer or total-power run per configuration |
+| `stages.py` | `generate_clean_cube()`, `simulate_observation()`, `image_products()` |
+| `export.py` | `export_results()` |
+| `pipeline.py` | `run_simulation()` |
 
 ## Main Entry Points
 

@@ -141,7 +141,6 @@ module = [
     "almasim.services.interferometry.core",
     "almasim.services.interferometry.imaging",
     "almasim.services.interferometry.utils",
-    "almasim.services.simulation",
     "almasim.skymodels.datasets.tng",
     "almasim.skymodels.serendipitous",
     # Surfaced when SQLAlchemy joined the test group (T1.12): the models use
