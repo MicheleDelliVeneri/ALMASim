@@ -48,6 +48,12 @@ def simulate_observation(*args, **kwargs):
     return _simulate_observation(*args, **kwargs)
 
 
+def image_products(*args, **kwargs):
+    from . import image_products as _image_products
+
+    return _image_products(*args, **kwargs)
+
+
 def export_results(*args, **kwargs):
     from . import export_results as _export_results
 
@@ -555,9 +561,17 @@ def simulation_run(
                             ),
                         ),
                     )
-                    _update_progress(progress_bar, 90)
                     logger(f"Dirty cube shape: {simulation_results['dirty_cube'].shape}")
                     logger(f"UV mask cube shape: {simulation_results['uv_mask_cube'].shape}")
+
+                    # The image-domain products (interferometric, total-power and
+                    # combined image cubes), as run_simulation makes them.
+                    simulation_results = _run_stage_with_feedback(
+                        progress_bar,
+                        label="imaging",
+                        work=lambda: image_products(simulation_results),
+                    )
+                    _update_progress(progress_bar, 90)
 
                     exported_results = _run_stage_with_feedback(
                         progress_bar,
