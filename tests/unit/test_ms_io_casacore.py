@@ -1,4 +1,4 @@
-"""ms_io through the python-casacore backend writes a correctly laid-out MS (MADIV-28 T1.5).
+"""The MS writer through the python-casacore backend writes a correctly laid-out MS (MADIV-28 T1.5).
 
 The casacore fallback used to transpose arrays as if python-casacore were
 column-major like casatools, so it wrote and read DATA, UVW and the antenna
@@ -13,7 +13,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from almasim.services.products import ms_io
+from almasim.services.ms import backends
+from almasim.services.ms import io as ms_io
 
 tables = pytest.importorskip("casacore.tables")
 
@@ -52,7 +53,7 @@ def _visibility_table():
 @pytest.fixture
 def written(tmp_path):
     vt = _visibility_table()
-    with patch.object(ms_io, "_get_backend", return_value=ms_io._CasacoreBackend()):
+    with patch.object(ms_io, "_get_backend", return_value=backends._CasacoreBackend()):
         path = ms_io.export_native_ms(
             ms_path=tmp_path / "sim.ms", visibility_table=vt, project_name="P", source_name="S"
         )
@@ -90,7 +91,7 @@ def test_subtable_layout(written):
 
 def test_round_trip(written):
     vt, path = written
-    with patch.object(ms_io, "_get_backend", return_value=ms_io._CasacoreBackend()):
+    with patch.object(ms_io, "_get_backend", return_value=backends._CasacoreBackend()):
         back = ms_io.read_native_ms(path)
     for key in ("data", "model_data", "flag", "uvw_m", "weight", "sigma", "antenna_positions_m"):
         np.testing.assert_array_equal(back[key], vt[key], err_msg=key)
@@ -109,13 +110,13 @@ def test_backend_import_errors_fall_back_quietly_but_other_failures_are_logged(c
         def __init__(self):
             raise ImportError("No module named 'casatools'")
 
-    with patch.object(ms_io, "_CasatoolsBackend", Broken):
-        with caplog.at_level("WARNING", logger=ms_io.__name__):
-            assert isinstance(ms_io._get_backend(), ms_io._CasacoreBackend)
+    with patch.object(backends, "_CasatoolsBackend", Broken):
+        with caplog.at_level("WARNING", logger=backends.__name__):
+            assert isinstance(backends._get_backend(), backends._CasacoreBackend)
     assert "libpmix" in caplog.text
 
     caplog.clear()
-    with patch.object(ms_io, "_CasatoolsBackend", Missing):
-        with caplog.at_level("WARNING", logger=ms_io.__name__):
-            assert isinstance(ms_io._get_backend(), ms_io._CasacoreBackend)
+    with patch.object(backends, "_CasatoolsBackend", Missing):
+        with caplog.at_level("WARNING", logger=backends.__name__):
+            assert isinstance(backends._get_backend(), backends._CasacoreBackend)
     assert caplog.text == ""

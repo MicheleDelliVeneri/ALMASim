@@ -1,0 +1,227 @@
+"""What ALMASim writes into each MeasurementSet table, and one writer for all (MADIV-28 T4.9).
+
+Each ``*_table`` function returns a :class:`TableSpec`: the table's columns
+and values. :func:`write_table` creates any of them, so the main table and the
+nine subtables share one code path.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from typing import Any, Mapping, Sequence
+
+import numpy as np
+
+from . import schema
+from .schema import Column
+
+
+@dataclass(frozen=True)
+class TableSpec:
+    """One table to write.
+
+    ``values`` holds whole columns when ``by_column`` (the main and ANTENNA
+    tables), otherwise the cells of the table's single row.
+    """
+
+    name: str  # the subtable's name; "" for the main table
+    columns: Sequence[Column]
+    values: Mapping[str, Any]
+    nrow: int = 1
+    by_column: bool = False
+    keywords: Mapping[str, Any] = field(default_factory=dict)
+    info: Mapping[str, Any] | None = None
+
+
+def write_table(backend, ms_path: str, spec: TableSpec) -> None:
+    """Create ``spec``'s table under ``ms_path`` and fill it."""
+    path = os.path.join(ms_path, spec.name) if spec.name else ms_path
+    tb = backend.create(path, [column.desc() for column in spec.columns], nrow=spec.nrow)
+    arrays = {column.name for column in spec.columns if column.ndim}
+    for name, value in spec.values.items():
+        if spec.by_column:
+            if name in arrays:
+                backend.put(tb, name, value)
+            else:
+                tb.putcol(name, value)
+        elif name in arrays:
+            backend.put_cell(tb, name, 0, value)
+        else:
+            tb.putcell(name, 0, value)
+    for key, value in spec.keywords.items():
+        tb.putkeyword(key, value)
+    if spec.info is not None:
+        tb.putinfo(dict(spec.info))
+    tb.flush()
+    tb.close()
+
+
+def main_table(ms_path: str, vt: Mapping[str, Any]) -> TableSpec:
+    """The visibilities, in the MS's (nrows, nchan, ncorr) layout."""
+    data = np.asarray(vt["data"], dtype=np.complex64)
+    flag = np.asarray(vt["flag"], dtype=bool)
+    time_mjd_s = np.asarray(vt["time_mjd_s"], dtype=np.float64)
+    nrows = data.shape[0]
+    values = {
+        "TIME": time_mjd_s,
+        "TIME_CENTROID": time_mjd_s,
+        "INTERVAL": np.asarray(vt["interval_s"], dtype=np.float64),
+        "EXPOSURE": np.asarray(vt["exposure_s"], dtype=np.float64),
+        "ANTENNA1": np.asarray(vt["antenna1"], dtype=np.int32),
+        "ANTENNA2": np.asarray(vt["antenna2"], dtype=np.int32),
+        "FEED1": np.zeros(nrows, dtype=np.int32),
+        "FEED2": np.zeros(nrows, dtype=np.int32),
+        "DATA_DESC_ID": np.zeros(nrows, dtype=np.int32),
+        "FIELD_ID": np.zeros(nrows, dtype=np.int32),
+        "ARRAY_ID": np.zeros(nrows, dtype=np.int32),
+        "OBSERVATION_ID": np.zeros(nrows, dtype=np.int32),
+        "PROCESSOR_ID": np.full(nrows, -1, dtype=np.int32),
+        "SCAN_NUMBER": np.ones(nrows, dtype=np.int32),
+        "STATE_ID": np.zeros(nrows, dtype=np.int32),
+        "FLAG_ROW": np.all(flag, axis=(1, 2)),
+        # The visibility table's (nrows, ncorr, nchan) becomes (nrows, nchan, ncorr).
+        "UVW": np.asarray(vt["uvw_m"], dtype=np.float64),
+        "DATA": data.transpose(0, 2, 1),
+        "MODEL_DATA": np.asarray(vt["model_data"], dtype=np.complex64).transpose(0, 2, 1),
+        "FLAG": flag.transpose(0, 2, 1),
+        "WEIGHT": np.asarray(vt["weight"], dtype=np.float32),  # (nrows, ncorr)
+        "SIGMA": np.asarray(vt["sigma"], dtype=np.float32),
+    }
+    keywords: dict[str, Any] = {"MS_VERSION": 2.0}
+    keywords.update(
+        {name: "Table: " + os.path.join(ms_path, name) for name in schema.SUBTABLE_NAMES}
+    )
+    return TableSpec(
+        "",
+        schema.MAIN_COLUMNS,
+        values,
+        nrow=nrows,
+        by_column=True,
+        keywords=keywords,
+        info={"type": "Measurement Set", "subType": "ALMASim"},
+    )
+
+
+def antenna_table(antenna_names: Sequence[str], antenna_positions_m: np.ndarray) -> TableSpec:
+    nant = len(antenna_names)
+    values = {
+        "NAME": list(antenna_names),
+        "STATION": list(antenna_names),
+        "TYPE": ["GROUND-BASED"] * nant,
+        "MOUNT": ["alt-az"] * nant,
+        "DISH_DIAMETER": np.full(nant, 12.0),
+        "FLAG_ROW": np.zeros(nant, dtype=bool),
+        "POSITION": antenna_positions_m,  # (nant, 3)
+        "OFFSET": np.zeros((nant, 3)),
+    }
+    return TableSpec("ANTENNA", schema.ANTENNA_COLUMNS, values, nrow=nant, by_column=True)
+
+
+def spectral_window_table(channel_freq_hz: np.ndarray, nchan: int) -> TableSpec:
+    chan_width = np.gradient(channel_freq_hz).astype(np.float64) if nchan > 1 else np.array([1.0])
+    values = {
+        "NUM_CHAN": int(nchan),
+        "CHAN_FREQ": channel_freq_hz,
+        "CHAN_WIDTH": chan_width,
+        "EFFECTIVE_BW": np.abs(chan_width),
+        "RESOLUTION": np.abs(chan_width),
+        "REF_FREQUENCY": float(np.median(channel_freq_hz)),
+        "TOTAL_BANDWIDTH": float(np.sum(np.abs(chan_width))),
+        "NAME": "ALMASim SPW 0",
+        "MEAS_FREQ_REF": 5,
+        "NET_SIDEBAND": 1,
+        "FLAG_ROW": False,
+    }
+    return TableSpec("SPECTRAL_WINDOW", schema.SPECTRAL_WINDOW_COLUMNS, values)
+
+
+def polarization_table(ncorr: int) -> TableSpec:
+    values = {
+        "NUM_CORR": int(ncorr),
+        "CORR_TYPE": np.array([9], dtype=np.int32),  # Stokes I
+        "CORR_PRODUCT": np.array([[0, 0]], dtype=np.int32),  # (ncorr, 2)
+        "FLAG_ROW": False,
+    }
+    return TableSpec("POLARIZATION", schema.POLARIZATION_COLUMNS, values)
+
+
+def data_description_table() -> TableSpec:
+    values = {"SPECTRAL_WINDOW_ID": 0, "POLARIZATION_ID": 0, "FLAG_ROW": False}
+    return TableSpec("DATA_DESCRIPTION", schema.DATA_DESCRIPTION_COLUMNS, values)
+
+
+def field_table(
+    source_name: str, ra_rad: float, dec_rad: float, time_range: np.ndarray
+) -> TableSpec:
+    direction = np.array([[ra_rad, dec_rad]])  # shape (1, 2): one polynomial term
+    values = {
+        "NAME": source_name,
+        "CODE": "",
+        "NUM_POLY": 0,
+        "SOURCE_ID": 0,
+        "TIME": float(np.mean(time_range)),
+        "FLAG_ROW": False,
+        "DELAY_DIR": direction,
+        "PHASE_DIR": direction,
+        "REFERENCE_DIR": direction,
+    }
+    return TableSpec("FIELD", schema.FIELD_COLUMNS, values)
+
+
+def observation_table(telescope_name: str, project_name: str, time_range: np.ndarray) -> TableSpec:
+    values = {
+        "TELESCOPE_NAME": telescope_name,
+        "OBSERVER": "ALMASim",
+        "PROJECT": project_name,
+        "SCHEDULE_TYPE": "ALMASim",
+        "RELEASE_DATE": float(time_range.max()),
+        "FLAG_ROW": False,
+        "TIME_RANGE": time_range.astype(np.float64),
+    }
+    return TableSpec("OBSERVATION", schema.OBSERVATION_COLUMNS, values)
+
+
+def source_table(
+    source_name: str, ra_rad: float, dec_rad: float, time_range: np.ndarray
+) -> TableSpec:
+    values = {
+        "SOURCE_ID": 0,
+        "TIME": float(np.mean(time_range)),
+        "INTERVAL": float(time_range[1] - time_range[0]),
+        "SPECTRAL_WINDOW_ID": -1,
+        "NUM_LINES": 0,
+        "NAME": source_name,
+        "CODE": "",
+        "CALIBRATION_GROUP": 0,
+        "DIRECTION": np.array([ra_rad, dec_rad]),
+    }
+    return TableSpec("SOURCE", schema.SOURCE_COLUMNS, values)
+
+
+def state_table() -> TableSpec:
+    values = {
+        "SIG": True,
+        "REF": False,
+        "CAL": 0.0,
+        "LOAD": 0.0,
+        "SUB_SCAN": 0,
+        "OBS_MODE": "ON_SOURCE",
+        "FLAG_ROW": False,
+    }
+    return TableSpec("STATE", schema.STATE_COLUMNS, values)
+
+
+def history_table(project_name: str, time_range: np.ndarray) -> TableSpec:
+    values = {
+        "TIME": float(np.mean(time_range)),
+        "OBSERVATION_ID": 0,
+        "MESSAGE": "ALMASim MSv2 export",
+        "PRIORITY": "NORMAL",
+        "ORIGIN": "ALMASim",
+        "OBJECT_ID": 0,
+        "APPLICATION": "ALMASim",
+        "CLI_COMMAND": np.array(["export_native_ms"]),
+        "APP_PARAMS": np.array([project_name]),
+    }
+    return TableSpec("HISTORY", schema.HISTORY_COLUMNS, values)
