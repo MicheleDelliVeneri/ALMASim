@@ -10,6 +10,7 @@ This module provides:
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import re
 import shlex
@@ -21,6 +22,8 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Mapping, Sequence
 
 from almasim.services.paths import UnsafePathError, safe_join
+
+logger = logging.getLogger(__name__)
 
 try:
     from dask.distributed import Client
@@ -309,8 +312,8 @@ class SlurmDaskClusterSingleton:
         self.cluster = SLURMCluster(**slurm_kwargs)
         self.cluster.scale(n_jobs)
         self.client = Client(self.cluster)
-        print(f"Dask dashboard: {getattr(self.client, 'dashboard_link', None)}", flush=True)
-        print(f"Slurm worker logs (dask-worker stdout/stderr): {log_directory}", flush=True)
+        logger.info("Dask dashboard: %s", getattr(self.client, "dashboard_link", None))
+        logger.info("Slurm worker logs (dask-worker stdout/stderr): %s", log_directory)
         self._config_signature = (
             queue,
             node_cores,

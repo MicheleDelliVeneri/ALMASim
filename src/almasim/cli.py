@@ -14,6 +14,14 @@ app = typer.Typer(
 )
 
 
+@app.callback()
+def _setup() -> None:
+    """ALMASim command-line interface."""
+    from .cli_shared import configure_logging
+
+    configure_logging()
+
+
 def _invoke_click_command(command: click.Command, *, args: list[str], prog_name: str) -> None:
     """Invoke a click command while preserving Typer-style exit behavior."""
     try:
