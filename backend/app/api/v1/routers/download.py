@@ -19,12 +19,12 @@ from app.schemas.download import (
     DiskSpaceInfo,
     DownloadJobStatus,
     DownloadJobSummary,
-    FileStatus,
     RedownloadRequest,
     ResolveProductsRequest,
     ResolveProductsResponse,
     StartDownloadRequest,
     StartDownloadResponse,
+    json_list,
 )
 from app.schemas.metadata import MetadataResponse
 from app.services.download_service import (
@@ -39,22 +39,19 @@ from app.services.download_service import (
 router = APIRouter()
 
 
-def _json_list(value) -> list:
-    """Decode a JSON list from DB text fields."""
-    import json
-
-    if not value:
-        return []
-    try:
-        parsed = json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    return parsed if isinstance(parsed, list) else []
+def _record_or_404(job_id: str):
+    """The job's database record, or a 404."""
+    record = download_store.get_from_db(job_id)
+    if not record:
+        raise _job_not_found(job_id)
+    return record
 
 
-def _metadata_stats(value) -> tuple[bool, int]:
-    rows = _json_list(value)
-    return bool(rows), len(rows)
+def _job_not_found(job_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Download job {job_id} not found",
+    )
 
 
 def _browse_path(resolved_path) -> BrowseDirectoryResponse:
@@ -291,64 +288,11 @@ def list_download_jobs():
     records = download_store.list_all()  # returns DB records, newest first
     result = []
     for rec in records:
-        job_id_str = str(rec.job_id)
         # For active jobs, prefer the live in-memory data
-        active = download_store.get(job_id_str)
-        if active:
-            total = active.total_bytes or 1
-            result.append(
-                DownloadJobSummary(
-                    job_id=active.job_id,
-                    status=active.status,
-                    destination=active.destination,
-                    total_files=active.total_files,
-                    files_completed=active.files_completed,
-                    files_failed=active.files_failed,
-                    progress=active.bytes_downloaded / total if total > 0 else 0,
-                    created_at=active.created_at.isoformat(),
-                    member_ous_uids=active.member_ous_uids,
-                    product_filter=active.product_filter,
-                    total_bytes=active.total_bytes,
-                    bytes_downloaded=active.bytes_downloaded,
-                    error=active.error,
-                    raw_measurement_sets=active.raw_measurement_sets,
-                    calibrated_measurement_sets=active.calibrated_measurement_sets,
-                    manifest_path=active.manifest_path,
-                    has_metadata=bool(active.metadata_rows),
-                    metadata_count=len(active.metadata_rows),
-                )
-            )
-        else:
-            import json
-
-            total = rec.total_bytes or 1
-            try:
-                uids = json.loads(rec.member_ous_uids) if rec.member_ous_uids else []
-            except (json.JSONDecodeError, TypeError):
-                uids = []
-            has_metadata, metadata_count = _metadata_stats(rec.metadata_json)
-            result.append(
-                DownloadJobSummary(
-                    job_id=str(rec.job_id),
-                    status=rec.status,
-                    destination=rec.destination,
-                    total_files=rec.total_files,
-                    files_completed=rec.files_completed,
-                    files_failed=rec.files_failed,
-                    progress=rec.bytes_downloaded / total if total > 0 else 0,
-                    created_at=rec.created_at.isoformat(),
-                    member_ous_uids=uids,
-                    product_filter=rec.product_filter or "all",
-                    total_bytes=int(rec.total_bytes),
-                    bytes_downloaded=int(rec.bytes_downloaded),
-                    error=rec.error,
-                    raw_measurement_sets=_json_list(rec.raw_measurement_sets),
-                    calibrated_measurement_sets=_json_list(rec.calibrated_measurement_sets),
-                    manifest_path=rec.manifest_path,
-                    has_metadata=has_metadata,
-                    metadata_count=metadata_count,
-                )
-            )
+        active = download_store.get(str(rec.job_id))
+        result.append(
+            DownloadJobSummary.from_job(active) if active else DownloadJobSummary.from_record(rec)
+        )
     return result
 
 
@@ -358,85 +302,9 @@ def get_download_job(job_id: str):
     # Try active (in-memory) first for live progress
     job = download_store.get(job_id)
     if job:
-        return DownloadJobStatus(
-            job_id=job.job_id,
-            status=job.status,
-            destination=job.destination,
-            total_files=job.total_files,
-            files_completed=job.files_completed,
-            files_failed=job.files_failed,
-            total_bytes=job.total_bytes,
-            bytes_downloaded=job.bytes_downloaded,
-            progress=((job.bytes_downloaded / job.total_bytes) if job.total_bytes > 0 else 0),
-            error=job.error,
-            raw_measurement_sets=job.raw_measurement_sets,
-            calibrated_measurement_sets=job.calibrated_measurement_sets,
-            manifest_path=job.manifest_path,
-            has_metadata=bool(job.metadata_rows),
-            metadata_count=len(job.metadata_rows),
-            unpack_ms=job.unpack_ms,
-            generate_calibrated_visibilities=job.generate_calibrated_visibilities,
-            clean_intermediate_files=job.clean_intermediate_files,
-            archive_output_root=job.archive_output_root,
-            casa_data_root=job.casa_data_root,
-            skip_casa_data_update=job.skip_casa_data_update,
-            files=[
-                FileStatus(
-                    filename=f.filename,
-                    content_length=f.content_length,
-                    bytes_downloaded=f.bytes_downloaded,
-                    status=f.status,
-                    error=f.error,
-                    progress=(
-                        (f.bytes_downloaded / f.content_length) if f.content_length > 0 else 0
-                    ),
-                )
-                for f in job.files
-            ],
-        )
-
+        return DownloadJobStatus.from_job(job)
     # Fall back to DB record (historical)
-    rec = download_store.get_from_db(job_id)
-    if not rec:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Download job {job_id} not found",
-        )
-
-    return DownloadJobStatus(
-        job_id=str(rec.job_id),
-        status=rec.status,
-        destination=rec.destination,
-        total_files=rec.total_files,
-        files_completed=rec.files_completed,
-        files_failed=rec.files_failed,
-        total_bytes=int(rec.total_bytes),
-        bytes_downloaded=int(rec.bytes_downloaded),
-        progress=(rec.bytes_downloaded / rec.total_bytes) if rec.total_bytes > 0 else 0,
-        error=rec.error,
-        raw_measurement_sets=_json_list(rec.raw_measurement_sets),
-        calibrated_measurement_sets=_json_list(rec.calibrated_measurement_sets),
-        manifest_path=rec.manifest_path,
-        has_metadata=_metadata_stats(rec.metadata_json)[0],
-        metadata_count=_metadata_stats(rec.metadata_json)[1],
-        unpack_ms=bool(rec.unpack_ms),
-        generate_calibrated_visibilities=bool(rec.generate_calibrated_visibilities),
-        clean_intermediate_files=bool(rec.clean_intermediate_files),
-        archive_output_root=rec.archive_output_root,
-        casa_data_root=rec.casa_data_root,
-        skip_casa_data_update=bool(rec.skip_casa_data_update),
-        files=[
-            FileStatus(
-                filename=f.filename,
-                content_length=int(f.content_length),
-                bytes_downloaded=int(f.bytes_downloaded),
-                status=f.status,
-                error=f.error,
-                progress=((f.bytes_downloaded / f.content_length) if f.content_length > 0 else 0),
-            )
-            for f in rec.files
-        ],
-    )
+    return DownloadJobStatus.from_record(_record_or_404(job_id))
 
 
 @router.get("/jobs/{job_id}/metadata", response_model=MetadataResponse)
@@ -446,13 +314,7 @@ def get_download_job_metadata(job_id: str):
     if job:
         rows = job.metadata_rows
     else:
-        rec = download_store.get_from_db(job_id)
-        if not rec:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Download job {job_id} not found",
-            )
-        rows = _json_list(rec.metadata_json)
+        rows = json_list(_record_or_404(job_id).metadata_json)
 
     if not rows:
         raise HTTPException(
@@ -479,12 +341,7 @@ def cancel_download_job(job_id: str):
         return {"job_id": job_id, "status": "cancelled"}
 
     # Fall back to DB (job already finished or server restarted)
-    rec = download_store.get_from_db(job_id)
-    if not rec:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Download job {job_id} not found",
-        )
+    rec = _record_or_404(job_id)
     if rec.status not in ("pending", "running"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -506,12 +363,7 @@ def redownload_job(
     Uses the original access URLs from the database so UID resolution is not
     needed.  Existing files at the destination are overwritten.
     """
-    rec = download_store.get_from_db(job_id)
-    if not rec:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Download job {job_id} not found",
-        )
+    rec = _record_or_404(job_id)
 
     import json
 
@@ -601,7 +453,7 @@ def redownload_job(
         job_id=new_job_id,
         destination=destination,
         member_ous_uids=uids,
-        metadata_rows=_json_list(rec.metadata_json),
+        metadata_rows=json_list(rec.metadata_json),
         product_filter=rec.product_filter or "all",
         unpack_ms=unpack_ms or generate_calibrated,
         generate_calibrated_visibilities=generate_calibrated,
@@ -655,12 +507,7 @@ def delete_download_job(job_id: str):
         )
 
     # Look up the job (with file records) before deleting from DB
-    rec = download_store.get_from_db(job_id)
-    if not rec:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Download job {job_id} not found",
-        )
+    rec = _record_or_404(job_id)
 
     # Delete downloaded files (and any leftover .part files) from disk. Only
     # paths inside the job's own destination are removed (T1.9): a stored
@@ -683,8 +530,8 @@ def delete_download_job(job_id: str):
                 pass  # best-effort; don't fail the delete if a file is gone
 
     generated_paths = [
-        *(_json_list(rec.raw_measurement_sets)),
-        *(_json_list(rec.calibrated_measurement_sets)),
+        *(json_list(rec.raw_measurement_sets)),
+        *(json_list(rec.calibrated_measurement_sets)),
     ]
     if rec.manifest_path:
         generated_paths.append(rec.manifest_path)
@@ -706,10 +553,7 @@ def delete_download_job(job_id: str):
 
     deleted = download_store.delete_from_db(job_id)
     if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Download job {job_id} not found",
-        )
+        raise _job_not_found(job_id)
     # Also remove from memory if still lingering
     download_store.remove(job_id)
     return {

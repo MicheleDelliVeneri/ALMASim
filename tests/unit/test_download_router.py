@@ -103,32 +103,42 @@ def _make_db_rec(job_id="job-1", status="completed"):
 
 
 def test_json_list_returns_list_from_valid_json():
-    result = download_router._json_list(json.dumps(["a", "b"]))
+    result = download_router.json_list(json.dumps(["a", "b"]))
     assert result == ["a", "b"]
 
 
 def test_json_list_returns_empty_on_invalid_json():
-    assert download_router._json_list("not-json") == []
+    assert download_router.json_list("not-json") == []
 
 
 def test_json_list_returns_empty_on_non_list():
-    assert download_router._json_list(json.dumps({"key": "val"})) == []
+    assert download_router.json_list(json.dumps({"key": "val"})) == []
 
 
 def test_json_list_returns_empty_on_none():
-    assert download_router._json_list(None) == []
+    assert download_router.json_list(None) == []
 
 
-def test_metadata_stats_with_rows():
-    has_meta, count = download_router._metadata_stats(json.dumps([{"uid": "x"}]))
-    assert has_meta is True
-    assert count == 1
+def test_job_summary_from_record_carries_the_post_processing_options():
+    """The re-download dialog reads these from the job list; they used to be left out."""
+    rec = _make_db_rec()
+    rec.unpack_ms = True
+    rec.generate_calibrated_visibilities = True
+    rec.archive_output_root = "/tmp/archive"
+    rec.metadata_json = json.dumps([{"uid": "x"}, {"uid": "y"}])
+    summary = download_router.DownloadJobSummary.from_record(rec)
+    assert summary.unpack_ms and summary.generate_calibrated_visibilities
+    assert summary.archive_output_root == "/tmp/archive"
+    assert (summary.has_metadata, summary.metadata_count) == (True, 2)
+    assert summary.member_ous_uids == ["uid://A001/X1/X1"]
+    assert summary.created_at == "2024-01-01T00:00:00"
 
 
-def test_metadata_stats_empty():
-    has_meta, count = download_router._metadata_stats(json.dumps([]))
-    assert has_meta is False
-    assert count == 0
+def test_job_status_progress_is_zero_for_an_empty_job():
+    rec = _make_db_rec()
+    rec.total_bytes = 0
+    rec.bytes_downloaded = 0
+    assert download_router.DownloadJobStatus.from_record(rec).progress == 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 """Download-related schemas."""
 
+import json
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
@@ -187,6 +188,63 @@ class StartDownloadResponse(BaseModel):
     destination: str
 
 
+def json_list(value: Any) -> list:
+    """A list stored as JSON text in a database column ([] when empty or not a list)."""
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _fraction(done: float, total: float) -> float:
+    return done / total if total > 0 else 0.0
+
+
+def _job_fields(job: Any, *, live: bool) -> dict[str, Any]:
+    """The fields the job schemas share, from a live job or its database record.
+
+    A live job (``download_service.DownloadJob``) holds lists; its database
+    record stores them as JSON text.
+    """
+    if live:
+        rows, uids = job.metadata_rows, job.member_ous_uids
+        raw, calibrated = job.raw_measurement_sets, job.calibrated_measurement_sets
+    else:
+        rows, uids = json_list(job.metadata_json), json_list(job.member_ous_uids)
+        raw = json_list(job.raw_measurement_sets)
+        calibrated = json_list(job.calibrated_measurement_sets)
+    total, done = int(job.total_bytes), int(job.bytes_downloaded)
+    return {
+        "job_id": str(job.job_id),
+        "status": job.status,
+        "destination": job.destination,
+        "total_files": job.total_files,
+        "files_completed": job.files_completed,
+        "files_failed": job.files_failed,
+        "total_bytes": total,
+        "bytes_downloaded": done,
+        "progress": _fraction(done, total),
+        "error": job.error,
+        "member_ous_uids": list(uids),
+        "product_filter": job.product_filter or "all",
+        "created_at": job.created_at.isoformat(),
+        "raw_measurement_sets": list(raw),
+        "calibrated_measurement_sets": list(calibrated),
+        "manifest_path": job.manifest_path,
+        "has_metadata": bool(rows),
+        "metadata_count": len(rows),
+        "unpack_ms": bool(job.unpack_ms),
+        "generate_calibrated_visibilities": bool(job.generate_calibrated_visibilities),
+        "clean_intermediate_files": bool(job.clean_intermediate_files),
+        "archive_output_root": job.archive_output_root,
+        "casa_data_root": job.casa_data_root,
+        "skip_casa_data_update": bool(job.skip_casa_data_update),
+    }
+
+
 class FileStatus(BaseModel):
     """Status of a single file in a download job."""
 
@@ -196,6 +254,19 @@ class FileStatus(BaseModel):
     status: str
     error: Optional[str] = None
     progress: float = Field(..., description="Download progress 0.0 to 1.0")
+
+    @classmethod
+    def from_file(cls, file: Any) -> "FileStatus":
+        """From a live file status or its database record."""
+        length, done = int(file.content_length), int(file.bytes_downloaded)
+        return cls(
+            filename=file.filename,
+            content_length=length,
+            bytes_downloaded=done,
+            status=file.status,
+            error=file.error,
+            progress=_fraction(done, length),
+        )
 
 
 class DownloadJobStatus(BaseModel):
@@ -223,6 +294,18 @@ class DownloadJobStatus(BaseModel):
     archive_output_root: Optional[str] = None
     casa_data_root: Optional[str] = None
     skip_casa_data_update: bool = False
+
+    @classmethod
+    def from_job(cls, job: Any) -> "DownloadJobStatus":
+        """From a live (in-memory) job."""
+        files = [FileStatus.from_file(f) for f in job.files]
+        return cls.model_validate({**_job_fields(job, live=True), "files": files})
+
+    @classmethod
+    def from_record(cls, record: Any) -> "DownloadJobStatus":
+        """From a job's database record."""
+        files = [FileStatus.from_file(f) for f in record.files]
+        return cls.model_validate({**_job_fields(record, live=False), "files": files})
 
 
 class DownloadJobSummary(BaseModel):
@@ -252,3 +335,13 @@ class DownloadJobSummary(BaseModel):
     archive_output_root: Optional[str] = None
     casa_data_root: Optional[str] = None
     skip_casa_data_update: bool = False
+
+    @classmethod
+    def from_job(cls, job: Any) -> "DownloadJobSummary":
+        """From a live (in-memory) job."""
+        return cls.model_validate(_job_fields(job, live=True))
+
+    @classmethod
+    def from_record(cls, record: Any) -> "DownloadJobSummary":
+        """From a job's database record."""
+        return cls.model_validate(_job_fields(record, live=False))
