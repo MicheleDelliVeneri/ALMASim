@@ -283,8 +283,8 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      # slurmd manages its own cgroups in the container.
-      options: --privileged
+      # slurmd manages its own cgroups under the runner VM's cgroup tree.
+      options: --privileged --cgroupns=host
     env:
       SUPERSEDE: ${{ contains(github.event.pull_request.labels.*.name, 'golden:supersede') }}
     steps:
