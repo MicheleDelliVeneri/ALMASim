@@ -10,18 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Ensure casatasks / casaconfig are stubbed before the module under test is
-# imported so that the real CASA installations are never required.
-# ---------------------------------------------------------------------------
-_casa_stubs = {
-    "casatasks": MagicMock(),
-    "casaconfig": MagicMock(),
-}
-for _mod, _stub in _casa_stubs.items():
-    sys.modules.setdefault(_mod, _stub)
-
-from almasim.services.archive.unpack_ms import (  # noqa: E402
+from almasim.services.archive.unpack_ms import (
     _emit,
     asdm_name,
     configure_casa_environment,
@@ -38,6 +27,18 @@ from almasim.services.archive.unpack_ms import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _stub_casa_modules(monkeypatch):
+    """Stub casatasks / casaconfig for this module's tests only.
+
+    unpack_ms imports them lazily, so no real CASA is needed. They used to be
+    installed in sys.modules at import time, which leaked the stubs into every
+    test collected after this module.
+    """
+    for name in ("casatasks", "casaconfig"):
+        monkeypatch.setitem(sys.modules, name, MagicMock())
 
 
 @pytest.fixture(autouse=True)
