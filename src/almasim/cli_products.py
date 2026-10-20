@@ -14,6 +14,8 @@ import typer
 from tqdm.auto import tqdm
 
 from .cli_shared import dedupe_keep_order, default_output_path, split_csv_values
+from .services.runtime.env import casa_bundled_lib_dir as _casa_bundled_lib_dir
+from .services.runtime.env import casa_library_path
 
 MAX_PARALLEL_PER_MIRROR = 10
 MAX_PARALLEL_TOTAL = 30
@@ -561,33 +563,6 @@ def _extract_uids_from_raw_ms_root(raw_ms_root: Path) -> list[str]:
     return [path.name.removesuffix(".ms") for path in find_raw_ms_directories(raw_ms_root)]
 
 
-def _casa_bundled_lib_dir() -> Optional[str]:
-    """Locate the shared libraries that ``casatools`` ships inside its wheel.
-
-    casatools bundles its own OpenMPI/PMIx stack (``libopen-pal.so``,
-    ``libpmix.so``) and finds it through RUNPATH. Because ``LD_LIBRARY_PATH``
-    is searched *before* RUNPATH, any system library directory placed on that
-    variable shadows the bundled copies, and ``libopen-pal`` then resolves its
-    PMIx symbols against the incompatible system ``libpmix`` (seen on compute
-    nodes as ``undefined symbol: pmix_framework_names``). Returning this
-    directory lets callers keep it ahead of the system paths.
-
-    Uses ``find_spec`` so the package is located without importing the
-    extension modules that would fail in exactly this situation.
-    """
-    import importlib.util
-    import os
-
-    try:
-        spec = importlib.util.find_spec("casatools")
-    except (ImportError, ValueError):
-        return None
-    if spec is None or not spec.origin:
-        return None
-    lib_dir = os.path.join(os.path.dirname(spec.origin), "__casac__", "lib")
-    return lib_dir if os.path.isdir(lib_dir) else None
-
-
 def _stage_child_env() -> tuple[Path, dict[str, str]]:
     """The project root and environment for an unpack or calibrate worker child.
 
@@ -606,15 +581,9 @@ def _stage_child_env() -> tuple[Path, dict[str, str]]:
     env["PYTHONPATH"] = (
         f"{src_root}:{existing_pythonpath}" if existing_pythonpath else str(src_root)
     )
-    search_dirs = ["/lib64", "/usr/lib64", "/usr/local/lib64", "/lib", "/usr/lib", "/usr/local/lib"]
-    casa_lib_dir = _casa_bundled_lib_dir()
-    if casa_lib_dir is not None:
-        search_dirs.insert(0, casa_lib_dir)
-    ld_library_path = ":".join(search_dirs)
-    existing_ld = env.get("LD_LIBRARY_PATH", "")
-    if existing_ld:
-        ld_library_path = f"{ld_library_path}:{existing_ld}"
-    env["LD_LIBRARY_PATH"] = ld_library_path
+    env["LD_LIBRARY_PATH"] = casa_library_path(
+        env.get("LD_LIBRARY_PATH", ""), _casa_bundled_lib_dir()
+    )
     env["PYTHONUNBUFFERED"] = "1"
     return project_root, env
 
