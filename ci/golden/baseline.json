@@ -4,15 +4,15 @@
     "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
   },
   "baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v8/golden-baseline-v8.tar.gz",
-    "sha256": "1b322e92bb718b382f1e91d883212ea22a122ad2211d2a5bf1ccaf4375bc5c97",
-    "version": "v8",
-    "source": "workflow run 39493661909, commit fc10dcdd; T4.5 (#356): CASA Airy primary beam for simulator and TP, and the beam width no longer scales with the pixel size; every beam-attenuated product changes, uv coverage and PSF unchanged"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v9/golden-baseline-v9.tar.gz",
+    "sha256": "c000042d19e2a9b14fc318dba79f577ffbb79706e72707e66761e9fff13da762",
+    "version": "v9",
+    "source": "workflow run 39507992171, commit cfbff460; T5.4 (#369): uv sampling and exported CHAN_FREQ on the cube centred channel grid; per-configuration FITS headers (no EPOCH)"
   },
   "simulation_baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v8/golden-simulation-v8.tar.gz",
-    "sha256": "138b4e4b3ce3d6bff3eabe6deb6278da42cd73a5b9aed2a926183565eb5740b9",
-    "version": "v8",
-    "source": "workflow run 39493661909, commit fc10dcdd; T4.5 (#356): CASA Airy primary beam for simulator and TP, and the beam width no longer scales with the pixel size; every beam-attenuated product changes, uv coverage and PSF unchanged"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v9/golden-simulation-v9.tar.gz",
+    "sha256": "96b9596047e3a3f0ea7eb06503e25d0ca2a9d68e8aa1258871292101263eb831",
+    "version": "v9",
+    "source": "workflow run 39507992171, commit cfbff460; T5.4 (#369): uv sampling and exported CHAN_FREQ on the cube centred channel grid; per-configuration FITS headers (no EPOCH)"
   }
 }
