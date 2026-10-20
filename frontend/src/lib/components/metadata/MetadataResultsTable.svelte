@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatBytes } from '#lib/utils/format.js';
 	import type { MetadataResponse } from '#lib/api/metadata.js';
 	import { downloadApi } from '#lib/api/download.js';
 	import { createLogger } from '#lib/logger.js';
@@ -203,14 +204,6 @@
 	let sizeTotalFiles = $state(0);  // accumulated file count
 	let sizeError = $state<string>('');
 	let sizeCancelled = $state(false);
-
-	function formatBytes(bytes: number): string {
-		for (const unit of ['B', 'KB', 'MB', 'GB', 'TB']) {
-			if (Math.abs(bytes) < 1000) return `${bytes.toFixed(1)} ${unit}`;
-			bytes /= 1000;
-		}
-		return `${bytes.toFixed(1)} PB`;
-	}
 
 	// Reset size result when selection changes
 	$effect(() => {

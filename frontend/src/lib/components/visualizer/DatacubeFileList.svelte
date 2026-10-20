@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatBytes, formatDate } from '#lib/utils/format.js';
 	interface DatacubeFile {
 		name: string;
 		path: string;
@@ -33,15 +34,6 @@
 		actionLabel = 'Load'
 	}: Props = $props();
 
-	function formatFileSize(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	}
-
-	function formatDate(timestamp: number): string {
-		return new Date(timestamp * 1000).toLocaleString();
-	}
 </script>
 
 <div class="space-y-4">
@@ -109,7 +101,7 @@
 									{file.name}
 								</td>
 								<td class="px-4 py-2 text-sm text-gray-600">
-									{formatFileSize(file.size)}
+									{formatBytes(file.size)}
 								</td>
 								<td class="px-4 py-2 text-sm text-gray-600 uppercase">
 									{file.type ?? file.name.split('.').pop() ?? 'file'}
