@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Sequence
 
 from almasim.services.imaging.products import CUBE_NAME, LINE_MASK_FILENAME
+from almasim.services.imaging.wsclean.command import WSCleanCommand
 
 _CHANNEL_FILE = re.compile(r"^(?P<prefix>.+)-(?P<channel>\d{4})-(?P<product>[a-z-]+)\.fits$")
 
@@ -172,16 +173,9 @@ def _line_mask_pass(cube_cmd: Sequence[str], out: Path, log) -> list[str] | None
         return None
     log.write(f"# cube line mask: {pixels} pixels; second pass inside it\n")
     log.flush()
-    second: list[str] = []
-    parts = list(cube_cmd)
-    index = 0
-    while index < len(parts):
-        if parts[index] == "-auto-mask":
-            index += 2  # the fixed mask replaces the per-channel one
-            continue
-        second.append(parts[index])
-        index += 1
-    return [*second[:-1], "-fits-mask", str(mask_path), "-continue", second[-1]]
+    # The fixed mask replaces the per-channel one.
+    second = WSCleanCommand.parse(cube_cmd).without("-auto-mask")
+    return second.with_option("-fits-mask", mask_path).continued().argv()
 
 
 def _zero_non_finite_models(out: Path, prefix: str = CUBE_NAME) -> int:

@@ -43,6 +43,7 @@ from almasim.services.imaging.products import (
     LINE_COLUMN,
     PB_FILENAME,
     PBCOR_FILENAME,
+    SCRATCH_PLACEHOLDER,
     SELFCAL_CORRECTION_FILENAME,
     SELFCAL_GAINS_DIRNAME,
     SINGLE_WINDOW_PLACEHOLDER,
@@ -53,6 +54,7 @@ from almasim.services.imaging.uv_contsub import (
     subtract_uv_continuum_subprocess,
 )
 from almasim.services.imaging.wsclean.command import (
+    WSCleanCommand,
     _with_data_column,
     continuum_restart_commands,
 )
@@ -151,10 +153,7 @@ def run_wsclean_task(
         if not single_window:
             raise ValueError("cube_line_mask writes MODEL_DATA: it needs single_window")
         # The second pass continues from this one's model visibilities.
-        commands[-1] = [
-            "-update-model-required" if part == "-no-update-model-required" else part
-            for part in commands[-1]
-        ]
+        commands[-1] = WSCleanCommand.parse(commands[-1]).with_model_update(True).argv()
     required = [IMAGE_FILENAME] * bool(command) + [CUBE_IMAGE_FILENAME] * bool(cube_command)
     if cube_command and contsub_order is not None:
         required.append(CONTSUB_FILENAME)
@@ -223,7 +222,7 @@ def run_wsclean_task(
                 f"{extracted.get('seconds')} s{drop_note}\n"
             )
         commands = [
-            [str(single_window_ms) if part == SINGLE_WINDOW_PLACEHOLDER else part for part in c]
+            WSCleanCommand.parse(c).substituted(SINGLE_WINDOW_PLACEHOLDER, single_window_ms).argv()
             for c in commands
         ]
     scratch_dir: Path | None = None
@@ -236,7 +235,8 @@ def run_wsclean_task(
         Path(scratch_root).mkdir(parents=True, exist_ok=True)
         scratch_dir = Path(tempfile.mkdtemp(prefix=f"{out.name}-", dir=scratch_root))
         commands = [
-            [str(scratch_dir) if part == "__SCRATCH__" else part for part in c] for c in commands
+            WSCleanCommand.parse(c).substituted(SCRATCH_PLACEHOLDER, scratch_dir).argv()
+            for c in commands
         ]
     env = wsclean_environment(threads)
     tail: deque[str] = deque(maxlen=60)

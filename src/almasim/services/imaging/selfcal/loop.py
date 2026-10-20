@@ -30,6 +30,7 @@ from almasim.services.imaging.selfcal.noise_products import (
     add_images,
 )
 from almasim.services.imaging.wsclean.command import (
+    WSCleanCommand,
     _dirty_command,
     _selfcal_command,
 )
@@ -154,7 +155,7 @@ def self_calibrate(
         command = _selfcal_command(continuum_command, out, name)
         run(command)
         if restart:
-            run([*command[:-1], "-continue", command[-1]])
+            run(WSCleanCommand.parse(command).continued().argv())
         image_path = out / f"{name}-image.fits"
         return image_snr(image_path, out / f"{name}-residual.fits"), image_peak(image_path)
 

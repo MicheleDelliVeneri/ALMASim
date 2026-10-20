@@ -80,6 +80,9 @@ SELFCAL_GAINS_DIRNAME = "selfcal_gains"
 # Placeholder in a task command for the per-task single-window MS that the
 # wrapper extracts on the worker (see ``extract_single_window_ms``).
 SINGLE_WINDOW_PLACEHOLDER = "__SINGLE_WINDOW_MS__"
+# Placeholder for the per-task scratch directory (the -temp-dir value), created
+# on the worker when the batch has a scratch root.
+SCRATCH_PLACEHOLDER = "__SCRATCH__"
 
 
 def continuum_product(kind: str) -> str:
