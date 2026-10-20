@@ -57,8 +57,7 @@ def test_skymodel_generation(tmp_path):
 
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(freq_support, freq)
     max_baseline = (
-        alma_antenna.get_max_baseline_from_antenna_config(None, main_dir.parent / "antenna.cfg")
-        * U.km
+        alma_antenna.get_max_baseline_from_antenna_array(antenna_array, str(main_dir)) * U.km
     )
     beam_size = alma_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     beam_solid_angle = np.pi * (beam_size / 2) ** 2

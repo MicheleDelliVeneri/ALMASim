@@ -71,12 +71,13 @@ def test_interferometer_runs(tmp_path):
     alma_antenna.generate_antenna_config_file_from_antenna_array(
         antenna_array, str(main_dir), str(main_dir.parent)
     )
-    antennalist = main_dir.parent / "antenna.cfg"
 
     from almasim.services.interferometry.frequency import freq_supp_extractor
 
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(freq_support, freq)
-    max_baseline = alma_antenna.get_max_baseline_from_antenna_config(None, antennalist) * U.km
+    max_baseline = (
+        alma_antenna.get_max_baseline_from_antenna_array(antenna_array, str(main_dir)) * U.km
+    )
     beam_size = alma_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
     beam_area = 1.1331 * beam_size**2
     cont_sens_jy = (cont_sens * (np.pi * (beam_size / 2) ** 2)).to(U.Jy)

@@ -6,10 +6,9 @@ import os
 from typing import TYPE_CHECKING, Callable, Optional
 
 import astropy.units as U
-import matplotlib.cm as cm
 import numpy as np
 import pandas as pd
-from astropy.coordinates import AltAz, EarthLocation, SkyCoord
+from astropy.coordinates import EarthLocation
 from astropy.io import fits
 from astropy.time import Time
 
@@ -186,18 +185,13 @@ class Interferometer:
 
     def _init_variables(self) -> None:
         """Initialize calculation variables."""
-        self.Hfac = np.pi / 180.0 * 15.0
         self.deg2rad = np.pi / 180.0
         self.rad2deg = 180.0 / np.pi
-        self.deg2arcsec = 3600.0
-        self.arcsec2deg = 1.0 / 3600.0
         self.second2hour = 1.0 / 3600.0
         self.curzoom = [0, 0, 0, 0]
-        self.deltaAng = 1.0 * self.deg2rad
         self.gamma = 0.5
         self.lfac = 1.0e6
         self._get_nH()
-        self.Hmax = np.pi
         self.lat = ALMA_LATITUDE_DEG * self.deg2rad
         self.trlat = [np.sin(self.lat), np.cos(self.lat)]
         self.Diameters = [self.antenna_diameter_m, 0]
@@ -228,7 +222,6 @@ class Interferometer:
             -np.outer(self.xx**2.0, self.yy) - np.outer(self.yy, self.xx**2.0)
         ) * self.pixsize**2.0
         self.robfac = 0.0
-        self.currcmap = cm.jet
         self.zooming = 0
         self._log(f"Number of Epochs: {self.nH}")
 
@@ -260,16 +253,6 @@ class Interferometer:
         if ha < 0:
             ha += 360
         return ha
-
-    def _get_az_el(self) -> None:
-        """Calculate azimuth and elevation."""
-        self._get_observing_location()
-        self._get_middle_time()
-        sky_coords = SkyCoord(ra=self.ra * self.rad2deg, dec=self.dec * self.rad2deg, unit="deg")
-        aa = AltAz(location=self.observing_location, obstime=self.middle_time)
-        sky_coords.transform_to(aa)
-        self.az = sky_coords.az
-        self.el = sky_coords.alt
 
     def _get_nH(self) -> None:
         """Calculate number of hour angle samples."""
@@ -319,7 +302,6 @@ class Interferometer:
             if self.Hcov[1] > Hhor:
                 self.Hcov[1] = Hhor
 
-        self.Hmax = Hhor
         self.Xmax = self.Xmax * 1.5
         self.Nant = len(self.antPos)
 
@@ -533,7 +515,6 @@ class Interferometer:
             "Np4": self.Np4,
             "Nchan": self.Nchan,
             "gamma": self.gamma,
-            "currcmap": self.currcmap,
             "Xaxmax": self.Xaxmax,
             "lfac": self.lfac,
             "UVpixsize": self.UVpixsize,

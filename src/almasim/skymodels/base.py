@@ -6,8 +6,6 @@ from typing import Any, Optional
 import numpy as np
 from dask.distributed import Client
 
-from .utils import gaussian
-
 
 class _ImmediateFuture:
     """A resolved future wrapping an already-computed value."""
@@ -101,21 +99,6 @@ class SkyModel(ABC):
         # (sync / local backends pass client=None).
         self.client = client if client is not None else _LocalClient()
         self.update_progress = update_progress
-
-    def _compute_spectral_profile(self) -> np.ndarray:
-        """
-        Compute the spectral profile from continuum and line fluxes.
-
-        Returns
-        -------
-        np.ndarray
-            Spectral profile as a function of channel
-        """
-        z_idxs = np.arange(0, self.n_chan)
-        gs = np.zeros(self.n_chan)
-        for i in range(len(self.line_fluxes)):
-            gs += gaussian(z_idxs, self.line_fluxes[i], self.pos_z[i], self.fwhm_z[i])
-        return gs
 
     @abstractmethod
     def insert(self) -> Any:
