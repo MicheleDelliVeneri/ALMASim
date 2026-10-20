@@ -20,51 +20,15 @@ from astropy.io import fits
 from almasim import cli_image
 from almasim.services.archive import unpack_ms
 from almasim.services.imaging import archive_imaging as ai
+from almasim.services.imaging.ms import chunks as chunks_module
 
-
-class _FakeTable:
-    """The subset of ``casacore.tables.table`` the imaging code uses."""
-
-    def __init__(self, columns: dict[str, np.ndarray]):
-        self.columns = columns
-        self.closed = False
-
-    def colnames(self):
-        return list(self.columns)
-
-    def nrows(self):
-        return len(next(iter(self.columns.values())))
-
-    def iscelldefined(self, name, row):
-        return name in self.columns
-
-    def getcell(self, name, row):
-        return self.columns[name][row]
-
-    def getcol(self, name, startrow=0, nrow=-1):
-        column = self.columns[name]
-        return column[startrow:] if nrow < 0 else column[startrow : startrow + nrow]
-
-    def putcol(self, name, value, startrow=0, nrow=-1):
-        self.columns[name][startrow : startrow + len(value)] = value
-
-    def getcoldesc(self, name):
-        return {"source": name}
-
-    def addcols(self, desc):
-        self.columns[desc["name"]] = np.zeros_like(self.columns[desc["source"]])
-
-    def removecols(self, name):
-        del self.columns[name]
-
-    def close(self):
-        self.closed = True
+from ._fakes import FakeTable, patch_everywhere
 
 
 @pytest.fixture
 def fake_casacore(monkeypatch):
     """``casacore.tables`` serving the tables registered in the returned dict by path."""
-    tables: dict[str, _FakeTable] = {}
+    tables: dict[str, FakeTable] = {}
     package = ModuleType("casacore")
     module = ModuleType("casacore.tables")
     module.table = lambda path, **kwargs: tables[str(path)]
@@ -99,7 +63,7 @@ def _ms(data, *, spectrum_weight=False, corrected=False):
         columns["WEIGHT_SPECTRUM"] = np.ones(data.shape)
     if corrected:
         columns["CORRECTED_DATA"] = data.copy()
-    return _FakeTable(columns)
+    return FakeTable(columns)
 
 
 @pytest.mark.unit
@@ -113,7 +77,7 @@ def test_source_spectrum_averages_every_row(spectrum_weight):
 
     assert not usable[5] and usable.sum() == 63
     np.testing.assert_allclose(spectrum[usable], np.abs(data.mean(axis=(0, 2)))[usable], rtol=1e-5)
-    assert ai._source_spectrum(_FakeTable({"DATA": data[:0]}), "DATA", 7) is None
+    assert ai._source_spectrum(FakeTable({"DATA": data[:0]}), "DATA", 7) is None
 
 
 @pytest.mark.unit
@@ -170,11 +134,14 @@ def test_subtract_uv_continuum_subprocess_returns_the_child_result(tmp_path, mon
         seen.update(args=json.loads(cmd[-1]), env=kwargs["env"])
         return _Proc(stdout='{"line_channels": 3}\n', stderr="casacore note")
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     log = tmp_path / "task.log"
     result = ai.subtract_uv_continuum_subprocess("x.ms", order=0, log_path=log)
 
-    assert result == {"line_channels": 3} and seen["args"] == {"ms": "x.ms", "order": 0}
+    assert result == {"line_channels": 3} and seen["args"] == {
+        "target": "almasim.services.imaging.archive_imaging:subtract_uv_continuum",
+        "kwargs": {"ms_path": "x.ms", "order": 0},
+    }
     assert seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
     assert log.read_text() == "casacore note\n"
 
@@ -194,7 +161,7 @@ def test_subtract_uv_continuum_subprocess_failures(monkeypatch, outcome, message
             raise outcome
         return outcome
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(RuntimeError, match=message):
         ai.subtract_uv_continuum_subprocess("x.ms", timeout=5)
 
@@ -211,7 +178,7 @@ def test_drop_corrected_data(fake_casacore):
 def test_selfcal_prepare_selects_line_free_channels_and_the_busiest_antenna(fake_casacore):
     fake_casacore["p.ms"] = ms = _ms(_visibilities())
     ms.columns["FLAG_ROW"][ms.columns["ANTENNA1"] == 0] = True  # antenna 0 mostly flagged
-    fake_casacore["p.ms/ANTENNA"] = _FakeTable(
+    fake_casacore["p.ms/ANTENNA"] = FakeTable(
         {"NAME": np.array(["DA41", "DA42", "DV01", "DV02", "PM03"])}
     )
 
@@ -339,20 +306,20 @@ def test_call_in_child_needs_a_result(monkeypatch):
     class _Proc:
         returncode, stdout, stderr = 0, "", ""
 
-    monkeypatch.setattr(ai.subprocess, "run", lambda *a, **k: _Proc())
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Proc())
     with pytest.raises(RuntimeError, match="wrote no result"):
         ai._call_in_child("image_peak", {}, what="peak")
 
 
 @pytest.mark.unit
 def test_self_calibrate_turns_a_failed_step_into_a_task_failure(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai, "image_snr", lambda image, residual: 50.0)
-    monkeypatch.setattr(ai, "image_peak", lambda image: 1.0)
+    patch_everywhere(monkeypatch, ai, "image_snr", lambda image, residual: 50.0)
+    patch_everywhere(monkeypatch, ai, "image_peak", lambda image: 1.0)
 
     def broken(function, kwargs, **_):
         raise RuntimeError("gaincal exploded")
 
-    monkeypatch.setattr(ai, "_call_in_child", broken)
+    patch_everywhere(monkeypatch, ai, "_call_in_child", broken)
     with (tmp_path / "task.log").open("w") as log, pytest.raises(ValueError, match="exploded"):
         ai.self_calibrate(
             tmp_path / "x.ms",
@@ -372,8 +339,11 @@ class _Stop(Exception):
 
 
 def _wsclean_task(tmp_path, monkeypatch, **kwargs):
-    monkeypatch.setattr(
-        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
+    patch_everywhere(
+        monkeypatch,
+        ai,
+        "extract_single_window_ms_subprocess",
+        lambda *a, **k: {"rows": 1, "bytes": 0},
     )
     out = tmp_path / "out" / "SPW-25"
     return ai.run_wsclean_task(
@@ -391,14 +361,16 @@ def _wsclean_task(tmp_path, monkeypatch, **kwargs):
 @pytest.mark.unit
 def test_run_wsclean_task_self_calibrates_before_imaging(tmp_path, monkeypatch):
     seen = {}
-    monkeypatch.setattr(ai, "_run_with_retries", lambda cmd, *args: seen.setdefault("ran", cmd))
+    patch_everywhere(
+        monkeypatch, ai, "_run_with_retries", lambda cmd, *args: seen.setdefault("ran", cmd)
+    )
 
     def fake_self_calibrate(ms, command, **kwargs):
         seen.update(kwargs, ms=ms, command=command)
         kwargs["run"](["wsclean", "-name", "probe"])
         raise _Stop
 
-    monkeypatch.setattr(ai, "self_calibrate", fake_self_calibrate)
+    patch_everywhere(monkeypatch, ai, "self_calibrate", fake_self_calibrate)
     with pytest.raises(_Stop):
         _wsclean_task(
             tmp_path,
@@ -437,12 +409,12 @@ def test_run_wsclean_task_fails_when_the_uv_subtraction_fails(tmp_path, monkeypa
         (Path(out_path) / "table.dat").write_text("x")
         return {"rows": 1, "bytes": 0}
 
-    monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", extract)
+    patch_everywhere(monkeypatch, ai, "extract_single_window_ms_subprocess", extract)
 
     def broken(*args, **kwargs):
         raise RuntimeError("casacore lock")
 
-    monkeypatch.setattr(ai, "subtract_uv_continuum_subprocess", broken)
+    patch_everywhere(monkeypatch, ai, "subtract_uv_continuum_subprocess", broken)
     out = tmp_path / "out" / "SPW-25"
     with pytest.raises(RuntimeError, match="Could not subtract the continuum.*casacore lock"):
         ai.run_wsclean_task(
@@ -516,7 +488,7 @@ def test_subtract_uv_continuum_reads_chunks_sized_by_samples(fake_casacore, monk
         "getcol",
         lambda name, startrow=0, nrow=-1: reads.append(nrow) or getcol(name, startrow, nrow),
     )
-    monkeypatch.setattr(ai, "_CHUNK_SAMPLES", 64 * 2 * 10)  # ten rows of 64 channels x 2
+    monkeypatch.setattr(chunks_module, "_CHUNK_SAMPLES", 64 * 2 * 10)  # ten rows of 64 channels x 2
 
     ai.subtract_uv_continuum("x.ms")
 
@@ -549,7 +521,7 @@ def test_selfcal_prepare_skips_antennas_whose_samples_are_all_flagged(fake_casac
     rows = (ms.columns["ANTENNA1"] == busiest) | (ms.columns["ANTENNA2"] == busiest)
     ms.columns["FLAG"][rows] = True  # FLAG_ROW stays False: only the samples are flagged
     names = np.array(["DA41", "DA42", "DV01", "DV02", "PM03"])
-    fake_casacore["p.ms/ANTENNA"] = _FakeTable({"NAME": names})
+    fake_casacore["p.ms/ANTENNA"] = FakeTable({"NAME": names})
 
     assert ai.selfcal_prepare("p.ms")["refant"] != names[busiest]
 
@@ -559,9 +531,9 @@ def test_self_calibrate_logs_an_adopted_calibration(tmp_path, monkeypatch):
     def fake_call(function, kwargs, **_):
         return {"adopted": True} if function == "adopt_corrected_data" else {}
 
-    monkeypatch.setattr(ai, "_call_in_child", fake_call)
-    monkeypatch.setattr(ai, "image_snr", lambda image, residual: 5.0)
-    monkeypatch.setattr(ai, "image_peak", lambda image: 1.0)
+    patch_everywhere(monkeypatch, ai, "_call_in_child", fake_call)
+    patch_everywhere(monkeypatch, ai, "image_snr", lambda image, residual: 5.0)
+    patch_everywhere(monkeypatch, ai, "image_peak", lambda image: 1.0)
     with (tmp_path / "task.log").open("w") as log:
         ai.self_calibrate(
             tmp_path / "x.ms",
@@ -579,7 +551,7 @@ def test_self_calibrate_logs_an_adopted_calibration(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 def test_default_rows_per_chunk_follows_the_cell_shape(monkeypatch):
-    monkeypatch.setattr(ai, "_CHUNK_SAMPLES", 640)
+    monkeypatch.setattr(chunks_module, "_CHUNK_SAMPLES", 640)
     assert ai._default_rows_per_chunk(_ms(_visibilities(n_channels=64)), "DATA") == 5
     assert ai._default_rows_per_chunk(_ms(_visibilities()[:0]), "DATA") == 640
 
@@ -642,7 +614,7 @@ def test_line_free_from_ranges():
 @pytest.mark.unit
 def test_export_gain_table(fake_casacore, tmp_path):
     gains = np.array([[[np.exp(0.5j) * 1.2]], [[np.exp(-0.25j)]]])
-    fake_casacore["g.cal"] = _FakeTable(
+    fake_casacore["g.cal"] = FakeTable(
         {
             "TIME": np.array([100.0, 160.0]),
             "ANTENNA1": np.array([0, 7]),
@@ -650,7 +622,7 @@ def test_export_gain_table(fake_casacore, tmp_path):
             "FLAG": np.array([[[False]], [[True]]]),
         }
     )
-    fake_casacore["g.cal/ANTENNA"] = _FakeTable({"NAME": np.array(["DA41", "DA42"])})
+    fake_casacore["g.cal/ANTENNA"] = FakeTable({"NAME": np.array(["DA41", "DA42"])})
 
     assert ai.export_gain_table("g.cal", str(tmp_path / "g.csv")) == {"rows": 2}
     lines = (tmp_path / "g.csv").read_text().splitlines()
@@ -698,7 +670,9 @@ def _noise_run(tmp_path, monkeypatch, *, fit, single_channel=False, write=True):
     fits.PrimaryHDU(np.ones((1, 1, 4, 4), np.float32)).writeto(out / "wsclean-residual.fits")
     fits.PrimaryHDU(np.ones((1, 3, 4, 4), np.float32)).writeto(out / "wsclean-cube-residual.fits")
     children, runs = [], []
-    monkeypatch.setattr(ai, "_call_in_child", lambda f, kw, **_: children.append((f, kw)) or {})
+    patch_everywhere(
+        monkeypatch, ai, "_call_in_child", lambda f, kw, **_: children.append((f, kw)) or {}
+    )
 
     def stack(out_dir, prefix, keep):
         if single_channel:
@@ -706,7 +680,7 @@ def _noise_run(tmp_path, monkeypatch, *, fit, single_channel=False, write=True):
         (out_dir / f"{prefix}-0000-dirty.fits").rename(out_dir / f"{prefix}-dirty.fits")
         return {"dirty": 3}
 
-    monkeypatch.setattr(ai, "stack_channel_images", stack)
+    patch_everywhere(monkeypatch, ai, "stack_channel_images", stack)
 
     def run(cmd):
         runs.append(cmd)
@@ -780,7 +754,7 @@ def test_selfcal_noise_products_failures(tmp_path, monkeypatch):
     def broken(*args, **kwargs):
         raise RuntimeError("casacore lock")
 
-    monkeypatch.setattr(ai, "_call_in_child", broken)
+    patch_everywhere(monkeypatch, ai, "_call_in_child", broken)
     with (
         (tmp_path / "l").open("w") as log,
         pytest.raises(RuntimeError, match="Could not write the self-calibration correction"),
@@ -800,17 +774,20 @@ def test_selfcal_noise_products_failures(tmp_path, monkeypatch):
 @pytest.mark.unit
 def test_run_wsclean_task_makes_noise_products_after_an_applied_selfcal(tmp_path, monkeypatch):
     seen = {}
-    monkeypatch.setattr(ai, "self_calibrate", lambda *a, **k: {"applied": True})
-    monkeypatch.setattr(
-        ai, "_selfcal_noise_products", lambda ms, **kwargs: seen.update(kwargs, ms=ms) or []
+    patch_everywhere(monkeypatch, ai, "self_calibrate", lambda *a, **k: {"applied": True})
+    patch_everywhere(
+        monkeypatch,
+        ai,
+        "_selfcal_noise_products",
+        lambda ms, **kwargs: seen.update(kwargs, ms=ms) or [],
     )
-    monkeypatch.setattr(ai, "_run_with_retries", lambda cmd, *args: 1)
+    patch_everywhere(monkeypatch, ai, "_run_with_retries", lambda cmd, *args: 1)
 
     def stop(*args, **kwargs):
         kwargs["after_images"]()
         raise _Stop
 
-    monkeypatch.setattr(ai, "_run_and_mark", stop)
+    patch_everywhere(monkeypatch, ai, "_run_and_mark", stop)
     with pytest.raises(_Stop):
         _wsclean_task(
             tmp_path, monkeypatch, selfcal_solints=["inf"], casa_data="/casa", noise_products=True
@@ -847,7 +824,7 @@ def test_run_wsclean_task_clears_stale_noise_products(
     def stop(*args, **kwargs):
         raise _Stop
 
-    monkeypatch.setattr(ai, "_run_and_mark", stop)
+    patch_everywhere(monkeypatch, ai, "_run_and_mark", stop)
     with pytest.raises(_Stop):
         ai.run_wsclean_task(
             command=["wsclean", "-name", str(out / "wsclean"), "x.ms"] if continuum else [],
