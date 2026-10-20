@@ -123,7 +123,8 @@ def run_stage_subprocess(
         env=dict(env),
     )
     tail_lines: deque[str] = deque(maxlen=tail)
-    assert process.stdout is not None  # stdout=PIPE
+    if process.stdout is None:  # not reached: stdout=PIPE
+        raise RuntimeError(f"the output of {cmd[0]} is not captured")
     with Path(log_path).open("w", encoding="utf-8") as log_file:
         log_file.write("# " + " ".join(cmd) + "\n")
         for line in process.stdout:

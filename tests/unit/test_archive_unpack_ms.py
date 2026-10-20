@@ -842,3 +842,16 @@ def test_verify_measurement_set_rejects_empty_subtables(mock_rows, mock_empty, t
     ms.mkdir()
     with pytest.raises(RuntimeError, match=r"subtables have no rows \(ANTENNA\)"):
         verify_measurement_set(ms)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", ["ASDM.xml", "Main.xml"])
+def test_verify_asdm_directory_chains_the_parse_error(tmp_path, name):
+    """A truncated index says which file does not parse and keeps the cause (T4.7)."""
+    import xml.etree.ElementTree as ET
+
+    asdm = _make_asdm(tmp_path)
+    (asdm / name).write_text("<ASDM><Table>")
+    with pytest.raises(RuntimeError, match=f"{name} does not parse") as info:
+        verify_asdm_directory(asdm)
+    assert isinstance(info.value.__cause__, ET.ParseError)
