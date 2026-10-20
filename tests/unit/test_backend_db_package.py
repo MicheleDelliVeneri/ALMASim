@@ -79,7 +79,6 @@ def test_startup_creates_tables_and_imports_csvs_only_into_an_empty_database(
 
     startup = importlib.import_module("app.db.startup")
     engine = backend_db.session.get_bind()
-    monkeypatch.setattr(startup, "get_engine", lambda: engine)
     monkeypatch.setattr(startup, "new_session", sessionmaker(bind=engine))
     monkeypatch.setattr(startup, "init_db", lambda: None)  # the fixture created the tables
     imported = []
