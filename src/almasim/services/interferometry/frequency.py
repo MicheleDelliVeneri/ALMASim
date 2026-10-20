@@ -125,3 +125,20 @@ def freq_supp_extractor(
     freq_d = freq_ds[idx_]
 
     return band_range * U.GHz, central_freq * U.GHz, n_channels_val, freq_d
+
+
+def channel_wavelength_edges(
+    central_freq_hz: float, bandwidth_hz: float, n_channels: int, speed_of_light: float
+) -> tuple[float, float, np.ndarray]:
+    """(w_min, w_max, [[lo, hi] per channel]): the band's wavelengths split into channels.
+
+    MADIV-28 T5.11 moved this out of Interferometer; T5.4 replaces the
+    wavelength-linear split with the cube's centred frequency grid.
+    """
+    w_max, w_min = [
+        speed_of_light / freq
+        for freq in (central_freq_hz - bandwidth_hz / 2, central_freq_hz + bandwidth_hz / 2)
+    ]
+    waves = np.linspace(w_min, w_max, n_channels + 1)
+    edges = np.array([[waves[i], waves[i + 1]] for i in range(len(waves) - 1)])
+    return w_min, w_max, edges

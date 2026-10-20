@@ -12,8 +12,11 @@ from __future__ import annotations
 import math
 
 import astropy.units as U
+import numpy as np
 from astropy.coordinates import EarthLocation
 from astropy.time import Time
+
+from ..instrument.constants import ALMA_ELEVATION_M, ALMA_LATITUDE_DEG, ALMA_LONGITUDE_DEG
 
 # Scan lengths (s) tried in turn until the track has at most MAX_EPOCHS samples.
 SCAN_TIMES_S = (6.0, 8.064, 18.144, 30.24)
@@ -61,3 +64,32 @@ def hour_angle_coverage(
 
     ha_middle = hour_angle(middle)
     return [_wrap(hour_angle(start) - ha_middle), _wrap(hour_angle(end) - ha_middle)]
+
+
+def alma_location() -> EarthLocation:
+    """The ALMA site."""
+    return EarthLocation.from_geodetic(
+        lon=ALMA_LONGITUDE_DEG * U.deg,
+        lat=ALMA_LATITUDE_DEG * U.deg,
+        height=ALMA_ELEVATION_M * U.m,
+    )
+
+
+def clip_to_horizon(coverage: list, lat_rad: float, dec_rad: float) -> list:
+    """``coverage`` ([start, end] hour angles, rad) limited to when the source is up.
+
+    Changed in place and returned (MADIV-28 T5.11: moved out of Interferometer).
+    """
+    cos_w = -np.tan(lat_rad) * np.tan(dec_rad)
+    if np.abs(cos_w) < 1.0:
+        h_horizon = np.arccos(cos_w)
+    elif np.abs(lat_rad - dec_rad) > np.pi / 2.0:
+        h_horizon = 0
+    else:
+        h_horizon = np.pi
+    if h_horizon > 0.0:
+        if coverage[0] < -h_horizon:
+            coverage[0] = -h_horizon
+        if coverage[1] > h_horizon:
+            coverage[1] = h_horizon
+    return coverage
