@@ -1,8 +1,9 @@
 """Simulation business logic service."""
 
+import dataclasses
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from database.config import get_db_context
 from database.service import DatabaseService
@@ -71,66 +72,13 @@ class SimulationService:
 
     def _simulation_params(self, params: SimulationParamsCreate) -> SimulationParams:
         """The internal SimulationParams for an API request."""
-        return SimulationParams.from_values(
-            idx=params.idx,
-            source_name=params.source_name,
-            member_ouid=params.member_ouid,
+        return to_sim_params(
+            params,
             main_dir=self.main_dir,
             output_dir=self._safe_output_dir(params.output_dir),
             tng_dir=self.tng_dir,
             galaxy_zoo_dir=self.galaxy_zoo_dir,
             hubble_dir=self.hubble_dir,
-            project_name=params.project_name,
-            ra=params.ra,
-            dec=params.dec,
-            band=params.band,
-            ang_res=params.ang_res,
-            vel_res=params.vel_res,
-            fov=params.fov,
-            obs_date=params.obs_date,
-            pwv=params.pwv,
-            int_time=params.int_time,
-            bandwidth=params.bandwidth,
-            freq=params.freq,
-            freq_support=params.freq_support,
-            cont_sens=params.cont_sens,
-            line_sens_10kms=params.line_sens_10kms,
-            antenna_array=params.antenna_array,
-            n_pix=params.n_pix,
-            n_channels=params.n_channels,
-            source_type=params.source_type,
-            tng_api_key=params.tng_api_key,
-            ncpu=params.ncpu,
-            rest_frequency=params.rest_frequency,
-            redshift=params.redshift,
-            lum_infrared=params.lum_infrared,
-            snr=params.snr,
-            n_lines=params.n_lines,
-            line_names=params.line_names,
-            save_mode=params.save_mode,
-            persist=params.persist,
-            ml_dataset_path=params.ml_dataset_path,
-            inject_serendipitous=params.inject_serendipitous,
-            remote=False,
-            observation_configs=params.observation_configs,
-            ground_temperature_k=params.ground_temperature_k,
-            correlator=params.correlator,
-            elevation_deg=params.elevation_deg,
-            source_offset_x_arcsec=params.source_offset_x_arcsec,
-            source_offset_y_arcsec=params.source_offset_y_arcsec,
-            background_mode=params.background_mode,
-            background_level=params.background_level,
-            background_seed=params.background_seed,
-            seed=params.seed,
-            external_skymodel_path=params.external_skymodel_path,
-            external_component_table_path=params.external_component_table_path,
-            external_alignment_mode=params.external_alignment_mode,
-            external_header_mode=params.external_header_mode,
-            external_header_overrides=params.external_header_overrides,
-            ms_export=params.ms_export,
-            ms_export_dir=params.ms_export_dir,
-            ms_save_mode=params.ms_save_mode,
-            imaging_algorithm=params.imaging_algorithm,
         )
 
     def _persist_log(
@@ -321,3 +269,31 @@ class SimulationService:
             )
             log_callback(f"ERROR: {error_msg}")
             raise
+
+
+# The request's own directory fields are not used: the server's configured
+# directories apply (the output directory after validation).
+_SERVER_SET_FIELDS = {"main_dir", "output_dir", "tng_dir", "galaxy_zoo_dir", "hubble_dir", "remote"}
+
+
+def to_sim_params(
+    params: SimulationParamsCreate,
+    *,
+    main_dir: Any,
+    output_dir: Any,
+    tng_dir: Any,
+    galaxy_zoo_dir: Any,
+    hubble_dir: Any,
+) -> SimulationParams:
+    """The library's SimulationParams for an API request, with the server's directories."""
+    names = {spec.name for spec in dataclasses.fields(SimulationParams)} - _SERVER_SET_FIELDS
+    values = {key: value for key, value in params.model_dump().items() if key in names}
+    return SimulationParams(
+        **values,
+        main_dir=main_dir,
+        output_dir=output_dir,
+        tng_dir=tng_dir,
+        galaxy_zoo_dir=galaxy_zoo_dir,
+        hubble_dir=hubble_dir,
+        remote=False,
+    )

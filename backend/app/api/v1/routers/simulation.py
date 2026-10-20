@@ -37,7 +37,7 @@ from app.schemas.simulation import (
 from app.schemas.simulation import (
     SimulationStatus as SimulationStatusSchema,
 )
-from app.services.simulation_service import SimulationService
+from app.services.simulation_service import SimulationService, to_sim_params
 from app.services.status_store import status_store
 
 router = APIRouter()
@@ -228,65 +228,13 @@ def estimate_simulation(
 ) -> SimulationEstimate:
     """Estimate simulation cube dimensions and raw storage footprint."""
     try:
-        sim_params = sim_service.SimulationParams.from_values(
-            idx=params.idx,
-            source_name=params.source_name,
-            member_ouid=params.member_ouid,
+        sim_params = to_sim_params(
+            params,
             main_dir=settings.MAIN_DIR,
             output_dir=params.output_dir or settings.OUTPUT_DIR,
             tng_dir=settings.TNG_DIR,
             galaxy_zoo_dir=settings.GALAXY_ZOO_DIR,
             hubble_dir=settings.HUBBLE_DIR,
-            project_name=params.project_name,
-            ra=params.ra,
-            dec=params.dec,
-            band=params.band,
-            ang_res=params.ang_res,
-            vel_res=params.vel_res,
-            fov=params.fov,
-            obs_date=params.obs_date,
-            pwv=params.pwv,
-            int_time=params.int_time,
-            bandwidth=params.bandwidth,
-            freq=params.freq,
-            freq_support=params.freq_support,
-            cont_sens=params.cont_sens,
-            line_sens_10kms=params.line_sens_10kms,
-            antenna_array=params.antenna_array,
-            n_pix=params.n_pix,
-            n_channels=params.n_channels,
-            source_type=params.source_type,
-            tng_api_key=params.tng_api_key,
-            ncpu=params.ncpu,
-            rest_frequency=params.rest_frequency,
-            redshift=params.redshift,
-            lum_infrared=params.lum_infrared,
-            snr=params.snr,
-            n_lines=params.n_lines,
-            line_names=params.line_names,
-            save_mode=params.save_mode,
-            persist=params.persist,
-            ml_dataset_path=params.ml_dataset_path,
-            inject_serendipitous=params.inject_serendipitous,
-            remote=False,
-            observation_configs=params.observation_configs,
-            ground_temperature_k=params.ground_temperature_k,
-            correlator=params.correlator,
-            elevation_deg=params.elevation_deg,
-            source_offset_x_arcsec=params.source_offset_x_arcsec,
-            source_offset_y_arcsec=params.source_offset_y_arcsec,
-            background_mode=params.background_mode,
-            background_level=params.background_level,
-            background_seed=params.background_seed,
-            external_skymodel_path=params.external_skymodel_path,
-            external_component_table_path=params.external_component_table_path,
-            external_alignment_mode=params.external_alignment_mode,
-            external_header_mode=params.external_header_mode,
-            external_header_overrides=params.external_header_overrides,
-            ms_export=params.ms_export,
-            ms_export_dir=params.ms_export_dir,
-            ms_save_mode=params.ms_save_mode,
-            imaging_algorithm=params.imaging_algorithm,
         )
         return SimulationEstimate(**sim_service.estimate_simulation_footprint(sim_params))
     except Exception as e:

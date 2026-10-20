@@ -5,10 +5,10 @@ from __future__ import annotations
 import math
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from time import gmtime, strftime
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Mapping, Optional, Union
 
 import astropy.units as U
 import numpy as np
@@ -44,406 +44,193 @@ LogFn = Optional[Callable[[str], None]]
 StopFn = Union[bool, Callable[[], bool]]
 
 
+_FORBIDDEN_ROOTS = (Path("/proc"), Path("/sys"), Path("/dev"))
+
+
+def _expand_path(path_like: Path | str) -> str:
+    """An absolute path with ``~`` expanded, refused under /proc, /sys or /dev."""
+    raw = str(path_like)
+    if "\x00" in raw:
+        raise ValueError(f"Path contains null bytes: {path_like!r}")
+    resolved = Path(raw).expanduser().resolve()
+    for forbidden in _FORBIDDEN_ROOTS:
+        if resolved.is_relative_to(forbidden):
+            raise ValueError(
+                f"Path '{path_like}' resolves to a restricted system location: {resolved}"
+            )
+    return str(resolved)
+
+
+def _optional(convert: Callable[[Any], Any]) -> Callable[[Any], Any]:
+    return lambda value: None if value is None else convert(value)
+
+
+def _cpu_count(value: Any) -> int:
+    return int(value if value is not None else (os.cpu_count() or 1))
+
+
+def _name_or_none(value: Any) -> Optional[str]:
+    return str(value) if value else None
+
+
+def _coerced(convert: Callable[[Any], Any], **kwargs: Any) -> Any:
+    """A field that ``SimulationParams.__post_init__`` passes through ``convert``."""
+    return field(metadata={"coerce": convert}, **kwargs)
+
+
 @dataclass
 class SimulationParams:
-    idx: int
-    source_name: str
-    member_ouid: str
-    main_dir: str
-    output_dir: str
-    tng_dir: str
-    galaxy_zoo_dir: str
-    hubble_dir: str
-    project_name: str
-    ra: float
-    dec: float
-    band: float
-    ang_res: float
-    vel_res: float
-    fov: float
-    obs_date: str
-    pwv: float
-    int_time: float
-    bandwidth: float
-    freq: float
-    freq_support: str
-    cont_sens: float
-    antenna_array: str
-    n_pix: Optional[float]
-    n_channels: Optional[int]
-    source_type: str
-    tng_api_key: Optional[str]
-    ncpu: int
-    rest_frequency: Any
-    redshift: Any
-    lum_infrared: Any
-    snr: Optional[float]
-    n_lines: Any
-    line_names: Any
-    save_mode: str
-    persist: bool
-    ml_dataset_path: Optional[str]
-    inject_serendipitous: bool
-    output_subdir_name: Optional[str] = None
-    remote: bool = False
+    """Everything one simulation run needs.
+
+    Values are coerced on construction (``__post_init__``, driven by each
+    field's ``coerce`` metadata): numbers become ``float``/``int``, paths
+    become absolute (and are refused under /proc, /sys and /dev), ``ncpu``
+    defaults to the machine's CPU count.
+    """
+
+    idx: int = _coerced(int)
+    source_name: str = _coerced(str)
+    member_ouid: str = _coerced(str)
+    main_dir: str = _coerced(_expand_path)
+    output_dir: str = _coerced(_expand_path)
+    tng_dir: str = _coerced(_expand_path)
+    galaxy_zoo_dir: str = _coerced(_expand_path)
+    hubble_dir: str = _coerced(_expand_path)
+    project_name: str = _coerced(str)
+    ra: float = _coerced(float)
+    dec: float = _coerced(float)
+    band: float = _coerced(float)
+    ang_res: float = _coerced(float)
+    vel_res: float = _coerced(float)
+    fov: float = _coerced(float)
+    obs_date: str = _coerced(str)
+    pwv: float = _coerced(float)
+    int_time: float = _coerced(float)
+    bandwidth: float = _coerced(float)
+    freq: float = _coerced(float)
+    freq_support: str = _coerced(str)
+    cont_sens: float = _coerced(float)
+    antenna_array: str = _coerced(str)
+    n_pix: Optional[float] = None
+    n_channels: Optional[int] = None
+    source_type: str = _coerced(str, default="point")
+    tng_api_key: Optional[str] = None
+    ncpu: Optional[int] = _coerced(_cpu_count, default=None)
+    rest_frequency: Any = None
+    redshift: Any = None
+    lum_infrared: Any = None
+    snr: Optional[float] = None
+    n_lines: Any = None
+    line_names: Any = None
+    save_mode: str = _coerced(str, default="fits")
+    persist: bool = _coerced(bool, default=True)
+    ml_dataset_path: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    inject_serendipitous: bool = _coerced(bool, default=False)
+    output_subdir_name: Optional[str] = _coerced(_name_or_none, default=None)
+    remote: bool = _coerced(bool, default=False)
     observation_configs: Optional[Any] = None
-    ground_temperature_k: float = 270.0
+    ground_temperature_k: float = _coerced(float, default=270.0)
     correlator: Optional[str] = None
     elevation_deg: Optional[float] = None
-    line_sens_10kms: Optional[float] = None
-    source_offset_x_arcsec: float = 0.0
-    source_offset_y_arcsec: float = 0.0
-    background_mode: str = "none"
-    background_level: float = 1.0
-    background_seed: Optional[int] = None
+    line_sens_10kms: Optional[float] = _coerced(_optional(float), default=None)
+    source_offset_x_arcsec: float = _coerced(float, default=0.0)
+    source_offset_y_arcsec: float = _coerced(float, default=0.0)
+    background_mode: str = _coerced(str, default="none")
+    background_level: float = _coerced(float, default=1.0)
+    background_seed: Optional[int] = _coerced(_optional(int), default=None)
     # Seeds the total-power noise; None draws fresh noise for every run.
-    seed: Optional[int] = None
-    external_skymodel_path: Optional[str] = None
-    external_component_table_path: Optional[str] = None
-    external_alignment_mode: str = "observation"
-    external_header_mode: str = "observation"
+    seed: Optional[int] = _coerced(_optional(int), default=None)
+    external_skymodel_path: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    external_component_table_path: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    external_alignment_mode: str = _coerced(str, default="observation")
+    external_header_mode: str = _coerced(str, default="observation")
     external_header_overrides: Optional[dict[str, Any]] = None
-    ms_export: bool = False
-    ms_export_dir: Optional[str] = None
-    ms_save_mode: str = "msv2"
-    imaging_algorithm: str = "legacy"
-    kaggle_token: Optional[str] = None
+    ms_export: bool = _coerced(bool, default=False)
+    ms_export_dir: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    ms_save_mode: str = _coerced(str, default="msv2")
+    imaging_algorithm: str = _coerced(str, default="legacy")
+    kaggle_token: Optional[str] = _coerced(_optional(_expand_path), default=None)
+
+    def __post_init__(self) -> None:
+        for spec in fields(self):
+            convert = spec.metadata.get("coerce")
+            if convert is not None:
+                setattr(self, spec.name, convert(getattr(self, spec.name)))
 
     @classmethod
-    def from_values(
-        cls,
-        *,
-        idx: int,
-        source_name: str,
-        member_ouid: str,
-        main_dir: Path | str,
-        output_dir: Path | str,
-        tng_dir: Path | str,
-        galaxy_zoo_dir: Path | str,
-        hubble_dir: Path | str,
-        project_name: str,
-        ra: float,
-        dec: float,
-        band: float,
-        ang_res: float,
-        vel_res: float,
-        fov: float,
-        obs_date: str,
-        pwv: float,
-        int_time: float,
-        bandwidth: float,
-        freq: float,
-        freq_support: str,
-        cont_sens: float,
-        antenna_array: str,
-        n_pix: Optional[int],
-        n_channels: Optional[int],
-        source_type: str,
-        tng_api_key: Optional[str],
-        ncpu: Optional[int],
-        rest_frequency: Any,
-        redshift: Any,
-        lum_infrared: Any,
-        snr: Optional[float],
-        n_lines: Any,
-        line_names: Any,
-        save_mode: str,
-        persist: bool,
-        ml_dataset_path: Optional[Path | str],
-        inject_serendipitous: bool,
-        output_subdir_name: Optional[str] = None,
-        remote: bool = False,
-        observation_configs: Optional[Any] = None,
-        ground_temperature_k: float = 270.0,
-        correlator: Optional[str] = None,
-        elevation_deg: Optional[float] = None,
-        line_sens_10kms: Optional[float] = None,
-        source_offset_x_arcsec: float = 0.0,
-        source_offset_y_arcsec: float = 0.0,
-        background_mode: str = "none",
-        background_level: float = 1.0,
-        background_seed: Optional[int] = None,
-        seed: Optional[int] = None,
-        external_skymodel_path: Optional[Path | str] = None,
-        external_component_table_path: Optional[Path | str] = None,
-        external_alignment_mode: str = "observation",
-        external_header_mode: str = "observation",
-        external_header_overrides: Optional[dict[str, Any]] = None,
-        ms_export: bool = False,
-        ms_export_dir: Optional[Path | str] = None,
-        ms_save_mode: str = "msv2",
-        imaging_algorithm: str = "legacy",
-        kaggle_token: Optional[Path | str] = None,
-    ) -> "SimulationParams":
-        """Build :class:`SimulationParams` from explicit values.
+    def from_values(cls, **values: Any) -> "SimulationParams":
+        """Build :class:`SimulationParams` from explicit values (same as the constructor).
 
         ``n_pix`` and ``n_channels`` may be ``None`` to allow downstream simulation
         stages to derive suitable defaults from the observing configuration.
         """
+        return cls(**values)
 
-        _FORBIDDEN_ROOTS = (Path("/proc"), Path("/sys"), Path("/dev"))
-
-        def _expand_path(path_like: Path | str) -> str:
-            """Normalize path-like values to absolute paths with user-home expansion."""
-            raw = str(path_like)
-            if "\x00" in raw:
-                raise ValueError(f"Path contains null bytes: {path_like!r}")
-            resolved = Path(raw).expanduser().resolve()
-            for forbidden in _FORBIDDEN_ROOTS:
-                if resolved.is_relative_to(forbidden):
-                    raise ValueError(
-                        f"Path '{path_like}' resolves to a restricted system location: {resolved}"
-                    )
-            return str(resolved)
-
-        return cls(
-            idx=int(idx),
-            source_name=str(source_name),
-            member_ouid=str(member_ouid),
-            main_dir=_expand_path(main_dir),
-            output_dir=_expand_path(output_dir),
-            tng_dir=_expand_path(tng_dir),
-            galaxy_zoo_dir=_expand_path(galaxy_zoo_dir),
-            hubble_dir=_expand_path(hubble_dir),
-            project_name=str(project_name),
-            ra=float(ra),
-            dec=float(dec),
-            band=float(band),
-            ang_res=float(ang_res),
-            vel_res=float(vel_res),
-            fov=float(fov),
-            obs_date=str(obs_date),
-            pwv=float(pwv),
-            int_time=float(int_time),
-            bandwidth=float(bandwidth),
-            freq=float(freq),
-            freq_support=str(freq_support),
-            cont_sens=float(cont_sens),
-            antenna_array=str(antenna_array),
-            n_pix=n_pix,
-            n_channels=n_channels,
-            source_type=str(source_type),
-            tng_api_key=tng_api_key,
-            ncpu=int(ncpu if ncpu is not None else (os.cpu_count() or 1)),
-            rest_frequency=rest_frequency,
-            redshift=redshift,
-            lum_infrared=lum_infrared,
-            snr=snr,
-            n_lines=n_lines,
-            line_names=line_names,
-            save_mode=str(save_mode),
-            persist=bool(persist),
-            ml_dataset_path=(
-                _expand_path(ml_dataset_path) if ml_dataset_path is not None else None
-            ),
-            inject_serendipitous=bool(inject_serendipitous),
-            output_subdir_name=(str(output_subdir_name) if output_subdir_name else None),
-            remote=bool(remote),
-            observation_configs=observation_configs,
-            ground_temperature_k=float(ground_temperature_k),
-            correlator=correlator,
-            elevation_deg=elevation_deg,
-            line_sens_10kms=(float(line_sens_10kms) if line_sens_10kms is not None else None),
-            source_offset_x_arcsec=float(source_offset_x_arcsec),
-            source_offset_y_arcsec=float(source_offset_y_arcsec),
-            background_mode=str(background_mode),
-            background_level=float(background_level),
-            background_seed=(int(background_seed) if background_seed is not None else None),
-            seed=(int(seed) if seed is not None else None),
-            external_skymodel_path=(
-                _expand_path(external_skymodel_path) if external_skymodel_path is not None else None
-            ),
-            external_component_table_path=(
-                _expand_path(external_component_table_path)
-                if external_component_table_path is not None
-                else None
-            ),
-            external_alignment_mode=str(external_alignment_mode),
-            external_header_mode=str(external_header_mode),
-            external_header_overrides=external_header_overrides,
-            ms_export=bool(ms_export),
-            ms_export_dir=(_expand_path(ms_export_dir) if ms_export_dir is not None else None),
-            ms_save_mode=str(ms_save_mode),
-            imaging_algorithm=str(imaging_algorithm),
-            kaggle_token=(_expand_path(kaggle_token) if kaggle_token is not None else None),
-        )
+    # Metadata columns (archive name first, then the snake_case alias) of the
+    # values a metadata row provides.
+    _ROW_COLUMNS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "source_name": ("ALMA_source_name", "source_name", "target_name"),
+        "member_ouid": ("member_ous_uid", "member_ouid"),
+        "band": ("Band", "band"),
+        "ra": ("RA",),
+        "dec": ("Dec",),
+        "ang_res": ("Ang.res.", "ang_res"),
+        "vel_res": ("Vel.res.", "vel_res"),
+        "fov": ("FOV", "fov"),
+        "obs_date": ("Obs.date", "obs_date"),
+        "pwv": ("PWV", "pwv"),
+        "int_time": ("Int.Time", "int_time"),
+        "bandwidth": ("Bandwidth", "bandwidth"),
+        "freq": ("Freq", "frequency"),
+        "freq_support": ("Freq.sup.", "frequency_support"),
+        "cont_sens": ("Cont_sens_mJybeam", "cont_sens"),
+        "antenna_array": ("antenna_arrays", "antenna_array"),
+    }
+    # Values a row may provide; an explicit keyword argument wins.
+    _OPTIONAL_ROW_COLUMNS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "line_sens_10kms": ("Line_sens_10kms_mJybeam", "line_sens_10kms"),
+        "rest_frequency": ("rest_frequency",),
+        "redshift": ("redshift",),
+        "lum_infrared": ("lum_infrared",),
+        "n_lines": ("n_lines",),
+        "line_names": ("line_names",),
+    }
 
     @classmethod
     def from_metadata_row(
-        cls,
-        row: pd.Series | Mapping[str, Any],
-        *,
-        idx: int,
-        main_dir: Path | str,
-        output_dir: Path | str,
-        tng_dir: Path | str,
-        galaxy_zoo_dir: Path | str,
-        hubble_dir: Path | str,
-        project_name: str,
-        source_type: str = "point",
-        snr: Optional[float] = None,
-        save_mode: str = "fits",
-        persist: bool = True,
-        ml_dataset_path: Optional[Path | str] = None,
-        output_subdir_name: Optional[str] = None,
-        n_pix: Optional[float] = None,
-        n_channels: Optional[int] = None,
-        n_lines: Optional[Any] = None,
-        line_names: Optional[Any] = None,
-        rest_frequency: Optional[Any] = None,
-        redshift: Optional[Any] = None,
-        lum_infrared: Optional[Any] = None,
-        ncpu: Optional[int] = None,
-        tng_api_key: Optional[str] = None,
-        inject_serendipitous: bool = False,
-        remote: bool = False,
-        observation_configs: Optional[Any] = None,
-        ground_temperature_k: float = 270.0,
-        correlator: Optional[str] = None,
-        elevation_deg: Optional[float] = None,
-        source_offset_x_arcsec: float = 0.0,
-        source_offset_y_arcsec: float = 0.0,
-        background_mode: str = "none",
-        background_level: float = 1.0,
-        background_seed: Optional[int] = None,
-        seed: Optional[int] = None,
-        external_skymodel_path: Optional[Path | str] = None,
-        external_component_table_path: Optional[Path | str] = None,
-        external_alignment_mode: str = "observation",
-        external_header_mode: str = "observation",
-        external_header_overrides: Optional[dict[str, Any]] = None,
-        ms_export: bool = False,
-        ms_export_dir: Optional[Path | str] = None,
-        ms_save_mode: str = "msv2",
-        imaging_algorithm: str = "legacy",
-        kaggle_token: Optional[Path | str] = None,
+        cls, row: pd.Series | Mapping[str, Any], **values: Any
     ) -> "SimulationParams":
-        """Build :class:`SimulationParams` from a metadata row."""
+        """Build :class:`SimulationParams` from a metadata row plus explicit values.
 
-        def _as_dict(obj):
-            if hasattr(obj, "to_dict"):
-                return dict(obj.to_dict())
-            if isinstance(obj, Mapping):
-                return dict(obj)
-            return dict(obj)
+        The row supplies the observation (``_ROW_COLUMNS``, all required) and
+        optionally the line and source values (``_OPTIONAL_ROW_COLUMNS``); the
+        keyword arguments supply the rest and override the optional ones.
+        """
+        payload = dict(row.to_dict()) if hasattr(row, "to_dict") else dict(row)
 
-        payload = _as_dict(row)
-        missing = object()
-
-        def _get(keys, *, required=True, default=None):
-            keys_seq = [keys] if isinstance(keys, str) else list(keys)
-            for key in keys_seq:
-                value = payload.get(key, missing)
-                if value is missing:
-                    continue
+        def _get(keys: tuple[str, ...]) -> Any:
+            for key in keys:
+                value = payload.get(key)
                 if value is None:
                     continue
                 try:
                     if pd.isna(value):
                         continue
-                except Exception:
+                except (TypeError, ValueError):
                     pass
                 return value
-            if required and default is None:
-                raise KeyError(f"Missing required metadata column(s): {keys_seq}")
-            return default
+            return None
 
-        def _float(keys):
+        row_values: dict[str, Any] = {}
+        for name, keys in cls._ROW_COLUMNS.items():
             value = _get(keys)
-            return float(value)
-
-        source_name = _get(["ALMA_source_name", "source_name", "target_name"])
-        member_ouid = _get(["member_ous_uid", "member_ouid"])
-        band = _float(["Band", "band"])
-        ra = _float("RA")
-        dec = _float("Dec")
-        ang_res = _float(["Ang.res.", "ang_res"])
-        vel_res = _float(["Vel.res.", "vel_res"])
-        fov = _float(["FOV", "fov"])
-        obs_date = str(_get(["Obs.date", "obs_date"]))
-        pwv = _float(["PWV", "pwv"])
-        int_time = _float(["Int.Time", "int_time"])
-        bandwidth = _float(["Bandwidth", "bandwidth"])
-        freq = _float(["Freq", "frequency"])
-        freq_support = str(_get(["Freq.sup.", "frequency_support"]))
-        cont_sens = _float(["Cont_sens_mJybeam", "cont_sens"])
-        line_sens_10kms = _get(["Line_sens_10kms_mJybeam", "line_sens_10kms"], required=False)
-        antenna_array = str(_get(["antenna_arrays", "antenna_array"]))
-
-        if rest_frequency is None:
-            rest_frequency = _get("rest_frequency", required=False)
-        if redshift is None:
-            redshift = _get("redshift", required=False)
-        if lum_infrared is None:
-            lum_infrared = _get("lum_infrared", required=False)
-        if n_lines is None:
-            n_lines = _get("n_lines", required=False)
-        if line_names is None:
-            line_names = _get("line_names", required=False)
-
-        return cls.from_values(
-            idx=idx,
-            source_name=source_name,
-            member_ouid=member_ouid,
-            main_dir=main_dir,
-            output_dir=output_dir,
-            tng_dir=tng_dir,
-            galaxy_zoo_dir=galaxy_zoo_dir,
-            hubble_dir=hubble_dir,
-            project_name=project_name,
-            ra=ra,
-            dec=dec,
-            band=band,
-            ang_res=ang_res,
-            vel_res=vel_res,
-            fov=fov,
-            obs_date=obs_date,
-            pwv=pwv,
-            int_time=int_time,
-            bandwidth=bandwidth,
-            freq=freq,
-            freq_support=freq_support,
-            cont_sens=cont_sens,
-            line_sens_10kms=line_sens_10kms,
-            antenna_array=antenna_array,
-            n_pix=n_pix,
-            n_channels=n_channels,
-            source_type=source_type,
-            tng_api_key=tng_api_key,
-            ncpu=ncpu,
-            rest_frequency=rest_frequency,
-            redshift=redshift,
-            lum_infrared=lum_infrared,
-            snr=snr,
-            n_lines=n_lines,
-            line_names=line_names,
-            save_mode=save_mode,
-            persist=persist,
-            ml_dataset_path=ml_dataset_path,
-            output_subdir_name=output_subdir_name,
-            inject_serendipitous=inject_serendipitous,
-            remote=remote,
-            observation_configs=observation_configs,
-            ground_temperature_k=ground_temperature_k,
-            correlator=correlator,
-            elevation_deg=elevation_deg,
-            source_offset_x_arcsec=source_offset_x_arcsec,
-            source_offset_y_arcsec=source_offset_y_arcsec,
-            background_mode=background_mode,
-            background_level=background_level,
-            background_seed=background_seed,
-            seed=seed,
-            external_skymodel_path=external_skymodel_path,
-            external_component_table_path=external_component_table_path,
-            external_alignment_mode=external_alignment_mode,
-            external_header_mode=external_header_mode,
-            external_header_overrides=external_header_overrides,
-            ms_export=ms_export,
-            ms_export_dir=ms_export_dir,
-            ms_save_mode=ms_save_mode,
-            imaging_algorithm=imaging_algorithm,
-            kaggle_token=kaggle_token,
-        )
+            if value is None:
+                raise KeyError(f"Missing required metadata column(s): {list(keys)}")
+            row_values[name] = value
+        for name, keys in cls._OPTIONAL_ROW_COLUMNS.items():
+            if values.get(name) is None:
+                row_values[name] = _get(keys)
+        return cls(**{**values, **row_values})
 
 
 @dataclass
