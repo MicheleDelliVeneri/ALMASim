@@ -41,7 +41,6 @@ class DummyClient:
         return None
 
 
-
 @pytest.fixture(autouse=True)
 def _reset_singleton():
     """Ensure singleton state is clean for each test."""
