@@ -20,6 +20,7 @@ from astropy.io import fits
 from almasim import cli_image
 from almasim.services.archive import unpack_ms
 from almasim.services.imaging import archive_imaging as ai
+from almasim.services.imaging.ms import chunks as chunks_module
 
 from ._fakes import FakeTable
 
@@ -133,7 +134,7 @@ def test_subtract_uv_continuum_subprocess_returns_the_child_result(tmp_path, mon
         seen.update(args=json.loads(cmd[-1]), env=kwargs["env"])
         return _Proc(stdout='{"line_channels": 3}\n', stderr="casacore note")
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     log = tmp_path / "task.log"
     result = ai.subtract_uv_continuum_subprocess("x.ms", order=0, log_path=log)
 
@@ -160,7 +161,7 @@ def test_subtract_uv_continuum_subprocess_failures(monkeypatch, outcome, message
             raise outcome
         return outcome
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(RuntimeError, match=message):
         ai.subtract_uv_continuum_subprocess("x.ms", timeout=5)
 
@@ -305,7 +306,7 @@ def test_call_in_child_needs_a_result(monkeypatch):
     class _Proc:
         returncode, stdout, stderr = 0, "", ""
 
-    monkeypatch.setattr(ai.subprocess, "run", lambda *a, **k: _Proc())
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Proc())
     with pytest.raises(RuntimeError, match="wrote no result"):
         ai._call_in_child("image_peak", {}, what="peak")
 
@@ -482,7 +483,7 @@ def test_subtract_uv_continuum_reads_chunks_sized_by_samples(fake_casacore, monk
         "getcol",
         lambda name, startrow=0, nrow=-1: reads.append(nrow) or getcol(name, startrow, nrow),
     )
-    monkeypatch.setattr(ai, "_CHUNK_SAMPLES", 64 * 2 * 10)  # ten rows of 64 channels x 2
+    monkeypatch.setattr(chunks_module, "_CHUNK_SAMPLES", 64 * 2 * 10)  # ten rows of 64 channels x 2
 
     ai.subtract_uv_continuum("x.ms")
 
@@ -545,7 +546,7 @@ def test_self_calibrate_logs_an_adopted_calibration(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 def test_default_rows_per_chunk_follows_the_cell_shape(monkeypatch):
-    monkeypatch.setattr(ai, "_CHUNK_SAMPLES", 640)
+    monkeypatch.setattr(chunks_module, "_CHUNK_SAMPLES", 640)
     assert ai._default_rows_per_chunk(_ms(_visibilities(n_channels=64)), "DATA") == 5
     assert ai._default_rows_per_chunk(_ms(_visibilities()[:0]), "DATA") == 640
 
