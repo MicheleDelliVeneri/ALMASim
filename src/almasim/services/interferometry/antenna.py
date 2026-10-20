@@ -2,8 +2,10 @@
 
 import math
 import os
+from dataclasses import dataclass
 
 import astropy.units as U
+import numpy as np
 from astropy.units import Quantity
 
 from ..data_paths import DataLayout, antenna_positions, max_baseline_km
@@ -128,3 +130,33 @@ def compute_distance(x1, y1, z1, x2, y2, z2):
 def get_max_baseline_from_antenna_array(antenna_array, master_path):
     """Get maximum baseline (km) from antenna array string."""
     return max_baseline_km(DataLayout(master_path), antenna_array)
+
+
+@dataclass(frozen=True)
+class ArrayLayout:
+    """An antenna array as the simulator uses it (MADIV-28 T5.11).
+
+    ``positions_km`` are the local (x, y) offsets in km; ``max_extent_km`` is
+    the largest |offset| seen while reading them (the uv grid's extent).
+    """
+
+    positions_km: list
+    names: list
+    positions_m: np.ndarray
+    max_extent_km: float
+
+
+def read_array_layout(main_dir: str, antenna_array: str) -> ArrayLayout:
+    """The antennas of ``antenna_array`` from the antenna configuration in ``main_dir``."""
+    obs_coordinates = antenna_positions(DataLayout(main_dir), antenna_array)
+    positions = []
+    extent = 0.0
+    for line in obs_coordinates[["x", "y"]].values:
+        positions.append([line[0] * 1e-3, line[1] * 1e-3])
+        extent = np.max(np.abs(positions[-1] + [extent]))
+    return ArrayLayout(
+        positions_km=positions,
+        names=list(obs_coordinates["name"].values),
+        positions_m=obs_coordinates[["x", "y", "z"]].values.astype(np.float64),
+        max_extent_km=extent,
+    )

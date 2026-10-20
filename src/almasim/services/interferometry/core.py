@@ -8,24 +8,19 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import astropy.units as U
 import numpy as np
-from astropy.coordinates import EarthLocation
 from astropy.io import fits
 
 if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
 
 from ..compute.progress import watch_futures
-from ..data_paths import DataLayout, antenna_positions
-from ..instrument.constants import (
-    ALMA_ELEVATION_M,
-    ALMA_LATITUDE_DEG,
-    ALMA_LONGITUDE_DEG,
-    SPEED_OF_LIGHT_M_S,
-)
+from ..instrument.constants import ALMA_LATITUDE_DEG, SPEED_OF_LIGHT_M_S
 from ..products.cube_export import write_interferometry_products
-from .imaging import image_channel, image_channel_ducc0
-from .observing import hour_angle_coverage, hour_angle_samples
-from .utils import get_channel_wavelength, sampling_to_uv_mask
+from .antenna import read_array_layout
+from .frequency import channel_wavelength_edges
+from .observing import alma_location, clip_to_horizon, hour_angle_coverage, hour_angle_samples
+from .simulator import ChannelImagingConfig, image_channels, picklable_header, stack_channels
+from .utils import get_channel_wavelength
 from .visibility import assemble_visibility_table
 
 _logger = logging.getLogger(__name__)
@@ -230,11 +225,7 @@ class Interferometer:
 
     def _get_observing_location(self) -> None:
         """Get ALMA observing location."""
-        self.observing_location = EarthLocation.from_geodetic(
-            lon=ALMA_LONGITUDE_DEG * U.deg,
-            lat=ALMA_LATITUDE_DEG * U.deg,
-            height=ALMA_ELEVATION_M * U.m,
-        )
+        self.observing_location = alma_location()
 
     def _get_Hcov(self) -> None:
         """Hour-angle coverage [start, end] in radians, centred on the track's middle."""
@@ -252,47 +243,19 @@ class Interferometer:
 
     def _read_antennas(self) -> None:
         """Read antenna positions from configuration."""
-        obs_coordinates = antenna_positions(DataLayout(self.main_dir), self.antenna_array)
-        antenna_coordinates = obs_coordinates[["x", "y"]].values
-        antPos = []
-        Xmax = 0.0
-        for line in antenna_coordinates:
-            antPos.append([line[0] * 1e-3, line[1] * 1e-3])
-            Xmax = np.max(np.abs(antPos[-1] + [Xmax]))
-        self.Xmax = Xmax
-        self.antPos = antPos
-        self.antNames = list(obs_coordinates["name"].values)
-        self.antPos3D = obs_coordinates[["x", "y", "z"]].values.astype(np.float64)
-
-        cosW = -np.tan(self.lat) * np.tan(self.dec)
-        if np.abs(cosW) < 1.0:
-            Hhor = np.arccos(cosW)
-        elif np.abs(self.lat - self.dec) > np.pi / 2.0:
-            Hhor = 0
-        else:
-            Hhor = np.pi
-
-        if Hhor > 0.0:
-            if self.Hcov[0] < -Hhor:
-                self.Hcov[0] = -Hhor
-            if self.Hcov[1] > Hhor:
-                self.Hcov[1] = Hhor
-
-        self.Xmax = self.Xmax * 1.5
+        layout = read_array_layout(self.main_dir, self.antenna_array)
+        self.antPos = layout.positions_km
+        self.antNames = layout.names
+        self.antPos3D = layout.positions_m
+        clip_to_horizon(self.Hcov, self.lat, self.dec)
+        self.Xmax = layout.max_extent_km * 1.5
         self.Nant = len(self.antPos)
 
     def _get_wavelengths(self) -> None:
         """Calculate observing wavelengths for each channel."""
-        self.w_max, self.w_min = [
-            self._hz_to_m(freq)
-            for freq in [
-                self.central_freq - self.bandwidth / 2,
-                self.central_freq + self.bandwidth / 2,
-            ]
-        ]
-        waves = np.linspace(self.w_min, self.w_max, self.Nchan + 1)
-        obs_wavelengths = np.array([[waves[i], waves[i + 1]] for i in range(len(waves) - 1)])
-        self.obs_wavelengths = obs_wavelengths
+        self.w_min, self.w_max, self.obs_wavelengths = channel_wavelength_edges(
+            self.central_freq, self.bandwidth, self.Nchan, self.c_ms
+        )
 
     def get_channel_wavelength(self, channel: int) -> tuple:
         """Get wavelength and format string for a channel."""
@@ -309,126 +272,38 @@ class Interferometer:
 
     def run_interferometric_sim(self) -> dict:
         """Run interferometric simulation."""
-        # Scatter input data to workers
-        scattered_channels = [
-            self.backend.scatter(self.skymodel[i]) for i in range(self.skymodel.shape[0])
-        ]
-
-        # Convert FITS header to dict for pickling (header contains thread locks)
-        # FITS headers can be converted to dict using dict() constructor
-        # Ensure we create a plain Python dict, not a Header-like object
-        try:
-            if isinstance(self.header, fits.Header):
-                # Convert to plain dict by iterating over items
-                # Convert all values to basic Python types to ensure picklability
-                header_dict = {}
-                for k, v in self.header.items():
-                    key = str(k)
-                    if isinstance(v, (int, float, bool, type(None))):
-                        header_dict[key] = v
-                    elif isinstance(v, str):
-                        header_dict[key] = str(v)
-                    else:
-                        # Convert any other type to string
-                        header_dict[key] = str(v)
-            elif isinstance(self.header, dict):
-                # Already a dict, but ensure it's a plain dict with basic types
-                header_dict = {
-                    str(k): (str(v) if not isinstance(v, (int, float, bool, type(None))) else v)
-                    for k, v in self.header.items()
-                }
-            else:
-                header_dict = {}
-        except Exception:
-            # Fallback: create empty dict if conversion fails
-            header_dict = {}
-
-        # Select channel imaging implementation once per simulation run.
-        channel_imager = image_channel
-        if self.imaging_algorithm == "ducc0":
-            channel_imager = image_channel_ducc0
-
-        # Get the delayed decorator from the backend
-        delayed = self.backend.delayed(channel_imager)
-
-        delayed_results = []
-        for i in range(self.Nchan):
-            wavelength, _ = self.get_channel_wavelength(i)
-            channel_noise = (
-                float(self.noise[i])
-                if isinstance(self.noise, (list, tuple, np.ndarray))
-                else float(self.noise)
-            )
-            delayed_result = delayed(
-                scattered_channels[i],
-                wavelength,
-                self.Npix,
-                self.Nant,
-                self.Hcov,
-                self.nH,
-                channel_noise,
-                self.antPos,
-                self.robfac,
-                self.trlat,
-                self.trdec,
-                self.Diameters,
-                self.imsize,
-                self.Xmax,
-                self.lfac,
-                self.distmat,
-                self.Nphf,
-                self.Np4,
-                self.zooming,
-                header_dict,  # Pass dict instead of Header object
-                self.robust,
-                self.scan_time,
-            )
-            delayed_results.append(delayed_result)
-
-        # Compute per-channel futures
-        futures_per_channel = [self.backend.compute(dr, sync=False) for dr in delayed_results]
-
-        # Start tracking progress of the per-channel computations
-        self.track_progress(futures_per_channel)
-
-        # Gather the results after completion
-        results_per_channel = self.backend.gather(futures_per_channel)
-
-        # Extract and stack the outputs
-        modelcube = [res[0] for res in results_per_channel]
-        dirtycube = [res[1] for res in results_per_channel]
-        modelvis = [res[2] for res in results_per_channel]
-        dirtyvis = [res[3] for res in results_per_channel]
-        u = [res[4] for res in results_per_channel]
-        v = [res[5] for res in results_per_channel]
-        beam = [res[6] for res in results_per_channel]
-        totsampling = [res[7] for res in results_per_channel]
-        raw_visibility_rows = [res[8] for res in results_per_channel]
-
-        # Stack the results into 3D arrays
-        modelCube = np.stack(modelcube, axis=0)
-        modelVis = np.stack(modelvis, axis=0)
-        dirtyCube = np.stack(dirtycube, axis=0)
-        dirtyVis = np.stack(dirtyvis, axis=0)
-        u = np.stack(u, axis=0)
-        v = np.stack(v, axis=0)
-        beam = np.stack(beam, axis=0)
-        totsampling = np.stack(totsampling, axis=0)
-
-        # Crop the zero-padded FFT grid back to the central science field (Nphf).
-        # The science content sits in the central Nphf x Nphf box in BOTH domains:
-        # the source is centred in the image domain (dirty/model/beam), and the
-        # sampled visibilities / uv sampling are DC-centred in the Fourier domain,
-        # so the surrounding ring is the FFT guard band in either case. The cropped
-        # size equals the input sky-model size, so downstream shapes are unchanged.
-        s, e = self.Np4, self.Np4 + self.Nphf
-        modelCube = modelCube[:, s:e, s:e]
-        dirtyCube = dirtyCube[:, s:e, s:e]
-        beam = beam[:, s:e, s:e]
-        modelVis = modelVis[:, s:e, s:e]
-        dirtyVis = dirtyVis[:, s:e, s:e]
-        totsampling = totsampling[:, s:e, s:e]
-        uv_mask = sampling_to_uv_mask(totsampling)
+        config = ChannelImagingConfig(
+            Npix=self.Npix,
+            Nant=self.Nant,
+            Hcov=self.Hcov,
+            nH=self.nH,
+            antPos=self.antPos,
+            robfac=self.robfac,
+            trlat=self.trlat,
+            trdec=self.trdec,
+            Diameters=self.Diameters,
+            imsize=self.imsize,
+            Xmax=self.Xmax,
+            lfac=self.lfac,
+            distmat=self.distmat,
+            Nphf=self.Nphf,
+            Np4=self.Np4,
+            zooming=self.zooming,
+            header=picklable_header(self.header),
+            robust=self.robust,
+            scan_time_s=self.scan_time,
+        )
+        wavelengths = [self.get_channel_wavelength(i)[0] for i in range(self.Nchan)]
+        results_per_channel = image_channels(
+            self.backend, config, self.skymodel, wavelengths, self.noise, self.track_progress
+        )
+        cubes, raw_visibility_rows = stack_channels(
+            results_per_channel, start=self.Np4, size=self.Nphf
+        )
+        modelCube, dirtyCube, beam = cubes["model"], cubes["dirty"], cubes["beam"]
+        modelVis, dirtyVis = cubes["model_vis"], cubes["dirty_vis"]
+        totsampling, uv_mask = cubes["totsampling"], cubes["uv_mask"]
+        u, v = cubes["u"], cubes["v"]
         visibility_table = assemble_visibility_table(
             channel_rows=raw_visibility_rows,
             channel_freq_hz=np.linspace(
@@ -509,23 +384,6 @@ class Interferometer:
             "antenna_diameter_m": self.antenna_diameter_m,
             "visibility_table": visibility_table,
         }
-
-        # Clean up variables to free memory
-        del (
-            modelCube,
-            modelVis,
-            dirtyCube,
-            dirtyVis,
-            u,
-            v,
-            beam,
-            totsampling,
-            uv_mask,
-            modelcube,
-            modelvis,
-            dirtycube,
-            dirtyvis,
-        )
 
         return simulation_results
 
