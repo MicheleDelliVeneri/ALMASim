@@ -7,6 +7,7 @@ import pytest
 
 from almasim.services.products.ms_io import (
     _arr_desc,
+    _CasatoolsBackend,
     _get_backend,
     _make_tabledesc,
     _sca_desc,
@@ -150,6 +151,11 @@ def _mock_backend():
     b.open.return_value = tb
     b.sca.side_effect = _sca_desc
     b.arr.side_effect = _arr_desc
+    # Array layout conversion as casatools does it (the tables' getcol results
+    # below are in casatools order).
+    b.put.side_effect = _CasatoolsBackend.put
+    b.put_cell.side_effect = _CasatoolsBackend.put_cell
+    b.get.side_effect = _CasatoolsBackend.get
     return b, tb
 
 
@@ -381,6 +387,7 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
 
     b = MagicMock()
     b.open.side_effect = fake_open
+    b.get.side_effect = _CasatoolsBackend.get  # the getcol results above are casatools-ordered
 
     with patch("almasim.services.products.ms_io._get_backend", return_value=b):
         result = read_native_ms(tmp_path / "test.ms")

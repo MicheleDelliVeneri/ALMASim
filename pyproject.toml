@@ -19,35 +19,29 @@ classifiers = [
 ]
 dependencies = [
     "astropy",
-    "asyncssh",
     "httpx",
     "pyvo",
     "numpy",
     "pandas",
     "matplotlib",
-    "seaborn",
     "tqdm",
     "scipy",
     "h5py",
     "kaggle",
     "kagglehub",
     "dask",
-    "dask-expr",
     "dask-jobqueue",
     "distributed",
     "astromartini",
-    "Hdecompose",
+    "Hdecompose",  # not imported directly: martini needs it for TNG sources
     "paramiko",
     "pysftp",
     "tenacity",
     "nifty8",
-    "setuptools",
-    "multiprocess",
     "scikit-image",
-    "imagecodecs",
+    "imagecodecs",  # not imported directly: image decoding for the dataset sky models
     "ducc0",
     "typer",
-    "bokeh>=3.9.0",
     "pypdf>=6.19.0",
 ]
 
@@ -55,6 +49,8 @@ dependencies = [
 almasim = "almasim.cli:main"
 
 [project.optional-dependencies]
+# The Dask dashboard the CLI links to (distributed serves it only with bokeh).
+dashboard = ["bokeh>=3.9.0"]
 casa = ["casatools", "casatasks"]
 ms-casacore = ["python-casacore"]
 

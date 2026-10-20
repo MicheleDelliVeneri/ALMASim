@@ -112,6 +112,33 @@ class DownloadStore:
             job.updated_at = datetime.now()
             return job
 
+    def apply_file_update(self, job_id: str, file_status: FileDownloadStatus) -> None:
+        """Record one file's progress and refresh the job's totals.
+
+        Files are matched by filename: the transfer layer rewrites each
+        access_url to spread downloads over the ALMA mirrors, so the URL is not
+        a stable key (keying on it listed most files twice).
+        """
+        with self._lock:
+            job = self._active.get(job_id)
+            if not job:
+                return
+            for index, current in enumerate(job.files):
+                if current.filename == file_status.filename:
+                    job.files[index] = file_status
+                    break
+            else:
+                job.files.append(file_status)
+            job.bytes_downloaded = sum(f.bytes_downloaded for f in job.files)
+            job.files_completed = sum(1 for f in job.files if f.status == "completed")
+            job.files_failed = sum(1 for f in job.files if f.status == "failed")
+            job.updated_at = datetime.now()
+
+    def remove(self, job_id: str) -> None:
+        """Drop a job from memory (its database record is kept)."""
+        with self._lock:
+            self._active.pop(job_id, None)
+
     def persist(self, job_id: str) -> None:
         """Flush the current in-memory state to the database."""
         with self._lock:
@@ -161,8 +188,7 @@ class DownloadStore:
     def finish(self, job_id: str) -> None:
         """Persist final state and remove the job from memory."""
         self.persist(job_id)
-        with self._lock:
-            self._active.pop(job_id, None)
+        self.remove(job_id)
 
     def list_all(self) -> list:
         """Return all persisted jobs from the database."""
@@ -268,35 +294,8 @@ def run_download_job(
         current_job = download_store.get(job_id)
         return current_job is None or current_job.status == "cancelled"
 
-    file_positions = {
-        (file_status.filename, file_status.access_url): index
-        for index, file_status in enumerate(file_statuses)
-    }
-
     def on_update(file_status: FileDownloadStatus) -> None:
-        with download_store._lock:
-            current_job = download_store._active.get(job_id)
-            if not current_job:
-                return
-
-            key = (file_status.filename, file_status.access_url)
-            index = file_positions.get(key)
-            if index is None:
-                file_positions[key] = len(current_job.files)
-                current_job.files.append(file_status)
-            else:
-                current_job.files[index] = file_status
-
-            current_job.bytes_downloaded = sum(
-                current_file.bytes_downloaded for current_file in current_job.files
-            )
-            current_job.files_completed = sum(
-                1 for current_file in current_job.files if current_file.status == "completed"
-            )
-            current_job.files_failed = sum(
-                1 for current_file in current_job.files if current_file.status == "failed"
-            )
-            current_job.updated_at = datetime.now()
+        download_store.apply_file_update(job_id, file_status)
 
     try:
         summary = download_products(
@@ -318,27 +317,25 @@ def run_download_job(
         if not current_job:
             return
 
-        current_job.files = summary.files
-        current_job.bytes_downloaded = sum(
-            file_status.bytes_downloaded for file_status in summary.files
-        )
-        current_job.files_completed = summary.files_completed
-        current_job.files_failed = summary.files_failed
-        current_job.raw_measurement_sets = summary.raw_measurement_sets
-        current_job.calibrated_measurement_sets = summary.calibrated_measurement_sets
-        current_job.manifest_path = summary.manifest_path
-
+        final: dict = {
+            "files": summary.files,
+            "bytes_downloaded": sum(file_status.bytes_downloaded for file_status in summary.files),
+            "files_completed": summary.files_completed,
+            "files_failed": summary.files_failed,
+            "raw_measurement_sets": summary.raw_measurement_sets,
+            "calibrated_measurement_sets": summary.calibrated_measurement_sets,
+            "manifest_path": summary.manifest_path,
+        }
         if current_job.status == "cancelled":
             pass
         elif summary.files_failed == 0:
-            current_job.status = "completed"
-            current_job.error = None
+            final.update(status="completed", error=None)
         elif summary.files_completed > 0:
-            current_job.status = "completed"
-            current_job.error = f"{summary.files_failed} file(s) failed"
+            final.update(status="completed", error=f"{summary.files_failed} file(s) failed")
         else:
-            current_job.status = "failed"
-            current_job.error = "All downloads failed"
+            final.update(status="failed", error="All downloads failed")
+        # One update, under the store's lock, instead of attribute writes outside it.
+        download_store.update(job_id, **final)
     except Exception as exc:
         logger.error("Download job %s failed: %s", job_id, exc, exc_info=True)
         download_store.update(job_id, status="failed", error=str(exc))

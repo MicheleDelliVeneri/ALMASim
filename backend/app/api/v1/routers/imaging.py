@@ -13,6 +13,7 @@ from almasim.services.imaging import (
     load_cube_from_npz,
 )
 from app.core.config import settings
+from app.core.path_utils import resolve_safe_path
 from app.schemas.imaging import DeconvolutionRequest, DeconvolutionResponse
 
 router = APIRouter()
@@ -20,15 +21,8 @@ router = APIRouter()
 
 def _resolve_cube_path(directory: str, file_path: str) -> Path:
     """Resolve an .npz cube file under OUTPUT_DIR, guarding against traversal."""
-    base = os.path.realpath(str(settings.OUTPUT_DIR))
     sub = os.path.join(directory, file_path) if directory else file_path
-    full = os.path.realpath(os.path.join(base, sub))
-    if full != base and not full.startswith(base + os.sep):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file path",
-        )
-    resolved = Path(full)
+    resolved = resolve_safe_path(sub, Path(settings.OUTPUT_DIR), detail="Invalid file path")
     if not resolved.exists() or not resolved.is_file():  # lgtm[py/path-injection]
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -61,7 +55,7 @@ def _derive_output_paths(dirty_path: Path) -> dict[str, Path]:
 
 
 @router.post("/deconvolve", response_model=DeconvolutionResponse)
-async def deconvolve_saved_products(
+def deconvolve_saved_products(
     body: DeconvolutionRequest,
 ) -> DeconvolutionResponse:
     """Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews."""

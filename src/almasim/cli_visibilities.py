@@ -155,8 +155,8 @@ def unpack(
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
-        min=1,
-        help="Number of Slurm workers for post-processing.",
+        min=0,
+        help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
     ),
     slurm_scheduler_host: Optional[str] = typer.Option(
         None,
@@ -260,8 +260,8 @@ def calibrate(
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
-        min=1,
-        help="Number of Slurm workers for post-processing.",
+        min=0,
+        help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
     ),
     slurm_scheduler_host: Optional[str] = typer.Option(
         None,

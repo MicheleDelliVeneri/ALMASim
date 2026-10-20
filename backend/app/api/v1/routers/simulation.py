@@ -1,8 +1,8 @@
 """Simulation API endpoints."""
 
 import asyncio
-import os
 import uuid
+from pathlib import Path
 
 from database.config import get_db
 from database.service import DatabaseService
@@ -23,6 +23,7 @@ from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
 from app.core.config import settings
 from app.core.dependencies import get_compute_backend
+from app.core.path_utils import resolve_safe_path
 from app.schemas.simulation import (
     SimulationEstimate,
     SimulationListResponse,
@@ -53,7 +54,7 @@ class DaskTestResponse(BaseModel):
 
 
 @router.get("/", response_model=SimulationListResponse)
-async def list_simulations(db: Session = Depends(get_db)) -> SimulationListResponse:
+def list_simulations(db: Session = Depends(get_db)) -> SimulationListResponse:
     """List all simulations."""
     from app.schemas.simulation import SimulationSummary
 
@@ -96,7 +97,7 @@ async def list_simulations(db: Session = Depends(get_db)) -> SimulationListRespo
 
 
 @router.post("/", response_model=SimulationResponse, status_code=status.HTTP_201_CREATED)
-async def create_simulation(
+def create_simulation(
     params: SimulationParamsCreate,
     background_tasks: BackgroundTasks,
     default_backend: ComputationBackend = Depends(get_compute_backend),
@@ -117,19 +118,16 @@ async def create_simulation(
                         detail="compute_backend_config.log_directory must be a string",
                     )
 
-                safe_root = os.path.realpath(os.path.expanduser("~"))
-                resolved_log_directory = os.path.realpath(
-                    os.path.abspath(os.path.expanduser(raw_log_directory))
-                )
-                if os.path.commonpath([safe_root, resolved_log_directory]) != safe_root:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
+                backend_config["log_directory"] = str(
+                    resolve_safe_path(
+                        raw_log_directory,
+                        Path.home(),
                         detail=(
                             "compute_backend_config.log_directory must be within "
                             "the user's home directory"
                         ),
                     )
-                backend_config["log_directory"] = resolved_log_directory
+                )
 
             compute_backend = create_backend(params.compute_backend, **backend_config)
         else:
@@ -201,7 +199,7 @@ async def create_simulation(
 
 
 @router.post("/estimate", response_model=SimulationEstimate)
-async def estimate_simulation(
+def estimate_simulation(
     params: SimulationParamsCreate,
 ) -> SimulationEstimate:
     """Estimate simulation cube dimensions and raw storage footprint."""
@@ -275,7 +273,7 @@ async def estimate_simulation(
 
 
 @router.get("/{simulation_id}/status", response_model=SimulationStatusSchema)
-async def get_simulation_status(
+def get_simulation_status(
     simulation_id: str,
     db: Session = Depends(get_db),
 ) -> SimulationStatusSchema:
@@ -319,7 +317,7 @@ async def get_simulation_status(
 
 
 @router.post("/{simulation_id}/cancel", response_model=SimulationResponse)
-async def cancel_simulation(
+def cancel_simulation(
     simulation_id: str,
     db: Session = Depends(get_db),
 ) -> SimulationResponse:
@@ -420,7 +418,7 @@ async def websocket_status(websocket: WebSocket, simulation_id: str):
 
 
 @router.post("/test-dask", response_model=DaskTestResponse)
-async def test_dask_connection(body: DaskTestRequest):
+def test_dask_connection(body: DaskTestRequest):
     """Test connectivity to a Dask scheduler and return cluster info."""
     from dask.distributed import Client
 
