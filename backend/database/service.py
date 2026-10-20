@@ -84,31 +84,15 @@ class DatabaseService:
         exclude: Optional[ObservationExclusionParams] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = 0,
-        # Legacy flat kwargs kept for backwards compatibility with direct callers
-        **kwargs,
     ) -> List[Observation]:
         """Query observations with inclusion and exclusion filter dataclasses.
 
-        Accepts ``include`` (ObservationQueryParams) and ``exclude``
-        (ObservationExclusionParams).  Any extra keyword arguments are merged
-        into an ObservationQueryParams so existing call-sites continue working.
+        The flat keyword form this used to accept is gone: names shared by both
+        dataclasses (``science_keywords``) landed in the exclusions too, and
+        ``exclude_*`` names matched neither, so exclusions were dropped.
         """
-        if include is None:
-            include = ObservationQueryParams(
-                **{
-                    k: v
-                    for k, v in kwargs.items()
-                    if k in ObservationQueryParams.__dataclass_fields__
-                }
-            )
-        if exclude is None:
-            exclude = ObservationExclusionParams(
-                **{
-                    k: v
-                    for k, v in kwargs.items()
-                    if k in ObservationExclusionParams.__dataclass_fields__
-                }
-            )
+        include = include or ObservationQueryParams()
+        exclude = exclude or ObservationExclusionParams()
 
         stmt = select(Observation).options(
             joinedload(Observation.scientific_category),
@@ -188,9 +172,11 @@ class DatabaseService:
     def _range_filters(p: ObservationQueryParams) -> list:
         """Numeric and date range filters."""
         filters = []
+        # Int.Time sits in t_max on rows cached before MADIV-28 T1.12.
+        integration_time = func.coalesce(Observation.t_resolution, Observation.t_max)
         for col, rng in (
             (Observation.s_fov, p.fov_range),
-            (Observation.t_resolution, p.time_resolution_range),
+            (integration_time, p.time_resolution_range),
             (Observation.frequency, p.frequency_range),
             (Observation.spatial_resolution, p.angular_resolution_range),
         ):
@@ -200,6 +186,8 @@ class DatabaseService:
                     filters.append(col >= lo)
                 if hi is not None:
                     filters.append(col <= hi)
+        # The cache holds only the release date. TAP filters on the observation's
+        # end time (t_max), so MetadataService does not answer dated queries from here.
         if p.observation_date_range:
             lo_str, hi_str = p.observation_date_range
             if lo_str:
@@ -235,11 +223,19 @@ class DatabaseService:
             for t in e.obs_types:
                 filters.append(~Observation.obs_type.ilike(f"%{t}%"))
 
+        # Solar exclusion matches TAP: the target name, a science keyword or the
+        # category mentioning the Sun excludes the observation.
         if e.solar:
             filters.append(~Observation.target_name.ilike("%sun%"))
 
-        if e.science_keywords:
-            for kw in e.science_keywords:
+        excluded_keywords = list(e.science_keywords or [])
+        excluded_categories = list(e.scientific_categories or [])
+        if e.solar:
+            excluded_keywords.append("sun")
+            excluded_categories.append("sun")
+
+        if excluded_keywords:
+            for kw in excluded_keywords:
                 kw_subq = (
                     select(observation_keywords.c.observation_id)
                     .join(
@@ -250,8 +246,8 @@ class DatabaseService:
                 )
                 filters.append(~Observation.id.in_(kw_subq))
 
-        if e.scientific_categories:
-            for cat in e.scientific_categories:
+        if excluded_categories:
+            for cat in excluded_categories:
                 cat_subq = (
                     select(Observation.id)
                     .join(Observation.scientific_category)
