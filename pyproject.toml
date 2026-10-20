@@ -146,6 +146,8 @@ module = [
     # untyped Column attributes rather than Mapped[].
     "app.db.models",
     "app.db.service",
+    "app.db.cache_query",  # split out of app.db.service (T6.10)
+    "app.db.repositories.*",  # split out of app.db.service (T6.10)
     "app.db.startup",
 ]
 ignore_errors = true

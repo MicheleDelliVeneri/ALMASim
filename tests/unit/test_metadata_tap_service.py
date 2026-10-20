@@ -369,7 +369,7 @@ def _fresh_tap_service():
 @pytest.mark.unit
 def test_get_tap_service_returns_on_first_success():
     mock_svc = MagicMock()
-    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+    with patch("almasim.services.metadata.tap.client.pyvo") as mock_pyvo:
         mock_pyvo.dal.TAPService.return_value = mock_svc
         result = get_tap_service()
     assert result is mock_svc
@@ -377,7 +377,7 @@ def test_get_tap_service_returns_on_first_success():
 
 @pytest.mark.unit
 def test_get_tap_service_reuses_the_connected_mirror():
-    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+    with patch("almasim.services.metadata.tap.client.pyvo") as mock_pyvo:
         first = get_tap_service()
         second = get_tap_service()
     assert first is second
@@ -386,7 +386,7 @@ def test_get_tap_service_reuses_the_connected_mirror():
 
 @pytest.mark.unit
 def test_a_failed_query_forgets_the_mirror():
-    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+    with patch("almasim.services.metadata.tap.client.pyvo") as mock_pyvo:
         service = get_tap_service()
         service.search.side_effect = RuntimeError("mirror down")
         with pytest.raises(Exception):
@@ -514,7 +514,7 @@ def test_query_products_for_members_list_of_uids():
 
 @pytest.mark.unit
 def test_get_tap_service_raises_when_every_mirror_fails():
-    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+    with patch("almasim.services.metadata.tap.client.pyvo") as mock_pyvo:
         mock_pyvo.dal.TAPService.return_value.search.side_effect = RuntimeError("down")
         with pytest.raises(RuntimeError, match="All ALMA TAP mirrors unreachable"):
             get_tap_service(max_rounds=1)
@@ -524,11 +524,12 @@ def test_get_tap_service_raises_when_every_mirror_fails():
 def test_get_science_types_forgets_the_mirror_on_a_query_error():
     import pyvo
 
+    from almasim.services.metadata.tap import client
     from almasim.services.metadata.tap import service as tap
 
     failing = MagicMock()
     failing.search.side_effect = pyvo.dal.exceptions.DALServiceError("boom")
-    tap._connected_service = failing
+    client._connected_service = failing
     with pytest.raises(pyvo.dal.exceptions.DALServiceError):
         tap.get_science_types.retry_with(stop=lambda _: True, reraise=True)()
-    assert tap._connected_service is None
+    assert client._connected_service is None
