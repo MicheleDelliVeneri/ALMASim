@@ -5,39 +5,13 @@
 	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '#lib/logger.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
-	import { API_BASE_URL } from '#lib/config.js';
+	import { visualizerApi, type DatacubeFile, type IntegratedImage } from '#lib/api/visualizer.js';
 
 	const logger = createLogger('routes/combination');
 	const PRODUCT_PREFIXES = ['int-image-cube_', 'tp-image-cube_', 'tp-int-image-cube_'] as const;
 	type ProductFilter = 'all' | 'int' | 'tp' | 'merged';
 
-	interface ImageData {
-		image: number[][];
-		stats: {
-			shape: number[];
-			integrated_shape: number[];
-			min: number;
-			max: number;
-			mean: number;
-			std: number;
-			cube_name: string;
-		};
-		method: string;
-	}
-
-	interface DatacubeFile {
-		name: string;
-		path: string;
-		size: number;
-		modified: number;
-	}
-
-	interface FileListResponse {
-		files: DatacubeFile[];
-		output_dir: string;
-	}
-
-	interface LoadedImage extends ImageData {
+	interface LoadedImage extends IntegratedImage {
 		id: string;
 		productKind: Exclude<ProductFilter, 'all'>;
 		scale: number;
@@ -96,10 +70,7 @@
 			return;
 		}
 		try {
-			const url = `${API_BASE_URL}/api/v1/visualizer/files?dir=${encodeURIComponent(targetDir)}`;
-			const response = await fetch(url);
-			if (!response.ok) throw new Error('Failed to load combination file list');
-			const data: FileListResponse = await response.json();
+			const data = await visualizerApi.listFiles(targetDir);
 			outputDir = data.output_dir;
 			allFiles = data.files.filter((file) =>
 				PRODUCT_PREFIXES.some((prefix) => file.name.startsWith(prefix))
@@ -133,29 +104,10 @@
 		loading = true;
 		error = null;
 		try {
-			const dirParam = outputDir ? `?dir=${encodeURIComponent(outputDir)}` : '';
-			const fileResponse = await fetch(
-				`${API_BASE_URL}/api/v1/visualizer/files/${encodeURIComponent(filePath)}${dirParam}`
+			const data = await visualizerApi.integrate(
+				{ serverPath: filePath, dir: outputDir || undefined },
+				{ method: 'sum' }
 			);
-			if (!fileResponse.ok) {
-				throw new Error(`Failed to load file: ${fileResponse.statusText}`);
-			}
-			const blob = await fileResponse.blob();
-			const serverFile = new File([blob], fileName, { type: 'application/octet-stream' });
-			const formData = new FormData();
-			formData.append('file', serverFile);
-			formData.append('method', 'sum');
-
-			const response = await fetch(`${API_BASE_URL}/api/v1/visualizer/integrate`, {
-				method: 'POST',
-				body: formData
-			});
-			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-				throw new Error(errorData.detail || `HTTP ${response.status}`);
-			}
-
-			const data: ImageData = await response.json();
 			loadedImages = [
 				...loadedImages,
 				{

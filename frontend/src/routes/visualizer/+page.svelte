@@ -6,47 +6,15 @@
 	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
 	import { createLogger } from '#lib/logger.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
-	import { API_BASE_URL } from '#lib/config.js';
+	import { ApiTimeoutError } from '#lib/api/client.js';
+	import { visualizerApi, type DatacubeFile, type IntegratedImage } from '#lib/api/visualizer.js';
 
 	const logger = createLogger('routes/visualizer');
 	const DEFAULT_PROCESS_TIMEOUT_MS = 10_000;
 	const FITS_PROCESS_TIMEOUT_MS = 20_000;
 	const MSV2_PROCESS_TIMEOUT_MS = 120_000;
 
-	interface ImageData {
-		image: number[][];
-		stats: {
-			shape: number[];
-			window_shape: number[];
-			integrated_shape: number[];
-			min: number;
-			max: number;
-			mean: number;
-			std: number;
-			cube_name: string;
-			format: string;
-			integration_axis: number;
-			complex_component: string;
-			channel_start: number;
-			channel_end: number;
-		};
-		method: string;
-	}
-
-	interface DatacubeFile {
-		name: string;
-		path: string;
-		size: number;
-		modified: number;
-		type: string;
-	}
-
-	interface FileListResponse {
-		files: DatacubeFile[];
-		output_dir: string;
-	}
-
-	interface LoadedImage extends ImageData {
+	interface LoadedImage extends IntegratedImage {
 		id: string;
 		scale: number;
 		panX: number;
@@ -92,31 +60,18 @@
 			fileListLoading = false;
 			return;
 		}
-		let timeoutId: number | undefined;
 		try {
-			const controller = new AbortController();
-			timeoutId = window.setTimeout(() => controller.abort(), 5000);
-			const response = await fetch(
-				`${API_BASE_URL}/api/v1/visualizer/files?dir=${encodeURIComponent(targetDir)}`,
-				{
-					signal: controller.signal
-				}
-			);
-			if (!response.ok) throw new Error('Failed to load file list');
-			const data: FileListResponse = await response.json();
+			const data = await visualizerApi.listFiles(targetDir, { timeoutMs: 5000 });
 			outputDir = data.output_dir;
 			fileList = data.files;
 			logger.info({ outputDir: data.output_dir, count: data.files.length }, 'File list loaded');
 		} catch (err) {
-			if (err instanceof DOMException && err.name === 'AbortError') {
+			if (err instanceof ApiTimeoutError) {
 				error = 'Timed out while loading visualizer files';
 			}
 			logger.error({ err }, 'Failed to load file list');
 			fileList = [];
 		} finally {
-			if (timeoutId !== undefined) {
-				window.clearTimeout(timeoutId);
-			}
 			fileListLoading = false;
 		}
 	}
@@ -137,36 +92,19 @@
 		logger.info({ fileName, method: integrationMethod, timeoutMs }, 'Processing visualizer product');
 		loading = true;
 		error = null;
-		let integrateTimeoutId: number | undefined;
 
 		try {
-			const formData = new FormData();
-			if (typeof file === 'string') {
-				formData.append('server_path', file);
-				if (outputDir) formData.append('dir', outputDir);
-			} else {
-				formData.append('file', file);
-			}
-			formData.append('method', integrationMethod);
-			formData.append('complex_component', complexComponent);
-			formData.append('integration_axis', '0');
-			if (channelStart.trim().length > 0) formData.append('channel_start', channelStart.trim());
-			if (channelEnd.trim().length > 0) formData.append('channel_end', channelEnd.trim());
-
-			const integrateController = new AbortController();
-			integrateTimeoutId = window.setTimeout(() => integrateController.abort(), timeoutMs);
-			const response = await fetch(`${API_BASE_URL}/api/v1/visualizer/integrate`, {
-				method: 'POST',
-				body: formData,
-				signal: integrateController.signal
-			});
-
-			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-				throw new Error(errorData.detail || `HTTP ${response.status}`);
-			}
-
-			const data: ImageData = await response.json();
+			const data = await visualizerApi.integrate(
+				typeof file === 'string' ? { serverPath: file, dir: outputDir || undefined } : { file },
+				{
+					method: integrationMethod,
+					complexComponent,
+					integrationAxis: '0',
+					channelStart,
+					channelEnd
+				},
+				{ timeoutMs }
+			);
 			logger.info({ fileName, shape: data.stats.shape }, 'Datacube processed');
 
 			// Add to loaded images array with unique ID
@@ -184,7 +122,7 @@
 
 			loadedImages = [...loadedImages, newImage];
 		} catch (err) {
-			if (err instanceof DOMException && err.name === 'AbortError') {
+			if (err instanceof ApiTimeoutError) {
 				error =
 					timeoutMs === MSV2_PROCESS_TIMEOUT_MS
 						? 'Timed out while processing MSv2 file after 2 minutes'
@@ -194,9 +132,6 @@
 			}
 			logger.error({ fileName, err }, 'Failed to process datacube');
 		} finally {
-			if (integrateTimeoutId !== undefined) {
-				window.clearTimeout(integrateTimeoutId);
-			}
 			loading = false;
 		}
 	}
