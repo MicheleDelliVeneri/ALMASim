@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -26,6 +27,8 @@ from ..products.cube_export import write_interferometry_products
 from .imaging import image_channel, image_channel_ducc0
 from .utils import get_channel_wavelength, sampling_to_uv_mask
 from .visibility import assemble_visibility_table
+
+_logger = logging.getLogger(__name__)
 
 LogFn = Optional[Callable[[str], None]]
 
@@ -177,7 +180,7 @@ class Interferometer:
         if self.logger is not None:
             self.logger(message)
         else:
-            print(message)
+            _logger.info(message)
 
     def _hz_to_m(self, freq: float) -> float:
         """Convert frequency in Hz to wavelength in meters."""
