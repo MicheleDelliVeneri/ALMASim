@@ -14,6 +14,8 @@ import astropy.units as U
 import numpy as np
 import pandas as pd
 
+from almasim.services.json_safe import json_safe as _json_safe
+
 from .. import skymodels as usm
 from . import astro as uas
 from . import interferometry as uin
@@ -457,23 +459,6 @@ class CleanCubeStage:
     cell_size_arcsec: float
     background_cube: Optional[np.ndarray]
     external_input_metadata: Optional[dict[str, Any]]
-
-
-def _json_safe(value: Any) -> Any:
-    """Convert nested metadata values into JSON/HDF5-friendly objects."""
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, (np.integer, np.floating)):
-        return value.item()
-    if isinstance(value, U.Quantity):
-        return {"value": value.value, "unit": str(value.unit)}
-    if isinstance(value, Path):
-        return str(value)
-    return value
 
 
 # Progress emitter functions moved to services.utils
