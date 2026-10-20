@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { BROWSE_ROOT } from '#lib/constants.js';
 	import { readCachedResults } from '#lib/utils/metadataCache.js';
 	import { onMount, onDestroy } from 'svelte';
 	import {
@@ -45,7 +46,7 @@
 	let nChannels = $state<number | null>(null);
 	let sourceType = $state('point');
 	let simulationName = $state('');
-	let outputDir = $state('/host_home');
+	let outputDir = $state(BROWSE_ROOT);
 	let snr = $state(1.3);
 	let useMetadataSnr = $state(true);
 	let useMetadataPwv = $state(true);
@@ -249,11 +250,7 @@
 			background_mode: backgroundMode,
 			background_level: backgroundLevel,
 			background_seed: backgroundSeed ?? undefined,
-			main_dir: './src/almasim',
 			output_dir: outputDir || './outputs',
-			tng_dir: './data/TNG100-1',
-			galaxy_zoo_dir: './data/galaxy_zoo',
-			hubble_dir: './data/hubble',
 			compute_backend: computeBackend,
 			compute_backend_config: backendConfig
 		};

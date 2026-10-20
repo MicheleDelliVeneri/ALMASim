@@ -33,7 +33,3 @@ function resolveApiBaseUrl(): string {
 }
 
 export const API_BASE_URL: string = resolveApiBaseUrl();
-
-export function getApiBaseUrl(): string {
-	return resolveApiBaseUrl();
-}
