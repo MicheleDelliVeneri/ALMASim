@@ -6,7 +6,6 @@ Moved out of archive_imaging.py (MADIV-28 module split).
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
 
 if TYPE_CHECKING:
@@ -90,6 +89,8 @@ def subtract_continuum(
     import numpy as np
     from astropy.io import fits
 
+    from almasim.services.imaging.fits_io import write_fits_atomic
+
     if order not in (0, 1):
         raise ValueError(f"continuum order must be 0 or 1, not {order}")
     with fits.open(cube_path, memmap=True) as hdus:
@@ -113,12 +114,9 @@ def subtract_continuum(
     header["HISTORY"] = (
         f"ALMASim continuum subtracted: order {order}, {clip_sigma:g} sigma clipping per pixel"
     )
-    out = Path(out_path)
-    partial = out.with_name(out.name + ".partial")
-    fits.HDUList([fits.PrimaryHDU(result.reshape(data.shape), header=header), *extensions]).writeto(
-        partial, overwrite=True
+    write_fits_atomic(
+        out_path, [fits.PrimaryHDU(result.reshape(data.shape), header=header), *extensions]
     )
-    partial.replace(out)
     return {"line_fraction": clipped / fitted if fitted else 0.0}
 
 

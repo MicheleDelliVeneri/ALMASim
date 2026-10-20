@@ -40,6 +40,8 @@ def stack_channel_images(
     import numpy as np
     from astropy.io import fits
 
+    from almasim.services.imaging.fits_io import write_fits_atomic
+
     out = Path(output_dir)
     groups: dict[str, list[tuple[int, Path]]] = {}
     for path in out.iterdir():
@@ -91,9 +93,7 @@ def stack_channel_images(
             beams.header["NPOL"] = 1
             hdus.append(beams)
         target = out / f"{prefix}-{product}.fits"
-        partial = target.with_name(target.name + ".partial")
-        fits.HDUList([fits.PrimaryHDU(cube, header=header), *hdus]).writeto(partial, overwrite=True)
-        partial.replace(target)
+        write_fits_atomic(target, [fits.PrimaryHDU(cube, header=header), *hdus])
         for path in paths:
             path.unlink(missing_ok=True)
         written[product] = len(paths)
