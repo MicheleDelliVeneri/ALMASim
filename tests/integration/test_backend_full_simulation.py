@@ -79,6 +79,7 @@ def sample_simulation_params(main_dir, test_data_dir, temp_output_dir):
         "n_channels": 32,
         "snr": 1.3,
         "save_mode": "npz",
+        "ms_save_mode": "npz",  # the default (msv2) needs casatools
         "ncpu": 2,
     }
 
