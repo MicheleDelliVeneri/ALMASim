@@ -220,9 +220,10 @@ class Interferometer:
         self.c_ms = SPEED_OF_LIGHT_M_S
         self.xx = np.linspace(-self.Xaxmax, self.Xaxmax, self.Npix)
         self.yy = np.ones(self.Npix, dtype=np.float32)
-        self.distmat = (
-            -np.outer(self.xx**2.0, self.yy) - np.outer(self.yy, self.xx**2.0)
-        ) * self.pixsize**2.0
+        # Minus the squared distance (arcsec^2) from the pointing centre: xx is
+        # already in arcsec. It used to be multiplied by pixsize^2 as well, which
+        # made the primary beam's width scale with the pixel size (MADIV-28 T4.5).
+        self.distmat = -np.outer(self.xx**2.0, self.yy) - np.outer(self.yy, self.xx**2.0)
         self.robfac = 0.0
         self.zooming = 0
         self._log(f"Number of Epochs: {self.nH}")

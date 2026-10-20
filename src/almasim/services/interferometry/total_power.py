@@ -6,7 +6,8 @@ from typing import Any
 
 import numpy as np
 
-from ..instrument.constants import ARCSEC_PER_RAD, FWHM_PER_SIGMA
+from ..instrument.constants import ARCSEC_PER_RAD
+from ..instrument.primary_beam import primary_beam_fwhm_rad, primary_beam_response
 from .combine import normalized_config_weights, single_run_result
 
 
@@ -15,25 +16,25 @@ def estimate_tp_beam_fwhm_arcsec(
     antenna_diameter_m: float = 12.0,
 ) -> np.ndarray:
     """The TP beam FWHM per channel: the primary beam's half-power width."""
-    from ..imaging.primary_beam import primary_beam_fwhm_rad
-
     freqs_hz = np.clip(np.asarray(freqs_hz, dtype=float), 1.0, None)
     return primary_beam_fwhm_rad(max(float(antenna_diameter_m), 1e-6), freqs_hz) * ARCSEC_PER_RAD
 
 
-def _gaussian_kernel(shape: tuple[int, int], sigma_pix: float) -> np.ndarray:
-    """Build a centered 2D Gaussian kernel normalized to unit sum."""
-    if sigma_pix <= 0.0:
-        kernel = np.zeros(shape, dtype=np.float32)
-        kernel[shape[0] // 2, shape[1] // 2] = 1.0
-        return kernel
+def _beam_kernel(
+    shape: tuple[int, int], cell_size_arcsec: float, frequency_hz: float, dish_diameter_m: float
+) -> np.ndarray:
+    """The primary beam's power pattern on a centred grid, normalised to unit sum."""
     yy, xx = np.indices(shape, dtype=float)
     cy = (shape[0] - 1) / 2.0
     cx = (shape[1] - 1) / 2.0
-    rr2 = (xx - cx) ** 2 + (yy - cy) ** 2
-    kernel = np.exp(-0.5 * rr2 / max(sigma_pix**2, 1e-12))
-    kernel /= np.sum(kernel)
-    return kernel.astype(np.float32)
+    radius_rad = np.hypot(xx - cx, yy - cy) * float(cell_size_arcsec) / ARCSEC_PER_RAD
+    kernel = primary_beam_response(radius_rad, frequency_hz, dish_diameter_m)
+    total = float(np.sum(kernel))
+    if not total > 0.0:
+        kernel = np.zeros(shape)
+        kernel[shape[0] // 2, shape[1] // 2] = 1.0
+        return kernel.astype(np.float32)
+    return (kernel / total).astype(np.float32)
 
 
 def _fft_convolve2d(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
@@ -54,7 +55,7 @@ def simulate_total_power_observation(
     array_type: str = "TP",
     rng: np.random.Generator | None = None,
 ) -> dict[str, Any]:
-    """Simulate a TP observation as beam-smoothed single-dish imaging."""
+    """Simulate a TP observation as single-dish imaging smoothed by the primary beam."""
     model_cube = np.asarray(model_cube, dtype=np.float32)
     freqs_hz = np.asarray(freqs_hz, dtype=float)
     if model_cube.ndim != 3:
@@ -74,7 +75,6 @@ def simulate_total_power_observation(
         freqs_hz,
         antenna_diameter_m=antenna_diameter_m,
     )
-    sigma_pix = beam_fwhm_arcsec / (FWHM_PER_SIGMA * max(float(cell_size_arcsec), 1e-6))
 
     tp_model_cube = np.zeros_like(model_cube, dtype=np.float32)
     tp_dirty_cube = np.zeros_like(model_cube, dtype=np.float32)
@@ -82,7 +82,12 @@ def simulate_total_power_observation(
     tp_sampling_cube = np.ones_like(model_cube, dtype=np.float32)
 
     for channel in range(model_cube.shape[0]):
-        kernel = _gaussian_kernel(model_cube.shape[1:], float(sigma_pix[channel]))
+        kernel = _beam_kernel(
+            model_cube.shape[1:],
+            max(float(cell_size_arcsec), 1e-6),
+            float(np.clip(freqs_hz[channel], 1.0, None)),
+            max(float(antenna_diameter_m), 1e-6),
+        )
         tp_beam_cube[channel] = kernel / np.max(kernel)
         tp_model_cube[channel] = _fft_convolve2d(model_cube[channel], kernel)
         if noise_profile[channel] > 0.0:
