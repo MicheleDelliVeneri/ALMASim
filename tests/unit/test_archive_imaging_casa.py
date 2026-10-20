@@ -21,50 +21,13 @@ from almasim import cli_image
 from almasim.services.archive import unpack_ms
 from almasim.services.imaging import archive_imaging as ai
 
-
-class _FakeTable:
-    """The subset of ``casacore.tables.table`` the imaging code uses."""
-
-    def __init__(self, columns: dict[str, np.ndarray]):
-        self.columns = columns
-        self.closed = False
-
-    def colnames(self):
-        return list(self.columns)
-
-    def nrows(self):
-        return len(next(iter(self.columns.values())))
-
-    def iscelldefined(self, name, row):
-        return name in self.columns
-
-    def getcell(self, name, row):
-        return self.columns[name][row]
-
-    def getcol(self, name, startrow=0, nrow=-1):
-        column = self.columns[name]
-        return column[startrow:] if nrow < 0 else column[startrow : startrow + nrow]
-
-    def putcol(self, name, value, startrow=0, nrow=-1):
-        self.columns[name][startrow : startrow + len(value)] = value
-
-    def getcoldesc(self, name):
-        return {"source": name}
-
-    def addcols(self, desc):
-        self.columns[desc["name"]] = np.zeros_like(self.columns[desc["source"]])
-
-    def removecols(self, name):
-        del self.columns[name]
-
-    def close(self):
-        self.closed = True
+from ._fakes import FakeTable
 
 
 @pytest.fixture
 def fake_casacore(monkeypatch):
     """``casacore.tables`` serving the tables registered in the returned dict by path."""
-    tables: dict[str, _FakeTable] = {}
+    tables: dict[str, FakeTable] = {}
     package = ModuleType("casacore")
     module = ModuleType("casacore.tables")
     module.table = lambda path, **kwargs: tables[str(path)]
@@ -99,7 +62,7 @@ def _ms(data, *, spectrum_weight=False, corrected=False):
         columns["WEIGHT_SPECTRUM"] = np.ones(data.shape)
     if corrected:
         columns["CORRECTED_DATA"] = data.copy()
-    return _FakeTable(columns)
+    return FakeTable(columns)
 
 
 @pytest.mark.unit
@@ -113,7 +76,7 @@ def test_source_spectrum_averages_every_row(spectrum_weight):
 
     assert not usable[5] and usable.sum() == 63
     np.testing.assert_allclose(spectrum[usable], np.abs(data.mean(axis=(0, 2)))[usable], rtol=1e-5)
-    assert ai._source_spectrum(_FakeTable({"DATA": data[:0]}), "DATA", 7) is None
+    assert ai._source_spectrum(FakeTable({"DATA": data[:0]}), "DATA", 7) is None
 
 
 @pytest.mark.unit
@@ -211,7 +174,7 @@ def test_drop_corrected_data(fake_casacore):
 def test_selfcal_prepare_selects_line_free_channels_and_the_busiest_antenna(fake_casacore):
     fake_casacore["p.ms"] = ms = _ms(_visibilities())
     ms.columns["FLAG_ROW"][ms.columns["ANTENNA1"] == 0] = True  # antenna 0 mostly flagged
-    fake_casacore["p.ms/ANTENNA"] = _FakeTable(
+    fake_casacore["p.ms/ANTENNA"] = FakeTable(
         {"NAME": np.array(["DA41", "DA42", "DV01", "DV02", "PM03"])}
     )
 
@@ -549,7 +512,7 @@ def test_selfcal_prepare_skips_antennas_whose_samples_are_all_flagged(fake_casac
     rows = (ms.columns["ANTENNA1"] == busiest) | (ms.columns["ANTENNA2"] == busiest)
     ms.columns["FLAG"][rows] = True  # FLAG_ROW stays False: only the samples are flagged
     names = np.array(["DA41", "DA42", "DV01", "DV02", "PM03"])
-    fake_casacore["p.ms/ANTENNA"] = _FakeTable({"NAME": names})
+    fake_casacore["p.ms/ANTENNA"] = FakeTable({"NAME": names})
 
     assert ai.selfcal_prepare("p.ms")["refant"] != names[busiest]
 
@@ -642,7 +605,7 @@ def test_line_free_from_ranges():
 @pytest.mark.unit
 def test_export_gain_table(fake_casacore, tmp_path):
     gains = np.array([[[np.exp(0.5j) * 1.2]], [[np.exp(-0.25j)]]])
-    fake_casacore["g.cal"] = _FakeTable(
+    fake_casacore["g.cal"] = FakeTable(
         {
             "TIME": np.array([100.0, 160.0]),
             "ANTENNA1": np.array([0, 7]),
@@ -650,7 +613,7 @@ def test_export_gain_table(fake_casacore, tmp_path):
             "FLAG": np.array([[[False]], [[True]]]),
         }
     )
-    fake_casacore["g.cal/ANTENNA"] = _FakeTable({"NAME": np.array(["DA41", "DA42"])})
+    fake_casacore["g.cal/ANTENNA"] = FakeTable({"NAME": np.array(["DA41", "DA42"])})
 
     assert ai.export_gain_table("g.cal", str(tmp_path / "g.csv")) == {"rows": 2}
     lines = (tmp_path / "g.csv").read_text().splitlines()
