@@ -9,6 +9,8 @@ from typing import List, NoReturn, Optional
 
 import typer
 
+from ..services.utils import dedupe_keep_order  # noqa: F401  (re-exported)
+
 
 def default_output_path(filename: str) -> Path:
     """Return the default user-scoped output path for a filename."""
@@ -21,18 +23,6 @@ def split_csv_values(values: Optional[List[str]]) -> Optional[List[str]]:
         return None
     flattened = [item.strip() for value in values for item in value.split(",") if item.strip()]
     return flattened or None
-
-
-def dedupe_keep_order(values: list[str]) -> list[str]:
-    """Remove duplicates while preserving first-seen order."""
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        ordered.append(value)
-    return ordered
 
 
 def validate_range(

@@ -14,8 +14,9 @@ import typer
 from typer.testing import CliRunner
 
 from almasim import cli, cli_clean, cli_image, cli_metadata, cli_predict, cli_products
+from almasim.services.archive import pipeline as archive_pipeline
 
-from ._fakes import fake_popen
+from ._fakes import fake_popen, patch_everywhere
 
 runner = CliRunner()
 
@@ -449,7 +450,7 @@ def test_compute_jobs_with_progress_uses_async_and_gather(monkeypatch):
         gathered=[["raw1.ms"], ["raw2.ms"]],
     )
 
-    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(archive_pipeline, "sleep", lambda *_args, **_kwargs: None)
 
     results = cli_products._compute_jobs_with_progress(
         backend=backend,
@@ -521,9 +522,11 @@ def test_preflight_casa_data_uses_resolved_path(monkeypatch, tmp_path):
 
 def test_run_unpack_jobs_slurm_exits_when_no_uids(monkeypatch, tmp_path):
     """Slurm unpack should fail early when no ASDM inputs can be discovered."""
-    monkeypatch.setattr(cli_products, "_extract_asdm_uids_from_download_root", lambda *_: [])
+    patch_everywhere(
+        monkeypatch, cli_products, "_extract_asdm_uids_from_download_root", lambda *_: []
+    )
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(archive_pipeline.StageError, match="No ASDM directories"):
         cli_products._run_unpack_jobs(
             input_root=tmp_path / "input",
             output_root=tmp_path / "out",
@@ -538,7 +541,7 @@ def test_run_unpack_jobs_slurm_exits_when_no_uids(monkeypatch, tmp_path):
 
 def test_run_calibrate_jobs_slurm_rejects_clean_intermediate(tmp_path):
     """Slurm calibrate should reject clean-intermediate mode."""
-    with pytest.raises(typer.Exit):
+    with pytest.raises(archive_pipeline.StageUsageError, match="clean-intermediate"):
         cli_products._run_calibrate_jobs(
             input_root=tmp_path / "input",
             raw_ms_root=tmp_path / "raw",
@@ -567,15 +570,19 @@ def test_run_unpack_jobs_slurm_preflights_and_submits(monkeypatch, tmp_path):
         def delayed(self, fn):
             return lambda **kwargs: kwargs
 
-    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli_products, "create_backend", lambda *args, **kwargs: _Backend())
+    patch_everywhere(
+        monkeypatch, cli_products, "_preflight_casa_data", lambda *args, **kwargs: None
+    )
+    patch_everywhere(
+        monkeypatch, cli_products, "create_backend", lambda *args, **kwargs: _Backend()
+    )
 
     def _fake_compute_jobs_with_progress(**kwargs):
         captured.update(kwargs)
         return [["/tmp/raw-a.ms"]]
 
-    monkeypatch.setattr(
-        cli_products, "_compute_jobs_with_progress", _fake_compute_jobs_with_progress
+    patch_everywhere(
+        monkeypatch, cli_products, "_compute_jobs_with_progress", _fake_compute_jobs_with_progress
     )
 
     outputs = cli_products._run_unpack_jobs(
@@ -607,15 +614,19 @@ def test_run_calibrate_jobs_slurm_preflights_and_submits(monkeypatch, tmp_path):
         def delayed(self, fn):
             return lambda **kwargs: kwargs
 
-    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli_products, "create_backend", lambda *args, **kwargs: _Backend())
+    patch_everywhere(
+        monkeypatch, cli_products, "_preflight_casa_data", lambda *args, **kwargs: None
+    )
+    patch_everywhere(
+        monkeypatch, cli_products, "create_backend", lambda *args, **kwargs: _Backend()
+    )
 
     def _fake_compute_jobs_with_progress(**kwargs):
         captured.update(kwargs)
         return [["/tmp/cal-a.ms"]]
 
-    monkeypatch.setattr(
-        cli_products, "_compute_jobs_with_progress", _fake_compute_jobs_with_progress
+    patch_everywhere(
+        monkeypatch, cli_products, "_compute_jobs_with_progress", _fake_compute_jobs_with_progress
     )
 
     outputs = cli_products._run_calibrate_jobs(
@@ -968,7 +979,7 @@ def test_compute_jobs_with_progress_continue_on_error_skips_failed(monkeypatch):
     """A failed future should become a None placeholder and a recorded StageFailure."""
     futures = [_FakeFuture(done_after=1), _FakeFailingFuture("boom on B"), _FakeFuture()]
     backend = _FakePerFutureBackend(futures, results=[["a.ms"], None, ["c.ms"]])
-    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(archive_pipeline, "sleep", lambda *_args, **_kwargs: None)
     failures: list[cli_products.TaskFailure] = []
 
     results = cli_products._compute_jobs_with_progress(
@@ -995,7 +1006,7 @@ def test_compute_jobs_with_progress_fail_fast_still_raises(monkeypatch):
             raise RuntimeError("gather failed")
 
     backend = _RaisingBackend([_FakeFailingFuture("boom")], results=[None])
-    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(archive_pipeline, "sleep", lambda *_args, **_kwargs: None)
 
     with pytest.raises(RuntimeError, match="gather failed"):
         cli_products._compute_jobs_with_progress(
@@ -1033,9 +1044,11 @@ def test_compute_jobs_with_progress_heartbeat_prints_log_tail(monkeypatch, tmp_p
         def write(self, text):
             written.append(text)
 
-    monkeypatch.setattr(cli_products, "tqdm", _Bar)
+    patch_everywhere(monkeypatch, cli_products, "tqdm", _Bar)
     # The worker "writes" to the log while the stage is running.
-    monkeypatch.setattr(cli_products, "sleep", lambda *_args, **_kwargs: os.utime(log_path, None))
+    monkeypatch.setattr(
+        archive_pipeline, "sleep", lambda *_args, **_kwargs: os.utime(log_path, None)
+    )
 
     cli_products._compute_jobs_with_progress(
         backend=backend,
@@ -1110,12 +1123,18 @@ def test_run_calibrate_jobs_sync_multi_uid_isolates_each_uid(monkeypatch, tmp_pa
             raise RuntimeError("casacore::ArrayError")
         return [f"{kwargs['calibrated_output_root']}/{kwargs['asdm_uid']}.ms.split.cal"]
 
-    monkeypatch.setattr(cli_products, "_calibrate_single_uid", _fake_single)
-    monkeypatch.setattr(
-        cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "out" / ".casa-data"
+    patch_everywhere(monkeypatch, cli_products, "_calibrate_single_uid", _fake_single)
+    patch_everywhere(
+        monkeypatch,
+        cli_products,
+        "_preflight_casa_data",
+        lambda *a, **k: tmp_path / "out" / ".casa-data",
     )
-    monkeypatch.setattr(
-        cli_products, "_extract_uids_from_raw_ms_root", lambda *_: ["uid___A", "uid___B", "uid___C"]
+    patch_everywhere(
+        monkeypatch,
+        cli_products,
+        "_extract_uids_from_raw_ms_root",
+        lambda *_: ["uid___A", "uid___B", "uid___C"],
     )
 
     failures: list[cli_products.TaskFailure] = []
@@ -1154,7 +1173,8 @@ def test_run_calibrate_jobs_sync_single_uid_runs_in_process(monkeypatch, tmp_pat
         return [tmp_path / "out" / "uid___A.ms.split.cal"]
 
     monkeypatch.setattr(archive_mod, "create_calibrated_measurement_sets", _fake_create)
-    monkeypatch.setattr(
+    patch_everywhere(
+        monkeypatch,
         cli_products,
         "_calibrate_single_uid",
         lambda **kwargs: pytest.fail("subprocess wrapper must not be used for one UID"),
@@ -1182,7 +1202,8 @@ def test_run_calibrate_jobs_sync_skips_cleanup_when_failures(monkeypatch, tmp_pa
     """Intermediate cleanup must not run when any UID failed."""
     import almasim.services.archive as archive_mod
 
-    monkeypatch.setattr(
+    patch_everywhere(
+        monkeypatch,
         cli_products,
         "_calibrate_single_uid",
         lambda **kwargs: (
@@ -1191,7 +1212,9 @@ def test_run_calibrate_jobs_sync_skips_cleanup_when_failures(monkeypatch, tmp_pa
             else ["/out/ok.ms.split.cal"]
         ),
     )
-    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
+    patch_everywhere(
+        monkeypatch, cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa"
+    )
     monkeypatch.setattr(
         archive_mod,
         "cleanup_intermediate_calibration_data",
@@ -1288,10 +1311,15 @@ def test_run_parallel_archive_jobs_skips_calibration_for_failed_unpack(monkeypat
         def __exit__(self, *exc):
             return None
 
-    monkeypatch.setattr(cli_products, "create_backend", lambda *a, **k: _Backend())
-    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
-    monkeypatch.setattr(
-        cli_products, "_extract_asdm_uids_from_download_root", lambda *_: ["uid___A", "uid___B"]
+    patch_everywhere(monkeypatch, cli_products, "create_backend", lambda *a, **k: _Backend())
+    patch_everywhere(
+        monkeypatch, cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa"
+    )
+    patch_everywhere(
+        monkeypatch,
+        cli_products,
+        "_extract_asdm_uids_from_download_root",
+        lambda *_: ["uid___A", "uid___B"],
     )
 
     stages: list[tuple[str, list[str]]] = []
@@ -1303,7 +1331,7 @@ def test_run_parallel_archive_jobs_skips_calibration_for_failed_unpack(monkeypat
             return [["/raw/uid___A.ms"], []]
         return [["/cal/uid___A.ms.split.cal"]]
 
-    monkeypatch.setattr(cli_products, "_run_uid_stage", _fake_stage)
+    patch_everywhere(monkeypatch, cli_products, "_run_uid_stage", _fake_stage)
 
     failures: list[cli_products.TaskFailure] = []
     raw, cal = cli_products._run_parallel_archive_jobs(
@@ -1384,8 +1412,10 @@ def test_run_calibrate_jobs_skips_completed_uids_before_submission(monkeypatch, 
         assert kwargs["keep_working_copies"] is False
         return [f"{kwargs['calibrated_output_root']}/{kwargs['asdm_uid']}.ms.split.cal"]
 
-    monkeypatch.setattr(cli_products, "_calibrate_single_uid", _fake_single)
-    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
+    patch_everywhere(monkeypatch, cli_products, "_calibrate_single_uid", _fake_single)
+    patch_everywhere(
+        monkeypatch, cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa"
+    )
 
     outputs = cli_products._run_calibrate_jobs(
         input_root=tmp_path / "input",
@@ -1413,11 +1443,17 @@ def test_run_calibrate_jobs_all_completed_does_nothing(monkeypatch, tmp_path):
     for uid in ("uid___A", "uid___B"):
         (output_root / f"{uid}.ms.split.cal").mkdir(parents=True)
         write_calibration_marker(output_root, uid)
-    monkeypatch.setattr(
-        cli_products, "_preflight_casa_data", lambda *a, **k: pytest.fail("no preflight")
+    patch_everywhere(
+        monkeypatch,
+        cli_products,
+        "_preflight_casa_data",
+        lambda *a, **k: pytest.fail("no preflight"),
     )
-    monkeypatch.setattr(
-        cli_products, "create_backend", lambda *a, **k: pytest.fail("no backend expected")
+    patch_everywhere(
+        monkeypatch,
+        cli_products,
+        "create_backend",
+        lambda *a, **k: pytest.fail("no backend expected"),
     )
 
     outputs = cli_products._run_calibrate_jobs(
@@ -1480,7 +1516,7 @@ def test_casa_bundled_lib_dir_precedes_system_paths(tmp_path, monkeypatch):
     calls = fake_popen(monkeypatch)
     bundled = tmp_path / "site-packages" / "casatools" / "__casac__" / "lib"
     bundled.mkdir(parents=True)
-    monkeypatch.setattr(cli_products, "_casa_bundled_lib_dir", lambda: str(bundled))
+    patch_everywhere(monkeypatch, cli_products, "_casa_bundled_lib_dir", lambda: str(bundled))
     monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/spack/lib")
 
     output_root = tmp_path / "cal"
@@ -1507,7 +1543,7 @@ def test_casa_bundled_lib_dir_absent_keeps_system_paths(tmp_path, monkeypatch):
     """Without casatools installed the previous system-first ordering is unchanged."""
 
     calls = fake_popen(monkeypatch)
-    monkeypatch.setattr(cli_products, "_casa_bundled_lib_dir", lambda: None)
+    patch_everywhere(monkeypatch, cli_products, "_casa_bundled_lib_dir", lambda: None)
     monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
 
     output_root = tmp_path / "raw"
@@ -1554,13 +1590,18 @@ def test_run_calibrate_jobs_slurm_pins_one_task_per_worker(monkeypatch, tmp_path
         def __exit__(self, *exc):
             return None
 
-    monkeypatch.setattr(
+    patch_everywhere(
+        monkeypatch,
         cli_products,
         "create_backend",
         lambda backend, **kwargs: captured.update(kwargs) or _Backend(),
     )
-    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
-    monkeypatch.setattr(cli_products, "_run_uid_stage", lambda **kwargs: [["/cal/a.ms.split.cal"]])
+    patch_everywhere(
+        monkeypatch, cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa"
+    )
+    patch_everywhere(
+        monkeypatch, cli_products, "_run_uid_stage", lambda **kwargs: [["/cal/a.ms.split.cal"]]
+    )
 
     cli_products._run_calibrate_jobs(
         input_root=tmp_path / "input",
@@ -1581,9 +1622,14 @@ def test_run_calibrate_jobs_slurm_pins_one_task_per_worker(monkeypatch, tmp_path
 def test_run_calibrate_jobs_sync_does_not_add_worker_args(monkeypatch, tmp_path):
     """The sync path has no Dask workers, so no worker arguments are injected."""
     captured: dict[str, object] = {}
-    monkeypatch.setattr(cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa")
-    monkeypatch.setattr(
-        cli_products, "_run_uid_stage", lambda **kwargs: captured.update(kwargs) or [[], []]
+    patch_everywhere(
+        monkeypatch, cli_products, "_preflight_casa_data", lambda *a, **k: tmp_path / "casa"
+    )
+    patch_everywhere(
+        monkeypatch,
+        cli_products,
+        "_run_uid_stage",
+        lambda **kwargs: captured.update(kwargs) or [[], []],
     )
 
     cli_products._run_calibrate_jobs(
@@ -1749,3 +1795,28 @@ def test_python_m_almasim_cli_runs_the_app(monkeypatch, capsys):
         runpy.run_module("almasim.cli", run_name="__main__")
     assert info.value.code == 0
     assert "visibilities" in capsys.readouterr().out
+
+
+def test_stage_errors_map_to_exit_codes():
+    """StageError exits 1 and StageUsageError exits 2, with their messages."""
+    with pytest.raises(typer.Exit) as info, cli_products._stage_errors():
+        raise archive_pipeline.StageError("nothing to do")
+    assert info.value.exit_code == 1
+    with pytest.raises(typer.Exit) as info, cli_products._stage_errors():
+        raise archive_pipeline.StageUsageError("bad combination")
+    assert info.value.exit_code == 2
+
+
+def test_run_archive_stages_collects_failures(monkeypatch, tmp_path):
+    """run_archive_stages returns the outputs and the failed UIDs instead of raising."""
+
+    def _fake_jobs(**kwargs):
+        kwargs["failures"].append(archive_pipeline.TaskFailure("uid___B", "boom", None))
+        assert kwargs["continue_on_error"] is True
+        return ["/raw/uid___A.ms"], ["/cal/uid___A.ms.split.cal"]
+
+    monkeypatch.setattr(archive_pipeline, "_run_parallel_archive_jobs", _fake_jobs)
+    result = archive_pipeline.run_archive_stages(tmp_path / "dl", tmp_path / "out")
+    assert result.raw_ms == ["/raw/uid___A.ms"]
+    assert result.calibrated_ms == ["/cal/uid___A.ms.split.cal"]
+    assert not result.ok and result.failures[0].label == "uid___B"
