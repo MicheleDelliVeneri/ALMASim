@@ -11,18 +11,9 @@ import time
 from pathlib import Path
 from typing import Sequence
 
+from almasim.services.instrument.constants import DEFAULT_MAX_WEIGHT
 from almasim.services.runtime.child import ChildFailed, append_to_log, call_in_child
 from almasim.services.runtime.env import wsclean_environment
-
-# Rows whose WEIGHT exceeds this are left out of the single-window MS. The
-# Cycle-11 calibrated MSs (2026-09-25, 40/40 sampled) carry 4-58 % of
-# unflagged target rows with WEIGHT ~1e5-1e8 and amplitudes 1e3 too low or
-# 4-26x too high: data the ALMA pipeline had flagged (bad Tsys, antenna or
-# scan) that received garbage gains because the calibration stage did not
-# restore the delivered Pipeline_Final flags. Physical ALMA weights
-# (1/sigma^2 per visibility, calwt) stay below ~1e3; the two populations are
-# separated by more than an order of magnitude on every EB sampled.
-DEFAULT_MAX_WEIGHT = 1.0e4
 
 
 def extract_single_window_ms(

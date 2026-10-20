@@ -19,7 +19,8 @@ from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_MAX_WEIGHT = 1e4  # the imaging step's --max-weight
+from ..instrument.constants import DEFAULT_MAX_WEIGHT
+
 CALIBRATED_SUFFIX = ".ms.split.cal"
 
 SUMMARY_COLUMNS = [

@@ -463,31 +463,25 @@ def test_compute_jobs_with_progress_uses_async_and_gather(monkeypatch):
     assert results == [["raw1.ms"], ["raw2.ms"]]
 
 
-def test_products_wrapper_functions_delegate(monkeypatch):
-    """Thin wrapper helpers should delegate to the underlying contract/functions."""
+def test_products_cli_uses_the_download_service(monkeypatch):
+    """The CLI uses the download service's limits and functions, not copies of them."""
     import almasim.services.compute as compute_mod
+    import almasim.services.download as download
 
     monkeypatch.setattr(compute_mod, "create_backend", lambda *args, **kwargs: (args, kwargs))
-    monkeypatch.setattr(
-        cli_products,
-        "_download_contract",
-        lambda: {
-            "download_products": lambda *args, **kwargs: ("download", args, kwargs),
-            "filter_products": lambda *args, **kwargs: ("filter", args, kwargs),
-            "format_bytes": lambda *args, **kwargs: "fmt",
-            "load_products_csv": lambda *args, **kwargs: ["loaded"],
-            "resolve_products": lambda *args, **kwargs: ["resolved"],
-            "save_products_csv": lambda *args, **kwargs: "saved.csv",
-        },
-    )
-
     assert cli_products.create_backend("slurm", n_workers=2) == (("slurm",), {"n_workers": 2})
-    assert cli_products.download_products(["x"], destination="/tmp")[0] == "download"
-    assert cli_products.filter_products([1], "all")[0] == "filter"
-    assert cli_products.format_bytes(123) == "fmt"
-    assert cli_products.load_products_csv("x.csv") == ["loaded"]
-    assert cli_products.resolve_products(["uid://A"]) == ["resolved"]
-    assert cli_products.save_products_csv([], "x.csv") == "saved.csv"
+    assert cli_products.MAX_PARALLEL_TOTAL == download.MAX_PARALLEL_TOTAL
+    assert cli_products.MAX_PARALLEL_PER_MIRROR == download.MAX_PARALLEL_PER_MIRROR
+    assert cli_products.PRODUCT_TYPES is download.PRODUCT_TYPES
+    for name in (
+        "download_products",
+        "filter_products",
+        "format_bytes",
+        "load_products_csv",
+        "resolve_products",
+        "save_products_csv",
+    ):
+        assert getattr(cli_products, name) is getattr(download, name)
 
 
 def test_preflight_casa_data_uses_resolved_path(monkeypatch, tmp_path):
