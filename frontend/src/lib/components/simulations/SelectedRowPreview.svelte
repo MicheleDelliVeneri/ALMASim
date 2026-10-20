@@ -1,38 +1,32 @@
 <script lang="ts">
+	import type { SimulationFormValues } from '#lib/utils/simulationForm.js';
 	import type { MetadataRow } from '#lib/api/metadata.js';
-	import { deriveArrayType, inferObservationConfigsFromMetadataRow } from '#lib/utils/observationPlan.js';
+	import {
+		deriveArrayType,
+		inferObservationConfigsFromMetadataRow
+	} from '#lib/utils/observationPlan.js';
 	import type { SimulationEstimate } from '#lib/api/simulation.js';
 
 	interface Props {
 		row: MetadataRow | null;
 		getRowValue: (row: MetadataRow, key: string) => string;
 		getRowNumber: (row: MetadataRow, key: string) => number | null;
-		sourceType: string;
-		nPix: number | null;
-		nChannels: number | null;
-		snr: number;
-		useMetadataSnr: boolean;
-		useMetadataPwv: boolean;
-		pwvOverride: number;
-		saveMode: string;
-		nLines: number;
-		robust: number;
-		imagingAlgorithm: 'legacy';
-		sourceOffsetXArcsec: number;
-		sourceOffsetYArcsec: number;
-		backgroundMode: string;
-		backgroundLevel: number;
-		backgroundSeed: number | null;
+		/** The simulation form's values (MADIV-28 T7.5). */
+		form: SimulationFormValues;
 		estimate: SimulationEstimate | null;
 		estimating: boolean;
 		estimateError: string | null;
 	}
 
-	let { row, getRowValue, getRowNumber, sourceType, nPix, nChannels, snr, useMetadataSnr, useMetadataPwv, pwvOverride, saveMode, nLines, robust, imagingAlgorithm, sourceOffsetXArcsec, sourceOffsetYArcsec, backgroundMode, backgroundLevel, backgroundSeed, estimate, estimating, estimateError }: Props = $props();
+	let { row, getRowValue, getRowNumber, form, estimate, estimating, estimateError }: Props =
+		$props();
 
 	function derivePreviewSnr(targetRow: MetadataRow): string {
-		if (!useMetadataSnr) return `${snr.toFixed(2)} (manual)`;
-		const contSens = getRowNumber(targetRow, 'Cont_sens_mJybeam') ?? getRowNumber(targetRow, 'Cont_sens') ?? getRowNumber(targetRow, 'cont_sens');
+		if (!form.useMetadataSnr) return `${form.snr.toFixed(2)} (manual)`;
+		const contSens =
+			getRowNumber(targetRow, 'Cont_sens_mJybeam') ??
+			getRowNumber(targetRow, 'Cont_sens') ??
+			getRowNumber(targetRow, 'cont_sens');
 		const lineSens = getRowNumber(targetRow, 'Line_sens_10kms_mJybeam');
 		if (contSens !== null && lineSens !== null && contSens > 0) {
 			const inferred = Math.max(1.0, Math.min(30.0, lineSens / contSens));
@@ -65,7 +59,7 @@
 			<div>
 				<span class="font-medium text-fg-muted">Imaging:</span>
 				<p class="mt-1 text-fg">
-					Mode {saveMode} | Lines {nLines} | Robust {robust.toFixed(2)}
+					Mode {form.saveMode} | Lines {form.nLines} | Robust {form.robust.toFixed(2)}
 				</p>
 			</div>
 			<div>
@@ -108,27 +102,34 @@
 			<div>
 				<span class="font-medium text-fg-muted">PWV:</span>
 				<p class="mt-1 text-fg">
-					{#if useMetadataPwv}
+					{#if form.useMetadataPwv}
 						{(() => {
 							const val = getRowNumber(row, 'PWV') ?? getRowNumber(row, 'pwv');
 							return val !== null ? `${val.toFixed(2)} mm (metadata)` : '1.00 mm (default)';
 						})()}
 					{:else}
-						{`${pwvOverride.toFixed(2)} mm (manual)`}
+						{`${form.pwvOverride.toFixed(2)} mm (manual)`}
 					{/if}
 				</p>
 			</div>
 			<div>
 				<span class="font-medium text-fg-muted">Array Type:</span>
 				<p class="mt-1 text-fg">
-					{getRowValue(row, 'Array_type') || deriveArrayType(getRowValue(row, 'antenna_arrays') || getRowValue(row, 'antenna_array')) || 'N/A'}
+					{getRowValue(row, 'Array_type') ||
+						deriveArrayType(
+							getRowValue(row, 'antenna_arrays') || getRowValue(row, 'antenna_array')
+						) ||
+						'N/A'}
 				</p>
 			</div>
 			<div>
 				<span class="font-medium text-fg-muted">Inferred Configs:</span>
 				<p class="mt-1 text-fg">
 					{#if inferObservationConfigsFromMetadataRow(row, getRowNumber(row, 'Int.Time') ?? getRowNumber(row, 'int_time') ?? 3600)?.length}
-						{inferObservationConfigsFromMetadataRow(row, getRowNumber(row, 'Int.Time') ?? getRowNumber(row, 'int_time') ?? 3600)
+						{inferObservationConfigsFromMetadataRow(
+							row,
+							getRowNumber(row, 'Int.Time') ?? getRowNumber(row, 'int_time') ?? 3600
+						)
 							?.map((config) => `${config.array_type}: ${config.antenna_array}`)
 							.join(' | ')}
 					{:else}
@@ -138,25 +139,25 @@
 			</div>
 			<div>
 				<span class="font-medium text-fg-muted">Source Type:</span>
-				<p class="mt-1 text-fg">{sourceType}</p>
+				<p class="mt-1 text-fg">{form.sourceType}</p>
 			</div>
 			<div>
 				<span class="font-medium text-fg-muted">Source Offset:</span>
 				<p class="mt-1 text-fg">
-					{sourceOffsetXArcsec.toFixed(1)}", {sourceOffsetYArcsec.toFixed(1)}"
+					{form.sourceOffsetXArcsec.toFixed(1)}", {form.sourceOffsetYArcsec.toFixed(1)}"
 				</p>
 			</div>
 			<div>
 				<span class="font-medium text-fg-muted">Imaging Algorithm:</span>
-				<p class="mt-1 text-fg">{imagingAlgorithm}</p>
+				<p class="mt-1 text-fg">{form.imagingAlgorithm}</p>
 			</div>
 			<div>
 				<span class="font-medium text-fg-muted">Cube Size:</span>
 				<p class="mt-1 text-fg">
 					{#if estimate}
 						{estimate.n_pix} × {estimate.n_pix} × {estimate.n_channels}
-					{:else if nPix !== null || nChannels !== null}
-						{nPix ?? 'auto'} × {nPix ?? 'auto'} × {nChannels ?? 'auto'}
+					{:else if form.nPix !== null || form.nChannels !== null}
+						{form.nPix ?? 'auto'} × {form.nPix ?? 'auto'} × {form.nChannels ?? 'auto'}
 					{:else}
 						Auto from metadata-derived FOV and frequency support
 					{/if}
@@ -165,9 +166,9 @@
 			<div>
 				<span class="font-medium text-fg-muted">Background:</span>
 				<p class="mt-1 text-fg">
-					{backgroundMode} @ level {backgroundLevel.toFixed(1)}
-					{#if backgroundSeed !== null}
-						(seed {backgroundSeed})
+					{form.backgroundMode} @ level {form.backgroundLevel.toFixed(1)}
+					{#if form.backgroundSeed !== null}
+						(seed {form.backgroundSeed})
 					{/if}
 				</p>
 			</div>
