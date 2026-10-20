@@ -22,6 +22,14 @@ mkdir -p /etc/slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm
 # hierarchy instead (needs a writable /sys/fs/cgroup, i.e. --privileged).
 # Slurm 23.11 has no CgroupPlugin=disabled.
 printf '%s\n' 'CgroupPlugin=cgroup/v2' 'IgnoreSystemd=yes' > /etc/slurm/cgroup.conf
+# Prepare the container's cgroup v2 root the way systemd would: cgroup v2
+# forbids processes in a cgroup that delegates controllers, so move this
+# container's processes into a child, enable the controllers for the
+# subtree, and create the system.slice slurmd puts its stepd scope in.
+CG=/sys/fs/cgroup
+mkdir -p "$CG/init" "$CG/system.slice"
+while read -r pid; do echo "$pid" > "$CG/init/cgroup.procs" 2>/dev/null || true; done < "$CG/cgroup.procs"
+sed -e 's/^/+/' -e 's/ / +/g' "$CG/cgroup.controllers" > "$CG/cgroup.subtree_control"
 # Node line with the real topology (sockets/cores/threads), memory reduced.
 NODE_LINE="$(slurmd -C | head -1 | sed -E "s/RealMemory=[0-9]+/RealMemory=$MEM_MB/")"
 cat > /etc/slurm/slurm.conf <<CONF
