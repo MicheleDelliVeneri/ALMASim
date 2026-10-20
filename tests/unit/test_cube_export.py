@@ -167,13 +167,6 @@ def test_ml_shard_holds_the_cubes_and_json_metadata(tmp_path):
     assert metadata["obj"] == str(object)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason="_json_safe tests np.ndarray before U.Quantity, and Quantity.tolist() refuses; "
-    "the simulator pre-converts its metadata, so only direct API callers hit this. "
-    "Fixed with the single JSON serialiser of T2.8.",
-)
 def test_ml_shard_metadata_may_hold_quantities(tmp_path):
     cube = np.ones((1, 1, 1), dtype=np.float32)
     cube_export.write_ml_dataset_shard(
@@ -184,3 +177,6 @@ def test_ml_shard_metadata_may_hold_quantities(tmp_path):
         uv_mask_cube=cube,
         metadata={"freq": 100.0 * U.GHz},
     )
+    with h5py.File(tmp_path / "q.h5") as handle:
+        metadata = json.loads(handle.attrs["metadata_json"])
+    assert metadata["freq"] == {"value": 100.0, "unit": "GHz"}
