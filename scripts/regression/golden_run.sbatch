@@ -58,13 +58,20 @@ stage calibrate "$PYTHON" -m almasim.cli visibilities calibrate --postprocess-ba
     --input-root "$AUX_ROOT" --raw-ms-root "$RUN/raw_ms/working" --output-root "$RUN/cal" \
     --asdm-uid "$GOLDEN_UID" --casa-data-root "$CASA_DATA" --skip-casa-data-update
 
-# The reference imaging parameters, pointed at this run's calibrated MS.
-"$PYTHON" - "$REF_PARAMS" "$RUN/params.csv" "$GOLDEN_UID" "$RUN/cal" <<'PY'
-import csv, sys
-src, dst, uid, cal_root = sys.argv[1:]
-rows = [r for r in csv.DictReader(open(src)) if f"/{uid}.ms" in r["filename"]]
-assert len(rows) == 1, f"expected one params row for {uid}, found {len(rows)}"
-rows[0]["filename"] = f"{cal_root}/{uid}.ms.split.cal"
+# Imaging parameters computed from this run's calibrated MS, like a user run, so
+# changes to compute-parameters are gated too (they used to be the frozen
+# MADIV-16 row). Only the golden task's row is kept.
+stage compute-parameters "$PYTHON" -m almasim.cli image compute-parameters \
+    "$RUN/cal" "$RUN/all-params.csv"
+"$PYTHON" - "$RUN/all-params.csv" "$RUN/params.csv" "$GOLDEN_TASK" <<'PY'
+import csv, re, sys
+src, dst, task = sys.argv[1:]
+spw, field = re.fullmatch(r"SPW-(\d+)_FIELD-(\d+)", task).groups()
+rows = [
+    r for r in csv.DictReader(open(src))
+    if r["spectral_window_id"] == spw and r["target_field_ids"] == field
+]
+assert len(rows) == 1, f"expected one params row for {task}, found {len(rows)}"
 with open(dst, "w", newline="") as out:
     writer = csv.DictWriter(out, fieldnames=list(rows[0]))
     writer.writeheader()
