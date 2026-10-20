@@ -99,12 +99,16 @@ def test_simulation_run_csv_happy_path(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         cli_simulation,
-        "export_results",
-        lambda *args, **kwargs: {
-            "ml_dataset_path": "/tmp/mock_ml.h5",
-            "dirty_cube": "dummy",
-        },
+        "image_products",
+        lambda results: {**results, "int_image_cube": "imaged"},
     )
+    exported = []
+
+    def fake_export(params, clean_stage, simulation_results, **kwargs):
+        exported.append(simulation_results)
+        return {"ml_dataset_path": "/tmp/mock_ml.h5", "dirty_cube": "dummy"}
+
+    monkeypatch.setattr(cli_simulation, "export_results", fake_export)
 
     result = runner.invoke(
         cli.app,
@@ -117,6 +121,7 @@ def test_simulation_run_csv_happy_path(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
+    assert exported[0]["int_image_cube"] == "imaged", "image cubes are built before export"
     assert "All done. Simulated 1 run(s) across 1 row(s)." in result.output
     assert "ML shard written to: /tmp/mock_ml.h5" in result.output
 
@@ -160,11 +165,13 @@ def test_simulation_wrapper_functions_delegate(monkeypatch):
     monkeypatch.setattr(almasim, "generate_clean_cube", lambda *args, **kwargs: "clean")
     monkeypatch.setattr(almasim, "simulate_observation", lambda *args, **kwargs: "simulated")
     monkeypatch.setattr(almasim, "export_results", lambda *args, **kwargs: "exported")
+    monkeypatch.setattr(almasim, "image_products", lambda *args, **kwargs: "imaged")
 
     assert cli_simulation.create_backend("sync", n_workers=1) == (("sync",), {"n_workers": 1})
     assert cli_simulation.generate_clean_cube() == "clean"
     assert cli_simulation.simulate_observation() == "simulated"
     assert cli_simulation.export_results() == "exported"
+    assert cli_simulation.image_products() == "imaged"
 
 
 def test_external_source_helpers_delegate(monkeypatch):

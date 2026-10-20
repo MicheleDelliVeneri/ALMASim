@@ -4,15 +4,15 @@
     "sha256": "c96c2ab387d9ca3883efe1d7438a748e0a2f69844bde6b401278800f59bc7019"
   },
   "baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v1/golden-baseline-v1.tar.gz",
-    "sha256": "74f69bcbca75d3d0145de91e6acf72987ffed2926c45d06ac3db8c77ebe7ee79",
-    "version": "v1",
-    "source": "workflow run 39341514141, commit e2606c18 (pipeline code of main 325f731b)"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v2/golden-baseline-v2.tar.gz",
+    "sha256": "566ffec2c120e30b08734cc587bc208baeb37e3a035d59c1db4a3b9ba7eff8ed",
+    "version": "v2",
+    "source": "workflow run 39379133586, commit b477bac0; SIM-7: CLI simulation runs write the int and TP+INT image cubes (#303)"
   },
   "simulation_baseline": {
-    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v1/golden-simulation-v1.tar.gz",
-    "sha256": "8bb47e6b06f2760d6f7045c698bba03324f29df62047194943b38d071bdf8554",
-    "version": "v1",
-    "source": "workflow run 39341514141, commit e2606c18"
+    "url": "https://github.com/astromadiv/ALMASim/releases/download/golden-baseline-v2/golden-simulation-v2.tar.gz",
+    "sha256": "6a5ca4d197434a7813b78ddc483670e2d1c130f7afaaabe645e70537fb660b57",
+    "version": "v2",
+    "source": "workflow run 39379133586, commit b477bac0; SIM-7: CLI simulation runs write the int and TP+INT image cubes (#303)"
   }
 }
