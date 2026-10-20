@@ -18,9 +18,10 @@ HOST="$(hostname)"
 CPUS="$(nproc)"
 MEM_MB=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 - 1024 ))
 mkdir -p /etc/slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm
-# A container has no systemd/dbus for slurmd's cgroup v2 plugin; process
-# tracking by process group is enough here.
-printf 'CgroupPlugin=disabled\n' > /etc/slurm/cgroup.conf
+# A container has no systemd/dbus: slurmd's cgroup v2 plugin manages its own
+# hierarchy instead (needs a writable /sys/fs/cgroup, i.e. --privileged).
+# Slurm 23.11 has no CgroupPlugin=disabled.
+printf '%s\n' 'CgroupPlugin=cgroup/v2' 'IgnoreSystemd=yes' > /etc/slurm/cgroup.conf
 # Node line with the real topology (sockets/cores/threads), memory reduced.
 NODE_LINE="$(slurmd -C | head -1 | sed -E "s/RealMemory=[0-9]+/RealMemory=$MEM_MB/")"
 cat > /etc/slurm/slurm.conf <<CONF
