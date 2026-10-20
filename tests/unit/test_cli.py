@@ -1713,13 +1713,20 @@ def test_unpack_single_uid_hard_abort_writes_failure_marker(tmp_path, monkeypatc
 
 def test_cli_modules_are_the_package_modules():
     """``almasim.cli_<group>`` names the module in ``almasim.cli`` (MADIV-28 T3.1)."""
-    import almasim.cli.image
-    import almasim.cli.simulation
-    import almasim.cli_image
-    import almasim.cli_simulation
+    import importlib
 
-    assert almasim.cli_image is almasim.cli.image
-    assert almasim.cli_simulation is almasim.cli.simulation
+    for old, new in [
+        ("cli_clean", "clean"),
+        ("cli_image", "image"),
+        ("cli_metadata", "metadata"),
+        ("cli_predict", "predict"),
+        ("cli_products", "products"),
+        ("cli_shared", "_shared"),
+        ("cli_simulation", "simulation"),
+        ("cli_visibilities", "visibilities"),
+    ]:
+        alias = importlib.import_module(f"almasim.{old}")
+        assert alias is importlib.import_module(f"almasim.cli.{new}"), old
 
 
 def test_simulation_main_dir_defaults_to_the_package_data():
@@ -1730,3 +1737,15 @@ def test_simulation_main_dir_defaults_to_the_package_data():
 
     default = inspect.signature(simulation.simulation_run).parameters["main_dir"].default.default
     assert (default / "cli").is_dir() and default.name == "almasim"
+
+
+def test_python_m_almasim_cli_runs_the_app(monkeypatch, capsys):
+    """``python -m almasim.cli --help`` prints the command groups."""
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["almasim", "--help"])
+    with pytest.raises(SystemExit) as info:
+        runpy.run_module("almasim.cli", run_name="__main__")
+    assert info.value.code == 0
+    assert "visibilities" in capsys.readouterr().out
