@@ -1,8 +1,43 @@
 /** API client for backend communication */
 import { API_BASE_URL } from '#lib/config.js';
 
+/** FastAPI error bodies: `detail` is a string, or a list of validation errors (422). */
 export interface ApiError {
-	detail: string;
+	detail?: unknown;
+}
+
+/** An HTTP error from the backend, with a readable message and the raw response body. */
+export class ApiRequestError extends Error {
+	constructor(
+		message: string,
+		readonly status: number,
+		readonly body: unknown
+	) {
+		super(message);
+		this.name = 'ApiRequestError';
+	}
+}
+
+/** Turn a FastAPI `detail` into text: validation errors become "field: message; ...". */
+export function formatErrorDetail(detail: unknown): string {
+	if (typeof detail === 'string') return detail;
+	if (Array.isArray(detail)) {
+		return detail
+			.map((item) => {
+				if (item && typeof item === 'object' && 'msg' in item) {
+					const loc = Array.isArray((item as { loc?: unknown }).loc)
+						? (item as { loc: unknown[] }).loc.filter((part) => part !== 'body').join('.')
+						: '';
+					return loc
+						? `${loc}: ${String((item as { msg: unknown }).msg)}`
+						: String((item as { msg: unknown }).msg);
+				}
+				return typeof item === 'string' ? item : JSON.stringify(item);
+			})
+			.join('; ');
+	}
+	if (detail && typeof detail === 'object') return JSON.stringify(detail);
+	return '';
 }
 
 export class ApiClient {
@@ -23,10 +58,11 @@ export class ApiClient {
 		});
 
 		if (!response.ok) {
-			const error: ApiError = await response.json().catch(() => ({
+			const body: ApiError = await response.json().catch(() => ({
 				detail: `HTTP ${response.status}: ${response.statusText}`
 			}));
-			throw new Error(error.detail || `HTTP ${response.status}`);
+			const message = formatErrorDetail(body?.detail) || `HTTP ${response.status}`;
+			throw new ApiRequestError(message, response.status, body);
 		}
 
 		if (response.status === 204 || response.headers.get('content-length') === '0') {

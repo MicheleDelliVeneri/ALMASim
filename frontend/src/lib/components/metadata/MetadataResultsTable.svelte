@@ -7,6 +7,8 @@
 
 	interface Props {
 		results: MetadataResponse | null;
+		/** Identifies the result set: filters and selection reset only when it changes. */
+		resultsKey?: unknown;
 		loading: boolean;
 		fetching: boolean;
 		onClear: () => void;
@@ -16,7 +18,8 @@
 		onDownload: (memberOusUids: string[], metadataRows: Record<string, unknown>[]) => void;
 	}
 
-	let { results, loading, fetching, onClear, onLoad, onSave, saving, onDownload }: Props = $props();
+	let { results, resultsKey, loading, fetching, onClear, onLoad, onSave, saving, onDownload }: Props =
+		$props();
 
 	let isCollapsed = $state(false);
 	let columnsMenuOpen = $state(false);
@@ -94,9 +97,6 @@
 	// Client-side column filters (reset on new results)
 	let columnFilters = $state<Record<string, string>>({});
 
-	$effect(() => {
-		if (results) columnFilters = {};
-	});
 
 	const hasActiveFilters = $derived(Object.values(columnFilters).some((v) => v.length > 0));
 
@@ -138,30 +138,50 @@
 		}
 	}
 
-	const filteredData = $derived.by(() => {
+	// Positions in results.data of the rows that pass the column filters.
+	const filteredIndices = $derived.by(() => {
 		const data = results?.data ?? [];
 		const active = Object.entries(columnFilters).filter(([, v]) => v.length > 0);
-		if (active.length === 0) return data;
-		return data.filter((row) =>
-			active.every(([col, val]) => matchesFilter(String(row[col] ?? ''), val))
-		);
+		const indices: number[] = [];
+		data.forEach((row, index) => {
+			if (active.every(([col, val]) => matchesFilter(String(row[col] ?? ''), val))) {
+				indices.push(index);
+			}
+		});
+		return indices;
 	});
+	const filteredData = $derived(filteredIndices.map((index) => (results?.data ?? [])[index]));
 
 	// --- Row selection (must come after filteredData) ---
+	// Positions in results.data, so a selection survives filter changes: an index
+	// into the filtered rows would silently point at other rows once the filter
+	// changed, and the download would then use the wrong member_ous_uids.
 	let selectedRowIndices = $state(new Set<number>());
+
+	// Reset filters and selection when the result set changes, not when the same
+	// result set gets more rows (a streaming query rebuilds `results` on every poll).
+	let lastResultsKey: unknown = undefined;
+	$effect(() => {
+		const key = resultsKey !== undefined ? resultsKey : results;
+		if (key !== lastResultsKey) {
+			lastResultsKey = key;
+			columnFilters = {};
+			selectedRowIndices = new Set();
+		}
+	});
 
 	const selectedCount = $derived(selectedRowIndices.size);
 
 	const allFilteredSelected = $derived(
-		filteredData.length > 0 && filteredData.every((_, i) => selectedRowIndices.has(i))
+		filteredIndices.length > 0 && filteredIndices.every((i) => selectedRowIndices.has(i))
 	);
 
-	function toggleRowSelection(globalIndex: number) {
+	function toggleRowSelection(dataIndex: number) {
 		const next = new Set(selectedRowIndices);
-		if (next.has(globalIndex)) {
-			next.delete(globalIndex);
+		if (next.has(dataIndex)) {
+			next.delete(dataIndex);
 		} else {
-			next.add(globalIndex);
+			next.add(dataIndex);
 		}
 		selectedRowIndices = next;
 	}
@@ -171,13 +191,13 @@
 			selectedRowIndices = new Set();
 			logger.debug('All rows deselected');
 		} else {
-			selectedRowIndices = new Set(filteredData.map((_, i) => i));
+			selectedRowIndices = new Set(filteredIndices);
 			logger.debug({ count: filteredData.length }, 'All filtered rows selected');
 		}
 	}
 
 	function getSelectedMemberOusUids(): string[] {
-		const data = filteredData;
+		const data = results?.data ?? [];
 		const uids: string[] = [];
 		for (const idx of selectedRowIndices) {
 			const row = data[idx];
@@ -190,7 +210,7 @@
 
 	function getSelectedMetadataRows(): Record<string, unknown>[] {
 		return [...selectedRowIndices]
-			.map((idx) => filteredData[idx])
+			.map((idx) => results?.data?.[idx])
 			.filter((row): row is Record<string, unknown> => Boolean(row))
 			.map((row) => ({ ...row }));
 	}
@@ -266,10 +286,6 @@
 
 	const sizeFinished = $derived(!sizeResolving && sizeResolved > 0);
 
-	// Reset selection when results change
-	$effect(() => {
-		if (results) selectedRowIndices = new Set();
-	});
 
 	// Virtual scrolling constants
 	const ROW_HEIGHT = 36;        // px — matches row height below
@@ -755,8 +771,8 @@
 							<td colspan={tableColumns.length + 1}></td>
 						</tr>
 						{#each visibleRows as row, vi}
-							{@const globalIndex = virtualStart + vi}
-							{@const isSelected = selectedRowIndices.has(globalIndex)}
+							{@const dataIndex = filteredIndices[virtualStart + vi]}
+							{@const isSelected = selectedRowIndices.has(dataIndex)}
 							<tr
 								class="group border-b border-gray-100 hover:bg-gray-50"
 								class:bg-blue-50={isSelected}
@@ -770,7 +786,7 @@
 									<input
 										type="checkbox"
 										checked={isSelected}
-										onchange={() => toggleRowSelection(globalIndex)}
+										onchange={() => toggleRowSelection(dataIndex)}
 										class="rounded border-gray-300"
 									/>
 								</td>
