@@ -807,11 +807,15 @@ def test_image_from_ms_passes_selfcal_solints_and_casa_data(tmp_path, monkeypatc
 
 
 @pytest.mark.unit
-def test_casa_environment_drops_system_library_dirs():
-    base = {"LD_LIBRARY_PATH": "/lib64:/usr/lib64:/opt/x/lib:/usr/lib", "PATH": "/bin"}
-    env = ai.casa_environment(base)
-    assert env["LD_LIBRARY_PATH"] == "/opt/x/lib" and env["OMP_NUM_THREADS"] == "1"
-    assert "LD_LIBRARY_PATH" not in ai.casa_environment({"LD_LIBRARY_PATH": "/lib64"})
+def test_casa_environment_puts_the_bundled_casatools_libraries_first():
+    """One policy for every CASA child (T2.3): bundled libs, system libs, inherited."""
+    base = {"LD_LIBRARY_PATH": "/opt/spack/lib", "PATH": "/bin"}
+    env = ai.casa_environment(base, bundled="/site/casatools/__casac__/lib")
+    entries = env["LD_LIBRARY_PATH"].split(":")
+    assert entries[0] == "/site/casatools/__casac__/lib" and entries[1] == "/lib64"
+    assert entries[-1] == "/opt/spack/lib" and env["OMP_NUM_THREADS"] == "1"
+    without = ai.casa_environment({}, bundled=None)["LD_LIBRARY_PATH"]
+    assert without.startswith("/lib64:/usr/lib64:")
     assert ai.wsclean_environment(1, base)["LD_LIBRARY_PATH"].startswith("/lib64")
 
 

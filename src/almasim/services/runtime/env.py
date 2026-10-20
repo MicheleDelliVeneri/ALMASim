@@ -1,6 +1,11 @@
-"""Child-process environments for WSClean and CASA (policy to be unified in T2.3).
+"""Child-process environments for WSClean and CASA (MADIV-28 T2.3).
 
-Moved out of archive_imaging.py (MADIV-28 module split).
+One library-path policy: the system C library goes ahead of spack builds
+(GLIBC conflicts), and every CASA child additionally searches casatools'
+bundled libraries before the system ones, because ``LD_LIBRARY_PATH`` is
+searched before RUNPATH and a system ``libpmix`` would otherwise shadow the
+bundled one (``libopen-pal.so.80: undefined symbol: pmix_framework_names``,
+job 5299, 2026-10-17).
 """
 
 from __future__ import annotations
@@ -31,21 +36,43 @@ def wsclean_environment(cores: int, base: Mapping[str, str] | None = None) -> di
     return env
 
 
-def casa_environment(base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Environment for a CASA child: one thread each, and no system library
-    directories in ``LD_LIBRARY_PATH``.
+def casa_bundled_lib_dir() -> str | None:
+    """The directory of shared libraries ``casatools`` ships in its wheel, if any.
 
-    ``wsclean_environment`` and the Slurm worker's job script put /lib64 and
-    friends first for WSClean's spack build; casatools then loads the
-    system PMIx under its bundled Open MPI and fails to import
-    (``libopen-pal.so.80: undefined symbol: pmix_framework_names``, every
-    task of job 5299, 2026-10-17).
+    Found with ``find_spec``, so the package is located without importing the
+    extension modules that fail in exactly the situation this guards against.
     """
-    env = wsclean_environment(1, base)
-    system = set(_SYSTEM_LIBRARY_DIRS.split(":"))
-    kept = [d for d in env.get("LD_LIBRARY_PATH", "").split(":") if d and d not in system]
-    if kept:
-        env["LD_LIBRARY_PATH"] = ":".join(kept)
-    else:
-        env.pop("LD_LIBRARY_PATH", None)
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec("casatools")
+    except (ImportError, ValueError):
+        return None
+    if spec is None or not spec.origin:
+        return None
+    lib_dir = os.path.join(os.path.dirname(spec.origin), "__casac__", "lib")
+    return lib_dir if os.path.isdir(lib_dir) else None
+
+
+def casa_library_path(existing: str, bundled: str | None) -> str:
+    """``LD_LIBRARY_PATH`` for a CASA child: bundled libs, system libs, then ``existing``."""
+    dirs = ([bundled] if bundled else []) + _SYSTEM_LIBRARY_DIRS.split(":")
+    path = ":".join(dirs)
+    return f"{path}:{existing}" if existing else path
+
+
+_FIND = object()
+
+
+def casa_environment(
+    base: Mapping[str, str] | None = None, *, bundled: str | None | object = _FIND
+) -> dict[str, str]:
+    """Environment for a CASA child: one thread each, casatools' libraries first.
+
+    ``bundled`` defaults to :func:`casa_bundled_lib_dir`.
+    """
+    source = dict(os.environ if base is None else base)
+    env = wsclean_environment(1, source)
+    lib_dir = casa_bundled_lib_dir() if bundled is _FIND else bundled
+    env["LD_LIBRARY_PATH"] = casa_library_path(source.get("LD_LIBRARY_PATH", ""), lib_dir)  # type: ignore[arg-type]
     return env
