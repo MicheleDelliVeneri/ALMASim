@@ -57,9 +57,9 @@ class DownloadStore:
 
     @staticmethod
     def _get_db():
-        from app.db.config import SessionLocal
+        from app.db.config import new_session
 
-        return SessionLocal()
+        return new_session()
 
     def create(self, job: DownloadJob) -> DownloadJob:
         """Register a new job and persist the initial record to DB."""
