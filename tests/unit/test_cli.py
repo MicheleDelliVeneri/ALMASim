@@ -107,6 +107,28 @@ def test_products_resolve_extracts_member_uids(tmp_path, monkeypatch):
     assert captured["member_ous_uid"] == ["uid://A", "uid://B"]
 
 
+def test_metadata_query_saves_datalink_rows_that_download_reads(tmp_path, monkeypatch):
+    """--save-products-csv resolves DataLink for the queried UIDs (products-CSV schema)."""
+    metadata = pd.DataFrame({"Band": [6, 6, 6], "member_ous_uid": ["uid://1", None, "uid://3"]})
+    monkeypatch.setattr(cli_metadata, "query_metadata_by_science", lambda **kwargs: metadata)
+    captured: dict[str, object] = {}
+
+    def _fake_resolve(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", _fake_resolve)
+    products_csv = tmp_path / "products.csv"
+    result = runner.invoke(
+        cli.app,
+        ["metadata", "query", "--yes", "--save-products-csv", str(products_csv)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["member_ous_uid"] == ["uid://1", "uid://3"]
+    assert captured["save_products_csv_path"] == products_csv
+
+
 def test_products_download_invalid_filter_exits():
     """Invalid product filter should fail fast before resolution/download calls."""
     result = runner.invoke(
