@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Callable
+from dataclasses import dataclass, fields
+from typing import Any, Callable, Optional
 
 import astropy.units as U
 import numpy as np
 
+from ..astro.parameters import write_sim_parameters
 from ..json_safe import json_safe as _json_safe
 from .geometry import CubeGeometry
 from .params import SimulationParams
@@ -40,45 +42,87 @@ def resolve_snr(params: SimulationParams, log: Callable[[str], None]) -> float:
     return effective_snr
 
 
+@dataclass
+class SimParamsRecord:
+    """The values ``write_sim_parameters`` writes to ``sim_params_<idx>.txt`` (MADIV-28 T5.8)."""
+
+    path: str
+    source_name: str
+    member_ouid: str
+    ra: Any
+    dec: Any
+    ang_res: Any
+    vel_res: Any
+    int_time: Any
+    band: Any
+    band_range: Any
+    central_freq: Any
+    redshift: Any
+    line_fluxes: Any
+    line_names: Any
+    line_frequencies: Any
+    continuum: Any
+    fov: Any
+    beam_size: Any
+    cell_size: Any
+    n_pix: int
+    n_channels: int
+    snapshot: Optional[int]
+    subhalo: Any
+    lum_infrared: Any
+    fwhm_z: Any
+    source_type: str
+    fwhm_x: Any = None
+    fwhm_y: Any = None
+    angle: Any = None
+
+    def write(self) -> str:
+        """Write the parameter file; its path."""
+        values = {f.name: getattr(self, f.name) for f in fields(self)}
+        values["continum"] = values.pop("continuum")
+        write_sim_parameters(**values)
+        return self.path
+
+
 def sim_params_record(
     params: SimulationParams,
     geometry: CubeGeometry,
     spectral: SpectralSetup,
     sky: SkyCube,
     output_dir_abs: str,
-) -> dict[str, Any]:
-    """The values ``write_sim_parameters`` writes to ``sim_params_<idx>.txt``."""
-    return {
-        "sim_params_path": os.path.join(output_dir_abs, f"sim_params_{params.idx}.txt"),
-        "source_name": params.source_name,
-        "member_ouid": params.member_ouid,
-        "ra": params.ra * U.deg,
-        "dec": params.dec * U.deg,
-        "ang_res": params.ang_res * U.arcsec,
-        "vel_res": params.vel_res * U.km / U.s,
-        "int_time": params.int_time * U.s,
-        "band": params.band,
-        "band_range": geometry.band_range,
-        "central_freq": geometry.central_freq,
-        "redshift": spectral.redshift,
-        "line_fluxes": spectral.line_fluxes,
-        "line_names": spectral.line_names,
-        "line_frequency": spectral.line_frequency,
-        "continuum": spectral.continuum,
-        "fov": geometry.fov,
-        "beam_size": geometry.beam_size,
-        "cell_size": geometry.cell_size,
-        "n_pix": geometry.n_pix,
-        "n_channels": geometry.n_channels,
-        "snapshot": sky.snapshot,
-        "tng_subhaloid": sky.tng_subhaloid,
-        "lum_infrared": spectral.lum_infrared,
-        "fwhm_z": spectral.fwhm_z,
-        "source_type": params.source_type,
-        "fwhm_x": sky.fwhm_x,
-        "fwhm_y": sky.fwhm_y,
-        "angle": sky.angle,
-    }
+) -> SimParamsRecord:
+    """The run's parameter record."""
+    return SimParamsRecord(
+        path=os.path.join(output_dir_abs, f"sim_params_{params.idx}.txt"),
+        source_name=params.source_name,
+        member_ouid=params.member_ouid,
+        ra=params.ra * U.deg,
+        dec=params.dec * U.deg,
+        ang_res=params.ang_res * U.arcsec,
+        vel_res=params.vel_res * U.km / U.s,
+        int_time=params.int_time * U.s,
+        band=params.band,
+        band_range=geometry.band_range,
+        central_freq=geometry.central_freq,
+        redshift=spectral.redshift,
+        line_fluxes=spectral.line_fluxes,
+        line_names=spectral.line_names,
+        line_frequencies=spectral.line_frequency,
+        continuum=spectral.continuum,
+        fov=geometry.fov,
+        beam_size=geometry.beam_size,
+        cell_size=geometry.cell_size,
+        n_pix=geometry.n_pix,
+        n_channels=geometry.n_channels,
+        snapshot=sky.snapshot,
+        subhalo=sky.tng_subhaloid,
+        lum_infrared=spectral.lum_infrared,
+        fwhm_z=spectral.fwhm_z,
+        source_type=params.source_type,
+        fwhm_x=sky.fwhm_x,
+        fwhm_y=sky.fwhm_y,
+        angle=sky.angle,
+    )
 
 
 def simulation_metadata(

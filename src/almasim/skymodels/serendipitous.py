@@ -1,6 +1,7 @@
 """Serendipitous sources utilities."""
 
 import math
+from dataclasses import dataclass, fields
 from typing import Any, Optional
 
 import numpy as np
@@ -208,6 +209,33 @@ def _randint_from(low: int, high: Any, size: Any = None) -> Any:
     as small as ``low`` (a 2-channel line); numpy rejects an empty range.
     """
     return np.random.randint(low, max(low + 1, int(high)), size)
+
+
+@dataclass
+class SerendipitousConfig:
+    """The arguments of :func:`insert_serendipitous` (MADIV-28 T5.8)."""
+
+    terminal: Optional[Any]
+    client: Optional[Client]
+    update_progress: Optional[Any]
+    datacube: Any
+    continum: np.ndarray
+    cont_sens: float
+    line_fluxes: np.ndarray
+    line_names: Any
+    line_frequencies: np.ndarray
+    freq_sup: float
+    pos_zs: list
+    fwhm_x: int
+    fwhm_y: int
+    fwhm_zs: Any
+    n_px: int
+    n_chan: int
+    sim_params_path: Optional[str] = None
+
+    def insert(self) -> Any:
+        """The datacube with the serendipitous sources added."""
+        return insert_serendipitous(**{f.name: getattr(self, f.name) for f in fields(self)})
 
 
 def insert_serendipitous(

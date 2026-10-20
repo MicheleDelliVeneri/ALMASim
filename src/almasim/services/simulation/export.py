@@ -7,7 +7,6 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from .. import astro as uas
 from ..interferometry import antenna as ual_antenna
 from ..products.cube_export import save_optional_cube, write_ml_dataset_shard
 from ..products.ms_io import export_native_ms
@@ -82,39 +81,7 @@ def export_results(
                 {key: value for key, value in cube_output_paths.items() if value}
             )
 
-        payload = clean_cube_stage.sim_params_payload
-        uas.write_sim_parameters(
-            payload["sim_params_path"],
-            payload["source_name"],
-            payload["member_ouid"],
-            payload["ra"],
-            payload["dec"],
-            payload["ang_res"],
-            payload["vel_res"],
-            payload["int_time"],
-            payload["band"],
-            payload["band_range"],
-            payload["central_freq"],
-            payload["redshift"],
-            payload["line_fluxes"],
-            payload["line_names"],
-            payload["line_frequency"],
-            payload["continuum"],
-            payload["fov"],
-            payload["beam_size"],
-            payload["cell_size"],
-            payload["n_pix"],
-            payload["n_channels"],
-            payload["snapshot"],
-            payload["tng_subhaloid"],
-            payload["lum_infrared"],
-            payload["fwhm_z"],
-            payload["source_type"],
-            payload["fwhm_x"],
-            payload["fwhm_y"],
-            payload["angle"],
-        )
-        exported_results["sim_params_path"] = payload["sim_params_path"]
+        exported_results["sim_params_path"] = clean_cube_stage.sim_params_payload.write()
     else:
         log("Skipping on-disk simulation exports (pure Python mode)")
 

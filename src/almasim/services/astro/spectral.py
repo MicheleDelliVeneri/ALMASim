@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from math import ceil, pi
 from pathlib import Path
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, NamedTuple, Optional, Sequence, Tuple
 
 import astropy.units as U
 import numpy as np
@@ -265,6 +265,26 @@ def find_compatible_lines(
     return compatible_lines
 
 
+class SpectralResult(NamedTuple):
+    """What :func:`process_spectral_data` returns (MADIV-28 T5.8).
+
+    A tuple, so the 12-value unpacking callers keep working.
+    """
+
+    continuum: np.ndarray
+    line_fluxes: np.ndarray
+    line_names: Any
+    redshift: float
+    line_frequencies: np.ndarray
+    line_indexes: Any
+    n_channels: int
+    bandwidth: float
+    freq_support: float
+    cont_frequencies: np.ndarray
+    fwhm_z: Any
+    lum_infrared: float
+
+
 def process_spectral_data(
     source_type: str,
     master_path: str | Path,
@@ -280,7 +300,7 @@ def process_spectral_data(
     remote: bool = False,
     line_width_range: Tuple[float, float] = (50.0, 300.0),
     logger: LogFn = None,
-):
+) -> SpectralResult:
     """Compute continua and emission lines for a simulated observation."""
     master_path = Path(master_path)
     freq_min = central_frequency - delta_freq / 2
@@ -361,7 +381,7 @@ def process_spectral_data(
             fwhms.append(fwhm)
         else:
             fwhms.append(1)
-    return (
+    return SpectralResult(
         int_cont_fluxes,
         line_fluxes,
         line_names,

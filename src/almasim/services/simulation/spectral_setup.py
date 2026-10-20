@@ -10,7 +10,7 @@ import astropy.units as U
 import numpy as np
 
 from .. import astro as uas
-from ..astro.spectral import process_spectral_data
+from ..astro.spectral import SpectralResult, process_spectral_data
 from ..external_skymodel import is_external_source_type
 from .context import RunContext
 from .geometry import CubeGeometry
@@ -102,7 +102,7 @@ def resolve_spectral_setup(
         continum = np.zeros(int(n_channels), dtype=float)
         line_fluxes = np.array([], dtype=float)
         line_names = None
-        line_frequency = []
+        line_frequency: Any = []
         source_channel_index = [int(n_channels // 2)]
         fwhm_z = 1.0
         if redshift is None:
@@ -110,35 +110,29 @@ def resolve_spectral_setup(
         if not isinstance(rest_frequency, U.Quantity):
             rest_frequency = central_freq
     else:
-        (
-            continum,
-            line_fluxes,
-            line_names,
-            redshift,
-            line_frequency,
-            source_channel_index,
-            # The channel count (returned unchanged), bandwidth, frequency
-            # support and continuum frequencies are not used here.
-            _n_channels,
-            _bandwidth,
-            _freq_support,
-            _cont_frequencies,
-            fwhm_z,
-            lum_infrared,
-        ) = process_spectral_data(
-            params.source_type,
-            params.main_dir,
-            redshift,
-            central_freq.value,
-            band_range.value,
-            source_freq.value,
-            n_channels,
-            lum_infrared,
-            cont_sens_jy.value,
-            line_names,
-            n_lines,
-            bool(params.remote),
+        # SpectralResult(*...) also accepts a plain 12-tuple (as test doubles return).
+        result = SpectralResult(
+            *process_spectral_data(
+                params.source_type,
+                params.main_dir,
+                redshift,
+                central_freq.value,
+                band_range.value,
+                source_freq.value,
+                n_channels,
+                lum_infrared,
+                cont_sens_jy.value,
+                line_names,
+                n_lines,
+                bool(params.remote),
+            )
         )
+        # The channel count (returned unchanged), bandwidth, frequency support
+        # and continuum frequencies are not used here.
+        continum, line_fluxes, line_names = result.continuum, result.line_fluxes, result.line_names
+        redshift, line_frequency = result.redshift, result.line_frequencies
+        source_channel_index, fwhm_z = result.line_indexes, result.fwhm_z
+        lum_infrared = result.lum_infrared
     return SpectralSetup(
         continuum=continum,
         line_fluxes=line_fluxes,
