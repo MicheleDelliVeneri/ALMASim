@@ -71,10 +71,11 @@ def image_snr(image_path: Path, residual_path: Path) -> float:
     import numpy as np
     from astropy.io import fits
 
+    from almasim.services.imaging.stats import robust_sigma
+
     image = fits.getdata(image_path).squeeze()
     residual = fits.getdata(residual_path).squeeze()
-    finite = residual[np.isfinite(residual)]
-    noise = 1.4826 * np.median(np.abs(finite - np.median(finite)))
+    noise = robust_sigma(residual)
     return float(np.nanmax(image) / noise) if noise > 0 else 0.0
 
 
