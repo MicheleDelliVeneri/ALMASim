@@ -116,14 +116,6 @@ def find_raw_ms_directories(
     return sorted(raw_mss)
 
 
-def _find_input_casa_data(input_path: Path) -> Path | None:
-    """Return the first populated CASA runtime data directory under ``input_path``."""
-    for candidate in input_path.rglob(".casa-data"):
-        if candidate.is_dir() and has_casa_runtime_data(candidate):
-            return candidate.resolve()
-    return None
-
-
 def _prepare_casa_environment(
     input_path: Path,
     output_path: Path,
@@ -136,13 +128,10 @@ def _prepare_casa_environment(
         resolved = Path(casa_data_root).expanduser().resolve()
         return resolved, workspace_root
 
+    # Searches the output root, then the input tree (one walk; it is slow on NFS).
     existing = find_existing_casa_data(input_path, output_path)
     if has_casa_runtime_data(existing):
         return existing.resolve(), workspace_root
-
-    existing = _find_input_casa_data(input_path)
-    if existing is not None:
-        return existing, workspace_root
 
     return workspace_root / ".casa-data", workspace_root
 
