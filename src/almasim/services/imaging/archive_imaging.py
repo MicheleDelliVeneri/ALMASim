@@ -16,18 +16,18 @@ retry everything else.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
-import sys
 import threading
 import time
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
+
+from almasim.services.runtime.child import ChildFailed, append_to_log, call_in_child, error_line
 
 from ..markers import StageMarkers
 
@@ -252,13 +252,7 @@ def casa_environment(base: Mapping[str, str] | None = None) -> dict[str, str]:
     return env
 
 
-def _error_line(lines: Sequence[str]) -> str:
-    """The most recent line that looks like the reason WSClean died."""
-    for line in reversed(lines):
-        lower = line.lower()
-        if "what():" in line or "exception" in lower or "error" in lower:
-            return line.strip()
-    return ""
+_error_line = error_line
 
 
 # casacore keeps a list of the processes using a table in its table.lock file
@@ -375,16 +369,6 @@ def _extract_single_window_ms_once(
     }
 
 
-_EXTRACT_CHILD = (
-    "import json, sys\n"
-    "from almasim.services.imaging.archive_imaging import extract_single_window_ms\n"
-    "args = json.loads(sys.argv[1])\n"
-    "result = extract_single_window_ms(args['ms'], args['spw'], args['fields'], args['out'], "
-    "max_weight=args.get('max_weight'))\n"
-    "sys.stdout.write(json.dumps(result))\n"
-)
-
-
 def extract_single_window_ms_subprocess(
     ms_path: str | os.PathLike[str],
     spw: int,
@@ -413,52 +397,35 @@ def extract_single_window_ms_subprocess(
     new process; any other failure raises at once. ``timeout`` applies to
     each attempt.
     """
-    args = json.dumps(
-        {
-            "ms": str(ms_path),
-            "spw": int(spw),
-            "fields": [int(f) for f in field_ids] if field_ids else None,
-            "out": str(out_path),
-            "max_weight": float(max_weight) if max_weight else None,
-        }
-    )
+    kwargs = {
+        "ms_path": str(ms_path),
+        "spw": int(spw),
+        "field_ids": [int(f) for f in field_ids] if field_ids else None,
+        "out_path": str(out_path),
+        "max_weight": float(max_weight) if max_weight else None,
+    }
     started = time.time()
     for attempt in range(1, max(int(attempts), 1) + 1):
         try:
-            proc = subprocess.run(
-                [sys.executable, "-c", _EXTRACT_CHILD, args],
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=timeout,
+            result = call_in_child(
+                "almasim.services.imaging.archive_imaging:extract_single_window_ms",
+                kwargs,
+                what="extraction",
                 env=wsclean_environment(1),
+                timeout=timeout,
+                timeout_noun="task timeout",
+                log_path=log_path,
             )
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                f"extraction killed after exceeding the {timeout:.0f}s task timeout"
-            ) from exc
-        if log_path is not None and proc.stderr.strip():
-            with Path(log_path).open("a", encoding="utf-8") as log:
-                log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
-        if proc.returncode == 0:
             break
-        if _LOCK_FILE_ERROR in proc.stderr and attempt < attempts:
-            message = (
+        except ChildFailed as exc:
+            if _LOCK_FILE_ERROR not in exc.stderr or attempt >= attempts:
+                raise
+            append_to_log(
+                log_path,
                 f"extraction attempt {attempt}/{attempts} hit a casacore lock-file error; "
-                f"retrying in a new process in {retry_seconds:g} s\n"
+                f"retrying in a new process in {retry_seconds:g} s\n",
             )
-            if log_path is not None:
-                with Path(log_path).open("a", encoding="utf-8") as log:
-                    log.write(message)
             time.sleep(retry_seconds)
-            continue
-        reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
-        detail = f": {reason}" if reason else ""
-        raise RuntimeError(f"extraction exited with return code {proc.returncode}{detail}")
-    try:
-        result = json.loads(proc.stdout.strip().splitlines()[-1])
-    except (IndexError, ValueError) as exc:
-        raise RuntimeError("extraction wrote no result") from exc
     result["seconds"] = round(time.time() - started, 1)
     result["attempts"] = attempt
     return result
@@ -1376,15 +1343,6 @@ def subtract_uv_continuum(
         ms.close()
 
 
-_UV_CONTSUB_CHILD = (
-    "import json, sys\n"
-    "from almasim.services.imaging.archive_imaging import subtract_uv_continuum\n"
-    "args = json.loads(sys.argv[1])\n"
-    "result = subtract_uv_continuum(args['ms'], order=args['order'])\n"
-    "sys.stdout.write(json.dumps(result))\n"
-)
-
-
 def subtract_uv_continuum_subprocess(
     ms_path: str | os.PathLike[str],
     *,
@@ -1394,33 +1352,15 @@ def subtract_uv_continuum_subprocess(
 ) -> dict[str, object]:
     """Run ``subtract_uv_continuum`` in a child process, for the reason
     ``extract_single_window_ms_subprocess`` gives: casacore holds the GIL."""
-    args = json.dumps({"ms": str(ms_path), "order": int(order)})
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", _UV_CONTSUB_CHILD, args],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=timeout,
-            env=wsclean_environment(1),
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"continuum subtraction killed after exceeding the {timeout:.0f}s task timeout"
-        ) from exc
-    if log_path is not None and proc.stderr.strip():
-        with Path(log_path).open("a", encoding="utf-8") as log:
-            log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
-    if proc.returncode != 0:
-        reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
-        detail = f": {reason}" if reason else ""
-        raise RuntimeError(
-            f"continuum subtraction exited with return code {proc.returncode}{detail}"
-        )
-    try:
-        return json.loads(proc.stdout.strip().splitlines()[-1])
-    except (IndexError, ValueError) as exc:
-        raise RuntimeError("continuum subtraction wrote no result") from exc
+    return call_in_child(
+        "almasim.services.imaging.archive_imaging:subtract_uv_continuum",
+        {"ms_path": str(ms_path), "order": int(order)},
+        what="continuum subtraction",
+        env=wsclean_environment(1),
+        timeout=timeout,
+        timeout_noun="task timeout",
+        log_path=log_path,
+    )
 
 
 def drop_corrected_data(ms_path: str) -> dict[str, object]:
@@ -1435,15 +1375,6 @@ def drop_corrected_data(ms_path: str) -> dict[str, object]:
         return {"dropped": dropped}
     finally:
         ms.close()
-
-
-_CHILD_CALL = (
-    "import json, sys\n"
-    "from almasim.services.imaging import archive_imaging as ai\n"
-    "args = json.loads(sys.argv[1])\n"
-    "result = getattr(ai, args['function'])(**args['kwargs'])\n"
-    "sys.stdout.write(json.dumps(result))\n"
-)
 
 
 def _call_in_child(
@@ -1462,30 +1393,14 @@ def _call_in_child(
     python-casacore and casatools must not share a process. The child's
     stderr is appended to ``log_path``; ``casa`` gives it ``casa_environment``.
     """
-    args = json.dumps({"function": function, "kwargs": dict(kwargs)})
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", _CHILD_CALL, args],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=timeout,
-            env=casa_environment() if casa else wsclean_environment(1),
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"{what} killed after exceeding the {timeout:.0f}s timeout") from exc
-    if log_path is not None and proc.stderr.strip():
-        with Path(log_path).open("a", encoding="utf-8") as log:
-            log.write(proc.stderr if proc.stderr.endswith("\n") else proc.stderr + "\n")
-    if proc.returncode != 0:
-        reason = _error_line([line for line in proc.stderr.splitlines() if line.strip()])
-        raise RuntimeError(
-            f"{what} exited with return code {proc.returncode}" + (f": {reason}" if reason else "")
-        )
-    try:
-        return json.loads(proc.stdout.strip().splitlines()[-1])
-    except (IndexError, ValueError) as exc:
-        raise RuntimeError(f"{what} wrote no result") from exc
+    return call_in_child(
+        f"almasim.services.imaging.archive_imaging:{function}",
+        kwargs,
+        what=what,
+        env=casa_environment() if casa else wsclean_environment(1),
+        timeout=timeout,
+        log_path=log_path,
+    )
 
 
 def selfcal_prepare(ms_path: str, rows_per_chunk: int | None = None) -> dict[str, object]:

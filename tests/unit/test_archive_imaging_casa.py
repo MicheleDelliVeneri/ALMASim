@@ -137,7 +137,10 @@ def test_subtract_uv_continuum_subprocess_returns_the_child_result(tmp_path, mon
     log = tmp_path / "task.log"
     result = ai.subtract_uv_continuum_subprocess("x.ms", order=0, log_path=log)
 
-    assert result == {"line_channels": 3} and seen["args"] == {"ms": "x.ms", "order": 0}
+    assert result == {"line_channels": 3} and seen["args"] == {
+        "target": "almasim.services.imaging.archive_imaging:subtract_uv_continuum",
+        "kwargs": {"ms_path": "x.ms", "order": 0},
+    }
     assert seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
     assert log.read_text() == "casacore note\n"
 

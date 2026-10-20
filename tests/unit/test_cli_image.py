@@ -1506,13 +1506,16 @@ def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, 
     result = ai.extract_single_window_ms_subprocess(
         "/data/in.ms", 5, [2, 3], tmp_path / "out.ms", timeout=30, max_weight=500.0
     )
-    assert seen["cmd"][0] == ai.sys.executable and seen["cmd"][1] == "-c"
+    assert seen["cmd"][0] == sys.executable and seen["cmd"][1] == "-c"
     assert json.loads(seen["cmd"][3]) == {
-        "ms": "/data/in.ms",
-        "spw": 5,
-        "fields": [2, 3],
-        "out": str(tmp_path / "out.ms"),
-        "max_weight": 500.0,
+        "target": "almasim.services.imaging.archive_imaging:extract_single_window_ms",
+        "kwargs": {
+            "ms_path": "/data/in.ms",
+            "spw": 5,
+            "field_ids": [2, 3],
+            "out_path": str(tmp_path / "out.ms"),
+            "max_weight": 500.0,
+        },
     }
     assert seen["timeout"] == 30 and seen["env"]["OPENBLAS_NUM_THREADS"] == "1"
     assert result["rows"] == 12 and "seconds" in result
