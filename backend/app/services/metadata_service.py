@@ -6,26 +6,15 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
-from almasim.services.metadata.adapters import (
-    build_exclusion_filters,
-    build_inclusion_filters,
-    observations_to_metadata_records,
-)
+from almasim.services.metadata.adapters import observations_to_metadata_records
 from almasim.services.metadata.tap.queries import (
     load_metadata,
     query_metadata_by_science,
     query_science_types,
 )
-from almasim.services.metadata.tap.service import (
-    _QA2_STATUS_MAP,
-)
 from app.db.models import Observation
-from app.db.service import (
-    DatabaseService,
-    ObservationExclusionParams,
-    ObservationQueryParams,
-)
-from app.schemas.metadata import ScienceQueryParams
+from app.db.service import DatabaseService
+from app.schemas.metadata import ScienceQuery
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +79,7 @@ class MetadataService:
 
     def query_by_science(
         self,
-        params: ScienceQueryParams,
+        params: ScienceQuery,
         save_to: Optional[Path] = None,
     ) -> List[Dict[str, Any]]:
         """Query metadata by science parameters.
@@ -98,26 +87,17 @@ class MetadataService:
         First checks database cache, then queries ALMA TAP if needed.
         Caches TAP results in database for future queries.
         """
-        # Map QA2 human-friendly labels to TAP stored values for the DB cache path
-        mapped_qa2 = (
-            [_QA2_STATUS_MAP.get(s, s) for s in params.qa2_status] if params.qa2_status else None
-        )
-
-        db_result = self._try_cache_query(params, mapped_qa2)
+        db_result = self._try_cache_query(params)
         if db_result is not None:
             return db_result
 
         return self._run_fresh_tap_query(params, save_to)
 
-    def _try_cache_query(
-        self,
-        params: ScienceQueryParams,
-        mapped_qa2: Optional[List[str]],
-    ) -> Optional[List[Dict[str, Any]]]:
+    def _try_cache_query(self, params: ScienceQuery) -> Optional[List[Dict[str, Any]]]:
         """Attempt to serve results from the DB cache. Returns None on miss or error."""
         if not self.db_service:
             return None
-        if params.observation_date_range:
+        if params.include.observation_date_range:
             # TAP filters on the observation end time, which the cache does not hold.
             logger.info("Date-filtered query, querying ALMA TAP")
             return None
@@ -126,29 +106,7 @@ class MetadataService:
                 logger.info("No keyword-annotated observations in cache, querying ALMA TAP")
                 return None
             observations = self.db_service.query_observations(
-                include=ObservationQueryParams(
-                    target_name=params.source_name,
-                    science_keywords=params.science_keyword,
-                    scientific_categories=params.scientific_category,
-                    bands=params.bands,
-                    antenna_arrays=params.antenna_arrays,
-                    array_type=params.array_type,
-                    array_configuration=params.array_configuration,
-                    angular_resolution_range=params.angular_resolution_range,
-                    qa2_status=mapped_qa2,
-                    obs_type=params.obs_type,
-                    fov_range=params.fov_range,
-                    time_resolution_range=params.time_resolution_range,
-                    frequency_range=params.frequency_range,
-                    proposal_id_prefix=params.proposal_id_prefix,
-                ),
-                exclude=ObservationExclusionParams(
-                    science_keywords=params.exclude_science_keyword,
-                    scientific_categories=params.exclude_scientific_category,
-                    source_names=params.exclude_source_name,
-                    obs_types=params.exclude_obs_type,
-                    solar=params.exclude_solar,
-                ),
+                include=params.include, exclude=params.exclude
             )
             if not observations:
                 # The cache holds only what earlier queries fetched, so an empty
@@ -167,16 +125,14 @@ class MetadataService:
 
     def _run_fresh_tap_query(
         self,
-        params: ScienceQueryParams,
+        params: ScienceQuery,
         save_to: Optional[Path] = None,
     ) -> List[Dict[str, Any]]:
         """Run a fresh TAP query and optionally cache the results in the DB."""
         logger.info("Querying ALMA TAP archive")
-        include = build_inclusion_filters(params)
-        exclude = build_exclusion_filters(params)
         result_df = query_metadata_by_science(
-            include=include,
-            exclude=exclude,
+            include=params.include,
+            exclude=params.exclude,
             visible_columns=params.visible_columns,
             save_to=save_to,
         )
@@ -188,7 +144,7 @@ class MetadataService:
                 logger.error(f"Failed to cache TAP results in database: {e}")
         return result_df.to_dict("records") if result_df is not None else []
 
-    def run_background_query(self, query_id: str, params: ScienceQueryParams) -> None:
+    def run_background_query(self, query_id: str, params: ScienceQuery) -> None:
         """Run a TAP query in the background.
 
         Workflow:
@@ -218,7 +174,7 @@ class MetadataService:
     def _run_background_query_impl(
         self,
         query_id: str,
-        params: ScienceQueryParams,
+        params: ScienceQuery,
         query_store,
     ) -> None:
         """Implementation of the background query, with a live DB session."""
@@ -255,15 +211,12 @@ class MetadataService:
     def _seed_from_cache(
         self,
         query_id: str,
-        params: ScienceQueryParams,
+        params: ScienceQuery,
         query_store,
         seen_uids: set,
     ) -> list:
         """Append cached rows matching the query into the store. Returns them."""
-        mapped_qa2 = (
-            [_QA2_STATUS_MAP.get(s, s) for s in params.qa2_status] if params.qa2_status else None
-        )
-        cached_rows = self._try_cache_query(params, mapped_qa2) or []
+        cached_rows = self._try_cache_query(params) or []
         if not cached_rows:
             return []
         for row in cached_rows:
@@ -274,13 +227,11 @@ class MetadataService:
             logger.info(f"Background query {query_id} seeded {len(cached_rows)} cached rows")
         return cached_rows
 
-    def _run_tap_query(self, params: ScienceQueryParams):
+    def _run_tap_query(self, params: ScienceQuery):
         """Run the TAP query and return the resulting DataFrame."""
-        include = build_inclusion_filters(params)
-        exclude = build_exclusion_filters(params)
         return query_metadata_by_science(
-            include=include,
-            exclude=exclude,
+            include=params.include,
+            exclude=params.exclude,
             visible_columns=None,
         )
 

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import pandas as pd
 import pyvo
@@ -13,62 +12,14 @@ import requests
 from astropy.time import Time
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from ..filters import (  # noqa: F401  (re-exported)
+    ARRAY_TYPE_ANTENNA_PATTERNS,
+    ExclusionFilters,
+    InclusionFilters,
+    qa2_codes,
+)
+
 logger = logging.getLogger(__name__)
-
-# Map human-friendly QA2 labels to ALMA TAP stored values
-_QA2_STATUS_MAP = {
-    "Pass": "T",
-    "Fail": "F",
-    "SemiPass": "X",
-    # Pass-through for raw values already in TAP form
-    "T": "T",
-    "F": "F",
-    "X": "X",
-}
-
-# Antenna prefix patterns used to identify array type from antenna_arrays column
-# 12m arrays: DA / DV antennas; 7m arrays: CM antennas; TP: PM antennas
-_ARRAY_TYPE_ANTENNA_PATTERNS = {
-    "12m": ["%DA%", "%DV%"],
-    "7m": ["%CM%"],
-    "TP": ["%PM%"],
-}
-
-
-@dataclass
-class InclusionFilters:
-    """Positive (include-only) filters for ALMA TAP science queries."""
-
-    science_keyword: Optional[List[str]] = None
-    scientific_category: Optional[List[str]] = None
-    band: Optional[List[int]] = None
-    fov_range: Optional[Tuple[float, float]] = None
-    time_resolution_range: Optional[Tuple[float, float]] = None
-    frequency_range: Optional[Tuple[float, float]] = None
-    source_name: Optional[str] = None
-    antenna_arrays: Optional[str] = None
-    array_type: Optional[List[str]] = None  # e.g. ['12m', '7m', 'TP']
-    array_configuration: Optional[List[str]] = None  # e.g. ['C-1', 'C-2']
-    angular_resolution_range: Optional[Tuple[float, float]] = None
-    observation_date_range: Optional[Tuple[str, str]] = None
-    qa2_status: Optional[List[str]] = None
-    obs_type: Optional[List[str]] = None
-    proposal_id_prefix: Optional[List[str]] = None  # e.g. ['2016.', '2017.']
-    proposal_id: Optional[List[str]] = None  # exact codes e.g. ['2019.1.00001.S']
-    public_only: bool = True  # default: only query non-proprietary data
-    science_only: bool = True  # default: only science observations
-    exclude_mosaic: bool = True  # default: exclude mosaic observations
-
-
-@dataclass
-class ExclusionFilters:
-    """Negative (exclude) filters for ALMA TAP science queries."""
-
-    science_keyword: Optional[List[str]] = None
-    scientific_category: Optional[List[str]] = None
-    source_name: Optional[List[str]] = None
-    obs_type: Optional[List[str]] = None
-    solar: bool = False  # exclude observations related to the Sun
 
 
 _TAP_URLS = [
@@ -334,7 +285,7 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
         type_clauses = [
             f"antenna_arrays LIKE {_adql_str(pattern)}"
             for atype in f.array_type
-            for pattern in _ARRAY_TYPE_ANTENNA_PATTERNS.get(atype, [f"%{atype}%"])
+            for pattern in ARRAY_TYPE_ANTENNA_PATTERNS.get(atype, [f"%{atype}%"])
         ]
         conds.append(f"({' OR '.join(type_clauses)})")
 
@@ -356,7 +307,7 @@ def _build_inclusion_conditions(f: InclusionFilters) -> list:
 
     # QA2 status: map human-friendly labels to TAP-stored single-char values
     if f.qa2_status:
-        mapped = [_QA2_STATUS_MAP.get(s, s) for s in f.qa2_status]
+        mapped = qa2_codes(f.qa2_status)
         conds.append(f"qa2_passed IN {_adql_in(mapped)}")
 
     if f.obs_type:

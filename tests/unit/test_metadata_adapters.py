@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from almasim.services.metadata.adapters import (
     apply_visible_columns,
-    build_exclusion_filters,
-    build_inclusion_filters,
     derive_array_type,
     observation_to_metadata_record,
     observations_to_metadata_records,
@@ -75,80 +72,6 @@ def test_derive_array_type_no_match():
 def test_derive_array_type_case_insensitive():
     """Detection is case-insensitive."""
     assert derive_array_type("da41 cm01") == "12m+7m"
-
-
-# ===========================================================================
-# build_inclusion_filters
-# ===========================================================================
-
-
-@pytest.mark.unit
-def test_build_inclusion_filters_all_none():
-    """Params with no relevant attrs yields all-None InclusionFilters."""
-    params = SimpleNamespace()
-    filters = build_inclusion_filters(params)
-    assert filters.science_keyword is None
-    assert filters.scientific_category is None
-    assert filters.band is None
-    assert filters.fov_range is None
-
-
-@pytest.mark.unit
-def test_build_inclusion_filters_public_only_default():
-    """Default public_only=True when attr absent."""
-    params = SimpleNamespace()
-    filters = build_inclusion_filters(params)
-    assert filters.public_only is True
-
-
-@pytest.mark.unit
-def test_build_inclusion_filters_science_only_default():
-    """Default science_only=True when attr absent."""
-    params = SimpleNamespace()
-    filters = build_inclusion_filters(params)
-    assert filters.science_only is True
-
-
-@pytest.mark.unit
-def test_build_inclusion_filters_reads_attrs():
-    """Attributes from params are mapped to filter fields."""
-    params = SimpleNamespace(
-        science_keyword=["galaxies"],
-        bands=[3, 6],
-        fov_range=(1.0, 10.0),
-        public_only=False,
-    )
-    filters = build_inclusion_filters(params)
-    assert filters.science_keyword == ["galaxies"]
-    assert filters.band == [3, 6]
-    assert filters.fov_range == (1.0, 10.0)
-    assert filters.public_only is False
-
-
-# ===========================================================================
-# build_exclusion_filters
-# ===========================================================================
-
-
-@pytest.mark.unit
-def test_build_exclusion_filters_defaults():
-    """Exclusion filters with no attrs default to None/False."""
-    params = SimpleNamespace()
-    filters = build_exclusion_filters(params)
-    assert filters.science_keyword is None
-    assert filters.solar is False
-
-
-@pytest.mark.unit
-def test_build_exclusion_filters_reads_attrs():
-    """Exclusion filter attributes mapped from params."""
-    params = SimpleNamespace(
-        exclude_science_keyword=["solar"],
-        exclude_solar=True,
-    )
-    filters = build_exclusion_filters(params)
-    assert filters.science_keyword == ["solar"]
-    assert filters.solar is True
 
 
 # ===========================================================================

@@ -65,7 +65,7 @@ def start_query(
         background_tasks.add_task(
             service.run_background_query,
             query_id=query_id,
-            params=query.to_params(),
+            params=query.to_query(),
         )
         return MetadataQueryStartResponse(query_id=query_id, status="running")
     except Exception as e:
