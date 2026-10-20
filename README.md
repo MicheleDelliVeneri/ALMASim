@@ -124,10 +124,13 @@ almasim --help
 Once installed, the CLI exposes the main workflows:
 
 ```bash
-almasim metadata --help
-almasim products --help
-almasim simulation --help
-almasim clean --help
+almasim metadata --help      # query ALMA metadata (TAP)
+almasim products --help      # resolve and download archive products
+almasim visibilities --help  # extract, unpack and calibrate MeasurementSets; flag summaries
+almasim image --help         # imaging parameters, WSClean imaging, quality, primary-beam correction
+almasim predict --help       # predict model visibilities into MeasurementSets
+almasim simulation --help    # simulate ALMA observations
+almasim clean --help         # run WSClean with extra arguments passed through
 ```
 
 ### With CASA tools (Linux x86-64 only)
@@ -394,20 +397,21 @@ almasim products download \
   --extract-tar --skip-qa0-semipass --yes
 
 # Split archive stages so download/extract/unpack/calibrate can run independently
+# (`almasim products extract/unpack/calibrate` remain as hidden aliases)
 almasim products download \
   --products-csv examples/output/resolved_products.csv \
   --destination examples/output/downloads
 
-almasim products extract \
+almasim visibilities extract \
   --source-root examples/output/downloads
 
-almasim products unpack \
+almasim visibilities unpack \
   --input-root examples/output/downloads \
   --output-root examples/output/archive_ms/raw_ms \
   --postprocess-backend slurm \
   --slurm-workers 8
 
-almasim products calibrate \
+almasim visibilities calibrate \
   --input-root examples/output/downloads \
   --raw-ms-root examples/output/archive_ms/raw_ms \
   --output-root examples/output/archive_ms/calibrated_ms \
