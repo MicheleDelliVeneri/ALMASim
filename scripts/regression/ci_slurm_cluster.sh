@@ -6,9 +6,13 @@
 # whose workers run here, which exercises the pipeline's Slurm code paths
 # (scheduling/cluster.py, worker environments, child-process isolation).
 set -euo pipefail
+set -x
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends slurm-wlm munge > /dev/null
+if ! apt-get install -y -qq --no-install-recommends slurm-wlm munge > /tmp/apt-slurm.log 2>&1; then
+    tail -40 /tmp/apt-slurm.log
+    exit 1
+fi
 
 HOST="$(hostname)"
 CPUS="$(nproc)"
