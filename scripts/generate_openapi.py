@@ -1,8 +1,8 @@
 """Write the backend's OpenAPI schema for the frontend's generated types (MADIV-28 T7.4).
 
-    python scripts/generate_openapi.py            # writes frontend/src/lib/api/openapi.json
-    python scripts/generate_openapi.py --stdout   # prints it instead
-    cd frontend && npm run gen:api                # regenerates schema.d.ts from it
+python scripts/generate_openapi.py            # writes frontend/src/lib/api/openapi.json
+python scripts/generate_openapi.py --stdout   # prints it instead
+cd frontend && npm run gen:api                # regenerates schema.d.ts from it
 """
 
 from __future__ import annotations
