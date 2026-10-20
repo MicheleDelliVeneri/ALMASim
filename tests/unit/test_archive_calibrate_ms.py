@@ -20,7 +20,6 @@ import pytest
 # Functions that call `from casatools import ...` inside their body are tested
 # with explicit patch.dict(sys.modules) in each test.
 from almasim.services.archive.calibrate_ms import (
-    _find_input_casa_data,
     _is_relative_to,
     _parse_applycal_calls,
     _prepare_casa_environment,
@@ -92,15 +91,24 @@ def _make_raw_ms(tmp_path: Path, uid: str = "uid___A001_X1_X1") -> Path:
     return ms_dir
 
 
-def _mock_casatools():
+def _mock_casatools(spws=(0, 1, 2), nchan=lambda spw: 128 if spw in [0, 2] else 2):
     """Return a MagicMock that looks like casatools with msmetadata."""
     mock_msmd = MagicMock()
-    mock_msmd.spwsforintent.return_value = [0, 1, 2]
-    mock_msmd.nchan.side_effect = lambda spw: 128 if spw in [0, 2] else 2
+    mock_msmd.spwsforintent.return_value = list(spws)
+    mock_msmd.nchan.side_effect = nchan
     mock_msmd.intents.return_value = ["OBSERVE_TARGET#ON_SOURCE"]
     mock_casatools = MagicMock()
     mock_casatools.msmetadata.return_value = mock_msmd
     return mock_casatools, mock_msmd
+
+
+def _fake_casatasks(applycal):
+    """A casatasks module whose applycal is *applycal*."""
+    fake_casatasks = MagicMock()
+    fake_casatasks.applycal = applycal
+    fake_casatasks.clearcal = MagicMock()
+    fake_casatasks.mstransform = MagicMock()
+    return fake_casatasks
 
 
 # ===========================================================================
@@ -294,14 +302,16 @@ def test_parse_applycal_calls_ignores_non_applycal(tmp_path):
 
 @pytest.mark.unit
 def test_find_input_casa_data_returns_populated_runtime_dir(tmp_path):
-    """_find_input_casa_data should return the first populated .casa-data directory."""
+    """find_input_casa_data should return the first populated .casa-data directory."""
+    from almasim.services.casa import find_input_casa_data
+
     input_root = tmp_path / "input"
     candidate = input_root / "nested" / ".casa-data"
     candidate.mkdir(parents=True)
     (candidate / "readme.txt").write_text("ok")
     (candidate / "geodetic").mkdir()
 
-    result = _find_input_casa_data(input_root)
+    result = find_input_casa_data(input_root)
 
     assert result == candidate.resolve()
 
@@ -328,9 +338,7 @@ def test_prepare_casa_environment_honors_explicit_casa_data_root(mock_mkdtemp, t
 
 @pytest.mark.unit
 @patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.find_existing_casa_data")
 def test_prepare_casa_environment_falls_back_to_input_runtime_data(
-    mock_find_existing,
     mock_mkdtemp,
     tmp_path,
 ):
@@ -348,7 +356,6 @@ def test_prepare_casa_environment_falls_back_to_input_runtime_data(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     mock_mkdtemp.return_value = str(workspace)
-    mock_find_existing.return_value = output_root / ".casa-data"
 
     casa_data, workspace_root = _prepare_casa_environment(input_root, output_root, None)
 
@@ -672,11 +679,7 @@ def test_science_spws_no_science_spws_raises(tmp_path):
     ms_path = tmp_path / "test.ms"
     ms_path.mkdir()
 
-    mock_msmd = MagicMock()
-    mock_msmd.spwsforintent.return_value = [0, 1]
-    mock_msmd.nchan.return_value = 1  # all <= 4
-    mock_casatools = MagicMock()
-    mock_casatools.msmetadata.return_value = mock_msmd
+    mock_casatools, _ = _mock_casatools(spws=(0, 1), nchan=lambda spw: 1)  # all <= 4
 
     with patch.dict(sys.modules, {"casatools": mock_casatools}):
         with pytest.raises(RuntimeError, match="No science SPWs found"):
@@ -816,10 +819,7 @@ def test_create_calibrated_measurement_sets_uses_temp_workspace_when_no_casa_roo
     scratch_root.mkdir()
     mock_mkdtemp.return_value = str(scratch_root)
 
-    fake_casatasks = MagicMock()
-    fake_casatasks.applycal = mock_apply
-    fake_casatasks.clearcal = MagicMock()
-    fake_casatasks.mstransform = MagicMock()
+    fake_casatasks = _fake_casatasks(mock_apply)
 
     with patch.dict(sys.modules, {"casatasks": fake_casatasks}):
         results = create_calibrated_measurement_sets(
@@ -874,10 +874,7 @@ def test_create_calibrated_measurement_sets_reuses_preflighted_output_casa_data(
     mock_apply.return_value = raw_ms
     mock_split.return_value = output_root / f"{raw_ms.name}.split.cal"
 
-    fake_casatasks = MagicMock()
-    fake_casatasks.applycal = mock_apply
-    fake_casatasks.clearcal = MagicMock()
-    fake_casatasks.mstransform = MagicMock()
+    fake_casatasks = _fake_casatasks(mock_apply)
 
     scratch_root = tmp_path / "scratch"
     mock_mkdtemp.return_value = str(scratch_root)
@@ -983,10 +980,7 @@ def test_create_calibrated_measurement_sets_cleans_intermediate_paths(
     scratch_root.mkdir()
     mock_mkdtemp.return_value = str(scratch_root)
 
-    fake_casatasks = MagicMock()
-    fake_casatasks.applycal = mock_apply
-    fake_casatasks.clearcal = MagicMock()
-    fake_casatasks.mstransform = MagicMock()
+    fake_casatasks = _fake_casatasks(mock_apply)
 
     with patch.dict(sys.modules, {"casatasks": fake_casatasks}):
         results = create_calibrated_measurement_sets(
