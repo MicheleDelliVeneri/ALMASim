@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import List
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from almasim.__version__ import __version__ as almasim_version
@@ -77,6 +77,23 @@ class Settings(BaseSettings):
         default=4,
         description="Number of Dask workers (deprecated, use COMPUTE_BACKEND_CONFIG)",
     )
+
+    # Where request-supplied paths may point (MADIV-28 T1.9): HOST_DIR, OUTPUT_DIR,
+    # DATA_DIR and these extra roots, e.g. ["/SKAO_data"].
+    ALLOWED_ROOTS: List[Path] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("ALLOWED_ROOTS", "ALMASIM_ALLOWED_ROOTS"),
+        description="Extra directories requests may write under (JSON list)",
+    )
+    # Dask scheduler addresses requests may use, besides DASK_SCHEDULER.
+    ALLOWED_SCHEDULERS: List[str] = Field(
+        default_factory=list,
+        description="Extra Dask scheduler addresses requests may use (JSON list)",
+    )
+
+    def write_roots(self) -> List[Path]:
+        """Directories request-supplied paths must lie under, in lookup order."""
+        return [self.HOST_DIR, self.OUTPUT_DIR, self.DATA_DIR, *self.ALLOWED_ROOTS]
 
     # Simulation defaults
     DEFAULT_SOURCE_TYPE: str = "point"

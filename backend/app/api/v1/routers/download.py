@@ -8,8 +8,9 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from almasim.services.download import format_bytes
+from almasim.services.paths import UnsafePathError, safe_join
 from app.core.config import settings
-from app.core.path_utils import resolve_safe_path
+from app.core.path_utils import require_allowed_path, resolve_safe_path
 from app.schemas.download import (
     BrowseDirectoryEntry,
     BrowseDirectoryResponse,
@@ -207,6 +208,19 @@ def start_download(body: StartDownloadRequest, background_tasks: BackgroundTasks
             detail="member_ous_uids must not be empty",
         )
 
+    # Every server path in the request must lie under an allowed root (T1.9).
+    destination = str(require_allowed_path(body.destination, field="destination"))
+    archive_output_root = (
+        str(require_allowed_path(body.archive_output_root, field="archive_output_root"))
+        if body.archive_output_root
+        else None
+    )
+    casa_data_root = (
+        str(require_allowed_path(body.casa_data_root, field="casa_data_root"))
+        if body.casa_data_root
+        else None
+    )
+
     # Resolve products from DataLink
     try:
         all_products = resolve_products(body.member_ous_uids)
@@ -230,15 +244,15 @@ def start_download(body: StartDownloadRequest, background_tasks: BackgroundTasks
     job_id = str(uuid.uuid4())
     job = DownloadJob(
         job_id=job_id,
-        destination=body.destination,
+        destination=destination,
         member_ous_uids=body.member_ous_uids,
         metadata_rows=body.selected_metadata or [],
         product_filter=body.product_filter,
         unpack_ms=body.unpack_ms or body.generate_calibrated_visibilities,
         generate_calibrated_visibilities=body.generate_calibrated_visibilities,
         clean_intermediate_files=body.clean_intermediate_files,
-        archive_output_root=body.archive_output_root,
-        casa_data_root=body.casa_data_root,
+        archive_output_root=archive_output_root,
+        casa_data_root=casa_data_root,
         skip_casa_data_update=body.skip_casa_data_update,
         total_files=len(products),
         total_bytes=total_bytes,
@@ -250,14 +264,14 @@ def start_download(body: StartDownloadRequest, background_tasks: BackgroundTasks
         run_download_job,
         job_id=job_id,
         products=products,
-        destination=body.destination,
+        destination=destination,
         max_parallel=body.max_parallel,
         extract_tar=body.extract_tar or body.unpack_ms or body.generate_calibrated_visibilities,
         unpack_ms=body.unpack_ms or body.generate_calibrated_visibilities,
         generate_calibrated_visibilities=body.generate_calibrated_visibilities,
         clean_intermediate_files=body.clean_intermediate_files,
-        archive_output_root=body.archive_output_root,
-        casa_data_root=body.casa_data_root,
+        archive_output_root=archive_output_root,
+        casa_data_root=casa_data_root,
         skip_casa_data_update=body.skip_casa_data_update,
     )
 
@@ -267,7 +281,7 @@ def start_download(body: StartDownloadRequest, background_tasks: BackgroundTasks
         total_files=len(products),
         total_bytes=total_bytes,
         total_size_display=format_bytes(total_bytes),
-        destination=body.destination,
+        destination=destination,
     )
 
 
@@ -567,6 +581,14 @@ def redownload_job(
         else rec.archive_output_root
     )
     casa_data_root = body.casa_data_root if body.casa_data_root is not None else rec.casa_data_root
+    # Checked again: the request may override them, and older jobs predate the check.
+    destination = str(require_allowed_path(rec.destination, field="destination"))
+    if archive_output_root:
+        archive_output_root = str(
+            require_allowed_path(archive_output_root, field="archive_output_root")
+        )
+    if casa_data_root:
+        casa_data_root = str(require_allowed_path(casa_data_root, field="casa_data_root"))
     skip_casa_data_update = (
         body.skip_casa_data_update
         if body.skip_casa_data_update is not None
@@ -577,7 +599,7 @@ def redownload_job(
     new_job_id = str(uuid.uuid4())
     job = DownloadJob(
         job_id=new_job_id,
-        destination=rec.destination,
+        destination=destination,
         member_ous_uids=uids,
         metadata_rows=_json_list(rec.metadata_json),
         product_filter=rec.product_filter or "all",
@@ -596,7 +618,7 @@ def redownload_job(
         run_download_job,
         job_id=new_job_id,
         products=products,
-        destination=rec.destination,
+        destination=destination,
         max_parallel=max_parallel,
         extract_tar=extract_tar,
         unpack_ms=unpack_ms or generate_calibrated,
@@ -613,7 +635,7 @@ def redownload_job(
         total_files=len(products),
         total_bytes=total_bytes,
         total_size_display=format_bytes(total_bytes),
-        destination=rec.destination,
+        destination=destination,
     )
 
 
@@ -640,11 +662,19 @@ def delete_download_job(job_id: str):
             detail=f"Download job {job_id} not found",
         )
 
-    # Delete downloaded files (and any leftover .part files) from disk
+    # Delete downloaded files (and any leftover .part files) from disk. Only
+    # paths inside the job's own destination are removed (T1.9): a stored
+    # filename or generated path pointing elsewhere is left alone.
     dest = Path(rec.destination)
     files_deleted = 0
+    skipped = 0
     for file_rec in rec.files:
-        for path in (dest / file_rec.filename, dest / (file_rec.filename + ".part")):
+        for name in (file_rec.filename, file_rec.filename + ".part"):
+            try:
+                path = safe_join(dest, name)
+            except UnsafePathError:
+                skipped += 1
+                continue
             try:
                 if path.is_file():
                     path.unlink()
@@ -659,7 +689,11 @@ def delete_download_job(job_id: str):
     if rec.manifest_path:
         generated_paths.append(rec.manifest_path)
     for generated in generated_paths:
-        path = Path(generated)
+        try:
+            path = safe_join(dest, generated)
+        except UnsafePathError:
+            skipped += 1
+            continue
         try:
             if path.is_dir():
                 shutil.rmtree(path)
@@ -678,4 +712,9 @@ def delete_download_job(job_id: str):
         )
     # Also remove from memory if still lingering
     download_store.remove(job_id)
-    return {"job_id": job_id, "deleted": True, "files_deleted": files_deleted}
+    return {
+        "job_id": job_id,
+        "deleted": True,
+        "files_deleted": files_deleted,
+        "skipped_outside_destination": skipped,
+    }

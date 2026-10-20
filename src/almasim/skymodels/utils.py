@@ -6,6 +6,8 @@ import numpy as np
 from astropy.io import fits
 from scipy.ndimage import zoom
 
+from almasim.services.instrument.constants import FWHM_PER_SIGMA
+
 
 def interpolate_array(arr: np.ndarray, n_px: int) -> np.ndarray:
     """Interpolates a 2D array to have n_px pixels while preserving aspect ratio."""
@@ -47,7 +49,7 @@ def gaussian(x: np.ndarray, amp: float, cen: float, fwhm: float) -> np.ndarray:
     np.ndarray
         Normalized Gaussian profile
     """
-    gaussian = np.exp(-((x - cen) ** 2) / (2 * (fwhm / 2.35482) ** 2))
+    gaussian = np.exp(-((x - cen) ** 2) / (2 * (fwhm / FWHM_PER_SIGMA) ** 2))
     if np.sum(gaussian) != 0:
         norm = amp / np.sum(gaussian)
     else:

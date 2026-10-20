@@ -23,7 +23,11 @@ from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
 from app.core.config import settings
 from app.core.dependencies import get_compute_backend
-from app.core.path_utils import resolve_safe_path
+from app.core.path_utils import (
+    require_allowed_path,
+    require_allowed_scheduler,
+    resolve_safe_path,
+)
 from app.schemas.simulation import (
     SimulationEstimate,
     SimulationListResponse,
@@ -107,9 +111,29 @@ def create_simulation(
     try:
         simulation_id = str(uuid.uuid4())
 
+        # Server paths and scheduler addresses must be allowed ones (T1.9).
+        if params.ms_export_dir:
+            params.ms_export_dir = str(
+                require_allowed_path(
+                    params.ms_export_dir, field="ms_export_dir", relative_to=settings.OUTPUT_DIR
+                )
+            )
+        if params.ml_dataset_path:
+            params.ml_dataset_path = str(
+                require_allowed_path(
+                    params.ml_dataset_path,
+                    field="ml_dataset_path",
+                    relative_to=settings.OUTPUT_DIR,
+                )
+            )
+
         # Use backend from params if provided, otherwise use default
         if params.compute_backend:
             backend_config = dict(params.compute_backend_config or {})
+            if "scheduler" in backend_config:
+                backend_config["scheduler"] = require_allowed_scheduler(
+                    str(backend_config["scheduler"])
+                )
             if params.compute_backend.lower() == "slurm" and "log_directory" in backend_config:
                 raw_log_directory = backend_config["log_directory"]
                 if not isinstance(raw_log_directory, str):
@@ -422,6 +446,7 @@ def test_dask_connection(body: DaskTestRequest):
     """Test connectivity to a Dask scheduler and return cluster info."""
     from dask.distributed import Client
 
+    require_allowed_scheduler(body.scheduler)
     try:
         client = Client(body.scheduler, timeout=10)
         info = client.scheduler_info()

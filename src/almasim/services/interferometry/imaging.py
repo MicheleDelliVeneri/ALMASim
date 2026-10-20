@@ -10,7 +10,7 @@ from astropy.io import fits
 from astropy.time import Time
 from scipy.ndimage import zoom
 
-from ..instrument.constants import SPEED_OF_LIGHT_M_S
+from ..instrument.constants import FWHM_PER_SIGMA, SPEED_OF_LIGHT_M_S
 from .baselines import generate_via_astropy, prepare_baselines, set_baselines, set_noise
 from .visibility import build_channel_visibility_rows
 
@@ -197,7 +197,10 @@ def set_primary_beam(
     modelimTrue: np.ndarray,
 ) -> tuple:
     """Set primary beam and calculate model FFT."""
-    PB = 2.0 * (1220.0 * 180.0 / np.pi * 3600.0 * wavelength[2] / Diameters[0] / 2.3548) ** 2.0
+    PB = (
+        2.0
+        * (1220.0 * 180.0 / np.pi * 3600.0 * wavelength[2] / Diameters[0] / FWHM_PER_SIGMA) ** 2.0
+    )
     beamImg = np.exp(distmat / PB)
     modelim[0][:] = modelimTrue * beamImg
     modelfft = np.fft.fft2(np.fft.fftshift(modelim[0]))

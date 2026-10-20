@@ -17,7 +17,12 @@ from astropy.time import Time
 if TYPE_CHECKING:
     from ..compute.base import ComputationBackend
 
-from ..instrument.constants import ALMA_LATITUDE_DEG, SPEED_OF_LIGHT_M_S
+from ..instrument.constants import (
+    ALMA_ELEVATION_M,
+    ALMA_LATITUDE_DEG,
+    ALMA_LONGITUDE_DEG,
+    SPEED_OF_LIGHT_M_S,
+)
 from ..products.cube_export import write_interferometry_products
 from .imaging import image_channel, image_channel_ducc0
 from .utils import sampling_to_uv_mask
@@ -229,7 +234,11 @@ class Interferometer:
 
     def _get_observing_location(self) -> None:
         """Get ALMA observing location."""
-        self.observing_location = EarthLocation.of_site("ALMA")
+        self.observing_location = EarthLocation.from_geodetic(
+            lon=ALMA_LONGITUDE_DEG * U.deg,
+            lat=ALMA_LATITUDE_DEG * U.deg,
+            height=ALMA_ELEVATION_M * U.m,
+        )
 
     def _get_Hcov(self) -> None:
         """Calculate hour angle coverage."""

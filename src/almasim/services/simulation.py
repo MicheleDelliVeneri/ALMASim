@@ -26,6 +26,7 @@ from .external_skymodel import (
     load_external_sky_model,
 )
 from .imaging import build_image_products
+from .instrument.constants import GAUSSIAN_BEAM_AREA
 from .interferometry import antenna as ual_antenna
 from .interferometry.frequency import freq_supp_extractor
 from .interferometry.utils import closest_power_of_2
@@ -871,7 +872,7 @@ def generate_clean_cube(
         log(f"Field of view: {round(fov.value, 3)} arcsec")
 
     beam_size = ual_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
-    beam_area = 1.1331 * beam_size**2
+    beam_area = GAUSSIAN_BEAM_AREA * beam_size**2
     beam_solid_angle = np.pi * (beam_size / 2) ** 2
     cont_sens = params.cont_sens * U.mJy / (U.arcsec**2)
     cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
