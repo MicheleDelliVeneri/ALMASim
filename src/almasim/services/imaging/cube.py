@@ -41,7 +41,7 @@ def stack_channel_images(
     import numpy as np
     from astropy.io import fits
 
-    from almasim.services.imaging.fits_io import write_fits_atomic
+    from almasim.services.imaging.fits_io import ChannelBeam, read_image, write_cube
 
     out = Path(output_dir)
     groups: dict[str, list[tuple[int, Path]]] = {}
@@ -67,34 +67,17 @@ def stack_channel_images(
             raise RuntimeError(f"{product} channels of {out} are not evenly spaced in frequency")
         cube = np.empty((1, len(paths), int(first["NAXIS2"]), int(first["NAXIS1"])), np.float32)
         for index, path in enumerate(paths):
-            cube[0, index] = fits.getdata(path).reshape(cube.shape[2:])
+            cube[0, index] = read_image(path).reshape(cube.shape[2:])
         header = first.copy()
         header["NAXIS3"] = len(paths)
         header["CRPIX3"] = 1.0
         header["CRVAL3"] = frequencies[0]
         if steps.size:
             header["CDELT3"] = float(steps[0])
-        hdus: list[fits.hdu.base.ExtensionHDU] = []
+        beams = None
         if all("BMAJ" in h for h in headers):
-            middle = headers[len(headers) // 2]
-            for key in ("BMAJ", "BMIN", "BPA"):
-                header[key] = middle[key]
-            header["CASAMBM"] = (True, "one beam per channel in the BEAMS table")
-            beams = fits.BinTableHDU.from_columns(
-                [
-                    fits.Column("BMAJ", "1E", "arcsec", array=[h["BMAJ"] * 3600 for h in headers]),
-                    fits.Column("BMIN", "1E", "arcsec", array=[h["BMIN"] * 3600 for h in headers]),
-                    fits.Column("BPA", "1E", "deg", array=[h["BPA"] for h in headers]),
-                    fits.Column("CHAN", "1J", array=np.arange(len(headers))),
-                    fits.Column("POL", "1J", array=np.zeros(len(headers), dtype=int)),
-                ],
-                name="BEAMS",
-            )
-            beams.header["NCHAN"] = len(headers)
-            beams.header["NPOL"] = 1
-            hdus.append(beams)
-        target = out / f"{prefix}-{product}.fits"
-        write_fits_atomic(target, [fits.PrimaryHDU(cube, header=header), *hdus])
+            beams = [ChannelBeam.from_header(h) for h in headers]
+        write_cube(out / f"{prefix}-{product}.fits", cube, header, beams)
         for path in paths:
             path.unlink(missing_ok=True)
         written[product] = len(paths)

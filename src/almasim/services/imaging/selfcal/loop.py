@@ -70,12 +70,12 @@ def _call_in_child(
 def image_snr(image_path: Path, residual_path: Path) -> float:
     """Peak of the restored image over the robust noise (1.4826 MAD) of the residual."""
     import numpy as np
-    from astropy.io import fits
 
+    from almasim.services.imaging.fits_io import read_image
     from almasim.services.imaging.stats import robust_sigma
 
-    image = fits.getdata(image_path).squeeze()
-    residual = fits.getdata(residual_path).squeeze()
+    image = read_image(image_path).squeeze()
+    residual = read_image(residual_path).squeeze()
     noise = robust_sigma(residual)
     return float(np.nanmax(image) / noise) if noise > 0 else 0.0
 
@@ -83,9 +83,10 @@ def image_snr(image_path: Path, residual_path: Path) -> float:
 def image_peak(image_path: Path) -> float:
     """Peak of the restored image."""
     import numpy as np
-    from astropy.io import fits
 
-    return float(np.nanmax(fits.getdata(image_path)))
+    from almasim.services.imaging.fits_io import read_image
+
+    return float(np.nanmax(read_image(image_path)))
 
 
 def parse_selfcal_rounds(solints: Sequence[str]) -> list[tuple[str, str]]:

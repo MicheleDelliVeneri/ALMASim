@@ -12,7 +12,7 @@ from astropy.io import fits
 
 from almasim.services.json_safe import json_safe as _json_safe
 
-from ..imaging.fits_io import write_fits_atomic
+from ..imaging.fits_io import write_cube, write_fits_atomic
 
 
 def write_ml_dataset_shard(
@@ -63,7 +63,7 @@ def save_optional_cube(
         saved_paths.append(str(h5_path))
     if save_mode in ("fits", "both"):
         fits_path = output_dir_path / f"{stem}_{idx}.fits"
-        write_fits_atomic(fits_path, [fits.PrimaryHDU(header=header.copy(), data=cube)])
+        write_cube(fits_path, cube, header)
         saved_paths.append(str(fits_path))
     return saved_paths
 
@@ -77,7 +77,7 @@ def _write_fits_cube(
     fits_header = header.copy() if header is not None else fits.Header()
     fits_header["DATAMAX"] = float(np.max(cube))
     fits_header["DATAMIN"] = float(np.min(cube))
-    write_fits_atomic(path, [fits.PrimaryHDU(header=fits_header, data=cube)])
+    write_cube(path, cube, fits_header)
 
 
 def _write_fits_complex_cube(output_dir: Path, stem: str, idx: int, cube: np.ndarray) -> None:

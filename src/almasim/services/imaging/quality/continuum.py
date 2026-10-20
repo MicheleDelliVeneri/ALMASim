@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 
+from ..fits_io import read_image
 from ..fits_wcs import beam_pixels
 from ..products import IMAGE_FILENAME, continuum_product
 from ..stats import robust_sigma
@@ -76,9 +77,9 @@ def continuum_quality(task_dir: Path) -> dict[str, Any] | None:
     if not all(path.is_file() for path in paths.values()):
         return None
     header = fits.getheader(paths["image"])
-    image = _plane(fits.getdata(paths["image"]))
-    residual = _plane(fits.getdata(paths["residual"]))
-    model = _plane(fits.getdata(paths["model"]))
+    image = _plane(read_image(paths["image"]))
+    residual = _plane(read_image(paths["residual"]))
+    model = _plane(read_image(paths["model"]))
     beam = beam_pixels(header)
     sy, sx, r = _source_geometry(image, beam)
     sigma = robust_sigma(residual[r >= 2.5])
