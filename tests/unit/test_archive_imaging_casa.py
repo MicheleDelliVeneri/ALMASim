@@ -23,7 +23,7 @@ from almasim.services.casa import runtime_data as casa_runtime_data
 from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging.ms import chunks as chunks_module
 
-from ._fakes import FakeTable, patch_everywhere
+from ._fakes import FakeTable, FakeTask, patch_everywhere
 
 
 @pytest.fixture
@@ -325,12 +325,10 @@ def test_self_calibrate_turns_a_failed_step_into_a_task_failure(tmp_path, monkey
         ai.self_calibrate(
             tmp_path / "x.ms",
             ["wsclean", "-name", str(tmp_path / "w"), "ms"],
-            out=tmp_path,
+            task=FakeTask(tmp_path, run=lambda cmd: 1, fail=ValueError),
             log=log,
             solints=["inf"],
             min_snr=20,
-            run=lambda cmd: 1,
-            fail=ValueError,
             casa_data="/d",
         )
 
@@ -368,7 +366,7 @@ def test_run_wsclean_task_self_calibrates_before_imaging(tmp_path, monkeypatch):
 
     def fake_self_calibrate(ms, command, **kwargs):
         seen.update(kwargs, ms=ms, command=command)
-        kwargs["run"](["wsclean", "-name", "probe"])
+        kwargs["task"].run(["wsclean", "-name", "probe"], kwargs["log"])
         raise _Stop
 
     patch_everywhere(monkeypatch, ai, "self_calibrate", fake_self_calibrate)
@@ -539,12 +537,10 @@ def test_self_calibrate_logs_an_adopted_calibration(tmp_path, monkeypatch):
         ai.self_calibrate(
             tmp_path / "x.ms",
             ["wsclean", "-name", str(tmp_path / "w"), "ms"],
-            out=tmp_path,
+            task=FakeTask(tmp_path, run=lambda cmd: 1, fail=RuntimeError),
             log=log,
             solints=["inf"],
             min_snr=20,
-            run=lambda cmd: 1,
-            fail=RuntimeError,
             casa_data="/d",
         )
     assert "incoming CORRECTED_DATA adopted as DATA" in (tmp_path / "task.log").read_text()
@@ -705,10 +701,8 @@ def _noise_run(tmp_path, monkeypatch, *, fit, single_channel=False, write=True):
             continuum_command=["wsclean", "-name", "w", "-niter", "9", "x.ms"],
             cube_command=["wsclean", "-name", "c", "-channels-out", "3", "x.ms"],
             fit=fit,
-            out=out,
+            task=FakeTask(out, run=run, fail=RuntimeError),
             log=log,
-            run=run,
-            fail=RuntimeError,
         )
     return out, written, children, runs, (tmp_path / "log").read_text()
 
@@ -765,10 +759,8 @@ def test_selfcal_noise_products_failures(tmp_path, monkeypatch):
             continuum_command=None,
             cube_command=None,
             fit=None,
-            out=tmp_path,
+            task=FakeTask(tmp_path, run=lambda c: 1, fail=RuntimeError),
             log=log,
-            run=lambda c: 1,
-            fail=RuntimeError,
         )
 
 
@@ -796,7 +788,7 @@ def test_run_wsclean_task_makes_noise_products_after_an_applied_selfcal(tmp_path
     assert Path(seen["ms"]).name == "spw25.single.ms" and seen["fit"] is None
     assert seen["continuum_command"][2].endswith("wsclean")
     assert seen["cube_command"][2].endswith("wsclean-cube")
-    assert seen["run"](["wsclean"]) == 1
+    assert seen["task"].run(["wsclean"], None) == 1
 
 
 @pytest.mark.unit
@@ -864,10 +856,8 @@ def test_selfcal_noise_products_keep_the_cause_of_a_failure(tmp_path, monkeypatc
             continuum_command=None,
             cube_command=cube,
             fit=None,
-            out=tmp_path,
+            task=FakeTask(tmp_path, run=lambda c: 1, fail=RuntimeError),
             log=log,
-            run=lambda c: 1,
-            fail=RuntimeError,
         )
     assert isinstance(info.value.__cause__, ValueError)
 
@@ -889,9 +879,7 @@ def test_selfcal_noise_products_keep_the_cause_of_a_failure(tmp_path, monkeypatc
             continuum_command=continuum,
             cube_command=None,
             fit=None,
-            out=tmp_path,
+            task=FakeTask(tmp_path, run=run, fail=RuntimeError),
             log=log,
-            run=run,
-            fail=RuntimeError,
         )
     assert isinstance(info.value.__cause__, ValueError)
