@@ -93,3 +93,42 @@ def call_in_child(
         return json.loads(proc.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError) as exc:
         raise RuntimeError(f"{what} wrote no result") from exc
+
+
+def run_stage_subprocess(
+    cmd: Sequence[str],
+    log_path: str | os.PathLike[str],
+    *,
+    cwd: str | os.PathLike[str],
+    env: Mapping[str, str],
+    tail: int = 200,
+) -> tuple[int, list[str]]:
+    """Run a pipeline stage's command, streaming its output to the console and a log.
+
+    Every line the child prints is echoed and written to ``log_path`` (after a
+    ``# <command>`` header) as it arrives, so long CASA logs never pile up in
+    memory and the run can be followed with ``tail -f``, also on Slurm.
+    Returns the exit code and the last ``tail`` lines.
+    """
+    from collections import deque
+
+    process = subprocess.Popen(
+        list(cmd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+        bufsize=1,
+        cwd=str(cwd),
+        env=dict(env),
+    )
+    tail_lines: deque[str] = deque(maxlen=tail)
+    assert process.stdout is not None
+    with Path(log_path).open("w", encoding="utf-8") as log_file:
+        log_file.write("# " + " ".join(cmd) + "\n")
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            log_file.write(line)
+            log_file.flush()
+            tail_lines.append(line.rstrip("\n"))
+    return process.wait(), list(tail_lines)
