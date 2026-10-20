@@ -30,7 +30,7 @@ from typing import Any
 
 import numpy as np
 
-SPEED_OF_LIGHT_M_S = 299_792_458.0
+from ..instrument.constants import SPEED_OF_LIGHT_M_S
 
 # Nominal dish diameter -> (effective aperture, central blockage) in metres.
 ALMA_AIRY_APERTURES = {12.0: (10.7, 0.75), 7.0: (6.25, 0.75)}
