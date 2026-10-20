@@ -8,6 +8,8 @@ import numpy as np
 from dask import delayed
 from dask.distributed import Client
 
+from almasim.services.instrument.constants import FWHM_PER_SIGMA
+
 from .base import SkyModel
 from .utils import gaussian, track_progress
 
@@ -37,8 +39,8 @@ def gaussian2d(amp, x, y, n_px, cen_x, cen_y, fwhm_x, fwhm_y, angle):
 
     gaussian = np.exp(
         -(
-            (xp - cen_x) ** 2 / (2 * (fwhm_x / 2.35482) ** 2)
-            + (yp - cen_y) ** 2 / (2 * (fwhm_y / 2.35482) ** 2)
+            (xp - cen_x) ** 2 / (2 * (fwhm_x / FWHM_PER_SIGMA) ** 2)
+            + (yp - cen_y) ** 2 / (2 * (fwhm_y / FWHM_PER_SIGMA) ** 2)
         )
     )
     norm = amp / np.sum(gaussian)
