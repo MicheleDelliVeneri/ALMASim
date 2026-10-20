@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isActiveStatus } from '#lib/utils/status.js';
 	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/simulations/SimulationStatusDisplay');
@@ -78,7 +79,7 @@
 				>
 					{status?.status.toUpperCase() || 'CONNECTING'}
 				</span>
-				{#if onCancel && (status.status === 'queued' || status.status === 'running')}
+				{#if onCancel && isActiveStatus(status.status)}
 					<button
 						type="button"
 						class="rounded-md border border-danger-line px-3 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
