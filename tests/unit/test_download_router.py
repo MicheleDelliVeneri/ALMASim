@@ -131,7 +131,8 @@ def test_job_summary_from_record_carries_the_post_processing_options():
     assert summary.archive_output_root == "/tmp/archive"
     assert (summary.has_metadata, summary.metadata_count) == (True, 2)
     assert summary.member_ous_uids == ["uid://A001/X1/X1"]
-    assert summary.created_at == "2024-01-01T00:00:00+00:00"  # stored UTC, sent with its zone (T6.4)
+    # Stored as UTC without a zone, sent with it (MADIV-28 T6.4).
+    assert summary.created_at == "2024-01-01T00:00:00+00:00"
 
 
 def test_job_status_progress_is_zero_for_an_empty_job():
