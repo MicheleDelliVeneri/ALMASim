@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 
+from ..casa import tools as casa_tools
+
 _SUBTABLE_NAMES = (
     "ANTENNA",
     "DATA_DESCRIPTION",
@@ -96,7 +98,7 @@ logger = logging.getLogger(__name__)
 
 class _CasatoolsBackend:
     def __init__(self):
-        import casatools as _ct
+        _ct = casa_tools()
 
         self._ct = _ct
 

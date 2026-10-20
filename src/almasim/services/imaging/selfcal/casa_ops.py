@@ -19,6 +19,9 @@ from almasim.services.imaging.ms.chunks import (
     _source_spectrum,
 )
 
+from ...casa import tasks as casa_tasks
+from ...casa import tools as casa_tools
+
 
 def _configure_casa(casa_data: str, log_file: str) -> Path:
     """Point CASA at ``casa_data`` and ``log_file`` with a private workspace (removed at exit)."""
@@ -125,8 +128,8 @@ def casa_selfcal_solve(
     import numpy as np
 
     _configure_casa(casa_data, log_file)
-    from casatasks import gaincal
-    from casatools import table
+    gaincal = casa_tasks().gaincal
+    table = casa_tools().table
 
     started = time.time()
     gaincal(
@@ -172,7 +175,7 @@ def casa_selfcal_apply(
     """CASA ``applycal`` of ``caltables`` into CORRECTED_DATA. ``calonly``: data
     whose solution failed stay as they were, unflagged; weights unchanged."""
     _configure_casa(casa_data, log_file)
-    from casatasks import applycal
+    applycal = casa_tasks().applycal
 
     applycal(
         vis=ms_path,

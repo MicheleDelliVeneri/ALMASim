@@ -17,6 +17,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
+from ..casa import tasks as casa_tasks
+from ..casa import tools as casa_tools
 from ..extraction import member_is_safe
 from ..markers import StageMarkers
 from .unpack_ms import (
@@ -157,7 +159,7 @@ def _normalize_intent(intent: str, ms_path: Path) -> str:
     if not intent:
         return intent
 
-    from casatools import msmetadata
+    msmetadata = casa_tools().msmetadata
 
     msmd = msmetadata()
     msmd.open(str(ms_path))
@@ -351,7 +353,7 @@ def apply_delivered_calibration(
 
 def science_spws(ms_path: str | os.PathLike[str]) -> str:
     """Return target science SPWs with more than four channels."""
-    from casatools import msmetadata
+    msmetadata = casa_tools().msmetadata
 
     msmd = msmetadata()
     msmd.open(str(ms_path))
@@ -584,7 +586,11 @@ def create_calibrated_measurement_sets(
         _emit(logger_fn, f"CASA log file: {casa_log}")
         ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
-        from casatasks import applycal, clearcal, flagmanager, mstransform
+        _casa = casa_tasks()
+        applycal = _casa.applycal
+        clearcal = _casa.clearcal
+        flagmanager = _casa.flagmanager
+        mstransform = _casa.mstransform
 
         _emit(logger_fn, f"Found {len(raw_mss)} raw MeasurementSet(s) to calibrate")
         calibrated_mss: list[Path] = []

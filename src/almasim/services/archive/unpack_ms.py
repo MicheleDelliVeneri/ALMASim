@@ -24,6 +24,8 @@ from almasim.services.casa.runtime_data import (  # noqa: F401  (re-exported)
 )
 from almasim.services.extraction import is_extraction_tmp_dir
 
+from ..casa import tasks as casa_tasks
+from ..casa import tools as casa_tools
 from ..markers import StageMarkers
 
 logger = logging.getLogger(__name__)
@@ -201,7 +203,7 @@ def measurement_set_row_count(ms_path: str | os.PathLike[str]) -> int:
     never committed, so the table opens cleanly and reports zero rows. Checking
     the directory exists is therefore not enough to call an import finished.
     """
-    from casatools import table
+    table = casa_tools().table
 
     tb = table()
     try:
@@ -229,7 +231,7 @@ def empty_required_subtables(ms_path: str | os.PathLike[str]) -> list[str]:
     Array has no elements`` (uid___A002_X10f3768_Xb604, Cycle-11 recalibration,
     2026-10-07).
     """
-    from casatools import table
+    table = casa_tools().table
 
     empty = []
     for name in REQUIRED_SUBTABLES:
@@ -435,7 +437,7 @@ def create_measurement_sets(
     )
     ensure_casa_runtime_data(casa_data, skip_update=skip_casa_data_update, logger_fn=logger_fn)
 
-    from casatasks import importasdm
+    importasdm = casa_tasks().importasdm
 
     logger.info(
         "Found %d ASDM director%s",
