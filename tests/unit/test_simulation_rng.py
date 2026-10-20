@@ -48,3 +48,12 @@ def test_image_templates_are_chosen_reproducibly(tmp_path):
     assert list(model._image_files()) == ["a.png", "b.png", "c.png"]
     picks = [np.random.default_rng(1).choice(model._image_files()) for _ in range(2)]
     assert picks[0] == picks[1]
+
+
+def test_serendipitous_uniform_accepts_a_reversed_range():
+    """A continuum sensitivity above the brightest line used to crash Generator.uniform."""
+    from almasim.skymodels.serendipitous import _uniform
+
+    values = _uniform(np.random.default_rng(0), 2.0, 1.0, 50)
+    assert values.shape == (50,)
+    assert np.all((values > 1.0) & (values <= 2.0))

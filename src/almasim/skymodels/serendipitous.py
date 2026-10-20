@@ -206,6 +206,13 @@ def sample_positions(
     return sample
 
 
+def _uniform(rng: np.random.Generator, low: Any, high: Any, size: Any = None) -> Any:
+    """``low + (high - low) * U[0, 1)``: like the legacy ``np.random.uniform``,
+    ``high`` below ``low`` is allowed (``Generator.uniform`` raises), e.g. a
+    continuum sensitivity above the brightest line."""
+    return low + (high - low) * rng.random(size)
+
+
 def _randint_from(
     low: int, high: Any, size: Any = None, rng: Optional[np.random.Generator] = None
 ) -> Any:
@@ -295,7 +302,7 @@ def insert_serendipitous(
     # get maximum continum value
     cont_peak = np.max(continum)
     # get serendipitous continum maximum
-    serendipitous_norms = rng.uniform(cont_sens, cont_peak, n_sources)
+    serendipitous_norms = _uniform(rng, cont_sens, cont_peak, n_sources)
     # normalize continum to each serendipitous continum maximum
     serendipitous_conts = np.array(
         [continum * serendipitous_norm / cont_peak for serendipitous_norm in serendipitous_norms]
@@ -332,7 +339,7 @@ def insert_serendipitous(
                 terminal.add_log(
                     "Simulating serendipitous source {} with {} lines".format(c_id + 1, n_line)
                 )
-            s_line_fluxes = rng.uniform(cont_sens, np.max(line_fluxes), n_line)
+            s_line_fluxes = _uniform(rng, cont_sens, np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
             if terminal is not None:
                 for s_name, s_flux in zip(s_line_names, s_line_fluxes):
