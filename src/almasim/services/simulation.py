@@ -1152,7 +1152,15 @@ def simulate_observation(
     terminal_logger=None,
     interferometer_progress_callback: Optional[Callable[[int], None]] = None,
 ) -> dict[str, Any]:
-    """Run the interferometric observation stage from a prepared clean cube."""
+    """Run the interferometric observation stage from a prepared clean cube.
+
+    Without a ``compute_backend`` the channels are imaged in-process
+    (:class:`SyncBackend`); the Interferometer needs one to scatter the cube.
+    """
+    if compute_backend is None:
+        from .compute.sync import SyncBackend
+
+        compute_backend = SyncBackend()
     per_config_results = []
     total_configs = max(
         len(clean_cube_stage.interferometer_runs) + len(clean_cube_stage.total_power_runs),
