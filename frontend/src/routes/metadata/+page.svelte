@@ -716,32 +716,32 @@
 	{/if}
 	<div class="space-y-8">
 		<header>
-			<h1 class="text-3xl font-bold text-gray-900">Metadata Explorer</h1>
-			<p class="mt-2 text-gray-600">Query ALMA observation metadata or load a precomputed dataset.</p>
+			<h1 class="text-3xl font-bold text-fg">Metadata Explorer</h1>
+			<p class="mt-2 text-fg-muted">Query ALMA observation metadata or load a precomputed dataset.</p>
 		</header>
 
 		<!-- Query Presets panel -->
 	{#if presets.length > 0}
-		<div class="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
-			<h2 class="mb-3 text-sm font-semibold text-indigo-800">Saved Query Presets</h2>
+		<div class="rounded-lg border border-indigo-100 bg-accent-soft p-4">
+			<h2 class="mb-3 text-sm font-semibold text-accent">Saved Query Presets</h2>
 			<div class="space-y-2">
 				{#each presets as preset (preset.name)}
-					<div class="flex items-center justify-between rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm">
+					<div class="flex items-center justify-between rounded-md border border-accent-line bg-surface px-3 py-2 text-sm">
 						<div class="min-w-0">
-							<span class="font-medium text-gray-900">{preset.name}</span>
+							<span class="font-medium text-fg">{preset.name}</span>
 							{#if preset.description}
-								<span class="ml-2 text-xs text-gray-500">{preset.description}</span>
+								<span class="ml-2 text-xs text-fg-dim">{preset.description}</span>
 							{/if}
-							<span class="ml-2 text-xs text-gray-400">({preset.result_count} rows)</span>
+							<span class="ml-2 text-xs text-fg-dim">({preset.result_count} rows)</span>
 						</div>
 						<div class="ml-4 flex shrink-0 gap-2">
 							<button
 								onclick={() => applyPreset(preset)}
-								class="rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+								class="rounded-md bg-primary px-2 py-1 text-xs font-medium text-white hover:bg-primary-hover"
 							>Apply & Run</button>
 							<button
 								onclick={() => handleDeletePreset(preset.name)}
-								class="rounded-md bg-white px-2 py-1 text-xs font-medium text-red-600 ring-1 ring-red-200 hover:bg-red-50"
+								class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-danger ring-1 ring-red-200 hover:bg-danger-soft"
 							>Delete</button>
 						</div>
 					</div>
@@ -753,13 +753,13 @@
 	<MetadataQueryForm {scienceTypes} loading={starting} onSubmit={runQuery} />
 
 		{#if error}
-			<div class="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+			<div class="rounded-md border border-danger-line bg-danger-soft p-4 text-sm text-danger">
 				{error}
 			</div>
 		{/if}
 
 		{#if statusMessage}
-			<div class="whitespace-pre-wrap rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+			<div class="whitespace-pre-wrap rounded-md border border-accent-line bg-accent-soft p-4 text-sm text-accent">
 				{statusMessage}
 				{#if statusLink}
 					<a href={resolve(statusLink.route)} class="font-medium underline">{statusLink.label}</a>.
@@ -771,18 +771,18 @@
 		{#if jobs.length > 0}
 			<div class="space-y-2">
 				{#if selectedJobId}
-					<div class="flex items-center justify-between rounded-md border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-700">
+					<div class="flex items-center justify-between rounded-md border border-accent-line bg-accent-soft px-4 py-2 text-xs text-accent">
 						<span>Showing results for query <span class="font-mono">{selectedJobId.slice(0, 8)}</span></span>
-						<button onclick={() => (selectedJobId = null)} class="underline hover:text-indigo-900">Show all</button>
+						<button onclick={() => (selectedJobId = null)} class="underline hover:text-accent">Show all</button>
 					</div>
 				{/if}
 				{#each jobs as job (job.id)}
 					<div class="flex items-center justify-between rounded-md border px-4 py-2 text-sm
 						{selectedJobId === job.id ? 'ring-2 ring-indigo-400' : ''}
-						{job.status === 'error' ? 'border-red-200 bg-red-50 text-red-800' :
-						 job.status === 'cancelled' ? 'border-gray-200 bg-gray-50 text-gray-500' :
-						 job.status === 'done' ? 'border-green-200 bg-green-50 text-green-800' :
-						 'border-blue-200 bg-blue-50 text-blue-800'}">
+						{job.status === 'error' ? 'border-danger-line bg-danger-soft text-danger' :
+						 job.status === 'cancelled' ? 'border-line bg-surface text-fg-dim' :
+						 job.status === 'done' ? 'border-ok-line bg-ok-soft text-ok' :
+						 'border-accent-line bg-accent-soft text-accent'}">
 						<div class="flex items-center gap-2 min-w-0">
 							{#if job.status === 'fetching' || job.status === 'starting'}
 								<svg class="h-4 w-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -807,21 +807,21 @@
 										onclick={() => loadJob(job.id)}
 										class="rounded-md px-2 py-1 text-xs font-medium ring-1
 											{selectedJobId === job.id
-												? 'bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-700'
-												: 'bg-white text-indigo-700 ring-indigo-300 hover:bg-indigo-50'}"
+												? 'bg-primary text-white ring-indigo-600 hover:bg-primary-hover'
+												: 'bg-surface text-accent ring-indigo-300 hover:bg-accent-soft'}"
 									>{selectedJobId === job.id ? 'Loaded' : 'Load'}</button>
 									<button
 										onclick={() => saveJob(job.id)}
-										class="rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50"
+										class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-fg-muted ring-1 ring-gray-300 hover:bg-hover"
 									>Save</button>
 									<button
 										onclick={() => openPresetSave(job.id)}
-										class="rounded-md bg-white px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-indigo-300 hover:bg-indigo-50"
+										class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-accent ring-1 ring-indigo-300 hover:bg-accent-soft"
 									>Save as Preset</button>
 								{/if}
 								<button
 									onclick={() => dismissJob(job.id)}
-									class="rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"
+									class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-fg-muted ring-1 ring-gray-300 hover:bg-hover"
 								>Dismiss</button>
 							{/if}
 						</div>
@@ -881,37 +881,37 @@
 <!-- Preset save modal -->
 {#if presetSaveOpen}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-			<h3 class="mb-4 text-base font-semibold text-gray-900">Save Query as Preset</h3>
+		<div class="w-full max-w-sm rounded-lg bg-surface p-6 shadow-panel">
+			<h3 class="mb-4 text-base font-semibold text-fg">Save Query as Preset</h3>
 			<div class="space-y-3">
 				<label class="block">
-					<span class="text-sm font-medium text-gray-700">Preset name <span class="text-red-500">*</span></span>
+					<span class="text-sm font-medium text-fg-muted">Preset name <span class="text-danger">*</span></span>
 					<input
 						type="text"
 						bind:value={presetSaveName}
 						placeholder="e.g. galaxies_band6"
-						class="mt-1 w-full rounded-md border border-gray-300 p-2 text-sm"
+						class="mt-1 w-full rounded-md border border-line p-2 text-sm"
 					/>
 				</label>
 				<label class="block">
-					<span class="text-sm font-medium text-gray-700">Description</span>
+					<span class="text-sm font-medium text-fg-muted">Description</span>
 					<input
 						type="text"
 						bind:value={presetSaveDesc}
 						placeholder="Optional description"
-						class="mt-1 w-full rounded-md border border-gray-300 p-2 text-sm"
+						class="mt-1 w-full rounded-md border border-line p-2 text-sm"
 					/>
 				</label>
 			</div>
 			<div class="mt-5 flex justify-end gap-2">
 				<button
 					onclick={() => (presetSaveOpen = false)}
-					class="rounded-md px-3 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-300 hover:bg-gray-50"
+					class="rounded-md px-3 py-2 text-sm font-medium text-fg-muted ring-1 ring-gray-300 hover:bg-hover"
 				>Cancel</button>
 				<button
 					onclick={handleSavePreset}
 					disabled={presetSaving || !presetSaveName.trim()}
-					class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:bg-gray-400"
+					class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-gray-400"
 				>{presetSaving ? 'Saving…' : 'Save'}</button>
 			</div>
 		</div>

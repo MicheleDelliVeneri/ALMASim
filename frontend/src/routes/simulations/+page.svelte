@@ -406,16 +406,16 @@
 <div class="container mx-auto px-4 py-8">
 	<div class="mx-auto max-w-6xl space-y-6">
 		<header>
-			<h1 class="text-3xl font-bold text-gray-900">Create Simulation</h1>
-			<p class="mt-2 text-gray-600">Select a metadata row and configure simulation parameters.</p>
+			<h1 class="text-3xl font-bold text-fg">Create Simulation</h1>
+			<p class="mt-2 text-fg-muted">Select a metadata row and configure simulation parameters.</p>
 		</header>
 
 		{#if message}
 			<div
 				class={`rounded-lg p-4 ${
 					message.includes('Error')
-						? 'border border-red-200 bg-red-100 text-red-800'
-						: 'border border-green-200 bg-green-100 text-green-800'
+						? 'border border-danger-line bg-danger-soft text-danger'
+						: 'border border-ok-line bg-ok-soft text-ok'
 				}`}
 			>
 				{message}
@@ -509,11 +509,11 @@
 			<button
 				type="submit"
 				disabled={loading || !selectedRow}
-				class="w-full rounded-md bg-blue-600 px-6 py-3 text-lg font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+				class="w-full rounded-md bg-primary px-6 py-3 text-lg font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-gray-400"
 			>
 				{loading ? 'Creating Simulation...' : 'Create Simulation'}
 			</button>
-			<p class="mt-2 text-center text-xs text-gray-500">
+			<p class="mt-2 text-center text-xs text-fg-dim">
 				{!selectedRow
 					? 'Please select a metadata row above'
 					: nPix !== null && nChannels !== null

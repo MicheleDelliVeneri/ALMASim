@@ -86,17 +86,17 @@
 	function getStatusColor(status: string): string {
 		switch (status) {
 			case 'completed':
-				return 'bg-green-100 text-green-800';
+				return 'bg-ok-soft text-ok';
 			case 'running':
-				return 'bg-blue-100 text-blue-800';
+				return 'bg-accent-soft text-accent';
 			case 'failed':
-				return 'bg-red-100 text-red-800';
+				return 'bg-danger-soft text-danger';
 			case 'cancelled':
-				return 'bg-gray-100 text-gray-800';
+				return 'bg-surface text-fg';
 			case 'queued':
 				return 'bg-yellow-100 text-yellow-800';
 			default:
-				return 'bg-gray-100 text-gray-800';
+				return 'bg-surface text-fg';
 		}
 	}
 
@@ -227,12 +227,12 @@
 	});
 </script>
 
-<section class="rounded-lg bg-white p-6 shadow">
+<section class="rounded-lg bg-surface p-6 shadow">
 	<div class="mb-4 flex items-center justify-between">
-		<h2 class="text-xl font-semibold text-gray-900">Simulations</h2>
+		<h2 class="text-xl font-semibold text-fg">Simulations</h2>
 		<button
 			type="button"
-			class="rounded-md border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+			class="rounded-md border border-line px-3 py-1 text-sm font-medium text-fg-muted hover:bg-hover"
 			onclick={fetchSimulations}
 		>
 			Refresh
@@ -244,43 +244,43 @@
 			<div class="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
 		</div>
 	{:else if error}
-		<div class="rounded-md bg-red-50 p-4">
-			<p class="text-sm text-red-800">{error}</p>
+		<div class="rounded-md bg-danger-soft p-4">
+			<p class="text-sm text-danger">{error}</p>
 		</div>
 	{:else if simulations.length === 0}
-		<div class="py-8 text-center text-gray-500">
+		<div class="py-8 text-center text-fg-dim">
 			<p>No simulations found</p>
 			<p class="mt-1 text-sm">Create a simulation to get started</p>
 		</div>
 	{:else}
 		<div class="overflow-x-auto">
-			<table class="min-w-full divide-y divide-gray-200">
-				<thead class="bg-gray-50">
+			<table class="min-w-full divide-y divide-line">
+				<thead class="bg-surface">
 					<tr>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
 							ID
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
 							Status
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
 							Progress
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
 							Created
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
 							Updated
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
 							Actions
 						</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-100 bg-white">
+				<tbody class="divide-y divide-line bg-surface">
 					{#each simulations as sim}
-						<tr class="hover:bg-gray-50">
-							<td class="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-900">
+						<tr class="hover:bg-hover">
+							<td class="whitespace-nowrap px-4 py-3 text-sm font-mono text-fg">
 								{sim.simulation_id.slice(0, 8)}...
 							</td>
 							<td class="whitespace-nowrap px-4 py-3 text-sm">
@@ -288,28 +288,28 @@
 									{sim.status}
 								</span>
 							</td>
-							<td class="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
+							<td class="whitespace-nowrap px-4 py-3 text-sm text-fg">
 								<div class="flex items-center gap-2">
 									<div class="h-2 w-24 overflow-hidden rounded-full bg-gray-200">
 										<div
-											class="h-full bg-blue-600 transition-all duration-300"
+											class="h-full bg-primary transition-all duration-300"
 											style="width: {sim.progress}%"
 										></div>
 									</div>
-									<span class="text-xs text-gray-600">{Math.round(sim.progress)}%</span>
+									<span class="text-xs text-fg-muted">{Math.round(sim.progress)}%</span>
 								</div>
 							</td>
-							<td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+							<td class="whitespace-nowrap px-4 py-3 text-sm text-fg-dim">
 								{formatDate(sim.created_at)}
 							</td>
-							<td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+							<td class="whitespace-nowrap px-4 py-3 text-sm text-fg-dim">
 								{formatDate(sim.updated_at)}
 							</td>
 							<td class="whitespace-nowrap px-4 py-3 text-sm">
 								<div class="flex gap-2">
 									<button
 										type="button"
-										class="text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+										class="text-accent hover:text-accent disabled:text-gray-400"
 										onclick={() => handleVisualize(sim.simulation_id)}
 										disabled={sim.status !== 'completed'}
 										title="Visualize results"
@@ -355,7 +355,7 @@
 									</button>
 									<button
 										type="button"
-										class="text-gray-600 hover:text-gray-800"
+										class="text-fg-muted hover:text-gray-800"
 										onclick={() => handleLocate(sim)}
 										title="Show file location"
 									>
@@ -365,7 +365,7 @@
 									</button>
 									<button
 										type="button"
-										class="text-red-600 hover:text-red-800 disabled:text-gray-400"
+										class="text-danger hover:text-danger disabled:text-gray-400"
 										onclick={() => cancelSimulation(sim)}
 										disabled={!['queued', 'running'].includes(sim.status)}
 										title="Cancel simulation"
@@ -386,17 +386,17 @@
 
 {#if logDialogOpen}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
-		<div class="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-2xl">
+		<div class="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-lg bg-surface shadow-panel">
 			<header class="flex items-start justify-between gap-4 border-b px-5 py-4">
 				<div class="min-w-0">
-					<h3 class="text-lg font-semibold text-gray-900">Simulation Logs</h3>
+					<h3 class="text-lg font-semibold text-fg">Simulation Logs</h3>
 					{#if selectedLogSimulation}
-						<p class="mt-1 truncate font-mono text-xs text-gray-500">
+						<p class="mt-1 truncate font-mono text-xs text-fg-dim">
 							{selectedLogSimulation.simulation_id}
 						</p>
 					{/if}
 					{#if selectedSimulationStatus}
-						<p class="mt-1 text-sm text-gray-600">
+						<p class="mt-1 text-sm text-fg-muted">
 							Status: <span class="font-medium">{selectedSimulationStatus.status}</span>
 							{#if selectedSimulationStatus.current_step}
 								| Step: <span class="font-medium">{selectedSimulationStatus.current_step}</span>
@@ -406,7 +406,7 @@
 				</div>
 				<button
 					type="button"
-					class="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+					class="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-hover"
 					onclick={closeLogDialog}
 				>
 					Close
@@ -415,21 +415,21 @@
 
 			<div class="flex-1 space-y-3 overflow-hidden px-5 py-4">
 				{#if logLoading}
-					<div class="rounded-md bg-gray-50 px-4 py-3 text-sm text-gray-600">Loading logs…</div>
+					<div class="rounded-md bg-surface px-4 py-3 text-sm text-fg-muted">Loading logs…</div>
 				{/if}
 
 				{#if logError}
-					<div class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{logError}</div>
+					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{logError}</div>
 				{/if}
 
-				<div class="overflow-hidden rounded-md border border-gray-200 bg-slate-950">
+				<div class="overflow-hidden rounded-md border border-line bg-slate-950">
 					<div class="max-h-[55vh] overflow-y-auto p-4 font-mono text-xs leading-5 text-slate-100">
 						{#if selectedSimulationStatus?.logs && selectedSimulationStatus.logs.length > 0}
 							{#each selectedSimulationStatus.logs as line}
 								<div class="whitespace-pre-wrap break-words">{line}</div>
 							{/each}
 						{:else if !logLoading}
-							<div class="text-slate-400">No logs recorded yet.</div>
+							<div class="text-fg-dim">No logs recorded yet.</div>
 						{/if}
 					</div>
 				</div>

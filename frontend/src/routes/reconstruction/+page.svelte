@@ -7,7 +7,7 @@
 	});
 </script>
 
-<div class="rounded-lg bg-white p-6 shadow-md">
-	<h1 class="text-2xl font-bold text-gray-900">Redirecting…</h1>
-	<p class="mt-2 text-gray-600">This page has been renamed to Combination.</p>
+<div class="rounded-lg bg-surface p-6 shadow-panel">
+	<h1 class="text-2xl font-bold text-fg">Redirecting…</h1>
+	<p class="mt-2 text-fg-muted">This page has been renamed to Combination.</p>
 </div>

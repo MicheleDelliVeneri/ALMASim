@@ -30,16 +30,16 @@
 	<!-- Divider -->
 	<div class="relative">
 		<div class="absolute inset-0 flex items-center">
-			<div class="w-full border-t border-gray-300"></div>
+			<div class="w-full border-t border-line"></div>
 		</div>
 		<div class="relative flex justify-center text-sm">
-			<span class="bg-white px-2 text-gray-500">OR</span>
+			<span class="bg-surface px-2 text-fg-dim">OR</span>
 		</div>
 	</div>
 
 	<!-- File Upload -->
 	<div class="space-y-2">
-		<label for="datacube-upload" class="block text-sm font-medium text-gray-700">Upload Product (.npz or FITS file)</label>
+		<label for="datacube-upload" class="block text-sm font-medium text-fg-muted">Upload Product (.npz or FITS file)</label>
 		<div class="flex items-center space-x-4">
 			<input
 				id="datacube-upload"
@@ -47,20 +47,20 @@
 				accept=".npz,.fits,.fit,.fts"
 				onchange={onFileUpload}
 				disabled={loading}
-				class="block w-full text-sm text-gray-500 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+				class="block w-full text-sm text-fg-dim file:mr-4 file:rounded-md file:border-0 file:bg-accent-soft file:px-4 file:py-2 file:text-sm file:font-semibold file:text-accent hover:file:bg-accent-soft disabled:opacity-50"
 			/>
 		</div>
 	</div>
 
 	<!-- Integration Method -->
 	<div class="space-y-2">
-		<label for="integration-method" class="block text-sm font-medium text-gray-700">Integration Method</label>
+		<label for="integration-method" class="block text-sm font-medium text-fg-muted">Integration Method</label>
 		<select
 			id="integration-method"
 			value={integrationMethod}
 			onchange={(e) => onMethodChange(e.currentTarget.value as 'sum' | 'mean')}
 			disabled={loading}
-			class="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+			class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
 		>
 			<option value="sum">Sum (integrate all channels)</option>
 			<option value="mean">Mean (average over channels)</option>
@@ -68,7 +68,7 @@
 	</div>
 
 	<div class="space-y-2">
-		<label for="complex-component" class="block text-sm font-medium text-gray-700">Complex Component</label>
+		<label for="complex-component" class="block text-sm font-medium text-fg-muted">Complex Component</label>
 		<select
 			id="complex-component"
 			value={complexComponent}
@@ -77,7 +77,7 @@
 					e.currentTarget.value as 'real' | 'imag' | 'magnitude' | 'phase'
 				)}
 			disabled={loading}
-			class="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+			class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
 		>
 			<option value="real">Real</option>
 			<option value="imag">Imaginary</option>
@@ -87,7 +87,7 @@
 	</div>
 
 	<div class="space-y-2">
-		<span class="block text-sm font-medium text-gray-700">Channel Range (inclusive)</span>
+		<span class="block text-sm font-medium text-fg-muted">Channel Range (inclusive)</span>
 		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 			<input
 				type="number"
@@ -96,7 +96,7 @@
 				oninput={(e) => onChannelStartChange(e.currentTarget.value)}
 				disabled={loading}
 				placeholder="Start channel"
-				class="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+				class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
 			/>
 			<input
 				type="number"
@@ -105,9 +105,9 @@
 				oninput={(e) => onChannelEndChange(e.currentTarget.value)}
 				disabled={loading}
 				placeholder="End channel"
-				class="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+				class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
 			/>
 		</div>
-		<p class="text-xs text-gray-500">Leave blank to integrate all channels on axis 0.</p>
+		<p class="text-xs text-fg-dim">Leave blank to integrate all channels on axis 0.</p>
 	</div>
 </div>

@@ -114,21 +114,21 @@
 	}
 </script>
 
-<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+<div class="rounded-lg border border-line bg-surface p-4 shadow-panel">
 	<div class="flex items-center justify-between mb-3">
-		<h3 class="text-sm font-semibold text-gray-800">
+		<h3 class="text-sm font-semibold text-fg">
 			Download
 			{#if status}
 				<span
 					class="ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
-					class:bg-blue-100={isRunning}
-					class:text-blue-700={isRunning}
-					class:bg-green-100={status.status === 'completed'}
-					class:text-green-700={status.status === 'completed'}
-					class:bg-red-100={status.status === 'failed'}
-					class:text-red-700={status.status === 'failed'}
-					class:bg-gray-100={status.status === 'cancelled'}
-					class:text-gray-600={status.status === 'cancelled'}
+					class:bg-accent-soft={isRunning}
+					class:text-accent={isRunning}
+					class:bg-ok-soft={status.status === 'completed'}
+					class:text-ok={status.status === 'completed'}
+					class:bg-danger-soft={status.status === 'failed'}
+					class:text-danger={status.status === 'failed'}
+					class:bg-surface={status.status === 'cancelled'}
+					class:text-fg-muted={status.status === 'cancelled'}
 				>
 					{status.status}
 				</span>
@@ -138,7 +138,7 @@
 			{#if isRunning}
 				<button
 					type="button"
-					class="rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+					class="rounded-md border border-danger-line px-3 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
 					disabled={cancelling}
 					onclick={cancelDownload}
 				>
@@ -148,7 +148,7 @@
 			{#if isDone}
 				<button
 					type="button"
-					class="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+					class="rounded-md border border-line px-3 py-1 text-xs font-medium text-fg-muted hover:bg-hover"
 					onclick={onDone}
 				>
 					Dismiss
@@ -158,13 +158,13 @@
 	</div>
 
 	{#if error}
-		<p class="mb-2 text-sm text-red-600">{error}</p>
+		<p class="mb-2 text-sm text-danger">{error}</p>
 	{/if}
 
 	{#if status}
 		<!-- Overall progress bar -->
 		<div class="mb-2">
-			<div class="flex justify-between text-xs text-gray-500 mb-1">
+			<div class="flex justify-between text-xs text-fg-dim mb-1">
 				<span>{status.files_completed} / {status.total_files} files</span>
 				<span>{progressPct}%</span>
 			</div>
@@ -178,40 +178,40 @@
 					style="width: {progressPct}%"
 				></div>
 			</div>
-			<p class="mt-1 text-xs text-gray-400">
+			<p class="mt-1 text-xs text-fg-dim">
 				{formatBytes(status.bytes_downloaded)} / {formatBytes(status.total_bytes)}
 				{#if isRunning && speedBytesPerSec > 0}
 					<span class="mx-1">·</span>
-					<span class="text-blue-500">{formatSpeed(speedBytesPerSec)}</span>
+					<span class="text-accent">{formatSpeed(speedBytesPerSec)}</span>
 					{#if etaSeconds != null && etaSeconds > 0}
 						<span class="mx-1">·</span>
-						<span class="text-gray-500">~{formatEta(etaSeconds)} remaining</span>
+						<span class="text-fg-dim">~{formatEta(etaSeconds)} remaining</span>
 					{/if}
 				{/if}
 				{#if status.files_failed > 0}
-					<span class="text-red-500">({status.files_failed} failed)</span>
+					<span class="text-danger">({status.files_failed} failed)</span>
 				{/if}
 			</p>
 		</div>
 
 		<!-- Per-file list (scrollable, compact) -->
 		{#if status.files.length > 0}
-			<div class="max-h-40 overflow-y-auto border-t border-gray-100 pt-2">
+			<div class="max-h-40 overflow-y-auto border-t border-line pt-2">
 				{#each status.files as file}
 					<div class="flex items-center gap-2 py-1 text-xs">
 						{#if file.status === 'completed'}
-							<span class="text-green-500" title="Done">✓</span>
+							<span class="text-ok" title="Done">✓</span>
 						{:else if file.status === 'downloading'}
-							<span class="text-blue-500" title="Downloading">↓</span>
+							<span class="text-accent" title="Downloading">↓</span>
 						{:else if file.status === 'failed'}
-							<span class="text-red-500" title={file.error ?? 'Failed'}>✗</span>
+							<span class="text-danger" title={file.error ?? 'Failed'}>✗</span>
 						{:else}
 							<span class="text-gray-300" title="Pending">○</span>
 						{/if}
-						<span class="flex-1 truncate text-gray-600" title={file.filename}>
+						<span class="flex-1 truncate text-fg-muted" title={file.filename}>
 							{file.filename}
 						</span>
-						<span class="text-gray-400">
+						<span class="text-fg-dim">
 							{progressPercent(file.progress)}%
 						</span>
 					</div>
@@ -220,9 +220,9 @@
 		{/if}
 
 		{#if status.error}
-			<p class="mt-2 text-xs text-red-500">{status.error}</p>
+			<p class="mt-2 text-xs text-danger">{status.error}</p>
 		{/if}
 	{:else if !error}
-		<p class="text-sm text-gray-400">Loading…</p>
+		<p class="text-sm text-fg-dim">Loading…</p>
 	{/if}
 </div>
