@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { downloadApi, type BrowseDirectoryResponse } from '#lib/api/download.js';
+	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { createLogger } from '#lib/logger.js';
 
 	const logger = createLogger('components/simulations/SimulationForm');
@@ -97,62 +97,15 @@
 
 	// Directory browser state
 	let browserOpen = $state(false);
-	let browsing = $state(false);
-	let browseResult = $state<BrowseDirectoryResponse | null>(null);
-	let browseError = $state('');
-	let newFolderName = $state('');
-	let creatingFolder = $state(false);
-
-	async function browseDir(path: string) {
-		logger.debug({ path }, 'Browsing directory');
-		browsing = true;
-		browseError = '';
-		try {
-			browseResult = await downloadApi.browseDirectory(path);
-		} catch (e) {
-			browseError = e instanceof Error ? e.message : 'Failed to browse directory';
-			logger.error({ err: e, path }, 'Failed to browse directory');
-		} finally {
-			browsing = false;
-		}
-	}
 
 	function openBrowser() {
 		logger.debug({ outputDir }, 'Directory browser opened');
 		browserOpen = true;
-		newFolderName = '';
-		browseDir(outputDir || '/host_home');
 	}
 
-	function closeBrowser() {
+	function selectOutputDir(path: string) {
+		onOutputDirChange(path);
 		browserOpen = false;
-		browseResult = null;
-		browseError = '';
-		newFolderName = '';
-	}
-
-	async function createFolder() {
-		if (!browseResult || !newFolderName.trim()) return;
-		creatingFolder = true;
-		const newPath = `${browseResult.current}/${newFolderName.trim()}`;
-		logger.info({ newPath }, 'Creating new folder');
-		try {
-			browseResult = await downloadApi.createDirectory(newPath);
-			newFolderName = '';
-			logger.info({ newPath }, 'Folder created');
-		} catch (e) {
-			browseError = e instanceof Error ? e.message : 'Failed to create folder';
-			logger.error({ err: e, newPath }, 'Failed to create folder');
-		} finally {
-			creatingFolder = false;
-		}
-	}
-
-	function selectCurrent() {
-		if (!browseResult) return;
-		logger.info({ path: browseResult.current }, 'Output directory selected');
-		onOutputDirChange(browseResult.current);
-		closeBrowser();
 	}
 </script>
 
@@ -557,94 +510,11 @@
 </section>
 
 {#if browserOpen}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-		role="dialog"
-		aria-modal="true"
-	>
-		<div class="w-full max-w-lg rounded-lg border border-slate-700 bg-slate-950 shadow-panel">
-			<header class="flex items-center justify-between border-b border-slate-700 px-5 py-3">
-				<h3 class="text-sm font-semibold text-slate-100">Choose Output Folder</h3>
-				<button type="button" class="text-fg-dim hover:text-slate-200" aria-label="Close" onclick={closeBrowser}>✕</button>
-			</header>
-
-			<div class="space-y-3 px-5 py-4">
-				{#if browsing && !browseResult}
-					<div class="flex items-center justify-center gap-2 py-6 text-sm text-fg-dim">
-						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
-							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
-						</svg>
-						Loading…
-					</div>
-				{:else if browseError}
-					<div class="rounded-md border border-red-700 bg-red-950/60 px-4 py-3 text-sm text-red-300">{browseError}</div>
-				{:else if browseResult}
-					<!-- Current path -->
-					<div class="flex items-center gap-2 rounded-md bg-sunk px-3 py-2">
-						<span class="truncate font-mono text-xs text-slate-300">{browseResult.current}</span>
-						{#if browsing}
-							<svg class="h-3.5 w-3.5 shrink-0 animate-spin text-fg-dim" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
-								<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
-							</svg>
-						{/if}
-					</div>
-
-					<!-- Directory listing -->
-					<ul class="max-h-56 overflow-y-auto rounded-md border border-slate-700 bg-sunk">
-						{#if browseResult.parent}
-							<li class="border-b border-slate-700">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-slate-800" onclick={() => browseDir(browseResult!.parent!)}>
-									<span class="text-fg-dim">↩</span>
-									<span class="text-slate-300">..</span>
-								</button>
-							</li>
-						{/if}
-						{#each browseResult.entries as entry}
-							<li class="border-b border-slate-700 last:border-b-0">
-								<button type="button" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-slate-800" onclick={() => browseDir(entry.path)}>
-									<span class="text-amber-400">📁</span>
-									<span class="truncate text-fg-muted">{entry.name}</span>
-								</button>
-							</li>
-						{:else}
-							<li class="px-3 py-4 text-center text-sm italic text-fg-dim">No subdirectories</li>
-						{/each}
-					</ul>
-
-					<!-- New folder row -->
-					<div class="flex gap-2">
-						<input
-							type="text"
-							bind:value={newFolderName}
-							placeholder="New folder name…"
-							class="flex-1 rounded-md border border-slate-600 bg-sunk px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-							onkeydown={(e) => e.key === 'Enter' && createFolder()}
-						/>
-						<button
-							type="button"
-							disabled={!newFolderName.trim() || creatingFolder}
-							onclick={createFolder}
-							class="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-slate-700 disabled:opacity-50"
-						>
-							{creatingFolder ? '…' : '+ Create'}
-						</button>
-					</div>
-				{/if}
-			</div>
-
-			<footer class="flex items-center justify-end gap-3 border-t border-slate-700 px-5 py-3">
-				<button type="button" class="rounded-md border border-slate-600 px-4 py-2 text-sm font-medium text-fg-muted hover:bg-slate-800" onclick={closeBrowser}>Cancel</button>
-				<button
-					type="button"
-					disabled={!browseResult}
-					class="rounded-md bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-cyan-900/50"
-					onclick={selectCurrent}
-				>
-					Select this folder
-				</button>
-			</footer>
-		</div>
-	</div>
+	<DirectoryPicker
+		startPath={outputDir || '/host_home'}
+		title="Choose Output Folder"
+		allowCreate
+		onSelect={selectOutputDir}
+		onClose={() => (browserOpen = false)}
+	/>
 {/if}
