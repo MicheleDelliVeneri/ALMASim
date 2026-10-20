@@ -86,6 +86,12 @@ def _write_fits_complex_cube(output_dir: Path, stem: str, idx: int, cube: np.nda
     write_fits_atomic(output_dir / f"{stem}_imag{idx}.fits", [fits.PrimaryHDU(np.imag(cube))])
 
 
+# Kinds of interferometry product (write_interferometry_products).
+_IMAGE = "image"
+_VISIBILITIES = "visibilities"
+_OPERATOR = "operator"
+
+
 def write_interferometry_products(
     output_dir: str | Path,
     *,
@@ -102,52 +108,46 @@ def write_interferometry_products(
     u_cube: np.ndarray,
     v_cube: np.ndarray,
 ) -> None:
-    """Persist interferometric simulation products using ALMASim's standard formats."""
+    """Persist interferometric simulation products using ALMASim's standard formats.
+
+    Each product is a ``(stem, cube, kind)`` row: images get the sky header,
+    visibilities are written as real and imaginary FITS, and the measurement
+    operator's cubes share one HDF5 file.
+    """
+    if save_mode not in ("npz", "h5", "fits", "both"):
+        raise ValueError(f"Unsupported save_mode for interferometry products: {save_mode}")
     output_dir = Path(output_dir)
+    products = [
+        ("clean-cube", model_cube, _IMAGE),
+        ("dirty-cube", dirty_cube, _IMAGE),
+        ("dirty-vis-cube", dirty_vis_cube, _VISIBILITIES),
+        ("clean-vis-cube", vis_cube, _VISIBILITIES),
+        ("beam-cube", beam_cube, _OPERATOR),
+        ("totsampling-cube", totsampling_cube, _OPERATOR),
+        ("uv-mask-cube", uv_mask_cube, _OPERATOR),
+        ("u-cube", u_cube, _OPERATOR),
+        ("v-cube", v_cube, _OPERATOR),
+    ]
 
     if save_mode in ("npz", "both"):
-        np.savez_compressed(output_dir / f"clean-cube_{idx}.npz", model_cube)
-        np.savez_compressed(output_dir / f"dirty-cube_{idx}.npz", dirty_cube)
-        np.savez_compressed(output_dir / f"dirty-vis-cube_{idx}.npz", dirty_vis_cube)
-        np.savez_compressed(output_dir / f"clean-vis-cube_{idx}.npz", vis_cube)
-        np.savez_compressed(output_dir / f"beam-cube_{idx}.npz", beam_cube)
-        np.savez_compressed(output_dir / f"totsampling-cube_{idx}.npz", totsampling_cube)
-        np.savez_compressed(output_dir / f"uv-mask-cube_{idx}.npz", uv_mask_cube)
-        np.savez_compressed(output_dir / f"u-cube_{idx}.npz", u_cube)
-        np.savez_compressed(output_dir / f"v-cube_{idx}.npz", v_cube)
-        if save_mode == "npz":
-            return
+        for stem, cube, _ in products:
+            np.savez_compressed(output_dir / f"{stem}_{idx}.npz", cube)
 
     if save_mode == "h5":
-        with h5py.File(output_dir / f"clean-cube_{idx}.h5", "w") as handle:
-            handle.create_dataset("clean_cube", data=model_cube)
-        with h5py.File(output_dir / f"dirty-cube_{idx}.h5", "w") as handle:
-            handle.create_dataset("dirty_cube", data=dirty_cube)
-        with h5py.File(output_dir / f"dirty-vis-cube_{idx}.h5", "w") as handle:
-            handle.create_dataset("dirty_vis_cube", data=dirty_vis_cube)
-        with h5py.File(output_dir / f"clean-vis-cube_{idx}.h5", "w") as handle:
-            handle.create_dataset("clean_vis_cube", data=vis_cube)
+        for stem, cube, kind in products:
+            if kind != _OPERATOR:
+                with h5py.File(output_dir / f"{stem}_{idx}.h5", "w") as handle:
+                    handle.create_dataset(stem.replace("-", "_"), data=cube)
         with h5py.File(output_dir / f"measurement-operator_{idx}.h5", "w") as handle:
-            handle.create_dataset("beam_cube", data=beam_cube)
-            handle.create_dataset("totsampling_cube", data=totsampling_cube)
-            handle.create_dataset("uv_mask_cube", data=uv_mask_cube)
-            handle.create_dataset("u_cube", data=u_cube)
-            handle.create_dataset("v_cube", data=v_cube)
-        return
+            for stem, cube, kind in products:
+                if kind == _OPERATOR:
+                    handle.create_dataset(stem.replace("-", "_"), data=cube)
 
     if save_mode in ("fits", "both"):
-        _write_fits_cube(output_dir / f"clean-cube_{idx}.fits", model_cube, header)
-        _write_fits_cube(output_dir / f"dirty-cube_{idx}.fits", dirty_cube, header)
-        _write_fits_complex_cube(output_dir, "dirty-vis-cube", idx, dirty_vis_cube)
-        _write_fits_complex_cube(output_dir, "clean-vis-cube", idx, vis_cube)
-        write_fits_atomic(output_dir / f"beam-cube_{idx}.fits", [fits.PrimaryHDU(beam_cube)])
-        write_fits_atomic(
-            output_dir / f"totsampling-cube_{idx}.fits", [fits.PrimaryHDU(totsampling_cube)]
-        )
-        write_fits_atomic(output_dir / f"uv-mask-cube_{idx}.fits", [fits.PrimaryHDU(uv_mask_cube)])
-        write_fits_atomic(output_dir / f"u-cube_{idx}.fits", [fits.PrimaryHDU(u_cube)])
-        write_fits_atomic(output_dir / f"v-cube_{idx}.fits", [fits.PrimaryHDU(v_cube)])
-        return
-
-    if save_mode not in ("h5",):
-        raise ValueError(f"Unsupported save_mode for interferometry products: {save_mode}")
+        for stem, cube, kind in products:
+            if kind == _IMAGE:
+                _write_fits_cube(output_dir / f"{stem}_{idx}.fits", cube, header)
+            elif kind == _VISIBILITIES:
+                _write_fits_complex_cube(output_dir, stem, idx, cube)
+            else:
+                write_fits_atomic(output_dir / f"{stem}_{idx}.fits", [fits.PrimaryHDU(cube)])

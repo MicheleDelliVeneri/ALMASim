@@ -3,7 +3,11 @@
 from .apply import PIPELINE_FLAG_VERSION, apply_delivered_calibration, restore_pipeline_flags
 from .cleanup import cleanup_intermediate_calibration_data
 from .discovery import find_calibration_directory, find_raw_ms_directories
-from .run import create_calibrated_measurement_sets
+from .run import (
+    CalibrationOptions,
+    calibrate_measurement_sets,
+    create_calibrated_measurement_sets,
+)
 from .split import (
     calibrated_output_path,
     calibration_failure_marker_path,
@@ -17,8 +21,10 @@ from .split import (
 )
 
 __all__ = [
+    "CalibrationOptions",
     "PIPELINE_FLAG_VERSION",
     "apply_delivered_calibration",
+    "calibrate_measurement_sets",
     "calibrated_output_path",
     "calibration_failure_marker_path",
     "calibration_marker_path",
