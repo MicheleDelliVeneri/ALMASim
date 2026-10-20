@@ -7,9 +7,6 @@ from typing import Generator
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import Base
-from .schema_upgrade import add_missing_columns
-
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
@@ -37,10 +34,10 @@ def new_session() -> Session:
 
 
 def init_db():
-    """Initialize database tables."""
-    engine = get_engine()
-    Base.metadata.create_all(bind=engine)
-    add_missing_columns(engine)
+    """Create or upgrade the database's tables (Alembic, MADIV-28 T6.3)."""
+    from .migrate import upgrade_database
+
+    upgrade_database(get_engine())
 
 
 def get_db() -> Generator[Session, None, None]:

@@ -82,6 +82,7 @@ ms-casacore = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "alembic" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "ipykernel" },
@@ -99,6 +100,7 @@ dev = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 test = [
+    { name = "alembic" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic-settings" },
@@ -144,6 +146,7 @@ provides-extras = ["dashboard", "casa", "ms-casacore"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "alembic", specifier = ">=1.13.0" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "ipykernel", specifier = ">=7.2.0" },
@@ -161,6 +164,7 @@ dev = [
     { name = "uvicorn", extras = ["standard"] },
 ]
 test = [
+    { name = "alembic", specifier = ">=1.13.0" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic-settings" },

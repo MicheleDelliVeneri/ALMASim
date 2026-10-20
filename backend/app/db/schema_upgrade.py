@@ -1,10 +1,10 @@
-"""Bring an older database up to the current tables (until T6.3 adopts Alembic)."""
+"""Columns added to tables after they were first created (used by Alembic revision 0002)."""
 
 from __future__ import annotations
 
 # Columns added to a table after it was first created, as (name, SQL type and
-# default). init_db adds the missing ones to an older database; Base's models
-# already have them, so a new database gets them from create_all.
+# default). Revision 0002 adds the missing ones to a database made before
+# Alembic; the baseline's tables already have them.
 ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "observations": [
         ("proposal_abstract", "TEXT"),

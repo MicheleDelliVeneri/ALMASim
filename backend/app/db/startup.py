@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from .config import get_engine, init_db, new_session
+from .config import init_db, new_session
 from .csv_importer import initialize_database_from_csv
 from .jobs import JobRepository
 
@@ -29,17 +29,6 @@ def check_database_initialized() -> bool:
         return False
 
 
-def _drop_not_null_if_exists(columns: list) -> None:
-    """Drop NOT NULL constraints from observation columns that may hold NULL from TAP."""
-    try:
-        with get_engine().connect() as conn:
-            for col in columns:
-                conn.execute(text(f"ALTER TABLE observations ALTER COLUMN {col} DROP NOT NULL"))
-            conn.commit()
-    except Exception as e:
-        logger.warning(f"Could not drop NOT NULL constraints (may not exist): {e}")
-
-
 def initialize_database_on_startup(data_dir: Path) -> None:
     """
     Initialize database on application startup.
@@ -55,13 +44,10 @@ def initialize_database_on_startup(data_dir: Path) -> None:
     logger.info("Initializing database...")
 
     try:
-        # Create tables
-        logger.info("Creating database tables...")
+        # Create or upgrade the tables (Alembic migrations, MADIV-28 T6.3)
+        logger.info("Upgrading the database schema...")
         init_db()
-        logger.info("Database tables created successfully")
-
-        # Drop legacy NOT NULL constraints that reject incomplete TAP rows
-        _drop_not_null_if_exists(["ra", "dec", "target_name"])
+        logger.info("Database schema is current")
 
         # Jobs the previous server left running died with it (MADIV-28 T6.4).
         try:
