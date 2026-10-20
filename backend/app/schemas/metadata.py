@@ -1,44 +1,19 @@
 """Metadata-related schemas."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
+from almasim.services.metadata.filters import ExclusionFilters, InclusionFilters
+
 
 @dataclass
-class ScienceQueryParams:
-    """Internal dataclass bundling all science query parameters for service calls."""
+class ScienceQuery:
+    """A metadata query for the services: the shared filters and the columns to return."""
 
-    # Inclusion
-    source_name: Optional[str] = None
-    science_keyword: Optional[List[str]] = None
-    scientific_category: Optional[List[str]] = None
-    bands: Optional[List[int]] = None
-    antenna_arrays: Optional[str] = None
-    array_type: Optional[List[str]] = None
-    array_configuration: Optional[List[str]] = None
-    angular_resolution_range: Optional[Tuple[float, float]] = None
-    observation_date_range: Optional[Tuple[str, str]] = None
-    qa2_status: Optional[List[str]] = None
-    obs_type: Optional[List[str]] = None
-    fov_range: Optional[Tuple[float, float]] = None
-    time_resolution_range: Optional[Tuple[float, float]] = None
-    frequency_range: Optional[Tuple[float, float]] = None
-    # Exclusion
-    exclude_science_keyword: Optional[List[str]] = None
-    exclude_scientific_category: Optional[List[str]] = None
-    exclude_source_name: Optional[List[str]] = None
-    exclude_obs_type: Optional[List[str]] = None
-    exclude_solar: bool = False
-    # Cycle / proposal_id filtering
-    proposal_id_prefix: Optional[List[str]] = None
-    # Data rights
-    public_only: bool = True
-    # Observation type
-    science_only: bool = True
-    exclude_mosaic: bool = True
-    # Output
+    include: InclusionFilters
+    exclude: ExclusionFilters
     visible_columns: Optional[List[str]] = None
 
 
@@ -130,44 +105,46 @@ class MetadataQuery(BaseModel):
         description=("Ordered subset of result columns to return. Pass null/omit for all columns."),
     )
 
-    def to_params(self) -> ScienceQueryParams:
-        """Convert to the internal ScienceQueryParams dataclass."""
-        return ScienceQueryParams(
-            source_name=self.source_name,
-            science_keyword=(list(self.science_keyword) if self.science_keyword else None),
-            scientific_category=(
-                list(self.scientific_category) if self.scientific_category else None
-            ),
-            bands=list(self.bands) if self.bands else None,
-            antenna_arrays=self.antenna_arrays,
-            array_type=list(self.array_type) if self.array_type else None,
-            array_configuration=(
-                list(self.array_configuration) if self.array_configuration else None
-            ),
-            angular_resolution_range=self.angular_resolution_range,
-            observation_date_range=self.observation_date_range,
-            qa2_status=list(self.qa2_status) if self.qa2_status else None,
-            obs_type=list(self.obs_type) if self.obs_type else None,
+    def to_filters(self) -> tuple[InclusionFilters, ExclusionFilters]:
+        """The query as the filters the TAP and cache queries take (MADIV-28 T6.1)."""
+
+        def listed(values):
+            return list(values) if values else None
+
+        include = InclusionFilters(
+            science_keyword=listed(self.science_keyword),
+            scientific_category=listed(self.scientific_category),
+            band=listed(self.bands),
             fov_range=self.fov_range,
             time_resolution_range=self.time_resolution_range,
             frequency_range=self.frequency_range,
-            exclude_science_keyword=(
-                list(self.exclude_science_keyword) if self.exclude_science_keyword else None
-            ),
-            exclude_scientific_category=(
-                list(self.exclude_scientific_category) if self.exclude_scientific_category else None
-            ),
-            exclude_source_name=(
-                list(self.exclude_source_name) if self.exclude_source_name else None
-            ),
-            exclude_obs_type=(list(self.exclude_obs_type) if self.exclude_obs_type else None),
-            exclude_solar=self.exclude_solar,
-            proposal_id_prefix=([f"{2012 + c}." for c in self.cycles] if self.cycles else None),
+            source_name=self.source_name,
+            antenna_arrays=self.antenna_arrays,
+            array_type=listed(self.array_type),
+            array_configuration=listed(self.array_configuration),
+            angular_resolution_range=self.angular_resolution_range,
+            observation_date_range=self.observation_date_range,
+            qa2_status=listed(self.qa2_status),
+            obs_type=listed(self.obs_type),
+            # Cycle N is proposal_id prefix "{2012 + N}.".
+            proposal_id_prefix=[f"{2012 + c}." for c in self.cycles] if self.cycles else None,
             public_only=self.public_only,
             science_only=self.science_only,
             exclude_mosaic=self.exclude_mosaic,
-            visible_columns=self.visible_columns,
         )
+        exclude = ExclusionFilters(
+            science_keyword=listed(self.exclude_science_keyword),
+            scientific_category=listed(self.exclude_scientific_category),
+            source_name=listed(self.exclude_source_name),
+            obs_type=listed(self.exclude_obs_type),
+            solar=self.exclude_solar,
+        )
+        return include, exclude
+
+    def to_query(self) -> ScienceQuery:
+        """The query for the metadata service."""
+        include, exclude = self.to_filters()
+        return ScienceQuery(include, exclude, self.visible_columns)
 
 
 class MetadataResponse(BaseModel):

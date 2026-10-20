@@ -1,12 +1,18 @@
 """Database service layer for querying and managing data."""
 
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
+
+from almasim.services.metadata.filters import (
+    ARRAY_TYPE_ANTENNA_PATTERNS,
+    ExclusionFilters,
+    InclusionFilters,
+    qa2_codes,
+)
 
 from .models import (
     Observation,
@@ -16,46 +22,6 @@ from .models import (
     SimulationJob,
     SimulationLog,
 )
-
-# Antenna prefix → array type mapping (mirrors the TAP service constant)
-_DB_ARRAY_PREFIX_MAP: Dict[str, List[str]] = {
-    "12m": ["%DA%", "%DV%"],
-    "7m": ["%CM%"],
-    "TP": ["%PM%"],
-}
-
-
-@dataclass
-class ObservationQueryParams:
-    """Inclusion parameters for database observation queries."""
-
-    science_keywords: Optional[List[str]] = None
-    scientific_categories: Optional[List[str]] = None
-    bands: Optional[List[int]] = None
-    antenna_arrays: Optional[str] = None
-    array_type: Optional[List[str]] = None
-    array_configuration: Optional[List[str]] = None
-    angular_resolution_range: Optional[tuple] = None
-    observation_date_range: Optional[tuple] = None
-    qa2_status: Optional[List[str]] = None
-    obs_type: Optional[List[str]] = None
-    fov_range: Optional[tuple] = None
-    time_resolution_range: Optional[tuple] = None
-    frequency_range: Optional[tuple] = None
-    target_name: Optional[str] = None
-    member_ous_uid: Optional[str] = None
-    proposal_id_prefix: Optional[List[str]] = None
-
-
-@dataclass
-class ObservationExclusionParams:
-    """Exclusion parameters for database observation queries."""
-
-    science_keywords: Optional[List[str]] = None
-    scientific_categories: Optional[List[str]] = None
-    source_names: Optional[List[str]] = None
-    obs_types: Optional[List[str]] = None
-    solar: bool = False
 
 
 class DatabaseService:
@@ -80,19 +46,18 @@ class DatabaseService:
 
     def query_observations(
         self,
-        include: Optional[ObservationQueryParams] = None,
-        exclude: Optional[ObservationExclusionParams] = None,
+        include: Optional[InclusionFilters] = None,
+        exclude: Optional[ExclusionFilters] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = 0,
     ) -> List[Observation]:
-        """Query observations with inclusion and exclusion filter dataclasses.
+        """The cached observations matching the same filters a TAP query takes.
 
-        The flat keyword form this used to accept is gone: names shared by both
-        dataclasses (``science_keywords``) landed in the exclusions too, and
-        ``exclude_*`` names matched neither, so exclusions were dropped.
+        ``public_only``, ``science_only`` and ``exclude_mosaic`` are TAP-side
+        selections: the cache only ever holds rows a TAP query returned.
         """
-        include = include or ObservationQueryParams()
-        exclude = exclude or ObservationExclusionParams()
+        include = include or InclusionFilters()
+        exclude = exclude or ExclusionFilters()
 
         stmt = select(Observation).options(
             joinedload(Observation.scientific_category),
@@ -113,7 +78,7 @@ class DatabaseService:
     # -- private filter helpers -----------------------------------------------
 
     @staticmethod
-    def _apply_inclusion_filters(stmt, p: ObservationQueryParams):
+    def _apply_inclusion_filters(stmt, p: InclusionFilters):
         """Return (stmt, filters) with all positive filter clauses applied."""
         filters: list = []
         filters.extend(DatabaseService._direct_filters(p))
@@ -124,17 +89,15 @@ class DatabaseService:
         return stmt, filters
 
     @staticmethod
-    def _direct_filters(p: ObservationQueryParams) -> list:
+    def _direct_filters(p: InclusionFilters) -> list:
         """Simple equality / ilike filters that don't require extra joins."""
         filters = []
-        if p.member_ous_uid:
-            filters.append(Observation.member_ous_uid == p.member_ous_uid)
-        if p.target_name:
-            filters.append(Observation.target_name.ilike(f"%{p.target_name}%"))
-        if p.bands:
-            filters.append(Observation.band.in_(p.bands))
+        if p.source_name:
+            filters.append(Observation.target_name.ilike(f"%{p.source_name}%"))
+        if p.band:
+            filters.append(Observation.band.in_(p.band))
         if p.qa2_status:
-            filters.append(Observation.qa2_passed.in_(p.qa2_status))
+            filters.append(Observation.qa2_passed.in_(qa2_codes(p.qa2_status)))
         if p.obs_type:
             filters.append(or_(*(Observation.obs_type.ilike(f"%{t}%") for t in p.obs_type)))
         if p.antenna_arrays:
@@ -148,17 +111,19 @@ class DatabaseService:
                     )
                 )
             )
+        if p.proposal_id:
+            filters.append(Observation.proposal_id.in_(p.proposal_id))
         return filters
 
     @staticmethod
-    def _array_filters(p: ObservationQueryParams) -> list:
+    def _array_filters(p: InclusionFilters) -> list:
         """Filters for array_type (antenna prefix) and array_configuration."""
         filters = []
         if p.array_type:
             clauses = [
                 Observation.antenna_arrays.ilike(pat)
                 for atype in p.array_type
-                for pat in _DB_ARRAY_PREFIX_MAP.get(atype, [f"%{atype}%"])
+                for pat in ARRAY_TYPE_ANTENNA_PATTERNS.get(atype, [f"%{atype}%"])
             ]
             if clauses:
                 filters.append(or_(*clauses))
@@ -169,7 +134,7 @@ class DatabaseService:
         return filters
 
     @staticmethod
-    def _range_filters(p: ObservationQueryParams) -> list:
+    def _range_filters(p: InclusionFilters) -> list:
         """Numeric and date range filters."""
         filters = []
         # Int.Time sits in t_max on rows cached before MADIV-28 T1.12.
@@ -197,30 +162,30 @@ class DatabaseService:
         return filters
 
     @staticmethod
-    def _taxonomy_filters(stmt, p: ObservationQueryParams):
+    def _taxonomy_filters(stmt, p: InclusionFilters):
         """Filters that require joining the keywords / categories association tables."""
         filters = []
-        if p.scientific_categories:
+        if p.scientific_category:
             stmt = stmt.join(Observation.scientific_category)
-            filters.append(ScientificCategory.category.in_(p.scientific_categories))
-        if p.science_keywords:
+            filters.append(ScientificCategory.category.in_(p.scientific_category))
+        if p.science_keyword:
             stmt = stmt.join(Observation.science_keywords)
-            filters.append(ScienceKeyword.keyword.in_(p.science_keywords))
+            filters.append(ScienceKeyword.keyword.in_(p.science_keyword))
         return stmt, filters
 
     @staticmethod
-    def _build_exclusion_filters(e: ObservationExclusionParams) -> list:
+    def _build_exclusion_filters(e: ExclusionFilters) -> list:
         """Return a list of NOT conditions for the exclusion parameters."""
         from .models import observation_keywords
 
         filters = []
 
-        if e.source_names:
-            for name in e.source_names:
+        if e.source_name:
+            for name in e.source_name:
                 filters.append(~Observation.target_name.ilike(f"%{name}%"))
 
-        if e.obs_types:
-            for t in e.obs_types:
+        if e.obs_type:
+            for t in e.obs_type:
                 filters.append(~Observation.obs_type.ilike(f"%{t}%"))
 
         # Solar exclusion matches TAP: the target name, a science keyword or the
@@ -228,8 +193,8 @@ class DatabaseService:
         if e.solar:
             filters.append(~Observation.target_name.ilike("%sun%"))
 
-        excluded_keywords = list(e.science_keywords or [])
-        excluded_categories = list(e.scientific_categories or [])
+        excluded_keywords = list(e.science_keyword or [])
+        excluded_categories = list(e.scientific_category or [])
         if e.solar:
             excluded_keywords.append("sun")
             excluded_categories.append("sun")

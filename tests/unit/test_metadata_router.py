@@ -82,7 +82,7 @@ def test_start_query_creates_job_and_schedules_background_task(monkeypatch):
 
     bt = _make_background_tasks()
     query = MagicMock()
-    query.to_params.return_value = {}
+    query.to_query.return_value = {}
 
     result = metadata_router.start_query(query=query, background_tasks=bt, db=_make_db())
 
