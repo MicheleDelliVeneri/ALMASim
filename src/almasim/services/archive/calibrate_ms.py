@@ -9,16 +9,15 @@ then writes the science-only calibrated MS with ``casatasks.mstransform``.
 from __future__ import annotations
 
 import ast
-import json
 import logging
 import os
 import shutil
 import tarfile
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from ..markers import StageMarkers
 from .unpack_ms import (
     LogFn,
     _emit,
@@ -421,23 +420,17 @@ def has_calibration_failed(output_root: str | os.PathLike[str], uid: str) -> boo
     return calibration_failure_marker_path(output_root, uid).is_file()
 
 
-def write_calibration_marker(output_root: str | os.PathLike[str], uid: str) -> Path:
-    marker = calibration_marker_path(output_root, uid)
-    marker.write_text(
-        json.dumps(
-            {
-                "uid": uid,
-                "output": str(calibrated_output_path(output_root, uid)),
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+def _calibration_markers(output_root: str | os.PathLike[str], uid: str) -> StageMarkers:
+    return StageMarkers(
+        calibration_marker_path(output_root, uid),
+        calibration_failure_marker_path(output_root, uid),
     )
-    # A UID that succeeds now must not keep looking failed to the next run.
-    calibration_failure_marker_path(output_root, uid).unlink(missing_ok=True)
-    return marker
+
+
+def write_calibration_marker(output_root: str | os.PathLike[str], uid: str) -> Path:
+    return _calibration_markers(output_root, uid).write_done(
+        uid=uid, output=str(calibrated_output_path(output_root, uid))
+    )
 
 
 def write_calibration_failure_marker(
@@ -454,18 +447,9 @@ def write_calibration_failure_marker(
     (no delivered calibration tables) from a transient one (a truncated read)
     without re-reading the driver log, which is per-job and easily lost.
     """
-    marker = calibration_failure_marker_path(output_root, uid)
-    payload = {
-        "uid": uid,
-        "stage": stage,
-        "error": error,
-        "failed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if log_path is not None:
-        payload["log"] = str(log_path)
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return marker
+    return _calibration_markers(output_root, uid).write_failed(
+        error, stage=stage, log_path=log_path, uid=uid
+    )
 
 
 def split_calibrated_science_ms(

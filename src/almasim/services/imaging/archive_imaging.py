@@ -26,9 +26,10 @@ import sys
 import threading
 import time
 from collections import deque
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
+
+from ..markers import StageMarkers
 
 if TYPE_CHECKING:
     import numpy as np
@@ -147,6 +148,10 @@ def imaging_failure_marker_path(output_dir: str | os.PathLike[str]) -> Path:
     return out.with_name(out.name + ".failed")
 
 
+def _imaging_markers(output_dir: str | os.PathLike[str]) -> StageMarkers:
+    return StageMarkers(imaging_marker_path(output_dir), imaging_failure_marker_path(output_dir))
+
+
 def imaging_log_path(output_dir: str | os.PathLike[str]) -> Path:
     out = Path(output_dir)
     return out.with_name(out.name + ".log")
@@ -171,14 +176,11 @@ def write_imaging_marker(
     images: Sequence[str] | None = None,
 ) -> Path:
     out = Path(output_dir)
-    imaging_failure_marker_path(out).unlink(missing_ok=True)
-    marker = imaging_marker_path(out)
-    payload = {
+    payload: dict[str, Any] = {
         "ms": ms_path,
         "spw": int(spw),
         "output": str(out),
         "image": str(out / IMAGE_FILENAME),
-        "completed_at": datetime.now(timezone.utc).isoformat(),
     }
     if images:
         payload["image"] = str(out / images[0])
@@ -189,8 +191,7 @@ def write_imaging_marker(
         payload["commands"] = [shlex.join(str(part) for part in c) for c in commands]
     if seconds is not None:
         payload["seconds"] = round(float(seconds), 1)
-    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return marker
+    return _imaging_markers(out).write_done(**payload)
 
 
 def write_imaging_failure_marker(
@@ -204,23 +205,13 @@ def write_imaging_failure_marker(
 ) -> Path:
     """Record why a task failed. ``error`` is kept verbatim for triage."""
     out = Path(output_dir)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    imaging_marker_path(out).unlink(missing_ok=True)
-    marker = imaging_failure_marker_path(out)
-    payload = {
-        "ms": ms_path,
-        "spw": int(spw),
-        "stage": "image",
-        "output": str(out),
-        "error": error,
-        "failed_at": datetime.now(timezone.utc).isoformat(),
-    }
+    markers = _imaging_markers(out)
+    # Unlike unpack and calibrate, a failed image task also drops its old .done.
+    markers.done.unlink(missing_ok=True)
+    fields: dict[str, Any] = {"ms": ms_path, "spw": int(spw), "output": str(out)}
     if returncode is not None:
-        payload["returncode"] = int(returncode)
-    if log_path is not None:
-        payload["log"] = str(log_path)
-    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return marker
+        fields["returncode"] = int(returncode)
+    return markers.write_failed(error, stage="image", log_path=log_path, **fields)
 
 
 def wsclean_environment(cores: int, base: Mapping[str, str] | None = None) -> dict[str, str]:
