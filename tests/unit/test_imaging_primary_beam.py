@@ -15,6 +15,8 @@ from almasim import cli, cli_image
 from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging import primary_beam as pbm
 
+from ._fakes import patch_everywhere
+
 runner = CliRunner()
 C = pbm.SPEED_OF_LIGHT_M_S
 
@@ -169,7 +171,7 @@ def test_run_wsclean_task_primary_beam_corrects_and_logs(tmp_path, monkeypatch):
         seen.update(kwargs)
         return {"ok": True}
 
-    monkeypatch.setattr(ai, "_run_and_mark", _fake_run_and_mark)
+    patch_everywhere(monkeypatch, ai, "_run_and_mark", _fake_run_and_mark)
     ai.run_wsclean_task(
         command=["wsclean", "-name", str(out / "wsclean"), "in.ms"],
         output_dir=str(out),
@@ -206,7 +208,8 @@ def _mark_inputs(tmp_path: Path) -> dict:
 def test_run_and_mark_writes_the_primary_beam_products(tmp_path, monkeypatch):
     kwargs = _mark_inputs(tmp_path)
     out = kwargs["out"]
-    monkeypatch.setattr(
+    patch_everywhere(
+        monkeypatch,
         ai,
         "_run_with_retries",
         lambda cmd, out_, *a: _write_image(out_ / ai.IMAGE_FILENAME) or 1,
@@ -222,8 +225,11 @@ def test_run_and_mark_writes_the_primary_beam_products(tmp_path, monkeypatch):
 def test_run_and_mark_fails_the_task_when_the_correction_fails(tmp_path, monkeypatch):
     kwargs = _mark_inputs(tmp_path)
     out = kwargs["out"]
-    monkeypatch.setattr(
-        ai, "_run_with_retries", lambda cmd, out_, *a: (out_ / ai.IMAGE_FILENAME).write_bytes(b"x")
+    patch_everywhere(
+        monkeypatch,
+        ai,
+        "_run_with_retries",
+        lambda cmd, out_, *a: (out_ / ai.IMAGE_FILENAME).write_bytes(b"x"),
     )
     with pytest.raises(RuntimeError, match="Could not primary-beam correct"):
         ai._run_and_mark(**kwargs, pb_dish_diameter=12.0)

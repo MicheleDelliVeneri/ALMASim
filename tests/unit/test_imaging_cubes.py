@@ -18,6 +18,8 @@ from almasim import cli, cli_image
 from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging import cube as cube_module
 
+from ._fakes import patch_everywhere
+
 runner = CliRunner()
 
 
@@ -511,12 +513,18 @@ def test_channel_ranges_lists_runs_casa_style():
 def _uv_task(tmp_path, monkeypatch, fit, **kwargs):
     fake = _FakeCubeWsclean()
     monkeypatch.setattr(subprocess, "Popen", fake)
-    monkeypatch.setattr(
-        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 10, "bytes": 0}
+    patch_everywhere(
+        monkeypatch,
+        ai,
+        "extract_single_window_ms_subprocess",
+        lambda *a, **k: {"rows": 10, "bytes": 0},
     )
     calls = []
-    monkeypatch.setattr(
-        ai, "subtract_uv_continuum_subprocess", lambda ms, **k: calls.append((ms, k)) or fit
+    patch_everywhere(
+        monkeypatch,
+        ai,
+        "subtract_uv_continuum_subprocess",
+        lambda ms, **k: calls.append((ms, k)) or fit,
     )
     (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
     ai.run_wsclean_task(
@@ -647,10 +655,10 @@ def _run_selfcal(
             calls.append((function,))
         return {"spw": "0:0~9", "refant": "DA41", "line_free_channels": 10}
 
-    monkeypatch.setattr(ai, "_call_in_child", fake_call)
+    patch_everywhere(monkeypatch, ai, "_call_in_child", fake_call)
     remaining = list(snrs)
-    monkeypatch.setattr(ai, "image_snr", lambda image, residual: remaining.pop(0))
-    monkeypatch.setattr(ai, "image_peak", lambda image: 1.0)
+    patch_everywhere(monkeypatch, ai, "image_snr", lambda image, residual: remaining.pop(0))
+    patch_everywhere(monkeypatch, ai, "image_peak", lambda image: 1.0)
     images = []
 
     def fake_run(cmd):
@@ -823,8 +831,11 @@ def test_continuum_restart_commands_write_the_model_then_continue():
 def test_run_wsclean_task_cleans_the_continuum_in_two_passes(tmp_path, monkeypatch):
     fake = _FakeCubeWsclean()
     monkeypatch.setattr(subprocess, "Popen", fake)
-    monkeypatch.setattr(
-        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
+    patch_everywhere(
+        monkeypatch,
+        ai,
+        "extract_single_window_ms_subprocess",
+        lambda *a, **k: {"rows": 1, "bytes": 0},
     )
     (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
 
@@ -972,8 +983,11 @@ def test_line_mask_pass_continues_inside_the_mask(tmp_path, monkeypatch):
 def test_run_wsclean_task_cleans_the_cube_again_inside_the_line_mask(tmp_path, monkeypatch):
     fake = _FakeCubeWsclean()
     monkeypatch.setattr(subprocess, "Popen", fake)
-    monkeypatch.setattr(
-        ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
+    patch_everywhere(
+        monkeypatch,
+        ai,
+        "extract_single_window_ms_subprocess",
+        lambda *a, **k: {"rows": 1, "bytes": 0},
     )
     monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 50)
     (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)

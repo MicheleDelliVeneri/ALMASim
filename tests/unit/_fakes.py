@@ -97,3 +97,20 @@ def mock_dask_client(n_px: int, n_chan: int) -> MagicMock:
         np.random.rand(n_chan, n_px, n_px).astype(np.float32)
     ]
     return client
+
+
+def patch_everywhere(monkeypatch, module, name, value):
+    """Patch ``module.name`` and every almasim module that imported the same object.
+
+    archive_imaging re-exports functions that now live in imaging submodules;
+    a patch only takes effect where the caller looks the name up, so it is
+    applied in each almasim module holding that object.
+    """
+    import sys
+
+    original = getattr(module, name)
+    for mod in list(sys.modules.values()):
+        if getattr(mod, "__name__", "").startswith("almasim") and (
+            getattr(mod, name, None) is original
+        ):
+            monkeypatch.setattr(mod, name, value)
