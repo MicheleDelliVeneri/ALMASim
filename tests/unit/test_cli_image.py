@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -672,7 +674,7 @@ def test_wsclean_environment_pins_openblas_to_one_thread():
 @pytest.mark.unit
 def test_run_wsclean_task_success_writes_done_marker_and_log(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
 
     result = ai.run_wsclean_task(
@@ -698,7 +700,7 @@ def test_run_wsclean_task_hard_abort_writes_failure_marker(tmp_path, monkeypatch
         "terminate called after throwing an instance of 'std::bad_alloc'",
         "  what():  std::bad_alloc",
     ]
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=-6, lines=lines))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=-6, lines=lines))
     outdir = tmp_path / "ms" / "SPW-1"
 
     with pytest.raises(RuntimeError, match="return code -6"):
@@ -719,7 +721,7 @@ def test_run_wsclean_task_hard_abort_writes_failure_marker(tmp_path, monkeypatch
 @pytest.mark.unit
 def test_run_wsclean_task_removes_stale_files_of_a_previous_attempt(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
     outdir.mkdir(parents=True)
     # What a crashed or killed attempt leaves behind: WSClean's reorder files
@@ -742,7 +744,7 @@ def test_run_wsclean_task_removes_stale_files_of_a_previous_attempt(tmp_path, mo
 
 @pytest.mark.unit
 def test_run_wsclean_task_without_image_is_a_failure(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=0, write_image=False))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=0, write_image=False))
     outdir = tmp_path / "ms" / "SPW-2"
 
     with pytest.raises(RuntimeError, match="wrote no wsclean-image.fits"):
@@ -757,7 +759,7 @@ def test_run_wsclean_task_missing_binary_is_a_failure(tmp_path, monkeypatch):
     def _no_binary(*args, **kwargs):
         raise FileNotFoundError("wsclean")
 
-    monkeypatch.setattr(ai.subprocess, "Popen", _no_binary)
+    monkeypatch.setattr(subprocess, "Popen", _no_binary)
     outdir = tmp_path / "ms" / "SPW-2"
     with pytest.raises(RuntimeError, match="Could not start wsclean"):
         ai.run_wsclean_task(
@@ -772,7 +774,7 @@ def test_run_wsclean_task_replaces_stale_markers(tmp_path, monkeypatch):
     outdir = tmp_path / "ms" / "SPW-1"
     outdir.mkdir(parents=True)
     ai.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=0))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=0))
 
     ai.run_wsclean_task(
         command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=1
@@ -1195,7 +1197,7 @@ def test_build_imaging_tasks_abs_mem_and_scratch_placeholder(tmp_path):
 @pytest.mark.unit
 def test_run_wsclean_task_uses_and_removes_scratch_dir(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
     scratch_root = tmp_path / "scratch"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
@@ -1217,7 +1219,7 @@ def test_run_wsclean_task_uses_and_removes_scratch_dir(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 def test_run_wsclean_task_removes_scratch_dir_on_failure(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai.subprocess, "Popen", _FakeWsclean(returncode=-11))
+    monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=-11))
     outdir = tmp_path / "ms" / "SPW-1"
     scratch_root = tmp_path / "scratch"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
@@ -1257,7 +1259,7 @@ class _FlakyWsclean:
 @pytest.mark.unit
 def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
     flaky = _FlakyWsclean(crashes=2)
-    monkeypatch.setattr(ai.subprocess, "Popen", flaky)
+    monkeypatch.setattr(subprocess, "Popen", flaky)
     outdir = tmp_path / "ms" / "SPW-1"
 
     result = ai.run_wsclean_task(
@@ -1282,7 +1284,7 @@ def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
 @pytest.mark.unit
 def test_run_wsclean_task_gives_up_after_retries(tmp_path, monkeypatch):
     flaky = _FlakyWsclean(crashes=10)
-    monkeypatch.setattr(ai.subprocess, "Popen", flaky)
+    monkeypatch.setattr(subprocess, "Popen", flaky)
     outdir = tmp_path / "ms" / "SPW-1"
     with pytest.raises(RuntimeError, match="after 3 attempts"):
         ai.run_wsclean_task(
@@ -1301,7 +1303,7 @@ def test_run_wsclean_task_gives_up_after_retries(tmp_path, monkeypatch):
 @pytest.mark.unit
 def test_run_wsclean_task_does_not_retry_error_exits(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=255, lines=["+ >>> Error opening meta file"])
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
     with pytest.raises(RuntimeError, match="return code 255"):
         ai.run_wsclean_task(
@@ -1347,7 +1349,7 @@ def test_build_imaging_tasks_single_window_default(tmp_path):
 @pytest.mark.unit
 def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeypatch):
     fake = _FakeWsclean(returncode=0)
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     calls = []
 
     def fake_extract(
@@ -1394,7 +1396,7 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
         raise RuntimeError("No visibilities for spectral window 5")
 
     monkeypatch.setattr(ai, "extract_single_window_ms_subprocess", failing_extract)
-    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
     outdir = tmp_path / "ms" / "SPW-5"
     with pytest.raises(RuntimeError, match="Could not extract spectral window 5"):
         ai.run_wsclean_task(
@@ -1432,8 +1434,8 @@ def test_extract_single_window_ms_retries_lock_file_errors_in_a_new_process(tmp_
             return _Child(1, stderr=_LOCK_FILE_STDERR)
         return _Child(0, stdout='{"rows": 1, "bytes": 1, "data_desc_ids": [5]}')
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
-    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
     log_path = tmp_path / "SPW-5.log"
     result = ai.extract_single_window_ms_subprocess(
         "in.ms", 5, [2], tmp_path / "out.ms", log_path=log_path, attempts=5, retry_seconds=0
@@ -1450,8 +1452,8 @@ def test_extract_single_window_ms_gives_up_after_the_last_lock_file_attempt(tmp_
         children.append(cmd)
         return _Child(1, stderr=_LOCK_FILE_STDERR)
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
-    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
     with pytest.raises(RuntimeError, match="LockFile.cc"):
         ai.extract_single_window_ms_subprocess(
             "in.ms", 5, [2], tmp_path / "out.ms", attempts=3, retry_seconds=0
@@ -1467,7 +1469,7 @@ def test_extract_single_window_ms_does_not_retry_other_errors(tmp_path, monkeypa
         children.append(cmd)
         return _Child(1, stderr="RuntimeError: No visibilities for spectral window 5\n")
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(RuntimeError, match="No visibilities"):
         ai.extract_single_window_ms_subprocess(
             "in.ms", 5, [2], tmp_path / "out.ms", attempts=5, retry_seconds=0
@@ -1502,7 +1504,7 @@ def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, 
         seen.update(kwargs)
         return _Done()
 
-    monkeypatch.setattr(ai.subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     result = ai.extract_single_window_ms_subprocess(
         "/data/in.ms", 5, [2, 3], tmp_path / "out.ms", timeout=30, max_weight=500.0
     )

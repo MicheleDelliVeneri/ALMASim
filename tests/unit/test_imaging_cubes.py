@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 from pathlib import Path
 
 import click
@@ -15,6 +16,7 @@ from typer.testing import CliRunner
 
 from almasim import cli, cli_image
 from almasim.services.imaging import archive_imaging as ai
+from almasim.services.imaging import cube as cube_module
 
 runner = CliRunner()
 
@@ -227,7 +229,7 @@ def _tasks(tmp_path, **kwargs):
 @pytest.mark.unit
 def test_run_wsclean_task_makes_continuum_cube_and_contsub(tmp_path, monkeypatch):
     fake = _FakeCubeWsclean()
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     products = ("image", "residual", "psf")
     (task,), _ = _tasks(
         tmp_path, cube=cli_image.CubeOptions(), cube_products=products, single_window=True
@@ -269,7 +271,7 @@ def test_run_wsclean_task_makes_continuum_cube_and_contsub(tmp_path, monkeypatch
 @pytest.mark.unit
 def test_cube_only_run_adds_cubes_next_to_existing_continuum(tmp_path, monkeypatch):
     fake = _FakeCubeWsclean()
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     (continuum_task,), _ = _tasks(tmp_path)
     ai.run_wsclean_task(
         command=continuum_task.command,
@@ -508,7 +510,7 @@ def test_channel_ranges_lists_runs_casa_style():
 
 def _uv_task(tmp_path, monkeypatch, fit, **kwargs):
     fake = _FakeCubeWsclean()
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     monkeypatch.setattr(
         ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 10, "bytes": 0}
     )
@@ -820,7 +822,7 @@ def test_continuum_restart_commands_write_the_model_then_continue():
 @pytest.mark.unit
 def test_run_wsclean_task_cleans_the_continuum_in_two_passes(tmp_path, monkeypatch):
     fake = _FakeCubeWsclean()
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     monkeypatch.setattr(
         ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
     )
@@ -947,9 +949,9 @@ def test_line_mask_from_channels_without_channels_or_signal(tmp_path):
 def test_line_mask_pass_continues_inside_the_mask(tmp_path, monkeypatch):
     cube = ["wsclean", "-name", "c", "-auto-mask", "3.0", "-auto-threshold", "1.0", "x.ms"]
     with (tmp_path / "log").open("w") as log:
-        monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 120)
+        monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 120)
         second = ai._line_mask_pass(cube, tmp_path, log)
-        monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 0)
+        monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 0)
         assert ai._line_mask_pass(cube, tmp_path, log) is None
     assert second == [
         "wsclean",
@@ -969,11 +971,11 @@ def test_line_mask_pass_continues_inside_the_mask(tmp_path, monkeypatch):
 @pytest.mark.unit
 def test_run_wsclean_task_cleans_the_cube_again_inside_the_line_mask(tmp_path, monkeypatch):
     fake = _FakeCubeWsclean()
-    monkeypatch.setattr(ai.subprocess, "Popen", fake)
+    monkeypatch.setattr(subprocess, "Popen", fake)
     monkeypatch.setattr(
         ai, "extract_single_window_ms_subprocess", lambda *a, **k: {"rows": 1, "bytes": 0}
     )
-    monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 50)
+    monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 50)
     (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
 
     ai.run_wsclean_task(
@@ -1046,7 +1048,7 @@ def test_line_mask_from_channels_without_a_pixel_scale_is_not_grown(tmp_path):
 
 @pytest.mark.unit
 def test_line_mask_pass_reads_the_line_column_too(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 50)
+    monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 50)
     fit = {
         "source_column": "DATA",
         "order": 1,
@@ -1070,7 +1072,7 @@ def test_line_mask_pass_zeroes_the_nan_models_of_empty_channels(tmp_path, monkey
     for c, value in enumerate([1.0, np.nan]):
         plane = np.full((4, 4), value)
         _write_channel(tmp_path / f"wsclean-cube-{c:04d}-model.fits", plane, 230e9)
-    monkeypatch.setattr(ai, "line_mask_from_channels", lambda out, path: 10)
+    monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 10)
 
     with (tmp_path / "log").open("w") as log:
         assert ai._line_mask_pass(["wsclean", "-name", "c", "x.ms"], tmp_path, log)
