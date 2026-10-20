@@ -10,7 +10,8 @@
 		metadataApi,
 		type MetadataQuery,
 		type MetadataResponse,
-		type QueryPreset,
+		type MetadataRow,
+		type QueryPreset
 	} from '#lib/api/metadata.js';
 	import MetadataQueryForm from '#lib/components/metadata/MetadataQueryForm.svelte';
 	import MetadataResultsTable from '#lib/components/metadata/MetadataResultsTable.svelte';
@@ -18,10 +19,21 @@
 	import MetadataSaveModal from '#lib/components/metadata/MetadataSaveModal.svelte';
 	import DownloadDialog from '#lib/components/metadata/DownloadDialog.svelte';
 	import FullScreenLoader from '#lib/components/shared/Loader.svelte';
+	import PresetSaveModal from '#lib/components/metadata/PresetSaveModal.svelte';
+	import QueryJobsPanel from '#lib/components/metadata/QueryJobsPanel.svelte';
+	import QueryPresetsPanel from '#lib/components/metadata/QueryPresetsPanel.svelte';
+	import type { QueryJob } from '#lib/components/metadata/queryJob.js';
 	import { createLogger } from '#lib/logger.js';
 	import { formatDateStamp, supportsFilePicker } from '#lib/utils.js';
+	import {
+		DEFAULT_METADATA_PATH,
+		downloadMetadata,
+		normalizeBackendPath,
+		parseMetadataFile,
+		rowsToCsv,
+		snapshotMetadata
+	} from '#lib/utils/metadataFiles.js';
 
-	const DEFAULT_METADATA_PATH = 'data';
 	const logger = createLogger('routes/metadata');
 
 	type FileSystemFileHandle = {
@@ -35,164 +47,6 @@
 	type SaveFilePickerOptions = {
 		suggestedName?: string;
 		types?: { description?: string; accept: Record<string, string[]> }[];
-	};
-
-	const snapshotMetadata = (data: MetadataResponse): MetadataResponse => ({
-		count: typeof data.count === 'number' ? data.count : data.data.length,
-		data: data.data.map((row) => ({ ...row }))
-	});
-
-	const rowsToCsv = (rows: Record<string, unknown>[]): string => {
-		if (!rows.length) return '';
-		const columnsSet = new Set<string>();
-		const columns: string[] = [];
-		for (const row of rows) {
-			for (const key of Object.keys(row)) {
-				if (!columnsSet.has(key)) {
-					columnsSet.add(key);
-					columns.push(key);
-				}
-			}
-		}
-		const escape = (val: unknown): string => {
-			if (val === null || val === undefined) return '';
-			const s = typeof val === 'string' ? val : JSON.stringify(val);
-			return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-		};
-		const header = columns.map(escape).join(',');
-		const body = rows.map((r) => columns.map((c) => escape(r[c])).join(',')).join('\n');
-		return `${header}\n${body}\n`;
-	};
-
-	const downloadMetadata = (data: MetadataResponse, path: string, format: 'json' | 'csv' = 'json') => {
-		if (typeof window === 'undefined') return;
-		const snapshot = snapshotMetadata(data);
-		const extension = format === 'csv' ? '.csv' : '.json';
-		const body =
-			format === 'csv'
-				? rowsToCsv(snapshot.data)
-				: JSON.stringify(snapshot, null, 2);
-		const mime = format === 'csv' ? 'text/csv' : 'application/json';
-		const blob = new Blob([body], { type: mime });
-		const safePath = path.replace(/^[.@/\\]+/, '');
-		const sanitized =
-			safePath.length > 0 ? safePath.replace(/\s+/g, '-').replace(/[^\w./-]/g, '_') : '';
-		const segments = sanitized.split('/').filter(Boolean);
-		let fileName = segments.length
-			? segments.join('_')
-			: `metadata-results-${formatDateStamp()}`;
-		fileName = fileName.replace(/\.(json|csv)$/i, '');
-		fileName += extension;
-		const link = document.createElement('a');
-		link.href = URL.createObjectURL(blob);
-		link.download = fileName;
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-		URL.revokeObjectURL(link.href);
-	};
-
-	const normalizeBackendPath = (input: string, format: 'json' | 'csv' = 'json') => {
-		const extension = format === 'csv' ? '.csv' : '.json';
-		const cleaned = input.replace(/^[./\\]+/, '').trim() || DEFAULT_METADATA_PATH;
-		// Strip any existing json/csv extension so the format selector wins.
-		const withoutExt = cleaned.replace(/\.(json|csv)$/i, '');
-		// If the user provided no leaf filename (just a directory), append the default name.
-		const hasFileLeaf = /[^/]+$/.test(withoutExt) && !withoutExt.endsWith('/');
-		const base = hasFileLeaf
-			? withoutExt
-			: `${withoutExt.replace(/\/$/, '')}/metadata-results`;
-		return `${base}${extension}`;
-	};
-
-	const parseCsv = (input: string): Array<Record<string, string>> => {
-		const rows: string[][] = [];
-		let current = '';
-		let inQuotes = false;
-		const currentRow: string[] = [];
-
-		const pushValue = () => {
-			currentRow.push(current);
-			current = '';
-		};
-
-		const pushRow = () => {
-			pushValue();
-			rows.push([...currentRow]);
-			currentRow.length = 0;
-		};
-
-		for (let i = 0; i < input.length; i++) {
-			const char = input[i];
-			if (char === '"') {
-				if (inQuotes && input[i + 1] === '"') {
-					current += '"';
-					i++;
-				} else {
-					inQuotes = !inQuotes;
-				}
-			} else if (char === ',' && !inQuotes) {
-				pushValue();
-			} else if ((char === '\n' || char === '\r') && !inQuotes) {
-				if (char === '\r' && input[i + 1] === '\n') i++;
-				pushRow();
-			} else {
-				current += char;
-			}
-		}
-
-		if (current.length > 0 || currentRow.length > 0) {
-			pushRow();
-		}
-
-		if (!rows.length) return [];
-		const [header, ...dataRows] = rows;
-		return dataRows
-			.filter((cells) => cells.some((cell) => cell.trim().length))
-			.map((cells) =>
-				header.reduce<Record<string, string>>((acc, column, index) => {
-					acc[column] = cells[index] ?? '';
-					return acc;
-				}, {})
-			);
-	};
-
-	const parseMetadataFile = async (file: File): Promise<MetadataResponse> => {
-		const text = await file.text();
-		const extension = file.name.split('.').pop()?.toLowerCase();
-		if (extension === 'csv') {
-			const data = parseCsv(text);
-			return { data, count: data.length };
-		}
-
-		try {
-			const parsed = JSON.parse(text) as Partial<MetadataResponse>;
-			if (!parsed || !Array.isArray(parsed.data)) {
-				throw new Error();
-			}
-			return {
-				data: parsed.data,
-				count:
-					typeof parsed.count === 'number'
-						? parsed.count
-						: Array.isArray(parsed.data)
-							? parsed.data.length
-							: 0
-			};
-		} catch {
-			throw new Error('Invalid metadata file. Provide JSON with a `data` array or a CSV file.');
-		}
-	};
-
-	type QueryJob = {
-		id: string;
-		status: 'starting' | 'fetching' | 'done' | 'cancelled' | 'error';
-		rows: Record<string, unknown>[];
-		message: string;
-		error: string;
-		pollTimer: ReturnType<typeof setTimeout> | null;
-		page: number;
-		query: MetadataQuery;
 	};
 
 	let scienceTypes = $state<{ keywords: string[]; categories: string[] } | null>(null);
@@ -231,15 +85,19 @@
 	// Download state
 	let downloadDialogOpen = $state(false);
 	let downloadMemberOusUids = $state<string[]>([]);
-	let downloadMetadataRows = $state<Record<string, unknown>[]>([]);
+	let downloadMetadataRows = $state<MetadataRow[]>([]);
 
 	let selectedJobId = $state<string | null>(null);
 
-	const activeJobs = $derived(jobs.filter((j) => j.status === 'fetching' || j.status === 'starting'));
+	const activeJobs = $derived(
+		jobs.filter((j) => j.status === 'fetching' || j.status === 'starting')
+	);
 	const fetching = $derived(activeJobs.length > 0);
 
 	// When a job is selected show only its rows; otherwise merge all job rows
-	const selectedJob = $derived(selectedJobId ? jobs.find((j) => j.id === selectedJobId) ?? null : null);
+	const selectedJob = $derived(
+		selectedJobId ? (jobs.find((j) => j.id === selectedJobId) ?? null) : null
+	);
 	const queryRows = $derived(selectedJob ? selectedJob.rows : jobs.flatMap((j) => j.rows));
 	const results = $derived<MetadataResponse | null>(
 		queryRows.length > 0 ? { data: queryRows, count: queryRows.length } : loadedResults
@@ -279,7 +137,10 @@
 		if (cached) {
 			loadedResults = cached;
 			setStatus(`Loaded cached metadata (${cached.count ?? cached.data.length} rows)`);
-			logger.debug({ rowCount: cached.count ?? cached.data.length }, 'Restored metadata from cache');
+			logger.debug(
+				{ rowCount: cached.count ?? cached.data.length },
+				'Restored metadata from cache'
+			);
 		}
 
 		await loadPresets();
@@ -314,7 +175,7 @@
 				name: presetSaveName.trim(),
 				description: presetSaveDesc.trim(),
 				filters: job.query,
-				result_count: job.rows.length,
+				result_count: job.rows.length
 			});
 			presets = [saved, ...presets.filter((p) => p.name !== saved.name)];
 			setStatus(`Preset "${saved.name}" saved.`);
@@ -370,7 +231,7 @@
 			page: 0,
 			// Use $state.snapshot to get a plain object — structuredClone trips on
 			// Svelte 5 reactive proxies in some cases.
-			query: $state.snapshot(query) as MetadataQuery,
+			query: $state.snapshot(query) as MetadataQuery
 		};
 		jobs = [...jobs, job];
 		starting = false;
@@ -425,7 +286,13 @@
 				}
 
 				if (pageData.done) {
-					updateJob(queryId, { rows: newRows, page: newPage, status: 'done', message: msg, pollTimer: null });
+					updateJob(queryId, {
+						rows: newRows,
+						page: newPage,
+						status: 'done',
+						message: msg,
+						pollTimer: null
+					});
 					if (newRows.length > 0) {
 						const merged = jobs.flatMap((j) => (j.id === queryId ? newRows : j.rows));
 						writeCachedResults({ data: merged, count: merged.length });
@@ -439,12 +306,9 @@
 					updateJob(queryId, {
 						status: 'error',
 						error: 'TAP query timed out (no new rows for over 10 minutes).',
-						pollTimer: null,
+						pollTimer: null
 					});
-					logger.warn(
-						{ queryId, totalKnown, idlePolls },
-						'Stopping poll loop after hang timeout'
-					);
+					logger.warn({ queryId, totalKnown, idlePolls }, 'Stopping poll loop after hang timeout');
 					return;
 				}
 
@@ -460,7 +324,15 @@
 				const timer = setTimeout(pollNext, delay);
 				updateJob(queryId, { rows: newRows, page: newPage, message: msg, pollTimer: timer });
 				logger.debug(
-					{ queryId, page: newPage, rowsSoFar: newRows.length, phase, totalKnown, idlePolls, delay },
+					{
+						queryId,
+						page: newPage,
+						rowsSoFar: newRows.length,
+						phase,
+						totalKnown,
+						idlePolls,
+						delay
+					},
 					'Polling next page'
 				);
 			} catch (err) {
@@ -533,7 +405,7 @@
 			}
 
 			loadedResults = data;
-			jobs = [];  // clear query jobs so loaded data is shown
+			jobs = []; // clear query jobs so loaded data is shown
 			writeCachedResults(data);
 			loadModalOpen = false;
 			formElement.reset();
@@ -572,10 +444,7 @@
 			await metadataApi.save({ path: backendPath, data: snapshot.data, format });
 			backendSucceeded = true;
 			setStatus(`Saved ${snapshot.count} rows to backend path ${backendPath}`);
-			logger.info(
-				{ rowCount: snapshot.count, backendPath, format },
-				'Metadata saved to backend'
-			);
+			logger.info({ rowCount: snapshot.count, backendPath, format }, 'Metadata saved to backend');
 		} catch (err) {
 			const message =
 				err instanceof Error
@@ -599,13 +468,13 @@
 			if (localSaveHandle) {
 				const writable = await localSaveHandle.createWritable();
 				const body =
-					format === 'csv'
-						? rowsToCsv(snapshot.data)
-						: JSON.stringify(snapshot, null, 2);
+					format === 'csv' ? rowsToCsv(snapshot.data) : JSON.stringify(snapshot, null, 2);
 				const mime = format === 'csv' ? 'text/csv' : 'application/json';
 				await writable.write(new Blob([body], { type: mime }));
 				await writable.close();
-				setStatus(`Saved locally to ${localSaveFileName || localSaveHandle.name || `metadata.${format}`}${backendSucceeded ? ' (backend copy updated too)' : ''}`);
+				setStatus(
+					`Saved locally to ${localSaveFileName || localSaveHandle.name || `metadata.${format}`}${backendSucceeded ? ' (backend copy updated too)' : ''}`
+				);
 			} else if (needsLocalFallback) {
 				downloadMetadata(snapshot, backendPath, format);
 				setStatus(`Downloaded metadata snapshot (${snapshot.count} rows, ${format.toUpperCase()})`);
@@ -666,7 +535,7 @@
 		clearCachedResults();
 	}
 
-	function handleDownload(memberOusUids: string[], metadataRows: Record<string, unknown>[]) {
+	function handleDownload(memberOusUids: string[], metadataRows: MetadataRow[]) {
 		logger.info({ count: memberOusUids.length }, 'Download dialog opened');
 		downloadMemberOusUids = memberOusUids;
 		downloadMetadataRows = metadataRows;
@@ -689,40 +558,14 @@
 	<div class="space-y-8">
 		<header>
 			<h1 class="text-3xl font-bold text-fg">Metadata Explorer</h1>
-			<p class="mt-2 text-fg-muted">Query ALMA observation metadata or load a precomputed dataset.</p>
+			<p class="mt-2 text-fg-muted">
+				Query ALMA observation metadata or load a precomputed dataset.
+			</p>
 		</header>
 
-		<!-- Query Presets panel -->
-	{#if presets.length > 0}
-		<div class="rounded-lg border border-indigo-100 bg-accent-soft p-4">
-			<h2 class="mb-3 text-sm font-semibold text-accent">Saved Query Presets</h2>
-			<div class="space-y-2">
-				{#each presets as preset (preset.name)}
-					<div class="flex items-center justify-between rounded-md border border-accent-line bg-surface px-3 py-2 text-sm">
-						<div class="min-w-0">
-							<span class="font-medium text-fg">{preset.name}</span>
-							{#if preset.description}
-								<span class="ml-2 text-xs text-fg-dim">{preset.description}</span>
-							{/if}
-							<span class="ml-2 text-xs text-fg-dim">({preset.result_count} rows)</span>
-						</div>
-						<div class="ml-4 flex shrink-0 gap-2">
-							<button
-								onclick={() => applyPreset(preset)}
-								class="rounded-md bg-primary px-2 py-1 text-xs font-medium text-white hover:bg-primary-hover"
-							>Apply & Run</button>
-							<button
-								onclick={() => handleDeletePreset(preset.name)}
-								class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-danger ring-1 ring-red-200 hover:bg-danger-soft"
-							>Delete</button>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{/if}
+		<QueryPresetsPanel {presets} onApply={applyPreset} onDelete={handleDeletePreset} />
 
-	<MetadataQueryForm {scienceTypes} loading={starting} onSubmit={runQuery} />
+		<MetadataQueryForm {scienceTypes} loading={starting} onSubmit={runQuery} />
 
 		{#if error}
 			<div class="rounded-md border border-danger-line bg-danger-soft p-4 text-sm text-danger">
@@ -731,7 +574,9 @@
 		{/if}
 
 		{#if statusMessage}
-			<div class="whitespace-pre-wrap rounded-md border border-accent-line bg-accent-soft p-4 text-sm text-accent">
+			<div
+				class="whitespace-pre-wrap rounded-md border border-accent-line bg-accent-soft p-4 text-sm text-accent"
+			>
 				{statusMessage}
 				{#if statusLink}
 					<a href={resolve(statusLink.route)} class="font-medium underline">{statusLink.label}</a>.
@@ -739,68 +584,16 @@
 			</div>
 		{/if}
 
-		<!-- Per-job status panel -->
-		{#if jobs.length > 0}
-			<div class="space-y-2">
-				{#if selectedJobId}
-					<div class="flex items-center justify-between rounded-md border border-accent-line bg-accent-soft px-4 py-2 text-xs text-accent">
-						<span>Showing results for query <span class="font-mono">{selectedJobId.slice(0, 8)}</span></span>
-						<button onclick={() => (selectedJobId = null)} class="underline hover:text-accent">Show all</button>
-					</div>
-				{/if}
-				{#each jobs as job (job.id)}
-					<div class="flex items-center justify-between rounded-md border px-4 py-2 text-sm
-						{selectedJobId === job.id ? 'ring-2 ring-indigo-400' : ''}
-						{job.status === 'error' ? 'border-danger-line bg-danger-soft text-danger' :
-						 job.status === 'cancelled' ? 'border-line bg-surface text-fg-dim' :
-						 job.status === 'done' ? 'border-ok-line bg-ok-soft text-ok' :
-						 'border-accent-line bg-accent-soft text-accent'}">
-						<div class="flex items-center gap-2 min-w-0">
-							{#if job.status === 'fetching' || job.status === 'starting'}
-								<svg class="h-4 w-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
-									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-								</svg>
-							{/if}
-							<span class="truncate">
-								{job.status === 'error' ? job.error : job.message}
-								<span class="ml-1 font-mono text-xs opacity-60">{job.id.slice(0, 8)}</span>
-							</span>
-						</div>
-						<div class="ml-4 flex shrink-0 gap-2">
-							{#if job.status === 'fetching'}
-								<button
-									onclick={() => stopJob(job.id)}
-									class="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
-								>Stop</button>
-							{:else}
-								{#if job.status === 'done' && job.rows.length > 0}
-									<button
-										onclick={() => loadJob(job.id)}
-										class="rounded-md px-2 py-1 text-xs font-medium ring-1
-											{selectedJobId === job.id
-												? 'bg-primary text-white ring-indigo-600 hover:bg-primary-hover'
-												: 'bg-surface text-accent ring-indigo-300 hover:bg-accent-soft'}"
-									>{selectedJobId === job.id ? 'Loaded' : 'Load'}</button>
-									<button
-										onclick={() => saveJob(job.id)}
-										class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-fg-muted ring-1 ring-gray-300 hover:bg-hover"
-									>Save</button>
-									<button
-										onclick={() => openPresetSave(job.id)}
-										class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-accent ring-1 ring-indigo-300 hover:bg-accent-soft"
-									>Save as Preset</button>
-								{/if}
-								<button
-									onclick={() => dismissJob(job.id)}
-									class="rounded-md bg-surface px-2 py-1 text-xs font-medium text-fg-muted ring-1 ring-gray-300 hover:bg-hover"
-								>Dismiss</button>
-							{/if}
-						</div>
-					</div>
-				{/each}
-			</div>
-		{/if}
+		<QueryJobsPanel
+			{jobs}
+			{selectedJobId}
+			onShowAll={() => (selectedJobId = null)}
+			onStop={stopJob}
+			onLoad={loadJob}
+			onSave={saveJob}
+			onSavePreset={openPresetSave}
+			onDismiss={dismissJob}
+		/>
 
 		<MetadataResultsTable
 			{results}
@@ -850,42 +643,11 @@
 	</div>
 </div>
 
-<!-- Preset save modal -->
-{#if presetSaveOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="w-full max-w-sm rounded-lg bg-surface p-6 shadow-panel">
-			<h3 class="mb-4 text-base font-semibold text-fg">Save Query as Preset</h3>
-			<div class="space-y-3">
-				<label class="block">
-					<span class="text-sm font-medium text-fg-muted">Preset name <span class="text-danger">*</span></span>
-					<input
-						type="text"
-						bind:value={presetSaveName}
-						placeholder="e.g. galaxies_band6"
-						class="mt-1 w-full rounded-md border border-line p-2 text-sm"
-					/>
-				</label>
-				<label class="block">
-					<span class="text-sm font-medium text-fg-muted">Description</span>
-					<input
-						type="text"
-						bind:value={presetSaveDesc}
-						placeholder="Optional description"
-						class="mt-1 w-full rounded-md border border-line p-2 text-sm"
-					/>
-				</label>
-			</div>
-			<div class="mt-5 flex justify-end gap-2">
-				<button
-					onclick={() => (presetSaveOpen = false)}
-					class="rounded-md px-3 py-2 text-sm font-medium text-fg-muted ring-1 ring-gray-300 hover:bg-hover"
-				>Cancel</button>
-				<button
-					onclick={handleSavePreset}
-					disabled={presetSaving || !presetSaveName.trim()}
-					class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-gray-400"
-				>{presetSaving ? 'Saving…' : 'Save'}</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<PresetSaveModal
+	open={presetSaveOpen}
+	saving={presetSaving}
+	bind:name={presetSaveName}
+	bind:description={presetSaveDesc}
+	onCancel={() => (presetSaveOpen = false)}
+	onSave={handleSavePreset}
+/>
