@@ -283,8 +283,10 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      # slurmd manages its own cgroups under the runner VM's cgroup tree.
-      options: --privileged --cgroupns=host
+      # slurmd manages its own cgroups under the runner VM's cgroup tree. --init runs
+      # tini as PID 1 to reap orphaned job processes: without it the zombies keep the
+      # job's process group alive, the kill "fails" and Slurm drains the only node.
+      options: --privileged --cgroupns=host --init
     env:
       SUPERSEDE: ${{ contains(github.event.pull_request.labels.*.name, 'golden:supersede') }}
     steps:
