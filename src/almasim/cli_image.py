@@ -25,12 +25,18 @@ from almasim.services.compute.progress import (
 )
 from almasim.services.instrument.constants import ARCSEC_PER_RAD as RAD_TO_ARCSEC
 from almasim.services.instrument.constants import DEFAULT_MAX_WEIGHT, SPEED_OF_LIGHT_M_S
+from almasim.services.ms.tables import (
+    TARGET_INTENT,
+    intent_matches,
+    open_table,
+    polarization_of_data_description,
+    spw_of_data_description,
+)
 
 from .cli_shared import fail, usage_error
 
 MIN_IMAGE_PIXELS = 16
 DAY_IN_SECONDS = 3600 * 24
-TARGET_INTENT = "OBSERVE_TARGET"
 # How long the Slurm driver waits for its workers before it starts anyway.
 _WORKER_WAIT_S = 1800.0
 _IMAGING_HEARTBEAT_S = 60.0
@@ -147,24 +153,6 @@ def science_selection(input_ms: Path) -> tuple[dict[int, int], list[int]]:
     return rows_per_spw, target_fields
 
 
-def intent_matches(obs_mode: str, intents: Sequence[str]) -> bool:
-    """Whether a STATE ``OBS_MODE`` carries one of ``intents``.
-
-    ``OBS_MODE`` is a comma-separated list such as
-    ``CALIBRATE_PHASE#ON_SOURCE,CALIBRATE_WVR#ON_SOURCE``. An intent with a
-    ``#`` sub-intent must match a token exactly; one without (``OBSERVE_TARGET``)
-    matches any of its sub-intents.
-    """
-    tokens = [token.strip() for token in str(obs_mode).split(",") if token.strip()]
-    for intent in intents:
-        if "#" in intent:
-            if intent in tokens:
-                return True
-        elif any(token.split("#", 1)[0] == intent for token in tokens):
-            return True
-    return False
-
-
 def _field_scan(
     input_ms: Path,
     intents: Sequence[str] = (TARGET_INTENT,),
@@ -177,20 +165,21 @@ def _field_scan(
     The per-field counts cover all of a field's rows in a window, whatever the
     intent, which is what the single-window extraction copies for it.
     """
-    casacore_table = import_casacore_tables()
-    data_description = casacore_table(f"{input_ms}::DATA_DESCRIPTION", ack=False)
-    spw_of_dd = np.asarray(data_description.getcol("SPECTRAL_WINDOW_ID"))
-    states = casacore_table(f"{input_ms}::STATE", ack=False)
-    obs_modes = list(states.getcol("OBS_MODE")) if states.nrows() else []
-    main = casacore_table(str(input_ms), ack=False)
-    dd_ids = np.asarray(main.getcol("DATA_DESC_ID"))
+    opener = import_casacore_tables()
+    with open_table(f"{input_ms}::DATA_DESCRIPTION", opener=opener) as data_description:
+        spw_of_dd = np.asarray(spw_of_data_description(data_description))
+    with open_table(f"{input_ms}::STATE", opener=opener) as states:
+        obs_modes = list(states.getcol("OBS_MODE")) if states.nrows() else []
+    with open_table(str(input_ms), opener=opener) as main:
+        dd_ids = np.asarray(main.getcol("DATA_DESC_ID"))
+        field_ids = np.asarray(main.getcol("FIELD_ID"))
+        state_ids = np.asarray(main.getcol("STATE_ID"))
     unique_dd, counts = np.unique(dd_ids, return_counts=True)
     rows_per_spw: dict[int, int] = {}
     for dd_id, count in zip(unique_dd, counts):
         spw = int(spw_of_dd[int(dd_id)])
         rows_per_spw[spw] = rows_per_spw.get(spw, 0) + int(count)
 
-    field_ids = np.asarray(main.getcol("FIELD_ID"))
     rows_per_spw_field: dict[tuple[int, int], int] = {}
     pairs, pair_counts = np.unique(np.stack([dd_ids, field_ids]), axis=1, return_counts=True)
     for (dd_id, field_id), count in zip(pairs.T, pair_counts):
@@ -200,7 +189,6 @@ def _field_scan(
     target_states = {i for i, mode in enumerate(obs_modes) if intent_matches(mode, intents)}
     target_fields: list[int] = []
     if target_states:
-        state_ids = np.asarray(main.getcol("STATE_ID"))
         mask = np.isin(state_ids, list(target_states))
         target_fields = sorted(int(f) for f in np.unique(field_ids[mask]))
     return rows_per_spw, target_fields, rows_per_spw_field
@@ -252,13 +240,8 @@ def add_spectral_columns(parameters: pd.DataFrame) -> pd.DataFrame:
         if column not in filled.columns:
             filled[column] = np.nan
     for filename, rows in tqdm(filled.groupby("filename").groups.items(), desc="Spectral windows"):
-        spectral_windows = casacore_table(f"{filename}::SPECTRAL_WINDOW", ack=False)
-        try:
+        with open_table(f"{filename}::SPECTRAL_WINDOW", opener=casacore_table) as spectral_windows:
             spectral = spectral_window_properties(spectral_windows)
-        finally:
-            close = getattr(spectral_windows, "close", None)
-            if callable(close):
-                close()
         spws = filled.loc[rows, "spectral_window_id"].astype(int).to_numpy()
         for column, values in spectral.items():
             filled.loc[rows, column] = values[spws]
@@ -370,16 +353,17 @@ def compute_imaging_parameters(
     """
     if intents and not science_only:
         raise ValueError("intents select fields; they cannot be combined with all fields")
-    casacore_table = import_casacore_tables()
-    spectral_windows = casacore_table(f"{input_ms}::SPECTRAL_WINDOW", ack=False)
-    observation = casacore_table(f"{input_ms}::OBSERVATION", ack=False)
-    start_mjd, end_mjd = observation[0]["TIME_RANGE"]
+    opener = import_casacore_tables()
+    with open_table(f"{input_ms}::SPECTRAL_WINDOW", opener=opener) as spectral_windows:
+        reference_frequencies = spectral_windows.getcol("REF_FREQUENCY")
+        spectral = spectral_window_properties(spectral_windows)
+    with open_table(f"{input_ms}::OBSERVATION", opener=opener) as observation:
+        start_mjd, end_mjd = observation[0]["TIME_RANGE"]
     start_datetime = Time(start_mjd / DAY_IN_SECONDS, format="mjd").to_datetime()
     end_datetime = Time(end_mjd / DAY_IN_SECONDS, format="mjd").to_datetime()
-    antennas = casacore_table(f"{input_ms}::ANTENNA", ack=False)
-    reference_frequencies = spectral_windows.getcol("REF_FREQUENCY")
-    min_dish_diameter = np.min(antennas.getcol("DISH_DIAMETER"))
-    antenna_pos = antennas.getcol("POSITION")
+    with open_table(f"{input_ms}::ANTENNA", opener=opener) as antennas:
+        min_dish_diameter = np.min(antennas.getcol("DISH_DIAMETER"))
+        antenna_pos = antennas.getcol("POSITION")
     i, j = np.triu_indices(antenna_pos.shape[0], k=1)
     distance = np.linalg.norm(antenna_pos[j, :] - antenna_pos[i, :], axis=1)
     max_baseline_size = max(distance)
@@ -393,7 +377,6 @@ def compute_imaging_parameters(
         SPEED_OF_LIGHT_M_S * RAD_TO_ARCSEC / reference_frequencies / max_baseline_size
     )
     spectral_window_id = np.arange(reference_frequencies.size, dtype=int)
-    spectral = spectral_window_properties(spectral_windows)
 
     _, selected_fields, rows_per_spw_field = _field_scan(
         input_ms, tuple(intents) if intents else (TARGET_INTENT,)
@@ -410,8 +393,8 @@ def compute_imaging_parameters(
         entries.extend((index, f, rows_per_spw_field[(spw, f)]) for f in fields)
     field_names: list[str] = []
     if entries:
-        field_table = casacore_table(f"{input_ms}::FIELD", ack=False)
-        field_names = [str(name) for name in field_table.getcol("NAME")]
+        with open_table(f"{input_ms}::FIELD", opener=opener) as field_table:
+            field_names = [str(name) for name in field_table.getcol("NAME")]
     keep = np.array([index for index, _, _ in entries], dtype=int)
     n_rows = len(entries)
 
@@ -1953,21 +1936,18 @@ def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
     shutil.copytree(input_ms, output_ms)
     nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or (os.cpu_count() or 1))
 
-    data_description = casacore_table(str(output_ms / "DATA_DESCRIPTION"), ack=False)
-    spw_of_dd = data_description.getcol("SPECTRAL_WINDOW_ID")
-    pol_of_dd = data_description.getcol("POLARIZATION_ID")
-    data_description.close()
-    spectral_window = casacore_table(str(output_ms / "SPECTRAL_WINDOW"), ack=False)
-    chan_freq = [
-        np.asarray(spectral_window.getcell("CHAN_FREQ", i), dtype=np.float64)
-        for i in range(spectral_window.nrows())
-    ]
-    spectral_window.close()
-    polarization = casacore_table(str(output_ms / "POLARIZATION"), ack=False)
-    corr_types = [
-        np.asarray(polarization.getcell("CORR_TYPE", i)) for i in range(polarization.nrows())
-    ]
-    polarization.close()
+    with open_table(output_ms / "DATA_DESCRIPTION", opener=casacore_table) as data_description:
+        spw_of_dd = spw_of_data_description(data_description)
+        pol_of_dd = polarization_of_data_description(data_description)
+    with open_table(output_ms / "SPECTRAL_WINDOW", opener=casacore_table) as spectral_window:
+        chan_freq = [
+            np.asarray(spectral_window.getcell("CHAN_FREQ", i), dtype=np.float64)
+            for i in range(spectral_window.nrows())
+        ]
+    with open_table(output_ms / "POLARIZATION", opener=casacore_table) as polarization:
+        corr_types = [
+            np.asarray(polarization.getcell("CORR_TYPE", i)) for i in range(polarization.nrows())
+        ]
 
     main_table = casacore_table(str(output_ms), readonly=False, ack=False)
     try:

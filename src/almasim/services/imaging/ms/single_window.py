@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Sequence
 
 from almasim.services.instrument.constants import DEFAULT_MAX_WEIGHT
+from almasim.services.ms.tables import (
+    open_table,
+    polarization_of_data_description,
+    spw_of_data_description,
+)
 from almasim.services.runtime.child import ChildFailed, append_to_log, call_in_child
 from almasim.services.runtime.env import wsclean_environment
 
@@ -53,59 +58,53 @@ def _extract_single_window_ms_once(
     *,
     max_weight: float | None,
 ) -> dict[str, object]:
-    from casacore.tables import table, taql
+    from casacore.tables import taql
 
     src = str(ms_path)
     out = Path(out_path)
     shutil.rmtree(out, ignore_errors=True)
     # The source MS is only read, by several tasks at once (one per spectral
-    # window, on different nodes) over NFS. Read locking would make every
-    # task write the shared table.lock file, which failed with
-    # "LockFile.cc: Failed AlwaysAssert tracePWRITE" when three tasks of one
-    # MS ran together (job 3835); no read locking touches no lock file.
-    lock = {"lockoptions": "usernoread", "ack": False}
-    dd_table = table(f"{src}/DATA_DESCRIPTION", **lock)
-    spw_of_dd = [int(x) for x in dd_table.getcol("SPECTRAL_WINDOW_ID")]
-    pol_of_dd = [int(x) for x in dd_table.getcol("POLARIZATION_ID")]
-    dd_table.close()
+    # window, on different nodes) over NFS: shared reads (see ms.tables).
+    with open_table(f"{src}/DATA_DESCRIPTION", shared=True) as dd_table:
+        spw_of_dd = spw_of_data_description(dd_table)
+        pol_of_dd = polarization_of_data_description(dd_table)
     dd_ids = [i for i, s in enumerate(spw_of_dd) if s == int(spw)]
     if not dd_ids:
         raise RuntimeError(f"Spectral window {spw} has no DATA_DESCRIPTION row in {src}")
     where = f"DATA_DESC_ID in [{','.join(str(i) for i in dd_ids)}]"
     if field_ids:
         where += f" and FIELD_ID in [{','.join(str(int(f)) for f in field_ids)}]"
-    main_in = table(src, **lock)
-    n_all = int(taql(f"select from $1 where {where}", tables=[main_in]).nrows())
-    if n_all == 0:
-        main_in.close()
-        raise RuntimeError(f"No visibilities for spectral window {spw} fields {field_ids} in {src}")
-    if max_weight:
-        where += f" and max(WEIGHT) <= {float(max_weight)!r}"
-    selection = taql(f"select from $1 where {where}", tables=[main_in])
-    n_rows = int(selection.nrows())
-    if n_rows == 0:
-        selection.close()
-        main_in.close()
-        raise RuntimeError(
-            f"All {n_all} visibilities for spectral window {spw} fields {field_ids} in {src} "
-            f"have WEIGHT > {max_weight:g}"
-        )
-    selection.copy(str(out), deep=True)
-    selection.close()
-    main_in.close()
+    with open_table(src, shared=True) as main_in:
+        counted = taql(f"select from $1 where {where}", tables=[main_in])
+        n_all = int(counted.nrows())
+        counted.close()
+        if n_all == 0:
+            raise RuntimeError(
+                f"No visibilities for spectral window {spw} fields {field_ids} in {src}"
+            )
+        if max_weight:
+            where += f" and max(WEIGHT) <= {float(max_weight)!r}"
+        selection = taql(f"select from $1 where {where}", tables=[main_in])
+        try:
+            n_rows = int(selection.nrows())
+            if n_rows == 0:
+                raise RuntimeError(
+                    f"All {n_all} visibilities for spectral window {spw} fields {field_ids} "
+                    f"in {src} have WEIGHT > {max_weight:g}"
+                )
+            selection.copy(str(out), deep=True)
+        finally:
+            selection.close()
 
-    dd_out = table(f"{out}/DATA_DESCRIPTION", readonly=False, ack=False)
-    dd_out.removerows([i for i in range(dd_out.nrows()) if i not in dd_ids])
-    dd_out.putcol("SPECTRAL_WINDOW_ID", [0] * len(dd_ids))
-    dd_out.putcol("POLARIZATION_ID", [pol_of_dd[i] for i in dd_ids])
-    dd_out.close()
-    spw_out = table(f"{out}/SPECTRAL_WINDOW", readonly=False, ack=False)
-    spw_out.removerows([i for i in range(spw_out.nrows()) if i != int(spw)])
-    spw_out.close()
+    with open_table(f"{out}/DATA_DESCRIPTION", readonly=False) as dd_out:
+        dd_out.removerows([i for i in range(dd_out.nrows()) if i not in dd_ids])
+        dd_out.putcol("SPECTRAL_WINDOW_ID", [0] * len(dd_ids))
+        dd_out.putcol("POLARIZATION_ID", [pol_of_dd[i] for i in dd_ids])
+    with open_table(f"{out}/SPECTRAL_WINDOW", readonly=False) as spw_out:
+        spw_out.removerows([i for i in range(spw_out.nrows()) if i != int(spw)])
     renumber = {old: new for new, old in enumerate(dd_ids)}
-    main = table(str(out), readonly=False, ack=False)
-    main.putcol("DATA_DESC_ID", [renumber[int(x)] for x in main.getcol("DATA_DESC_ID")])
-    main.close()
+    with open_table(out, readonly=False) as main:
+        main.putcol("DATA_DESC_ID", [renumber[int(x)] for x in main.getcol("DATA_DESC_ID")])
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
     return {
         "rows": n_rows,

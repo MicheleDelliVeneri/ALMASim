@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..instrument.constants import DEFAULT_MAX_WEIGHT
+from ..ms.tables import intent_names, open_table, spw_of_data_description
 
 CALIBRATED_SUFFIX = ".ms.split.cal"
 
@@ -59,11 +60,6 @@ def uid_of(ms_path: str | os.PathLike[str]) -> str:
     return name[: -len(CALIBRATED_SUFFIX)] if name.endswith(CALIBRATED_SUFFIX) else Path(name).stem
 
 
-def _intent_names(obs_mode: str) -> set[str]:
-    """``CALIBRATE_PHASE#ON_SOURCE,CALIBRATE_WVR#ON_SOURCE`` -> its intents without sub-intent."""
-    return {token.split("#", 1)[0].strip() for token in str(obs_mode).split(",") if token.strip()}
-
-
 def _query(main, columns: list[str], select: str, where: str = "", group: str = "") -> pd.DataFrame:
     from casacore.tables import taql
 
@@ -95,18 +91,15 @@ def flag_summary(
       rows, of each row's largest WEIGHT; ``high_weight_rows`` counts the
       unflagged rows above ``max_weight``.
     """
-    from casacore.tables import table
-
     path = str(ms_path)
-    lock = {"ack": False, "readonly": True, "lockoptions": "usernoread"}
-    with table(f"{path}/DATA_DESCRIPTION", **lock) as dd_table:
-        spw_of_dd = [int(x) for x in dd_table.getcol("SPECTRAL_WINDOW_ID")]
-    with table(f"{path}/FIELD", **lock) as field_table:
+    with open_table(f"{path}/DATA_DESCRIPTION", shared=True) as dd_table:
+        spw_of_dd = spw_of_data_description(dd_table)
+    with open_table(f"{path}/FIELD", shared=True) as field_table:
         field_names = [str(x) for x in field_table.getcol("NAME")]
-    with table(f"{path}/STATE", **lock) as state_table:
+    with open_table(f"{path}/STATE", shared=True) as state_table:
         obs_modes = list(state_table.getcol("OBS_MODE")) if state_table.nrows() else []
 
-    with table(path, **lock) as main:
+    with open_table(path, shared=True) as main:
         if main.nrows() == 0:
             return pd.DataFrame(columns=SUMMARY_COLUMNS)
         by_state = _query(
@@ -166,7 +159,7 @@ def flag_summary(
 
     by_state = with_spw(by_state)
     by_state["intent_set"] = [
-        _intent_names(obs_modes[int(s)]) if 0 <= int(s) < len(obs_modes) else set()
+        intent_names(obs_modes[int(s)]) if 0 <= int(s) < len(obs_modes) else set()
         for s in by_state["state_id"]
     ]
     out = (
