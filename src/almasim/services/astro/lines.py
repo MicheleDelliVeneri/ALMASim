@@ -1,9 +1,9 @@
 """Line emission functions."""
 
-import os
-
 import numpy as np
 import pandas as pd
+
+from ..data_paths import DataLayout, calibrated_lines
 
 
 def read_line_emission_csv(path_line_emission_csv, sep=";"):
@@ -23,8 +23,7 @@ def read_line_emission_csv(path_line_emission_csv, sep=";"):
 
 def get_line_info(main_path, idxs=None):
     """Get line emission information from CSV file."""
-    path_line_emission_csv = os.path.join(main_path, "brightnes", "calibrated_lines.csv")
-    db_line = read_line_emission_csv(path_line_emission_csv, sep=",").sort_values(by="Line")
+    db_line = calibrated_lines(DataLayout(main_path)).sort_values(by="Line")
     rest_frequencies = db_line["freq(GHz)"].values
     line_names = db_line["Line"].values
     if idxs is not None:
@@ -35,9 +34,7 @@ def get_line_info(main_path, idxs=None):
 
 def compute_rest_frequency_from_redshift(master_path, source_freq, redshift):
     """Compute rest frequency from redshift and observed frequency."""
-    db_line = read_line_emission_csv(
-        os.path.join(master_path, "brightnes", "calibrated_lines.csv"), sep=","
-    )
+    db_line = calibrated_lines(DataLayout(master_path))
     db_line["freq(GHz)"] = db_line["freq(GHz)"].astype(float)
     source_freqs = db_line["freq(GHz)"].values / (1 + redshift)
     freq_names = db_line["Line"].values

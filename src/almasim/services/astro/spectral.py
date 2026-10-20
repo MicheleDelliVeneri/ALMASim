@@ -12,7 +12,7 @@ import pandas as pd
 from astropy.constants import c
 from astropy.cosmology import FlatLambdaCDM
 
-from .lines import read_line_emission_csv
+from ..data_paths import DataLayout, calibrated_lines, read_table
 from .redshift import compute_redshift
 from .tng import redshift_to_snapshot
 
@@ -184,7 +184,7 @@ def sed_reading(
     distance_Mpc = cosmo.luminosity_distance(redshift).value
     distance_cm = distance_Mpc * 3.086e24
     solid_angle = 4 * pi * distance_cm**2
-    sed = pd.read_csv(file_path, sep=r"\s+")
+    sed = read_table(file_path, sep=r"\s+")
     sed["GHz"] = sed["um"].apply(lambda x: (x * U.um).to(U.GHz, equivalencies=U.spectral()).value)
     sed, lum_infrared_erg_s, lum_infrared = normalize_sed(
         sed,
@@ -303,17 +303,14 @@ def process_spectral_data(
     freq_max = central_frequency + delta_freq / 2
     sed, flux_infrared, lum_infrared = sed_reading(
         source_type,
-        master_path / "brightnes",
+        DataLayout(master_path).brightness_dir,
         cont_sens,
         freq_min,
         freq_max,
         remote,
         lum_infrared,
     )
-    db_line = read_line_emission_csv(
-        master_path / "brightnes" / "calibrated_lines.csv",
-        sep=",",
-    )
+    db_line = calibrated_lines(DataLayout(master_path))
     if line_names is None:
         n = n_lines if n_lines is not None else 1
     else:
