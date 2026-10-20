@@ -90,7 +90,7 @@ def verify_asdm_directory(asdm_path: str | os.PathLike[str]) -> None:
     try:
         index_root = ET.parse(index).getroot()
     except ET.ParseError as exc:
-        raise RuntimeError(f"ASDM is incomplete, ASDM.xml does not parse ({exc}): {root}")
+        raise RuntimeError(f"ASDM is incomplete, ASDM.xml does not parse ({exc}): {root}") from exc
 
     missing_tables: list[str] = []
     for table in index_root.iter():
@@ -122,7 +122,7 @@ def verify_asdm_directory(asdm_path: str | os.PathLike[str]) -> None:
     try:
         main_root = ET.parse(main).getroot()
     except ET.ParseError as exc:
-        raise RuntimeError(f"ASDM is incomplete, Main.xml does not parse ({exc}): {root}")
+        raise RuntimeError(f"ASDM is incomplete, Main.xml does not parse ({exc}): {root}") from exc
 
     binary_dir = root / "ASDMBinary"
     missing_bdfs: list[str] = []
