@@ -496,14 +496,6 @@ def generate_background_cube(
     return cube
 
 
-def _channel_first_to_datacube_layout(cube: np.ndarray, datacube_array: Any) -> np.ndarray:
-    """Match a channel-first cube to the current datacube array layout."""
-    datacube_shape = tuple(datacube_array.shape)
-    if datacube_shape[0] == cube.shape[0]:
-        return cube
-    return np.transpose(cube, (2, 1, 0))
-
-
 def _ensure_morphology_dataset(params: "SimulationParams", log: LogFn = None) -> None:
     """Ensure image assets exist for image-based sky models (galaxy-zoo / hubble).
 
@@ -893,7 +885,7 @@ def generate_clean_cube(
                 * delta_freq.to(U.Hz).value
             ),
         )
-        datacube._array = external_payload.cube * U.Jy * U.pix**-2
+        usm.add_channel_first(datacube, external_payload.cube)
         header = external_payload.header
         external_input_metadata = external_payload.metadata
     else:
@@ -950,9 +942,7 @@ def generate_clean_cube(
         seed=params.background_seed,
     )
     if np.any(background_cube):
-        datacube._array += (
-            _channel_first_to_datacube_layout(background_cube, datacube._array) * U.Jy * U.pix**-2
-        )
+        usm.add_channel_first(datacube, background_cube)
         log(
             f"Injected background sky: mode={params.background_mode}, "
             f"level={params.background_level:.2f}, "
@@ -994,14 +984,7 @@ def generate_clean_cube(
 
     if not is_external_model:
         header = usm.get_datacube_header(datacube, params.obs_date)
-    model = datacube._array.to_value(datacube._array.unit)
-    if len(model.shape) == 4:
-        model = model[0]
-    dim1, dim2, dim3 = model.shape
-    if dim1 == n_channels:
-        model = model / beam_area.value
-    else:
-        model = model.T / beam_area.value
+    model = usm.channel_first(datacube) / beam_area.value
     totflux = np.sum(model)
     if remote:
         print(f"Total Flux injected in model cube: {round(totflux, 3)} Jy")
