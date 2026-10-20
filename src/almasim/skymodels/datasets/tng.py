@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Optional
 
 import paramiko
 
+from ._common import _ensure_directory
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     pass
 
@@ -21,7 +23,9 @@ except Exception as exc:  # pragma: no cover - import-time guard
 else:
     _PYSFTP_IMPORT_ERROR = None
 
-TNG_SIMULATION_URL = "http://www.tng-project.org/api/TNG100-1/files/simulation.hdf5"
+# The IllustrisTNG run the extended sky model draws its galaxies from.
+TNG_SIMULATION = "TNG100-1"
+TNG_SIMULATION_URL = f"http://www.tng-project.org/api/{TNG_SIMULATION}/files/simulation.hdf5"
 
 
 @dataclass
@@ -32,12 +36,6 @@ class RemoteMachine:
     username: str
     ssh_key: Path
     ssh_key_passphrase: Optional[str] = None
-
-
-def _ensure_directory(path: Path) -> Path:
-    """Ensure directory exists."""
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def _require_pysftp() -> "pysftp":  # type: ignore[name-defined]
@@ -74,10 +72,10 @@ def download_tng_structure(
     """Download the Illustris TNG structure file locally or to a remote host."""
     destination = Path(destination).expanduser().resolve()
     if remote is None:
-        structure_path = destination / "TNG100-1" / "simulation.hdf5"
+        structure_path = destination / TNG_SIMULATION / "simulation.hdf5"
         _ensure_directory(structure_path.parent)
-        _ensure_directory(destination / "TNG100-1" / "output")
-        _ensure_directory(destination / "TNG100-1" / "postprocessing" / "offsets")
+        _ensure_directory(destination / TNG_SIMULATION / "output")
+        _ensure_directory(destination / TNG_SIMULATION / "postprocessing" / "offsets")
         if not structure_path.exists():
             _wget_tng(api_key, structure_path)
         return structure_path
@@ -96,15 +94,15 @@ def download_tng_structure(
         private_key_pass=remote.ssh_key_passphrase,
     ) as sftp:
         for rel in [
-            Path("TNG100-1"),
-            Path("TNG100-1") / "output",
-            Path("TNG100-1") / "postprocessing",
-            Path("TNG100-1") / "postprocessing" / "offsets",
+            Path(TNG_SIMULATION),
+            Path(TNG_SIMULATION) / "output",
+            Path(TNG_SIMULATION) / "postprocessing",
+            Path(TNG_SIMULATION) / "postprocessing" / "offsets",
         ]:
             remote_dir = os.path.join(str(remote_base), str(rel))
             if not sftp.exists(remote_dir):
                 sftp.mkdir(remote_dir)
-        remote_file = os.path.join(str(remote_base), "TNG100-1", "simulation.hdf5")
+        remote_file = os.path.join(str(remote_base), TNG_SIMULATION, "simulation.hdf5")
         if not sftp.exists(remote_file):
             ssh = paramiko.SSHClient()
             ssh.load_system_host_keys()

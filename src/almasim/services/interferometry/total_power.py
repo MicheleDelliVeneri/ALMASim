@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from ..instrument.constants import ARCSEC_PER_RAD, FWHM_PER_SIGMA
+from .combine import normalized_config_weights, single_run_result
 
 
 def estimate_tp_beam_fwhm_arcsec(
@@ -112,21 +113,10 @@ def combine_total_power_results(
     config_weights: list[float] | None = None,
 ) -> dict[str, Any]:
     """Combine multiple TP runs into one weighted TP product."""
-    if not per_config_results:
-        raise ValueError("Cannot combine an empty TP result list")
-    if len(per_config_results) == 1:
-        combined = dict(per_config_results[0])
-        combined["per_config_results"] = per_config_results
-        combined["combined_config_count"] = 1
-        return combined
-
-    if config_weights is None:
-        config_weights = [1.0] * len(per_config_results)
-    weights = np.asarray(config_weights, dtype=float)
-    weights = np.clip(weights, 0.0, None)
-    if not np.any(weights):
-        weights = np.ones_like(weights)
-    normalized = weights / np.sum(weights)
+    single = single_run_result(per_config_results, "TP")
+    if single is not None:
+        return single
+    normalized = normalized_config_weights(len(per_config_results), config_weights)
 
     def _weighted_stack(key: str) -> np.ndarray:
         stack = np.stack([result[key] for result in per_config_results], axis=0)

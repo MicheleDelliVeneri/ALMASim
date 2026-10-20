@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import locale
 import os
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
+
+from ._common import _ensure_directory, _load_kaggle_api, _run_with_c_locale
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from kaggle import api as _kaggle_api  # noqa: F401
@@ -52,30 +52,6 @@ def configure_kaggle_token(token: Optional[Path | str]) -> None:
         return
     # Not a path on disk: treat the value itself as a bearer token.
     os.environ["KAGGLE_API_TOKEN"] = str(token)
-
-
-def _ensure_directory(path: Path) -> Path:
-    """Ensure directory exists."""
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-@lru_cache(maxsize=1)
-def _load_kaggle_api():
-    """Load Kaggle API (lazy import)."""
-    from kaggle import api as kaggle_api  # local import to avoid side effects
-
-    return kaggle_api
-
-
-def _run_with_c_locale(func):
-    """Run function with C locale."""
-    saved = locale.setlocale(locale.LC_ALL)
-    try:
-        locale.setlocale(locale.LC_ALL, "C")
-        return func()
-    finally:
-        locale.setlocale(locale.LC_ALL, saved)
 
 
 def download_galaxy_zoo(

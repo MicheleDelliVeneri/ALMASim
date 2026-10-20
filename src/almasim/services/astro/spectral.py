@@ -107,6 +107,15 @@ def cont_finder(cont_frequencies, line_frequency):
     return int(np.argmin(distances))
 
 
+def _min_continuum_flux(sed: pd.DataFrame, freq_min: float, freq_max: float) -> float:
+    """Faintest SED flux (Jy) in [freq_min, freq_max]; the flux nearest freq_min if none."""
+    freqs = sed["GHz"].values
+    cont_mask = (freqs >= freq_min) & (freqs <= freq_max)
+    if sum(cont_mask) > 0:
+        return np.min(sed["Jy"].values[cont_mask])
+    return sed["Jy"].values[np.argmin(np.abs(freqs - freq_min))]
+
+
 def normalize_sed(
     sed: pd.DataFrame,
     lum_infrared: float,
@@ -121,14 +130,7 @@ def normalize_sed(
     so_to_erg_s = 3.846e33
     lum_infrared_erg_s = lum_infrared * so_to_erg_s
     sed["Jy"] = lum_infrared_erg_s * sed["erg/s/Hz"] * 1e23 / solid_angle
-    cont_mask = (sed["GHz"].values >= freq_min) & (sed["GHz"].values <= freq_max)
-    if sum(cont_mask) > 0:
-        cont_fluxes = sed["Jy"].values[cont_mask]
-        min_ = np.min(cont_fluxes)
-    else:
-        freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
-        cont_fluxes = sed["Jy"].values[freq_point]
-        min_ = cont_fluxes
+    min_ = _min_continuum_flux(sed, freq_min, freq_max)
     _log(logger, f"Minimum continum flux: {min_:.2e}", remote=remote)
     _log(logger, f"Continum sensitivity: {cont_sens:.2e}", remote=remote)
     lum_save = lum_infrared
@@ -138,14 +140,7 @@ def normalize_sed(
             lum_infrared += 0.1 * lum_infrared
             lum_infrared_erg_s = so_to_erg_s * lum_infrared
             sed["Jy"] = lum_infrared_erg_s * sed["erg/s/Hz"] * 1e23 / solid_angle
-            cont_mask = (sed["GHz"] >= freq_min) & (sed["GHz"] <= freq_max)
-            if sum(cont_mask) > 0:
-                cont_fluxes = sed["Jy"].values[cont_mask]
-                min_ = np.min(cont_fluxes)
-            else:
-                freq_point = np.argmin(np.abs(sed["GHz"].values - freq_min))
-                cont_fluxes = sed["Jy"].values[freq_point]
-                min_ = cont_fluxes
+            min_ = _min_continuum_flux(sed, freq_min, freq_max)
 
     if lum_save != lum_infrared:
         _log(
