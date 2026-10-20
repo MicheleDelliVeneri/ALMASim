@@ -422,6 +422,77 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
 
 
 @pytest.mark.unit
+def test_read_native_ms_folds_xx_yy_back_to_stokes_i(tmp_path):
+    """An ALMASim MS stores Stokes I as XX = YY; the table gets one correlation back."""
+    nrows, ncorr, nchan = 3, 2, 4
+    main_tb = MagicMock()
+    main_tb.getcol.side_effect = lambda col: {
+        "DATA": np.ones((ncorr, nchan, nrows), dtype=np.complex64),
+        "MODEL_DATA": np.zeros((ncorr, nchan, nrows), dtype=np.complex64),
+        "FLAG": np.zeros((ncorr, nchan, nrows), dtype=bool),
+        "UVW": np.zeros((3, nrows)),
+        "ANTENNA1": np.zeros(nrows, dtype=np.int32),
+        "ANTENNA2": np.ones(nrows, dtype=np.int32),
+        "TIME": np.linspace(5e9, 5.1e9, nrows),
+        "INTERVAL": np.full(nrows, 10.0),
+        "EXPOSURE": np.full(nrows, 10.0),
+        "WEIGHT": np.ones((ncorr, nrows), dtype=np.float32),
+        "SIGMA": np.ones((ncorr, nrows), dtype=np.float32),
+    }[col]
+
+    spw_tb = MagicMock()
+    spw_tb.getcell.return_value = np.linspace(230e9, 231e9, nchan)
+
+    ant_tb = MagicMock()
+    ant_tb.getcol.side_effect = lambda col: {
+        "NAME": ["DA41", "DA42"],
+        "POSITION": np.zeros((3, 2)),
+        "DISH_DIAMETER": np.array([12.0, 7.0]),
+    }[col]
+
+    pol_tb = MagicMock()
+    pol_tb.getcell.return_value = np.array([9, 12])
+
+    fld_tb = MagicMock()
+    fld_tb.getcell.side_effect = lambda col, row: {
+        "PHASE_DIR": np.array([[0.1, -0.2]]),
+        "NAME": "J0000",
+    }[col]
+
+    obs_tb = MagicMock()
+    obs_tb.getcell.side_effect = lambda col, row: {
+        "TELESCOPE_NAME": "ALMA",
+        "PROJECT": "2021.1.S",
+    }[col]
+
+    def fake_open(path, readonly=True):
+        if path.endswith("SPECTRAL_WINDOW"):
+            return spw_tb
+        if path.endswith("ANTENNA"):
+            return ant_tb
+        if path.endswith("FIELD"):
+            return fld_tb
+        if path.endswith("OBSERVATION"):
+            return obs_tb
+        if path.endswith("POLARIZATION"):
+            return pol_tb
+        return main_tb
+
+    b = MagicMock()
+    b.open.side_effect = fake_open
+    b.get.side_effect = _CasatoolsBackend.get  # the getcol results above are casatools-ordered
+
+    with patch("almasim.services.ms.io._get_backend", return_value=b):
+        result = read_native_ms(tmp_path / "test.ms")
+
+    assert result["data"].shape == (nrows, 1, nchan)
+    np.testing.assert_array_equal(result["data"], np.ones((nrows, 1, nchan)))
+    assert result["weight"].shape == (nrows, 1) and result["sigma"].shape == (nrows, 1)
+    assert result["flag"].shape == (nrows, 1, nchan)
+    np.testing.assert_array_equal(result["antenna_diameters_m"], [12.0, 7.0])
+
+
+@pytest.mark.unit
 def test_every_table_spec_writes_only_declared_columns(tmp_path):
     """Each spec's values name columns of its own table (MADIV-28 T4.9)."""
     vt = _sample_vt()
