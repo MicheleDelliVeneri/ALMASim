@@ -45,6 +45,12 @@ else
 fi
 
 mkdir -p "$RUN/logs" "$RUN/archives"
+if [ "$BACKEND" = slurm ]; then
+    # What the queue looked like, every 30 s: why a job is pending shows up here.
+    ( while true; do date -u +%T; squeue -h -o "%i %j %T %C %m %r" || true; sleep 30; done ) \
+        > "$RUN/logs/squeue.log" 2>&1 &
+    trap 'kill %1 2>/dev/null || true' EXIT
+fi
 RUN="$(cd "$RUN" && pwd)"
 declare -A STAGE_SECONDS
 stage() {  # stage NAME COMMAND...

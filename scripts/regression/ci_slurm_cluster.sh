@@ -30,8 +30,11 @@ STEPD_PARENT="/sys/fs/cgroup$(dirname "$OWN_CGROUP")/system.slice"
 echo "own cgroup: $OWN_CGROUP; slurmstepd scopes go under $STEPD_PARENT"
 mkdir -p "$STEPD_PARENT"
 cat "/sys/fs/cgroup$(dirname "$OWN_CGROUP")/cgroup.subtree_control" || true
-# Node line with the real topology (sockets/cores/threads), memory reduced.
-NODE_LINE="$(slurmd -C | head -1 | sed -E "s/RealMemory=[0-9]+/RealMemory=$MEM_MB/")"
+# The node advertises 96 CPUs although the runner has 4 (config_overrides):
+# image-from-ms sizes its Slurm worker job by --max-cores-per-node (default 95)
+# and that option also sets WSClean's -mem share, so lowering it would make
+# tier 2 image differently from tier 1. The chain runs WSClean with -j 1.
+NODE_LINE="NodeName=$HOST CPUs=96 RealMemory=$MEM_MB"
 cat > /etc/slurm/slurm.conf <<CONF
 ClusterName=ci
 SlurmctldHost=$HOST
@@ -49,6 +52,7 @@ SelectType=select/cons_tres
 SelectTypeParameters=CR_Core_Memory
 MpiDefault=none
 ReturnToService=2
+SlurmdParameters=config_overrides
 $NODE_LINE State=UNKNOWN
 PartitionName=ci Nodes=$HOST Default=YES MaxTime=INFINITE State=UP
 CONF
