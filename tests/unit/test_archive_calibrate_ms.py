@@ -20,7 +20,6 @@ import pytest
 # Functions that call `from casatools import ...` inside their body are tested
 # with explicit patch.dict(sys.modules) in each test.
 from almasim.services.archive.calibrate_ms import (
-    _find_input_casa_data,
     _is_relative_to,
     _parse_applycal_calls,
     _prepare_casa_environment,
@@ -303,14 +302,16 @@ def test_parse_applycal_calls_ignores_non_applycal(tmp_path):
 
 @pytest.mark.unit
 def test_find_input_casa_data_returns_populated_runtime_dir(tmp_path):
-    """_find_input_casa_data should return the first populated .casa-data directory."""
+    """find_input_casa_data should return the first populated .casa-data directory."""
+    from almasim.services.casa import find_input_casa_data
+
     input_root = tmp_path / "input"
     candidate = input_root / "nested" / ".casa-data"
     candidate.mkdir(parents=True)
     (candidate / "readme.txt").write_text("ok")
     (candidate / "geodetic").mkdir()
 
-    result = _find_input_casa_data(input_root)
+    result = find_input_casa_data(input_root)
 
     assert result == candidate.resolve()
 
@@ -337,9 +338,7 @@ def test_prepare_casa_environment_honors_explicit_casa_data_root(mock_mkdtemp, t
 
 @pytest.mark.unit
 @patch("almasim.services.archive.calibrate_ms.tempfile.mkdtemp")
-@patch("almasim.services.archive.calibrate_ms.find_existing_casa_data")
 def test_prepare_casa_environment_falls_back_to_input_runtime_data(
-    mock_find_existing,
     mock_mkdtemp,
     tmp_path,
 ):
@@ -357,7 +356,6 @@ def test_prepare_casa_environment_falls_back_to_input_runtime_data(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     mock_mkdtemp.return_value = str(workspace)
-    mock_find_existing.return_value = output_root / ".casa-data"
 
     casa_data, workspace_root = _prepare_casa_environment(input_root, output_root, None)
 
