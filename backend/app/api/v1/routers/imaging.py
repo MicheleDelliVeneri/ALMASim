@@ -6,12 +6,8 @@ from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, HTTPException, status
 
-from almasim.services.imaging import (
-    clean_deconvolve_cube,
-    convolve_cube_with_beam,
-    integrate_cube_preview,
-    load_cube_from_npz,
-)
+from almasim.services.imaging import clean_deconvolve_cube, convolve_cube_with_beam
+from almasim.services.products.preview import integrate_cube_preview, load_cube_from_npz
 from app.core.config import settings
 from app.core.path_utils import resolve_safe_path
 from app.schemas.imaging import DeconvolutionRequest, DeconvolutionResponse
