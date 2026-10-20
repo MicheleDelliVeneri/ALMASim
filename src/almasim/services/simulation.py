@@ -952,10 +952,6 @@ def generate_clean_cube(
         line_names = None
         line_frequency = []
         source_channel_index = [int(n_channels // 2)]
-        n_channels_nw = n_channels
-        bandwidth = band_range.value
-        freq_sup = delta_freq
-        cont_frequencies = []
         fwhm_z = 1.0
         if redshift is None:
             redshift = 0.0
@@ -969,10 +965,12 @@ def generate_clean_cube(
             redshift,
             line_frequency,
             source_channel_index,
-            n_channels_nw,
-            bandwidth,
-            freq_sup_nw,
-            cont_frequencies,
+            # The channel count (returned unchanged), bandwidth, frequency
+            # support and continuum frequencies are not used here.
+            _n_channels,
+            _bandwidth,
+            _freq_support,
+            _cont_frequencies,
             fwhm_z,
             lum_infrared,
         ) = process_spectral_data(
@@ -989,12 +987,6 @@ def generate_clean_cube(
             n_lines,
             remote,
         )
-        if n_channels_nw != n_channels:
-            freq_sup = freq_sup_nw * U.MHz
-            n_channels = n_channels_nw
-            band_range = n_channels * freq_sup
-        else:
-            freq_sup = delta_freq
 
     if remote:
         print(f"Beam size: {round(beam_size.value, 4)} arcsec\n")
