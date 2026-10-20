@@ -7,11 +7,9 @@ pipeline products.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -25,6 +23,8 @@ from almasim.services.casa.runtime_data import (  # noqa: F401  (re-exported)
     has_casa_runtime_data,
 )
 from almasim.services.extraction import is_extraction_tmp_dir
+
+from ..markers import StageMarkers
 
 logger = logging.getLogger(__name__)
 
@@ -274,24 +274,17 @@ def is_unpack_complete(output_root: str | os.PathLike[str], uid: str) -> bool:
     return raw_ms_path(output_root, uid).is_dir() and raw_ms_marker_path(output_root, uid).is_file()
 
 
+def _raw_ms_markers(output_root: str | os.PathLike[str], uid: str) -> StageMarkers:
+    return StageMarkers(
+        raw_ms_marker_path(output_root, uid), raw_ms_failure_marker_path(output_root, uid)
+    )
+
+
 def write_raw_ms_marker(output_root: str | os.PathLike[str], uid: str, rows: int) -> Path:
     """Record that ``uid`` imported successfully, with the row count as proof."""
-    marker = raw_ms_marker_path(output_root, uid)
-    marker.write_text(
-        json.dumps(
-            {
-                "uid": uid,
-                "output": str(raw_ms_path(output_root, uid)),
-                "rows": rows,
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+    return _raw_ms_markers(output_root, uid).write_done(
+        uid=uid, output=str(raw_ms_path(output_root, uid)), rows=rows
     )
-    raw_ms_failure_marker_path(output_root, uid).unlink(missing_ok=True)
-    return marker
 
 
 def write_raw_ms_failure_marker(
@@ -302,18 +295,9 @@ def write_raw_ms_failure_marker(
     log_path: str | os.PathLike[str] | None = None,
 ) -> Path:
     """Record why ``uid`` could not be imported."""
-    marker = raw_ms_failure_marker_path(output_root, uid)
-    payload = {
-        "uid": uid,
-        "stage": "unpack",
-        "error": error,
-        "failed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if log_path is not None:
-        payload["log"] = str(log_path)
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return marker
+    return _raw_ms_markers(output_root, uid).write_failed(
+        error, stage="unpack", log_path=log_path, uid=uid
+    )
 
 
 def create_measurement_set(
