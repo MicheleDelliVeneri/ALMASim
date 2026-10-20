@@ -510,3 +510,25 @@ def test_query_products_for_members_list_of_uids():
     query_str = mock_svc.search.call_args[0][0]
     assert "uid://A001/X1/X1" in query_str
     assert "uid://A001/X2/X2" in query_str
+
+
+@pytest.mark.unit
+def test_get_tap_service_raises_when_every_mirror_fails():
+    with patch("almasim.services.metadata.tap.service.pyvo") as mock_pyvo:
+        mock_pyvo.dal.TAPService.return_value.search.side_effect = RuntimeError("down")
+        with pytest.raises(RuntimeError, match="All ALMA TAP mirrors unreachable"):
+            get_tap_service(max_rounds=1)
+
+
+@pytest.mark.unit
+def test_get_science_types_forgets_the_mirror_on_a_query_error():
+    import pyvo
+
+    from almasim.services.metadata.tap import service as tap
+
+    failing = MagicMock()
+    failing.search.side_effect = pyvo.dal.exceptions.DALServiceError("boom")
+    tap._connected_service = failing
+    with pytest.raises(pyvo.dal.exceptions.DALServiceError):
+        tap.get_science_types.retry_with(stop=lambda _: True, reraise=True)()
+    assert tap._connected_service is None
