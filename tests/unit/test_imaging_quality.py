@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 
 from almasim import cli
 from almasim.services.imaging import archive_imaging as ai
+from almasim.services.imaging import fits_wcs, stats
 from almasim.services.imaging import quality as q
 
 runner = CliRunner()
@@ -167,7 +168,7 @@ def test_logged_line_channels_follow_averaged_cubes(tmp_path):
 
     def logged(text, n):
         log.write_text(text + "\n")
-        line = q._logged_line_channels(task, n)
+        line = q.cube._logged_line_channels(task, n)
         return None if line is None else np.flatnonzero(line).tolist()
 
     head = "# continuum subtracted from DATA (order 1, 1 s): "
@@ -188,7 +189,7 @@ def test_logged_line_channels_follow_averaged_cubes(tmp_path):
     )
     assert logged("nothing about lines", 40) is None
     log.unlink()
-    assert q._logged_line_channels(task, 40) is None
+    assert q.cube._logged_line_channels(task, 40) is None
 
 
 @pytest.mark.unit
@@ -233,13 +234,13 @@ def test_noise_history_reads_the_first_run_of_a_name(tmp_path):
 
 @pytest.mark.unit
 def test_helpers():
-    assert math.isnan(q.robust_sigma(np.array([np.nan])))
-    assert math.isnan(q._ratio(1.0, 0.0))
-    assert math.isnan(q.beam_pixels(fits.Header()))
-    assert not q.moment_mask(np.zeros((8, 8)), 2.0).any()
+    assert math.isnan(stats.robust_sigma(np.array([np.nan])))
+    assert math.isnan(q.continuum._ratio(1.0, 0.0))
+    assert math.isnan(fits_wcs.beam_pixels(fits.Header()))
+    assert not stats.moment_mask(np.zeros((8, 8)), 2.0).any()
     with pytest.raises(TypeError):
-        q._json_default(object())
-    assert q._json_default(np.float32(1.5)) == 1.5
+        q.report._json_default(object())
+    assert q.report._json_default(np.float32(1.5)) == 1.5
 
 
 @pytest.mark.unit
@@ -317,7 +318,7 @@ def test_moment_mask_grows_by_one_beam_disk_like_the_fft_convolution():
     moment += np.random.default_rng(3).normal(0, 0.1, moment.shape)
     beam = 3.4
     mask = moment_mask(moment, beam)
-    seed = moment > 3 * q.robust_sigma(moment)
+    seed = moment > 3 * stats.robust_sigma(moment)
     radius = int(np.ceil(beam))
     yy, xx = np.mgrid[-radius : radius + 1, -radius : radius + 1]
     disk = (np.hypot(yy, xx) <= beam).astype(float)

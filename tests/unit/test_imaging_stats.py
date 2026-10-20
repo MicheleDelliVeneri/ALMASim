@@ -22,4 +22,5 @@ def test_robust_sigma_of_nothing_finite_is_nan():
 
 
 def test_quality_reexports_the_shared_function():
-    assert quality.robust_sigma is stats.robust_sigma
+    assert quality.continuum.robust_sigma is stats.robust_sigma
+    assert quality.cube.robust_sigma is stats.robust_sigma
