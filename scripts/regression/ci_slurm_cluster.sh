@@ -23,9 +23,13 @@ mkdir -p /etc/slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm
 # Slurm 23.11 has no CgroupPlugin=disabled.
 printf '%s\n' 'CgroupPlugin=cgroup/v2' 'IgnoreSystemd=yes' > /etc/slurm/cgroup.conf
 # The CI container shares the runner VM's cgroup namespace (--cgroupns=host),
-# whose systemd already enabled the controllers; slurmd puts its stepd scope
-# in system.slice.
-mkdir -p /sys/fs/cgroup/system.slice
+# whose systemd already enabled the controllers. Without systemd, slurmd puts
+# its stepd scope in <parent of its own cgroup>/system.slice: create that.
+OWN_CGROUP="$(cut -d: -f3 /proc/self/cgroup | head -1)"
+STEPD_PARENT="/sys/fs/cgroup$(dirname "$OWN_CGROUP")/system.slice"
+echo "own cgroup: $OWN_CGROUP; slurmstepd scopes go under $STEPD_PARENT"
+mkdir -p "$STEPD_PARENT"
+cat "/sys/fs/cgroup$(dirname "$OWN_CGROUP")/cgroup.subtree_control" || true
 # Node line with the real topology (sockets/cores/threads), memory reduced.
 NODE_LINE="$(slurmd -C | head -1 | sed -E "s/RealMemory=[0-9]+/RealMemory=$MEM_MB/")"
 cat > /etc/slurm/slurm.conf <<CONF
