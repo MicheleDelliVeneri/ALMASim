@@ -18,7 +18,8 @@ from almasim.services.ms import io as ms_io
 
 tables = pytest.importorskip("casacore.tables")
 
-NROWS, NCORR, NCHAN, NANT = 6, 2, 5, 3
+# The visibility table holds Stokes I; the MS holds it as XX and YY (MADIV-28 T5.12).
+NROWS, NCORR, NCHAN, NANT = 6, 1, 5, 3
 
 
 def _visibility_table():
@@ -38,6 +39,7 @@ def _visibility_table():
         "sigma": rng.uniform(0.5, 2.0, size=(NROWS, NCORR)).astype(np.float32),
         "channel_freq_hz": 230e9 + 1e6 * np.arange(NCHAN),
         "antenna_names": ["DA41", "DA42", "DV01"],
+        "antenna_diameters_m": np.array([12.0, 12.0, 7.0]),
         "antenna_positions_m": np.array(
             [
                 [2225061.0, -5440057.0, -2481681.0],
@@ -65,11 +67,12 @@ def test_main_table_layout_matches_the_measurementset_convention(written):
     ms = tables.table(path, ack=False)
     try:
         data = ms.getcol("DATA")
-        assert data.shape == (NROWS, NCHAN, NCORR), "MS DATA is (nrows, nchan, ncorr)"
-        np.testing.assert_array_equal(data, vt["data"].transpose(0, 2, 1))
-        np.testing.assert_array_equal(ms.getcol("FLAG"), vt["flag"].transpose(0, 2, 1))
+        assert data.shape == (NROWS, NCHAN, 2), "MS DATA is (nrows, nchan, ncorr): XX and YY"
+        for corr in range(2):  # both equal Stokes I
+            np.testing.assert_array_equal(data[:, :, corr], vt["data"][:, 0, :])
+            np.testing.assert_array_equal(ms.getcol("FLAG")[:, :, corr], vt["flag"][:, 0, :])
+            np.testing.assert_array_equal(ms.getcol("WEIGHT")[:, corr], vt["weight"][:, 0])
         np.testing.assert_array_equal(ms.getcol("UVW"), vt["uvw_m"])
-        np.testing.assert_array_equal(ms.getcol("WEIGHT"), vt["weight"])
     finally:
         ms.close()
 
@@ -78,14 +81,19 @@ def test_subtable_layout(written):
     vt, path = written
     antenna = tables.table(f"{path}/ANTENNA", ack=False)
     np.testing.assert_array_equal(antenna.getcol("POSITION"), vt["antenna_positions_m"])
+    np.testing.assert_array_equal(antenna.getcol("DISH_DIAMETER"), [12.0, 12.0, 7.0])
     antenna.close()
+    state = tables.table(f"{path}/STATE", ack=False)
+    assert state.getcell("OBS_MODE", 0) == "OBSERVE_TARGET#ON_SOURCE"
+    state.close()
     field = tables.table(f"{path}/FIELD", ack=False)
     phase_dir = field.getcell("PHASE_DIR", 0)
     field.close()
     assert phase_dir.shape == (1, 2), "PHASE_DIR is (npoly + 1, 2) in casacore order"
     np.testing.assert_allclose(phase_dir[0], [vt["field_ra_rad"], vt["field_dec_rad"]])
     polarization = tables.table(f"{path}/POLARIZATION", ack=False)
-    assert polarization.getcell("CORR_PRODUCT", 0).shape == (1, 2)
+    assert polarization.getcell("CORR_PRODUCT", 0).shape == (2, 2)
+    assert list(polarization.getcell("CORR_TYPE", 0)) == [9, 12]  # XX, YY
     polarization.close()
 
 
@@ -93,7 +101,8 @@ def test_round_trip(written):
     vt, path = written
     with patch.object(ms_io, "_get_backend", return_value=backends._CasacoreBackend()):
         back = ms_io.read_native_ms(path)
-    for key in ("data", "model_data", "flag", "uvw_m", "weight", "sigma", "antenna_positions_m"):
+    keys = ("data", "model_data", "flag", "uvw_m", "weight", "sigma", "antenna_positions_m")
+    for key in (*keys, "antenna_diameters_m"):
         np.testing.assert_array_equal(back[key], vt[key], err_msg=key)
     np.testing.assert_array_equal(back["channel_freq_hz"], vt["channel_freq_hz"])
     assert back["antenna_names"] == vt["antenna_names"]

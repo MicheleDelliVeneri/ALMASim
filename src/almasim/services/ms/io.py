@@ -10,6 +10,7 @@ import numpy as np
 
 from .backends import _get_backend
 from .subtables import (
+    MS_CORR_TYPES,
     antenna_table,
     data_description_table,
     field_table,
@@ -37,22 +38,23 @@ def export_native_ms(
     ms_path = str(Path(ms_path).expanduser().resolve())
     vt = visibility_table
 
-    data = np.asarray(vt["data"], dtype=np.complex64)
     channel_freq_hz = np.asarray(vt["channel_freq_hz"], dtype=np.float64)
     field_ra_rad = float(vt["field_ra_rad"])
     field_dec_rad = float(vt["field_dec_rad"])
     time_mjd_s = np.asarray(vt["time_mjd_s"], dtype=np.float64)
-    _, ncorr, nchan = data.shape
+    nchan = channel_freq_hz.shape[0]
     time_range = np.array([time_mjd_s.min(), time_mjd_s.max()])
 
     # The main table first: casatools creates the MS root directory with it.
     for spec in (
         main_table(ms_path, vt),
         antenna_table(
-            list(vt["antenna_names"]), np.asarray(vt["antenna_positions_m"], dtype=np.float64)
+            list(vt["antenna_names"]),
+            np.asarray(vt["antenna_positions_m"], dtype=np.float64),
+            vt.get("antenna_diameters_m"),
         ),
         spectral_window_table(channel_freq_hz, nchan),
-        polarization_table(ncorr),
+        polarization_table(),
         data_description_table(),
         field_table(source_name, field_ra_rad, field_dec_rad, time_range),
         observation_table(telescope_name, project_name, time_range),
@@ -84,6 +86,17 @@ def read_native_ms(ms_path: str | Path) -> dict[str, Any]:
     sigma = backend.get(tb, "SIGMA").astype(np.float32)
     tb.close()
 
+    pol = backend.open(os.path.join(ms_path, "POLARIZATION"), readonly=True)
+    corr_types = tuple(int(c) for c in np.asarray(pol.getcell("CORR_TYPE", 0)).ravel())
+    pol.close()
+    if corr_types == MS_CORR_TYPES:
+        # XX = YY = I: back to the visibility table's single Stokes I correlation.
+        data = data.mean(axis=1, keepdims=True).astype(np.complex64)
+        model_data = model_data.mean(axis=1, keepdims=True).astype(np.complex64)
+        flag = flag.any(axis=1, keepdims=True)
+        weight = weight.mean(axis=1, keepdims=True).astype(np.float32)
+        sigma = sigma.mean(axis=1, keepdims=True).astype(np.float32)
+
     spw = backend.open(os.path.join(ms_path, "SPECTRAL_WINDOW"), readonly=True)
     channel_freq_hz = np.asarray(spw.getcell("CHAN_FREQ", 0), dtype=np.float64)
     spw.close()
@@ -91,6 +104,7 @@ def read_native_ms(ms_path: str | Path) -> dict[str, Any]:
     ant = backend.open(os.path.join(ms_path, "ANTENNA"), readonly=True)
     antenna_names = list(ant.getcol("NAME"))
     antenna_positions_m = backend.get(ant, "POSITION").astype(np.float64)
+    antenna_diameters_m = np.asarray(ant.getcol("DISH_DIAMETER"), dtype=np.float64)
     ant.close()
 
     fld = backend.open(os.path.join(ms_path, "FIELD"), readonly=True)
@@ -120,6 +134,7 @@ def read_native_ms(ms_path: str | Path) -> dict[str, Any]:
         "channel_freq_hz": channel_freq_hz,
         "antenna_names": antenna_names,
         "antenna_positions_m": antenna_positions_m,
+        "antenna_diameters_m": antenna_diameters_m,
         "field_ra_rad": field_ra_rad,
         "field_dec_rad": field_dec_rad,
         "source_name": source_name,

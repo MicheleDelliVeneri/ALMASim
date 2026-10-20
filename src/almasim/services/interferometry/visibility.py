@@ -33,6 +33,8 @@ class VisibilityTable:
     observation_date: str
     config_name: str | None = None
     array_type: str | None = None
+    # One dish diameter per antenna (m); 12 m each when unknown.
+    antenna_diameters_m: np.ndarray | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Convert to a plain dict for serialization."""
@@ -51,6 +53,7 @@ class VisibilityTable:
             "channel_freq_hz": self.channel_freq_hz,
             "antenna_names": self.antenna_names,
             "antenna_positions_m": self.antenna_positions_m,
+            "antenna_diameters_m": self.antenna_diameters_m,
             "source_name": self.source_name,
             "field_ra_rad": self.field_ra_rad,
             "field_dec_rad": self.field_dec_rad,
@@ -139,6 +142,7 @@ def assemble_visibility_table(
     field_dec_rad: float,
     config_name: str | None = None,
     array_type: str | None = None,
+    antenna_diameters_m: np.ndarray | None = None,
 ) -> VisibilityTable:
     """Assemble channel-wise row samples into an MS-like visibility table."""
     if not channel_rows:
@@ -192,6 +196,11 @@ def assemble_visibility_table(
         observation_date=str(observation_date),
         config_name=config_name,
         array_type=array_type,
+        antenna_diameters_m=(
+            None
+            if antenna_diameters_m is None
+            else np.asarray(antenna_diameters_m, dtype=np.float64)
+        ),
     )
 
 
@@ -211,6 +220,14 @@ _ROW_COLUMNS = (
 )
 
 
+def _diameters(table: Mapping[str, Any]) -> np.ndarray:
+    """A table's per-antenna dish diameters (m), 12 m each when it has none."""
+    diameters = table.get("antenna_diameters_m")
+    if diameters is None:
+        return np.full(len(table["antenna_names"]), 12.0)
+    return np.asarray(diameters, dtype=np.float64)
+
+
 def concatenate_visibility_tables(tables: list[Mapping[str, Any]]) -> dict[str, Any]:
     """Concatenate multiple visibility tables across rows."""
     if not tables:
@@ -219,14 +236,27 @@ def concatenate_visibility_tables(tables: list[Mapping[str, Any]]) -> dict[str, 
         return dict(tables[0])
 
     first = tables[0]
+    # Each table's antennas follow the previous tables' in one ANTENNA list,
+    # its ANTENNA1/ANTENNA2 shifted to match: a 7 m configuration's rows used
+    # to point at the 12 m antennas of the first table.
+    offsets = np.cumsum([0] + [len(t["antenna_names"]) for t in tables[:-1]])
+    shifted = {
+        key: [np.asarray(t[key]) + offset for t, offset in zip(tables, offsets)]
+        for key in ("antenna1", "antenna2")
+    }
     return {
         **{
-            key: np.concatenate([np.asarray(t[key]) for t in tables], axis=0)
+            key: np.concatenate(
+                shifted[key] if key in shifted else [np.asarray(t[key]) for t in tables], axis=0
+            )
             for key in _ROW_COLUMNS
         },
         "channel_freq_hz": np.asarray(first["channel_freq_hz"]),
-        "antenna_names": list(first["antenna_names"]),
-        "antenna_positions_m": np.asarray(first["antenna_positions_m"]),
+        "antenna_names": [name for t in tables for name in t["antenna_names"]],
+        "antenna_positions_m": np.concatenate(
+            [np.asarray(t["antenna_positions_m"]).reshape(-1, 3) for t in tables], axis=0
+        ),
+        "antenna_diameters_m": np.concatenate([_diameters(t) for t in tables]),
         "source_name": first["source_name"],
         "field_ra_rad": float(first["field_ra_rad"]),
         "field_dec_rad": float(first["field_dec_rad"]),

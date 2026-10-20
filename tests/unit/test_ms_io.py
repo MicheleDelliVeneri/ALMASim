@@ -185,8 +185,8 @@ def test_write_spectral_window_multi_channel(tmp_path):
 @pytest.mark.unit
 def test_write_polarization(tmp_path):
     b, tb = _mock_backend()
-    write_table(b, str(tmp_path / "test.ms"), polarization_table(1))
-    tb.putcell.assert_any_call("NUM_CORR", 0, 1)
+    write_table(b, str(tmp_path / "test.ms"), polarization_table())
+    tb.putcell.assert_any_call("NUM_CORR", 0, 2)  # XX and YY
     tb.flush.assert_called_once()
 
 
@@ -229,7 +229,7 @@ def test_write_source(tmp_path):
 def test_write_state(tmp_path):
     b, tb = _mock_backend()
     write_table(b, str(tmp_path / "test.ms"), state_table())
-    tb.putcell.assert_any_call("OBS_MODE", 0, "ON_SOURCE")
+    tb.putcell.assert_any_call("OBS_MODE", 0, "OBSERVE_TARGET#ON_SOURCE")
 
 
 @pytest.mark.unit
@@ -356,7 +356,11 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
     ant_tb.getcol.side_effect = lambda col: {
         "NAME": ["DA41", "DA42"],
         "POSITION": np.zeros((3, 2)),
+        "DISH_DIAMETER": np.array([12.0, 7.0]),
     }[col]
+
+    pol_tb = MagicMock()
+    pol_tb.getcell.return_value = np.array([9])
 
     fld_tb = MagicMock()
     fld_tb.getcell.side_effect = lambda col, row: {
@@ -379,6 +383,8 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
             return fld_tb
         if path.endswith("OBSERVATION"):
             return obs_tb
+        if path.endswith("POLARIZATION"):
+            return pol_tb
         return main_tb
 
     b = MagicMock()
@@ -402,6 +408,7 @@ def test_read_native_ms_returns_expected_keys(tmp_path):
         "sigma",
         "channel_freq_hz",
         "antenna_names",
+        "antenna_diameters_m",
         "antenna_positions_m",
         "field_ra_rad",
         "field_dec_rad",
@@ -423,7 +430,7 @@ def test_every_table_spec_writes_only_declared_columns(tmp_path):
         main_table(str(tmp_path / "x.ms"), vt),
         antenna_table(vt["antenna_names"], vt["antenna_positions_m"]),
         spectral_window_table(vt["channel_freq_hz"], 4),
-        polarization_table(1),
+        polarization_table(),
         data_description_table(),
         field_table("S", 0.1, -0.2, time_range),
         observation_table("ALMA", "P", time_range),
@@ -489,3 +496,20 @@ def test_intent_and_subtable_helpers():
     antenna = MagicMock()
     antenna.getcol.return_value = ["DA41", "DV02"]
     assert tables.antenna_names(antenna) == ["DA41", "DV02"]
+
+
+@pytest.mark.unit
+def test_antenna_table_rejects_a_diameter_count_mismatch():
+    from almasim.services.ms.subtables import antenna_table
+
+    with pytest.raises(ValueError, match="1 dish diameters for 2 antennas"):
+        antenna_table(["A", "B"], np.zeros((2, 3)), np.array([12.0]))
+
+
+@pytest.mark.unit
+def test_main_table_refuses_more_than_one_correlation(tmp_path):
+    from almasim.services.ms.subtables import main_table
+
+    vt = {"data": np.zeros((2, 2, 3)), "flag": np.zeros((2, 1, 3), dtype=bool)}
+    with pytest.raises(ValueError, match="one \\(Stokes I\\) correlation"):
+        main_table(str(tmp_path / "x.ms"), vt)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -57,10 +57,18 @@ def write_table(backend, ms_path: str, spec: TableSpec) -> None:
     tb.close()
 
 
+def _as_xx_yy(values: Any, dtype: Any, axis: int) -> np.ndarray:
+    """A single (Stokes I) correlation repeated as XX and YY along ``axis``."""
+    array = np.asarray(values, dtype=dtype)
+    if array.shape[axis] != 1:
+        raise ValueError(f"expected one (Stokes I) correlation, got {array.shape[axis]}")
+    return np.repeat(array, len(MS_CORR_TYPES), axis=axis)
+
+
 def main_table(ms_path: str, vt: Mapping[str, Any]) -> TableSpec:
-    """The visibilities, in the MS's (nrows, nchan, ncorr) layout."""
-    data = np.asarray(vt["data"], dtype=np.complex64)
-    flag = np.asarray(vt["flag"], dtype=bool)
+    """The visibilities, in the MS's (nrows, nchan, ncorr) layout, Stokes I as XX and YY."""
+    data = _as_xx_yy(vt["data"], np.complex64, axis=1)
+    flag = _as_xx_yy(vt["flag"], bool, axis=1)
     time_mjd_s = np.asarray(vt["time_mjd_s"], dtype=np.float64)
     nrows = data.shape[0]
     values = {
@@ -83,10 +91,10 @@ def main_table(ms_path: str, vt: Mapping[str, Any]) -> TableSpec:
         # The visibility table's (nrows, ncorr, nchan) becomes (nrows, nchan, ncorr).
         "UVW": np.asarray(vt["uvw_m"], dtype=np.float64),
         "DATA": data.transpose(0, 2, 1),
-        "MODEL_DATA": np.asarray(vt["model_data"], dtype=np.complex64).transpose(0, 2, 1),
+        "MODEL_DATA": _as_xx_yy(vt["model_data"], np.complex64, axis=1).transpose(0, 2, 1),
         "FLAG": flag.transpose(0, 2, 1),
-        "WEIGHT": np.asarray(vt["weight"], dtype=np.float32),  # (nrows, ncorr)
-        "SIGMA": np.asarray(vt["sigma"], dtype=np.float32),
+        "WEIGHT": _as_xx_yy(vt["weight"], np.float32, axis=1),  # (nrows, ncorr)
+        "SIGMA": _as_xx_yy(vt["sigma"], np.float32, axis=1),
     }
     keywords: dict[str, Any] = {"MS_VERSION": 2.0}
     keywords.update(
@@ -103,14 +111,26 @@ def main_table(ms_path: str, vt: Mapping[str, Any]) -> TableSpec:
     )
 
 
-def antenna_table(antenna_names: Sequence[str], antenna_positions_m: np.ndarray) -> TableSpec:
+def antenna_table(
+    antenna_names: Sequence[str],
+    antenna_positions_m: np.ndarray,
+    dish_diameters_m: Optional[np.ndarray] = None,
+) -> TableSpec:
+    """One row per antenna, with its own dish diameter (12 m each when not given)."""
     nant = len(antenna_names)
+    diameters = (
+        np.full(nant, 12.0)
+        if dish_diameters_m is None
+        else np.asarray(dish_diameters_m, dtype=np.float64)
+    )
+    if diameters.shape != (nant,):
+        raise ValueError(f"{diameters.shape[0]} dish diameters for {nant} antennas")
     values = {
         "NAME": list(antenna_names),
         "STATION": list(antenna_names),
         "TYPE": ["GROUND-BASED"] * nant,
         "MOUNT": ["alt-az"] * nant,
-        "DISH_DIAMETER": np.full(nant, 12.0),
+        "DISH_DIAMETER": diameters,
         "FLAG_ROW": np.zeros(nant, dtype=bool),
         "POSITION": antenna_positions_m,  # (nant, 3)
         "OFFSET": np.zeros((nant, 3)),
@@ -136,11 +156,16 @@ def spectral_window_table(channel_freq_hz: np.ndarray, nchan: int) -> TableSpec:
     return TableSpec("SPECTRAL_WINDOW", schema.SPECTRAL_WINDOW_COLUMNS, values)
 
 
-def polarization_table(ncorr: int) -> TableSpec:
+# XX and YY (casacore Stokes types 9 and 12): the simulated Stokes I in both,
+# so imagers that form I = (XX + YY) / 2 recover it (MADIV-28 T5.12).
+MS_CORR_TYPES = (9, 12)
+
+
+def polarization_table() -> TableSpec:
     values = {
-        "NUM_CORR": int(ncorr),
-        "CORR_TYPE": np.array([9], dtype=np.int32),  # Stokes I
-        "CORR_PRODUCT": np.array([[0, 0]], dtype=np.int32),  # (ncorr, 2)
+        "NUM_CORR": len(MS_CORR_TYPES),
+        "CORR_TYPE": np.array(MS_CORR_TYPES, dtype=np.int32),
+        "CORR_PRODUCT": np.array([[0, 0], [1, 1]], dtype=np.int32),  # (ncorr, 2)
         "FLAG_ROW": False,
     }
     return TableSpec("POLARIZATION", schema.POLARIZATION_COLUMNS, values)
@@ -206,7 +231,8 @@ def state_table() -> TableSpec:
         "CAL": 0.0,
         "LOAD": 0.0,
         "SUB_SCAN": 0,
-        "OBS_MODE": "ON_SOURCE",
+        # The intent the imaging pipeline selects target fields by.
+        "OBS_MODE": "OBSERVE_TARGET#ON_SOURCE",
         "FLAG_ROW": False,
     }
     return TableSpec("STATE", schema.STATE_COLUMNS, values)

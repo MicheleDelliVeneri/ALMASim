@@ -243,3 +243,27 @@ def test_concatenate_two_tables_channel_from_first():
     vt2_dict["channel_freq_hz"] = np.array([999e9, 888e9, 777e9])
     result = concatenate_visibility_tables([vt1_dict, vt2_dict])
     np.testing.assert_array_equal(result["channel_freq_hz"], vt1_dict["channel_freq_hz"])
+
+
+@pytest.mark.unit
+def test_concatenate_keeps_each_configurations_antennas():
+    """A second configuration's rows point at its own antennas, with their dish sizes."""
+    vt12 = _make_visibility_table(nrows=4, nchan=3).as_dict()
+    vt7 = _make_visibility_table(nrows=4, nchan=3).as_dict()
+    vt12["antenna_diameters_m"] = np.array([12.0, 12.0])
+    vt7["antenna_names"] = ["C1", "C2"]
+    vt7["antenna_diameters_m"] = np.array([7.0, 7.0])
+    result = concatenate_visibility_tables([vt12, vt7])
+    assert result["antenna_names"] == ["A1", "A2", "C1", "C2"]
+    assert result["antenna_positions_m"].shape == (4, 3)
+    np.testing.assert_array_equal(result["antenna_diameters_m"], [12.0, 12.0, 7.0, 7.0])
+    np.testing.assert_array_equal(result["antenna1"][4:], np.asarray(vt7["antenna1"]) + 2)
+    np.testing.assert_array_equal(result["antenna2"][:4], vt12["antenna2"])
+
+
+@pytest.mark.unit
+def test_concatenate_assumes_12_m_dishes_without_diameters():
+    vt1 = _make_visibility_table(nrows=2, nchan=1).as_dict()
+    vt2 = _make_visibility_table(nrows=2, nchan=1).as_dict()
+    result = concatenate_visibility_tables([vt1, vt2])
+    np.testing.assert_array_equal(result["antenna_diameters_m"], np.full(4, 12.0))
