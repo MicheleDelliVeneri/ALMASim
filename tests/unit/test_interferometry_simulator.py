@@ -10,8 +10,8 @@ import pytest
 from astropy.io import fits
 
 from almasim.services.compute.sync import SyncBackend
+from almasim.services.instrument.spectral_window import SpectralWindow
 from almasim.services.interferometry import simulator
-from almasim.services.interferometry.frequency import channel_wavelength_edges
 from almasim.services.interferometry.observing import alma_location, clip_to_horizon
 
 pytestmark = pytest.mark.unit
@@ -69,10 +69,17 @@ def test_clip_to_horizon_limits_the_track():
     assert clip_to_horizon([-3.0, 3.0], lat, np.radians(-89.0)) == [-3.0, 3.0]  # circumpolar
 
 
-def test_channel_wavelength_edges_split_the_band():
-    w_min, w_max, edges = channel_wavelength_edges(100e9, 2e9, 4, 3e8)
-    assert w_min == pytest.approx(3e8 / 101e9) and w_max == pytest.approx(3e8 / 99e9)
-    assert edges.shape == (4, 2) and edges[0, 0] == w_min and edges[-1, 1] == pytest.approx(w_max)
+def test_one_centred_channel_grid():
+    """Channel i is centred on f0 + (i - (N - 1) / 2) * delta, increasing (T5.4)."""
+    window = SpectralWindow.centred(100e9, 1e6, 4)
+    np.testing.assert_allclose(
+        window.frequencies_hz(), 100e9 + np.array([-1.5, -0.5, 0.5, 1.5]) * 1e6
+    )
+    edges = window.wavelength_edges_m(3e8)
+    assert edges.shape == (4, 2) and np.all(edges[:, 0] < edges[:, 1])
+    np.testing.assert_allclose(edges[0], [3e8 / (100e9 - 1e6), 3e8 / (100e9 - 2e6)])
+    assert np.all(np.diff(edges[:, 0]) < 0), "channel 0 is the lowest frequency, longest wavelength"
+    assert SpectralWindow.from_band(100e9, 4e6, 4) == window
 
 
 def test_alma_location_is_the_site():

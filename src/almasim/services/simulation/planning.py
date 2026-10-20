@@ -95,6 +95,7 @@ def plan_observation_runs(
                     "config_name": config.name,
                     "array_type": config.array_type,
                     "imaging_algorithm": params.imaging_algorithm,
+                    "spectral_window": geometry.spectral_window(),
                 }
             )
     return interferometer_runs, total_power_runs

@@ -9,6 +9,7 @@ import astropy.units as U
 import numpy as np
 
 from ..external_skymodel import infer_external_cube_geometry, is_external_source_type
+from ..instrument.spectral_window import SpectralWindow
 from ..interferometry import antenna as ual_antenna
 from ..interferometry.frequency import freq_supp_extractor
 from ..interferometry.utils import closest_power_of_2
@@ -41,10 +42,13 @@ class CubeGeometry:
 
     def channel_frequencies_hz(self) -> np.ndarray:
         """The centre frequency of every channel, symmetric about ``central_freq``."""
-        offsets = (
-            np.arange(self.n_channels, dtype=float) - (float(self.n_channels) - 1.0) / 2.0
-        ) * (self.channel_width_hz)
-        return self.central_freq.to(U.Hz).value + offsets
+        return self.spectral_window().frequencies_hz()
+
+    def spectral_window(self) -> SpectralWindow:
+        """The cube's channels: the one grid the uv sampling and the MS use too (T5.4)."""
+        return SpectralWindow.centred(
+            self.central_freq.to(U.Hz).value, self.channel_width_hz, self.n_channels
+        )
 
 
 def resolve_cube_geometry(params: SimulationParams, *, strict: bool = True) -> CubeGeometry:
