@@ -1,7 +1,6 @@
 """Image processing functions for interferometry."""
 
 import numbers
-import os
 
 import astropy.units as u
 import ducc0 as _ducc0
@@ -13,21 +12,8 @@ from scipy.ndimage import zoom
 from ..instrument.constants import ARCSEC_PER_RAD, SPEED_OF_LIGHT_M_S
 from ..instrument.primary_beam import primary_beam_response
 from .baselines import generate_via_astropy, prepare_baselines, set_baselines, set_noise
+from .predict import ALMASIM_NTHREADS, _ducc0_with_wgridder_fallback, predict_visibilities
 from .visibility import build_channel_visibility_rows
-
-# Threads for ducc0 gridding: $ALMASIM_NTHREADS, else every CPU.
-ALMASIM_NTHREADS = int(os.environ.get("ALMASIM_NTHREADS") or os.cpu_count() or 1)
-
-
-def _ducc0_with_wgridder_fallback(func, /, **kwargs):
-    try:
-        return func(**kwargs)
-    except RuntimeError as exc:
-        if kwargs.get("do_wgridding") and "too many w planes" in str(exc):
-            retry_kwargs = dict(kwargs)
-            retry_kwargs["do_wgridding"] = False
-            return func(**retry_kwargs)
-        raise
 
 
 def prepare_2d_arrays(Npix: int) -> tuple:
@@ -434,17 +420,8 @@ def image_based_predict(
     # Sort frequencies in ascending order as required by ducc0
     freq_sort_idx = np.argsort(frequencies)
     frequencies = frequencies[freq_sort_idx]
-    visibilities = _ducc0_with_wgridder_fallback(
-        _ducc0.wgridder.dirty2vis,
-        uvw=uvw,
-        freq=frequencies,
-        dirty=image,
-        wgt=weights,
-        pixsize_x=pixsize_x,
-        pixsize_y=pixsize_y,
-        epsilon=1.0e-6,
-        do_wgridding=True,
-        nthreads=n_threads,
+    visibilities = predict_visibilities(
+        uvw, frequencies, image, pixsize_x, pixsize_y, weights=weights, nthreads=n_threads
     )
     return visibilities, weights
 
