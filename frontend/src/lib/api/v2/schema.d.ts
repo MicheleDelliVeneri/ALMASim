@@ -582,6 +582,48 @@ export interface components {
 			 */
 			source_type?: string;
 		};
+		/** FitsCard */
+		FitsCard: {
+			/**
+			 * Comment
+			 * @default
+			 */
+			comment?: string;
+			/** Key */
+			key: string;
+			/** Value */
+			value?: unknown;
+		};
+		/** FitsHeader */
+		FitsHeader: {
+			/** Cards */
+			cards: components['schemas']['FitsCard'][];
+			/** Hdu */
+			hdu: number;
+			/** Hdus */
+			hdus: number;
+			/** Path */
+			path: string;
+			/** Shape */
+			shape: number[];
+		};
+		/** FitsPlane */
+		FitsPlane: {
+			/** Channel */
+			channel: number;
+			/** Data */
+			data: (number | null)[][];
+			/** Max */
+			max: number | null;
+			/** Min */
+			min: number | null;
+			/** Path */
+			path: string;
+			/** Shape */
+			shape: number[];
+			/** Step */
+			step: number;
+		};
 		/** Folder */
 		Folder: {
 			/** Path */
@@ -1119,9 +1161,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': {
-						[key: string]: unknown;
-					};
+					'application/json': components['schemas']['FitsHeader'];
 				};
 			};
 			/** @description Validation Error */
@@ -1155,9 +1195,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': {
-						[key: string]: unknown;
-					};
+					'application/json': components['schemas']['FitsPlane'];
 				};
 			};
 			/** @description Validation Error */

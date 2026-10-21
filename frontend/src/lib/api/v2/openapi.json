@@ -457,6 +457,139 @@
         "title": "EstimateRequest",
         "type": "object"
       },
+      "FitsCard": {
+        "properties": {
+          "comment": {
+            "default": "",
+            "title": "Comment",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "FitsCard",
+        "type": "object"
+      },
+      "FitsHeader": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/FitsCard"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "hdu": {
+            "title": "Hdu",
+            "type": "integer"
+          },
+          "hdus": {
+            "title": "Hdus",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "shape": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Shape",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "hdus",
+          "hdu",
+          "shape",
+          "cards"
+        ],
+        "title": "FitsHeader",
+        "type": "object"
+      },
+      "FitsPlane": {
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "shape": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Shape",
+            "type": "array"
+          },
+          "step": {
+            "title": "Step",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "shape",
+          "step",
+          "channel",
+          "min",
+          "max",
+          "data"
+        ],
+        "title": "FitsPlane",
+        "type": "object"
+      },
       "Folder": {
         "properties": {
           "path": {
@@ -1817,9 +1950,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Fits Header Api V2 Files Fits Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/FitsHeader"
                 }
               }
             },
@@ -1895,9 +2026,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Fits Plane Api V2 Files Fits Plane Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/FitsPlane"
                 }
               }
             },

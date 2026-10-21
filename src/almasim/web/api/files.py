@@ -76,6 +76,30 @@ class Space(BaseModel):
     total_bytes: int
 
 
+class FitsCard(BaseModel):
+    key: str
+    value: Any = None
+    comment: str = ""
+
+
+class FitsHeader(BaseModel):
+    path: str
+    hdus: int
+    hdu: int
+    shape: list[int]
+    cards: list[FitsCard]
+
+
+class FitsPlane(BaseModel):
+    path: str
+    shape: list[int]
+    step: int  # every step-th pixel each way: planes are thinned to MAX_PLANE a side
+    channel: int
+    min: float | None
+    max: float | None
+    data: list[list[float | None]]  # rows bottom up, as FITS stores them; None is blanked
+
+
 class TextSlice(BaseModel):
     path: str
     text: str
@@ -267,7 +291,7 @@ def _open_fits(file: Path):
         ) from exc
 
 
-@router.get("/fits")
+@router.get("/fits", response_model=FitsHeader)
 def fits_header(
     request: Request, path: str = Query(...), hdu: int = Query(0, ge=0)
 ) -> dict[str, Any]:
@@ -295,7 +319,7 @@ def _plain(value: Any) -> bool:
     )
 
 
-@router.get("/fits/plane")
+@router.get("/fits/plane", response_model=FitsPlane)
 def fits_plane(
     request: Request,
     path: str = Query(...),

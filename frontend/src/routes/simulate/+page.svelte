@@ -21,6 +21,7 @@
 	import type { Command, Values } from '#lib/utils/commandForm.js';
 	import { errorMessage } from '#lib/utils/errors.js';
 	import { ROW_FIELDS, batchGb, simulationArgv, simulationDefaults } from '#lib/utils/simulate.js';
+	import { inRunDir } from '#lib/utils/runDir.js';
 
 	type Estimate = components['schemas']['Estimate'];
 
@@ -145,6 +146,12 @@
 	}
 
 	const gb = (n: number) => (n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(1) : n.toFixed(3));
+
+	/** Where a run wrote: its --output-dir, with {run_dir} filled in. */
+	function outputsOf(run: Run): string {
+		const at = run.argv.indexOf('--output-dir');
+		return at >= 0 ? inRunDir(run.argv[at + 1], run.run_dir) : run.run_dir;
+	}
 </script>
 
 <svelte:head><title>Simulate · ALMASim</title></svelte:head>
@@ -235,6 +242,12 @@
 					<li class="flex items-center gap-3 text-sm">
 						{#if run}<StateChip state={run.state} />{/if}
 						<a href={resolve('/jobs/[id]', { id })}>{run?.title ?? id}</a>
+						{#if run?.state === 'succeeded'}
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended -->
+							<a href={`${resolve('/products')}?dir=${encodeURIComponent(outputsOf(run))}`}
+								>Look at the results</a
+							>
+						{/if}
 					</li>
 				{/each}
 			</ul>
