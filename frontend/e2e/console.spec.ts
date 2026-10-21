@@ -95,4 +95,9 @@ test('image a folder, then look at the results', async ({ page }) => {
 	await expect(page.getByText(/beam 2\.50″ × 2\.00″/)).toBeVisible();
 	await page.getByRole('button', { name: '+ compare' }).last().click();
 	await expect(page.getByLabel(/wsclean-residual\.fits, channel 1/)).toBeVisible();
+
+	// A preview computed as a job opens beside them when it is done.
+	await page.getByRole('button', { name: 'map' }).first().click();
+	await expect(page.getByText('opened below')).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByLabel(/-map\.fits, channel 1/)).toBeVisible();
 });

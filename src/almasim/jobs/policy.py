@@ -48,6 +48,8 @@ KNOWN_COMMANDS = frozenset(
         "image clean-quality",
         "image pb-correct",
         "clean",
+        "preview integrate",
+        "preview wiener",
         "doctor",
     }
 )

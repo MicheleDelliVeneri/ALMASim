@@ -532,6 +532,74 @@ $ almasim image pb-correct [OPTIONS] {imaging_parameters} {output_directory}
 * `--cutoff <float range>`: Blank the corrected images where the beam's response is below this.  [default: 0.2; 0.001<=x<=0.999]
 * `--help`: Show this message and exit.
 
+# `almasim preview`
+
+Previews of products, written as FITS (moment-style maps, Wiener reconstructions).
+
+**Usage**:
+
+```console
+$ almasim preview [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `integrate`: Integrate a cube along its spectral axis...
+* `wiener`: Reconstruct a simulated observation from...
+
+## `almasim preview integrate`
+
+Integrate a cube along its spectral axis into one image.
+
+**Usage**:
+
+```console
+$ almasim preview integrate [OPTIONS] {product} {output}
+```
+
+**Arguments**:
+
+* `product`: A cube to integrate: FITS, NPZ, or a MeasurementSet (gridded first).  [required]
+* `output`: The 2D FITS image to write.  [required]
+
+**Options**:
+
+* `--method <sum|mean>`: Sum (moment-0 style) or mean along the axis.  [default: sum]
+* `--channel-start <int range>`: First channel to include (default: all).  [x>=0]
+* `--channel-end <int range>`: Last channel to include (default: all).  [x>=0]
+* `--complex-part <real|imag|magnitude|phase>`: For visibility cubes: the part to show.  [default: real]
+* `--help`: Show this message and exit.
+
+## `almasim preview wiener`
+
+Reconstruct a simulated observation from its dirty and beam cubes (Wiener filter).
+
+Writes wiener-model.fits, wiener-restored.fits (the model convolved with a
+clean beam fitted to each channel's PSF, plus the residual) and
+wiener-residual.fits. A quick look, not the reference imaging: that is
+WSClean on the simulated MeasurementSet.
+
+**Usage**:
+
+```console
+$ almasim preview wiener [OPTIONS] {dirty} {beam} {output_dir}
+```
+
+**Arguments**:
+
+* `dirty`: The dirty cube (FITS or NPZ).  [required]
+* `beam`: The beam (PSF) cube, the dirty cube's shape.  [required]
+* `output_dir`: Folder for the model, restored and residual.  [required]
+
+**Options**:
+
+* `--epsilon <float range>`: Wiener regularisation (noise-to-signal power).  [default: 0.001; x>=1e-12]
+* `--help`: Show this message and exit.
+
 # `almasim jobs`
 
 List, follow and control runs submitted with `almasim submit` or the web console.

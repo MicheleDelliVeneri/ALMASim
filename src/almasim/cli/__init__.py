@@ -88,6 +88,7 @@ _GROUPS = (
     ("visibilities", ".visibilities", "visibilities_app", "Visibility processing commands."),
     ("predict", ".predict", "predict_app", "Model prediction commands."),
     ("image", ".image", "image_app", "Data product batch imaging."),
+    ("preview", ".preview", "preview_app", "Previews of products, written as FITS."),
     ("jobs", ".jobs", "jobs_app", "List, follow and control submitted runs."),
 )
 
