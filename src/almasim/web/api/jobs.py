@@ -30,7 +30,7 @@ from almasim.jobs.service import (
 )
 from almasim.jobs.wrapper import STDERR_NAME, STDOUT_NAME
 
-from .runs import LogSlice, Run, RunDetail, RunList, run_json
+from .runs import Accounting, LogSlice, Run, RunDetail, RunList, run_json
 
 router = APIRouter(prefix="/api/v2/jobs", tags=["jobs"])
 
@@ -131,6 +131,21 @@ def resubmit_job(run_id: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     request.app.state.events.poke()
     return run_json(run)
+
+
+@router.get("/{run_id}/accounting", response_model=Accounting)
+def job_accounting(run_id: str, request: Request) -> dict[str, Any]:
+    """Slurm's accounting for the run's job: state, elapsed, node, CPUs, peak memory."""
+    from almasim.jobs.executors.slurm import accounting
+
+    slurm_id = view(_run_dir(request, run_id)).job.slurm_job_id
+    if not slurm_id:
+        return {"slurm_job_id": None, "rows": []}
+    try:
+        rows = accounting(slurm_id)
+    except SlurmError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"slurm_job_id": slurm_id, "rows": rows}
 
 
 @router.get("/{run_id}/log", response_model=LogSlice)

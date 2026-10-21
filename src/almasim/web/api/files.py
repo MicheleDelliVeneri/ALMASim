@@ -58,6 +58,14 @@ class Folder(BaseModel):
     path: str
 
 
+class TextSlice(BaseModel):
+    path: str
+    text: str
+    offset: int
+    next_offset: int
+    size: int
+
+
 def _roots(profile: Profile) -> list[Path]:
     roots = [Path(r).expanduser() for r in (*profile.roots, profile.runs_root)]
     seen: dict[str, Path] = {}
@@ -158,7 +166,7 @@ def make_folder(body: FolderRequest, request: Request) -> dict[str, str]:
     return {"path": str(folder)}
 
 
-@router.get("/text")
+@router.get("/text", response_model=TextSlice)
 def read_text(
     request: Request,
     path: str = Query(...),

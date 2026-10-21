@@ -157,6 +157,41 @@ def poll(slurm_ids: Iterable[str], *, run: Runner = _run) -> dict[str, SlurmStat
     return found
 
 
+ACCOUNTING_FIELDS = (
+    "JobID",
+    "JobName",
+    "State",
+    "ExitCode",
+    "Elapsed",
+    "Start",
+    "End",
+    "NodeList",
+    "AllocCPUS",
+    "ReqMem",
+    "MaxRSS",
+    "TotalCPU",
+)
+
+
+def accounting(slurm_id: str, *, run: Runner = _run) -> list[dict[str, str]]:
+    """``sacct``'s record of one job and its steps, one dict per row (the job first).
+
+    Empty when Slurm has no record (yet, or any more). Raises SlurmError when
+    sacct itself fails.
+    """
+    if not re.fullmatch(r"\d+(_\d+)?", slurm_id):
+        raise SlurmError(f"not a Slurm job id: {slurm_id!r}")
+    out = run(["sacct", "-n", "-P", "-j", slurm_id, "-o", ",".join(ACCOUNTING_FIELDS)])
+    if out.returncode != 0:
+        raise SlurmError(out.stderr.strip() or f"sacct exited {out.returncode}")
+    rows = []
+    for line in out.stdout.splitlines():
+        parts = line.rstrip("\n").split("|")
+        if len(parts) == len(ACCOUNTING_FIELDS):
+            rows.append(dict(zip(ACCOUNTING_FIELDS, parts, strict=True)))
+    return rows
+
+
 # Slurm ended the job for a reason the wrapper cannot see (it may have
 # recorded only the SIGTERM Slurm sent first).
 _SLURM_ENDED: Mapping[str, tuple[JobState, str]] = {

@@ -55,6 +55,13 @@ class RunList(BaseModel):
     user: str
 
 
+class Accounting(BaseModel):
+    """``sacct``'s rows for a run's Slurm job (the job, then its steps); none for a server job."""
+
+    slurm_job_id: str | None
+    rows: list[dict[str, str]]
+
+
 class LogSlice(BaseModel):
     text: str
     offset: int

@@ -11,6 +11,7 @@
 
 	const navItems = [
 		{ href: '/', label: 'Overview' },
+		{ href: '/jobs', label: 'Jobs' },
 		{ href: '/metadata', label: 'Metadata' },
 		{ href: '/data', label: 'Data' },
 		{ href: '/simulations', label: 'Simulations' },
@@ -46,7 +47,9 @@
 					aria-hidden="true"
 				></span>
 				{#if jobs.connected}
-					{jobs.active.length} active {jobs.active.length === 1 ? 'job' : 'jobs'}
+					<a href={resolve('/jobs')} class="text-navy-soft no-underline hover:text-white"
+						>{jobs.active.length} active {jobs.active.length === 1 ? 'job' : 'jobs'}</a
+					>
 				{:else}
 					Console offline
 				{/if}
