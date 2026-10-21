@@ -46,11 +46,12 @@ def submit(
     title: str,
     wait: bool,
     user_profile: Path | None,
+    after: list[str] | None = None,
 ) -> None:
     from almasim.jobs import ResourcesError
     from almasim.jobs.executors.slurm import SlurmError
     from almasim.jobs.policy import PolicyError
-    from almasim.jobs.service import short_id, submit_command
+    from almasim.jobs.service import RunError, find_run, short_id, submit_command
     from almasim.jobs.service import wait as wait_for
 
     profile = _profile(user_profile)
@@ -62,14 +63,19 @@ def submit(
         "time": time_limit,
     }
     try:
-        run = submit_command(command, profile, resources=resources, title=title)
-    except (PolicyError, ResourcesError, SlurmError) as exc:
+        parents = [find_run(profile, ref) for ref in after or []]
+        run = submit_command(command, profile, resources=resources, title=title, after=parents)
+    except (PolicyError, ResourcesError, SlurmError, RunError) as exc:
         fail(str(exc))
     where = f"Slurm job {run.job.slurm_job_id}" if run.job.slurm_job_id else "the server node"
     typer.echo(f"Run {short_id(run.job.id)} on {where}: almasim {shlex.join(run.job.argv)}")
     typer.echo(f"  folder: {run.run_dir}")
+    if run.job.parents:
+        typer.echo(
+            f"  after: {', '.join(short_id(p) for p in run.job.parents)} ({run.state.value})"
+        )
     if wait:
-        final = wait_for(run.run_dir)
+        final = wait_for(run.run_dir, profile=profile)
         typer.echo(f"  {final.state.value}{f': {final.reason}' if final.reason else ''}")
         if final.state.value != "succeeded":
             raise typer.Exit(code=1)
@@ -88,9 +94,10 @@ def list_command(
     """List runs, newest first."""
     import getpass
 
-    from almasim.jobs.service import list_runs, short_id
+    from almasim.jobs.service import advance_pipelines, list_runs, short_id
 
     profile = _profile(user_profile)
+    advance_pipelines(profile)
     runs = list_runs(profile, owner=None if everyone else getpass.getuser(), limit=limit)
     if not runs:
         typer.echo(f"No runs under {profile.runs_root}")

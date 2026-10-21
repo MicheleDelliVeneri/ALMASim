@@ -150,6 +150,9 @@ class Job:
     parents: list[str] = field(default_factory=list)
     slurm_job_id: str | None = None
     state: JobState = JobState.PENDING
+    # Why the console set the state itself (e.g. "an earlier step did not
+    # succeed"); the wrapper's and Slurm's reasons are not stored here.
+    reason: str = ""
     schema: int = MANIFEST_SCHEMA
 
     def __post_init__(self) -> None:
