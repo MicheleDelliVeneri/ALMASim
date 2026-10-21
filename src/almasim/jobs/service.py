@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import getpass
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -46,6 +46,9 @@ class RunView:
     reason: str = ""
 
 
+NOT_STARTED = "an earlier step did not succeed"
+
+
 def submit_command(
     argv: list[str],
     profile: Profile,
@@ -54,8 +57,14 @@ def submit_command(
     params: Mapping[str, Any] | None = None,
     title: str = "",
     owner: str | None = None,
+    after: Sequence[Path] = (),
 ) -> RunView:
-    """Plan, record and submit ``almasim <argv>``; the new run."""
+    """Plan, record and submit ``almasim <argv>``; the new run.
+
+    ``after``: run folders that must succeed first (J1.8). A Slurm run after
+    Slurm runs is submitted at once with ``afterok``; otherwise it waits as
+    pending, and :func:`advance_pipelines` submits it when they succeed.
+    """
     plan = plan_job(argv, profile, resources)
     job = Job(
         id=new_job_id(),
@@ -65,15 +74,73 @@ def submit_command(
         resources=plan.resources,
         params=dict(params or {}),
         title=title,
+        parents=[read_manifest(p).id for p in after],
     )
     run_dir = create_run_dir(profile.runs_root, job)
     write_manifest(run_dir, job)
+    _dispatch(job, run_dir, [view(p, _ask(p)) for p in after], profile)
+    return view(run_dir)
+
+
+def _ask(run_dir: Path) -> slurm_exec.SlurmState | None:
+    job = read_manifest(run_dir)
+    if not job.slurm_job_id:
+        return _UNASKED
+    return slurm_exec.poll([job.slurm_job_id]).get(job.slurm_job_id)
+
+
+def _dispatch(job: Job, run_dir: Path, parents: list[RunView], profile: Profile) -> None:
+    """Submit ``job`` now, wait for its parents, or give up on it."""
+    if any(p.state.finished and p.state is not JobState.SUCCEEDED for p in parents):
+        job.state, job.reason = JobState.CANCELLED, NOT_STARTED
+        write_manifest(run_dir, job)
+        return
+    waiting = [p for p in parents if p.state is not JobState.SUCCEEDED]
+    slurm_parents = [p.job.slurm_job_id for p in waiting if p.job.slurm_job_id]
+    if waiting and (job.executor != "slurm" or len(slurm_parents) < len(waiting)):
+        job.state = JobState.PENDING  # a server step, or a step not submitted yet
+        write_manifest(run_dir, job)
+        return
     if job.executor == "slurm":
-        slurm_exec.submit(job, run_dir, profile)
+        slurm_exec.submit(job, run_dir, profile, after=[i for i in slurm_parents if i])
     else:
         server_exec.queue(job, run_dir)
         start_queued_server_jobs(profile)
-    return view(run_dir)
+
+
+def advance_pipelines(profile: Profile) -> list[Path]:
+    """Move this user's waiting steps on: submit them, or mark them not started.
+
+    Pending runs whose earlier steps all succeeded are submitted; those with
+    a step that failed are cancelled. A Slurm run held by an ``afterok`` that
+    can never be met (Slurm leaves it pending as DependencyNeverSatisfied) is
+    cancelled too. Returns the run folders it changed.
+    """
+    me = getpass.getuser()
+    changed: list[Path] = []
+    for run in list_runs(profile, owner=me):
+        job = run.job
+        if job.state is JobState.PENDING and job.parents and not run.status.started_at:
+            parents = [_by_id(profile, pid) for pid in job.parents]
+            if any(p is None for p in parents):
+                job.state, job.reason = JobState.CANCELLED, "an earlier step's run folder is gone"
+                write_manifest(run.run_dir, job)
+            else:
+                _dispatch(job, run.run_dir, [view(p, _ask(p)) for p in parents if p], profile)
+            changed.append(run.run_dir)
+        elif run.state is JobState.QUEUED and "DependencyNeverSatisfied" in run.reason:
+            slurm_exec.cancel(job)
+            job.state, job.reason = JobState.CANCELLED, NOT_STARTED
+            write_manifest(run.run_dir, job)
+            changed.append(run.run_dir)
+    return changed
+
+
+def _by_id(profile: Profile, job_id: str) -> Path | None:
+    for run_dir in iter_runs(profile.runs_root):
+        if run_dir.name == job_id:
+            return run_dir
+    return None
 
 
 # view()'s default: Slurm was not asked, which is not the same as Slurm not
@@ -91,6 +158,8 @@ def view(run_dir: Path, slurm: slurm_exec.SlurmState | None = _UNASKED) -> RunVi
         state, reason = current_state(job, status), ""
     else:
         state, reason = slurm_exec.reconcile(job, status, slurm)
+    if state is JobState.CANCELLED and job.reason and not reason:
+        reason = job.reason
     return RunView(job, run_dir, status, state, reason)
 
 
@@ -202,10 +271,22 @@ def start_queued_server_jobs(profile: Profile, max_running: int | None = None) -
     )
 
 
-def wait(run_dir: Path, *, poll_s: float = 5.0, timeout: float | None = None) -> RunView:
-    """Block until the run finishes; its final view."""
+def wait(
+    run_dir: Path,
+    *,
+    profile: Profile | None = None,
+    poll_s: float = 5.0,
+    timeout: float | None = None,
+) -> RunView:
+    """Block until the run finishes; its final view.
+
+    With ``profile``, waiting steps of this user's pipelines are moved on
+    meanwhile (the run may itself be one).
+    """
     deadline = None if timeout is None else time.monotonic() + timeout
     while True:
+        if profile is not None:
+            advance_pipelines(profile)
         job = read_manifest(run_dir)
         slurm = slurm_exec.poll([job.slurm_job_id or ""]).get(job.slurm_job_id or "")
         current = view(run_dir, slurm)

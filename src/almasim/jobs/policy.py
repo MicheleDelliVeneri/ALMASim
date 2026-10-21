@@ -114,6 +114,8 @@ def _fills(command: str, argv: list[str], executor: str, profile: Profile) -> li
         extra.append("--skip-casa-data-update")  # compute nodes cannot download it
     if command in _WSCLEAN and profile.wsclean and not has_option(argv, "--wsclean-bin"):
         extra += ["--wsclean-bin", profile.wsclean]
+    if command == "products download" and not has_option(argv, "--yes", "-y"):
+        extra.append("--yes")  # it asks for confirmation; a job has no terminal to answer
     return extra
 
 

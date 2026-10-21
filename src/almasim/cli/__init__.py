@@ -160,6 +160,9 @@ def submit_command(
         None, "--time", help="Time limit, e.g. 02:00:00 or 2-00:00:00."
     ),
     title: str = typer.Option("", "--title", help="A name for the run."),
+    after: list[str] | None = typer.Option(
+        None, "--after", help="Start only when this run has succeeded (its id). Repeatable."
+    ),
     wait: bool = typer.Option(
         False, "--wait", help="Wait for the run to end; exit 1 unless it succeeded."
     ),
@@ -182,6 +185,7 @@ def submit_command(
         title=title,
         wait=wait,
         user_profile=profile,
+        after=after,
     )
 
 

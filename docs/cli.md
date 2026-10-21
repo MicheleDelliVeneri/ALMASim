@@ -705,6 +705,7 @@ $ almasim submit [OPTIONS] {command}...
 * `--memory <str>`: Memory for the job, e.g. 16G.
 * `--time <str>`: Time limit, e.g. 02:00:00 or 2-00:00:00.
 * `--title <str>`: A name for the run.
+* `--after <str>`: Start only when this run has succeeded (its id). Repeatable.
 * `--wait`: Wait for the run to end; exit 1 unless it succeeded.
 * `--profile <path>`: User profile (default: $ALMASIM_PROFILE, else ~/.config/almasim/almasim.toml).
 * `--help`: Show this message and exit.
