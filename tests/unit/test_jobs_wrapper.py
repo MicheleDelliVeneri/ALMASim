@@ -73,6 +73,16 @@ def test_a_failing_command_reads_as_failed(tmp_path):
     assert current_state(read_manifest(run_dir), status) is JobState.FAILED
 
 
+def test_a_command_that_cannot_start_reads_as_failed(tmp_path):
+    # A relative path, say, which the run folder does not have.
+    run_dir = _run_dir(tmp_path)
+    assert run_job(run_dir, ["../.venv/bin/python", "-m", "almasim.cli"]) == 127
+    status = read_status(run_dir)
+    assert status.exit_code == 127 and status.finished_at
+    assert "cannot start ../.venv/bin/python" in (run_dir / STDERR_NAME).read_text()
+    assert current_state(read_manifest(run_dir), status) is JobState.FAILED
+
+
 def test_a_command_killed_by_a_signal_reports_it(tmp_path):
     run_dir = _run_dir(tmp_path)
     code = run_job(run_dir, _python("import os, signal; os.kill(os.getpid(), signal.SIGKILL)"))
