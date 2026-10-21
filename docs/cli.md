@@ -169,8 +169,8 @@ $ almasim simulation [OPTIONS]
 * `--save-mode <memory|npz|h5|fits>`: Output save mode.  [default: memory]
 * `--persist-standard-outputs`: Persist standard outputs in addition to ML shard.
 * `--ml-shard-path <path>`: Destination HDF5 shard path.  [default: ~/almasim_outputs/ddrm_training_sample.h5]
-* `--backend <sync|local>`: Compute backend.  [default: sync]
-* `--n-workers <int range>`: Worker count for local backend.  [default: 1; x>=1]
+* `--backend <sync|local>`: How the channels are imaged: sync, one after another in one process; local, in parallel worker processes on this node (--n-workers).  [default: sync]
+* `--n-workers <int range>`: Worker processes for --backend local; give the job as many CPUs.  [default: 1; x>=1]
 * `--kaggle-token <path>`: Path to a Kaggle credentials file (JSON with username/key, e.g. kaggle.json or access_token) or the directory containing it, used to download morphology images for the galaxy-zoo / hubble-100 source types. Defaults to the standard Kaggle locations if omitted.
 * `--help`: Show this message and exit.
 

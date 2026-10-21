@@ -12,13 +12,16 @@ export const ROW_FIELDS = ['metadata_path', 'row_idx'];
  * The console's starting values over the CLI's. The CLI writes an ML shard
  * to one file in your home and keeps nothing else; the console runs one job
  * per row at once, so each writes its shard, and keeps its FITS products,
- * in its own run folder.
+ * in its own run folder. It also computes the channels in
+ * parallel, with the job's CPUs (`simulationCpus`).
  */
 export const CONSOLE_DEFAULTS: Values = {
 	output_dir: `${RUN_DIR}/outputs`,
 	ml_shard_path: `${RUN_DIR}/ml_shard.h5`,
 	save_mode: 'fits',
-	persist_standard_outputs: true
+	persist_standard_outputs: true,
+	// Channels in parallel, one worker per CPU of the job (simulationCpus).
+	backend: 'local'
 };
 
 /** The form's starting values: the CLI's, then the console's where the command has the field. */
@@ -52,4 +55,15 @@ export function simulationArgv(
 /** The estimate for the batch: per simulation, times runs per row, times rows. */
 export function batchGb(perSimulationGb: number, rows: number, perRow: number): number {
 	return perSimulationGb * Math.max(rows, 0) * Math.max(perRow, 1);
+}
+
+/**
+ * The CPUs a run's job asks for: one per worker with the `local` backend,
+ * which images channels in parallel processes on the job's node, and one
+ * with `sync`, which images them one after another. So the job asks Slurm
+ * for exactly what the run uses.
+ */
+export function simulationCpus(values: Values): number {
+	if (values.backend !== 'local') return 1;
+	return Math.max(1, Math.floor(Number(values.n_workers)) || 1);
 }

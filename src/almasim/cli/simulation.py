@@ -440,7 +440,10 @@ def simulation_run(
     backend: SimulationBackend = typer.Option(
         SimulationBackend("sync"),
         "--backend",
-        help="Compute backend.",
+        help=(
+            "How the channels are imaged: sync, one after another in one process;"
+            " local, in parallel worker processes on this node (--n-workers)."
+        ),
         case_sensitive=False,
         rich_help_panel="Cluster",
     ),
@@ -448,7 +451,7 @@ def simulation_run(
         1,
         "--n-workers",
         min=1,
-        help="Worker count for local backend.",
+        help="Worker processes for --backend local; give the job as many CPUs.",
         rich_help_panel="Cluster",
     ),
     kaggle_token: Path | None = typer.Option(
