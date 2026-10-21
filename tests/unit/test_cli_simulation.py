@@ -76,8 +76,8 @@ def test_simulation_run_csv_happy_path(monkeypatch, tmp_path):
     monkeypatch.setattr(cli_simulation.astro, "get_line_info", lambda main_dir: (100.0, None))
     monkeypatch.setattr(
         cli_simulation,
-        "sample_given_redshift",
-        lambda metadata, n, rest_frequency, extended, zmax, rng=None: metadata,
+        "with_redshifts",
+        lambda metadata, rest_frequency: metadata.assign(redshift=0.1, Freq=100.0),
     )
 
     monkeypatch.setattr(
@@ -189,3 +189,59 @@ def test_the_cli_uses_the_simulation_service_directly():
     assert cli_simulation.create_backend is compute.create_backend
     for name in ("generate_clean_cube", "simulate_observation", "image_products", "export_results"):
         assert getattr(cli_simulation, name) is getattr(simulation, name)
+
+
+def test_a_row_index_simulates_exactly_that_row(monkeypatch, tmp_path):
+    """--row-idx picks that CSV row (it once sampled one at random)."""
+    rows = [
+        {"member_ous_uid": f"uid://A{i}", "ALMA_source_name": f"S{i}", "Freq": f}
+        for i, f in enumerate([230.0, 100.0, 345.0])
+    ]
+    metadata_path = _write_metadata_csv(tmp_path, rows)
+    monkeypatch.setattr(cli_simulation.astro, "get_line_info", lambda main_dir: (400.0, None))
+    picked = []
+
+    def from_row(row, **kwargs):
+        picked.append((row["member_ous_uid"], round(float(row["redshift"]), 3)))
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli_simulation.SimulationParams, "from_metadata_row", from_row)
+    result = runner.invoke(
+        cli.app,
+        [
+            "simulation",
+            "run",
+            "--metadata-path",
+            metadata_path,
+            "--row-idx",
+            "1",
+            "--output-dir",
+            str(tmp_path / "out"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert picked == [("uid://A1", 3.0)]  # 400 GHz line seen at 100 GHz
+
+
+def test_a_row_with_no_line_above_it_is_refused(monkeypatch, tmp_path):
+    metadata_path = _write_metadata_csv(
+        tmp_path, [{"member_ous_uid": "uid://A", "ALMA_source_name": "S", "Freq": 500.0}]
+    )
+    monkeypatch.setattr(cli_simulation.astro, "get_line_info", lambda main_dir: (400.0, None))
+    result = runner.invoke(
+        cli.app,
+        [
+            "simulation",
+            "run",
+            "--metadata-path",
+            metadata_path,
+            "--row-idx",
+            "0",
+            "--output-dir",
+            str(tmp_path / "out"),
+        ],
+    )
+    assert result.exit_code != 0
+    printed = result.output + (result.stderr or "")
+    text = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", printed).replace("│", " ").split())
+    assert "no catalogue line at or above its frequency" in text

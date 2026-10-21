@@ -15,7 +15,7 @@ import typer
 from tqdm.auto import tqdm
 
 from ..services import astro
-from ..services.astro.spectral import sample_given_redshift
+from ..services.astro.spectral import with_redshifts
 from ..services.compute import create_backend
 from ..services.external_skymodel import EXTERNAL_SOURCE_TYPES, is_external_source_type
 from ..services.simulation import (
@@ -25,7 +25,6 @@ from ..services.simulation import (
     image_products,
     simulate_observation,
 )
-from ..services.simulation.rng import run_rng
 from ..skymodels.registry import SKYMODELS
 from ._shared import usage_error
 
@@ -207,20 +206,11 @@ def _build_simulation_params(
     input_path: Path | None,
     kaggle_token: Path | None = None,
 ) -> SimulationParams:
+    if not 0 <= row_idx < len(metadata):
+        usage_error(f"--row-idx {row_idx} is out of range for {len(metadata)} metadata rows")
+    # Exactly that row of the CSV, with the redshift of its catalogue line.
     rest_frequency, _ = astro.get_line_info(main_dir)
-    sampled = sample_given_redshift(
-        metadata,
-        n=max(row_idx + 1, 1),
-        rest_frequency=rest_frequency,
-        extended=(source_type == "extended"),
-        zmax=None,
-        rng=run_rng(seed, "metadata"),
-    )
-
-    if row_idx >= len(sampled):
-        usage_error(f"--row-idx {row_idx} is out of range for {len(sampled)} metadata rows")
-
-    row = sampled.iloc[row_idx]
+    row = with_redshifts(metadata.iloc[[row_idx]], rest_frequency).iloc[0]
     output_dir.mkdir(parents=True, exist_ok=True)
     external_input_path = _resolve_input_path_for_row(input_path, row)
     effective_source_type = (
@@ -228,6 +218,11 @@ def _build_simulation_params(
         if external_input_path is None or is_external_source_type(source_type)
         else "external-fits-cube"
     )
+    if not is_external_source_type(effective_source_type) and not row["redshift"] >= 0:
+        usage_error(
+            f"row {row_idx} ({row.get('ALMA_source_name', '?')}, {row['Freq']} GHz): no "
+            "catalogue line at or above its frequency, so no redshift places one there"
+        )
 
     return SimulationParams.from_metadata_row(
         row,
