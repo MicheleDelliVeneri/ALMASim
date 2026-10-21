@@ -53,7 +53,19 @@ from almasim.services.ms.tables import (
     spw_of_data_description,
 )
 
-from ._shared import fail, usage_error
+from ._options import (
+    Backend,
+    MaxCoresPerNode,
+    PostprocessBackend,
+    SchedulerHost,
+    SchedulerInterface,
+    SlurmMemory,
+    SlurmProject,
+    SlurmQueue,
+    SlurmWalltime,
+    TaskTimeout,
+)
+from ._shared import fail
 
 image_app = typer.Typer(
     help="Visibility-to-image and image-to-visibility commands.",
@@ -339,11 +351,7 @@ def image_from_ms(
         ),
     ),
     num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
-    max_cores_per_node: int = typer.Option(
-        help="Number of cores per node. [Used to scale the memory usage of wsclean]",
-        default=95,
-        min=1,
-    ),
+    max_cores_per_node: MaxCoresPerNode = 95,
     wsclean_bin: str = typer.Option(
         "wsclean",
         "--wsclean-bin",
@@ -437,30 +445,15 @@ def image_from_ms(
             "would write the same MS and every calibrated MS would grow."
         ),
     ),
-    postprocess_backend: str = typer.Option(
-        "slurm",
-        "--postprocess-backend",
-        help="Where the WSClean tasks run: slurm (default) or sync (this process, one at a time).",
-        case_sensitive=False,
-    ),
-    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
-    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
-    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
-    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    postprocess_backend: PostprocessBackend = Backend.slurm,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
-    scheduler_host: str | None = typer.Option(
-        default=None,
-        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
-    ),
-    scheduler_interface: str | None = typer.Option(
-        default=None,
-        help="Scheduler/worker network interface (e.g. ib0, eth0)",
-    ),
-    task_timeout: float = typer.Option(
-        default=3600,
-        min=1,
-        help="Timeout in seconds for each worker-side command",
-    ),
+    scheduler_host: SchedulerHost = None,
+    scheduler_interface: SchedulerInterface = None,
+    task_timeout: TaskTimeout = 3600,
     skip_existing: bool = typer.Option(
         False,
         "--skip-existing",
@@ -654,8 +647,6 @@ def image_from_ms(
     retries the rest, so an interrupted batch can simply be resubmitted.
     """
     backend_kind = postprocess_backend.lower()
-    if backend_kind not in {"sync", "slurm"}:
-        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     # A 3-sigma stop without a mask left ~3 sigma of source in every channel's
     # residual: stacked over the 3537 line-free channels of uid___A002_X10ded83_X6af4
@@ -909,11 +900,7 @@ def image_set(
         min=1e-6,
     ),
     num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
-    max_cores_per_node: int = typer.Option(
-        help="Number of cores per node. [Used to scale the memory usage of wsclean]",
-        default=95,
-        min=1,
-    ),
+    max_cores_per_node: MaxCoresPerNode = 95,
     wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin"),
     auto_threshold: float = typer.Option(1.0, "--auto-threshold", min=0.0),
     auto_mask: float = typer.Option(3.0, "--auto-mask", min=0.0),
@@ -923,15 +910,15 @@ def image_set(
     single_window: bool = typer.Option(True, "--single-window-ms/--no-single-window-ms"),
     max_weight: float = typer.Option(10000.0, "--max-weight", min=0.0),
     scratch_dir: Optional[Path] = typer.Option(None, "--scratch-dir"),
-    postprocess_backend: str = typer.Option("slurm", "--postprocess-backend", case_sensitive=False),
-    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
-    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
-    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
-    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    postprocess_backend: PostprocessBackend = Backend.slurm,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
-    scheduler_host: str | None = typer.Option(default=None),
-    scheduler_interface: str | None = typer.Option(default=None),
-    task_timeout: float = typer.Option(default=3600, min=1),
+    scheduler_host: SchedulerHost = None,
+    scheduler_interface: SchedulerInterface = None,
+    task_timeout: TaskTimeout = 3600,
     skip_existing: bool = typer.Option(False, "--skip-existing"),
     overwrite_outputs: bool = typer.Option(False, "--overwrite-outputs"),
     continue_on_error: bool = typer.Option(True, "--continue-on-error/--fail-fast"),
@@ -995,29 +982,15 @@ def ms_from_image(
     output_directory: Path = typer.Argument(help="Directory containing model FITS products"),
     use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
     num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
-    max_cores_per_node: int = typer.Option(
-        help="Number of cores per node for SLURM worker resource accounting",
-        default=95,
-        min=1,
-    ),
-    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
-    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
-    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
-    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    max_cores_per_node: MaxCoresPerNode = 95,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
-    scheduler_host: str | None = typer.Option(
-        default=None,
-        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
-    ),
-    scheduler_interface: str | None = typer.Option(
-        default=None,
-        help="Scheduler/worker network interface (e.g. ib0, eth0)",
-    ),
-    task_timeout: float = typer.Option(
-        default=3600,
-        min=1,
-        help="Timeout in seconds for each worker-side command",
-    ),
+    scheduler_host: SchedulerHost = None,
+    scheduler_interface: SchedulerInterface = None,
+    task_timeout: TaskTimeout = 3600,
 ):
     from .predict import ms_from_image as _predict_ms_from_image
 
@@ -1148,29 +1121,15 @@ def predict_batch(
     output_directory: Path = typer.Argument(..., help="Output directory path"),
     num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
     use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
-    max_cores_per_node: int = typer.Option(
-        help="Number of cores per node for SLURM worker resource accounting",
-        default=95,
-        min=1,
-    ),
-    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
-    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
-    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
-    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    max_cores_per_node: MaxCoresPerNode = 95,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
-    scheduler_host: str | None = typer.Option(
-        default=None,
-        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
-    ),
-    scheduler_interface: str | None = typer.Option(
-        default=None,
-        help="Scheduler/worker network interface (e.g. ib0, eth0)",
-    ),
-    task_timeout: float = typer.Option(
-        default=3600,
-        min=1,
-        help="Timeout in seconds for each worker-side command",
-    ),
+    scheduler_host: SchedulerHost = None,
+    scheduler_interface: SchedulerInterface = None,
+    task_timeout: TaskTimeout = 3600,
 ):
     parameters = pd.read_csv(str(imaging_parameters))
     slurm_commands: list[tuple[str, list[str]]] = []

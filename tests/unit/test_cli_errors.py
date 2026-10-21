@@ -16,11 +16,17 @@ def _invoke(*args):
     return runner.invoke(cli.app, [str(a) for a in args])
 
 
+def _plain(output: str) -> str:
+    """Typer's error panel as one line, without its box drawing."""
+    return " ".join(output.replace("│", " ").split())
+
+
 @pytest.mark.parametrize("command", ["extract", "unpack", "calibrate"])
 def test_archive_stages_refuse_an_unknown_backend(command):
     result = _invoke("visibilities", command, "--postprocess-backend", "dask")
+    # The choices are an Enum (MADIV-28 T3.2): typer rejects the value itself.
     assert result.exit_code == 2
-    assert "--postprocess-backend must be one of: sync, slurm." in result.output
+    assert "'dask' is not one of 'sync', 'slurm'" in _plain(result.output)
 
 
 def test_extract_needs_an_existing_source_with_archives(tmp_path):
@@ -45,7 +51,7 @@ def test_download_validates_its_options_and_reports_empty_results(monkeypatch):
     result = _invoke(
         "products", "download", "--member-ous-uid", "uid://A", "--postprocess-backend", "dask"
     )
-    assert result.exit_code == 2 and "--postprocess-backend must be one of" in result.output
+    assert result.exit_code == 2 and "is not one of 'sync', 'slurm'" in _plain(result.output)
     monkeypatch.setattr(cli_products, "resolve_products", lambda uids, **kw: [])
     result = _invoke("products", "download", "--member-ous-uid", "uid://A", "--yes")
     assert result.exit_code == 1
