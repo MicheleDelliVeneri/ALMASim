@@ -211,7 +211,7 @@
 						{:else if file.status === 'failed'}
 							<span class="text-danger" title={file.error ?? 'Failed'}>✗</span>
 						{:else}
-							<span class="text-gray-300" title="Pending">○</span>
+							<span class="text-fg-muted" title="Pending">○</span>
 						{/if}
 						<span class="flex-1 truncate text-fg-muted" title={file.filename}>
 							{file.filename}

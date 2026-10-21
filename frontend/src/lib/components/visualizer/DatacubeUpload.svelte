@@ -64,7 +64,7 @@
 			value={integrationMethod}
 			onchange={(e) => onMethodChange(e.currentTarget.value as 'sum' | 'mean')}
 			disabled={loading}
-			class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+			class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-magenta disabled:opacity-50"
 		>
 			<option value="sum">Sum (integrate all channels)</option>
 			<option value="mean">Mean (average over channels)</option>
@@ -81,7 +81,7 @@
 			onchange={(e) =>
 				onComplexComponentChange(e.currentTarget.value as 'real' | 'imag' | 'magnitude' | 'phase')}
 			disabled={loading}
-			class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+			class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-magenta disabled:opacity-50"
 		>
 			<option value="real">Real</option>
 			<option value="imag">Imaginary</option>
@@ -100,7 +100,7 @@
 				oninput={(e) => onChannelStartChange(e.currentTarget.value)}
 				disabled={loading}
 				placeholder="Start channel"
-				class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+				class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-magenta disabled:opacity-50"
 			/>
 			<input
 				type="number"
@@ -109,7 +109,7 @@
 				oninput={(e) => onChannelEndChange(e.currentTarget.value)}
 				disabled={loading}
 				placeholder="End channel"
-				class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+				class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-magenta disabled:opacity-50"
 			/>
 		</div>
 		<p class="text-xs text-fg-dim">Leave blank to integrate all channels on axis 0.</p>
