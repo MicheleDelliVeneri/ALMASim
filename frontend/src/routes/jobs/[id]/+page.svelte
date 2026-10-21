@@ -246,6 +246,13 @@
 							<div class="p-5"><ErrorMessage error={err} title="Could not read job.sbatch" /></div>
 						{/await}
 					{:else}
+						<p class="m-0 px-5 pt-4 text-sm">
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended -->
+							<a href={`${resolve('/products')}?dir=${encodeURIComponent(run.run_dir)}`}
+								>Open the run folder in Products</a
+							>
+							<span class="text-fg-muted">to look at its images and cubes.</span>
+						</p>
 						<ul class="m-0 flex list-none flex-col p-2">
 							{#each detail?.files ?? [] as name (name)}
 								<li class="flex items-center gap-3 rounded px-3 py-1.5 hover:bg-hover">

@@ -428,13 +428,19 @@
 					class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-1.5"
 				>
 					{#each tasks as task, i (`${task.msDir}/${task.name}`)}
-						<div
-							role="listitem"
-							title="{task.msDir.split('/').pop()} {task.name}: {states[i]}"
-							class="truncate rounded px-2 py-1.5 font-mono text-xs font-semibold {TILE[states[i]]}"
-						>
-							{shortMs(task.msDir)}
-							{task.name}
+						<div role="listitem" class="min-w-0">
+							<!-- eslint-disable svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended -->
+							<a
+								href={`${resolve('/products')}?dir=${encodeURIComponent(`${task.msDir}/${task.name}`)}`}
+								title="{task.msDir.split('/').pop()} {task.name}: {states[i]}; open its images"
+								class="block truncate rounded px-2 py-1.5 font-mono text-xs font-semibold no-underline {TILE[
+									states[i]
+								]}"
+							>
+								{shortMs(task.msDir)}
+								{task.name}
+							</a>
+							<!-- eslint-enable svelte/no-navigation-without-resolve -->
 						</div>
 					{/each}
 				</div>

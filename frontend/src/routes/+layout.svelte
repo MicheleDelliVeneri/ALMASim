@@ -15,10 +15,8 @@
 		{ href: '/jobs', label: 'Jobs' },
 		{ href: '/archive', label: 'Archive' },
 		{ href: '/simulate', label: 'Simulate' },
-		{ href: '/combination', label: 'Combination' },
 		{ href: '/imaging', label: 'Imaging' },
-		{ href: '/preview', label: 'Simulation preview' },
-		{ href: '/visualizer', label: 'Visualizer' }
+		{ href: '/products', label: 'Products' }
 	] as const;
 
 	function current(href: string): boolean {
