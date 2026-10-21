@@ -53,6 +53,8 @@ almasim = "almasim.cli:main"
 dashboard = ["bokeh>=3.9.0"]
 casa = ["casatools", "casatasks"]
 ms-casacore = ["python-casacore"]
+# The web console: `almasim serve` (web console plan, S2.1).
+web = ["fastapi", "uvicorn[standard]"]
 
 [project.urls]
 Repository = "https://github.com/astromadiv/ALMASim"

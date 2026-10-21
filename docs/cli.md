@@ -709,3 +709,20 @@ $ almasim submit [OPTIONS] {command}...
 * `--wait`: Wait for the run to end; exit 1 unless it succeeded.
 * `--profile <path>`: User profile (default: $ALMASIM_PROFILE, else ~/.config/almasim/almasim.toml).
 * `--help`: Show this message and exit.
+
+# `almasim serve`
+
+Serve the console; print the ssh tunnel line and the link with its access token.
+
+**Usage**:
+
+```console
+$ almasim serve [OPTIONS]
+```
+
+**Options**:
+
+* `--port <int range>`: Listen on 127.0.0.1:<port> instead of a private socket in ~/.almasim.  [1024<=x<=65535]
+* `--status`: Show the running console's link.
+* `--stop`: Stop the running console.
+* `--help`: Show this message and exit.

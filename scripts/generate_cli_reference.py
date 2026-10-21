@@ -68,7 +68,11 @@ def render() -> str:
     clean.command("clean")(import_module("almasim.cli.clean").clean_command)
     parts.append(_document(typer.main.get_command(clean), "almasim clean"))
     top = import_module("almasim.cli")
-    for name, function in (("doctor", top.doctor_command), ("submit", top.submit_command)):
+    for name, function in (
+        ("doctor", top.doctor_command),
+        ("submit", top.submit_command),
+        ("serve", top.serve_command),
+    ):
         single = typer.Typer(add_completion=False)
         single.command(name)(function)
         parts.append(_document(typer.main.get_command(single), f"almasim {name}"))
