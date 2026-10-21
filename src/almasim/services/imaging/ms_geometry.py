@@ -7,7 +7,6 @@ columns the cube planning needs.
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -16,8 +15,14 @@ import pandas as pd
 from astropy.time import Time
 from tqdm import tqdm
 
-from almasim.services.instrument.constants import ARCSEC_PER_RAD as RAD_TO_ARCSEC
-from almasim.services.instrument.constants import SPEED_OF_LIGHT_M_S
+from almasim.services.instrument.geometry import (
+    MIN_IMAGE_PIXELS,  # noqa: F401  (re-exported)
+    cell_arcsec,
+    image_size,
+    max_baseline_m,
+    primary_beam_fov_arcsec,
+    synthesized_beam_arcsec,
+)
 from almasim.services.ms.tables import (
     TARGET_INTENT,
     intent_matches,
@@ -25,7 +30,6 @@ from almasim.services.ms.tables import (
     spw_of_data_description,
 )
 
-MIN_IMAGE_PIXELS = 16
 DAY_IN_SECONDS = 3600 * 24
 
 
@@ -168,12 +172,10 @@ def image_pixels(
     ``min_beams_across`` widens images narrower than that many synthesized
     beams: a compact configuration's primary beam spans few of them.
     """
-    cell = imaging_parameters["synthetized_beam_size"] / beam_sampling
-    fov = imaging_parameters["fov_per_frequency"] * fov_fraction
-    return max(
-        MIN_IMAGE_PIXELS,
-        int(math.ceil(fov / cell)),
-        int(math.ceil(min_beams_across * beam_sampling)),
+    return image_size(
+        imaging_parameters["fov_per_frequency"] * fov_fraction,
+        cell_arcsec(imaging_parameters["synthetized_beam_size"], beam_sampling),
+        min_pixels=min_beams_across * beam_sampling,
     )
 
 
@@ -210,18 +212,10 @@ def compute_imaging_parameters(
     with open_table(f"{input_ms}::ANTENNA", opener=opener) as antennas:
         min_dish_diameter = np.min(antennas.getcol("DISH_DIAMETER"))
         antenna_pos = antennas.getcol("POSITION")
-    i, j = np.triu_indices(antenna_pos.shape[0], k=1)
-    distance = np.linalg.norm(antenna_pos[j, :] - antenna_pos[i, :], axis=1)
-    max_baseline_size = max(distance)
+    max_baseline_size = max_baseline_m(antenna_pos)
     # The primary beam's half-power width (the Airy model of primary_beam).
-    from almasim.services.imaging.primary_beam import primary_beam_fwhm_rad
-
-    fov_per_frequency = (
-        primary_beam_fwhm_rad(float(min_dish_diameter), reference_frequencies) * RAD_TO_ARCSEC
-    )
-    synthetized_beam_size = (
-        SPEED_OF_LIGHT_M_S * RAD_TO_ARCSEC / reference_frequencies / max_baseline_size
-    )
+    fov_per_frequency = primary_beam_fov_arcsec(float(min_dish_diameter), reference_frequencies)
+    synthetized_beam_size = synthesized_beam_arcsec(reference_frequencies, max_baseline_size)
     spectral_window_id = np.arange(reference_frequencies.size, dtype=int)
 
     _, selected_fields, rows_per_spw_field = _field_scan(

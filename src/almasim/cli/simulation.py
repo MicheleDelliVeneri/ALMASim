@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from enum import StrEnum
 from pathlib import Path
 from threading import Event, Thread
 from time import sleep
@@ -26,6 +27,14 @@ from ..services.simulation import (
 from ..services.simulation.rng import run_rng
 from ..skymodels.registry import SKYMODELS
 from ._shared import usage_error
+
+
+class InstrumentGeometry(StrEnum):
+    """How a simulation sets its beam, field of view and cell (MADIV-28 T2.11)."""
+
+    legacy = "legacy"
+    planner = "planner"
+
 
 simulation_app = typer.Typer(
     help="Simulation workflow commands.",
@@ -178,6 +187,7 @@ def _build_simulation_params(
     background_level: float,
     background_seed: int | None,
     seed: int | None,
+    instrument_geometry: str = "legacy",
     inject_serendipitous: bool,
     output_subdir_name: str | None,
     input_path: Path | None,
@@ -227,6 +237,7 @@ def _build_simulation_params(
         background_level=background_level,
         background_seed=background_seed,
         seed=seed,
+        instrument_geometry=instrument_geometry,
         inject_serendipitous=inject_serendipitous,
         kaggle_token=kaggle_token,
         # Disable MS export by default; requires casatools or python-casacore.
@@ -320,6 +331,15 @@ def simulation_run(
         0.0,
         "--robust",
         help="Robust weighting parameter for imaging.",
+    ),
+    instrument_geometry: InstrumentGeometry = typer.Option(
+        InstrumentGeometry.legacy,
+        "--instrument-geometry",
+        case_sensitive=False,
+        help=(
+            "Beam, field of view and cell: legacy (the metadata FOV, beam / 5) or planner "
+            "(the imaging planner's: the primary beam's FOV, beam / 8)."
+        ),
     ),
     background_level: float = typer.Option(
         0.0,
@@ -461,6 +481,7 @@ def simulation_run(
                     background_level=background_level,
                     background_seed=(background_seed if background_seed is not None else run_seed),
                     seed=run_seed,
+                    instrument_geometry=str(instrument_geometry),
                     inject_serendipitous=inject_serendipitous,
                     output_subdir_name=output_subdir_name,
                     input_path=input_path,

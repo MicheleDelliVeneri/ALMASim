@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping, Optional
 
+from .instrument.array import antenna_array_type, dish_diameter_m
 from .instrument.array import derive_array_type as _derive_array_type
 from .instrument.constants import (
     ALMA_LATITUDE_DEG,
-    DISH_DIAMETER_7M_M,
     DISH_DIAMETER_12M_M,
 )
 
@@ -24,10 +24,7 @@ def derive_array_type(antenna_array: str) -> str:
 
 def infer_antenna_diameter_m(array_type: str) -> float:
     """Infer a representative dish diameter for an ALMA array type."""
-    normalized = (array_type or "12m").lower()
-    if normalized == "7m":
-        return DISH_DIAMETER_7M_M
-    return DISH_DIAMETER_12M_M
+    return dish_diameter_m(array_type)
 
 
 def split_antenna_array_by_type(antenna_array: str) -> list[tuple[str, str]]:
@@ -35,13 +32,7 @@ def split_antenna_array_by_type(antenna_array: str) -> list[tuple[str, str]]:
     tokens = [token for token in str(antenna_array or "").split() if token.strip()]
     groups: dict[str, list[str]] = {"12m": [], "7m": [], "TP": []}
     for token in tokens:
-        upper = token.upper()
-        if "CM" in upper:
-            groups["7m"].append(token)
-        elif "PM" in upper:
-            groups["TP"].append(token)
-        else:
-            groups["12m"].append(token)
+        groups[antenna_array_type(token)].append(token)
 
     ordered_groups: list[tuple[str, str]] = []
     for array_type in ("12m", "7m", "TP"):
