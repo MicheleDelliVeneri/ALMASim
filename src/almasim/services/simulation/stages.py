@@ -18,7 +18,12 @@ from .context import RunContext
 from .geometry import resolve_cube_geometry
 from .metadata import SimParamsRecord, resolve_snr, sim_params_record, simulation_metadata
 from .params import LogFn, SimulationParams, StopFn
-from .planning import noise_reference, plan_observation_runs
+from .planning import (
+    InterferometerRun,
+    TotalPowerRun,
+    noise_reference,
+    plan_observation_runs,
+)
 from .rng import run_rng, stream_entropy
 from .skymodel_stage import build_sky_cube
 from .spectral_setup import resolve_spectral_setup
@@ -35,8 +40,8 @@ class CleanCubeStage:
     sim_output_dir: Optional[str]
     sim_params_payload: SimParamsRecord
     interferometer_kwargs: dict[str, Any]
-    interferometer_runs: list[dict[str, Any]]
-    total_power_runs: list[dict[str, Any]]
+    interferometer_runs: list[InterferometerRun]
+    total_power_runs: list[TotalPowerRun]
     metadata: dict[str, Any]
     observation_plan: dict[str, Any]
     channel_frequencies_hz: np.ndarray
@@ -153,7 +158,9 @@ def generate_clean_cube(
         output_dir_abs=output_dir_abs,
         persist_outputs=persist_outputs,
     )
-    interferometer_kwargs = interferometer_runs[0] if interferometer_runs else {}
+    interferometer_kwargs = (
+        interferometer_runs[0].interferometer_kwargs() if interferometer_runs else {}
+    )
 
     return CleanCubeStage(
         seed=params.seed,
@@ -200,13 +207,13 @@ def simulate_observation(
     )
     progress_index = 0
 
-    for config_index, interferometer_kwargs in enumerate(clean_cube_stage.interferometer_runs):
+    for config_index, run in enumerate(clean_cube_stage.interferometer_runs):
         interferometer = uin.Interferometer(
             backend=compute_backend,
             robust=robust,
             logger=terminal_logger,
             noise_entropy=stream_entropy(clean_cube_stage.seed, "interferometer", config_index),
-            **interferometer_kwargs,
+            **run.interferometer_kwargs(),
         )
         if interferometer_progress_callback is not None:
 
@@ -217,8 +224,8 @@ def simulate_observation(
 
             interferometer.progress_signal.connect(scaled_progress)
         config_result = interferometer.run_interferometric_sim()
-        config_result["config_name"] = interferometer_kwargs.get("config_name")
-        config_result["array_type"] = interferometer_kwargs.get("array_type")
+        config_result["config_name"] = run.config_name
+        config_result["array_type"] = run.array_type
         per_config_results.append(config_result)
         progress_index += 1
 
@@ -227,7 +234,7 @@ def simulate_observation(
         int_results = uin.combine_interferometric_results(
             per_config_results,
             config_weights=[
-                max(float(run["integration_time"]), 0.0)
+                max(float(run.integration_time), 0.0)
                 for run in clean_cube_stage.interferometer_runs
             ],
         )
@@ -240,10 +247,10 @@ def simulate_observation(
             clean_cube_stage.model_cube,
             freqs_hz=clean_cube_stage.channel_frequencies_hz,
             cell_size_arcsec=clean_cube_stage.cell_size_arcsec,
-            noise_profile=tp_run["noise"],
-            antenna_diameter_m=tp_run["antenna_diameter_m"],
-            config_name=tp_run["config_name"],
-            array_type=tp_run["array_type"],
+            noise_profile=tp_run.noise,
+            antenna_diameter_m=tp_run.antenna_diameter_m,
+            config_name=tp_run.config_name,
+            array_type=tp_run.array_type,
             rng=tp_rng,
         )
         tp_per_config_results.append(tp_result)
@@ -257,8 +264,7 @@ def simulate_observation(
         tp_results = uin.combine_total_power_results(
             tp_per_config_results,
             config_weights=[
-                max(float(run["integration_time_s"]), 0.0)
-                for run in clean_cube_stage.total_power_runs
+                max(float(run.integration_time_s), 0.0) for run in clean_cube_stage.total_power_runs
             ],
         )
 

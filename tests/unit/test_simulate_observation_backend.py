@@ -25,7 +25,7 @@ def _backend_used(monkeypatch, compute_backend):
 
     monkeypatch.setattr(simulation.stages.uin, "Interferometer", fake_interferometer)
     stage = MagicMock()
-    stage.interferometer_runs = [{}]
+    stage.interferometer_runs = [MagicMock(interferometer_kwargs=lambda: {})]
     stage.total_power_runs = []
     with pytest.raises(StopIteration):
         simulation.simulate_observation(stage, compute_backend=compute_backend)
