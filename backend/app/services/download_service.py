@@ -64,12 +64,13 @@ class DownloadStore:
         """Register a new job and persist the initial record to DB."""
         self._active.put(job.job_id, job)
 
+        from app.db.jobs import as_uuid
         from app.db.models import DownloadJobRecord
 
         db = self._get_db()
         try:
             rec = DownloadJobRecord(
-                job_id=job.job_id,
+                job_id=as_uuid(job.job_id),
                 destination=job.destination,
                 member_ous_uids=json.dumps(job.member_ous_uids),
                 metadata_json=json.dumps(job.metadata_rows),
@@ -137,11 +138,13 @@ class DownloadStore:
         if not job:
             return
 
+        from app.db.jobs import as_uuid
         from app.db.models import DownloadFileRecord, DownloadJobRecord
 
+        key = as_uuid(job_id)
         db = self._get_db()
         try:
-            rec = db.query(DownloadJobRecord).filter(DownloadJobRecord.job_id == job_id).first()
+            rec = db.query(DownloadJobRecord).filter(DownloadJobRecord.job_id == key).first()
             if not rec:
                 return
 
@@ -158,11 +161,11 @@ class DownloadStore:
             rec.updated_at = db_now()
 
             if job.files:
-                db.query(DownloadFileRecord).filter(DownloadFileRecord.job_id == job_id).delete()
+                db.query(DownloadFileRecord).filter(DownloadFileRecord.job_id == key).delete()
                 for file_status in job.files:
                     db.add(
                         DownloadFileRecord(
-                            job_id=job_id,
+                            job_id=key,
                             filename=file_status.filename,
                             access_url=file_status.access_url,
                             content_length=file_status.content_length,
@@ -196,6 +199,7 @@ class DownloadStore:
         """Return one persisted job, including file records."""
         from sqlalchemy.orm import joinedload
 
+        from app.db.jobs import as_uuid
         from app.db.models import DownloadJobRecord
 
         db = self._get_db()
@@ -203,7 +207,7 @@ class DownloadStore:
             return (
                 db.query(DownloadJobRecord)
                 .options(joinedload(DownloadJobRecord.files))
-                .filter(DownloadJobRecord.job_id == job_id)
+                .filter(DownloadJobRecord.job_id == as_uuid(job_id))
                 .first()
             )
         finally:

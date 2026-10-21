@@ -86,8 +86,11 @@ class SimulationParamsBase(BaseModel):
         description="Imaging implementation (ducc0 is disabled until its uv geometry is fixed)",
     )
     compute_backend: str | None = Field(
-        default="local",
-        description=("Computation backend type: local, dask, slurm, or kubernetes"),
+        default=None,
+        description=(
+            "Computation backend type: local, dask, slurm, or kubernetes. "
+            "Leave it out to use the server's configured backend (COMPUTE_BACKEND)."
+        ),
     )
     compute_backend_config: dict | None = Field(
         default_factory=dict, description="Backend-specific configuration"

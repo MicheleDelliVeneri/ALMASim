@@ -1521,10 +1521,9 @@ export interface components {
 			bandwidth: number;
 			/**
 			 * Compute Backend
-			 * @description Computation backend type: local, dask, slurm, or kubernetes
-			 * @default local
+			 * @description Computation backend type: local, dask, slurm, or kubernetes. Leave it out to use the server's configured backend (COMPUTE_BACKEND).
 			 */
-			compute_backend: string | null;
+			compute_backend?: string | null;
 			/**
 			 * Compute Backend Config
 			 * @description Backend-specific configuration

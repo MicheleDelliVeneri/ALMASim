@@ -163,9 +163,9 @@ class SlurmBackend(DaskClientBackend):
         return len(self.client.scheduler_info().get("workers", {}))
 
     def close(self) -> None:
-        """Close Slurm cluster and client."""
+        """Release this backend's hold on the shared cluster (the last one closes it)."""
         if getattr(self, "_cluster_manager", None) is not None:
-            SlurmDaskClusterSingleton.close_instance()
+            SlurmDaskClusterSingleton.release_instance()
             self._cluster_manager = None
         self.client = None
         self.cluster = None

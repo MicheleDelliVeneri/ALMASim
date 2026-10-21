@@ -83,3 +83,54 @@ def test_a_per_job_backend_is_closed_when_its_job_ends(backend_db, monkeypatch, 
     with pytest.raises(RuntimeError, match="bad parameters"):
         service.run_simulation("sim-1", MagicMock())
     assert backend.close.called is owns
+
+
+def _service(service_module, tmp_path, monkeypatch, run):
+    service = service_module.SimulationService(
+        main_dir=tmp_path,
+        output_dir=tmp_path,
+        tng_dir=tmp_path,
+        galaxy_zoo_dir=tmp_path,
+        hubble_dir=tmp_path,
+        compute_backend=MagicMock(),
+        owns_backend=False,
+    )
+    monkeypatch.setattr(service, "_simulation_params", lambda params: MagicMock(output_dir="out"))
+    monkeypatch.setattr(service, "_persist_status", lambda *a, **k: None)
+    monkeypatch.setattr(service, "_persist_log", lambda *a, **k: None)
+    monkeypatch.setattr(service_module.sim_service, "run_simulation", run)
+    return service
+
+
+def test_a_cancel_seen_by_the_library_ends_as_cancelled(backend_db, monkeypatch, tmp_path):
+    """The library's own stop check used to raise a plain RuntimeError (MADIV-28 W0.3)."""
+    service_module = importlib.import_module("app.services.simulation_service")
+    store = service_module.status_store
+
+    def run(params, **callbacks):
+        store.cancel("sim-cancel")
+        assert callbacks["stop_requested"]()
+        raise service_module.sim_service.SimulationCancelled("Simulation cancelled")
+
+    store.create("sim-cancel")
+    _service(service_module, tmp_path, monkeypatch, run).run_simulation("sim-cancel", MagicMock())
+
+    status = store.get("sim-cancel")
+    assert status.status == "cancelled"
+    assert status.error is None
+
+
+def test_a_failure_after_a_cancel_is_reported_once(backend_db, monkeypatch, tmp_path):
+    """The failure handler logged through a callback that raised the cancel again."""
+    service_module = importlib.import_module("app.services.simulation_service")
+    store = service_module.status_store
+
+    def run(params, **callbacks):
+        store.cancel("sim-fail")
+        raise OSError("disk full")
+
+    store.create("sim-fail")
+    service = _service(service_module, tmp_path, monkeypatch, run)
+    with pytest.raises(OSError, match="disk full"):
+        service.run_simulation("sim-fail", MagicMock())
+    assert [line for line in store.get("sim-fail").logs if line.endswith("ERROR: disk full")]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from sqlalchemy import select, update
@@ -30,6 +31,21 @@ def _key(model: JobModel):
     return model.simulation_id if model is SimulationJob else model.job_id
 
 
+def as_uuid(job_id: Any) -> uuid.UUID | None:
+    """``job_id`` as the UUID the id columns hold, or None if it is not one.
+
+    The routers carry ids as strings. PostgreSQL's UUID type converts them,
+    but on SQLite SQLAlchemy calls ``.hex`` on the value, so a string id
+    failed there (MADIV-28 W0.3).
+    """
+    if isinstance(job_id, uuid.UUID):
+        return job_id
+    try:
+        return uuid.UUID(str(job_id))
+    except ValueError:
+        return None
+
+
 class JobRepository:
     """Get, list, update and reconcile both kinds of job the same way."""
 
@@ -37,7 +53,10 @@ class JobRepository:
         self.db = db
 
     def get(self, model: JobModel, job_id: Any) -> Any | None:
-        return self.db.execute(select(model).where(_key(model) == job_id)).scalar_one_or_none()
+        key = as_uuid(job_id)
+        if key is None:
+            return None
+        return self.db.execute(select(model).where(_key(model) == key)).scalar_one_or_none()
 
     def list(self, model: JobModel, *, status: str | None = None, limit: int = 100) -> list:
         stmt = select(model).order_by(model.created_at.desc())

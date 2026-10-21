@@ -1805,8 +1805,7 @@
                 "type": "null"
               }
             ],
-            "default": "local",
-            "description": "Computation backend type: local, dask, slurm, or kubernetes",
+            "description": "Computation backend type: local, dask, slurm, or kubernetes. Leave it out to use the server's configured backend (COMPUTE_BACKEND).",
             "title": "Compute Backend"
           },
           "compute_backend_config": {

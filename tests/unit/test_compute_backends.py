@@ -300,7 +300,7 @@ def test_slurm_backend_forwards_scheduler_network_kwargs():
                 "get_instance",
                 return_value=manager,
             ) as mock_get_instance,
-            patch.object(slurm_mod.SlurmDaskClusterSingleton, "close_instance") as mock_close,
+            patch.object(slurm_mod.SlurmDaskClusterSingleton, "release_instance") as mock_close,
         ):
             backend = SlurmBackend(
                 queue="normal",
@@ -362,7 +362,7 @@ def test_slurm_backend_job_extra_directives_requeue(directives, expected):
                 "get_instance",
                 return_value=manager,
             ) as mock_get_instance,
-            patch.object(slurm_mod.SlurmDaskClusterSingleton, "close_instance"),
+            patch.object(slurm_mod.SlurmDaskClusterSingleton, "release_instance"),
         ):
             backend = SlurmBackend(queue="normal", job_extra_directives=caller_directives)
 

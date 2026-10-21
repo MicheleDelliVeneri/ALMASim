@@ -25,20 +25,22 @@ except ImportError:  # pragma: no cover - optional dependency
 class DummyCluster:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
+        self.closed = False
 
     def scale(self, n_jobs):
         self.n_jobs = n_jobs
 
     def close(self):
-        return None
+        self.closed = True
 
 
 class DummyClient:
     def __init__(self, cluster):
         self.cluster = cluster
+        self.closed = False
 
     def close(self):
-        return None
+        self.closed = True
 
 
 @pytest.fixture(autouse=True)
@@ -234,6 +236,48 @@ def test_singleton_get_instance_reuses_existing(monkeypatch):
     assert instance_a is instance_b
     assert instance_a.cluster.scaled_to == 2
     assert instance_a.cluster.kwargs["worker_extra_args"][-1] == "CPU=8"
+
+
+@pytest.mark.unit
+def test_the_last_holder_closes_the_shared_cluster(monkeypatch):
+    """Two users of one cluster: the first release leaves it running (MADIV-28 W0.3)."""
+    monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
+    monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
+    monkeypatch.setattr(cluster_mod, "Client", DummyClient)
+    singleton = cluster_mod.SlurmDaskClusterSingleton
+
+    first = singleton.get_instance(node_cores=8, n_jobs=1)
+    second = singleton.get_instance(node_cores=8, n_jobs=1)
+    assert first is second
+
+    singleton.release_instance()
+    assert singleton._instance is first
+    assert not first.cluster.closed
+
+    singleton.release_instance()
+    assert singleton._instance is None
+    assert first.cluster.closed and first.client.closed
+
+    singleton.release_instance()  # nothing left to release: no error
+
+
+@pytest.mark.unit
+def test_close_instance_closes_whoever_still_holds_it(monkeypatch):
+    monkeypatch.setattr(cluster_mod, "SLURM_DASK_AVAILABLE", True)
+    monkeypatch.setattr(cluster_mod, "SLURMCluster", DummyCluster)
+    monkeypatch.setattr(cluster_mod, "Client", DummyClient)
+    singleton = cluster_mod.SlurmDaskClusterSingleton
+
+    instance = singleton.get_instance(node_cores=8, n_jobs=1)
+    singleton.get_instance(node_cores=8, n_jobs=1)
+    singleton.close_instance()
+
+    assert singleton._instance is None
+    assert instance.cluster.closed
+    # A new cluster after a forced close starts with one holder again.
+    singleton.get_instance(node_cores=8, n_jobs=1)
+    singleton.release_instance()
+    assert singleton._instance is None
 
 
 @pytest.mark.unit
