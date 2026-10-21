@@ -73,6 +73,12 @@
 	const uids = $derived(results ? memberOusUids(results.records, selected) : []);
 	const totals = $derived(products ? productTotals(products) : []);
 	const downloadBytes = $derived(filteredBytes(totals, productFilter));
+	/** The ticked rows, opened on the Simulate page instead. */
+	const simulateHref = $derived(
+		`${resolve('/simulate')}?metadata=${encodeURIComponent(resultsCsv ?? '')}&rows=${[...selected]
+			.sort((a, b) => a - b)
+			.join(',')}`
+	);
 
 	function go(params: Record<string, string | null>) {
 		const next = new URLSearchParams(page.url.searchParams.toString());
@@ -331,6 +337,12 @@
 					<p class="m-0 text-xs text-fg-muted">
 						Asks the archive what each observation has to download (a short job).
 					</p>
+					{#if selected.size && resultsCsv}
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended -->
+						<a href={simulateHref} class="btn-secondary ml-auto no-underline"
+							>Simulate them instead</a
+						>
+					{/if}
 				</div>
 			{/if}
 		</section>

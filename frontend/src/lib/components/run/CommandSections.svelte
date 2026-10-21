@@ -8,11 +8,18 @@
 		values: Values;
 		/** Sections to leave out (the page sets those options itself). */
 		omit?: string[];
+		/** Parameters to leave out, by name (the page sets them itself). */
+		hide?: string[];
 	}
 
-	let { command, values = $bindable(), omit = [] }: Props = $props();
+	let { command, values = $bindable(), omit = [], hide = [] }: Props = $props();
 
-	const shown = $derived(sections(command).filter((s) => !omit.includes(s.title)));
+	const shown = $derived(
+		sections(command)
+			.filter((s) => !omit.includes(s.title))
+			.map((s) => ({ ...s, params: s.params.filter((p) => !hide.includes(p.name)) }))
+			.filter((s) => s.params.length > 0)
+	);
 </script>
 
 {#each shown as section (section.title)}
