@@ -10,13 +10,14 @@
 	let { children }: { children: Snippet } = $props();
 
 	const navItems = [
-		{ href: '/', label: 'Overview' },
+		{ href: '/', label: 'Home' },
 		{ href: '/run', label: 'Run a command' },
 		{ href: '/jobs', label: 'Jobs' },
 		{ href: '/archive', label: 'Archive' },
 		{ href: '/simulate', label: 'Simulate' },
 		{ href: '/imaging', label: 'Imaging' },
-		{ href: '/products', label: 'Products' }
+		{ href: '/products', label: 'Products' },
+		{ href: '/settings', label: 'Settings' }
 	] as const;
 
 	function current(href: string): boolean {
