@@ -98,6 +98,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/almasim"]
 
+# The built web app goes into both distributions (hatch_build.py, S2.6).
+[tool.hatch.build.targets.wheel.hooks.custom]
+[tool.hatch.build.targets.sdist.hooks.custom]
+
 [tool.ruff]
 line-length = 100
 exclude = ["node_modules", ".venv", "build", "htmlcov", "frontend"]

@@ -9,6 +9,7 @@ import pytest
 
 from almasim.jobs.catalog import catalog, validate
 from almasim.jobs.policy import KNOWN_COMMANDS
+from almasim.jobs.profile import CommandPolicy, Profile
 
 pytestmark = pytest.mark.unit
 
@@ -28,6 +29,12 @@ def test_every_runnable_command_is_described_and_serialisable(commands):
     assert commands["metadata"].executor == "slurm" and commands["metadata"].needs_internet
     assert not commands["image image-from-ms"].needs_internet
     assert commands["image image-from-ms"].summary
+
+
+def test_the_executor_is_where_the_profile_runs_each_command():
+    profile = Profile(executor="server", commands={"predict": CommandPolicy(executor="slurm")})
+    executors = {c.name: c.executor for c in catalog(profile)}
+    assert executors["metadata"] == "server" and executors["predict"] == "slurm"
 
 
 def test_types_ranges_and_choices_come_from_the_cli(commands):

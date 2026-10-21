@@ -8,6 +8,7 @@ it. Tables merge key by key, the user's value winning; lists are replaced.
 
     runs_root = "/SKAO_data/cycle11/almasim-runs"
     roots = ["/SKAO_data/cycle11", "~"]
+    executor = "slurm"  # where commands run unless their table says; "server" without Slurm
 
     [python]
     executable = "/home/me/.conda/envs/py312/bin/python"
@@ -83,6 +84,7 @@ class CommandPolicy:
 class Profile:
     runs_root: Path = DEFAULT_RUNS_ROOT
     roots: tuple[Path, ...] = (Path("~"),)
+    executor: str | None = None  # every command's, unless its own table names one
     python: str = sys.executable
     setup: tuple[str, ...] = ()
     wsclean: str | None = None
@@ -126,7 +128,7 @@ def _merge(base: dict[str, Any], top: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
-_TOP = {"runs_root", "roots", "python", "tools", "slurm", "commands"}
+_TOP = {"runs_root", "roots", "executor", "python", "tools", "slurm", "commands"}
 _PYTHON = {"executable", "setup"}
 _TOOLS = {"wsclean", "casa_data"}
 _SLURM = {"partition", "account", "partitions"}
@@ -150,6 +152,10 @@ def _paths(data: Mapping[str, Any], where: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
     if "runs_root" in data:
         out["runs_root"] = _expand(data["runs_root"])
+    if "executor" in data:
+        if data["executor"] not in EXECUTORS:
+            raise ProfileError(f"{where}: executor must be one of {', '.join(EXECUTORS)}")
+        out["executor"] = data["executor"]
     if "roots" in data:
         out["roots"] = tuple(_expand(p) for p in _strings(data["roots"], f"{where}: roots"))
     python = data.get("python", {})

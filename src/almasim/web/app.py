@@ -9,7 +9,8 @@ opening the printed link once sets, or as ``Authorization: Bearer <token>``.
 from __future__ import annotations
 
 import hmac
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode
@@ -29,7 +30,11 @@ from .events import EventHub
 from .events import router as events_router
 
 COOKIE = "almasim_token"
+# The built web app: inside the package in a wheel (S2.6); in a source
+# checkout, the frontend's own build folder (`npm run build`).
 STATIC_DIR = Path(__file__).parent / "static"
+CHECKOUT_BUILD = Path(__file__).resolve().parents[3] / "frontend" / "build"
+WEB_DIR_ENV = "ALMASIM_WEB_DIR"
 
 _NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>ALMASim</title>
 <p>The ALMASim web console is running, but its pages are not built into this
@@ -93,14 +98,26 @@ class TokenMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+def web_dir(environ: Mapping[str, str] | None = None) -> Path | None:
+    """Where the built web app is: ``$ALMASIM_WEB_DIR``, else the packaged
+    copy, else a source checkout's ``frontend/build``; None when there is none."""
+    env = os.environ if environ is None else environ
+    if env.get(WEB_DIR_ENV):
+        return Path(env[WEB_DIR_ENV]).expanduser()
+    for candidate in (STATIC_DIR, CHECKOUT_BUILD):
+        if (candidate / AppFiles.FALLBACK).is_file():
+            return candidate
+    return None
+
+
 def create_app(
     token: str,
-    static_dir: Path | None = STATIC_DIR,
+    static_dir: Path | None = None,
     *,
     profile: Profile | None = None,
     events_interval: float = 15.0,
 ) -> FastAPI:
-    """The console app. ``static_dir`` holds the built web app, when there is one.
+    """The console app, serving the built web app from ``static_dir`` (default: ``web_dir()``).
 
     ``profile`` is the job profile the server submits with (default: the
     one ``almasim`` reads from the environment); ``events_interval`` is how
@@ -137,11 +154,12 @@ def create_app(
     app.include_router(cluster.router)
     app.include_router(events_router)
 
+    static_dir = static_dir if static_dir is not None else web_dir()
     if static_dir is not None and (static_dir / AppFiles.FALLBACK).is_file():
         app.mount("/", AppFiles(directory=static_dir, html=True), name="web")
     else:
 
-        @app.get("/", response_class=HTMLResponse)
+        @app.get("/", response_class=HTMLResponse, include_in_schema=False)
         def not_built() -> str:
             return _NOT_BUILT
 

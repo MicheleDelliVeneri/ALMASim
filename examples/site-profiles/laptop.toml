@@ -1,0 +1,14 @@
+# Profile for a machine without Slurm: a laptop, or `docker compose up`
+# (web console plan, S2.6). Every command runs on the console's own machine
+# with the server executor, two at a time, under nice and ionice.
+#
+#   ALMASIM_SITE_PROFILE=examples/site-profiles/laptop.toml almasim serve
+#
+# Commands that fan out (unpack, calibrate, image-from-ms) keep their own
+# default backend here instead of submitting Slurm workers.
+
+executor = "server"
+
+# Inside the compose containers; change both for a laptop install.
+runs_root = "/app/runs"
+roots = ["/app/outputs", "/app/data", "/app/runs"]

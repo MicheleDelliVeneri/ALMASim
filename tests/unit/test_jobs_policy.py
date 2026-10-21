@@ -38,6 +38,24 @@ def test_a_site_without_internet_on_compute_nodes_moves_them_to_the_server():
     assert plan_job(["image", "clean-quality", "/out"], profile).executor == "slurm"
 
 
+def test_a_machine_without_slurm_runs_everything_on_the_server():
+    laptop = Profile(executor="server", commands={"metadata": CommandPolicy(cpus=2)})
+    for argv in (["metadata"], ["image", "clean-quality", "/out"], ["doctor"]):
+        assert plan_job(argv, laptop).executor == "server", argv
+    # A command's own table still wins.
+    mixed = Profile(executor="server", commands={"predict": CommandPolicy(executor="slurm")})
+    assert plan_job(["predict", "ms", "model"], mixed).executor == "slurm"
+
+
+def test_a_server_job_keeps_the_commands_own_backend():
+    """Workers go to Slurm only from a Slurm job; on a laptop there is no Slurm."""
+    laptop = Profile(executor="server", partition="p", account="a")
+    argv = plan_job(["image", "image-from-ms", "p.csv", "out"], laptop).argv
+    assert "--backend" not in argv and "--slurm-queue" not in argv
+    calibrate = plan_job(["visibilities", "calibrate", "raw", "out"], laptop).argv
+    assert "--backend" not in calibrate and "--skip-casa-data-update" not in calibrate
+
+
 def test_commands_that_ask_for_confirmation_get_yes():
     assert plan_job(["metadata", "--band", "3"], ZWICKY).argv[-1] == "--yes"
     assert "--yes" not in plan_job(["image", "clean-quality", "/o"], ZWICKY).argv

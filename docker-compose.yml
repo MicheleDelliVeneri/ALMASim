@@ -77,16 +77,61 @@ services:
     networks:
       - almasim-network
 
+  # The web console (`almasim serve`, API v2). Without Slurm here, it runs
+  # every command in this container with the server executor
+  # (examples/site-profiles/laptop.toml); runs land in the console_runs volume.
+  console:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: almasim-backend:latest
+    container_name: almasim-console
+    working_dir: /app
+    command: ["almasim", "serve", "--port", "8765"]
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      - ALMASIM_SITE_PROFILE=/app/examples/site-profiles/laptop.toml
+      # Listen beyond the container's loopback; the host publishes the port on
+      # 127.0.0.1 only. The token is fixed so the frontend can be given it:
+      # set ALMASIM_TOKEN in your shell or .env to change it.
+      - ALMASIM_SERVE_HOST=0.0.0.0
+      - ALMASIM_TOKEN=${ALMASIM_TOKEN:-almasim-laptop-console}
+    volumes:
+      - ./examples:/app/examples:ro
+      - ./data:/app/data:ro
+      - ./backend/outputs:/app/outputs
+      - console_runs:/app/runs
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request as u; u.urlopen(u.Request('http://localhost:8765/api/v2/health', headers={'Authorization': 'Bearer ' + os.environ['ALMASIM_TOKEN']}))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - almasim-network
+
   # Frontend SvelteKit service (the build differs between the two modes)
   frontend:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      # The address the browser uses for the API (read per request by
-      # frontend/src/hooks.server.ts and injected into the page).
-      - API_URL=http://localhost:8000
+      # Where the web app's server sends /api (vite.config.ts): API v1 to the
+      # backend, API v2 to the console, with the console's token.
+      - LEGACY_API_URL=http://backend:8000
+      - ALMASIM_API_URL=http://console:8765
+      - ALMASIM_TOKEN=${ALMASIM_TOKEN:-almasim-laptop-console}
     depends_on:
       backend:
+        condition: service_healthy
+      console:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -111,3 +156,4 @@ networks:
 
 volumes:
   postgres_data:
+  console_runs:

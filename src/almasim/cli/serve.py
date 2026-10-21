@@ -21,7 +21,7 @@ def _print_access(info) -> None:
         typer.echo(f"  {info.ssh_line()}")
         typer.echo("then browse to:")
     else:
-        typer.echo(f"  listening on 127.0.0.1:{info.port}")
+        typer.echo(f"  listening on {info.bind}:{info.port}")
         typer.echo("From your laptop, tunnel the port, then browse to the link:")
         typer.echo(f"  {info.ssh_line()}")
     typer.echo(f"  {info.url()}")
@@ -63,7 +63,12 @@ def _run(port: int | None) -> None:
     except ProfileError as exc:
         fail(str(exc))
 
-    token = state.new_token()
+    token = os.environ.get(state.TOKEN_ENV) or state.new_token()
+    if len(token) < state.MIN_TOKEN:
+        fail(f"{state.TOKEN_ENV} must be at least {state.MIN_TOKEN} characters")
+    bind = os.environ.get(state.HOST_ENV) or "127.0.0.1"
+    if bind != "127.0.0.1" and not port:
+        fail(f"{state.HOST_ENV} needs --port (the default socket has no address)")
     sock = None if port else state.state_dir() / state.SOCKET_NAME
     if sock is not None:
         if len(str(sock).encode()) > SOCKET_PATH_MAX:
@@ -75,6 +80,7 @@ def _run(port: int | None) -> None:
         host=state.this_host(),
         socket=str(sock) if sock else None,
         port=port,
+        bind=bind,
     )
     state.write_info(info)
     _print_access(info)
@@ -84,7 +90,7 @@ def _run(port: int | None) -> None:
         if port is None:
             uvicorn.run(app, uds=str(sock), log_level="warning")
         else:
-            uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+            uvicorn.run(app, host=bind, port=port, log_level="warning")
     finally:
         state.clear_info()
         if sock is not None:

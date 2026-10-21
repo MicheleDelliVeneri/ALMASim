@@ -722,7 +722,7 @@ $ almasim serve [OPTIONS]
 
 **Options**:
 
-* `--port <int range>`: Listen on 127.0.0.1:<port> instead of a private socket in ~/.almasim.  [1024<=x<=65535]
+* `--port <int range>`: Listen on 127.0.0.1:<port> instead of a private socket in ~/.almasim (in a container, ALMASIM_SERVE_HOST sets the address).  [1024<=x<=65535]
 * `--status`: Show the running console's link.
 * `--stop`: Stop the running console.
 * `--help`: Show this message and exit.

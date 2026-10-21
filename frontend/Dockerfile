@@ -1,45 +1,27 @@
-# Build stage
+# Build stage: the web app as static files (adapter-static, fallback 200.html)
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci
 
-# Copy source code
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Production stage
-FROM node:22-alpine AS production
+# Production stage: `vite preview` serves the build and forwards /api to the
+# servers, as configured in vite.config.ts: /api/v1 to LEGACY_API_URL and
+# /api/v2 to ALMASIM_API_URL with ALMASIM_TOKEN. This is the compose set-up
+# for a laptop; on a cluster, `almasim serve` serves the same build itself
+# (it is packaged in the wheel) and no frontend container is needed.
+FROM builder AS production
 
-WORKDIR /app
+ENV LEGACY_API_URL=http://backend:8000 \
+    ALMASIM_API_URL=http://console:8765
 
-# Copy package files
-COPY package*.json ./
-
-# Install only production dependencies
-RUN npm ci --omit=dev
-
-# Copy built application from builder stage
-COPY --from=builder /app/build ./build
-
-# Expose port
 EXPOSE 3000
 
-# The API address as the BROWSER sees it (not a Compose service name: the
-# browser cannot resolve those). src/hooks.server.ts reads it on every request
-# and injects it into the page, so override it at runtime with -e API_URL=...
-ENV API_URL=http://localhost:8000
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000', (r) => {if(r.statusCode !== 200) throw new Error(r.statusCode)})"
 
-# Start the application
-CMD ["node", "build"]
+CMD ["npx", "vite", "preview", "--host", "0.0.0.0", "--port", "3000"]

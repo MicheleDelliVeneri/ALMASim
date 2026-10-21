@@ -20,6 +20,12 @@ STATE_DIR = Path("~/.almasim")
 STATE_NAME = "serve.json"
 SOCKET_NAME = "serve.sock"
 LOCAL_PORT = 8765  # the port the ssh line forwards on the laptop
+# For a console in a container (docker-compose.yml): a token fixed in advance,
+# so the web app's dev server can be given it, and the address to listen on
+# with --port, since 127.0.0.1 inside a container is unreachable from outside.
+TOKEN_ENV = "ALMASIM_TOKEN"
+HOST_ENV = "ALMASIM_SERVE_HOST"
+MIN_TOKEN = 16
 
 
 @dataclass(frozen=True)
@@ -29,6 +35,7 @@ class ServerInfo:
     host: str  # this machine, for the ssh line
     socket: str | None = None
     port: int | None = None
+    bind: str = "127.0.0.1"  # the address it listens on, with a port
 
     def url(self, local_port: int = LOCAL_PORT) -> str:
         port = local_port if self.socket else self.port

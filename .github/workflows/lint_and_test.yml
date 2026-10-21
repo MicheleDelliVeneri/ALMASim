@@ -73,6 +73,47 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Keep the built app for the package job
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-app
+          path: frontend/build
+          retention-days: 3
+
+  # The wheel carries the web app (hatch_build.py), and an install of it
+  # serves it: `almasim serve` on a cluster needs no Node.
+  package:
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get the built app
+        uses: actions/download-artifact@v7
+        with:
+          name: web-app
+          path: frontend/build
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Build the distributions, the app required
+        run: uv build
+        env:
+          ALMASIM_REQUIRE_WEB: "1"
+
+      - name: The wheel holds the app
+        run: python scripts/check_web_wheel.py dist/*.whl
+
+      - name: An install of the wheel serves it
+        run: |
+          uv venv /tmp/wheel-env
+          uv pip install --python /tmp/wheel-env/bin/python "$(ls dist/*.whl)[web]" httpx
+          cd /tmp && /tmp/wheel-env/bin/python "$GITHUB_WORKSPACE/scripts/check_web_wheel.py" --serve
+
   tests:
     needs: lint
     runs-on: ${{ matrix.os }}
