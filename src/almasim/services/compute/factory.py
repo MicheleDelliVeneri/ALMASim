@@ -1,6 +1,6 @@
 """Factory for creating computation backends."""
 
-from typing import Any, Dict
+from typing import Any
 
 from .base import ComputationBackend
 from .dask import DaskBackend
@@ -12,7 +12,7 @@ from .sync import SyncBackend
 
 def create_backend(
     backend_type: str = "local",
-    **kwargs: Dict[str, Any],
+    **kwargs: Any,
 ) -> ComputationBackend:
     """Create a computation backend.
 

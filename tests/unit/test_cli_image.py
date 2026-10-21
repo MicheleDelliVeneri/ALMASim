@@ -18,6 +18,8 @@ import typer
 from typer.testing import CliRunner
 
 from almasim import cli, cli_image
+from almasim.services.imaging import batch_runner
+from almasim.services.ms.tables import intent_matches
 
 from ._fakes import FakeTable, patch_everywhere
 
@@ -48,7 +50,7 @@ def test_import_casacore_tables_raises_when_casacore_missing(monkeypatch):
     monkeypatch.setitem(sys.modules, "casacore", casacore_module)
     monkeypatch.delitem(sys.modules, "casacore.tables", raising=False)
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(cli_image.MissingDependencyError, match="python-casacore"):
         cli_image.import_casacore_tables()
 
 
@@ -95,8 +97,9 @@ def test_compute_imaging_parameters_builds_expected_dataframe(monkeypatch):
         if table_name.endswith("::FIELD"):
             return FakeTable({"NAME": np.array(["cal", "x", "target"])})
 
-    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
-    monkeypatch.setattr(
+    patch_everywhere(monkeypatch, cli_image, "import_casacore_tables", lambda: _fake_casacore_table)
+    patch_everywhere(
+        monkeypatch,
         cli_image,
         "_field_scan",
         lambda _ms, _intents=(): ({0: 15, 1: 20}, [2], {(0, 0): 5, (0, 2): 10, (1, 2): 20}),
@@ -215,7 +218,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
     (tmp_path / "second.cal").mkdir()
     out_csv = tmp_path / "imaging_parameters.csv"
 
-    monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
+    patch_everywhere(monkeypatch, cli_image, "tqdm", lambda iterable: iterable)
 
     def _fake_compute(input_ms: Path, science_only: bool = True, intents=None) -> pd.DataFrame:
         return pd.DataFrame(
@@ -245,7 +248,7 @@ def test_compute_parameters_writes_csv_for_all_datasets(monkeypatch, tmp_path):
 @pytest.mark.unit
 def test_compute_parameters_defaults_to_cwd_and_default_output(monkeypatch, tmp_path):
     """compute-parameters should run without args using cwd and default output filename."""
-    monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
+    patch_everywhere(monkeypatch, cli_image, "tqdm", lambda iterable: iterable)
 
     def _fake_compute(input_ms: Path, science_only: bool = True, intents=None) -> pd.DataFrame:
         return pd.DataFrame(
@@ -341,7 +344,7 @@ def test_run_commands_with_slurm_cluster_forwards_scheduler_interface(monkeypatc
         return _Backend()
 
     monkeypatch.setattr("almasim.services.compute.create_backend", _fake_create_backend)
-    monkeypatch.setattr(cli_image, "tqdm", lambda iterable, **kwargs: iterable)
+    patch_everywhere(monkeypatch, cli_image, "tqdm", lambda iterable, **kwargs: iterable)
 
     cli_image._run_commands_with_slurm_cluster(
         commands=[("job-1", ["echo", "ok"])],
@@ -526,7 +529,7 @@ def test_predict_batch_submits_jobs_via_slurm_cluster(monkeypatch, tmp_path):
         captured["task_timeout"] = task_timeout
 
     monkeypatch.setattr(cli_image, "_run_commands_with_slurm_cluster", _fake_run_with_slurm_cluster)
-    monkeypatch.setattr(cli_image, "tqdm", lambda iterable, total=None: iterable)
+    patch_everywhere(monkeypatch, cli_image, "tqdm", lambda iterable, total=None: iterable)
 
     result = runner.invoke(
         cli.app,
@@ -578,7 +581,7 @@ def test_predict_batch_skips_when_model_is_missing(monkeypatch, tmp_path):
     def _fake_subprocess_run(cmd: list[str], check: bool = False):
         calls.append((cmd, check))
 
-    monkeypatch.setattr(cli_image, "tqdm", lambda iterable, total=None: iterable)
+    patch_everywhere(monkeypatch, cli_image, "tqdm", lambda iterable, total=None: iterable)
     monkeypatch.setattr(cli_image.subprocess, "run", _fake_subprocess_run)
 
     result = runner.invoke(
@@ -879,7 +882,7 @@ def _tasks(tmp_path: Path, n: int) -> list[cli_image.ImagingTask]:
 
 def _run(tasks, backend, monkeypatch, **overrides):
     monkeypatch.setattr("almasim.services.compute.create_backend", lambda *a, **k: backend)
-    monkeypatch.setattr(cli_image, "tqdm", _QuietTqdm)
+    monkeypatch.setattr(batch_runner, "tqdm", _QuietTqdm)
     kwargs = dict(
         backend_kind="slurm",
         cores_per_task=4,
@@ -895,7 +898,7 @@ def _run(tasks, backend, monkeypatch, **overrides):
         heartbeat_interval=1e9,
     )
     kwargs.update(overrides)
-    return cli_image.run_imaging_tasks(tasks, **kwargs)
+    return batch_runner.run_imaging_tasks(tasks, **kwargs)
 
 
 class _QuietTqdm:
@@ -980,7 +983,7 @@ class _SlowBackend(_FakeBackend):
 def test_run_imaging_tasks_waits_for_workers_and_fills_only_free_slots(tmp_path, monkeypatch):
     """Job 3879: all 46 tasks landed on the first worker to register because
     they were all submitted at once; Dask never moves them afterwards."""
-    monkeypatch.setattr(cli_image, "sleep", lambda s: None)
+    monkeypatch.setattr(batch_runner, "sleep", lambda s: None)
     tasks = _tasks(tmp_path, 11)
     backend = _SlowBackend()
 
@@ -998,9 +1001,8 @@ def test_run_imaging_tasks_fail_fast_stops_and_cancels(tmp_path, monkeypatch):
     backend = _FakeBackend([RuntimeError("boom"), {"ok": 1}])
     failures: list[cli_image.TaskFailure] = []
 
-    with pytest.raises(typer.Exit) as exc:
+    with pytest.raises(batch_runner.ImagingRunAborted, match="ms_0"):
         _run(tasks, backend, monkeypatch, failures=failures, continue_on_error=False)
-    assert exc.value.exit_code == 1
     assert [f.label for f in failures] == ["ms_0"]
 
 
@@ -1087,7 +1089,7 @@ def test_compute_parameters_records_unreadable_ms_and_continues(monkeypatch, tmp
         (folder / name).mkdir()
         if name != "c.ms.split.cal":
             (folder / f"{name}.done").write_text("{}")
-    monkeypatch.setattr(cli_image, "tqdm", lambda iterable: iterable)
+    patch_everywhere(monkeypatch, cli_image, "tqdm", lambda iterable: iterable)
 
     def _fake_compute(ms: Path, science_only: bool = True, intents=None):
         if ms.name.startswith("b"):
@@ -1139,7 +1141,7 @@ def test_science_selection_reports_used_spws_and_target_fields(monkeypatch):
                 return tab
         return tables[""]
 
-    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_table)
+    patch_everywhere(monkeypatch, cli_image, "import_casacore_tables", lambda: _fake_table)
     rows_per_spw, target_fields = cli_image.science_selection(Path("x.ms"))
     assert rows_per_spw == {5: 3, 7: 3}, "SPW 0 has no rows and is left out"
     assert target_fields == [3, 4]
@@ -1594,8 +1596,10 @@ _X32FD_SCAN = (
 @pytest.mark.unit
 def test_compute_imaging_parameters_one_row_per_target_field(monkeypatch):
     """Science-only: a row per window and target field, one id per row, no calibrators."""
-    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES))
-    monkeypatch.setattr(cli_image, "_field_scan", lambda _ms, _intents=(): _X32FD_SCAN)
+    patch_everywhere(
+        monkeypatch, cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES)
+    )
+    patch_everywhere(monkeypatch, cli_image, "_field_scan", lambda _ms, _intents=(): _X32FD_SCAN)
 
     out = cli_image.compute_imaging_parameters(Path("x.ms.split.cal"))
 
@@ -1608,8 +1612,10 @@ def test_compute_imaging_parameters_one_row_per_target_field(monkeypatch):
 @pytest.mark.unit
 def test_compute_imaging_parameters_all_spws_includes_calibrators(monkeypatch):
     """--all-spws: every window, a row per field with data in it, calibrators included."""
-    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES))
-    monkeypatch.setattr(cli_image, "_field_scan", lambda _ms, _intents=(): _X32FD_SCAN)
+    patch_everywhere(
+        monkeypatch, cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES)
+    )
+    patch_everywhere(monkeypatch, cli_image, "_field_scan", lambda _ms, _intents=(): _X32FD_SCAN)
 
     out = cli_image.compute_imaging_parameters(Path("x.ms.split.cal"), science_only=False)
 
@@ -1628,8 +1634,11 @@ def test_compute_imaging_parameters_all_spws_includes_calibrators(monkeypatch):
 @pytest.mark.unit
 def test_compute_imaging_parameters_without_selected_intent_gives_no_rows(monkeypatch):
     """No field with the intent: nothing to image (no fallback to WSClean's field 0)."""
-    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(["a"]))
-    monkeypatch.setattr(
+    patch_everywhere(
+        monkeypatch, cli_image, "import_casacore_tables", lambda: _geometry_tables(["a"])
+    )
+    patch_everywhere(
+        monkeypatch,
         cli_image,
         "_field_scan",
         lambda _ms, _intents=(): ({0: 7, 2: 9}, [], {(0, 0): 7, (2, 0): 9}),
@@ -1646,8 +1655,10 @@ def test_compute_imaging_parameters_passes_intents_and_rejects_them_with_all_fie
         seen.append(intents)
         return _X32FD_SCAN[0], [1], _X32FD_SCAN[2]  # field 1 = phase calibrator
 
-    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES))
-    monkeypatch.setattr(cli_image, "_field_scan", _scan)
+    patch_everywhere(
+        monkeypatch, cli_image, "import_casacore_tables", lambda: _geometry_tables(_X32FD_NAMES)
+    )
+    patch_everywhere(monkeypatch, cli_image, "_field_scan", _scan)
 
     out = cli_image.compute_imaging_parameters(Path("x.ms"), intents=["CALIBRATE_PHASE#ON_SOURCE"])
     assert seen == [("CALIBRATE_PHASE#ON_SOURCE",)]
@@ -1672,7 +1683,7 @@ def test_compute_imaging_parameters_passes_intents_and_rejects_them_with_all_fie
     ],
 )
 def test_intent_matches(obs_mode, intents, expected):
-    assert cli_image.intent_matches(obs_mode, intents) is expected
+    assert intent_matches(obs_mode, intents) is expected
 
 
 @pytest.mark.unit
@@ -1705,7 +1716,8 @@ def test_field_scan_selects_fields_by_given_intent(monkeypatch):
             }
         ),
     }
-    monkeypatch.setattr(
+    patch_everywhere(
+        monkeypatch,
         cli_image,
         "import_casacore_tables",
         lambda: (
@@ -1764,7 +1776,7 @@ def test_field_scan_counts_rows_per_window_and_field(monkeypatch):
     def _fake_table(name, ack=False):
         return next((t for k, t in tables.items() if k and name.endswith(k)), tables[""])
 
-    monkeypatch.setattr(cli_image, "import_casacore_tables", lambda: _fake_table)
+    patch_everywhere(monkeypatch, cli_image, "import_casacore_tables", lambda: _fake_table)
     rows_per_spw, targets, per_field = cli_image._field_scan(Path("x.ms"))
     assert rows_per_spw == {5: 4, 7: 3}
     assert targets == [3, 4]
@@ -1823,3 +1835,25 @@ def test_run_imaging_tasks_passes_the_dish_diameter_when_correcting(
     )
     _run(tasks, None, monkeypatch, backend_kind="sync", pbcor=pbcor)
     assert calls[0]["pb_dish_diameter"] == expected
+
+
+@pytest.mark.unit
+def test_run_imaging_tasks_raises_when_the_workers_never_come_up(tmp_path, monkeypatch):
+    class _NoWorkers(_FakeBackend):
+        def wait_for_workers(self, n_workers, timeout=None):
+            raise RuntimeError("no worker registered in 30 min")
+
+    with pytest.raises(batch_runner.WorkersUnavailableError, match="no worker registered"):
+        _run(_tasks(tmp_path, 1), _NoWorkers([]), monkeypatch)
+
+
+@pytest.mark.unit
+def test_ms_overview_fails_cleanly_without_casacore(monkeypatch, tmp_path):
+    def _missing():
+        raise cli_image.MissingDependencyError("Missing optional dependency `python-casacore`")
+
+    patch_everywhere(monkeypatch, cli_image, "import_casacore_tables", _missing)
+    (tmp_path / "x.ms").mkdir()
+    result = runner.invoke(cli_image.image_app, ["ms-overview", str(tmp_path / "x.ms")])
+    assert result.exit_code == 1
+    assert "python-casacore" in result.output

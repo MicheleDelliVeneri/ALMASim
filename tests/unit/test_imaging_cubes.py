@@ -331,7 +331,8 @@ def test_image_from_ms_plan_only_fills_spectral_columns_and_reports(tmp_path, mo
             return np.full(26, 3840 if name == "NUM_CHAN" else 1875e6)
 
     opened = []
-    monkeypatch.setattr(
+    patch_everywhere(
+        monkeypatch,
         cli_image,
         "import_casacore_tables",
         lambda: lambda name, ack=False: opened.append(name) or _SpectralWindow(),
