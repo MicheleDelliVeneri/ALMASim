@@ -75,3 +75,32 @@ def test_planner_geometry_uses_the_primary_beam_and_eight_cells_per_beam(tmp_pat
         planner.beam_size.to_value(U.arcsec) / 8
     )
     assert planner.n_pix & (planner.n_pix - 1) == 0
+
+
+def test_an_input_cube_sets_its_own_grid(tmp_path):
+    """Size, pixel and frequency axis from the cube's header; n_pix and n_channels ignored."""
+    import numpy as np
+    from astropy.io import fits
+
+    header = fits.Header()
+    header.update(
+        CTYPE1="RA---SIN", CDELT1=-0.3 / 3600, CTYPE2="DEC--SIN", CDELT2=0.3 / 3600,
+        CTYPE3="FREQ", CRPIX3=1.0, CRVAL3=230e9, CDELT3=5e6, CTYPE4="STOKES",
+    )  # fmt: skip
+    path = tmp_path / "model.fits"
+    fits.PrimaryHDU(np.zeros((1, 6, 48, 48), dtype=np.float32), header=header).writeto(path)
+    params = _params(
+        tmp_path,
+        source_type="external-fits-cube",
+        external_skymodel_path=path,
+        n_pix=128,
+        n_channels=32,
+    )
+    geometry = resolve_cube_geometry(params)
+    assert (geometry.n_pix, geometry.n_channels) == (48, 6)
+    assert geometry.cell_size.to_value(U.arcsec) == pytest.approx(0.3)
+    assert geometry.channel_width_hz == pytest.approx(5e6)
+    assert geometry.central_freq.to_value(U.Hz) == pytest.approx(230e9 + 2.5 * 5e6)
+    assert geometry.band_range.to_value(U.Hz) == pytest.approx(6 * 5e6)
+    estimate = estimate_simulation_footprint(params)
+    assert estimate["cube_shape"] == [6, 48, 48]
