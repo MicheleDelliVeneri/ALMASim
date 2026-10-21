@@ -20,10 +20,17 @@
 	import { toRecords } from '#lib/utils/archive.js';
 	import type { Command, Values } from '#lib/utils/commandForm.js';
 	import { errorMessage } from '#lib/utils/errors.js';
-	import { ROW_FIELDS, batchGb, simulationArgv, simulationDefaults } from '#lib/utils/simulate.js';
+	import {
+		ROW_FIELDS,
+		batchGb,
+		simulationArgv,
+		simulationCpus,
+		simulationDefaults
+	} from '#lib/utils/simulate.js';
 	import { inRunDir } from '#lib/utils/runDir.js';
 
 	type Estimate = components['schemas']['Estimate'];
+	type Plan = components['schemas']['Plan'];
 
 	let simulation = $state<Command | null>(null);
 	let values = $state<Values>({});
@@ -37,6 +44,10 @@
 	let estimating = $state(false);
 	let submitting = $state(false);
 	let submitted = $state<string[]>([]);
+	// What the console would submit for the first ticked row, and the CPUs the
+	// site gives a simulation job (which the worker count starts from).
+	let plan = $state<Plan | null>(null);
+	let siteCpus = $state<number | null>(null);
 
 	const rows = $derived([...selected].sort((a, b) => a - b));
 	const perRow = $derived(Number(values.simulations_per_row) || 1);
@@ -114,6 +125,44 @@
 		};
 	});
 
+	// Where and how each run goes: a moment after a change, for the first ticked row.
+	$effect(() => {
+		if (!simulation || !table || rows[0] === undefined) {
+			plan = null;
+			return;
+		}
+		const argv = simulationArgv(simulation, values, metadataPath.trim(), rows[0], rows.length > 1);
+		const cpus = simulationCpus(values);
+		const controller = new AbortController();
+		const timer = setTimeout(async () => {
+			try {
+				if (siteCpus === null) {
+					// The site's CPUs for a simulation: the local backend gets a worker for each.
+					const { data } = await api.POST('/api/v2/commands/validate', {
+						body: { argv },
+						signal: controller.signal
+					});
+					siteCpus = data?.plan?.resources.cpus ?? 1;
+					if (values.backend === 'local' && Number(values.n_workers) <= 1) {
+						values.n_workers = String(siteCpus);
+						return; // the change runs this again
+					}
+				}
+				const { data } = await api.POST('/api/v2/commands/validate', {
+					body: { argv, resources: { cpus } },
+					signal: controller.signal
+				});
+				plan = data?.plan ?? null;
+			} catch {
+				if (!controller.signal.aborted) plan = null;
+			}
+		}, 500);
+		return () => {
+			clearTimeout(timer);
+			controller.abort();
+		};
+	});
+
 	async function submit() {
 		if (!simulation || !rows.length) return;
 		submitting = true;
@@ -124,6 +173,7 @@
 				const { data } = await api.POST('/api/v2/jobs', {
 					body: {
 						argv: simulationArgv(simulation, values, metadataPath.trim(), i, rows.length > 1),
+						resources: { cpus: simulationCpus(values) },
 						params: { ...values, metadata_path: metadataPath.trim(), row_idx: i },
 						title: `Simulation · ${source}`
 					}
@@ -162,7 +212,7 @@
 		<h1 class="m-0 text-3xl">Simulate observations</h1>
 		<p class="m-0 text-fg-muted">
 			Pick observations from a metadata CSV, choose a sky model, and simulate what ALMA would see:
-			one Slurm job per observation.
+			one job per observation.
 		</p>
 	</div>
 
@@ -218,6 +268,22 @@
 					in all (if the others are like the first).
 				</p>
 				<p class="m-0 text-xs text-fg-dim">{estimate.note}</p>
+			{/if}
+			{#if plan}
+				<p class="m-0 text-sm">
+					{#if plan.executor === 'slurm'}
+						Each is a Slurm job: <strong
+							>{plan.resources.cpus} CPU{plan.resources.cpus === 1 ? '' : 's'}</strong
+						>, {plan.resources.memory}, up to {plan.resources.time} on {plan.resources.partition ??
+							'the default partition'}.
+					{:else}
+						Each runs on the console's own machine (this site runs simulations there, not on Slurm),
+						with {plan.resources.cpus} CPU{plan.resources.cpus === 1 ? '' : 's'}.
+					{/if}
+					{values.backend === 'local'
+						? `Its channels are imaged in parallel, one worker per CPU (Cluster: --backend local, --n-workers).`
+						: `Its channels are imaged one after another (Cluster: --backend sync), so it asks for one CPU.`}
+				</p>
 			{/if}
 			<div>
 				<button

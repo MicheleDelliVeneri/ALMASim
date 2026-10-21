@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Command, Param } from './commandForm';
-import { batchGb, simulationArgv, simulationDefaults } from './simulate';
+import { batchGb, simulationArgv, simulationCpus, simulationDefaults } from './simulate';
 
 const option = (name: string, extra: Partial<Param> = {}): Param => ({
 	name,
@@ -88,5 +88,32 @@ describe('the console defaults', () => {
 		expect(argv[argv.indexOf('--output-dir') + 1]).toBe('/data/sims/row-4');
 		const alone = simulationArgv(command, values, '/m.csv', 4, false);
 		expect(alone[alone.indexOf('--output-dir') + 1]).toBe('/data/sims/');
+	});
+});
+
+describe('simulationCpus', () => {
+	it('asks for one CPU per local worker', () => {
+		expect(simulationCpus({ backend: 'local', n_workers: '16' })).toBe(16);
+		expect(simulationCpus({ backend: 'local', n_workers: '' })).toBe(1);
+		expect(simulationCpus({ backend: 'local', n_workers: '2.7' })).toBe(2);
+	});
+
+	it('asks for one CPU when channels go one after another', () => {
+		expect(simulationCpus({ backend: 'sync', n_workers: '16' })).toBe(1);
+		expect(simulationCpus({})).toBe(1);
+	});
+
+	it('is local by default in the console', () => {
+		const command: Command = {
+			...SIMULATION,
+			params: [
+				...SIMULATION.params,
+				option('backend', { type: 'choice', choices: ['sync', 'local'], default: 'sync' }),
+				option('n_workers', { type: 'integer', default: 1 })
+			]
+		};
+		const values = simulationDefaults(command);
+		expect(values.backend).toBe('local');
+		expect(simulationCpus(values)).toBe(1); // until the page sets the site's CPUs
 	});
 });
