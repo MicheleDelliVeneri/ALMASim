@@ -67,9 +67,11 @@ def render() -> str:
     clean = typer.Typer(add_completion=False)
     clean.command("clean")(import_module("almasim.cli.clean").clean_command)
     parts.append(_document(typer.main.get_command(clean), "almasim clean"))
-    doctor = typer.Typer(add_completion=False)
-    doctor.command("doctor")(import_module("almasim.cli").doctor_command)
-    parts.append(_document(typer.main.get_command(doctor), "almasim doctor"))
+    top = import_module("almasim.cli")
+    for name, function in (("doctor", top.doctor_command), ("submit", top.submit_command)):
+        single = typer.Typer(add_completion=False)
+        single.command(name)(function)
+        parts.append(_document(typer.main.get_command(single), f"almasim {name}"))
     text = "\n".join(part.rstrip() + "\n" for part in parts)
     # The sub-apps' shell-completion options are not reachable through almasim.
     text = "".join(

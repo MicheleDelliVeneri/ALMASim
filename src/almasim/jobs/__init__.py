@@ -31,7 +31,6 @@ from .rundir import (
     write_manifest,
     write_status,
 )
-from .wrapper import run_job
 
 __all__ = [
     "EXECUTORS",
@@ -52,7 +51,6 @@ __all__ = [
     "new_job_id",
     "read_manifest",
     "read_status",
-    "run_job",
     "write_manifest",
     "write_status",
 ]

@@ -41,7 +41,7 @@ import os
 import sys
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -92,6 +92,10 @@ class Profile:
     partitions: Mapping[str, Partition] = field(default_factory=dict)
     commands: Mapping[str, CommandPolicy] = field(default_factory=dict)
     sources: tuple[Path, ...] = ()  # the files it was read from, site first
+    # The same files as absolute paths, which a job gets in its environment: it
+    # runs in its run folder, where a relative path no longer points at them.
+    site_file: Path | None = None
+    user_file: Path | None = None
 
     def policy(self, command: str) -> CommandPolicy:
         return self.commands.get(command, CommandPolicy())
@@ -248,7 +252,13 @@ def load_profile(
     if site_path is not None:
         data = _merge(data, _read(site_path))
         sources.append(site_path)
+    user_file = None
     if user_path.is_file() or user_named:
         data = _merge(data, _read(user_path))
         sources.append(user_path)
-    return _build(data, tuple(sources))
+        user_file = user_path.absolute()
+    return replace(
+        _build(data, tuple(sources)),
+        site_file=site_path.absolute() if site_path is not None else None,
+        user_file=user_file,
+    )
