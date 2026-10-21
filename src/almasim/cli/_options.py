@@ -1,4 +1,4 @@
-"""Options that several commands share (MADIV-28 T3.2).
+"""Options that several commands share (MADIV-28 T3.2), and one spelling for each (T3.9).
 
 Each alias is an ``Annotated`` type carrying its ``typer.Option``; a command
 declares ``slurm_queue: SlurmQueue = "normal"`` and keeps its own default.
@@ -12,6 +12,26 @@ from typing import Annotated, Any, Optional
 
 import typer
 
+# Old spellings still accepted (MADIV-28 T3.9), and the one to use instead.
+DEPRECATED_FLAGS = {
+    "--postprocess-backend": "--backend",
+    "--slurm-scheduler-host": "--scheduler-host",
+    "--slurm-n-jobs": "--slurm-workers",
+    "--output-root": "--output-dir",
+}
+
+
+def deprecated_flag_warnings(args: list[str]) -> list[str]:
+    """A warning for every deprecated option spelling in ``args``."""
+    warnings = []
+    for arg in args:
+        flag = arg.split("=", 1)[0]
+        if flag in DEPRECATED_FLAGS:
+            warnings.append(
+                f"WARNING: {flag} is deprecated and will be removed; use {DEPRECATED_FLAGS[flag]}."
+            )
+    return warnings
+
 
 class Backend(StrEnum):
     """Where a command's tasks run."""
@@ -23,6 +43,7 @@ class Backend(StrEnum):
 PostprocessBackend = Annotated[
     Backend,
     typer.Option(
+        "--backend",
         "--postprocess-backend",
         case_sensitive=False,
         help="Where the tasks run: sync (this process, one at a time) or slurm (Slurm jobs).",
@@ -41,6 +62,7 @@ SchedulerHost = Annotated[
     Optional[str],
     typer.Option(
         "--scheduler-host",
+        "--slurm-scheduler-host",
         help="Scheduler host advertised to the workers (default: this host).",
     ),
 ]

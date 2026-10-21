@@ -49,10 +49,14 @@ def _forward_typer_subapp(
     prog_name: str,
 ) -> None:
     """Lazy-load a Typer sub-app and forward CLI args to it."""
+    from ._options import deprecated_flag_warnings
+
     module = import_module(module_name, package=__package__)
     subapp = getattr(module, app_name)
     command = typer.main.get_command(subapp)
     args = list(ctx.args) or ["--help"]
+    for warning in deprecated_flag_warnings(args):
+        typer.echo(warning, err=True)
 
     # Typer may emit a plain Command for single-command apps; in that case,
     # users still type an explicit subcommand token (e.g. `simulation run ...`).

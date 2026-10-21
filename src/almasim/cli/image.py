@@ -450,7 +450,9 @@ def image_from_ms(
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
-    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    slurm_n_jobs: int = typer.Option(
+        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+    ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
     task_timeout: TaskTimeout = 3600,
@@ -915,7 +917,9 @@ def image_set(
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
-    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    slurm_n_jobs: int = typer.Option(
+        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+    ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
     task_timeout: TaskTimeout = 3600,
@@ -987,7 +991,9 @@ def ms_from_image(
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
-    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    slurm_n_jobs: int = typer.Option(
+        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+    ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
     task_timeout: TaskTimeout = 3600,
@@ -1126,7 +1132,9 @@ def predict_batch(
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
-    slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
+    slurm_n_jobs: int = typer.Option(
+        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+    ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
     task_timeout: TaskTimeout = 3600,

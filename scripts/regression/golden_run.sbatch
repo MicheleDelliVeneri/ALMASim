@@ -51,11 +51,11 @@ stage extract "$PYTHON" -m almasim.cli visibilities extract \
     --source-root "$RUN/archives" --destination "$RUN/asdm"
 
 stage unpack "$PYTHON" -m almasim.cli visibilities unpack \
-    --input-root "$RUN/asdm" --output-root "$RUN/raw_ms" --asdm-uid "$GOLDEN_UID" \
-    --postprocess-backend sync --casa-data-root "$CASA_DATA" --skip-casa-data-update
+    --input-root "$RUN/asdm" --output-dir "$RUN/raw_ms" --asdm-uid "$GOLDEN_UID" \
+    --backend sync --casa-data-root "$CASA_DATA" --skip-casa-data-update
 
-stage calibrate "$PYTHON" -m almasim.cli visibilities calibrate --postprocess-backend sync \
-    --input-root "$AUX_ROOT" --raw-ms-root "$RUN/raw_ms/working" --output-root "$RUN/cal" \
+stage calibrate "$PYTHON" -m almasim.cli visibilities calibrate --backend sync \
+    --input-root "$AUX_ROOT" --raw-ms-root "$RUN/raw_ms/working" --output-dir "$RUN/cal" \
     --asdm-uid "$GOLDEN_UID" --casa-data-root "$CASA_DATA" --skip-casa-data-update
 
 # Imaging parameters computed from this run's calibrated MS, like a user run, so
@@ -79,7 +79,7 @@ with open(dst, "w", newline="") as out:
 PY
 
 stage image "$PYTHON" -m almasim.cli image image-from-ms "$RUN/params.csv" "$RUN/cubes" \
-    --postprocess-backend sync --wsclean-bin "$WSCLEAN_BIN" \
+    --backend sync --wsclean-bin "$WSCLEAN_BIN" \
     --num-cores "${GOLDEN_CORES:-1}" --task-memory-gb 36 --task-timeout 28800 \
     --cube --uv-contsub --selfcal inf,30s,ap:inf --noise-products --casa-data-root "$CASA_DATA"
 

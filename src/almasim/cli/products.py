@@ -57,6 +57,7 @@ from ..services.download import (
 from ._options import (
     Backend,
     PostprocessBackend,
+    SchedulerHost,
     SlurmCores,
     SlurmMemory,
     SlurmOptions,
@@ -690,15 +691,7 @@ def products_extract(
         min=0,
         help="Number of Slurm workers. Pass 0 to spawn one worker per archive.",
     ),
-    slurm_scheduler_host: Optional[str] = typer.Option(
-        None,
-        "--slurm-scheduler-host",
-        help=(
-            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
-            "Set this to an internal/HPC network address when the public hostname "
-            "is not reachable from compute nodes (e.g. 10.20.25.44)."
-        ),
-    ),
+    slurm_scheduler_host: SchedulerHost = None,
     skip_existing: bool = typer.Option(
         False,
         "--skip-existing",
@@ -755,6 +748,7 @@ def products_unpack(
     ),
     output_root: Path = typer.Option(
         default_output_path("downloads") / "archive_ms" / "raw_ms",
+        "--output-dir",
         "--output-root",
         help="Directory where raw MeasurementSets are written.",
     ),
@@ -785,15 +779,7 @@ def products_unpack(
         min=0,
         help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
     ),
-    slurm_scheduler_host: Optional[str] = typer.Option(
-        None,
-        "--slurm-scheduler-host",
-        help=(
-            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
-            "Set this to an internal/HPC network address when the public hostname "
-            "is not reachable from compute nodes (e.g. 10.20.25.44)."
-        ),
-    ),
+    slurm_scheduler_host: SchedulerHost = None,
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
@@ -856,6 +842,7 @@ def products_calibrate(
     ),
     output_root: Path = typer.Option(
         default_output_path("downloads") / "archive_ms" / "calibrated_ms",
+        "--output-dir",
         "--output-root",
         help="Directory where calibrated MeasurementSets are written.",
     ),
@@ -886,15 +873,7 @@ def products_calibrate(
         min=0,
         help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
     ),
-    slurm_scheduler_host: Optional[str] = typer.Option(
-        None,
-        "--slurm-scheduler-host",
-        help=(
-            "IP or hostname that Slurm workers use to reach the Dask scheduler. "
-            "Set this to an internal/HPC network address when the public hostname "
-            "is not reachable from compute nodes (e.g. 10.20.25.44)."
-        ),
-    ),
+    slurm_scheduler_host: SchedulerHost = None,
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",

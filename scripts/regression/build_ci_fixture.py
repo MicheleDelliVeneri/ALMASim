@@ -261,8 +261,8 @@ def try_asdm_round_trip(trimmed: Path, scratch: Path, args: argparse.Namespace) 
         shutil.rmtree(out)
     cmd = [
         sys.executable, "-m", "almasim.cli", "visibilities", "unpack",
-        "--input-root", str(scratch / "reimport-input"), "--output-root", str(out),
-        "--asdm-uid", UID, "--postprocess-backend", "sync",
+        "--input-root", str(scratch / "reimport-input"), "--output-dir", str(out),
+        "--asdm-uid", UID, "--backend", "sync",
         "--casa-data-root", str(CASA_DATA), "--skip-casa-data-update",
     ]  # fmt: skip
     result = subprocess.run(cmd, cwd=scratch)

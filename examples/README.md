@@ -43,15 +43,15 @@ almasim products extract \
 
 almasim products unpack \
   --input-root examples/output/downloads \
-  --output-root examples/output/archive_ms/raw_ms \
-  --postprocess-backend slurm \
+  --output-dir examples/output/archive_ms/raw_ms \
+  --backend slurm \
   --slurm-workers 8
 
 almasim products calibrate \
   --input-root examples/output/downloads \
   --raw-ms-root examples/output/archive_ms/raw_ms \
-  --output-root examples/output/archive_ms/calibrated_ms \
-  --postprocess-backend slurm \
+  --output-dir examples/output/archive_ms/calibrated_ms \
+  --backend slurm \
   --slurm-workers 8
 
 almasim clean -- \

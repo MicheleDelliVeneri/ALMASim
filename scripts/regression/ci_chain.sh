@@ -30,18 +30,18 @@ BACKEND="${BACKEND:-sync}"
 SLURM_QUEUE="${SLURM_QUEUE:-ci}"
 export OPENBLAS_NUM_THREADS=1
 if [ "$BACKEND" = slurm ]; then
-    CALIBRATE_BACKEND=(--postprocess-backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-cores 2
+    CALIBRATE_BACKEND=(--backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-cores 2
         --slurm-memory 6GB --slurm-workers 1 --slurm-walltime 01:00:00)
-    IMAGE_BACKEND=(--postprocess-backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-memory 10GB
-        --slurm-n-jobs 1 --slurm-walltime 01:00:00)
+    IMAGE_BACKEND=(--backend slurm --slurm-queue "$SLURM_QUEUE" --slurm-memory 10GB
+        --slurm-workers 1 --slurm-walltime 01:00:00)
     # Without SCHEDULER_HOST the pipeline picks the address the workers can reach.
     if [ -n "${SCHEDULER_HOST:-}" ]; then
-        CALIBRATE_BACKEND+=(--slurm-scheduler-host "$SCHEDULER_HOST")
+        CALIBRATE_BACKEND+=(--scheduler-host "$SCHEDULER_HOST")
         IMAGE_BACKEND+=(--scheduler-host "$SCHEDULER_HOST")
     fi
 else
-    CALIBRATE_BACKEND=(--postprocess-backend sync)
-    IMAGE_BACKEND=(--postprocess-backend sync)
+    CALIBRATE_BACKEND=(--backend sync)
+    IMAGE_BACKEND=(--backend sync)
 fi
 
 mkdir -p "$RUN/logs" "$RUN/archives"
@@ -74,8 +74,8 @@ if [[ "$raw_tar" == *.asdm.sdm.tar ]]; then
     stage extract "$PYTHON" -m almasim.cli visibilities extract \
         --source-root "$RUN/archives" --destination "$RUN/asdm"
     stage unpack "$PYTHON" -m almasim.cli visibilities unpack \
-        --input-root "$RUN/asdm" --output-root "$RUN/raw_ms" --asdm-uid "$UID_EB" \
-        --postprocess-backend sync --casa-data-root "$CASA_DATA" --skip-casa-data-update
+        --input-root "$RUN/asdm" --output-dir "$RUN/raw_ms" --asdm-uid "$UID_EB" \
+        --backend sync --casa-data-root "$CASA_DATA" --skip-casa-data-update
 else
     mkdir -p "$RUN/raw_ms/working"
     stage extract tar -xf "$raw_tar" -C "$RUN/raw_ms/working"
@@ -83,7 +83,7 @@ fi
 
 stage calibrate "$PYTHON" -m almasim.cli visibilities calibrate "${CALIBRATE_BACKEND[@]}" \
     --input-root "$FIXTURE/auxiliary" --raw-ms-root "$RUN/raw_ms/working" \
-    --output-root "$RUN/cal" --asdm-uid "$UID_EB" \
+    --output-dir "$RUN/cal" --asdm-uid "$UID_EB" \
     --casa-data-root "$CASA_DATA" --skip-casa-data-update
 
 stage compute-parameters "$PYTHON" -m almasim.cli image compute-parameters \
