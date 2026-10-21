@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '@fontsource-variable/noto-sans';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
+	import { asset, resolve } from '$app/paths';
 	import { onMount, type Snippet } from 'svelte';
 	import Toasts from '#lib/components/shared/Toasts.svelte';
 	import { jobs } from '#lib/stores/jobs.svelte.js';
@@ -35,7 +35,7 @@
 	<header class="sticky top-0 z-40 bg-navy text-white">
 		<div class="flex h-16 items-center gap-4 px-4 sm:px-6">
 			<a href={resolve('/')} class="flex items-center gap-3 text-white no-underline">
-				<img src="/assets/skao-mark-white.png" alt="" class="h-8 w-8" />
+				<img src={asset('assets/skao-mark-white.png')} alt="" class="h-8 w-8" />
 				<span class="text-xl font-light tracking-tight">ALMASim</span>
 				<span class="hidden text-xs font-medium uppercase tracking-wide text-navy-soft sm:inline"
 					>Web console</span

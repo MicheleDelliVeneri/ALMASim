@@ -7,6 +7,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { api } from '#lib/api/v2/client.js';
+	import { consoleUrl } from '#lib/config.js';
 	import { splitChunk, visibleWindow } from '#lib/utils/logLines.js';
 	import ErrorMessage from '#lib/components/shared/ErrorMessage.svelte';
 
@@ -112,7 +113,7 @@
 	}
 
 	const downloadHref = $derived(
-		`/api/v2/files/download?path=${encodeURIComponent(`${runDir}/${stream}.log`)}`
+		`${consoleUrl()}/api/v2/files/download?path=${encodeURIComponent(`${runDir}/${stream}.log`)}`
 	);
 </script>
 

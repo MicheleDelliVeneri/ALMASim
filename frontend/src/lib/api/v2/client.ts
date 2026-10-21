@@ -9,7 +9,7 @@
  * `data` is always there when the call returns.
  */
 import createClient, { type Middleware } from 'openapi-fetch';
-import { API_BASE_URL } from '#lib/config.js';
+import { consoleUrl } from '#lib/config.js';
 import { ApiRequestError, formatErrorDetail } from '../client.js';
 import type { components, paths } from './schema.js';
 
@@ -33,9 +33,9 @@ export const throwOnError: Middleware = {
 };
 
 export function createApi(
-	// The page's own origin, spelled out: a Request outside a browser page
-	// (tests, workers) cannot resolve a bare path.
-	baseUrl: string = API_BASE_URL || (typeof location === 'undefined' ? '' : location.origin),
+	// The page's own origin (and prefix), spelled out: a Request outside a
+	// browser page (tests, workers) cannot resolve a bare path.
+	baseUrl: string = consoleUrl(),
 	// Looked up on each call, not when the client is made (tests stub it).
 	fetchImpl: (request: Request) => Promise<Response> = (request) => globalThis.fetch(request)
 ) {

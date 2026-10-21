@@ -202,13 +202,22 @@ def serve_command(
             " (in a container, ALMASIM_SERVE_HOST sets the address)."
         ),
     ),
+    base_path: str = typer.Option(
+        "",
+        "--base-path",
+        envvar="ALMASIM_BASE_PATH",
+        help=(
+            "Serve under this URL prefix, for a reverse proxy that passes it on"
+            " (Open OnDemand's /node/<host>/<port>)."
+        ),
+    ),
     status: bool = typer.Option(False, "--status", help="Show the running console's link."),
     stop: bool = typer.Option(False, "--stop", help="Stop the running console."),
 ) -> None:
     """Serve the console; print the ssh tunnel line and the link with its access token."""
     from .serve import serve
 
-    serve(port, status, stop)
+    serve(port, status, stop, base_path)
 
 
 def main() -> None:

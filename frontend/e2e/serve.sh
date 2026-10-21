@@ -6,6 +6,7 @@
 #
 #   E2E_ROOT   the area (default /tmp/almasim-e2e; emptied first)
 #   E2E_PORT   the port (default 8765)
+#   E2E_BASE_PATH  a URL prefix to serve under, as Open OnDemand does (default none)
 #   ALMASIM    the almasim to run (default: almasim on PATH)
 #   PYTHON     the Python with numpy and astropy for the fake (default: python)
 set -euo pipefail
@@ -25,4 +26,5 @@ export ALMASIM_SITE_PROFILE="$root/profile.toml"
 export ALMASIM_TOKEN=${ALMASIM_TOKEN:?the tests set the token}
 export ALMASIM_WEB_DIR="$here/../build"
 export ALMASIM_JOB_COMMAND="${PYTHON:-python} $here/fake_almasim.py"
+export ALMASIM_BASE_PATH="${E2E_BASE_PATH:-}"
 exec "${ALMASIM:-almasim}" serve --port "${E2E_PORT:-8765}"

@@ -6,7 +6,7 @@
  * what the server can no longer replay, and then the server sends a fresh
  * snapshot. Pages read `jobs.list` or `jobs.get(id)`; they never poll.
  */
-import { API_BASE_URL } from '#lib/config.js';
+import { consoleUrl } from '#lib/config.js';
 import type { Run } from '#lib/api/v2/client.js';
 
 /** What the store needs of an EventSource (tests pass a fake). */
@@ -45,7 +45,7 @@ export class JobsStore {
 	#retries = 0;
 	#retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-	constructor(connect: Connect = browserConnect, url = `${API_BASE_URL}/api/v2/events`) {
+	constructor(connect: Connect = browserConnect, url = `${consoleUrl()}/api/v2/events`) {
 		this.#connect = connect;
 		this.#url = url;
 	}

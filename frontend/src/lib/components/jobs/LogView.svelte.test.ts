@@ -62,7 +62,7 @@ describe('LogView', () => {
 		expect(calls).toContain('stderr@0');
 		expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute(
 			'href',
-			'/api/v2/files/download?path=%2Fruns%2FR%2Fstderr.log'
+			`${location.origin}/api/v2/files/download?path=%2Fruns%2FR%2Fstderr.log`
 		);
 	});
 

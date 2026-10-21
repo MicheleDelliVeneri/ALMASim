@@ -46,6 +46,10 @@ npm run build
 ALMASIM=$PWD/../.venv/bin/almasim PYTHON=$PWD/../.venv/bin/python npm run test:e2e
 ```
 
+With `E2E_BASE_PATH=/node/e2e-host/8765` the same tests run against a console
+served under that URL prefix (`almasim serve --base-path`), as Open
+OnDemand's proxy serves it; CI runs them both ways.
+
 `src/lib/api/v2/openapi.json` is written by `scripts/generate_openapi.py` at
 the repository root and guarded by `tests/unit/test_openapi_snapshot.py`.
 

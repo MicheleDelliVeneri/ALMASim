@@ -1,3 +1,5 @@
+import { resolve } from '$app/paths';
+
 /**
  * The API base URL: empty, so requests go to the page's own origin.
  *
@@ -8,3 +10,15 @@
  * then has to allow it (CORS).
  */
 export const API_BASE_URL: string = import.meta.env?.VITE_API_URL ?? '';
+
+/**
+ * Where the console is: `VITE_API_URL`, else this page's origin plus the
+ * path the console is served under (`almasim serve --base-path`, e.g. Open
+ * OnDemand's `/node/<host>/<port>`), which the server puts in the page.
+ * Empty outside a browser.
+ */
+export function consoleUrl(): string {
+	if (API_BASE_URL) return API_BASE_URL;
+	if (typeof location === 'undefined') return '';
+	return location.origin + resolve('/').replace(/\/$/, '');
+}

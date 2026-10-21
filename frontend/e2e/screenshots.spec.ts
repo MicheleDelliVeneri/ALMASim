@@ -29,11 +29,11 @@ async function shoot(page: Page, name: string) {
 test('the console, page by page', async ({ page }) => {
 	test.setTimeout(240_000);
 
-	await page.goto('/run?command=image%20image-from-ms');
+	await page.goto('run?command=image%20image-from-ms');
 	await settle(page);
 	await shoot(page, 'run');
 
-	await page.goto('/archive');
+	await page.goto('archive');
 	await page.getByRole('textbox', { name: /Project code/ }).fill('2023.1.00133.S');
 	await page.getByRole('button', { name: 'Search the archive' }).click();
 	await expect(page.getByText('3 of 3 rows', { exact: false })).toBeVisible();
@@ -45,7 +45,7 @@ test('the console, page by page', async ({ page }) => {
 	await settle(page);
 	await shoot(page, 'simulate');
 
-	await page.goto('/imaging');
+	await page.goto('imaging');
 	await page.getByRole('textbox', { name: /Folder of calibrated/ }).fill(`${E2E_ROOT}/data/cal`);
 	await page.getByRole('button', { name: 'Work out the imaging parameters' }).click();
 	await expect(page.locator('table tbody tr')).toHaveCount(2);
@@ -62,7 +62,7 @@ test('the console, page by page', async ({ page }) => {
 	await page.waitForTimeout(1000);
 	await shoot(page, 'products');
 
-	await page.goto('/jobs');
+	await page.goto('jobs');
 	await settle(page);
 	await shoot(page, 'jobs');
 
@@ -76,7 +76,7 @@ test('the console, page by page', async ({ page }) => {
 	await page.waitForTimeout(1000);
 	await shoot(page, 'job');
 
-	await page.goto('/');
+	await page.goto('./');
 	await settle(page);
 	await shoot(page, 'home');
 });

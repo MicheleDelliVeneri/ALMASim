@@ -16,7 +16,8 @@ const PAGES = [
 
 for (const path of PAGES) {
 	test(`accessible: ${path}`, async ({ page }) => {
-		await page.goto(path);
+		// Relative to the console's address, which may carry a prefix (E2E_BASE_PATH).
+		await page.goto(path.slice(1) || './');
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		// The page keeps its event stream open, so it is never network-idle: wait
 		// for the live job count instead, then for what the page loads.

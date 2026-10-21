@@ -27,7 +27,7 @@ def _print_access(info) -> None:
     typer.echo(f"  {info.url()}")
 
 
-def serve(port: int | None, status: bool, stop_server: bool) -> None:
+def serve(port: int | None, status: bool, stop_server: bool, base_path: str = "") -> None:
     try:
         import uvicorn  # noqa: F401  (checked here, used by _run)
 
@@ -43,15 +43,20 @@ def serve(port: int | None, status: bool, stop_server: bool) -> None:
         info = state.stop()
         typer.echo("Stopped the console." if info else "No console was running.")
     else:
-        _run(port)
+        _run(port, base_path)
 
 
-def _run(port: int | None) -> None:
+def _run(port: int | None, base_path: str = "") -> None:
     import uvicorn
 
     from almasim.jobs.profile import ProfileError, load_profile
     from almasim.web import serve as state
-    from almasim.web.app import create_app
+    from almasim.web.app import create_app, normalize_base_path
+
+    try:
+        base_path = normalize_base_path(base_path)
+    except ValueError as exc:
+        fail(f"--base-path: {exc}")
 
     running = state.read_info()
     if running is not None:
@@ -81,12 +86,13 @@ def _run(port: int | None) -> None:
         socket=str(sock) if sock else None,
         port=port,
         bind=bind,
+        base_path=base_path,
     )
     state.write_info(info)
     _print_access(info)
     os.umask(0o077)  # the socket file: this user only
     try:
-        app = create_app(token, profile=profile)
+        app = create_app(token, profile=profile, base_path=base_path)
         if port is None:
             uvicorn.run(app, uds=str(sock), log_level="warning")
         else:
