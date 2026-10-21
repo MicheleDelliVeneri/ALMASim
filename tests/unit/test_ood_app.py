@@ -68,3 +68,15 @@ def test_the_console_and_the_connect_button_agree_on_the_path_and_token():
     # A token the console accepts (at least 16 characters).
     length = int(re.search(r"create_passwd (\d+)", before).group(1))
     assert length >= 16
+
+
+def test_the_rehearsal_script_fills_in_what_the_templates_ask_for():
+    rehearse = _read("try-without-ondemand.sh")
+    # It runs the app's own scripts, not copies of them...
+    assert "template/before.sh.erb" in rehearse and "template/script.sh.erb" in rehearse
+    # ...replacing the one ERB tag in script.sh, which must still be there.
+    tag = "<%= context.almasim_setup %>"
+    assert tag in rehearse and tag in _read("template/script.sh.erb")
+    # It provides OnDemand's helpers that before.sh calls.
+    for helper in re.findall(r"\$\((\w+) ", _read("template/before.sh.erb")):
+        assert f"{helper}()" in rehearse, helper
