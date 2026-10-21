@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import pytest
 from typer.testing import CliRunner
@@ -17,8 +19,8 @@ def _invoke(*args):
 
 
 def _plain(output: str) -> str:
-    """Typer's error panel as one line, without its box drawing."""
-    return " ".join(output.replace("│", " ").split())
+    """Typer's error panel as one line, without colours (CI forces them) or box drawing."""
+    return " ".join(re.sub(r"\x1b\[[0-9;]*m", "", output).replace("│", " ").split())
 
 
 @pytest.mark.parametrize("command", ["extract", "unpack", "calibrate"])
