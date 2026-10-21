@@ -1,6 +1,6 @@
 {
   "name": "almasim-frontend",
-  "version": "2.1.10",
+  "version": "2.1.16",
   "private": true,
   "type": "module",
   "scripts": {

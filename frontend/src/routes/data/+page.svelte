@@ -217,7 +217,7 @@
 		{:else if jobs.length === 0}
 			<div class="p-8 text-center text-sm text-fg-dim">
 				No downloads yet. Start downloading from the
-				<a href="/metadata" class="text-accent underline hover:text-accent">Metadata</a>
+				<a href={resolve('/metadata')} class="text-accent underline hover:text-accent">Metadata</a>
 				page.
 			</div>
 		{:else}
@@ -309,7 +309,9 @@
 													title="Load the metadata associated with this download"
 													onclick={() => loadMetadata(job)}
 												>
-													{loadingMetadata.has(job.job_id) ? 'Loading…' : `Metadata (${job.metadata_count})`}
+													{loadingMetadata.has(job.job_id)
+														? 'Loading…'
+														: `Metadata (${job.metadata_count})`}
 												</button>
 											{/if}
 											<button
@@ -332,32 +334,62 @@
 	</div>
 </div>
 
-
 {#if redownloadOptionsOpen && redownloadTarget}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+		role="dialog"
+		aria-modal="true"
+	>
 		<div class="alma-panel w-full max-w-xl rounded-lg shadow-panel">
 			<header class="flex items-center justify-between border-b border-line px-5 py-4">
 				<div>
 					<h2 class="text-lg font-semibold text-gray-100">Re-download products</h2>
-					<p class="mt-1 text-xs text-fg-dim">{redownloadTarget.total_files} files to {redownloadTarget.destination}</p>
+					<p class="mt-1 text-xs text-fg-dim">
+						{redownloadTarget.total_files} files to {redownloadTarget.destination}
+					</p>
 				</div>
-				<button type="button" class="text-fg-dim hover:text-gray-100" aria-label="Close" onclick={() => (redownloadOptionsOpen = false)}>✕</button>
+				<button
+					type="button"
+					class="text-fg-dim hover:text-gray-100"
+					aria-label="Close"
+					onclick={() => (redownloadOptionsOpen = false)}>✕</button
+				>
 			</header>
 
 			<div class="space-y-5 px-5 py-5">
 				<div>
-					<label class="block text-sm font-medium text-gray-300" for="redownload-parallel">Parallel streams</label>
-					<input id="redownload-parallel" type="range" min="1" max="30" bind:value={redownloadMaxParallel} class="mt-2 w-full" />
-					<p class="mt-1 text-xs text-fg-dim">{redownloadMaxParallel} simultaneous files (balanced across ESO, NRAO and NAOJ mirrors, capped at 10 per mirror)</p>
+					<label class="block text-sm font-medium text-gray-300" for="redownload-parallel"
+						>Parallel streams</label
+					>
+					<input
+						id="redownload-parallel"
+						type="range"
+						min="1"
+						max="30"
+						bind:value={redownloadMaxParallel}
+						class="mt-2 w-full"
+					/>
+					<p class="mt-1 text-xs text-fg-dim">
+						{redownloadMaxParallel} simultaneous files (balanced across ESO, NRAO and NAOJ mirrors, capped
+						at 10 per mirror)
+					</p>
 				</div>
 
 				<div class="grid gap-3 rounded border border-line p-3">
 					<label class="flex items-center gap-2 text-sm text-gray-300">
-						<input type="checkbox" bind:checked={redownloadExtractTar} disabled={redownloadUnpackMs || redownloadCalibrated} />
+						<input
+							type="checkbox"
+							bind:checked={redownloadExtractTar}
+							disabled={redownloadUnpackMs || redownloadCalibrated}
+						/>
 						Extract tar archives
 					</label>
 					<label class="flex items-center gap-2 text-sm text-gray-300">
-						<input type="checkbox" bind:checked={redownloadUnpackMs} disabled={redownloadCalibrated} />
+						<input
+							type="checkbox"
+							bind:checked={redownloadUnpackMs}
+							disabled={redownloadCalibrated}
+						/>
 						Create raw MeasurementSets
 					</label>
 					<label class="flex items-center gap-2 text-sm text-gray-300">
@@ -365,14 +397,28 @@
 						Restore calibration and create calibrated visibilities
 					</label>
 					<label class="flex items-center gap-2 text-sm text-gray-300">
-						<input type="checkbox" bind:checked={redownloadCleanIntermediate} disabled={!redownloadCalibrated} />
+						<input
+							type="checkbox"
+							bind:checked={redownloadCleanIntermediate}
+							disabled={!redownloadCalibrated}
+						/>
 						Keep only split calibrated products
 					</label>
 				</div>
 
 				<div class="grid gap-3 sm:grid-cols-2">
-					<input type="text" bind:value={redownloadArchiveOutputRoot} class="rounded border border-line px-3 py-2 text-sm" placeholder="Archive output root (optional)" />
-					<input type="text" bind:value={redownloadCasaDataRoot} class="rounded border border-line px-3 py-2 text-sm" placeholder="CASA data root (optional)" />
+					<input
+						type="text"
+						bind:value={redownloadArchiveOutputRoot}
+						class="rounded border border-line px-3 py-2 text-sm"
+						placeholder="Archive output root (optional)"
+					/>
+					<input
+						type="text"
+						bind:value={redownloadCasaDataRoot}
+						class="rounded border border-line px-3 py-2 text-sm"
+						placeholder="CASA data root (optional)"
+					/>
 				</div>
 
 				<label class="flex items-center gap-2 text-sm text-gray-300">
@@ -382,8 +428,17 @@
 			</div>
 
 			<footer class="flex justify-end gap-3 border-t border-line px-5 py-4">
-				<button type="button" class="rounded border border-line px-4 py-2 text-sm text-gray-300 hover:bg-hover" onclick={() => (redownloadOptionsOpen = false)}>Cancel</button>
-				<button type="button" class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50" disabled={redownloading.has(redownloadTarget.job_id)} onclick={redownload}>
+				<button
+					type="button"
+					class="rounded border border-line px-4 py-2 text-sm text-gray-300 hover:bg-hover"
+					onclick={() => (redownloadOptionsOpen = false)}>Cancel</button
+				>
+				<button
+					type="button"
+					class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+					disabled={redownloading.has(redownloadTarget.job_id)}
+					onclick={redownload}
+				>
 					{redownloading.has(redownloadTarget.job_id) ? 'Starting…' : 'Start re-download'}
 				</button>
 			</footer>

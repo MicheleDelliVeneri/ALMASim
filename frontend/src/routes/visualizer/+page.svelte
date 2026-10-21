@@ -91,7 +91,10 @@
 	async function processFile(file: File | string) {
 		const fileName = typeof file === 'string' ? file.split('/').pop() : file.name;
 		const timeoutMs = getProcessingTimeoutMs(file);
-		logger.info({ fileName, method: integrationMethod, timeoutMs }, 'Processing visualizer product');
+		logger.info(
+			{ fileName, method: integrationMethod, timeoutMs },
+			'Processing visualizer product'
+		);
 		loading = true;
 		error = null;
 
@@ -157,7 +160,12 @@
 		if (!file) return;
 
 		const lowerName = file.name.toLowerCase();
-		if (!lowerName.endsWith('.npz') && !lowerName.endsWith('.fits') && !lowerName.endsWith('.fit') && !lowerName.endsWith('.fts')) {
+		if (
+			!lowerName.endsWith('.npz') &&
+			!lowerName.endsWith('.fits') &&
+			!lowerName.endsWith('.fit') &&
+			!lowerName.endsWith('.fts')
+		) {
 			logger.warn({ name: file.name }, 'Invalid file type selected');
 			error = 'Please select a .npz or FITS file';
 			return;
@@ -186,9 +194,7 @@
 	onMount(async () => {
 		logger.info('Visualizer page mounted');
 		const requestedDir =
-			typeof window !== 'undefined'
-				? new URLSearchParams(window.location.search).get('dir')
-				: null;
+			typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('dir') : null;
 		void loadFileList(requestedDir || BROWSE_ROOT);
 	});
 </script>
@@ -234,9 +240,7 @@
 				{#if loading}
 					<div class="py-4 text-center">
 						<p class="text-fg-muted">Processing file...</p>
-						<p class="mt-1 text-sm text-fg-dim">
-							MSv2 products can take up to 2 minutes to open.
-						</p>
+						<p class="mt-1 text-sm text-fg-dim">MSv2 products can take up to 2 minutes to open.</p>
 					</div>
 				{/if}
 			</div>
@@ -263,9 +267,7 @@
 						</label>
 
 						<!-- Grid Layout Toggle -->
-						<div
-							class="flex items-center space-x-2 rounded-md border border-line bg-surface p-1"
-						>
+						<div class="flex items-center space-x-2 rounded-md border border-line bg-surface p-1">
 							<button
 								onclick={() => (gridLayout = 'horizontal')}
 								class="rounded px-3 py-1 text-sm transition-colors {gridLayout === 'horizontal'

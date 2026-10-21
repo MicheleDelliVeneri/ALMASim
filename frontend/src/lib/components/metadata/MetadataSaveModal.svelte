@@ -12,8 +12,16 @@
 		formRef?: HTMLFormElement;
 	}
 
-	let { open, saving, defaultPath, localFileName, onClose, onSubmit, onChooseLocalPath, formRef = $bindable() }: Props =
-		$props();
+	let {
+		open,
+		saving,
+		defaultPath,
+		localFileName,
+		onClose,
+		onSubmit,
+		onChooseLocalPath,
+		formRef = $bindable()
+	}: Props = $props();
 </script>
 
 {#if open}
@@ -37,8 +45,8 @@
 			<form bind:this={formRef} onsubmit={onSubmit} class="space-y-4 px-6 py-6">
 				<p class="text-sm text-fg-muted">
 					Save the current metadata result set to a backend-visible path (default:
-					<code class="rounded bg-surface px-1 py-0.5 text-xs text-fg">{defaultPath}</code
-					>) or pick a local destination on your machine.
+					<code class="rounded bg-surface px-1 py-0.5 text-xs text-fg">{defaultPath}</code>) or pick
+					a local destination on your machine.
 				</p>
 
 				<fieldset class="space-y-2">

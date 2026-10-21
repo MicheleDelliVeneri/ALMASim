@@ -1,12 +1,11 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/jpeg" href="%sveltekit.assets%/assets/almasim-icon.jpeg" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<!-- runtime config is injected here by src/hooks.server.ts -->
-		%almasim.runtimeConfig%
-		%sveltekit.head%
+		%almasim.runtimeConfig% %sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>

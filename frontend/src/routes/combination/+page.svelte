@@ -77,7 +77,10 @@
 			allFiles = data.files.filter((file) =>
 				PRODUCT_PREFIXES.some((prefix) => file.name.startsWith(prefix))
 			);
-			logger.info({ outputDir: data.output_dir, count: allFiles.length }, 'Combination file list loaded');
+			logger.info(
+				{ outputDir: data.output_dir, count: allFiles.length },
+				'Combination file list loaded'
+			);
 		} catch (err) {
 			logger.error({ err }, 'Failed to load combination file list');
 			allFiles = [];
@@ -151,9 +154,7 @@
 
 	async function getDefaultOutputDir(): Promise<string | undefined> {
 		const requestedDir =
-			typeof window !== 'undefined'
-				? new URLSearchParams(window.location.search).get('dir')
-				: null;
+			typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('dir') : null;
 		if (requestedDir) return requestedDir;
 		return BROWSE_ROOT;
 	}
@@ -171,16 +172,12 @@
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Combination</h1>
 					<p class="mt-2 text-fg-muted">
-						Load and compare the image-domain combination products: interferometric, total-power, and merged TP+INT cubes.
+						Load and compare the image-domain combination products: interferometric, total-power,
+						and merged TP+INT cubes.
 					</p>
 				</div>
 				<div class="flex flex-wrap gap-2">
-					{#each [
-						{ value: 'all', label: 'All' },
-						{ value: 'int', label: 'INT' },
-						{ value: 'tp', label: 'TP' },
-						{ value: 'merged', label: 'TP+INT' }
-					] as option}
+					{#each [{ value: 'all', label: 'All' }, { value: 'int', label: 'INT' }, { value: 'tp', label: 'TP' }, { value: 'merged', label: 'TP+INT' }] as option (option.value)}
 						<button
 							type="button"
 							onclick={() => (productFilter = option.value as ProductFilter)}
@@ -290,11 +287,16 @@
 						<div class="mb-4 flex items-start justify-between gap-3">
 							<div class="min-w-0">
 								<div class="mb-2">
-									<span class={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getProductBadgeClass(image.productKind)}`}>
+									<span
+										class={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getProductBadgeClass(image.productKind)}`}
+									>
 										{getProductLabel(image.productKind)}
 									</span>
 								</div>
-								<h3 class="truncate text-sm font-semibold text-fg-muted" title={image.stats.cube_name}>
+								<h3
+									class="truncate text-sm font-semibold text-fg-muted"
+									title={image.stats.cube_name}
+								>
 									{image.stats.cube_name}
 								</h3>
 							</div>

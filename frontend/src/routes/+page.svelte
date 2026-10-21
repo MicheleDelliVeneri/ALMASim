@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { apiClient } from '#lib/api/client.js';
 	import { createLogger } from '#lib/logger.js';
@@ -13,14 +14,16 @@
 			href: '/metadata',
 			code: '01',
 			title: 'Metadata',
-			description: 'Query ALMA observations and select real datasets for simulation or data processing.',
+			description:
+				'Query ALMA observations and select real datasets for simulation or data processing.',
 			metric: 'TAP'
 		},
 		{
 			href: '/data',
 			code: '02',
 			title: 'Data',
-			description: 'Download ALMA products, unpack raw MeasurementSets, and generate calibrated visibilities.',
+			description:
+				'Download ALMA products, unpack raw MeasurementSets, and generate calibrated visibilities.',
 			metric: 'MS'
 		},
 		{
@@ -37,14 +40,14 @@
 			description: 'Inspect simulation outputs, image products, datacubes, and reconstructed data.',
 			metric: 'VIS'
 		}
-	];
+	] as const;
 
 	const workflowLinks = [
 		{ href: '/metadata', label: 'Find observations' },
 		{ href: '/data', label: 'Download products' },
 		{ href: '/simulations', label: 'Run simulations' },
 		{ href: '/imaging', label: 'Create images' }
-	];
+	] as const;
 
 	onMount(async () => {
 		logger.info('Home page mounted');
@@ -66,19 +69,23 @@
 		<div class="alma-panel rounded-lg p-6 sm:p-8">
 			<div class="alma-kicker">ALMA Simulator</div>
 			<div class="mt-5 max-w-3xl">
-				<h1 class="text-4xl font-bold leading-tight text-gray-100 sm:text-5xl">
-					ALMASim
-				</h1>
+				<h1 class="text-4xl font-bold leading-tight text-gray-100 sm:text-5xl">ALMASim</h1>
 				<p class="mt-4 text-lg leading-8 text-gray-300">
-					A control surface for ALMA simulation workflows: select observations, download data products,
-					create MeasurementSets, run simulations, image outputs, and inspect results.
+					A control surface for ALMA simulation workflows: select observations, download data
+					products, create MeasurementSets, run simulations, image outputs, and inspect results.
 				</p>
 			</div>
 			<div class="mt-8 flex flex-wrap gap-3">
-				<a href="/metadata" class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover">
+				<a
+					href={resolve('/metadata')}
+					class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover"
+				>
 					Start from Metadata
 				</a>
-				<a href="/simulations" class="rounded border border-line px-4 py-2 text-sm font-semibold text-gray-200 hover:bg-hover">
+				<a
+					href={resolve('/simulations')}
+					class="rounded border border-line px-4 py-2 text-sm font-semibold text-gray-200 hover:bg-hover"
+				>
 					Open Simulations
 				</a>
 			</div>
@@ -106,8 +113,11 @@
 					This only reports whether the frontend can reach the ALMASim backend API.
 				</p>
 				<div class="grid gap-2">
-					{#each workflowLinks as link}
-						<a href={link.href} class="flex items-center justify-between rounded border border-line px-3 py-2 text-sm text-gray-300 hover:bg-hover">
+					{#each workflowLinks as link (link.href)}
+						<a
+							href={resolve(link.href)}
+							class="flex items-center justify-between rounded border border-line px-3 py-2 text-sm text-gray-300 hover:bg-hover"
+						>
 							<span>{link.label}</span>
 							<span class="text-fg-dim">Open</span>
 						</a>
@@ -118,15 +128,20 @@
 	</section>
 
 	<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-		{#each modules as module}
-			<a href={module.href} class="alma-panel group rounded-lg p-5 transition hover:border-cyan-300/50 hover:bg-hover">
+		{#each modules as module (module.href)}
+			<a
+				href={resolve(module.href)}
+				class="alma-panel group rounded-lg p-5 transition hover:border-cyan-300/50 hover:bg-hover"
+			>
 				<div class="flex items-center justify-between">
 					<span class="font-mono text-xs text-fg-dim">{module.code}</span>
 					<span class="alma-chip rounded px-2 py-1 text-xs font-semibold">{module.metric}</span>
 				</div>
 				<h2 class="mt-5 text-xl font-semibold text-gray-100">{module.title}</h2>
 				<p class="mt-3 text-sm leading-6 text-fg-dim">{module.description}</p>
-				<div class="mt-5 text-sm font-semibold text-accent group-hover:text-cyan-200">Open module</div>
+				<div class="mt-5 text-sm font-semibold text-accent group-hover:text-cyan-200">
+					Open module
+				</div>
 			</a>
 		{/each}
 	</section>

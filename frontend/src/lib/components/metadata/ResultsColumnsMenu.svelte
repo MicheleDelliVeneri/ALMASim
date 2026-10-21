@@ -94,7 +94,7 @@
 				</div>
 			</div>
 			<!-- Pinned columns (always visible, not reorderable) -->
-			{#each PINNED_COLUMNS as col}
+			{#each PINNED_COLUMNS as col (col)}
 				<div class="flex items-center gap-2 bg-surface px-3 py-1.5 text-sm text-fg-dim">
 					<svg class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
 						<path
@@ -108,7 +108,7 @@
 				</div>
 			{/each}
 			<!-- Reorderable columns (drag up/down to reorder) -->
-			{#each columnOrder as col}
+			{#each columnOrder as col (col)}
 				<label
 					class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-hover"
 					class:text-fg-dim={!dataColumns.has(col)}

@@ -121,7 +121,7 @@
 		<div class="space-y-2">
 			<p class="text-sm font-medium text-fg-muted">Simulation Steps:</p>
 			<div class="space-y-1">
-				{#each SIMULATION_STEPS as step, index}
+				{#each SIMULATION_STEPS as step, index (step)}
 					{@const currentStep = status?.current_step || ''}
 					{@const stepProgress = ((index + 1) / SIMULATION_STEPS.length) * 100}
 					{@const isActive =
@@ -161,7 +161,7 @@
 			</div>
 			<div bind:this={logsContainer} class="max-h-64 space-y-1 overflow-y-auto p-3">
 				{#if status?.logs && status.logs.length > 0}
-					{#each status.logs as log}
+					{#each status.logs as log, i (i)}
 						<div class="whitespace-pre-wrap break-words text-gray-300">
 							{log}
 						</div>

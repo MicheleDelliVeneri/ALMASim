@@ -1,0 +1,3 @@
+# Written by scripts/generate_openapi.py and compared byte for byte by
+# tests/unit/test_openapi_snapshot.py.
+src/lib/api/openapi.json

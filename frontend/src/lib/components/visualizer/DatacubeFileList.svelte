@@ -33,14 +33,17 @@
 		emptyMessage = 'No .npz, FITS, or MSv2 files found in the selected directory',
 		actionLabel = 'Load'
 	}: Props = $props();
-
 </script>
 
 <div class="space-y-4">
 	<!-- Output Directory Info -->
-	<div class="flex items-center gap-2 rounded-md border border-accent-line bg-accent-soft px-3 py-2">
+	<div
+		class="flex items-center gap-2 rounded-md border border-accent-line bg-accent-soft px-3 py-2"
+	>
 		<span class="shrink-0 text-sm font-medium text-accent">Directory:</span>
-		<span class="flex-1 truncate font-mono text-xs text-accent">{outputDir || '(none selected)'}</span>
+		<span class="flex-1 truncate font-mono text-xs text-accent"
+			>{outputDir || '(none selected)'}</span
+		>
 		<button
 			type="button"
 			onclick={onBrowseRequest}
@@ -95,7 +98,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-line bg-surface">
-						{#each files as file}
+						{#each files as file (file.path)}
 							<tr class="hover:bg-hover">
 								<td class="px-4 py-2 font-mono text-sm text-fg">
 									{file.name}
@@ -112,7 +115,7 @@
 								<td class="px-4 py-2 text-right">
 									<button
 										onclick={() => onFileSelect(file.path)}
-										disabled={disabled}
+										{disabled}
 										class="rounded-md bg-primary px-3 py-1 text-xs text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
 									>
 										{actionLabel}
