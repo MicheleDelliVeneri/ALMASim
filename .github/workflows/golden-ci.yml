@@ -161,7 +161,7 @@ jobs:
 
       - name: Upload the run
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: golden-run
           path: |
@@ -173,7 +173,7 @@ jobs:
 
       - name: Upload the candidate baseline
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: golden-candidate-baseline
           path: /tmp/candidate
@@ -242,7 +242,7 @@ jobs:
 
       - name: Upload the candidate simulation baseline
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: golden-candidate-simulation
           path: /tmp/candidate-sim
@@ -338,7 +338,7 @@ jobs:
 
       - name: Upload the run and Slurm logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: golden-run-slurm
           path: |
