@@ -324,7 +324,7 @@
 								<div class="flex gap-2">
 									<button
 										type="button"
-										class="text-accent hover:text-accent disabled:text-gray-400"
+										class="text-accent hover:text-accent disabled:text-fg-dim"
 										onclick={() => handleVisualize(sim.simulation_id)}
 										disabled={sim.status !== 'completed'}
 										title="Visualize results"
@@ -361,7 +361,7 @@
 									</button>
 									<button
 										type="button"
-										class="text-emerald-600 hover:text-emerald-800 disabled:text-gray-400"
+										class="text-emerald-600 hover:text-emerald-800 disabled:text-fg-dim"
 										onclick={() => handleCombination(sim)}
 										disabled={sim.status !== 'completed'}
 										title="Open combination products"
@@ -383,7 +383,7 @@
 									</button>
 									<button
 										type="button"
-										class="text-violet-600 hover:text-violet-800 disabled:text-gray-400"
+										class="text-violet-600 hover:text-violet-800 disabled:text-fg-dim"
 										onclick={() => handleImaging(sim)}
 										disabled={sim.status !== 'completed'}
 										title="Open imaging workflow"
@@ -420,7 +420,7 @@
 									</button>
 									<button
 										type="button"
-										class="text-danger hover:text-danger disabled:text-gray-400"
+										class="text-danger hover:text-danger disabled:text-fg-dim"
 										onclick={() => cancelSimulation(sim)}
 										disabled={!isActiveStatus(sim.status)}
 										title="Cancel simulation"
@@ -486,7 +486,7 @@
 					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{logError}</div>
 				{/if}
 
-				<div class="overflow-hidden rounded-md border border-line bg-slate-950">
+				<div class="overflow-hidden rounded-md border border-line bg-fg">
 					<div class="max-h-[55vh] overflow-y-auto p-4 font-mono text-xs leading-5 text-slate-100">
 						{#if selectedSimulationStatus?.logs && selectedSimulationStatus.logs.length > 0}
 							{#each selectedSimulationStatus.logs as line, i (i)}

@@ -89,7 +89,7 @@
 					onBackendTypeChange(e.currentTarget.value);
 					onConfigChange({}); // Reset config when backend changes
 				}}
-				class="w-full rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+				class="w-full rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-magenta"
 			>
 				<option value="local">Local</option>
 				<option value="dask">Dask (Distributed)</option>
@@ -121,7 +121,7 @@
 								}
 							}}
 							placeholder="Auto (CPU count)"
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 				</div>
@@ -147,7 +147,7 @@
 									daskTestError = null;
 								}}
 								placeholder="tcp://localhost:8786"
-								class="flex-1 rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								class="flex-1 rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 							/>
 							<button
 								type="button"
@@ -279,7 +279,7 @@
 								updateConfig('n_workers', isNaN(val) ? undefined : val);
 							}}
 							placeholder="Auto"
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 						<p class="mt-1 text-xs text-fg-dim">
 							Only used for local Dask cluster (ignored when using external scheduler).
@@ -300,7 +300,7 @@
 							id="slurm_queue"
 							value={(backendConfig.queue as string) || 'normal'}
 							oninput={(e) => updateConfig('queue', e.currentTarget.value)}
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -316,7 +316,7 @@
 								updateConfig('project', val || undefined);
 							}}
 							placeholder="Optional"
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -329,7 +329,7 @@
 							value={(backendConfig.walltime as string) || '02:00:00'}
 							oninput={(e) => updateConfig('walltime', e.currentTarget.value)}
 							placeholder="02:00:00"
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -345,7 +345,7 @@
 								const val = parseInt(e.currentTarget.value);
 								updateConfig('cores', isNaN(val) ? 1 : val);
 							}}
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -358,7 +358,7 @@
 							value={(backendConfig.memory as string) || '4GB'}
 							oninput={(e) => updateConfig('memory', e.currentTarget.value)}
 							placeholder="4GB"
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -374,7 +374,7 @@
 								const val = parseInt(e.currentTarget.value);
 								updateConfig('n_workers', isNaN(val) ? 4 : val);
 							}}
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 				</div>
@@ -396,7 +396,7 @@
 								updateConfig('namespace', val || undefined);
 							}}
 							placeholder="default"
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -412,7 +412,7 @@
 								const val = parseInt(e.currentTarget.value);
 								updateConfig('n_workers', isNaN(val) ? 4 : val);
 							}}
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -428,7 +428,7 @@
 								updateConfig('image', val || undefined);
 							}}
 							placeholder="daskdev/dask:latest"
-							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						/>
 					</div>
 					<div>
@@ -449,7 +449,7 @@
 								}
 							}}
 							placeholder={`{"requests": {"cpu": "1", "memory": "2Gi"}}`}
-							class="w-full rounded-md border border-line px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-line px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-magenta"
 						></textarea>
 						<p class="mt-1 text-xs text-fg-dim">JSON format for resource requests/limits</p>
 					</div>

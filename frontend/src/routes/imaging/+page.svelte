@@ -345,7 +345,7 @@
 							<input
 								type="checkbox"
 								bind:checked={linkedView}
-								class="h-4 w-4 rounded border-line text-accent focus:ring-blue-500"
+								class="h-4 w-4 rounded border-line text-accent focus:ring-magenta"
 							/>
 							<span>Link Pan/Zoom</span>
 						</label>

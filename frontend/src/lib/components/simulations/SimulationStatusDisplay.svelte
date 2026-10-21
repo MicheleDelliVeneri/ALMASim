@@ -156,13 +156,13 @@
 
 		<div class="rounded-md border border-line bg-gray-900 font-mono text-xs text-gray-100">
 			<div class="flex items-center justify-between rounded-t-md bg-gray-800 px-3 py-2">
-				<span class="font-medium text-gray-300">Backend Logs</span>
+				<span class="font-medium text-fg-muted">Backend Logs</span>
 				<span class="text-xs text-fg-dim">{status?.logs?.length || 0} entries</span>
 			</div>
 			<div bind:this={logsContainer} class="max-h-64 space-y-1 overflow-y-auto p-3">
 				{#if status?.logs && status.logs.length > 0}
 					{#each status.logs as log, i (i)}
-						<div class="whitespace-pre-wrap break-words text-gray-300">
+						<div class="whitespace-pre-wrap break-words text-fg-muted">
 							{log}
 						</div>
 					{/each}

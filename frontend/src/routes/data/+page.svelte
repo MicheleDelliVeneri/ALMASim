@@ -347,14 +347,14 @@
 		<div class="alma-panel w-full max-w-xl rounded-lg shadow-panel">
 			<header class="flex items-center justify-between border-b border-line px-5 py-4">
 				<div>
-					<h2 class="text-lg font-semibold text-gray-100">Re-download products</h2>
+					<h2 class="text-lg font-semibold text-fg">Re-download products</h2>
 					<p class="mt-1 text-xs text-fg-dim">
 						{redownloadTarget.total_files} files to {redownloadTarget.destination}
 					</p>
 				</div>
 				<button
 					type="button"
-					class="text-fg-dim hover:text-gray-100"
+					class="text-fg-dim hover:text-fg"
 					aria-label="Close"
 					onclick={() => (redownloadOptionsOpen = false)}>✕</button
 				>
@@ -362,7 +362,7 @@
 
 			<div class="space-y-5 px-5 py-5">
 				<div>
-					<label class="block text-sm font-medium text-gray-300" for="redownload-parallel"
+					<label class="block text-sm font-medium text-fg-muted" for="redownload-parallel"
 						>Parallel streams</label
 					>
 					<input
@@ -380,7 +380,7 @@
 				</div>
 
 				<div class="grid gap-3 rounded border border-line p-3">
-					<label class="flex items-center gap-2 text-sm text-gray-300">
+					<label class="flex items-center gap-2 text-sm text-fg-muted">
 						<input
 							type="checkbox"
 							bind:checked={redownloadExtractTar}
@@ -388,7 +388,7 @@
 						/>
 						Extract tar archives
 					</label>
-					<label class="flex items-center gap-2 text-sm text-gray-300">
+					<label class="flex items-center gap-2 text-sm text-fg-muted">
 						<input
 							type="checkbox"
 							bind:checked={redownloadUnpackMs}
@@ -396,11 +396,11 @@
 						/>
 						Create raw MeasurementSets
 					</label>
-					<label class="flex items-center gap-2 text-sm text-gray-300">
+					<label class="flex items-center gap-2 text-sm text-fg-muted">
 						<input type="checkbox" bind:checked={redownloadCalibrated} />
 						Restore calibration and create calibrated visibilities
 					</label>
-					<label class="flex items-center gap-2 text-sm text-gray-300">
+					<label class="flex items-center gap-2 text-sm text-fg-muted">
 						<input
 							type="checkbox"
 							bind:checked={redownloadCleanIntermediate}
@@ -425,7 +425,7 @@
 					/>
 				</div>
 
-				<label class="flex items-center gap-2 text-sm text-gray-300">
+				<label class="flex items-center gap-2 text-sm text-fg-muted">
 					<input type="checkbox" bind:checked={redownloadSkipCasaDataUpdate} />
 					Skip CASA runtime data update
 				</label>
@@ -434,7 +434,7 @@
 			<footer class="flex justify-end gap-3 border-t border-line px-5 py-4">
 				<button
 					type="button"
-					class="rounded border border-line px-4 py-2 text-sm text-gray-300 hover:bg-hover"
+					class="rounded border border-line px-4 py-2 text-sm text-fg-muted hover:bg-hover"
 					onclick={() => (redownloadOptionsOpen = false)}>Cancel</button
 				>
 				<button

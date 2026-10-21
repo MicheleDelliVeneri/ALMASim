@@ -109,7 +109,7 @@
 							type="button"
 							onclick={onChooseLocalPath}
 							disabled={!supportsFilePicker()}
-							class="rounded-md border border-line px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover disabled:cursor-not-allowed disabled:text-gray-400"
+							class="rounded-md border border-line px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover disabled:cursor-not-allowed disabled:text-fg-dim"
 						>
 							Choose location
 						</button>

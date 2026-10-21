@@ -184,7 +184,7 @@
 							onclick={() => (productFilter = option.value as ProductFilter)}
 							class={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
 								productFilter === option.value
-									? 'bg-sunk text-white'
+									? 'bg-primary text-white'
 									: 'bg-surface text-fg-muted hover:bg-gray-200'
 							}`}
 						>
@@ -232,7 +232,7 @@
 							<input
 								type="checkbox"
 								bind:checked={linkedView}
-								class="h-4 w-4 rounded border-line text-accent focus:ring-blue-500"
+								class="h-4 w-4 rounded border-line text-accent focus:ring-magenta"
 							/>
 							<span class="text-fg-muted">Link Pan/Zoom</span>
 						</label>

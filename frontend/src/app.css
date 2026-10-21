@@ -7,38 +7,58 @@
  * Components use these tokens; palette classes keep their Tailwind colours.
  */
 @theme static {
-	--color-canvas: #0a0c10;
-	--color-surface: #1e2024;
-	--color-sunk: rgba(12, 14, 18, 0.92);
-	--color-hover: rgba(60, 215, 255, 0.08);
-	--color-line: #343946;
+	/* SKAO SW Design System (web console plan, U3.0): Blueshift Navy for
+	   structure and primary actions, Redshift Magenta (its on-white ink) for
+	   accents and focus, Noto Sans throughout. The semantic names stay, so
+	   every component follows. */
+	--font-sans: 'Noto Sans Variable', 'Noto Sans', Verdana, 'Segoe UI', system-ui, sans-serif;
+	--font-mono: 'Noto Sans Mono', Menlo, Consolas, monospace;
 
-	--color-fg: #e2e2e8;
-	--color-fg-muted: #c3c6d3;
-	--color-fg-dim: #8d909c;
+	--color-canvas: #f7f8fb;
+	--color-surface: #ffffff;
+	--color-sunk: #eef1f7;
+	--color-hover: #eef1f7;
+	--color-line: #e0e4ee;
+	--color-line-strong: #c1c8d8;
 
-	--color-primary: #00418c;
-	--color-primary-hover: #0b58ad;
-	--color-primary-fg: #acc7ff;
+	--color-fg: #0d1224;
+	--color-fg-muted: #3a4259;
+	--color-fg-dim: #6b7385;
 
-	--color-accent: #3cd7ff;
-	--color-accent-soft: rgba(60, 215, 255, 0.1);
-	--color-accent-line: rgba(60, 215, 255, 0.32);
+	--color-navy: #0a1e46;
+	--color-navy-soft: #d7dcea;
+	--color-primary: #0a1e46;
+	--color-primary-hover: #132b5e;
+	--color-primary-fg: #ffffff;
 
-	--color-ok: #8ff0b1;
-	--color-ok-soft: rgba(143, 240, 177, 0.1);
-	--color-ok-line: rgba(143, 240, 177, 0.32);
+	--color-magenta: #e50d7f;
+	--color-accent: #b00c63;
+	--color-accent-soft: #fdebf3;
+	--color-accent-line: #fcd4e6;
 
-	--color-danger: #ff9479;
-	--color-danger-soft: rgba(255, 148, 121, 0.11);
-	--color-danger-line: rgba(255, 148, 121, 0.34);
+	--color-ok: #2e7d32;
+	--color-ok-soft: #e7f3e8;
+	--color-ok-line: #b9dcbb;
 
-	--shadow-panel: 0 0 0 1px rgba(172, 199, 255, 0.04), 0 18px 42px rgba(0, 0, 0, 0.22);
+	--color-warn: #8a4f08;
+	--color-warn-soft: #fbf0dc;
+	--color-warn-line: #ecd3a6;
+
+	--color-info: #1c4fa4;
+	--color-info-soft: #e3ecf9;
+	--color-info-line: #b9cdee;
+
+	--color-danger: #c2362d;
+	--color-danger-soft: #fbe6e4;
+	--color-danger-line: #efbcb7;
+
+	--shadow-panel: 0 2px 8px rgba(10, 30, 70, 0.08), 0 1px 3px rgba(10, 30, 70, 0.04);
+	--shadow-overlay: 0 12px 32px rgba(10, 30, 70, 0.16), 0 4px 12px rgba(10, 30, 70, 0.08);
 }
 
 @layer base {
 	:root {
-		color-scheme: dark;
+		color-scheme: light;
 	}
 
 	html {
@@ -47,91 +67,67 @@
 
 	body {
 		min-height: 100vh;
-		background:
-			radial-gradient(circle at 18% 12%, rgba(46, 93, 169, 0.28), transparent 28rem),
-			radial-gradient(circle at 86% 6%, rgba(60, 215, 255, 0.12), transparent 24rem),
-			linear-gradient(180deg, #0a0c10 0%, #111318 48%, #0c0e12 100%);
+		background: var(--color-canvas);
 		color: var(--color-fg);
-		font-family:
-			Inter,
-			ui-sans-serif,
-			system-ui,
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
+		font-family: var(--font-sans);
+		accent-color: var(--color-magenta); /* checkboxes, radios, ranges */
 	}
 
 	h1,
-	h2,
+	h2 {
+		color: var(--color-navy);
+		font-weight: 300;
+		letter-spacing: -0.02em;
+	}
+
 	h3,
-	.font-semibold,
-	.font-bold {
-		font-family:
-			'Space Grotesk',
-			Inter,
-			ui-sans-serif,
-			system-ui,
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
-		letter-spacing: 0;
+	h4 {
+		color: var(--color-navy);
 	}
 }
 
 @layer components {
 	.alma-shell {
-		background:
-			linear-gradient(rgba(172, 199, 255, 0.03) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(172, 199, 255, 0.03) 1px, transparent 1px);
-		background-size: 32px 32px;
+		background: var(--color-canvas);
 	}
 
 	.alma-glass {
-		border: 1px solid rgba(141, 144, 156, 0.22);
-		background: rgba(17, 19, 24, 0.82);
-		backdrop-filter: blur(14px);
+		border: 1px solid var(--color-line);
+		background: var(--color-surface);
 	}
 
 	.alma-panel {
 		border: 1px solid var(--color-line);
-		background: linear-gradient(180deg, rgba(30, 32, 36, 0.96), rgba(17, 19, 24, 0.96));
+		background: var(--color-surface);
+		box-shadow: var(--shadow-panel);
 	}
 
+	/* The SKAO eyebrow: small uppercase label above a heading. */
 	.alma-kicker {
 		color: var(--color-accent);
-		font-family:
-			'Space Grotesk',
-			Inter,
-			ui-sans-serif,
-			system-ui,
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.1em;
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
 		text-transform: uppercase;
 	}
 
 	.alma-chip {
-		border: 1px solid rgba(60, 215, 255, 0.28);
-		background: rgba(0, 65, 140, 0.26);
-		color: var(--color-primary-fg);
+		border: 1px solid var(--color-navy-soft);
+		background: var(--color-sunk);
+		color: var(--color-navy);
 	}
 
 	.alma-progress {
-		height: 3px;
-		background: rgba(141, 144, 156, 0.2);
+		height: 4px;
+		border-radius: 999px;
+		background: var(--color-sunk);
 	}
 
 	.alma-progress > span {
 		display: block;
 		height: 100%;
-		background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
-		box-shadow: 0 0 16px rgba(60, 215, 255, 0.45);
+		border-radius: 999px;
+		background: #22407f;
 	}
 }
 
@@ -145,8 +141,8 @@
 	input,
 	select,
 	textarea {
-		background-color: rgba(12, 14, 18, 0.72);
-		border-color: var(--color-line);
+		background-color: var(--color-surface);
+		border-color: var(--color-line-strong);
 		color: var(--color-fg);
 	}
 
@@ -155,12 +151,12 @@
 	textarea:focus,
 	button:focus-visible,
 	a:focus-visible {
-		outline: 1px solid var(--color-accent);
+		outline: 2px solid var(--color-magenta);
 		outline-offset: 2px;
-		box-shadow: 0 0 0 3px rgba(60, 215, 255, 0.16);
+		box-shadow: 0 0 0 3px rgba(229, 13, 127, 0.25);
 	}
 
 	table thead {
-		background-color: rgba(0, 65, 140, 0.18);
+		background-color: var(--color-sunk);
 	}
 }
