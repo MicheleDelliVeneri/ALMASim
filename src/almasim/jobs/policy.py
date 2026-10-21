@@ -6,7 +6,8 @@
   ALMA archive, so queries and downloads run there too and nothing heavy
   runs on the login node. A site whose compute nodes are offline sets
   ``[commands."<name>"] executor = "server"`` for the commands in
-  NETWORK_COMMANDS;
+  NETWORK_COMMANDS; a machine without Slurm (a laptop) sets
+  ``executor = "server"`` at the top of its profile, for every command;
 - the resources: the profile's defaults for the command, then the caller's;
 - the command line, with what the cluster needs filled in when the caller
   did not give it: the Slurm backend for the commands that fan out (their
@@ -102,7 +103,9 @@ def _fills(command: str, argv: list[str], executor: str, profile: Profile) -> li
         command == "products download" and has_option(argv, *_DOWNLOAD_POSTPROCESSING)
     )
     backend = option_value(argv, "--backend", "--postprocess-backend")
-    if fans_out and backend is None:
+    # Workers on Slurm only for a job on Slurm: a server job (a laptop, a
+    # cluster's login node) keeps the command's own default backend.
+    if fans_out and backend is None and executor == "slurm":
         extra += ["--backend", "slurm"]
         backend = "slurm"
     if fans_out and backend == "slurm":
@@ -137,7 +140,7 @@ def plan_job(
     if command not in KNOWN_COMMANDS:
         raise PolicyError(f"unknown command {' '.join(argv[:2])!r}")
     policy = profile.policy(command)
-    executor = policy.executor or DEFAULT_EXECUTOR
+    executor = policy.executor or profile.executor or DEFAULT_EXECUTOR
     extra = [*_fills(command, argv, executor, profile), *policy.args]
     # Options after a "--" would be taken as positional arguments.
     cut = argv.index("--") if "--" in argv else len(argv)

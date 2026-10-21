@@ -21,9 +21,9 @@ class CommandLine(BaseModel):
 
 
 @router.get("")
-def list_commands() -> list[dict[str, Any]]:
-    """Every command the console can run, with its parameters."""
-    return [asdict(c) for c in catalog()]
+def list_commands(request: Request) -> list[dict[str, Any]]:
+    """Every command the console can run, with its parameters and where it runs."""
+    return [asdict(c) for c in catalog(request.app.state.profile)]
 
 
 @router.post("/validate")

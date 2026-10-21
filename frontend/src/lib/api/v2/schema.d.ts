@@ -4,23 +4,6 @@
  */
 
 export interface paths {
-	'/': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/** Not Built */
-		get: operations['not_built__get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
 	'/api/v2/cluster': {
 		parameters: {
 			query?: never;
@@ -50,7 +33,7 @@ export interface paths {
 		};
 		/**
 		 * List Commands
-		 * @description Every command the console can run, with its parameters.
+		 * @description Every command the console can run, with its parameters and where it runs.
 		 */
 		get: operations['list_commands_api_v2_commands_get'];
 		put?: never;
@@ -613,26 +596,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-	not_built__get: {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'text/html': string;
-				};
-			};
-		};
-	};
 	cluster_api_v2_cluster_get: {
 		parameters: {
 			query?: never;

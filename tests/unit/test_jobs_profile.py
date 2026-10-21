@@ -98,6 +98,7 @@ def test_the_user_profile_overrides_key_by_key(tmp_path):
         ("runs_rot = '/x'", "unknown key"),
         ("[tools]\nwsclen = '/x'", r"\[tools\]: unknown key"),
         ("[commands.metadata]\nexecutor = 'kubernetes'", "executor must be one of"),
+        ("executor = 'local'", "executor must be one of"),
         ("[commands.metadata]\nmemory = '16 GB'", "memory"),
         ("[slurm]\npartition = 'a b'", "partition"),
         ("[commands.metadata]\nargs = '--x'", "list of strings"),
@@ -129,6 +130,13 @@ def test_the_zwicky_example_profile_loads(tmp_path, monkeypatch):
     profile = load_profile(site=ROOT / "examples" / "site-profiles" / "zwicky.toml", environ={})
     assert profile.partition == "zwickyA-CPU"
     assert profile.resources_for("image image-from-ms").time == "2-00:00:00"
+
+
+def test_the_laptop_example_profile_runs_everything_on_the_server(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    profile = load_profile(site=ROOT / "examples" / "site-profiles" / "laptop.toml", environ={})
+    assert profile.executor == "server"
+    assert profile.runs_root == Path("/app/runs")
 
 
 def test_the_profile_files_are_kept_as_absolute_paths(tmp_path, monkeypatch):

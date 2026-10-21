@@ -43,23 +43,25 @@ jobs:
     secrets: inherit
 
   # ------------------------------------------------------------------
-  # 3. Build wheel + sdist and publish to PyPI via OIDC trusted publisher
-  #    Setup required once on PyPI:
-  #    https://docs.pypi.org/trusted-publishers/adding-a-publisher/
-  #    Owner: astromadiv  Repo: ALMASim
-  #    Workflow: release.yml  Environment: pypi
+  # 3. Build wheel + sdist once, with the web app inside (hatch_build.py;
+  #    ALMASIM_REQUIRE_WEB makes a missing app an error)
   # ------------------------------------------------------------------
-  publish-pypi:
+  dist:
     needs: tests
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/almasim/
-    permissions:
-      id-token: write
-
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the web app
+        working-directory: frontend
+        run: npm ci && npm run build
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -69,12 +71,44 @@ jobs:
 
       - name: Build distributions
         run: uv build
+        env:
+          ALMASIM_REQUIRE_WEB: "1"
+
+      - name: The wheel holds the app
+        run: python scripts/check_web_wheel.py dist/*.whl
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  # ------------------------------------------------------------------
+  # 4. Publish to PyPI via OIDC trusted publisher
+  #    Setup required once on PyPI:
+  #    https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+  #    Owner: astromadiv  Repo: ALMASim
+  #    Workflow: release.yml  Environment: pypi
+  # ------------------------------------------------------------------
+  publish-pypi:
+    needs: dist
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/almasim/
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
   # ------------------------------------------------------------------
-  # 4. Create a GitHub Release and attach the built artifacts
+  # 5. Create a GitHub Release and attach the same distributions
   # ------------------------------------------------------------------
   github-release:
     needs: publish-pypi
@@ -87,14 +121,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - uses: actions/download-artifact@v7
         with:
-          enable-cache: true
-          python-version: "3.12"
-
-      - name: Rebuild distributions (for attachment)
-        run: uv build
+          name: dist
+          path: dist/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -103,7 +133,7 @@ jobs:
           files: dist/*
 
   # ------------------------------------------------------------------
-  # 5. Build and push backend Docker image to GHCR
+  # 6. Build and push backend Docker image to GHCR
   # ------------------------------------------------------------------
   docker:
     needs: github-release
@@ -147,7 +177,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
   # ------------------------------------------------------------------
-  # 6. Build and push frontend Docker image to GHCR
+  # 7. Build and push frontend Docker image to GHCR
   # ------------------------------------------------------------------
   docker-frontend:
     needs: github-release

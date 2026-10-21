@@ -8,6 +8,7 @@ import stat
 import tempfile
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -17,8 +18,9 @@ httpx = pytest.importorskip("httpx")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from almasim.web import app as app_module  # noqa: E402
 from almasim.web import serve as state  # noqa: E402
-from almasim.web.app import COOKIE, create_app  # noqa: E402
+from almasim.web.app import COOKIE, create_app, web_dir  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
@@ -76,6 +78,38 @@ def test_the_built_web_app_is_served_when_present(tmp_path):
     # ...but an unknown API path is still an API 404.
     missing = app_client.get("/api/v2/nothing-here")
     assert missing.status_code == 404 and "console" not in missing.text
+
+
+def test_the_web_app_is_found_in_the_package_then_the_checkout(tmp_path, monkeypatch):
+    packaged, checkout = tmp_path / "static", tmp_path / "build"
+    monkeypatch.setattr(app_module, "STATIC_DIR", packaged)
+    monkeypatch.setattr(app_module, "CHECKOUT_BUILD", checkout)
+    assert web_dir({}) is None
+    checkout.mkdir()
+    (checkout / "200.html").write_text("checkout")
+    assert web_dir({}) == checkout
+    packaged.mkdir()
+    (packaged / "200.html").write_text("wheel")
+    assert web_dir({}) == packaged
+    # ALMASIM_WEB_DIR wins, as given.
+    assert web_dir({"ALMASIM_WEB_DIR": "~/my-build"}) == Path("~/my-build").expanduser()
+
+
+@pytest.mark.parametrize(
+    ("env", "args", "message"),
+    [
+        ({"ALMASIM_TOKEN": "short"}, ["--port", "8799"], "at least 16 characters"),
+        ({"ALMASIM_SERVE_HOST": "0.0.0.0"}, [], "needs --port"),
+    ],
+)
+def test_container_settings_are_checked_before_serving(tmp_path, env, args, message):
+    from typer.testing import CliRunner
+
+    from almasim.cli import app as cli
+
+    result = CliRunner().invoke(cli, ["serve", *args], env={"HOME": str(tmp_path), **env})
+    assert result.exit_code != 0
+    assert message in result.output
 
 
 def test_an_app_needs_a_token():

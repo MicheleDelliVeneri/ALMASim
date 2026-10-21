@@ -22,7 +22,8 @@ import typer
 from almasim.cli._options import DEPRECATED_FLAGS
 
 from .model import command_name
-from .policy import KNOWN_COMMANDS, NETWORK_COMMANDS
+from .policy import DEFAULT_EXECUTOR, KNOWN_COMMANDS, NETWORK_COMMANDS
+from .profile import Profile
 
 
 @dataclass(frozen=True)
@@ -134,17 +135,21 @@ def _commands() -> dict[str, Any]:
     return _leaf_commands()
 
 
-def catalog() -> list[CommandInfo]:
-    """Every command the console can run, in the CLI's order."""
+def catalog(profile: Profile | None = None) -> list[CommandInfo]:
+    """Every command the console can run, in the CLI's order, with the
+    executor ``profile`` would run it on (Slurm without a profile)."""
     out = []
     for name, command in _commands().items():
+        executor = DEFAULT_EXECUTOR
+        if profile is not None:
+            executor = profile.policy(name).executor or profile.executor or DEFAULT_EXECUTOR
         params = [p for p in (describe_param(x) for x in command.params) if p is not None]
         out.append(
             CommandInfo(
                 name=name,
                 summary=(command.short_help or (command.help or "").split("\n\n")[0]).strip(),
                 help=(command.help or "").strip(),
-                executor="slurm",
+                executor=executor,
                 needs_internet=name in NETWORK_COMMANDS,
                 params=params,
                 extra_args=bool(command.context_settings.get("allow_extra_args")),

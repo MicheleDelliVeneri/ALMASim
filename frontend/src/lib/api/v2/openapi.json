@@ -704,24 +704,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/": {
-      "get": {
-        "operationId": "not_built__get",
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Not Built"
-      }
-    },
     "/api/v2/cluster": {
       "get": {
         "description": "Partitions with their CPU load, the profile's defaults and limits, and your queue.",
@@ -748,7 +730,7 @@
     },
     "/api/v2/commands": {
       "get": {
-        "description": "Every command the console can run, with its parameters.",
+        "description": "Every command the console can run, with its parameters and where it runs.",
         "operationId": "list_commands_api_v2_commands_get",
         "responses": {
           "200": {

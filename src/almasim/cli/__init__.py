@@ -196,7 +196,10 @@ def serve_command(
         "--port",
         min=1024,
         max=65535,
-        help="Listen on 127.0.0.1:<port> instead of a private socket in ~/.almasim.",
+        help=(
+            "Listen on 127.0.0.1:<port> instead of a private socket in ~/.almasim"
+            " (in a container, ALMASIM_SERVE_HOST sets the address)."
+        ),
     ),
     status: bool = typer.Option(False, "--status", help="Show the running console's link."),
     stop: bool = typer.Option(False, "--stop", help="Stop the running console."),
