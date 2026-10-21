@@ -174,6 +174,14 @@ cd ALMASim
 docker compose up
 ```
 
+`docker compose up` reads `docker-compose.yml` and the development
+`docker-compose.override.yml` (hot reload for the backend and the frontend).
+For the production builds, layer `docker-compose.prod.yml` on the base file
+instead: `make start-prod`, or
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml up`.
+`make help` lists the other targets, including `make test`, `make lint` and
+`make typecheck` for local checks.
+
 The backend image is available pre-built from GHCR:
 
 ```bash

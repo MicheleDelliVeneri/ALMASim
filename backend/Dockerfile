@@ -1,6 +1,6 @@
 FROM --platform=linux/amd64 python:3.12-slim AS base
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.14 /uv /uvx /bin/
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -19,7 +19,7 @@ COPY src/ /app/src/
 COPY backend/ /app/backend/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --all-packages
+    uv sync --frozen --all-packages --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 

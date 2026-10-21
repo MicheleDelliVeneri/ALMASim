@@ -1,4 +1,11 @@
-version: "3.8"
+# The services shared by development and production.
+#
+#   docker compose up                       development: this file plus
+#                                           docker-compose.override.yml (hot reload)
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+#                                           production builds and resource limits
+#
+# `make start` and `make start-prod` run these.
 
 services:
   # PostgreSQL database service
@@ -41,25 +48,17 @@ services:
       - HUBBLE_DIR=/app/data/hubble
       - DATABASE_URL=postgresql://almasim:almasim_dev_password@postgres:5432/almasim
       - DOWNLOAD_DIR=/host_home
+      # Request paths must lie under HOST_DIR, OUTPUT_DIR, DATA_DIR or these extra
+      # roots (JSON list), and Dask schedulers be DASK_SCHEDULER or listed here.
+      # - ALLOWED_ROOTS=["/SKAO_data"]
+      # - ALLOWED_SCHEDULERS=["tcp://scheduler-host:8786"]
     volumes:
       # Mount data directory for persistence (read-only for safety)
       - ./data:/app/data:ro
       # Mount outputs directory for simulation results
       - ./backend/outputs:/app/outputs
-      # Mount source code for hot reload (no rebuild needed on code changes)
-      - ./backend/app:/app/backend/app
-      - ./src:/app/src
       # Mount host home directory so downloads land on the host filesystem
       - ${HOME}:/host_home
-    command: >
-      uvicorn app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
-      --reload-dir /app/backend
-      --reload-dir /app/src
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,33 +78,13 @@ services:
     networks:
       - almasim-network
 
-  # Frontend SvelteKit service (development mode with hot reload)
+  # Frontend SvelteKit service (the build differs between the two modes)
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: almasim-frontend
-    image: almasim-frontend:dev
     ports:
       - "3000:3000"
     environment:
       - VITE_API_URL=http://localhost:8000
-      - NODE_ENV=development
-    volumes:
-      # Mount source code for hot reload
-      - ./frontend/src:/app/src
-      - ./frontend/static:/app/static
-      - ./frontend/svelte.config.js:/app/svelte.config.js
-      - ./frontend/vite.config.ts:/app/vite.config.ts
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./frontend/tailwind.config.js:/app/tailwind.config.js
-      - ./frontend/postcss.config.js:/app/postcss.config.js
-      # Exclude node_modules from volume mount
-      - /app/node_modules
-      - /app/.svelte-kit
     depends_on:
-      postgres:
-        condition: service_healthy
       backend:
         condition: service_healthy
     restart: unless-stopped
@@ -124,6 +103,7 @@ services:
     networks:
       - almasim-network
 
+# dask-docker-compose.yml joins this network as almasim_almasim-network.
 networks:
   almasim-network:
     driver: bridge
