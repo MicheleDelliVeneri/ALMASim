@@ -60,6 +60,89 @@ their own console; the runs live in run folders that a whole team can share.
 - The terminal sees the same runs: `almasim jobs list`, `almasim jobs logs -f
   <run>`, `almasim submit …`.
 
+## The pages
+
+Every page shows the live count of your active jobs in its header. Whatever a
+page starts is an ordinary run: it has a job page, it is listed in *Jobs*,
+and `almasim jobs` sees it too.
+
+### Home
+
+What is running now, your latest runs, how busy the cluster's partitions
+are, and what the rest of your team ran lately (read only).
+
+![Home](images/console/home.png)
+
+### Run a command
+
+Every `almasim` command, as a form built from the command's own options:
+the required inputs first, the rest folded by topic. Folders and files have
+a *Browse…* picker. *Cluster* sets the Slurm resources (or, where the site
+profile allows it, runs a short command on the console's own machine). The
+form checks the command line as you type, and *Run* submits it.
+
+![Run a command](images/console/run.png)
+
+### Jobs and a job's page
+
+*Jobs* lists your runs, or the team's, by state, with a search over
+commands, ids and paths. A job's page follows the run live: its log
+(`stdout.log`, `stderr.log`), the parameters it ran with, the batch script,
+the files in its run folder, and Slurm's accounting once it ends. From there
+you can cancel it, run it again, edit and run it, or delete a finished run of
+yours.
+
+![Jobs](images/console/jobs.png)
+
+![A job](images/console/job.png)
+
+### Archive
+
+Search the ALMA archive (with the filters of `almasim metadata`: project,
+source, band, science keyword and more), tick observations, find their products, and download
+them, raw or calibrated, to a folder you choose. Each step is a job. The
+ticked rows can go straight to *Simulate* instead.
+
+![Archive](images/console/archive.png)
+
+### Simulate
+
+Pick observations from a metadata CSV (an archive search, or any
+`almasim metadata` CSV), choose a sky model and the simulation options, and
+start one job per observation. As you choose, the page estimates each
+simulation's cube and the disk space its outputs take.
+
+![Simulate](images/console/simulate.png)
+
+### Imaging
+
+Image calibrated MeasurementSets with WSClean: the console works out the
+imaging parameters of each spectral window, images them all in one Slurm
+driver with its own workers, follows the windows as they finish, and then
+measures how well each was cleaned.
+
+![Imaging](images/console/imaging.png)
+
+### Products
+
+Browse the data roots and run folders, open up to three images or cubes side
+by side (the views pan and zoom together), read their FITS headers and the
+cleaning quality. *map* integrates a cube into a 2D map, and the Wiener pair
+reconstructs a simulated observation. Both run as jobs and open here when
+done.
+
+![Products](images/console/products.png)
+
+### Settings
+
+Where runs go and what they ask Slurm for: the profile in effect, the site's
+profile, and your own (TOML, edited here), which adds to the site's and wins
+where both say something.
+
+The screenshots come from the console the end-to-end tests drive
+(`frontend/e2e/screenshots.spec.ts`), where every command is an instant
+stand-in.
+
 ## A shared runs folder
 
 A team sees each other's runs when the site profile names one runs root
