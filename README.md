@@ -410,15 +410,15 @@ almasim visibilities extract \
 
 almasim visibilities unpack \
   --input-root examples/output/downloads \
-  --output-root examples/output/archive_ms/raw_ms \
-  --postprocess-backend slurm \
+  --output-dir examples/output/archive_ms/raw_ms \
+  --backend slurm \
   --slurm-workers 8
 
 almasim visibilities calibrate \
   --input-root examples/output/downloads \
   --raw-ms-root examples/output/archive_ms/raw_ms \
-  --output-root examples/output/archive_ms/calibrated_ms \
-  --postprocess-backend slurm \
+  --output-dir examples/output/archive_ms/calibrated_ms \
+  --backend slurm \
   --slurm-workers 8
 
 # Unpack/calibrate run every UID in its own subprocess (sync and slurm alike), so a
@@ -446,7 +446,7 @@ almasim products download \
   --extract-tar \
   --unpack-ms \
   --generate-calibrated-visibilities \
-  --postprocess-backend slurm \
+  --backend slurm \
   --slurm-queue normal \
   --slurm-workers 8
 
@@ -456,7 +456,7 @@ almasim products download \
 # (see docs/imaging.md)
 almasim image compute-parameters examples/output/archive_ms/calibrated_ms imaging_parameters.csv
 almasim image image-from-ms imaging_parameters.csv examples/output/images \
-  --num-cores 10 --slurm-queue normal --slurm-n-jobs 8
+  --num-cores 10 --slurm-queue normal --slurm-workers 8
 
 # Run WSClean through ALMASim (all WSClean flags are forwarded unchanged)
 almasim clean -- \

@@ -110,3 +110,32 @@ def test_flag_summary_refuses_a_path_that_is_no_measurement_set(tmp_path):
     not_ms.write_text("x")
     result = _invoke("visibilities", "flag-summary", not_ms, "--output", tmp_path / "s.csv")
     assert result.exit_code == 1 and "Not a MeasurementSet or folder" in result.output
+
+
+def test_old_option_spellings_still_work_with_a_warning(tmp_path):
+    """--postprocess-backend and friends are aliases of the new names (MADIV-28 T3.9)."""
+    result = _invoke(
+        "visibilities", "extract", "--source-root", tmp_path, "--postprocess-backend", "sync"
+    )
+    assert result.exit_code == 1 and "No .tar/.tgz archives found" in result.output
+    assert "--postprocess-backend is deprecated and will be removed; use --backend" in _plain(
+        result.output
+    )
+    result = _invoke("visibilities", "extract", "--source-root", tmp_path, "--backend", "sync")
+    assert result.exit_code == 1 and "deprecated" not in result.output
+
+
+def test_deprecated_flag_warnings_cover_every_old_spelling():
+    from almasim.cli._options import DEPRECATED_FLAGS, deprecated_flag_warnings
+
+    warnings = deprecated_flag_warnings(["--slurm-n-jobs", "2", "--output-root=/x", "--backend"])
+    assert warnings == [
+        "WARNING: --slurm-n-jobs is deprecated and will be removed; use --slurm-workers.",
+        "WARNING: --output-root is deprecated and will be removed; use --output-dir.",
+    ]
+    assert set(DEPRECATED_FLAGS.values()) == {
+        "--backend",
+        "--scheduler-host",
+        "--slurm-workers",
+        "--output-dir",
+    }

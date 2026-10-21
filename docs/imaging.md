@@ -64,7 +64,7 @@ almasim image compute-parameters /data/ms-calibrated imaging_parameters.csv
 almasim image image-from-ms imaging_parameters.csv /data/images \
   --wsclean-bin /opt/spack/.../bin/wsclean \
   --num-cores 10 --max-cores-per-node 95 \
-  --slurm-queue normal --slurm-n-jobs 8 --slurm-walltime 1-00:00:00 \
+  --slurm-queue normal --slurm-workers 8 --slurm-walltime 1-00:00:00 \
   --task-timeout 7200
 ```
 
@@ -101,7 +101,7 @@ work remaining is always *CSV rows − `.done` markers*.
 Each WSClean gets `-j <num-cores>` and runs with `OPENBLAS_NUM_THREADS=1`
 (WSClean refuses to start otherwise when linked against a threaded OpenBLAS),
 `-mem` scaled to its share of the node, and `-field <target_field_ids>` when
-the CSV has that column. `--postprocess-backend sync` runs the tasks one at a
+the CSV has that column. `--backend sync` runs the tasks one at a
 time in the current process, which is handy for a smoke test on one MS.
 
 ## Frontend Pages
