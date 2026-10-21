@@ -80,6 +80,56 @@ jobs:
           path: frontend/build
           retention-days: 3
 
+  # The console end to end (web console plan, U3.9): the built app served by
+  # a real `almasim serve`, its commands replaced by instant stand-ins
+  # (frontend/e2e), driven by Playwright, every page checked with axe.
+  e2e:
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get the built app
+        uses: actions/download-artifact@v7
+        with:
+          name: web-app
+          path: frontend/build
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install almasim with the web extra
+        run: uv sync --extra web --no-default-groups
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install the test tools
+        working-directory: frontend
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        working-directory: frontend
+        env:
+          ALMASIM: ${{ github.workspace }}/.venv/bin/almasim
+          PYTHON: ${{ github.workspace }}/.venv/bin/python
+        run: npx playwright test
+
+      - name: Keep the traces of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: frontend/test-results
+          retention-days: 7
+
   # The wheel carries the web app (hatch_build.py), and an install of it
   # serves it: `almasim serve` on a cluster needs no Node.
   package:

@@ -1,0 +1,92 @@
+/**
+ * The console's workflows end to end, against a real `almasim serve` whose
+ * commands are instant stand-ins (e2e/fake_almasim.py).
+ */
+import { expect, test, type Page } from '@playwright/test';
+
+import { E2E_ROOT } from '../playwright.config';
+
+async function chip(page: Page, state: string) {
+	await expect(page.getByText(state).first()).toBeVisible({ timeout: 60_000 });
+}
+
+test('run a command, follow its log, run it again', async ({ page }) => {
+	await page.goto('/run');
+	await page.getByRole('navigation', { name: 'Commands' }).getByRole('button', { name: 'doctor' }).click();
+	await page.getByRole('textbox', { name: /Title/ }).fill('e2e doctor');
+	await expect(page.getByText('Runs on the console server.')).toBeVisible();
+	await page.getByRole('button', { name: 'Run', exact: true }).click();
+
+	await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
+	const first = page.url();
+	await chip(page, 'Succeeded');
+	await expect(page.getByRole('log').getByText('fake almasim doctor')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Run again' }).click();
+	await expect(page).not.toHaveURL(first);
+	await chip(page, 'Succeeded');
+
+	await page.goto('/jobs');
+	await expect(page.getByRole('link', { name: 'e2e doctor' })).toHaveCount(2);
+});
+
+test('cancel a long run from its page', async ({ page }) => {
+	await page.goto('/run?command=doctor');
+	await page.getByRole('checkbox', { name: /Slurm/ }).check();
+	await page.getByRole('textbox', { name: /Title/ }).fill('e2e long');
+	await expect(page.getByText('Runs on the console server.')).toBeVisible();
+	await page.getByRole('button', { name: 'Run', exact: true }).click();
+	await chip(page, 'Running');
+	await expect(page.getByRole('log').getByText(/waiting for the compute node/).first()).toBeVisible();
+
+	await page.getByRole('button', { name: 'Cancel job' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Cancel this job?' });
+	await dialog.getByRole('button', { name: 'Cancel job' }).click();
+	await chip(page, 'Cancelled');
+});
+
+test('search the archive, resolve the products and download them', async ({ page }) => {
+	await page.goto('/archive');
+	await page.getByRole('textbox', { name: /Project code/ }).fill('2023.1.00133.S');
+	await page.getByRole('button', { name: 'Search the archive' }).click();
+
+	await expect(page.getByText('3 of 3 rows', { exact: false })).toBeVisible();
+	await page.getByRole('checkbox', { name: 'Tick row 2', exact: true }).check();
+	await page.getByRole('button', { name: /Find the products of 1 observation/ }).click();
+
+	const download = page.getByRole('combobox', { name: 'Download' });
+	await expect(download).toBeVisible();
+	await expect(page.getByText('953.7 MB').first()).toBeVisible(); // the raw product (10⁹ bytes)
+	await download.selectOption({ label: 'auxiliary only' });
+	await page.getByRole('textbox', { name: /Destination/ }).fill(`${E2E_ROOT}/data/archive`);
+	await expect(page.getByText(/free there/)).toBeVisible();
+	await page.getByRole('button', { name: /^Download / }).click();
+
+	await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
+	await chip(page, 'Succeeded');
+});
+
+test('image a folder, then look at the results', async ({ page }) => {
+	await page.goto('/imaging');
+	await page.getByRole('textbox', { name: /Folder of calibrated/ }).fill(`${E2E_ROOT}/data/cal`);
+	await page.getByRole('button', { name: 'Work out the imaging parameters' }).click();
+
+	await expect(page.locator('table tbody tr')).toHaveCount(2);
+	await expect(page.getByRole('textbox', { name: /Output folder/ })).toHaveValue(
+		`${E2E_ROOT}/data/cal-images`
+	);
+	await page.getByRole('button', { name: /^Image 2 windows/ }).click();
+
+	await expect(page.getByText(/^2 done · 0 running · 0 failed · 0 waiting/)).toBeVisible({
+		timeout: 60_000
+	});
+	await expect(page.getByRole('columnheader', { name: 'S/N' })).toBeVisible({ timeout: 60_000 });
+
+	await page.getByRole('list', { name: 'Windows' }).getByRole('link').first().click();
+	await expect(page.getByRole('heading', { name: 'How well it was cleaned' })).toBeVisible();
+	await page.getByRole('button', { name: 'wsclean-image.fits' }).click();
+	await expect(page.getByLabel(/wsclean-image\.fits, channel 1/)).toBeVisible();
+	await expect(page.getByText(/beam 2\.50″ × 2\.00″/)).toBeVisible();
+	await page.getByRole('button', { name: '+ compare' }).last().click();
+	await expect(page.getByLabel(/wsclean-residual\.fits, channel 1/)).toBeVisible();
+});

@@ -39,6 +39,16 @@ npm test           # vitest: unit tests in Node, components in jsdom
 npm run build
 ```
 
+End-to-end tests (`e2e/`, CI's `e2e` job) drive the built app in Chromium
+against a real `almasim serve`, its commands replaced by instant stand-ins
+(`e2e/fake_almasim.py`, through `ALMASIM_JOB_COMMAND`), and check every page
+with axe:
+
+```bash
+npm run build
+ALMASIM=../.venv/bin/almasim PYTHON=../.venv/bin/python npm run test:e2e
+```
+
 `src/lib/api/openapi.json` (v1) and `src/lib/api/v2/openapi.json` (v2) are
 written by `scripts/generate_openapi.py` at the repository root and guarded
 by `tests/unit/test_openapi_snapshot.py`.

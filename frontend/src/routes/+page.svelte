@@ -50,9 +50,7 @@
 		</div>
 		<div class="flex flex-wrap gap-2">
 			<a class="btn-secondary no-underline" href={resolve('/archive')}>Search the archive</a>
-			<a class="btn-primary bg-magenta no-underline hover:bg-accent" href={resolve('/run')}
-				>New run</a
-			>
+			<a class="btn-accent no-underline" href={resolve('/run')}>New run</a>
 		</div>
 	</div>
 

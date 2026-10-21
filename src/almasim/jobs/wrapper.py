@@ -15,12 +15,13 @@ run reads as cancelled rather than failed.
 from __future__ import annotations
 
 import os
+import shlex
 import signal
 import socket
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import FrameType
 
@@ -33,6 +34,16 @@ STDERR_NAME = "stderr.log"
 # The command a job runs, before its argv: this interpreter's almasim CLI, so
 # a job uses the same environment as whatever submitted it.
 ALMASIM_COMMAND: tuple[str, ...] = (sys.executable, "-m", "almasim.cli")
+# Another command in its place, split as a shell would: the console's
+# end-to-end tests run instant stand-ins for the real commands with it.
+COMMAND_ENV = "ALMASIM_JOB_COMMAND"
+
+
+def job_command(environ: Mapping[str, str] | None = None) -> tuple[str, ...]:
+    """The command jobs run: ``$ALMASIM_JOB_COMMAND`` if set, else the almasim CLI."""
+    env = os.environ if environ is None else environ
+    return tuple(shlex.split(env[COMMAND_ENV])) if env.get(COMMAND_ENV) else ALMASIM_COMMAND
+
 
 _FORWARDED = (signal.SIGTERM, signal.SIGINT)
 
@@ -94,7 +105,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if len(args) != 1:
         print("usage: python -m almasim.jobs.wrapper <run dir>", file=sys.stderr)
         return 2
-    return run_job(args[0])
+    return run_job(args[0], job_command())
 
 
 if __name__ == "__main__":
