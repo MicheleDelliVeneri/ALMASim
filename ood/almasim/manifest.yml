@@ -1,0 +1,11 @@
+---
+name: ALMASim
+category: Interactive Apps
+subcategory: Servers
+role: batch_connect
+icon: fa://satellite-dish
+description: |
+  The ALMASim web console: search the ALMA archive, simulate observations,
+  image MeasurementSets and follow your runs, all from the browser. It runs
+  as a small job of yours on a compute node and submits every command as
+  your own Slurm job.

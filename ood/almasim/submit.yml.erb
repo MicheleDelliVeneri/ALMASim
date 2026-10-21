@@ -1,0 +1,8 @@
+# One CPU is plenty: the console only serves pages and submits jobs.
+---
+batch_connect:
+  template: "basic"
+script:
+  native:
+    - "--cpus-per-task=1"
+    - "--mem=<%= memory_gb.to_i %>G"

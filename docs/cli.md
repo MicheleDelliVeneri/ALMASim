@@ -813,6 +813,7 @@ $ almasim serve [OPTIONS]
 
 * `--port <int range>`: Listen on 127.0.0.1:<port> instead of a private socket in ~/.almasim (in a container, ALMASIM_SERVE_HOST sets the address).  [1024<=x<=65535]
 * `--base-path <str>`: Serve under this URL prefix, for a reverse proxy that passes it on (Open OnDemand's /node/<host>/<port>).  [env var: ALMASIM_BASE_PATH]
+* `--managed`: Started and stopped by a portal (Open OnDemand): needs --port and keeps no record in ~/.almasim, so --status and --stop do not see it.
 * `--status`: Show the running console's link.
 * `--stop`: Stop the running console.
 * `--help`: Show this message and exit.

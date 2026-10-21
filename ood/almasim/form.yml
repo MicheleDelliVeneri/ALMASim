@@ -1,0 +1,32 @@
+# The launch form (Open OnDemand plan, O4). Administrators set `cluster` to
+# the cluster's name in /etc/ood/config/clusters.d/, and `almasim_setup` to
+# the script that puts almasim on the PATH (the shared install's).
+---
+cluster: "zwicky"
+form:
+  - almasim_setup
+  - bc_account
+  - bc_queue
+  - bc_num_hours
+  - memory_gb
+attributes:
+  almasim_setup:
+    widget: hidden_field
+    value: "/SKAO_data/cycle11/almasim/almasim.sh"
+  bc_account:
+    help: "The Slurm account the console job is charged to (leave empty for your default)."
+  bc_queue:
+    label: "Partition"
+    help: "Where the console itself runs; the jobs it submits choose their own."
+  bc_num_hours:
+    value: 8
+    min: 1
+    max: 72
+    help: "How long the console stays open. Runs you started carry on when it ends."
+  memory_gb:
+    widget: number_field
+    label: "Memory (GB)"
+    value: 4
+    min: 2
+    max: 32
+    step: 1

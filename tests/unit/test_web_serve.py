@@ -234,3 +234,33 @@ def test_the_console_answers_on_a_socket_only_its_user_can_open(monkeypatch):
         server.should_exit = True
         thread.join(timeout=10)
         shutil.rmtree(home, ignore_errors=True)
+
+
+def test_a_portal_console_keeps_no_record_and_stops_promptly(tmp_path, monkeypatch):
+    import uvicorn
+    from typer.testing import CliRunner
+
+    from almasim.cli import app as cli
+
+    calls = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append(kwargs))
+    result = CliRunner().invoke(
+        cli,
+        ["serve", "--managed", "--port", "8799", "--base-path", BASE],
+        env={"HOME": str(tmp_path), "ALMASIM_TOKEN": TOKEN, "ALMASIM_SERVE_HOST": "0.0.0.0"},
+    )
+    assert result.exit_code == 0, result.output
+    assert f"0.0.0.0:8799{BASE}/" in result.output
+    assert calls == [
+        {"host": "0.0.0.0", "port": 8799, "log_level": "warning", "timeout_graceful_shutdown": 5}
+    ]
+    assert not (tmp_path / ".almasim" / "serve.json").exists()
+
+
+def test_a_portal_console_needs_a_port(tmp_path):
+    from typer.testing import CliRunner
+
+    from almasim.cli import app as cli
+
+    result = CliRunner().invoke(cli, ["serve", "--managed"], env={"HOME": str(tmp_path)})
+    assert result.exit_code != 0 and "--managed needs --port" in result.output

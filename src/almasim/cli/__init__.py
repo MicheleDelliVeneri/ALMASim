@@ -211,13 +211,21 @@ def serve_command(
             " (Open OnDemand's /node/<host>/<port>)."
         ),
     ),
+    managed: bool = typer.Option(
+        False,
+        "--managed",
+        help=(
+            "Started and stopped by a portal (Open OnDemand): needs --port and keeps"
+            " no record in ~/.almasim, so --status and --stop do not see it."
+        ),
+    ),
     status: bool = typer.Option(False, "--status", help="Show the running console's link."),
     stop: bool = typer.Option(False, "--stop", help="Stop the running console."),
 ) -> None:
     """Serve the console; print the ssh tunnel line and the link with its access token."""
     from .serve import serve
 
-    serve(port, status, stop, base_path)
+    serve(port, status, stop, base_path, managed)
 
 
 def main() -> None:

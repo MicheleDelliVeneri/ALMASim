@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -27,7 +28,13 @@ def _print_access(info) -> None:
     typer.echo(f"  {info.url()}")
 
 
-def serve(port: int | None, status: bool, stop_server: bool, base_path: str = "") -> None:
+def serve(
+    port: int | None,
+    status: bool,
+    stop_server: bool,
+    base_path: str = "",
+    managed: bool = False,
+) -> None:
     try:
         import uvicorn  # noqa: F401  (checked here, used by _run)
 
@@ -43,22 +50,46 @@ def serve(port: int | None, status: bool, stop_server: bool, base_path: str = ""
         info = state.stop()
         typer.echo("Stopped the console." if info else "No console was running.")
     else:
-        _run(port, base_path)
+        _run(port, base_path, managed)
 
 
-def _run(port: int | None, base_path: str = "") -> None:
-    import uvicorn
+# How long a stopping console waits for open requests (the pages' event
+# streams never end by themselves) before it closes them: Slurm kills a job
+# 30 s after asking it to stop.
+SHUTDOWN_GRACE = 5
 
-    from almasim.jobs.profile import ProfileError, load_profile
+
+def _settings(port: int | None, base_path: str, managed: bool) -> tuple[str, str, str]:
+    """The checked URL prefix, access token and listening address."""
     from almasim.web import serve as state
-    from almasim.web.app import create_app, normalize_base_path
+    from almasim.web.app import normalize_base_path
 
     try:
         base_path = normalize_base_path(base_path)
     except ValueError as exc:
         fail(f"--base-path: {exc}")
+    if managed and not port:
+        fail("--managed needs --port (the portal chooses it)")
+    token = os.environ.get(state.TOKEN_ENV) or state.new_token()
+    if len(token) < state.MIN_TOKEN:
+        fail(f"{state.TOKEN_ENV} must be at least {state.MIN_TOKEN} characters")
+    bind = os.environ.get(state.HOST_ENV) or "127.0.0.1"
+    if bind != "127.0.0.1" and not port:
+        fail(f"{state.HOST_ENV} needs --port (the default socket has no address)")
+    return base_path, token, bind
 
-    running = state.read_info()
+
+def _run(port: int | None, base_path: str = "", managed: bool = False) -> None:
+    import uvicorn
+
+    from almasim.jobs.profile import ProfileError, load_profile
+    from almasim.web import serve as state
+    from almasim.web.app import create_app
+
+    base_path, token, bind = _settings(port, base_path, managed)
+    # A console a portal starts and stops (Open OnDemand) keeps no record:
+    # the portal tracks it, and a user may run several, on any node.
+    running = None if managed else state.read_info()
     if running is not None:
         typer.echo("A console is already running:", err=True)
         _print_access(running)
@@ -68,12 +99,6 @@ def _run(port: int | None, base_path: str = "") -> None:
     except ProfileError as exc:
         fail(str(exc))
 
-    token = os.environ.get(state.TOKEN_ENV) or state.new_token()
-    if len(token) < state.MIN_TOKEN:
-        fail(f"{state.TOKEN_ENV} must be at least {state.MIN_TOKEN} characters")
-    bind = os.environ.get(state.HOST_ENV) or "127.0.0.1"
-    if bind != "127.0.0.1" and not port:
-        fail(f"{state.HOST_ENV} needs --port (the default socket has no address)")
     sock = None if port else state.state_dir() / state.SOCKET_NAME
     if sock is not None:
         if len(str(sock).encode()) > SOCKET_PATH_MAX:
@@ -88,16 +113,18 @@ def _run(port: int | None, base_path: str = "") -> None:
         bind=bind,
         base_path=base_path,
     )
-    state.write_info(info)
-    _print_access(info)
+    if managed:
+        typer.echo(f"ALMASim web console on {bind}:{port}{base_path}/ (started by a portal)")
+    else:
+        state.write_info(info)
+        _print_access(info)
     os.umask(0o077)  # the socket file: this user only
+    where: dict[str, Any] = {"uds": str(sock)} if sock else {"host": bind, "port": port}
     try:
         app = create_app(token, profile=profile, base_path=base_path)
-        if port is None:
-            uvicorn.run(app, uds=str(sock), log_level="warning")
-        else:
-            uvicorn.run(app, host=bind, port=port, log_level="warning")
+        uvicorn.run(app, **where, log_level="warning", timeout_graceful_shutdown=SHUTDOWN_GRACE)
     finally:
-        state.clear_info()
+        if not managed:
+            state.clear_info()
         if sock is not None:
             Path(sock).unlink(missing_ok=True)
