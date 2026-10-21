@@ -133,6 +133,9 @@ almasim simulation --help    # simulate ALMA observations
 almasim clean --help         # run WSClean with extra arguments passed through
 ```
 
+Every command and option is listed in [docs/cli.md](docs/cli.md), generated from
+the command definitions (`python scripts/generate_cli_reference.py`).
+
 ### With CASA tools (Linux x86-64 only)
 
 `casatools` and `casatasks` wheels are Linux-only. Install the optional `[casa]` extra on a supported Linux system:

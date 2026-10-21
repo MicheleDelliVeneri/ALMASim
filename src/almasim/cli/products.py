@@ -343,7 +343,8 @@ def products_download(
         "--product-filter",
         help=(
             "Subset of resolved products to download. "
-            "Choices: all, " + ", ".join(PRODUCT_TYPES) + "."
+            # PRODUCT_TYPES is a set, so it is sorted for a stable help text.
+            "Choices: all, " + ", ".join(sorted(PRODUCT_TYPES - {"all"})) + "."
         ),
         case_sensitive=False,
     ),
