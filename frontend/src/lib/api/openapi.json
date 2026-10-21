@@ -268,247 +268,6 @@
         "title": "DataProductInfo",
         "type": "object"
       },
-      "DeconvolutionMetadata": {
-        "description": "Where a deconvolution run read and wrote its cubes, and how far it got.",
-        "properties": {
-          "beam_cube_name": {
-            "title": "Beam Cube Name",
-            "type": "string"
-          },
-          "beam_cube_path": {
-            "title": "Beam Cube Path",
-            "type": "string"
-          },
-          "clean_cube_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Clean Cube Path"
-          },
-          "component_cube_path": {
-            "title": "Component Cube Path",
-            "type": "string"
-          },
-          "convolved_reference_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Convolved Reference Path"
-          },
-          "cycles_added": {
-            "title": "Cycles Added",
-            "type": "integer"
-          },
-          "cycles_completed": {
-            "title": "Cycles Completed",
-            "type": "integer"
-          },
-          "cycles_requested": {
-            "title": "Cycles Requested",
-            "type": "integer"
-          },
-          "dirty_cube_path": {
-            "title": "Dirty Cube Path",
-            "type": "string"
-          },
-          "gain": {
-            "title": "Gain",
-            "type": "number"
-          },
-          "residual_cube_path": {
-            "title": "Residual Cube Path",
-            "type": "string"
-          },
-          "restored_cube_path": {
-            "title": "Restored Cube Path",
-            "type": "string"
-          },
-          "resumed": {
-            "title": "Resumed",
-            "type": "boolean"
-          },
-          "state_path": {
-            "title": "State Path",
-            "type": "string"
-          },
-          "threshold": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Threshold"
-          }
-        },
-        "required": [
-          "dirty_cube_path",
-          "beam_cube_path",
-          "beam_cube_name",
-          "cycles_requested",
-          "cycles_completed",
-          "cycles_added",
-          "gain",
-          "state_path",
-          "component_cube_path",
-          "restored_cube_path",
-          "residual_cube_path",
-          "resumed"
-        ],
-        "title": "DeconvolutionMetadata",
-        "type": "object"
-      },
-      "DeconvolutionRequest": {
-        "description": "Request body for iterative deconvolution from saved cube products.",
-        "properties": {
-          "beam_cube_path": {
-            "description": "Relative or absolute path to the beam cube",
-            "title": "Beam Cube Path",
-            "type": "string"
-          },
-          "clean_cube_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional reference clean/model cube for visual comparison",
-            "title": "Clean Cube Path"
-          },
-          "cycles": {
-            "default": 100,
-            "description": "Number of CLEAN cycles",
-            "maximum": 5000.0,
-            "minimum": 0.0,
-            "title": "Cycles",
-            "type": "integer"
-          },
-          "directory": {
-            "description": "Base directory for relative file paths",
-            "title": "Directory",
-            "type": "string"
-          },
-          "dirty_cube_path": {
-            "description": "Relative or absolute path to the dirty cube",
-            "title": "Dirty Cube Path",
-            "type": "string"
-          },
-          "gain": {
-            "default": 0.1,
-            "description": "Loop gain",
-            "exclusiveMinimum": 0.0,
-            "maximum": 1.0,
-            "title": "Gain",
-            "type": "number"
-          },
-          "method": {
-            "default": "sum",
-            "description": "Integration method for the 2D preview images",
-            "enum": [
-              "sum",
-              "mean"
-            ],
-            "title": "Method",
-            "type": "string"
-          },
-          "state_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional deconvolution state NPZ path for resuming with additional cycles",
-            "title": "State Path"
-          },
-          "threshold": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional absolute stopping threshold on the residual peak",
-            "title": "Threshold"
-          }
-        },
-        "required": [
-          "directory",
-          "dirty_cube_path",
-          "beam_cube_path"
-        ],
-        "title": "DeconvolutionRequest",
-        "type": "object"
-      },
-      "DeconvolutionResponse": {
-        "description": "Frontend response payload for iterative deconvolution previews.",
-        "properties": {
-          "component_model": {
-            "$ref": "#/components/schemas/ImagePreviewPayload"
-          },
-          "convolved_reference": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ImagePreviewPayload"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "dirty": {
-            "$ref": "#/components/schemas/ImagePreviewPayload"
-          },
-          "metadata": {
-            "$ref": "#/components/schemas/DeconvolutionMetadata"
-          },
-          "reference_clean": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ImagePreviewPayload"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "residual": {
-            "$ref": "#/components/schemas/ImagePreviewPayload"
-          },
-          "restored": {
-            "$ref": "#/components/schemas/ImagePreviewPayload"
-          }
-        },
-        "required": [
-          "dirty",
-          "component_model",
-          "restored",
-          "residual",
-          "metadata"
-        ],
-        "title": "DeconvolutionResponse",
-        "type": "object"
-      },
       "DiskSpaceInfo": {
         "description": "Disk space info for a given path.",
         "properties": {
@@ -2916,6 +2675,178 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WienerPreviewMetadata": {
+        "description": "Where a Wiener preview read and wrote its cubes.",
+        "properties": {
+          "beam_cube_name": {
+            "title": "Beam Cube Name",
+            "type": "string"
+          },
+          "beam_cube_path": {
+            "title": "Beam Cube Path",
+            "type": "string"
+          },
+          "clean_cube_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clean Cube Path"
+          },
+          "convolved_reference_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Convolved Reference Path"
+          },
+          "dirty_cube_path": {
+            "title": "Dirty Cube Path",
+            "type": "string"
+          },
+          "epsilon": {
+            "title": "Epsilon",
+            "type": "number"
+          },
+          "model_cube_path": {
+            "title": "Model Cube Path",
+            "type": "string"
+          },
+          "residual_cube_path": {
+            "title": "Residual Cube Path",
+            "type": "string"
+          },
+          "restored_cube_path": {
+            "title": "Restored Cube Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dirty_cube_path",
+          "beam_cube_path",
+          "beam_cube_name",
+          "epsilon",
+          "model_cube_path",
+          "restored_cube_path",
+          "residual_cube_path"
+        ],
+        "title": "WienerPreviewMetadata",
+        "type": "object"
+      },
+      "WienerPreviewRequest": {
+        "description": "Request body for a Wiener preview of saved cube products (MADIV-28 T5.12).",
+        "properties": {
+          "beam_cube_path": {
+            "description": "Relative or absolute path to the beam cube",
+            "title": "Beam Cube Path",
+            "type": "string"
+          },
+          "clean_cube_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional reference clean/model cube for visual comparison",
+            "title": "Clean Cube Path"
+          },
+          "directory": {
+            "description": "Base directory for relative file paths",
+            "title": "Directory",
+            "type": "string"
+          },
+          "dirty_cube_path": {
+            "description": "Relative or absolute path to the dirty cube",
+            "title": "Dirty Cube Path",
+            "type": "string"
+          },
+          "epsilon": {
+            "default": 0.001,
+            "description": "Wiener regularisation: larger is smoother and less noisy",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Epsilon",
+            "type": "number"
+          },
+          "method": {
+            "default": "sum",
+            "description": "Integration method for the 2D preview images",
+            "enum": [
+              "sum",
+              "mean"
+            ],
+            "title": "Method",
+            "type": "string"
+          }
+        },
+        "required": [
+          "directory",
+          "dirty_cube_path",
+          "beam_cube_path"
+        ],
+        "title": "WienerPreviewRequest",
+        "type": "object"
+      },
+      "WienerPreviewResponse": {
+        "description": "Frontend response payload for a Wiener preview.",
+        "properties": {
+          "convolved_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImagePreviewPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dirty": {
+            "$ref": "#/components/schemas/ImagePreviewPayload"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/WienerPreviewMetadata"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ImagePreviewPayload"
+          },
+          "reference_clean": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImagePreviewPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "residual": {
+            "$ref": "#/components/schemas/ImagePreviewPayload"
+          },
+          "restored": {
+            "$ref": "#/components/schemas/ImagePreviewPayload"
+          }
+        },
+        "required": [
+          "dirty",
+          "model",
+          "restored",
+          "residual",
+          "metadata"
+        ],
+        "title": "WienerPreviewResponse",
+        "type": "object"
       }
     }
   },
@@ -3401,15 +3332,15 @@
         ]
       }
     },
-    "/api/v1/imaging/deconvolve": {
+    "/api/v1/imaging/preview": {
       "post": {
-        "description": "Run a CLEAN-style deconvolution on saved dirty/beam cubes and return previews.",
-        "operationId": "deconvolve_saved_products_api_v1_imaging_deconvolve_post",
+        "description": "Wiener-deconvolve saved dirty/beam cubes and return previews of the results.",
+        "operationId": "wiener_preview_saved_products_api_v1_imaging_preview_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeconvolutionRequest"
+                "$ref": "#/components/schemas/WienerPreviewRequest"
               }
             }
           },
@@ -3420,7 +3351,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeconvolutionResponse"
+                  "$ref": "#/components/schemas/WienerPreviewResponse"
                 }
               }
             },
@@ -3437,7 +3368,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Deconvolve Saved Products",
+        "summary": "Wiener Preview Saved Products",
         "tags": [
           "imaging"
         ]

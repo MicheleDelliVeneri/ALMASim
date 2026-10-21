@@ -264,8 +264,8 @@ def test_get_simulation_status(client):
 
 
 @pytest.mark.integration
-def test_imaging_deconvolution_endpoint(client, temp_output_dir):
-    """Test imaging deconvolution on saved dirty/beam/clean cubes."""
+def test_imaging_preview_endpoint(client, temp_output_dir):
+    """The Wiener preview of saved dirty/beam/clean cubes (MADIV-28 T5.12)."""
     import numpy as np
 
     model_cube = np.zeros((1, 17, 17), dtype=np.float32)
@@ -284,14 +284,13 @@ def test_imaging_deconvolution_endpoint(client, temp_output_dir):
     np.savez(temp_output_dir / "beam-cube_0.npz", beam_cube=beam_cube)
 
     response = client.post(
-        "/api/v1/imaging/deconvolve",
+        "/api/v1/imaging/preview",
         json={
             "directory": str(temp_output_dir),
             "dirty_cube_path": "dirty-cube_0.npz",
             "beam_cube_path": "beam-cube_0.npz",
             "clean_cube_path": "clean-cube_0.npz",
-            "cycles": 120,
-            "gain": 0.12,
+            "epsilon": 0.01,
             "method": "sum",
         },
     )
@@ -299,10 +298,21 @@ def test_imaging_deconvolution_endpoint(client, temp_output_dir):
     assert response.status_code == 200
     data = response.json()
     assert "dirty" in data
-    assert "component_model" in data
+    assert "model" in data
     assert "restored" in data
     assert "residual" in data
     assert data["reference_clean"] is not None
     assert data["convolved_reference"] is not None
-    assert data["metadata"]["cycles_requested"] == 120
-    assert data["metadata"]["state_path"].endswith(".npz")
+    assert data["metadata"]["epsilon"] == 0.01
+    assert data["metadata"]["model_cube_path"].endswith("wiener-model-cube_0.npz")
+    assert (temp_output_dir / "residual-cube_0.npz").is_file()
+
+    missing_beam = client.post(
+        "/api/v1/imaging/preview",
+        json={
+            "directory": str(temp_output_dir),
+            "dirty_cube_path": "dirty-cube_0.npz",
+            "beam_cube_path": "nope.npz",
+        },
+    )
+    assert missing_beam.status_code == 404

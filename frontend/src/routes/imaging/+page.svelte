@@ -9,7 +9,7 @@
 	import { createLogger } from '#lib/logger.js';
 	import { INITIAL_VIEW, applyView } from '#lib/utils/linkedViews.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
-	import { imagingApi, type DeconvolutionResponse, type ImagePreviewPayload } from '#lib/api/imaging.js';
+	import { imagingApi, type ImagePreviewPayload, type WienerPreviewResponse } from '#lib/api/imaging.js';
 
 	const logger = createLogger('routes/imaging');
 	const DIRTY_PREFIX = 'dirty-cube_';
@@ -36,15 +36,11 @@
 	let matchedBeamPath = $state('');
 	let matchedCleanPath = $state('');
 
-	let cycles = $state(150);
-	let gain = $state(0.12);
+	let epsilon = $state(0.001);
 	let integrationMethod = $state<'sum' | 'mean'>('sum');
-	let useThreshold = $state(false);
-	let threshold = $state(0.0);
 
 	let panels = $state<PreviewPanel[]>([]);
-	let runMetadata = $state<DeconvolutionResponse['metadata'] | null>(null);
-	let resumeStatePath = $state<string | null>(null);
+	let runMetadata = $state<WienerPreviewResponse['metadata'] | null>(null);
 
 	let linkedView = $state(true);
 
@@ -73,7 +69,6 @@
 	function resetPanels() {
 		panels = [];
 		runMetadata = null;
-		resumeStatePath = null;
 	}
 
 	// The panels, in display order; the two references only when the run returns them.
@@ -82,7 +77,7 @@
 			| 'reference_clean'
 			| 'convolved_reference'
 			| 'dirty'
-			| 'component_model'
+			| 'model'
 			| 'restored'
 			| 'residual';
 		id: string;
@@ -113,29 +108,29 @@
 			badgeClass: 'bg-slate-100 text-slate-800'
 		},
 		{
-			key: 'component_model',
-			id: 'component-model',
-			title: 'Component Model',
-			description: 'CLEAN component cube, which should approach the original clean sky model',
+			key: 'model',
+			id: 'wiener-model',
+			title: 'Wiener Model',
+			description: 'Wiener-deconvolved cube, which should approach the original clean sky model',
 			badgeClass: 'bg-accent-soft text-accent'
 		},
 		{
 			key: 'restored',
 			id: 'restored',
 			title: 'Restored Cube',
-			description: 'Component model convolved with the clean beam and added back to the residual',
+			description: 'Wiener model convolved with the fitted clean beam and added back to the residual',
 			badgeClass: 'bg-accent-soft text-accent'
 		},
 		{
 			key: 'residual',
 			id: 'residual',
 			title: 'Residual Cube',
-			description: 'Residual cube after subtracting CLEAN components',
+			description: 'Dirty cube minus the Wiener model convolved with the dirty beam',
 			badgeClass: 'bg-amber-100 text-amber-800'
 		}
 	];
 
-	function buildPanels(response: DeconvolutionResponse): PreviewPanel[] {
+	function buildPanels(response: WienerPreviewResponse): PreviewPanel[] {
 		return PANEL_SPECS.flatMap(({ key, ...spec }) => {
 			const payload = response[key];
 			return payload ? [{ ...payload, ...spec, ...INITIAL_VIEW }] : [];
@@ -215,20 +210,16 @@
 		running = true;
 		error = null;
 		try {
-			const response = await imagingApi.deconvolve({
+			const response = await imagingApi.preview({
 				directory: outputDir,
 				dirtyCubePath: selectedDirtyPath,
 				beamCubePath: matchedBeamPath,
 				cleanCubePath: matchedCleanPath || null,
-				cycles,
-				gain,
-				threshold: useThreshold ? threshold : null,
-				statePath: resumeStatePath,
+				epsilon,
 				method: integrationMethod
 			});
 			panels = buildPanels(response);
 			runMetadata = response.metadata;
-			resumeStatePath = response.metadata.state_path;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to run imaging';
 			logger.error(
@@ -238,8 +229,7 @@
 					selectedDirtyPath,
 					matchedBeamPath,
 					matchedCleanPath,
-					cycles,
-					gain
+					epsilon
 				},
 				'Failed to run imaging'
 			);
@@ -278,7 +268,7 @@
 			<div class="mb-4">
 				<h1 class="text-2xl font-bold text-fg">Imaging</h1>
 				<p class="mt-2 text-fg-muted">
-					Run the iterative deconvolution stage on saved dirty and beam cubes, inspect the restored cube, and compare it against the simulation clean cube and residuals.
+					Preview a Wiener deconvolution of saved dirty and beam cubes, inspect the restored cube, and compare it against the simulation clean cube and residuals. WSClean on the simulated MeasurementSet is the reference imaging.
 				</p>
 			</div>
 
@@ -319,32 +309,6 @@
 
 					<div class="grid gap-4 md:grid-cols-2">
 						<label class="space-y-2">
-							<span class="text-sm font-medium text-fg-muted">Cycles</span>
-							<input
-								type="number"
-								min="0"
-								max="5000"
-								step="10"
-								bind:value={cycles}
-								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-							/>
-						</label>
-
-						<label class="space-y-2">
-							<span class="text-sm font-medium text-fg-muted">Gain</span>
-							<input
-								type="number"
-								min="0.01"
-								max="1"
-								step="0.01"
-								bind:value={gain}
-								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-							/>
-						</label>
-					</div>
-
-					<div class="grid gap-4 md:grid-cols-2">
-						<label class="space-y-2">
 							<span class="text-sm font-medium text-fg-muted">Integration</span>
 							<select
 								bind:value={integrationMethod}
@@ -355,24 +319,17 @@
 							</select>
 						</label>
 
-						<div class="space-y-2">
-							<label class="flex items-center gap-2 text-sm font-medium text-fg-muted">
-								<input
-									type="checkbox"
-									bind:checked={useThreshold}
-									class="h-4 w-4 rounded border-line text-accent focus:ring-blue-500"
-								/>
-								<span>Use Threshold</span>
-							</label>
+						<label class="space-y-2">
+							<span class="text-sm font-medium text-fg-muted">Regularisation (ε)</span>
 							<input
 								type="number"
-								min="0"
-								step="0.0001"
-								bind:value={threshold}
-								disabled={!useThreshold}
-								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100"
+								min="0.00001"
+								max="1"
+								step="0.0005"
+								bind:value={epsilon}
+								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
 							/>
-						</div>
+						</label>
 					</div>
 
 					<div class="flex flex-wrap items-center gap-3">
@@ -391,22 +348,18 @@
 							disabled={running || !selectedDirtyPath || !matchedBeamPath}
 							class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-blue-300"
 						>
-							{running ? 'Running…' : resumeStatePath ? 'Run More Cycles' : 'Run Deconvolution'}
+							{running ? 'Running…' : 'Run Wiener Preview'}
 						</button>
 					</div>
 
 					{#if runMetadata}
 						<div class="rounded-md border border-accent-line bg-accent-soft p-3 text-sm text-accent">
 							<p>
-								Total cycles completed: <span class="font-semibold">{runMetadata.cycles_completed}</span>
-								{#if runMetadata.resumed}
-									<span class="ml-1 text-accent">(added {runMetadata.cycles_added} more)</span>
-								{:else}
-									<span class="ml-1 text-accent">(initial run added {runMetadata.cycles_added})</span>
-								{/if}
+								Wiener preview with ε = <span class="font-semibold">{runMetadata.epsilon}</span>.
+								Compare the Wiener model with the original clean cube, and the restored cube with the convolved clean reference.
 							</p>
 							<p class="mt-1">
-								Use the component model to compare against the original clean cube, and the restored cube to compare against the convolved clean reference.
+								For reference imaging, run WSClean on the simulated MeasurementSet (<code>almasim image image-from-ms</code>).
 							</p>
 						</div>
 					{/if}

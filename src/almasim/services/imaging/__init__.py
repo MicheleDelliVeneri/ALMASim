@@ -7,20 +7,22 @@ imaging -> products.preview -> interferometry -> core -> cube_export).
 
 from .reconstruction import (
     build_image_products,
-    clean_deconvolve_cube,
+    clean_beam_cube,
     convolve_cube_with_beam,
     feather_merge_cube,
     match_tp_to_int_flux_scale,
     regrid_cube_to_match,
     wiener_deconvolve_cube,
+    wiener_preview,
 )
 
 __all__ = [
     "build_image_products",
-    "clean_deconvolve_cube",
+    "clean_beam_cube",
     "convolve_cube_with_beam",
     "feather_merge_cube",
     "match_tp_to_int_flux_scale",
     "regrid_cube_to_match",
     "wiener_deconvolve_cube",
+    "wiener_preview",
 ]
