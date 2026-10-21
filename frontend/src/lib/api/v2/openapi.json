@@ -343,6 +343,120 @@
         "title": "Entry",
         "type": "object"
       },
+      "Estimate": {
+        "properties": {
+          "band": {
+            "title": "Band",
+            "type": "string"
+          },
+          "beam_size_arcsec": {
+            "title": "Beam Size Arcsec",
+            "type": "number"
+          },
+          "cell_size_arcsec": {
+            "title": "Cell Size Arcsec",
+            "type": "number"
+          },
+          "cube_shape": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Cube Shape",
+            "type": "array"
+          },
+          "estimated_standard_output_gb": {
+            "title": "Estimated Standard Output Gb",
+            "type": "number"
+          },
+          "n_channels": {
+            "title": "N Channels",
+            "type": "integer"
+          },
+          "n_pix": {
+            "title": "N Pix",
+            "type": "integer"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "raw_single_cube_gb": {
+            "title": "Raw Single Cube Gb",
+            "type": "number"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_name",
+          "band",
+          "n_pix",
+          "n_channels",
+          "cube_shape",
+          "cell_size_arcsec",
+          "beam_size_arcsec",
+          "raw_single_cube_gb",
+          "estimated_standard_output_gb",
+          "note"
+        ],
+        "title": "Estimate",
+        "type": "object"
+      },
+      "EstimateRequest": {
+        "properties": {
+          "instrument_geometry": {
+            "default": "legacy",
+            "title": "Instrument Geometry",
+            "type": "string"
+          },
+          "metadata_path": {
+            "title": "Metadata Path",
+            "type": "string"
+          },
+          "n_channels": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Channels"
+          },
+          "n_pix": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Pix"
+          },
+          "row_idx": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Row Idx",
+            "type": "integer"
+          },
+          "source_type": {
+            "default": "point",
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metadata_path"
+        ],
+        "title": "EstimateRequest",
+        "type": "object"
+      },
       "Folder": {
         "properties": {
           "path": {
@@ -2449,6 +2563,48 @@
         "summary": "Resubmit Job",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/api/v2/simulation/estimate": {
+      "post": {
+        "description": "The cube a simulation of one metadata row would make, and its raw size.",
+        "operationId": "estimate_api_v2_simulation_estimate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Estimate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Estimate",
+        "tags": [
+          "simulation"
         ]
       }
     }

@@ -14,7 +14,7 @@
 		{ href: '/run', label: 'Run a command' },
 		{ href: '/jobs', label: 'Jobs' },
 		{ href: '/archive', label: 'Archive' },
-		{ href: '/simulations', label: 'Simulations' },
+		{ href: '/simulate', label: 'Simulate' },
 		{ href: '/combination', label: 'Combination' },
 		{ href: '/imaging', label: 'Imaging' },
 		{ href: '/preview', label: 'Simulation preview' },

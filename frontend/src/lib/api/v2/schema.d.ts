@@ -389,6 +389,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/v2/simulation/estimate': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Estimate
+		 * @description The cube a simulation of one metadata row would make, and its raw size.
+		 */
+		post: operations['estimate_api_v2_simulation_estimate_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -514,6 +534,53 @@ export interface components {
 			name: string;
 			/** Size */
 			size: number | null;
+		};
+		/** Estimate */
+		Estimate: {
+			/** Band */
+			band: string;
+			/** Beam Size Arcsec */
+			beam_size_arcsec: number;
+			/** Cell Size Arcsec */
+			cell_size_arcsec: number;
+			/** Cube Shape */
+			cube_shape: number[];
+			/** Estimated Standard Output Gb */
+			estimated_standard_output_gb: number;
+			/** N Channels */
+			n_channels: number;
+			/** N Pix */
+			n_pix: number;
+			/** Note */
+			note: string;
+			/** Raw Single Cube Gb */
+			raw_single_cube_gb: number;
+			/** Source Name */
+			source_name: string;
+		};
+		/** EstimateRequest */
+		EstimateRequest: {
+			/**
+			 * Instrument Geometry
+			 * @default legacy
+			 */
+			instrument_geometry?: string;
+			/** Metadata Path */
+			metadata_path: string;
+			/** N Channels */
+			n_channels?: number | null;
+			/** N Pix */
+			n_pix?: number | null;
+			/**
+			 * Row Idx
+			 * @default 0
+			 */
+			row_idx?: number;
+			/**
+			 * Source Type
+			 * @default point
+			 */
+			source_type?: string;
 		};
 		/** Folder */
 		Folder: {
@@ -1522,6 +1589,39 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['Run'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	estimate_api_v2_simulation_estimate_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['EstimateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Estimate'];
 				};
 			};
 			/** @description Validation Error */
