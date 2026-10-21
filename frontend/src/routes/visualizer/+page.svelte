@@ -68,9 +68,10 @@
 			fileList = data.files;
 			logger.info({ outputDir: data.output_dir, count: data.files.length }, 'File list loaded');
 		} catch (err) {
-			if (err instanceof ApiTimeoutError) {
-				error = 'Timed out while loading visualizer files';
-			}
+			error =
+				err instanceof ApiTimeoutError
+					? 'Timed out while loading visualizer files'
+					: `Could not list ${targetDir}: ${err instanceof Error ? err.message : 'unknown error'}`;
 			logger.error({ err }, 'Failed to load file list');
 			fileList = [];
 		} finally {

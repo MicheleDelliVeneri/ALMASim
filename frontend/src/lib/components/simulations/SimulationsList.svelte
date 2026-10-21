@@ -30,20 +30,25 @@
 	const SIMULATIONS_FETCH_TIMEOUT_MS = 20_000;
 	const SIMULATIONS_REFRESH_INTERVAL_MS = 10_000;
 
-	async function fetchSimulations() {
-		if (refreshing) {
+	/**
+	 * Reload the list. The periodic refresh skips while a request is in flight;
+	 * `force` (after a cancel, or the Refresh button) replaces that request so
+	 * the list cannot stay stale.
+	 */
+	async function fetchSimulations(force = false) {
+		if (refreshing && !force) {
 			return;
 		}
 
+		currentRequest?.abort();
+		const controller = new AbortController();
+		currentRequest = controller;
 		try {
 			refreshing = true;
 			if (simulations.length === 0) {
 				loading = true;
 			}
 			error = null;
-			currentRequest?.abort();
-			const controller = new AbortController();
-			currentRequest = controller;
 			simulations = await simulationApi.list({
 				signal: controller.signal,
 				timeoutMs: SIMULATIONS_FETCH_TIMEOUT_MS
@@ -62,9 +67,12 @@
 			error = err instanceof Error ? err.message : 'Failed to load simulations';
 			logger.error({ err }, 'Error fetching simulations');
 		} finally {
-			loading = false;
-			refreshing = false;
-			currentRequest = null;
+			// A forced refresh may have replaced this request: leave its state alone.
+			if (currentRequest === controller) {
+				loading = false;
+				refreshing = false;
+				currentRequest = null;
+			}
 		}
 	}
 
@@ -97,9 +105,9 @@
 	}
 
 	function handleLocate(sim: SimulationSummary) {
-		const path = sim.output_dir
-			? `${sim.output_dir}/${sim.simulation_id}`
-			: `(output directory not recorded)`;
+		// The backend writes a simulation's products into output_dir itself (it
+		// sets no per-run subfolder), as the Visualize and Imaging links assume.
+		const path = sim.output_dir || '(output directory not recorded)';
 		logger.info({ simulationId: sim.simulation_id, path }, 'Locate simulation output');
 		outputLocation = path;
 	}
@@ -136,7 +144,7 @@
 					message: 'Cancellation requested'
 				};
 			}
-			await fetchSimulations();
+			await fetchSimulations(true);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to cancel simulation';
 			logger.error({ err, simulationId: sim.simulation_id }, 'Failed to cancel simulation');
@@ -207,7 +215,7 @@
 		<button
 			type="button"
 			class="rounded-md border border-line px-3 py-1 text-sm font-medium text-fg-muted hover:bg-hover"
-			onclick={fetchSimulations}
+			onclick={() => fetchSimulations(true)}
 		>
 			Refresh
 		</button>

@@ -36,16 +36,28 @@ export function readCachedResults(
 	}
 }
 
+/**
+ * Cache `data` for the other pages; whether it fitted. When it does not
+ * (localStorage holds a few MB), the previous results are removed too, so no
+ * page goes on showing rows from an older query.
+ */
 export function writeCachedResults(
 	data: MetadataResponse,
 	store: Storage | null = browserStorage()
-): void {
+): boolean {
+	if (!store) return false;
 	try {
-		store?.setItem(METADATA_CACHE_KEY, JSON.stringify(data));
+		store.setItem(METADATA_CACHE_KEY, JSON.stringify(data));
+		return true;
 	} catch {
-		/* storage full or blocked: the cache is a convenience */
+		clearCachedResults(store);
+		return false;
 	}
 }
+
+/** Shown when results are too large to hand to the other pages. */
+export const CACHE_FULL_MESSAGE =
+	'These results are too large to keep in the browser, so the Simulations page cannot use them. Save them to a CSV file and load that instead.';
 
 export function clearCachedResults(store: Storage | null = browserStorage()): void {
 	try {

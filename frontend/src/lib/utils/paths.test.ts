@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { childPath } from './paths';
+import { childPath, encodePathSegments } from './paths';
 
 describe('childPath', () => {
 	it('joins a folder name to its parent', () => {
@@ -16,5 +16,12 @@ describe('childPath', () => {
 		for (const name of ['', '   ', '.', '..', 'a/b', 'a\\b']) {
 			expect(childPath('/data', name)).toBeNull();
 		}
+	});
+});
+
+describe('encodePathSegments', () => {
+	it('encodes each part and keeps the slashes', () => {
+		expect(encodePathSegments('/data/run 1/q#2?.csv')).toBe('/data/run%201/q%232%3F.csv');
+		expect(encodePathSegments('results.csv')).toBe('results.csv');
 	});
 });

@@ -82,6 +82,20 @@ export interface DaskTestResult {
 	error?: string | null;
 }
 
+/**
+ * One status-socket message. The server sends `{"error": ...}` instead of a
+ * status for a simulation it does not know (for example after a restart);
+ * that becomes an Error rather than a status without a `status` field.
+ */
+export function parseStatusMessage(raw: string): SimulationStatus {
+	const data = JSON.parse(raw) as Partial<SimulationStatus> & { error?: unknown };
+	if (typeof data.status !== 'string') {
+		const reason = typeof data.error === 'string' ? data.error : 'malformed status message';
+		throw new Error(`Status unavailable: ${reason}`);
+	}
+	return data as SimulationStatus;
+}
+
 export const simulationApi = {
 	create: async (params: SimulationParamsCreate): Promise<SimulationResponse> => {
 		return apiClient.post<SimulationResponse>('/api/v1/simulations/', params);
@@ -91,8 +105,11 @@ export const simulationApi = {
 		return apiClient.post<SimulationResponse>(`/api/v1/simulations/${simulationId}/cancel`, {});
 	},
 
-	estimate: async (params: SimulationParamsCreate): Promise<SimulationEstimate> => {
-		return apiClient.post<SimulationEstimate>('/api/v1/simulations/estimate', params);
+	estimate: async (
+		params: SimulationParamsCreate,
+		options?: RequestOptions
+	): Promise<SimulationEstimate> => {
+		return apiClient.post<SimulationEstimate>('/api/v1/simulations/estimate', params, options);
 	},
 
 	getStatus: async (simulationId: string): Promise<SimulationStatus> => {
@@ -116,9 +133,10 @@ export const simulationApi = {
 		const socket = new WebSocket(apiClient.socketUrl(`/api/v1/simulations/${simulationId}/ws`));
 		socket.onmessage = (event) => {
 			try {
-				onStatus(JSON.parse(event.data) as SimulationStatus);
+				onStatus(parseStatusMessage(event.data));
 			} catch (error) {
 				onError?.(error);
+				socket.close();
 			}
 		};
 		return socket;

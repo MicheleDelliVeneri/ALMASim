@@ -77,7 +77,7 @@
 										: 'bg-surface text-fg'
 					}`}
 				>
-					{status?.status.toUpperCase() || 'CONNECTING'}
+					{status?.status?.toUpperCase() || 'CONNECTING'}
 				</span>
 				{#if onCancel && isActiveStatus(status.status)}
 					<button

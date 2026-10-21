@@ -229,32 +229,40 @@
 			return;
 		}
 
+		// Read the form now, so this effect reruns when it changes, but ask for
+		// the estimate only once typing pauses: every keystroke used to POST.
+		const params = buildSimulationParamsFromRow(row, 0);
 		let cancelled = false;
+		const controller = new AbortController();
 		estimating = true;
 		estimateError = null;
 
-		void simulationApi
-			.estimate(buildSimulationParamsFromRow(row, 0))
-			.then((estimate) => {
-				if (!cancelled) {
-					simulationEstimate = estimate;
-				}
-			})
-			.catch((error) => {
-				if (!cancelled) {
-					simulationEstimate = null;
-					estimateError =
-						error instanceof Error ? error.message : 'Failed to estimate simulation size';
-				}
-			})
-			.finally(() => {
-				if (!cancelled) {
-					estimating = false;
-				}
-			});
+		const timer = setTimeout(() => {
+			void simulationApi
+				.estimate(params, { signal: controller.signal })
+				.then((estimate) => {
+					if (!cancelled) {
+						simulationEstimate = estimate;
+					}
+				})
+				.catch((error) => {
+					if (!cancelled) {
+						simulationEstimate = null;
+						estimateError =
+							error instanceof Error ? error.message : 'Failed to estimate simulation size';
+					}
+				})
+				.finally(() => {
+					if (!cancelled) {
+						estimating = false;
+					}
+				});
+		}, 500);
 
 		return () => {
 			cancelled = true;
+			clearTimeout(timer);
+			controller.abort();
 		};
 	});
 
