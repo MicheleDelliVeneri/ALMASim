@@ -119,6 +119,11 @@ class SimulationParams:
     ms_export_dir: Optional[str] = _coerced(_optional(_expand_path), default=None)
     ms_save_mode: str = _coerced(str, default="msv2")
     imaging_algorithm: str = _coerced(str, default="legacy")
+    # "legacy": the metadata FOV, a fifth of the beam per cell. "planner": the
+    # imaging planner's geometry (services.instrument.geometry: the primary
+    # beam's FOV, 8 cells per beam); MADIV-28 T2.11, until the golden
+    # simulation outputs are re-baselined on it.
+    instrument_geometry: str = _coerced(str, default="legacy")
     kaggle_token: Optional[str] = _coerced(_optional(_expand_path), default=None)
 
     def __post_init__(self) -> None:

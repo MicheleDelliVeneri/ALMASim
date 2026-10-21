@@ -9,12 +9,21 @@ import astropy.units as U
 import numpy as np
 
 from ..external_skymodel import infer_external_cube_geometry, is_external_source_type
+from ..instrument.geometry import (
+    cell_arcsec,
+    image_size,
+    primary_beam_fov_arcsec,
+    synthesized_beam_arcsec,
+)
 from ..instrument.spectral_window import SpectralWindow
 from ..interferometry import antenna as ual_antenna
 from ..interferometry.frequency import freq_supp_extractor
 from ..interferometry.utils import closest_power_of_2
 from ..observation_plan import build_single_pointing_observation_plan
 from .params import SimulationParams, _clean
+
+# Cells per synthesised beam in the planner geometry (the imaging planner's default).
+PLANNER_BEAM_SAMPLING = 8
 
 
 @dataclass(frozen=True)
@@ -70,9 +79,21 @@ def resolve_cube_geometry(params: SimulationParams, *, strict: bool = True) -> C
         for config in observation_plan.configs
     )
     max_baseline = max_baseline_km * U.km
-    fov = params.fov * 3600 * U.arcsec
-    beam_size = ual_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
-    cell_size = beam_size / 5
+    planner = str(params.instrument_geometry).lower() == "planner"
+    if planner:
+        # The imaging planner's geometry (MADIV-28 T2.11): the primary beam of
+        # the smallest dish as the FOV, PLANNER_BEAM_SAMPLING cells per beam.
+        frequency_hz = central_freq.to(U.Hz).value
+        dish = min(config.antenna_diameter_m for config in observation_plan.configs)
+        fov = primary_beam_fov_arcsec(dish, frequency_hz) * U.arcsec
+        beam_size = synthesized_beam_arcsec(frequency_hz, max_baseline.to(U.m).value) * U.arcsec
+        cell_size = cell_arcsec(beam_size, PLANNER_BEAM_SAMPLING)
+    else:
+        fov = params.fov * 3600 * U.arcsec
+        beam_size = ual_antenna.estimate_alma_beam_size(
+            central_freq, max_baseline, return_value=False
+        )
+        cell_size = beam_size / 5
 
     external_geometry = None
     if is_external_source_type(params.source_type) and params.external_header_mode == "preserve":
@@ -90,7 +111,7 @@ def resolve_cube_geometry(params: SimulationParams, *, strict: bool = True) -> C
     if n_pix is None and external_geometry is not None:
         n_pix = int(external_geometry["n_pix"])
     elif n_pix is None:
-        n_pix = closest_power_of_2(int(1.5 * fov.value / cell_size.value))
+        n_pix = image_size(1.5 * fov.value, cell_size.value, rounding="pow2")
     else:
         n_pix = closest_power_of_2(int(n_pix))
         cell_size = fov / n_pix

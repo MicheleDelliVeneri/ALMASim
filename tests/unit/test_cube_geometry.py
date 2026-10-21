@@ -49,3 +49,29 @@ def test_a_given_size_sets_the_cell_from_the_field_and_the_estimate_agrees(tmp_p
     estimate = estimate_simulation_footprint(params)
     assert estimate["cube_shape"] == [8, 128, 128]
     assert estimate["cell_size_arcsec"] == pytest.approx(geometry.cell_size.to_value(U.arcsec))
+
+
+def test_planner_geometry_uses_the_primary_beam_and_eight_cells_per_beam(tmp_path):
+    """instrument_geometry="planner" shares the imaging planner's model (MADIV-28 T2.11)."""
+    from almasim.services.instrument.geometry import (
+        primary_beam_fov_arcsec,
+        synthesized_beam_arcsec,
+    )
+
+    legacy = resolve_cube_geometry(_params(tmp_path))
+    planner = resolve_cube_geometry(_params(tmp_path, instrument_geometry="planner"))
+    frequency_hz = planner.central_freq.to_value(U.Hz)
+    dish = min(c.antenna_diameter_m for c in planner.observation_plan.configs)
+    assert planner.fov.to_value(U.arcsec) == pytest.approx(
+        primary_beam_fov_arcsec(dish, frequency_hz)
+    )
+    assert planner.beam_size.to_value(U.arcsec) == pytest.approx(
+        synthesized_beam_arcsec(frequency_hz, planner.max_baseline.to_value(U.m))
+    )
+    assert planner.beam_size.to_value(U.arcsec) == pytest.approx(
+        legacy.beam_size.to_value(U.arcsec), rel=1e-9
+    ), "the same lambda / B_max as the legacy estimate"
+    assert planner.cell_size.to_value(U.arcsec) == pytest.approx(
+        planner.beam_size.to_value(U.arcsec) / 8
+    )
+    assert planner.n_pix & (planner.n_pix - 1) == 0

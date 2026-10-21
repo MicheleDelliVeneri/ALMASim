@@ -162,6 +162,7 @@ $ almasim simulation [OPTIONS]
 * `--simulations-per-row <int range>`: How many simulations to run for each selected metadata row.  [default: 1; x>=1]
 * `--imaging-algorithm <str>`: Channel imaging algorithm. Choices: legacy.  [default: legacy]
 * `--robust <float>`: Robust weighting parameter for imaging.  [default: 0.0]
+* `--instrument-geometry <legacy|planner>`: Beam, field of view and cell: legacy (the metadata FOV, beam / 5) or planner (the imaging planner's: the primary beam's FOV, beam / 8).  [default: legacy]
 * `--background-level <float>`: Background sky level scaling factor (0 = no background).  [default: 0.0]
 * `--background-seed <int>`: Random seed for background sky generation.
 * `--inject-serendipitous`: Add a few random serendipitous sources around the target.
