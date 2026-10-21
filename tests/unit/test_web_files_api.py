@@ -75,6 +75,16 @@ def test_relative_paths_are_taken_from_the_first_root(client, area):
     assert text["text"] == "line one\nline two\n" and text["next_offset"] == text["size"]
 
 
+def test_free_space_where_a_folder_is_or_will_be(client, area):
+    got = client.get(
+        "/api/v2/files/space", params={"path": str(area / "data" / "new" / "deeper")}
+    ).json()
+    assert got["checked"] == str(area / "data")  # the nearest folder that exists
+    assert 0 < got["free_bytes"] <= got["total_bytes"]
+    outside = client.get("/api/v2/files/space", params={"path": str(area / "secret")})
+    assert outside.status_code == 403
+
+
 def test_mkdir_inside_a_root(client, area):
     made = client.post("/api/v2/files/mkdir", json={"path": str(area / "data" / "new" / "deep")})
     assert made.status_code == 201 and (area / "data" / "new" / "deep").is_dir()

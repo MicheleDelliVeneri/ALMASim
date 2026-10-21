@@ -3,7 +3,8 @@
     python -m almasim.jobs.wrapper <run dir>
 
 This is the only thing a job's Slurm script, or the server executor, calls.
-It reads the run folder's job.json, runs ``almasim <argv>`` with its output in
+It reads the run folder's job.json, runs ``almasim <argv>`` (``{run_dir}`` in an
+argument becomes the run folder) with its output in
 stdout.log and stderr.log, and writes status.json twice: when the command
 starts (host, time) and when it ends (time, exit code, and the signal if it
 was stopped). A job cancelled with ``scancel`` receives SIGTERM; the wrapper
@@ -23,6 +24,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from types import FrameType
 
+from .model import expand_run_dir
 from .rundir import RunStatus, read_manifest, write_status
 
 STDOUT_NAME = "stdout.log"
@@ -48,7 +50,7 @@ def run_job(run_dir: str | os.PathLike[str], command: Sequence[str] = ALMASIM_CO
     received: list[int] = []
     with (run_dir / STDOUT_NAME).open("ab") as out, (run_dir / STDERR_NAME).open("ab") as err:
         child = subprocess.Popen(
-            [*command, *job.argv],
+            [*command, *expand_run_dir(job.argv, run_dir.absolute())],
             cwd=run_dir,
             stdin=subprocess.DEVNULL,
             stdout=out,

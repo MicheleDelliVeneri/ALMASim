@@ -57,6 +57,14 @@ def test_a_finished_command_is_reported_with_its_output(tmp_path):
     assert current_state(read_manifest(run_dir), status) is JobState.SUCCEEDED
 
 
+def test_run_dir_in_an_argument_becomes_the_run_folder(tmp_path):
+    run_dir = _run_dir(tmp_path, ("metadata", "--save-csv", "{run_dir}/results.csv"))
+    assert run_job(run_dir, _python("import sys; print(*sys.argv[1:])")) == 0
+    assert f"--save-csv {run_dir.absolute()}/results.csv" in (run_dir / STDOUT_NAME).read_text()
+    # The manifest keeps the placeholder, so running it again uses the new folder.
+    assert read_manifest(run_dir).argv[-1] == "{run_dir}/results.csv"
+
+
 def test_a_failing_command_reads_as_failed(tmp_path):
     run_dir = _run_dir(tmp_path)
     assert run_job(run_dir, _python("import sys; sys.exit(3)")) == 3

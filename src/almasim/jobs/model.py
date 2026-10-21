@@ -7,6 +7,7 @@ import re
 import time
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 # Bump when the manifest's fields change incompatibly; readers refuse newer.
@@ -63,6 +64,18 @@ def is_job_id(text: str) -> bool:
 # may type or leave out (`almasim metadata query ...` is `metadata`).
 _MULTI_COMMAND_GROUPS = frozenset({"products", "visibilities", "image"})
 _SINGLE_COMMAND_GROUPS = {"metadata": "query", "simulation": "run", "predict": "ms-from-image"}
+
+
+# In an argument, the run's own folder, filled in when the job runs: a
+# command can write its results there (`--save-csv {run_dir}/results.csv`)
+# before the folder exists. The manifest keeps the placeholder, so running it
+# again writes into the new run's folder.
+RUN_DIR = "{run_dir}"
+
+
+def expand_run_dir(argv: list[str], run_dir: str | Path) -> list[str]:
+    """``argv`` with ``{run_dir}`` replaced by the run folder."""
+    return [arg.replace(RUN_DIR, str(run_dir)) for arg in argv]
 
 
 def command_name(argv: list[str]) -> str:

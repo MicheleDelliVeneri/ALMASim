@@ -11,7 +11,7 @@
 
 	const modules = [
 		{
-			href: '/metadata',
+			href: '/archive',
 			code: '01',
 			title: 'Metadata',
 			description:
@@ -19,7 +19,7 @@
 			metric: 'TAP'
 		},
 		{
-			href: '/data',
+			href: '/archive',
 			code: '02',
 			title: 'Data',
 			description:
@@ -43,8 +43,8 @@
 	] as const;
 
 	const workflowLinks = [
-		{ href: '/metadata', label: 'Find observations' },
-		{ href: '/data', label: 'Download products' },
+		{ href: '/archive', label: 'Find observations' },
+		{ href: '/archive', label: 'Download products' },
 		{ href: '/simulations', label: 'Run simulations' },
 		{ href: '/imaging', label: 'Create images' }
 	] as const;
@@ -77,10 +77,10 @@
 			</div>
 			<div class="mt-8 flex flex-wrap gap-3">
 				<a
-					href={resolve('/metadata')}
+					href={resolve('/archive')}
 					class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover"
 				>
-					Start from Metadata
+					Search the archive
 				</a>
 				<a
 					href={resolve('/simulations')}

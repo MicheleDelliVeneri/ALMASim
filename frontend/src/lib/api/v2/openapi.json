@@ -230,6 +230,48 @@
         "title": "CpuCounts",
         "type": "object"
       },
+      "CsvPage": {
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "columns",
+          "rows",
+          "start",
+          "total"
+        ],
+        "title": "CsvPage",
+        "type": "object"
+      },
       "Defaults": {
         "properties": {
           "account": {
@@ -1230,6 +1272,35 @@
         "title": "RunResources",
         "type": "object"
       },
+      "Space": {
+        "description": "Disk space where ``path`` is, or would be created (its nearest existing folder).",
+        "properties": {
+          "checked": {
+            "title": "Checked",
+            "type": "string"
+          },
+          "free_bytes": {
+            "title": "Free Bytes",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "checked",
+          "free_bytes",
+          "total_bytes"
+        ],
+        "title": "Space",
+        "type": "object"
+      },
       "SubmitRequest": {
         "properties": {
           "after": {
@@ -1539,9 +1610,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Read Csv Api V2 Files Csv Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CsvPage"
                 }
               }
             },
@@ -1890,6 +1959,49 @@
           }
         },
         "summary": "Roots",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v2/files/space": {
+      "get": {
+        "description": "Free and total bytes on the disk that holds ``path`` (it need not exist yet).",
+        "operationId": "space_api_v2_files_space_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Space"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Space",
         "tags": [
           "files"
         ]

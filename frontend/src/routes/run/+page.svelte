@@ -10,7 +10,7 @@
 	import { page } from '$app/state';
 	import { api } from '#lib/api/v2/client.js';
 	import type { components } from '#lib/api/v2/schema.js';
-	import CommandField from '#lib/components/run/CommandField.svelte';
+	import CommandSections from '#lib/components/run/CommandSections.svelte';
 	import ErrorMessage from '#lib/components/shared/ErrorMessage.svelte';
 	import Spinner from '#lib/components/shared/Spinner.svelte';
 	import { jobs } from '#lib/stores/jobs.svelte.js';
@@ -20,7 +20,6 @@
 		initialValues,
 		parseArgv,
 		searchCommands,
-		sections,
 		type Command,
 		type Values
 	} from '#lib/utils/commandForm.js';
@@ -301,34 +300,7 @@
 					novalidate
 				>
 					<div class="flex min-w-0 flex-[999_1_28rem] flex-col gap-4">
-						{#each sections(selected) as section (section.title)}
-							<details class="alma-panel group rounded-lg" open={!section.folded}>
-								<summary
-									class="flex cursor-pointer list-none items-center gap-2 px-5 py-3 text-base font-semibold text-navy"
-								>
-									<span
-										class="inline-block transition-transform group-open:rotate-90"
-										aria-hidden="true">›</span
-									>
-									{section.title}
-									<span class="text-xs font-normal text-fg-dim">{section.params.length}</span>
-									{#if section.folded}
-										<span class="ml-auto text-xs font-normal text-fg-dim"
-											>{section.title === 'Cluster'
-												? 'filled in by the console'
-												: 'rarely needed'}</span
-										>
-									{/if}
-								</summary>
-								<div class="grid gap-x-6 gap-y-4 border-t border-line px-5 py-4 md:grid-cols-2">
-									{#each section.params as param (param.name)}
-										<div class={param.type === 'path' || param.multiple ? 'md:col-span-2' : ''}>
-											<CommandField {param} bind:value={values[param.name]} />
-										</div>
-									{/each}
-								</div>
-							</details>
-						{/each}
+						<CommandSections command={selected} bind:values />
 						{#if selected.extra_args}
 							<div class="alma-panel flex flex-col gap-1 rounded-lg p-5">
 								<label for="extra" class="text-sm font-medium">More arguments</label>
