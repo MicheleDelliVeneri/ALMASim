@@ -9,6 +9,7 @@
 :maxdepth: 2
 
 quickstart
+console
 simulation
 interferometry
 noise

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import getpass
 import subprocess
 import sys
 import time
@@ -220,6 +221,41 @@ def test_the_hub_reports_each_change_once(profile, slurm):
     assert changed["run"]["state"] == "running"
     assert [n for n, _ in hub.since(1)] == [2]
     assert hub.since(0) is not None
+
+
+def test_only_a_finished_run_of_yours_can_be_deleted(client, profile, slurm):
+    run = client.post("/api/v2/jobs", json={"argv": ["image", "clean-quality", "/out"]}).json()
+    run_dir = next(profile.runs_root.glob(f"*/{run['id']}"))
+    unfinished = client.delete(f"/api/v2/jobs/{run['id']}")
+    assert unfinished.status_code == 409 and "cancel it first" in unfinished.json()["detail"]
+
+    slurm.states[run["slurm_job_id"]] = SlurmState("COMPLETED", "exit code 0:0")
+    job = read_manifest(run_dir)
+    job.owner = "someone-else"
+    write_manifest(run_dir, job)
+    theirs = client.delete(f"/api/v2/jobs/{run['id']}")
+    assert theirs.status_code == 409 and "someone-else" in theirs.json()["detail"]
+
+    assert run_dir.exists()  # the refusal changed nothing
+    job.owner = getpass.getuser()
+    write_manifest(run_dir, job)
+    assert client.delete(f"/api/v2/jobs/{run['id']}").status_code == 204
+    assert not run_dir.exists()
+    assert client.get(f"/api/v2/jobs/{run['id']}").status_code == 404
+
+
+def test_the_hub_says_when_a_run_is_gone(profile, slurm):
+    import shutil
+
+    from almasim.jobs.service import submit_command
+
+    hub = EventHub(profile, interval=60)
+    run = submit_command(["image", "clean-quality", "/out"], profile)
+    hub.tick()
+    shutil.rmtree(run.run_dir)
+    [gone] = hub.tick()
+    assert gone == {"type": "gone", "id": run.job.id}
+    assert hub.tick() == []
 
 
 def test_the_stream_starts_with_a_snapshot_and_resumes_from_an_id(profile, slurm):

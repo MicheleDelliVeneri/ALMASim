@@ -5,6 +5,7 @@ This directory contains focused markdown documentation for the main ALMASim subs
 ## Contents
 
 - [Command-line reference](cli.md) (generated)
+- [Web console](console.md)
 - [Simulation](simulation.md)
 - [Interferometry](interferometry.md)
 - [Noise](noise.md)

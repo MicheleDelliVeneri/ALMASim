@@ -552,6 +552,7 @@ $ almasim jobs [OPTIONS] COMMAND [ARGS]...
 * `show`: Show one run: its command, resources,...
 * `logs`: Print a run's output.
 * `cancel`: Stop a run (yours only).
+* `delete`: Remove a finished run's folder (yours...
 * `resubmit`: Run the same command again, with the same...
 
 ## `almasim jobs list`
@@ -627,6 +628,26 @@ $ almasim jobs cancel [OPTIONS] {run_id}
 
 **Options**:
 
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE or ~/.config/almasim).
+* `--help`: Show this message and exit.
+
+## `almasim jobs delete`
+
+Remove a finished run's folder (yours only); outputs written elsewhere stay.
+
+**Usage**:
+
+```console
+$ almasim jobs delete [OPTIONS] {run_id}
+```
+
+**Arguments**:
+
+* `run_id`: Run id, or its first or last characters.  [required]
+
+**Options**:
+
+* `-y, --yes`: Do not ask first.
 * `--profile <path>`: User profile (default: $ALMASIM_PROFILE or ~/.config/almasim).
 * `--help`: Show this message and exit.
 
