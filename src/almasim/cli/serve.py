@@ -9,6 +9,9 @@ import typer
 
 from ._shared import fail
 
+# sockaddr_un holds 104 bytes on macOS, 108 on Linux, the terminator included.
+SOCKET_PATH_MAX = 103
+
 
 def _print_access(info) -> None:
     typer.echo("ALMASim web console")
@@ -54,6 +57,8 @@ def serve(port: int | None, status: bool, stop_server: bool) -> None:
     folder = state.state_dir()
     sock = None if port else folder / state.SOCKET_NAME
     if sock is not None:
+        if len(str(sock).encode()) > SOCKET_PATH_MAX:
+            fail(f"{sock} is too long for a socket path; use --port instead")
         sock.unlink(missing_ok=True)  # left over from a server that did not exit cleanly
     info = state.ServerInfo(
         pid=os.getpid(),

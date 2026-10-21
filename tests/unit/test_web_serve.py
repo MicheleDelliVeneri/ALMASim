@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
+import tempfile
 import threading
 import time
 
@@ -88,8 +90,11 @@ def test_the_server_record_is_private_and_forgets_dead_servers(tmp_path, monkeyp
     assert state.read_info() is None
 
 
-def test_the_console_answers_on_a_socket_only_its_user_can_open(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
+def test_the_console_answers_on_a_socket_only_its_user_can_open(monkeypatch):
+    # A short home: socket paths are limited to about 104 bytes (macOS), and
+    # pytest's tmp_path there is longer.
+    home = tempfile.mkdtemp(prefix="alm", dir="/tmp")
+    monkeypatch.setenv("HOME", home)
     folder = state.state_dir()
     sock = folder / state.SOCKET_NAME
     server = uvicorn.Server(uvicorn.Config(create_app(TOKEN), uds=str(sock), log_level="warning"))
@@ -109,3 +114,4 @@ def test_the_console_answers_on_a_socket_only_its_user_can_open(tmp_path, monkey
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+        shutil.rmtree(home, ignore_errors=True)
