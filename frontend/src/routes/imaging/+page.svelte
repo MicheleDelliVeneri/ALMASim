@@ -1,434 +1,487 @@
+<!--
+	Image calibrated MeasurementSets: work out each window's imaging geometry
+	(`image compute-parameters`), review it, choose the imaging options, then
+	run `image image-from-ms` and `image clean-quality` as one pipeline. Each
+	window's progress comes from its task markers. The runs live in the
+	address (?params=<id>&image=<id>&quality=<id>); ?csv=<path> starts from a
+	parameters CSV made before.
+-->
 <script lang="ts">
-	import { BROWSE_ROOT } from '#lib/constants.js';
-	import { ApiTimeoutError } from '#lib/api/client.js';
-	import { visualizerApi, type DatacubeFile } from '#lib/api/visualizer.js';
-	import { onMount } from 'svelte';
-	import DatacubeFileList from '#lib/components/visualizer/DatacubeFileList.svelte';
-	import ImageCanvas from '#lib/components/visualizer/ImageCanvas.svelte';
-	import ImageStatistics from '#lib/components/visualizer/ImageStatistics.svelte';
-	import { createLogger } from '#lib/logger.js';
-	import { INITIAL_VIEW, applyView } from '#lib/utils/linkedViews.js';
-	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { api, type Run } from '#lib/api/v2/client.js';
+	import StateChip from '#lib/components/jobs/StateChip.svelte';
+	import CommandSections from '#lib/components/run/CommandSections.svelte';
+	import ErrorMessage from '#lib/components/shared/ErrorMessage.svelte';
+	import PathPicker from '#lib/components/shared/PathPicker.svelte';
+	import Spinner from '#lib/components/shared/Spinner.svelte';
+	import { jobs } from '#lib/stores/jobs.svelte.js';
+	import { toasts } from '#lib/toasts.svelte.js';
+	import { toRecords } from '#lib/utils/archive.js';
+	import { buildArgv, initialValues, type Command, type Values } from '#lib/utils/commandForm.js';
+	import { errorMessage } from '#lib/utils/errors.js';
 	import {
-		imagingApi,
-		type ImagePreviewPayload,
-		type WienerPreviewResponse
-	} from '#lib/api/imaging.js';
+		PARAMETERS_CSV,
+		QUALITY_COLUMNS,
+		QUALITY_CSV,
+		countStates,
+		imagingArgv,
+		parametersArgv,
+		qualityArgv,
+		qualityValue,
+		shortMs,
+		taskOf,
+		taskState,
+		type TaskState
+	} from '#lib/utils/imaging.js';
 
-	const logger = createLogger('routes/imaging');
-	const DIRTY_PREFIX = 'dirty-cube_';
-	const BEAM_PREFIX = 'beam-cube_';
-	const CLEAN_PREFIX = 'clean-cube_';
+	const PROGRESS_MS = 10_000;
 
-	interface PreviewPanel extends ImagePreviewPayload {
-		id: string;
-		title: string;
-		description: string;
-		badgeClass: string;
-		scale: number;
-		panX: number;
-		panY: number;
-	}
+	let imaging = $state<Command | null>(null);
+	let values = $state<Values>({});
+	let loadError = $state<unknown>(null);
+	let busy = $state(false);
 
-	let loadingFiles = $state(false);
-	let running = $state(false);
-	let error = $state<string | null>(null);
-	let outputDir = $state('');
-	let allFiles = $state<DatacubeFile[]>([]);
+	let folder = $state('');
+	let pattern = $state('*.cal');
+	let allSpws = $state(false);
+	let openCsv = $state('');
+	let outputRoot = $state('');
 
-	let selectedDirtyPath = $state('');
-	let matchedBeamPath = $state('');
-	let matchedCleanPath = $state('');
+	const paramsId = $derived(page.url.searchParams.get('params'));
+	const imageId = $derived(page.url.searchParams.get('image'));
+	const qualityId = $derived(page.url.searchParams.get('quality'));
+	const csvParam = $derived(page.url.searchParams.get('csv'));
 
-	let epsilon = $state(0.001);
-	let integrationMethod = $state<'sum' | 'mean'>('sum');
+	let fetched = $state<Record<string, Run>>({});
+	const runOf = (id: string | null) => (id ? (jobs.get(id) ?? fetched[id]) : undefined);
+	const paramsRun = $derived(runOf(paramsId));
+	const imageRun = $derived(runOf(imageId));
+	const qualityRun = $derived(runOf(qualityId));
 
-	let panels = $state<PreviewPanel[]>([]);
-	let runMetadata = $state<WienerPreviewResponse['metadata'] | null>(null);
+	const parametersCsv = $derived(
+		csvParam ?? (paramsRun?.state === 'succeeded' ? `${paramsRun.run_dir}/${PARAMETERS_CSV}` : null)
+	);
+	/** The output root the image run uses (its fourth argument), else the form's. */
+	const imagedRoot = $derived(imageRun?.argv[3] ?? null);
 
-	let linkedView = $state(true);
-
-	let dirBrowserOpen = $state(false);
-
-	const dirtyFiles = $derived.by(() =>
-		allFiles.filter((file) => file.name.startsWith(DIRTY_PREFIX))
+	let rows = $state<Record<string, string>[] | null>(null);
+	let rowsError = $state<unknown>(null);
+	let listings = $state<Record<string, Set<string>>>({});
+	let quality = $state<{ columns: string[]; records: Record<string, string>[] } | null>(null);
+	const qualityColumns = $derived(
+		quality ? Object.keys(QUALITY_COLUMNS).filter((c) => quality?.columns.includes(c)) : []
 	);
 
-	function normalizeParent(path: string): string {
-		const parts = path.split('/');
-		return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
-	}
+	const tasks = $derived(
+		rows && (imagedRoot || outputRoot) ? rows.map((r) => taskOf(r, imagedRoot ?? outputRoot)) : []
+	);
+	const states = $derived(
+		tasks.map((t): TaskState =>
+			imageRun ? taskState(t, listings[t.msDir] ?? new Set()) : 'waiting'
+		)
+	);
+	const counts = $derived(countStates(states));
 
-	function findCompanion(path: string, prefix: string): string {
-		const fileName = path.split('/').pop() ?? path;
-		if (!fileName.startsWith(DIRTY_PREFIX)) return '';
-		const suffix = fileName.slice(DIRTY_PREFIX.length);
-		const parent = normalizeParent(path);
-		const expectedPath = parent ? `${parent}/${prefix}${suffix}` : `${prefix}${suffix}`;
-		const exactMatch = allFiles.find((file) => file.path === expectedPath);
-		if (exactMatch) return exactMatch.path;
-		return allFiles.find((file) => file.name === `${prefix}${suffix}`)?.path ?? '';
-	}
-
-	function resetPanels() {
-		panels = [];
-		runMetadata = null;
-	}
-
-	// The panels, in display order; the two references only when the run returns them.
-	const PANEL_SPECS: {
-		key: 'reference_clean' | 'convolved_reference' | 'dirty' | 'model' | 'restored' | 'residual';
-		id: string;
-		title: string;
-		description: string;
-		badgeClass: string;
-	}[] = [
-		{
-			key: 'reference_clean',
-			id: 'reference-clean',
-			title: 'Reference Clean Cube',
-			description: 'Original model/clean cube saved by the simulation',
-			badgeClass: 'bg-emerald-100 text-emerald-800'
-		},
-		{
-			key: 'convolved_reference',
-			id: 'convolved-reference',
-			title: 'Convolved Clean Reference',
-			description:
-				'Original clean cube convolved with the clean beam for apples-to-apples comparison with the restored image',
-			badgeClass: 'bg-teal-100 text-teal-800'
-		},
-		{
-			key: 'dirty',
-			id: 'dirty',
-			title: 'Dirty Cube',
-			description: 'Observed interferometric cube before deconvolution',
-			badgeClass: 'bg-slate-100 text-slate-800'
-		},
-		{
-			key: 'model',
-			id: 'wiener-model',
-			title: 'Wiener Model',
-			description: 'Wiener-deconvolved cube, which should approach the original clean sky model',
-			badgeClass: 'bg-accent-soft text-accent'
-		},
-		{
-			key: 'restored',
-			id: 'restored',
-			title: 'Restored Cube',
-			description:
-				'Wiener model convolved with the fitted clean beam and added back to the residual',
-			badgeClass: 'bg-accent-soft text-accent'
-		},
-		{
-			key: 'residual',
-			id: 'residual',
-			title: 'Residual Cube',
-			description: 'Dirty cube minus the Wiener model convolved with the dirty beam',
-			badgeClass: 'bg-amber-100 text-amber-800'
+	function go(params: Record<string, string | null>) {
+		const next = new URLSearchParams(page.url.searchParams.toString());
+		for (const [key, value] of Object.entries(params)) {
+			if (value === null) next.delete(key);
+			else next.set(key, value);
 		}
-	];
-
-	function buildPanels(response: WienerPreviewResponse): PreviewPanel[] {
-		return PANEL_SPECS.flatMap(({ key, ...spec }) => {
-			const payload = response[key];
-			return payload ? [{ ...payload, ...spec, ...INITIAL_VIEW }] : [];
-		});
+		const query = next.toString();
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended
+		void goto(`${resolve('/imaging')}${query ? `?${query}` : ''}`, { replaceState: true });
 	}
 
-	function updateScale(id: string, scale: number) {
-		panels = applyView(panels, id, { scale }, linkedView);
-	}
-
-	function updatePan(id: string, panX: number, panY: number) {
-		panels = applyView(panels, id, { panX, panY }, linkedView);
-	}
-
-	function handleReset(id: string) {
-		panels = applyView(panels, id, INITIAL_VIEW, linkedView);
-	}
-
-	async function loadFileList(dir?: string) {
-		const targetDir = dir || BROWSE_ROOT;
-		loadingFiles = true;
-		error = null;
-		outputDir = targetDir;
-		if (targetDir === BROWSE_ROOT) {
-			allFiles = [];
-			selectedDirtyPath = '';
-			matchedBeamPath = '';
-			matchedCleanPath = '';
-			resetPanels();
-			loadingFiles = false;
-			return;
-		}
-		try {
-			const data = await visualizerApi.listFiles(targetDir, { timeoutMs: 5000 });
-			outputDir = data.output_dir;
-			allFiles = data.files.filter((file) =>
-				[DIRTY_PREFIX, BEAM_PREFIX, CLEAN_PREFIX].some((prefix) => file.name.startsWith(prefix))
-			);
-			if (selectedDirtyPath && !allFiles.some((file) => file.path === selectedDirtyPath)) {
-				selectedDirtyPath = '';
-				matchedBeamPath = '';
-				matchedCleanPath = '';
-				resetPanels();
+	$effect(() => {
+		void (async () => {
+			try {
+				const { data } = await api.GET('/api/v2/commands');
+				imaging = data?.find((c) => c.name === 'image image-from-ms') ?? null;
+				if (imaging) values = initialValues(imaging);
+			} catch (err) {
+				loadError = err;
 			}
-			logger.info(
-				{ outputDir: data.output_dir, count: allFiles.length },
-				'Imaging file list loaded'
-			);
-		} catch (err) {
-			if (err instanceof ApiTimeoutError) {
-				error = 'Timed out while loading imaging files';
-			} else {
-				error = err instanceof Error ? err.message : 'Failed to load imaging file list';
-			}
-			allFiles = [];
-			logger.error({ err }, 'Failed to load imaging file list');
-		} finally {
-			loadingFiles = false;
-		}
-	}
-
-	function selectDirtyFile(path: string) {
-		selectedDirtyPath = path;
-		matchedBeamPath = findCompanion(path, BEAM_PREFIX);
-		matchedCleanPath = findCompanion(path, CLEAN_PREFIX);
-		resetPanels();
-		error = null;
-	}
-
-	async function runImaging() {
-		if (!selectedDirtyPath) {
-			error = 'Select a dirty cube first';
-			return;
-		}
-		if (!matchedBeamPath) {
-			error = 'No matching beam cube was found for the selected dirty cube';
-			return;
-		}
-
-		running = true;
-		error = null;
-		try {
-			const response = await imagingApi.preview({
-				directory: outputDir,
-				dirtyCubePath: selectedDirtyPath,
-				beamCubePath: matchedBeamPath,
-				cleanCubePath: matchedCleanPath || null,
-				epsilon,
-				method: integrationMethod
-			});
-			panels = buildPanels(response);
-			runMetadata = response.metadata;
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to run imaging';
-			logger.error(
-				{
-					err,
-					outputDir,
-					selectedDirtyPath,
-					matchedBeamPath,
-					matchedCleanPath,
-					epsilon
-				},
-				'Failed to run imaging'
-			);
-		} finally {
-			running = false;
-		}
-	}
-
-	function openDirBrowser() {
-		dirBrowserOpen = true;
-	}
-
-	function selectDir(selectedDir: string) {
-		dirBrowserOpen = false;
-		void loadFileList(selectedDir);
-	}
-
-	async function getDefaultOutputDir(): Promise<string | undefined> {
-		const requestedDir =
-			typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('dir') : null;
-		if (requestedDir) return requestedDir;
-		return BROWSE_ROOT;
-	}
-
-	onMount(async () => {
-		const initialDir = await getDefaultOutputDir();
-		void loadFileList(initialDir);
+		})();
 	});
+
+	$effect(() => {
+		for (const id of [paramsId, imageId, qualityId]) {
+			if (id && !jobs.get(id) && !fetched[id] && jobs.loaded) {
+				void api
+					.GET('/api/v2/jobs/{run_id}', { params: { path: { run_id: id } } })
+					.then(({ data }) => data && (fetched = { ...fetched, [id]: data }))
+					.catch((err) => (loadError = err));
+			}
+		}
+	});
+
+	async function readCsv(path: string) {
+		const { data } = await api.GET('/api/v2/files/csv', {
+			params: { query: { path, start: 0, rows: 5000 } }
+		});
+		return {
+			columns: data?.columns ?? [],
+			records: toRecords(data?.columns ?? [], data?.rows ?? [])
+		};
+	}
+
+	$effect(() => {
+		const path = parametersCsv;
+		rows = null;
+		rowsError = null;
+		if (!path) return;
+		let stale = false;
+		readCsv(path).then(
+			(read) => !stale && (rows = read.records),
+			(err) => !stale && (rowsError = err)
+		);
+		return () => (stale = true);
+	});
+
+	// Each window's progress: list the MS folders while imaging runs, and once after.
+	$effect(() => {
+		const run = imageRun;
+		const folders = [...new Set(tasks.map((t) => t.msDir))];
+		if (!run || !folders.length) return;
+		let stopped = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		async function look() {
+			const next: Record<string, Set<string>> = {};
+			for (const dir of folders) {
+				try {
+					const { data } = await api.GET('/api/v2/files/list', {
+						params: { query: { path: dir } }
+					});
+					next[dir] = new Set(data?.entries.map((e) => e.name) ?? []);
+				} catch {
+					next[dir] = new Set(); // not made yet
+				}
+			}
+			if (stopped) return;
+			listings = next;
+			if (!run?.finished) timer = setTimeout(look, PROGRESS_MS);
+		}
+		void look();
+		return () => {
+			stopped = true;
+			clearTimeout(timer);
+		};
+	});
+
+	$effect(() => {
+		quality = null;
+		if (qualityRun?.state !== 'succeeded' || !imagedRoot) return;
+		let stale = false;
+		readCsv(`${imagedRoot.replace(/\/+$/, '')}/${QUALITY_CSV}`).then(
+			(read) => !stale && (quality = read),
+			() => !stale && (quality = null)
+		);
+		return () => (stale = true);
+	});
+
+	async function submit(body: { argv: string[]; title: string; after?: string[] }) {
+		const { data } = await api.POST('/api/v2/jobs', { body });
+		if (data) jobs.put(data);
+		return data ?? null;
+	}
+
+	async function computeParameters(event: SubmitEvent) {
+		event.preventDefault();
+		busy = true;
+		try {
+			const run = await submit({
+				argv: parametersArgv(folder.trim(), pattern, allSpws),
+				title: `Imaging parameters · ${folder.trim().split('/').pop()}`
+			});
+			if (run) {
+				if (!outputRoot) outputRoot = `${folder.trim().replace(/\/+$/, '')}-images`;
+				go({ params: run.id, csv: null, image: null, quality: null });
+			}
+		} catch (err) {
+			toasts.show(`Could not start it: ${errorMessage(err)}`, 'danger');
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function startImaging() {
+		if (!imaging || !parametersCsv || !outputRoot.trim()) return;
+		busy = true;
+		try {
+			const options = buildArgv(imaging, values).slice(2);
+			const out = outputRoot.trim();
+			const image = await submit({
+				argv: imagingArgv(parametersCsv, out, options),
+				title: `Imaging · ${rows?.length ?? ''} windows`
+			});
+			if (!image) return;
+			const check = await submit({
+				argv: qualityArgv(out),
+				title: 'Clean quality',
+				after: [image.id]
+			});
+			go({ image: image.id, quality: check?.id ?? null });
+			toasts.show('Imaging started; clean-quality runs when it succeeds.', 'ok');
+		} catch (err) {
+			toasts.show(`Could not start imaging: ${errorMessage(err)}`, 'danger');
+		} finally {
+			busy = false;
+		}
+	}
+
+	const TILE: Record<TaskState, string> = {
+		done: 'bg-ok-soft text-ok',
+		running: 'bg-info text-white',
+		failed: 'bg-danger text-white',
+		waiting: 'bg-sunk text-fg-muted'
+	};
+	const fmt = (n: number, digits = 1) => (Number.isFinite(n) ? n.toFixed(digits) : '—');
+	const step = (n: number, done: boolean) =>
+		`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${done ? 'bg-ok' : 'bg-navy'}`;
 </script>
 
-<div class="container mx-auto px-4 py-8">
-	<div class="mx-auto max-w-7xl space-y-6">
-		<div class="rounded-lg bg-surface p-6 shadow-panel">
-			<div class="mb-4">
-				<h1 class="text-2xl font-bold text-fg">Imaging</h1>
-				<p class="mt-2 text-fg-muted">
-					Preview a Wiener deconvolution of saved dirty and beam cubes, inspect the restored cube,
-					and compare it against the simulation clean cube and residuals. WSClean on the simulated
-					MeasurementSet is the reference imaging.
-				</p>
-			</div>
+<svelte:head><title>Imaging · ALMASim</title></svelte:head>
 
-			<div class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
-				<div>
-					<DatacubeFileList
-						files={dirtyFiles}
-						loading={loadingFiles}
-						{outputDir}
-						onFileSelect={selectDirtyFile}
-						onRefresh={() => loadFileList(outputDir || undefined)}
-						onBrowseRequest={openDirBrowser}
-						disabled={running}
-						title="Available Dirty Cubes"
-						emptyMessage="No `dirty-cube_*.npz` files found. Imaging expects an ALMASim simulation output directory, not raw downloaded ALMA products."
-						actionLabel="Select"
-					/>
-				</div>
+<div class="flex flex-col gap-5">
+	<div class="flex flex-col gap-1">
+		<p class="alma-kicker">Workflow</p>
+		<h1 class="m-0 text-3xl">Imaging</h1>
+		<p class="m-0 text-fg-muted">
+			Image calibrated MeasurementSets with WSClean, window by window, then measure how well each
+			was cleaned. Imaging runs as a Slurm driver with its own workers.
+		</p>
+	</div>
 
-				<div class="space-y-4 rounded-lg border border-line bg-surface p-4">
-					<div>
-						<h2 class="text-sm font-semibold text-fg">Selected Imaging Inputs</h2>
-						<div class="mt-3 space-y-2 text-sm">
-							<div>
-								<p class="text-fg-dim">Dirty Cube</p>
-								<p class="truncate font-mono text-xs text-fg">
-									{selectedDirtyPath || 'Not selected'}
-								</p>
-							</div>
-							<div>
-								<p class="text-fg-dim">Beam Cube</p>
-								<p class="truncate font-mono text-xs text-fg">
-									{matchedBeamPath || 'No matching beam cube found'}
-								</p>
-							</div>
-							<div>
-								<p class="text-fg-dim">Reference Clean Cube</p>
-								<p class="truncate font-mono text-xs text-fg">
-									{matchedCleanPath || 'No matching clean cube found'}
-								</p>
-							</div>
-						</div>
-					</div>
+	{#if loadError}<ErrorMessage error={loadError} title="Something did not load" />{/if}
 
-					<div class="grid gap-4 md:grid-cols-2">
-						<label class="space-y-2">
-							<span class="text-sm font-medium text-fg-muted">Integration</span>
-							<select
-								bind:value={integrationMethod}
-								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-							>
-								<option value="sum">Sum</option>
-								<option value="mean">Mean</option>
-							</select>
-						</label>
-
-						<label class="space-y-2">
-							<span class="text-sm font-medium text-fg-muted">Regularisation (ε)</span>
-							<input
-								type="number"
-								min="0.00001"
-								max="1"
-								step="0.0005"
-								bind:value={epsilon}
-								class="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-							/>
-						</label>
-					</div>
-
-					<div class="flex flex-wrap items-center gap-3">
-						<label class="flex items-center gap-2 text-sm text-fg-muted">
-							<input
-								type="checkbox"
-								bind:checked={linkedView}
-								class="h-4 w-4 rounded border-line text-accent focus:ring-magenta"
-							/>
-							<span>Link Pan/Zoom</span>
-						</label>
-
-						<button
-							type="button"
-							onclick={runImaging}
-							disabled={running || !selectedDirtyPath || !matchedBeamPath}
-							class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-blue-300"
-						>
-							{running ? 'Running…' : 'Run Wiener Preview'}
-						</button>
-					</div>
-
-					{#if runMetadata}
-						<div
-							class="rounded-md border border-accent-line bg-accent-soft p-3 text-sm text-accent"
-						>
-							<p>
-								Wiener preview with ε = <span class="font-semibold">{runMetadata.epsilon}</span>.
-								Compare the Wiener model with the original clean cube, and the restored cube with
-								the convolved clean reference.
-							</p>
-							<p class="mt-1">
-								For reference imaging, run WSClean on the simulated MeasurementSet (<code
-									>almasim image image-from-ms</code
-								>).
-							</p>
-						</div>
-					{/if}
-
-					{#if error}
-						<div
-							class="rounded-md border border-danger-line bg-danger-soft p-3 text-sm text-danger"
-						>
-							{error}
-						</div>
-					{/if}
-				</div>
-			</div>
+	<!-- 1. Parameters -->
+	<section class="alma-panel flex flex-col gap-4 rounded-lg p-5" aria-labelledby="i1">
+		<div class="flex flex-wrap items-center gap-3">
+			<span class={step(1, !!rows)}>1</span>
+			<h2 id="i1" class="m-0 text-xl font-semibold">Measurement sets</h2>
+			{#if paramsRun}
+				<StateChip state={paramsRun.state} />
+				<a class="text-sm" href={resolve('/jobs/[id]', { id: paramsRun.id })}
+					>job {paramsRun.short_id}</a
+				>
+			{/if}
+			{#if paramsId || csvParam}
+				<button
+					type="button"
+					class="btn-ghost ml-auto px-3 py-1.5"
+					onclick={() => go({ params: null, csv: null, image: null, quality: null })}
+					>Start over</button
+				>
+			{/if}
 		</div>
-
-		{#if panels.length > 0}
-			<div class="grid gap-6 md:grid-cols-2">
-				{#each panels as panel (panel.id)}
-					<div class="rounded-lg bg-surface p-6 shadow-panel">
-						<div class="mb-4 flex items-start justify-between gap-3">
-							<div class="min-w-0">
-								<span
-									class={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${panel.badgeClass}`}
-								>
-									{panel.title}
-								</span>
-								<p class="mt-2 text-sm text-fg-muted">{panel.description}</p>
-							</div>
-						</div>
-
-						<ImageStatistics stats={panel.stats} method={panel.method} />
-
-						<div class="mt-4">
-							<ImageCanvas
-								imageData={panel}
-								scale={panel.scale}
-								panX={panel.panX}
-								panY={panel.panY}
-								onScaleChange={(scale) => updateScale(panel.id, scale)}
-								onPanChange={(x, y) => updatePan(panel.id, x, y)}
-								onReset={() => handleReset(panel.id)}
-							/>
-						</div>
+		{#if !paramsId && !csvParam}
+			<form class="flex flex-col gap-4" onsubmit={computeParameters}>
+				<PathPicker
+					bind:value={folder}
+					label="Folder of calibrated MeasurementSets"
+					required
+					hint="Every MS in it matching the pattern is imaged, one task per spectral window and field."
+				/>
+				<div class="flex flex-wrap items-end gap-4">
+					<label class="flex flex-col gap-1 text-sm">
+						<span class="font-medium">Pattern</span>
+						<input class="w-40 rounded-md border px-3 py-2 font-mono" bind:value={pattern} />
+					</label>
+					<label class="flex items-center gap-2 pb-2 text-sm">
+						<input type="checkbox" bind:checked={allSpws} /> Every window and field, calibrators too
+					</label>
+					<button type="submit" class="btn-primary ml-auto" disabled={busy || !folder.trim()}
+						>Work out the imaging parameters</button
+					>
+				</div>
+			</form>
+			<details class="text-sm">
+				<summary class="cursor-pointer text-fg-muted">Or start from a parameters CSV</summary>
+				<div class="mt-3 flex flex-wrap items-end gap-3">
+					<div class="min-w-72 flex-1">
+						<PathPicker bind:value={openCsv} label="Parameters CSV" kind="file" />
 					</div>
-				{/each}
+					<button
+						type="button"
+						class="btn-secondary"
+						disabled={!openCsv.trim()}
+						onclick={() => go({ csv: openCsv.trim(), params: null, image: null, quality: null })}
+						>Open</button
+					>
+				</div>
+			</details>
+		{:else if paramsRun && !paramsRun.finished}
+			<p class="m-0 flex items-center gap-2 text-sm text-fg-muted">
+				<Spinner /> Reading the measurement sets{paramsRun.reason ? ` (${paramsRun.reason})` : ''}…
+			</p>
+		{:else if paramsRun && paramsRun.state !== 'succeeded'}
+			<ErrorMessage
+				error={`compute-parameters ${paramsRun.state}: ${paramsRun.reason || 'see its log.'}`}
+				title="No parameters"
+			/>
+		{:else if rowsError}
+			<ErrorMessage error={rowsError} title="Could not read the parameters" />
+		{:else if !rows}
+			<p class="flex items-center gap-2 text-sm text-fg-muted">
+				<Spinner /> Reading the parameters…
+			</p>
+		{:else}
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="text-left text-xs font-semibold tracking-wide text-fg-muted uppercase">
+							<th scope="col" class="px-3 py-2">State</th>
+							<th scope="col" class="px-3 py-2">Measurement set</th>
+							<th scope="col" class="px-3 py-2">Task</th>
+							<th scope="col" class="px-3 py-2">Source</th>
+							<th scope="col" class="px-3 py-2 text-right">GHz</th>
+							<th scope="col" class="px-3 py-2 text-right">Channels</th>
+							<th scope="col" class="px-3 py-2 text-right">Beam ″</th>
+							<th scope="col" class="px-3 py-2 text-right">FOV ″</th>
+							<th scope="col" class="px-3 py-2 text-right">Minutes</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each rows as row, i (i)}
+							{@const task = taskOf(row, imagedRoot ?? (outputRoot || '/'))}
+							<tr class="border-t border-sunk">
+								<td class="px-3 py-1.5">
+									<span
+										class="rounded px-2 py-0.5 text-xs font-semibold {TILE[states[i] ?? 'waiting']}"
+										>{states[i] ?? 'waiting'}</span
+									>
+								</td>
+								<td class="max-w-56 truncate px-3 py-1.5 font-mono text-xs" title={row.filename}
+									>{task.msDir.split('/').pop()}</td
+								>
+								<td class="px-3 py-1.5 font-mono text-xs">{task.name}</td>
+								<td class="max-w-48 truncate px-3 py-1.5" title={task.source}>{task.source}</td>
+								<td class="px-3 py-1.5 text-right font-mono">{fmt(task.frequencyGhz, 3)}</td>
+								<td class="px-3 py-1.5 text-right font-mono">{task.channels}</td>
+								<td class="px-3 py-1.5 text-right font-mono">{fmt(task.beamArcsec, 2)}</td>
+								<td class="px-3 py-1.5 text-right font-mono">{fmt(task.fovArcsec, 1)}</td>
+								<td class="px-3 py-1.5 text-right font-mono">{fmt(task.minutes, 0)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 		{/if}
-	</div>
-</div>
+	</section>
 
-{#if dirBrowserOpen}
-	<DirectoryPicker
-		startPath={outputDir || BROWSE_ROOT}
-		title="Select Imaging Directory"
-		selectLabel="Select This Directory"
-		onSelect={selectDir}
-		onClose={() => (dirBrowserOpen = false)}
-	/>
-{/if}
+	<!-- 2. Options and start -->
+	{#if rows?.length && !imageId}
+		<section class="flex flex-col gap-4" aria-labelledby="i2">
+			<div class="alma-panel flex flex-col gap-4 rounded-lg p-5">
+				<div class="flex items-center gap-3">
+					<span class={step(2, false)}>2</span>
+					<h2 id="i2" class="m-0 text-xl font-semibold">Imaging options</h2>
+				</div>
+				<PathPicker
+					bind:value={outputRoot}
+					label="Output folder"
+					allowCreate
+					required
+					hint="Each MS gets a folder here, with one folder per window inside."
+				/>
+			</div>
+			{#if imaging}
+				<CommandSections command={imaging} bind:values omit={['Inputs']} />
+			{/if}
+			<div class="flex flex-wrap items-center gap-3">
+				<button
+					type="button"
+					class="btn-primary bg-magenta hover:bg-accent"
+					disabled={busy || !outputRoot.trim() || !imaging}
+					onclick={startImaging}>Image {rows.length} window{rows.length === 1 ? '' : 's'}</button
+				>
+				<p class="m-0 text-xs text-fg-muted">
+					Then <code>clean-quality</code> runs on the results, once imaging succeeds.
+				</p>
+			</div>
+		</section>
+	{/if}
+
+	<!-- 3. Progress -->
+	{#if imageId}
+		<section class="alma-panel flex flex-col gap-4 rounded-lg p-5" aria-labelledby="i3">
+			<div class="flex flex-wrap items-center gap-3">
+				<span class={step(3, imageRun?.state === 'succeeded')}>3</span>
+				<h2 id="i3" class="m-0 text-xl font-semibold">Imaging</h2>
+				{#if imageRun}
+					<StateChip state={imageRun.state} />
+					<a class="text-sm" href={resolve('/jobs/[id]', { id: imageRun.id })}
+						>job {imageRun.short_id}</a
+					>
+				{/if}
+				<span class="text-sm text-fg-muted">
+					{counts.done} done · {counts.running} running · {counts.failed} failed · {counts.waiting} waiting
+				</span>
+			</div>
+			{#if tasks.length}
+				<div
+					role="list"
+					aria-label="Windows"
+					class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-1.5"
+				>
+					{#each tasks as task, i (`${task.msDir}/${task.name}`)}
+						<div
+							role="listitem"
+							title="{task.msDir.split('/').pop()} {task.name}: {states[i]}"
+							class="truncate rounded px-2 py-1.5 font-mono text-xs font-semibold {TILE[states[i]]}"
+						>
+							{shortMs(task.msDir)}
+							{task.name}
+						</div>
+					{/each}
+				</div>
+			{/if}
+			<div class="flex flex-wrap items-center gap-3 border-t border-line pt-4">
+				<h3 class="m-0 text-base font-semibold">Clean quality</h3>
+				{#if qualityRun}
+					<StateChip state={qualityRun.state} />
+					<a class="text-sm" href={resolve('/jobs/[id]', { id: qualityRun.id })}
+						>job {qualityRun.short_id}</a
+					>
+					{#if qualityRun.state === 'pending'}
+						<span class="text-sm text-fg-muted">runs when imaging succeeds</span>
+					{/if}
+				{/if}
+			</div>
+			{#if quality && quality.records.length}
+				<div class="overflow-x-auto">
+					<table class="text-xs">
+						<thead>
+							<tr class="text-left text-fg-muted">
+								<th scope="col" class="px-2 py-1 whitespace-nowrap">Task</th>
+								{#each qualityColumns as column (column)}
+									<th scope="col" class="px-2 py-1 text-right whitespace-nowrap"
+										>{QUALITY_COLUMNS[column]}</th
+									>
+								{/each}
+							</tr>
+						</thead>
+						<tbody>
+							{#each quality.records as record, i (i)}
+								<tr class="border-t border-sunk">
+									<td class="px-2 py-1 font-mono whitespace-nowrap" title={record.task}
+										>{shortMs(record.task.split('/')[0])} {record.task.split('/').pop()}</td
+									>
+									{#each qualityColumns as column (column)}
+										<td
+											class="px-2 py-1 text-right font-mono whitespace-nowrap"
+											title={record[column]}>{qualityValue(record[column])}</td
+										>
+									{/each}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+	{/if}
+</div>
