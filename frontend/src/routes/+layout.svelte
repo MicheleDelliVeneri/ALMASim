@@ -2,7 +2,9 @@
 	import '@fontsource-variable/noto-sans';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import type { Snippet } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
+	import Toasts from '#lib/components/shared/Toasts.svelte';
+	import { jobs } from '#lib/stores/jobs.svelte.js';
 	import '../app.css';
 
 	let { children }: { children: Snippet } = $props();
@@ -21,6 +23,11 @@
 		const path = page.url.pathname;
 		return href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`);
 	}
+
+	onMount(() => {
+		jobs.start();
+		return () => jobs.stop();
+	});
 </script>
 
 <div class="flex min-h-screen flex-col bg-canvas text-fg">
@@ -33,6 +40,17 @@
 					>Web console</span
 				>
 			</a>
+			<p class="ml-auto flex items-center gap-2 text-xs text-navy-soft" role="status">
+				<span
+					class="h-2 w-2 rounded-full {jobs.connected ? 'bg-ok' : 'bg-navy-soft/50'}"
+					aria-hidden="true"
+				></span>
+				{#if jobs.connected}
+					{jobs.active.length} active {jobs.active.length === 1 ? 'job' : 'jobs'}
+				{:else}
+					Console offline
+				{/if}
+			</p>
 		</div>
 		<nav
 			aria-label="Main"
@@ -72,3 +90,5 @@
 		</main>
 	</div>
 </div>
+
+<Toasts />

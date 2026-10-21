@@ -3,6 +3,7 @@
 	import type { ResolveProductsResponse, DiskSpaceInfo } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
 	import { isAbortError } from '#lib/api/client.js';
+	import Dialog from '#lib/components/shared/Dialog.svelte';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { createLogger } from '#lib/logger.js';
 
@@ -220,252 +221,228 @@
 </script>
 
 {#if open}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-		role="dialog"
-		aria-modal="true"
-	>
-		<div class="w-full max-w-xl rounded-lg bg-surface shadow-panel">
-			<header class="flex items-center justify-between border-b px-6 py-4">
-				<h2 class="text-lg font-semibold text-fg">Download ALMA Data</h2>
-				<button
-					type="button"
-					class="text-fg-dim hover:text-gray-800"
-					aria-label="Close"
-					onclick={onClose}
-				>
-					✕
-				</button>
-			</header>
+	<Dialog title="Download ALMA Data" width="max-w-xl" {onClose}>
+		<div class="space-y-5">
+			<!-- Observations summary -->
+			<p class="text-sm text-fg-muted">
+				{memberOusUids.length} observation{memberOusUids.length === 1 ? '' : 's'} selected.
+			</p>
 
-			<div class="space-y-5 px-6 py-6">
-				<!-- Observations summary -->
-				<p class="text-sm text-fg-muted">
-					{memberOusUids.length} observation{memberOusUids.length === 1 ? '' : 's'} selected.
-				</p>
-
-				<!-- Loading / Error state -->
-				{#if resolving}
-					<div class="flex items-center gap-2 text-sm text-fg-dim">
-						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-							<circle
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="4"
-								class="opacity-25"
-							/>
-							<path
-								fill="currentColor"
-								d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-								class="opacity-75"
-							/>
-						</svg>
-						Resolving available products…
-					</div>
-				{:else if resolveError}
-					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">
-						{resolveError}
-						<button type="button" class="ml-2 underline" onclick={resolveProducts}>Retry</button>
-					</div>
-				{:else if resolved}
-					<!-- Product type selector -->
-					<div>
-						<label class="block text-sm font-medium text-fg-muted mb-2" for="product-filter">
-							Product type
-						</label>
-						<div class="flex flex-wrap gap-2">
-							{#each productTypes as pt (pt.value)}
-								{@const typeInfo = pt.value === 'all' ? null : resolved.by_type[pt.value]}
-								{@const count = pt.value === 'all' ? resolved.total_count : (typeInfo?.count ?? 0)}
-								<button
-									type="button"
-									class="rounded-full px-3 py-1 text-sm border transition-colors"
-									class:bg-primary={productFilter === pt.value}
-									class:text-white={productFilter === pt.value}
-									class:border-blue-600={productFilter === pt.value}
-									class:bg-surface={productFilter !== pt.value}
-									class:text-fg-muted={productFilter !== pt.value}
-									class:border-line={productFilter !== pt.value}
-									class:opacity-50={count === 0 && pt.value !== 'all'}
-									disabled={count === 0 && pt.value !== 'all'}
-									onclick={() => (productFilter = pt.value)}
-								>
-									{pt.label} ({count})
-								</button>
-							{/each}
-						</div>
-					</div>
-
-					<!-- Size info -->
-					<div class="rounded-md bg-surface p-3 text-sm text-fg-muted">
-						<span class="font-medium">{filteredInfo.count}</span> files,
-						<span class="font-medium">{filteredInfo.display}</span> total
-					</div>
-
-					<!-- Destination path -->
-					<div>
-						<label class="block text-sm font-medium text-fg-muted mb-1" for="download-dest">
-							Download destination
-						</label>
-						<div class="flex gap-2">
-							<input
-								type="text"
-								id="download-dest"
-								bind:value={destination}
-								class="flex-1 rounded-md border border-line px-3 py-2 text-sm"
-								placeholder="/path/to/download/directory"
-							/>
+			<!-- Loading / Error state -->
+			{#if resolving}
+				<div class="flex items-center gap-2 text-sm text-fg-dim">
+					<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+						<circle
+							cx="12"
+							cy="12"
+							r="10"
+							stroke="currentColor"
+							stroke-width="4"
+							class="opacity-25"
+						/>
+						<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+					</svg>
+					Resolving available products…
+				</div>
+			{:else if resolveError}
+				<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">
+					{resolveError}
+					<button type="button" class="ml-2 underline" onclick={resolveProducts}>Retry</button>
+				</div>
+			{:else if resolved}
+				<!-- Product type selector -->
+				<div>
+					<label class="block text-sm font-medium text-fg-muted mb-2" for="product-filter">
+						Product type
+					</label>
+					<div class="flex flex-wrap gap-2">
+						{#each productTypes as pt (pt.value)}
+							{@const typeInfo = pt.value === 'all' ? null : resolved.by_type[pt.value]}
+							{@const count = pt.value === 'all' ? resolved.total_count : (typeInfo?.count ?? 0)}
 							<button
 								type="button"
-								class="rounded-md border border-line px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover whitespace-nowrap"
-								onclick={openBrowser}
+								class="rounded-full px-3 py-1 text-sm border transition-colors"
+								class:bg-primary={productFilter === pt.value}
+								class:text-white={productFilter === pt.value}
+								class:border-blue-600={productFilter === pt.value}
+								class:bg-surface={productFilter !== pt.value}
+								class:text-fg-muted={productFilter !== pt.value}
+								class:border-line={productFilter !== pt.value}
+								class:opacity-50={count === 0 && pt.value !== 'all'}
+								disabled={count === 0 && pt.value !== 'all'}
+								onclick={() => (productFilter = pt.value)}
 							>
-								Browse…
+								{pt.label} ({count})
 							</button>
-						</div>
-
-						<!-- Inline directory browser -->
+						{/each}
 					</div>
+				</div>
 
-					<!-- Disk space -->
-					{#if diskSpaceLoading}
-						<p class="text-xs text-fg-dim">Checking disk space…</p>
-					{:else if diskSpaceError}
-						<p class="text-xs text-danger">{diskSpaceError}</p>
-					{:else if diskSpace}
-						<div
-							class="rounded-md p-3 text-sm"
-							class:bg-ok-soft={diskSpace.sufficient}
-							class:text-ok={diskSpace.sufficient}
-							class:bg-danger-soft={!diskSpace.sufficient}
-							class:text-danger={!diskSpace.sufficient}
-						>
-							Free: <span class="font-medium">{diskSpace.free_display}</span>
-							/ Total: {diskSpace.total_display}
-							{#if !diskSpace.sufficient}
-								<span class="ml-2 font-semibold">— Insufficient space!</span>
-							{/if}
-						</div>
-					{/if}
+				<!-- Size info -->
+				<div class="rounded-md bg-surface p-3 text-sm text-fg-muted">
+					<span class="font-medium">{filteredInfo.count}</span> files,
+					<span class="font-medium">{filteredInfo.display}</span> total
+				</div>
 
-					<!-- Parallel downloads -->
-					<div>
-						<label class="block text-sm font-medium text-fg-muted mb-1" for="max-parallel">
-							Parallel downloads
-						</label>
+				<!-- Destination path -->
+				<div>
+					<label class="block text-sm font-medium text-fg-muted mb-1" for="download-dest">
+						Download destination
+					</label>
+					<div class="flex gap-2">
 						<input
-							type="range"
-							id="max-parallel"
-							min="1"
-							max="30"
-							bind:value={maxParallel}
-							class="w-full"
+							type="text"
+							id="download-dest"
+							bind:value={destination}
+							class="flex-1 rounded-md border border-line px-3 py-2 text-sm"
+							placeholder="/path/to/download/directory"
 						/>
-						<p class="text-xs text-fg-dim">
-							{maxParallel} simultaneous files (load is balanced across the ESO, NRAO and NAOJ ALMA mirrors,
-							capped at 10 per mirror)
-						</p>
+						<button
+							type="button"
+							class="rounded-md border border-line px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover whitespace-nowrap"
+							onclick={openBrowser}
+						>
+							Browse…
+						</button>
 					</div>
 
-					<!-- Extract tar archives -->
+					<!-- Inline directory browser -->
+				</div>
+
+				<!-- Disk space -->
+				{#if diskSpaceLoading}
+					<p class="text-xs text-fg-dim">Checking disk space…</p>
+				{:else if diskSpaceError}
+					<p class="text-xs text-danger">{diskSpaceError}</p>
+				{:else if diskSpace}
+					<div
+						class="rounded-md p-3 text-sm"
+						class:bg-ok-soft={diskSpace.sufficient}
+						class:text-ok={diskSpace.sufficient}
+						class:bg-danger-soft={!diskSpace.sufficient}
+						class:text-danger={!diskSpace.sufficient}
+					>
+						Free: <span class="font-medium">{diskSpace.free_display}</span>
+						/ Total: {diskSpace.total_display}
+						{#if !diskSpace.sufficient}
+							<span class="ml-2 font-semibold">— Insufficient space!</span>
+						{/if}
+					</div>
+				{/if}
+
+				<!-- Parallel downloads -->
+				<div>
+					<label class="block text-sm font-medium text-fg-muted mb-1" for="max-parallel">
+						Parallel downloads
+					</label>
+					<input
+						type="range"
+						id="max-parallel"
+						min="1"
+						max="30"
+						bind:value={maxParallel}
+						class="w-full"
+					/>
+					<p class="text-xs text-fg-dim">
+						{maxParallel} simultaneous files (load is balanced across the ESO, NRAO and NAOJ ALMA mirrors,
+						capped at 10 per mirror)
+					</p>
+				</div>
+
+				<!-- Extract tar archives -->
+				<label class="flex items-center gap-2 cursor-pointer">
+					<input
+						type="checkbox"
+						bind:checked={extractTar}
+						disabled={unpackMs || generateCalibratedVisibilities}
+						class="rounded border-line"
+					/>
+					<span class="text-sm text-fg-muted">Extract tar archives after download</span>
+				</label>
+				<p class="text-xs text-fg-dim -mt-3 ml-6">
+					ALMA delivers data as .tar bundles. Enable this to automatically extract FITS files and
+					remove the archives.
+				</p>
+
+				<div class="space-y-3 rounded-md border border-line p-3">
+					<p class="text-sm font-medium text-fg">MeasurementSet products</p>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input
 							type="checkbox"
-							bind:checked={extractTar}
-							disabled={unpackMs || generateCalibratedVisibilities}
+							bind:checked={unpackMs}
+							disabled={generateCalibratedVisibilities}
 							class="rounded border-line"
 						/>
-						<span class="text-sm text-fg-muted">Extract tar archives after download</span>
+						<span class="text-sm text-fg-muted">Create raw MeasurementSets</span>
 					</label>
-					<p class="text-xs text-fg-dim -mt-3 ml-6">
-						ALMA delivers data as .tar bundles. Enable this to automatically extract FITS files and
-						remove the archives.
-					</p>
-
-					<div class="space-y-3 rounded-md border border-line p-3">
-						<p class="text-sm font-medium text-fg">MeasurementSet products</p>
-						<label class="flex items-center gap-2 cursor-pointer">
-							<input
-								type="checkbox"
-								bind:checked={unpackMs}
-								disabled={generateCalibratedVisibilities}
-								class="rounded border-line"
-							/>
-							<span class="text-sm text-fg-muted">Create raw MeasurementSets</span>
-						</label>
-						<label class="flex items-center gap-2 cursor-pointer">
-							<input
-								type="checkbox"
-								bind:checked={generateCalibratedVisibilities}
-								class="rounded border-line"
-							/>
-							<span class="text-sm text-fg-muted">Create calibrated visibilities</span>
-						</label>
-						<label class="flex items-center gap-2 cursor-pointer">
-							<input
-								type="checkbox"
-								bind:checked={cleanIntermediateFiles}
-								disabled={!generateCalibratedVisibilities}
-								class="rounded border-line"
-							/>
-							<span class="text-sm text-fg-muted">Keep only split calibrated MS products</span>
-						</label>
-						<div class="grid gap-3 sm:grid-cols-2">
-							<input
-								type="text"
-								bind:value={archiveOutputRoot}
-								class="rounded-md border border-line px-3 py-2 text-sm"
-								placeholder="Archive output root (optional)"
-							/>
-							<input
-								type="text"
-								bind:value={casaDataRoot}
-								class="rounded-md border border-line px-3 py-2 text-sm"
-								placeholder="CASA data root (optional)"
-							/>
-						</div>
-						<label class="flex items-center gap-2 cursor-pointer">
-							<input
-								type="checkbox"
-								bind:checked={skipCasaDataUpdate}
-								class="rounded border-line"
-							/>
-							<span class="text-sm text-fg-muted">Skip CASA runtime data update</span>
-						</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input
+							type="checkbox"
+							bind:checked={generateCalibratedVisibilities}
+							class="rounded border-line"
+						/>
+						<span class="text-sm text-fg-muted">Create calibrated visibilities</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input
+							type="checkbox"
+							bind:checked={cleanIntermediateFiles}
+							disabled={!generateCalibratedVisibilities}
+							class="rounded border-line"
+						/>
+						<span class="text-sm text-fg-muted">Keep only split calibrated MS products</span>
+					</label>
+					<div class="grid gap-3 sm:grid-cols-2">
+						<input
+							type="text"
+							bind:value={archiveOutputRoot}
+							class="rounded-md border border-line px-3 py-2 text-sm"
+							aria-label="Archive output root (optional)"
+							placeholder="Archive output root (optional)"
+						/>
+						<input
+							type="text"
+							bind:value={casaDataRoot}
+							class="rounded-md border border-line px-3 py-2 text-sm"
+							aria-label="CASA data root (optional)"
+							placeholder="CASA data root (optional)"
+						/>
 					</div>
-
-					<!-- Errors -->
-					{#if startError}
-						<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{startError}</div>
-					{/if}
-				{/if}
-
-				<!-- Actions -->
-				<div class="flex items-center justify-end gap-3 pt-2 border-t">
-					<button
-						type="button"
-						class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
-						onclick={onClose}
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						disabled={!resolved ||
-							filteredInfo.count === 0 ||
-							starting ||
-							(diskSpace != null && !diskSpace.sufficient)}
-						class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-green-300 disabled:cursor-not-allowed"
-						onclick={startDownload}
-					>
-						{starting ? 'Starting…' : `Download ${filteredInfo.count} files`}
-					</button>
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" bind:checked={skipCasaDataUpdate} class="rounded border-line" />
+						<span class="text-sm text-fg-muted">Skip CASA runtime data update</span>
+					</label>
 				</div>
+
+				<!-- Errors -->
+				{#if startError}
+					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{startError}</div>
+				{/if}
+			{/if}
+
+			<!-- Actions -->
+			<div class="flex items-center justify-end gap-3 pt-2 border-t">
+				<button
+					type="button"
+					class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
+					onclick={onClose}
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					disabled={!resolved ||
+						filteredInfo.count === 0 ||
+						starting ||
+						(diskSpace != null && !diskSpace.sufficient)}
+					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+					onclick={startDownload}
+				>
+					{starting ? 'Starting…' : `Download ${filteredInfo.count} files`}
+				</button>
 			</div>
 		</div>
-	</div>
+	</Dialog>
 {/if}
 
 <!-- Browse directory popup -->
@@ -473,7 +450,6 @@
 	<DirectoryPicker
 		startPath={destination || '/'}
 		title="Choose Download Folder"
-		layer="z-[60]"
 		onSelect={selectDirectory}
 		onClose={() => (browserOpen = false)}
 	/>

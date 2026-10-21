@@ -6,6 +6,7 @@
 	import type { DownloadJobSummary } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
 	import DownloadProgress from '#lib/components/metadata/DownloadProgress.svelte';
+	import Dialog from '#lib/components/shared/Dialog.svelte';
 	import { createLogger } from '#lib/logger.js';
 	import StatusBadge from '#lib/components/shared/StatusBadge.svelte';
 	import { createPoller } from '#lib/utils/poll.js';
@@ -339,113 +340,100 @@
 </div>
 
 {#if redownloadOptionsOpen && redownloadTarget}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-		role="dialog"
-		aria-modal="true"
+	{@const target = redownloadTarget}
+	<Dialog
+		title="Re-download products"
+		width="max-w-xl"
+		onClose={() => (redownloadOptionsOpen = false)}
 	>
-		<div class="alma-panel w-full max-w-xl rounded-lg shadow-panel">
-			<header class="flex items-center justify-between border-b border-line px-5 py-4">
-				<div>
-					<h2 class="text-lg font-semibold text-fg">Re-download products</h2>
-					<p class="mt-1 text-xs text-fg-dim">
-						{redownloadTarget.total_files} files to {redownloadTarget.destination}
-					</p>
-				</div>
-				<button
-					type="button"
-					class="text-fg-dim hover:text-fg"
-					aria-label="Close"
-					onclick={() => (redownloadOptionsOpen = false)}>✕</button
+		<p class="-mt-1 mb-4 text-xs text-fg-dim">
+			{target.total_files} files to {target.destination}
+		</p>
+		<div class="space-y-5">
+			<div>
+				<label class="block text-sm font-medium text-fg-muted" for="redownload-parallel"
+					>Parallel streams</label
 				>
-			</header>
+				<input
+					id="redownload-parallel"
+					type="range"
+					min="1"
+					max="30"
+					bind:value={redownloadMaxParallel}
+					class="mt-2 w-full"
+				/>
+				<p class="mt-1 text-xs text-fg-dim">
+					{redownloadMaxParallel} simultaneous files (balanced across ESO, NRAO and NAOJ mirrors, capped
+					at 10 per mirror)
+				</p>
+			</div>
 
-			<div class="space-y-5 px-5 py-5">
-				<div>
-					<label class="block text-sm font-medium text-fg-muted" for="redownload-parallel"
-						>Parallel streams</label
-					>
-					<input
-						id="redownload-parallel"
-						type="range"
-						min="1"
-						max="30"
-						bind:value={redownloadMaxParallel}
-						class="mt-2 w-full"
-					/>
-					<p class="mt-1 text-xs text-fg-dim">
-						{redownloadMaxParallel} simultaneous files (balanced across ESO, NRAO and NAOJ mirrors, capped
-						at 10 per mirror)
-					</p>
-				</div>
-
-				<div class="grid gap-3 rounded border border-line p-3">
-					<label class="flex items-center gap-2 text-sm text-fg-muted">
-						<input
-							type="checkbox"
-							bind:checked={redownloadExtractTar}
-							disabled={redownloadUnpackMs || redownloadCalibrated}
-						/>
-						Extract tar archives
-					</label>
-					<label class="flex items-center gap-2 text-sm text-fg-muted">
-						<input
-							type="checkbox"
-							bind:checked={redownloadUnpackMs}
-							disabled={redownloadCalibrated}
-						/>
-						Create raw MeasurementSets
-					</label>
-					<label class="flex items-center gap-2 text-sm text-fg-muted">
-						<input type="checkbox" bind:checked={redownloadCalibrated} />
-						Restore calibration and create calibrated visibilities
-					</label>
-					<label class="flex items-center gap-2 text-sm text-fg-muted">
-						<input
-							type="checkbox"
-							bind:checked={redownloadCleanIntermediate}
-							disabled={!redownloadCalibrated}
-						/>
-						Keep only split calibrated products
-					</label>
-				</div>
-
-				<div class="grid gap-3 sm:grid-cols-2">
-					<input
-						type="text"
-						bind:value={redownloadArchiveOutputRoot}
-						class="rounded border border-line px-3 py-2 text-sm"
-						placeholder="Archive output root (optional)"
-					/>
-					<input
-						type="text"
-						bind:value={redownloadCasaDataRoot}
-						class="rounded border border-line px-3 py-2 text-sm"
-						placeholder="CASA data root (optional)"
-					/>
-				</div>
-
+			<div class="grid gap-3 rounded border border-line p-3">
 				<label class="flex items-center gap-2 text-sm text-fg-muted">
-					<input type="checkbox" bind:checked={redownloadSkipCasaDataUpdate} />
-					Skip CASA runtime data update
+					<input
+						type="checkbox"
+						bind:checked={redownloadExtractTar}
+						disabled={redownloadUnpackMs || redownloadCalibrated}
+					/>
+					Extract tar archives
+				</label>
+				<label class="flex items-center gap-2 text-sm text-fg-muted">
+					<input
+						type="checkbox"
+						bind:checked={redownloadUnpackMs}
+						disabled={redownloadCalibrated}
+					/>
+					Create raw MeasurementSets
+				</label>
+				<label class="flex items-center gap-2 text-sm text-fg-muted">
+					<input type="checkbox" bind:checked={redownloadCalibrated} />
+					Restore calibration and create calibrated visibilities
+				</label>
+				<label class="flex items-center gap-2 text-sm text-fg-muted">
+					<input
+						type="checkbox"
+						bind:checked={redownloadCleanIntermediate}
+						disabled={!redownloadCalibrated}
+					/>
+					Keep only split calibrated products
 				</label>
 			</div>
 
-			<footer class="flex justify-end gap-3 border-t border-line px-5 py-4">
-				<button
-					type="button"
-					class="rounded border border-line px-4 py-2 text-sm text-fg-muted hover:bg-hover"
-					onclick={() => (redownloadOptionsOpen = false)}>Cancel</button
-				>
-				<button
-					type="button"
-					class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
-					disabled={redownloading.has(redownloadTarget.job_id)}
-					onclick={redownload}
-				>
-					{redownloading.has(redownloadTarget.job_id) ? 'Starting…' : 'Start re-download'}
-				</button>
-			</footer>
+			<div class="grid gap-3 sm:grid-cols-2">
+				<input
+					type="text"
+					bind:value={redownloadArchiveOutputRoot}
+					class="rounded border border-line px-3 py-2 text-sm"
+					aria-label="Archive output root (optional)"
+					placeholder="Archive output root (optional)"
+				/>
+				<input
+					type="text"
+					bind:value={redownloadCasaDataRoot}
+					class="rounded border border-line px-3 py-2 text-sm"
+					aria-label="CASA data root (optional)"
+					placeholder="CASA data root (optional)"
+				/>
+			</div>
+
+			<label class="flex items-center gap-2 text-sm text-fg-muted">
+				<input type="checkbox" bind:checked={redownloadSkipCasaDataUpdate} />
+				Skip CASA runtime data update
+			</label>
 		</div>
-	</div>
+
+		{#snippet footer()}
+			<button type="button" class="btn-ghost" onclick={() => (redownloadOptionsOpen = false)}
+				>Cancel</button
+			>
+			<button
+				type="button"
+				class="btn-primary"
+				disabled={redownloading.has(target.job_id)}
+				onclick={redownload}
+			>
+				{redownloading.has(target.job_id) ? 'Starting…' : 'Start re-download'}
+			</button>
+		{/snippet}
+	</Dialog>
 {/if}

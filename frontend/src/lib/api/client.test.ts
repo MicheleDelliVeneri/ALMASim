@@ -23,6 +23,12 @@ describe('formatErrorDetail', () => {
 		);
 	});
 
+	it("lists the console's command problems", () => {
+		expect(
+			formatErrorDetail({ problems: ["Missing argument 'OUT'.", 'No such option: --x'] })
+		).toBe("Missing argument 'OUT'.; No such option: --x");
+	});
+
 	it('falls back to JSON for other shapes and to "" for nothing', () => {
 		expect(formatErrorDetail({ code: 7 })).toBe('{"code":7}');
 		expect(formatErrorDetail(undefined)).toBe('');
