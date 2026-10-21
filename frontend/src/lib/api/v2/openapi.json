@@ -1,6 +1,38 @@
 {
   "components": {
     "schemas": {
+      "Accounting": {
+        "description": "``sacct``'s rows for a run's Slurm job (the job, then its steps); none for a server job.",
+        "properties": {
+          "rows": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "slurm_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slurm Job Id"
+          }
+        },
+        "required": [
+          "slurm_job_id",
+          "rows"
+        ],
+        "title": "Accounting",
+        "type": "object"
+      },
       "CommandLine": {
         "properties": {
           "argv": {
@@ -656,6 +688,39 @@
         "title": "SubmitRequest",
         "type": "object"
       },
+      "TextSlice": {
+        "properties": {
+          "next_offset": {
+            "title": "Next Offset",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "text",
+          "offset",
+          "next_offset",
+          "size"
+        ],
+        "title": "TextSlice",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1262,9 +1327,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Read Text Api V2 Files Text Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TextSlice"
                 }
               }
             },
@@ -1456,6 +1519,49 @@
           }
         },
         "summary": "Get Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v2/jobs/{run_id}/accounting": {
+      "get": {
+        "description": "Slurm's accounting for the run's job: state, elapsed, node, CPUs, peak memory.",
+        "operationId": "job_accounting_api_v2_jobs__run_id__accounting_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accounting"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Accounting",
         "tags": [
           "jobs"
         ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import sys
 import time
 
@@ -116,6 +117,56 @@ def test_a_job_is_submitted_listed_shown_cancelled_and_resubmitted(client, slurm
     again = client.post(f"/api/v2/jobs/{run['id']}/resubmit")
     assert again.status_code == 201 and again.json()["id"] != run["id"]
     assert client.get("/api/v2/jobs/ZZZZZZZZ").status_code == 404
+
+
+def test_a_slurm_runs_accounting_comes_from_sacct(client, monkeypatch):
+    run = client.post("/api/v2/jobs", json={"argv": ["image", "clean-quality", "/out"]}).json()
+    asked = []
+
+    def fake_accounting(slurm_id):
+        asked.append(slurm_id)
+        return [{"JobID": slurm_id, "State": "COMPLETED", "MaxRSS": ""}]
+
+    monkeypatch.setattr(slurm_exec, "accounting", fake_accounting)
+    got = client.get(f"/api/v2/jobs/{run['id']}/accounting").json()
+    assert asked == ["9100"]
+    assert got == {
+        "slurm_job_id": "9100",
+        "rows": [{"JobID": "9100", "State": "COMPLETED", "MaxRSS": ""}],
+    }
+
+    def broken(slurm_id):
+        raise slurm_exec.SlurmError("sacct: slurmdbd unreachable")
+
+    monkeypatch.setattr(slurm_exec, "accounting", broken)
+    failed = client.get(f"/api/v2/jobs/{run['id']}/accounting")
+    assert failed.status_code == 502 and "slurmdbd" in failed.json()["detail"]
+
+
+def test_a_server_run_has_no_accounting(client):
+    run = client.post("/api/v2/jobs", json={"argv": ["doctor", "--help"]}).json()
+    got = client.get(f"/api/v2/jobs/{run['id']}/accounting").json()
+    assert got == {"slurm_job_id": None, "rows": []}
+
+
+def test_sacct_rows_become_records():
+    out = (
+        "6402|almasim|COMPLETED|0:0|00:03:12|2026-10-21T10:00:00|2026-10-21T10:03:12"
+        "|node47|4|16G||00:05:00\n"
+        "6402.batch|batch|COMPLETED|0:0|00:03:12|s|e|node47|4||2100M|00:05:00\n"
+        "short|line\n"
+    )
+    rows = slurm_exec.accounting(
+        "6402", run=lambda cmd: subprocess.CompletedProcess(cmd, 0, out, "")
+    )
+    assert [r["JobID"] for r in rows] == ["6402", "6402.batch"]
+    assert rows[1]["MaxRSS"] == "2100M" and rows[0]["NodeList"] == "node47"
+    with pytest.raises(slurm_exec.SlurmError, match="not a Slurm job id"):
+        slurm_exec.accounting("6402; rm -rf /")
+    with pytest.raises(slurm_exec.SlurmError, match="no db"):
+        slurm_exec.accounting(
+            "6402", run=lambda cmd: subprocess.CompletedProcess(cmd, 1, "", "no db")
+        )
 
 
 def test_only_the_owner_can_cancel(client, profile):
