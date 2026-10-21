@@ -54,6 +54,16 @@ from ..services.download import (
     resolve_products,
     save_products_csv,
 )
+from ._options import (
+    Backend,
+    PostprocessBackend,
+    SlurmCores,
+    SlurmMemory,
+    SlurmOptions,
+    SlurmProject,
+    SlurmQueue,
+    SlurmWalltime,
+)
 from ._shared import dedupe_keep_order, default_output_path, fail, split_csv_values, usage_error
 
 
@@ -421,30 +431,12 @@ def products_download(
         "--clean-intermediate-files",
         help="Clean downloaded/intermediate raw files after calibrated outputs are created.",
     ),
-    postprocess_backend: str = typer.Option(
-        "sync",
-        "--postprocess-backend",
-        help="Backend for unpack/calibration stage. Choices: sync, slurm.",
-        case_sensitive=False,
-    ),
-    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
-    slurm_project: Optional[str] = typer.Option(
-        None,
-        "--slurm-project",
-        help="Optional Slurm project/account.",
-    ),
-    slurm_walltime: str = typer.Option(
-        "02:00:00",
-        "--slurm-walltime",
-        help="Slurm walltime per worker job (HH:MM:SS).",
-    ),
-    slurm_cores: int = typer.Option(
-        1,
-        "--slurm-cores",
-        min=1,
-        help="Cores per Slurm worker.",
-    ),
-    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    postprocess_backend: PostprocessBackend = Backend.sync,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_cores: SlurmCores = 1,
+    slurm_memory: SlurmMemory = "4GB",
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
@@ -485,8 +477,6 @@ def products_download(
         usage_error("Invalid --product-filter. Allowed values: " + ", ".join(sorted(PRODUCT_TYPES)))
 
     backend_normalized = postprocess_backend.lower()
-    if backend_normalized not in {"sync", "slurm"}:
-        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     if max_parallel > MAX_PARALLEL_TOTAL:
         typer.echo(
@@ -578,14 +568,14 @@ def products_download(
                 generate_calibrated_visibilities=generate_calibrated_visibilities,
                 postprocess_backend=backend_normalized,
                 postprocess_backend_kwargs=(
-                    {
-                        "queue": slurm_queue,
-                        "project": slurm_project,
-                        "walltime": slurm_walltime,
-                        "cores": slurm_cores,
-                        "memory": slurm_memory,
-                        "n_workers": slurm_workers,
-                    }
+                    SlurmOptions(
+                        queue=slurm_queue,
+                        project=slurm_project,
+                        walltime=slurm_walltime,
+                        memory=slurm_memory,
+                        n_workers=slurm_workers,
+                        cores=slurm_cores,
+                    ).backend_kwargs()
                     if backend_normalized == "slurm"
                     else {}
                 ),
@@ -688,30 +678,12 @@ def products_extract(
         "--delete-archives",
         help="Delete each archive after successful extraction.",
     ),
-    postprocess_backend: str = typer.Option(
-        "sync",
-        "--postprocess-backend",
-        help="Backend for extraction stage. Choices: sync, slurm.",
-        case_sensitive=False,
-    ),
-    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
-    slurm_project: Optional[str] = typer.Option(
-        None,
-        "--slurm-project",
-        help="Optional Slurm project/account.",
-    ),
-    slurm_walltime: str = typer.Option(
-        "01:00:00",
-        "--slurm-walltime",
-        help="Slurm walltime per worker job (HH:MM:SS).",
-    ),
-    slurm_cores: int = typer.Option(
-        1,
-        "--slurm-cores",
-        min=1,
-        help="Cores per Slurm worker.",
-    ),
-    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    postprocess_backend: PostprocessBackend = Backend.sync,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "01:00:00",
+    slurm_cores: SlurmCores = 1,
+    slurm_memory: SlurmMemory = "4GB",
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
@@ -735,8 +707,6 @@ def products_extract(
 ) -> None:
     """Extract ALMA archive tarballs as a standalone step."""
     backend_normalized = postprocess_backend.lower()
-    if backend_normalized not in {"sync", "slurm"}:
-        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     source = source_root.expanduser().resolve()
     if not source.exists() or not source.is_dir():
@@ -756,15 +726,15 @@ def products_extract(
             target=target,
             archives=archives,
             postprocess_backend=backend_normalized,
-            postprocess_backend_kwargs={
-                "queue": slurm_queue,
-                "project": slurm_project,
-                "walltime": slurm_walltime,
-                "cores": slurm_cores,
-                "memory": slurm_memory,
-                "n_workers": slurm_workers,
-                **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
-            },
+            postprocess_backend_kwargs=SlurmOptions(
+                queue=slurm_queue,
+                project=slurm_project,
+                walltime=slurm_walltime,
+                memory=slurm_memory,
+                n_workers=slurm_workers,
+                cores=slurm_cores,
+                scheduler_host=slurm_scheduler_host,
+            ).backend_kwargs(),
             delete_archives=delete_archives,
             skip_existing=skip_existing,
             echo=typer.echo,
@@ -803,30 +773,12 @@ def products_unpack(
         "--skip-casa-data-update",
         help="Do not auto-download CASA runtime data if missing.",
     ),
-    postprocess_backend: str = typer.Option(
-        "sync",
-        "--postprocess-backend",
-        help="Backend for unpack stage. Choices: sync, slurm.",
-        case_sensitive=False,
-    ),
-    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
-    slurm_project: Optional[str] = typer.Option(
-        None,
-        "--slurm-project",
-        help="Optional Slurm project/account.",
-    ),
-    slurm_walltime: str = typer.Option(
-        "02:00:00",
-        "--slurm-walltime",
-        help="Slurm walltime per worker job (HH:MM:SS).",
-    ),
-    slurm_cores: int = typer.Option(
-        1,
-        "--slurm-cores",
-        min=1,
-        help="Cores per Slurm worker.",
-    ),
-    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    postprocess_backend: PostprocessBackend = Backend.sync,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_cores: SlurmCores = 1,
+    slurm_memory: SlurmMemory = "4GB",
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
@@ -858,8 +810,6 @@ def products_unpack(
 ) -> None:
     """Import ASDM directories into raw MeasurementSets as a standalone step."""
     backend_normalized = postprocess_backend.lower()
-    if backend_normalized not in {"sync", "slurm"}:
-        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     parsed_uids = _parse_uid_options(asdm_uid)
     stage_failures: list[TaskFailure] = []
@@ -869,15 +819,15 @@ def products_unpack(
             output_root=output_root.expanduser().resolve(),
             asdm_uids=parsed_uids,
             postprocess_backend=backend_normalized,
-            postprocess_backend_kwargs={
-                "queue": slurm_queue,
-                "project": slurm_project,
-                "walltime": slurm_walltime,
-                "cores": slurm_cores,
-                "memory": slurm_memory,
-                "n_workers": slurm_workers,
-                **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
-            },
+            postprocess_backend_kwargs=SlurmOptions(
+                queue=slurm_queue,
+                project=slurm_project,
+                walltime=slurm_walltime,
+                memory=slurm_memory,
+                n_workers=slurm_workers,
+                cores=slurm_cores,
+                scheduler_host=slurm_scheduler_host,
+            ).backend_kwargs(),
             casa_data_root=casa_data_root,
             skip_casa_data_update=skip_casa_data_update,
             overwrite_outputs=overwrite_outputs,
@@ -924,30 +874,12 @@ def products_calibrate(
         "--skip-casa-data-update",
         help="Do not auto-download CASA runtime data if missing.",
     ),
-    postprocess_backend: str = typer.Option(
-        "sync",
-        "--postprocess-backend",
-        help="Backend for calibration stage. Choices: sync, slurm.",
-        case_sensitive=False,
-    ),
-    slurm_queue: str = typer.Option("normal", "--slurm-queue", help="Slurm queue/partition."),
-    slurm_project: Optional[str] = typer.Option(
-        None,
-        "--slurm-project",
-        help="Optional Slurm project/account.",
-    ),
-    slurm_walltime: str = typer.Option(
-        "02:00:00",
-        "--slurm-walltime",
-        help="Slurm walltime per worker job (HH:MM:SS).",
-    ),
-    slurm_cores: int = typer.Option(
-        1,
-        "--slurm-cores",
-        min=1,
-        help="Cores per Slurm worker.",
-    ),
-    slurm_memory: str = typer.Option("4GB", "--slurm-memory", help="Memory per Slurm worker."),
+    postprocess_backend: PostprocessBackend = Backend.sync,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_cores: SlurmCores = 1,
+    slurm_memory: SlurmMemory = "4GB",
     slurm_workers: int = typer.Option(
         4,
         "--slurm-workers",
@@ -992,8 +924,6 @@ def products_calibrate(
 ) -> None:
     """Create calibrated MeasurementSets as a standalone step."""
     backend_normalized = postprocess_backend.lower()
-    if backend_normalized not in {"sync", "slurm"}:
-        usage_error("--postprocess-backend must be one of: sync, slurm.")
 
     parsed_uids = _parse_uid_options(asdm_uid)
     stage_failures: list[TaskFailure] = []
@@ -1004,15 +934,15 @@ def products_calibrate(
             output_root=output_root.expanduser().resolve(),
             asdm_uids=parsed_uids,
             postprocess_backend=backend_normalized,
-            postprocess_backend_kwargs={
-                "queue": slurm_queue,
-                "project": slurm_project,
-                "walltime": slurm_walltime,
-                "cores": slurm_cores,
-                "memory": slurm_memory,
-                "n_workers": slurm_workers,
-                **({"scheduler_host": slurm_scheduler_host} if slurm_scheduler_host else {}),
-            },
+            postprocess_backend_kwargs=SlurmOptions(
+                queue=slurm_queue,
+                project=slurm_project,
+                walltime=slurm_walltime,
+                memory=slurm_memory,
+                n_workers=slurm_workers,
+                cores=slurm_cores,
+                scheduler_host=slurm_scheduler_host,
+            ).backend_kwargs(),
             casa_data_root=casa_data_root,
             skip_casa_data_update=skip_casa_data_update,
             overwrite_outputs=overwrite_outputs,

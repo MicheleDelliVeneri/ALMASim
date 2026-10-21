@@ -6,6 +6,16 @@ from pathlib import Path
 
 import typer
 
+from ._options import (
+    MaxCoresPerNode,
+    SchedulerHost,
+    SchedulerInterface,
+    SlurmMemory,
+    SlurmProject,
+    SlurmQueue,
+    SlurmWalltime,
+    TaskTimeout,
+)
 from .image import _iter_ms_inputs, _predict_all_models_for_ms
 
 predict_app = typer.Typer(
@@ -20,29 +30,15 @@ def ms_from_image(
     output_directory: Path = typer.Argument(help="Directory containing model FITS products"),
     use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
     num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
-    max_cores_per_node: int = typer.Option(
-        help="Number of cores per node for SLURM worker resource accounting",
-        default=95,
-        min=1,
-    ),
-    slurm_queue: str = typer.Option(default="normal", help="SLURM queue/partition"),
-    slurm_project: str | None = typer.Option(default=None, help="SLURM project/account"),
-    slurm_walltime: str = typer.Option(default="02:00:00", help="SLURM walltime HH:MM:SS"),
-    slurm_memory: str = typer.Option(default="16GB", help="SLURM memory per worker"),
+    max_cores_per_node: MaxCoresPerNode = 95,
+    slurm_queue: SlurmQueue = "normal",
+    slurm_project: SlurmProject = None,
+    slurm_walltime: SlurmWalltime = "02:00:00",
+    slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(default=1, min=1, help="Number of SLURM workers/jobs"),
-    scheduler_host: str | None = typer.Option(
-        default=None,
-        help="Scheduler host advertised to workers (defaults to submit HOSTNAME)",
-    ),
-    scheduler_interface: str | None = typer.Option(
-        default=None,
-        help="Scheduler/worker network interface (e.g. ib0, eth0)",
-    ),
-    task_timeout: float = typer.Option(
-        default=3600,
-        min=1,
-        help="Timeout in seconds for each worker-side command",
-    ),
+    scheduler_host: SchedulerHost = None,
+    scheduler_interface: SchedulerInterface = None,
+    task_timeout: TaskTimeout = 3600,
 ) -> None:
     """Predict visibilities from one MS or a folder of MSs."""
     ms_inputs = _iter_ms_inputs(input_ms_or_folder)

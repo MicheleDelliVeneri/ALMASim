@@ -123,9 +123,9 @@ $ almasim products download [OPTIONS]
 * `--casa-data-root <path>`: Optional CASA runtime data directory.
 * `--skip-casa-data-update`: Do not auto-download CASA runtime data if missing.
 * `--clean-intermediate-files`: Clean downloaded/intermediate raw files after calibrated outputs are created.
-* `--postprocess-backend <str>`: Backend for unpack/calibration stage. Choices: sync, slurm.  [default: sync]
+* `--postprocess-backend <sync|slurm>`: Where the tasks run: sync (this process, one at a time) or slurm (Slurm jobs).  [default: sync]
 * `--slurm-queue <str>`: Slurm queue/partition.  [default: normal]
-* `--slurm-project <str>`: Optional Slurm project/account.
+* `--slurm-project <str>`: Slurm project/account.
 * `--slurm-walltime <str>`: Slurm walltime per worker job (HH:MM:SS).  [default: 02:00:00]
 * `--slurm-cores <int range>`: Cores per Slurm worker.  [default: 1; x>=1]
 * `--slurm-memory <str>`: Memory per Slurm worker.  [default: 4GB]
@@ -211,9 +211,9 @@ $ almasim visibilities extract [OPTIONS]
 * `--destination <path>`: Extraction destination (defaults to --source-root).
 * `--recursive / --no-recursive`: Recursively search --source-root for .tar/.tgz archives.  [default: recursive]
 * `--delete-archives`: Delete each archive after successful extraction.
-* `--postprocess-backend <str>`: Backend for extraction stage. Choices: sync, slurm.  [default: sync]
+* `--postprocess-backend <sync|slurm>`: Where the tasks run: sync (this process, one at a time) or slurm (Slurm jobs).  [default: sync]
 * `--slurm-queue <str>`: Slurm queue/partition.  [default: normal]
-* `--slurm-project <str>`: Optional Slurm project/account.
+* `--slurm-project <str>`: Slurm project/account.
 * `--slurm-walltime <str>`: Slurm walltime per worker job (HH:MM:SS).  [default: 01:00:00]
 * `--slurm-cores <int range>`: Cores per Slurm worker.  [default: 1; x>=1]
 * `--slurm-memory <str>`: Memory per Slurm worker.  [default: 4GB]
@@ -239,9 +239,9 @@ $ almasim visibilities unpack [OPTIONS]
 * `--asdm-uid <str>`: Optional ASDM UID(s) to process. Repeat or pass comma-separated values.
 * `--casa-data-root <path>`: Optional CASA runtime data directory.
 * `--skip-casa-data-update`: Do not auto-download CASA runtime data if missing.
-* `--postprocess-backend <str>`: Backend for unpack stage. Choices: sync, slurm.  [default: sync]
+* `--postprocess-backend <sync|slurm>`: Where the tasks run: sync (this process, one at a time) or slurm (Slurm jobs).  [default: sync]
 * `--slurm-queue <str>`: Slurm queue/partition.  [default: normal]
-* `--slurm-project <str>`: Optional Slurm project/account.
+* `--slurm-project <str>`: Slurm project/account.
 * `--slurm-walltime <str>`: Slurm walltime per worker job (HH:MM:SS).  [default: 02:00:00]
 * `--slurm-cores <int range>`: Cores per Slurm worker.  [default: 1; x>=1]
 * `--slurm-memory <str>`: Memory per Slurm worker.  [default: 4GB]
@@ -269,9 +269,9 @@ $ almasim visibilities calibrate [OPTIONS]
 * `--asdm-uid <str>`: Optional UID(s) to calibrate. Repeat or pass comma-separated values.
 * `--casa-data-root <path>`: Optional CASA runtime data directory.
 * `--skip-casa-data-update`: Do not auto-download CASA runtime data if missing.
-* `--postprocess-backend <str>`: Backend for calibration stage. Choices: sync, slurm.  [default: sync]
+* `--postprocess-backend <sync|slurm>`: Where the tasks run: sync (this process, one at a time) or slurm (Slurm jobs).  [default: sync]
 * `--slurm-queue <str>`: Slurm queue/partition.  [default: normal]
-* `--slurm-project <str>`: Optional Slurm project/account.
+* `--slurm-project <str>`: Slurm project/account.
 * `--slurm-walltime <str>`: Slurm walltime per worker job (HH:MM:SS).  [default: 02:00:00]
 * `--slurm-cores <int range>`: Cores per Slurm worker.  [default: 1; x>=1]
 * `--slurm-memory <str>`: Memory per Slurm worker.  [default: 4GB]
@@ -349,15 +349,15 @@ $ almasim predict [OPTIONS] {input_ms_or_folder} {output_directory}
 
 * `--use-slurm / --no-use-slurm`: Whether or not to use slurm or not  [default: use-slurm]
 * `--num-cores <int range>`: Number of cores per predict task  [default: 1; x>=1]
-* `--max-cores-per-node <int range>`: Number of cores per node for SLURM worker resource accounting  [default: 95; x>=1]
-* `--slurm-queue <str>`: SLURM queue/partition  [default: normal]
-* `--slurm-project <str>`: SLURM project/account
-* `--slurm-walltime <str>`: SLURM walltime HH:MM:SS  [default: 02:00:00]
-* `--slurm-memory <str>`: SLURM memory per worker  [default: 16GB]
+* `--max-cores-per-node <int range>`: Cores per node, for the Slurm workers' resource accounting.  [default: 95; x>=1]
+* `--slurm-queue <str>`: Slurm queue/partition.  [default: normal]
+* `--slurm-project <str>`: Slurm project/account.
+* `--slurm-walltime <str>`: Slurm walltime per worker job (HH:MM:SS).  [default: 02:00:00]
+* `--slurm-memory <str>`: Memory per Slurm worker.  [default: 16GB]
 * `--slurm-n-jobs <int range>`: Number of SLURM workers/jobs  [default: 1; x>=1]
-* `--scheduler-host <str>`: Scheduler host advertised to workers (defaults to submit HOSTNAME)
-* `--scheduler-interface <str>`: Scheduler/worker network interface (e.g. ib0, eth0)
-* `--task-timeout <float range>`: Timeout in seconds for each worker-side command  [default: 3600; x>=1]
+* `--scheduler-host <str>`: Scheduler host advertised to the workers (default: this host).
+* `--scheduler-interface <str>`: Scheduler/worker network interface (e.g. ib0, eth0).
+* `--task-timeout <float range>`: Timeout in seconds for each worker-side command.  [default: 3600; x>=1]
 * `--help`: Show this message and exit.
 
 # `almasim image`
@@ -436,7 +436,7 @@ $ almasim image image-from-ms [OPTIONS] {imaging_parameters} {output_directory}
 * `--min-beams-across <float range>`: Make every image at least this many synthesized beams wide, whatever --fov-fraction gives (default 32; 0: no minimum).  [default: 32.0; x>=0.0]
 * `--multiscale / --no-multiscale`: Clean with WSClean's multi-scale algorithm (-multiscale) for extended emission. Off by default: it can diverge on bright sources in small images.  [default: no-multiscale]
 * `--num-cores <int range>`: Number of cores per imaging task  [default: 10; x>=1]
-* `--max-cores-per-node <int range>`: Number of cores per node. [Used to scale the memory usage of wsclean]  [default: 95; x>=1]
+* `--max-cores-per-node <int range>`: Cores per node, for the Slurm workers' resource accounting.  [default: 95; x>=1]
 * `--wsclean-bin <str>`: Path or executable name of the WSClean binary the workers run.  [default: wsclean]
 * `--auto-threshold <float range>`: Stop cleaning when the residual peak drops below this many sigma of the residual noise (WSClean -auto-threshold; default 1, inside the --auto-mask mask). 0 disables it and cleaning runs to -niter.  [default: 1.0; x>=0.0]
 * `--auto-mask <float range>`: WSClean -auto-mask level in sigma (default 3): clean to this level everywhere, then only inside the mask it found down to --auto-threshold. Must be above --auto-threshold; 0 disables masking.  [default: 3.0; x>=0.0]
@@ -447,15 +447,15 @@ $ almasim image image-from-ms [OPTIONS] {imaging_parameters} {output_directory}
 * `--scratch-dir <path>`: Directory for WSClean's reordered visibilities (one sub-directory per task, removed afterwards). Default: the task's output directory.
 * `--continuum-restart / --no-continuum-restart`: Clean the continuum in two passes, the second (-continue) from the true residual with a mask rebuilt at the true noise: the first pass's auto-mask, built while a bright source's sidelobes inflate the noise, misses its fainter parts (default; only with --single-window-ms, whose per-task copy gets MODEL_DATA).  [default: continuum-restart]
 * `--update-model / --no-update-model`: Write the CLEAN model back into the MS MODEL_DATA column (WSClean -update-model-required). Off by default: concurrent spectral-window tasks would write the same MS and every calibrated MS would grow.  [default: no-update-model]
-* `--postprocess-backend <str>`: Where the WSClean tasks run: slurm (default) or sync (this process, one at a time).  [default: slurm]
-* `--slurm-queue <str>`: SLURM queue/partition  [default: normal]
-* `--slurm-project <str>`: SLURM project/account
-* `--slurm-walltime <str>`: SLURM walltime HH:MM:SS  [default: 02:00:00]
-* `--slurm-memory <str>`: SLURM memory per worker  [default: 16GB]
+* `--postprocess-backend <sync|slurm>`: Where the tasks run: sync (this process, one at a time) or slurm (Slurm jobs).  [default: slurm]
+* `--slurm-queue <str>`: Slurm queue/partition.  [default: normal]
+* `--slurm-project <str>`: Slurm project/account.
+* `--slurm-walltime <str>`: Slurm walltime per worker job (HH:MM:SS).  [default: 02:00:00]
+* `--slurm-memory <str>`: Memory per Slurm worker.  [default: 16GB]
 * `--slurm-n-jobs <int range>`: Number of SLURM workers/jobs  [default: 1; x>=1]
-* `--scheduler-host <str>`: Scheduler host advertised to workers (defaults to submit HOSTNAME)
-* `--scheduler-interface <str>`: Scheduler/worker network interface (e.g. ib0, eth0)
-* `--task-timeout <float range>`: Timeout in seconds for each worker-side command  [default: 3600; x>=1]
+* `--scheduler-host <str>`: Scheduler host advertised to the workers (default: this host).
+* `--scheduler-interface <str>`: Scheduler/worker network interface (e.g. ib0, eth0).
+* `--task-timeout <float range>`: Timeout in seconds for each worker-side command.  [default: 3600; x>=1]
 * `--skip-existing`: Also trust an existing wsclean-image.fits that has no .done marker (an output from before markers existed) and write its marker. Tasks with a marker are always skipped.
 * `--overwrite-outputs`: Redo every task, including the ones with a .done marker.
 * `--continue-on-error / --fail-fast`: Keep imaging the rest of the batch when a task fails (default); the failed tasks are listed at the end and the command exits 1. --fail-fast stops at the first failure.  [default: continue-on-error]
