@@ -98,7 +98,7 @@ jobs:
           PY
 
       - name: Cache the fixture and baseline
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .golden-cache
           key: golden-${{ steps.pointers.outputs.fixture_sha256 }}-${{ steps.pointers.outputs.baseline_sha256 }}
