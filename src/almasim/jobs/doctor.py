@@ -44,7 +44,8 @@ def _run(cmd: list[str], env: Mapping[str, str] | None = None) -> subprocess.Com
 # Checked the way the pipeline starts CASA children: casatools' bundled
 # libraries first on LD_LIBRARY_PATH (runtime.env.casa_environment; without
 # them the import hung on zwicky) and a site config with automatic data
-# updates off (casa.environment), since compute nodes have no internet.
+# updates off (casa.environment): concurrent jobs must not update a shared
+# CASA data folder, and some sites' compute nodes have no internet.
 _CASA_LIB_DIR = (
     "import importlib.util, os\n"
     "spec = importlib.util.find_spec('casatools')\n"

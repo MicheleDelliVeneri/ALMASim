@@ -144,8 +144,8 @@ def doctor_command(
 @app.command(
     "submit",
     help=(
-        "Run an almasim command as a job: on Slurm, or on this node for the commands that "
-        "need the internet. Options before the command are the job's; the rest is the "
+        "Run an almasim command as a job on Slurm (or on this node, where the profile says "
+        "so). Options before the command are the job's; the rest is the "
         "command, e.g. `almasim submit --cpus 8 image image-from-ms params.csv out --cube`."
     ),
     context_settings={"ignore_unknown_options": True, "allow_interspersed_args": False},
