@@ -1,6 +1,7 @@
 /** Metadata API types and functions */
 import type { components } from './schema';
 import { apiClient } from './client';
+import { encodePathSegments } from '#lib/utils/paths.js';
 
 // Generated from the backend's OpenAPI schema (npm run gen:api, MADIV-28 T7.4).
 type Schemas = components['schemas'];
@@ -151,7 +152,7 @@ export const metadataApi = {
 	},
 
 	load: async (filePath: string): Promise<MetadataResponse> => {
-		return apiClient.get<MetadataResponse>(`/api/v1/metadata/load/${filePath}`);
+		return apiClient.get<MetadataResponse>(`/api/v1/metadata/load/${encodePathSegments(filePath)}`);
 	},
 
 	save: async (payload: MetadataSaveRequest): Promise<MetadataSaveResponse> => {

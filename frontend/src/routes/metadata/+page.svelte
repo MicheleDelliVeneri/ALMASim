@@ -1,5 +1,6 @@
 <script lang="ts">
 	import {
+		CACHE_FULL_MESSAGE,
 		clearCachedResults,
 		readCachedResults,
 		writeCachedResults
@@ -113,7 +114,12 @@
 		jobs = jobs.map((j) => (j.id === id ? { ...j, ...patch } : j));
 	}
 
+	// Set when the page goes away: a page request still in flight must not
+	// arm another poll afterwards.
+	let destroyed = false;
+
 	onDestroy(() => {
+		destroyed = true;
 		for (const job of jobs) {
 			if (job.pollTimer) clearTimeout(job.pollTimer);
 		}
@@ -255,6 +261,12 @@
 			try {
 				const pageData = await metadataApi.getQueryPage(queryId, current.page, PAGE_SIZE);
 
+				// The page may have closed, or the job been cancelled, while the
+				// request was in flight: a late answer must not re-arm the loop
+				// or overwrite the cancel with "done".
+				const latest = jobs.find((j) => j.id === queryId);
+				if (destroyed || !latest || latest.status === 'cancelled') return;
+
 				if (pageData.error) {
 					updateJob(queryId, { status: 'error', error: pageData.error, pollTimer: null });
 					logger.error({ queryId, err: pageData.error }, 'Query job returned error');
@@ -295,7 +307,9 @@
 					});
 					if (newRows.length > 0) {
 						const merged = jobs.flatMap((j) => (j.id === queryId ? newRows : j.rows));
-						writeCachedResults({ data: merged, count: merged.length });
+						if (!writeCachedResults({ data: merged, count: merged.length })) {
+							setStatus(CACHE_FULL_MESSAGE);
+						}
 					}
 					logger.info({ queryId, totalRows: newRows.length }, 'Query job complete');
 					return;
@@ -406,10 +420,12 @@
 
 			loadedResults = data;
 			jobs = []; // clear query jobs so loaded data is shown
-			writeCachedResults(data);
+			const cached = writeCachedResults(data);
 			loadModalOpen = false;
 			formElement.reset();
-			setStatus(`Loaded ${data.count} rows from ${file instanceof File ? 'local file' : filePath}`);
+			setStatus(
+				`Loaded ${data.count} rows from ${source}.${cached ? '' : ` ${CACHE_FULL_MESSAGE}`}`
+			);
 			logger.info({ rowCount: data.count, source }, 'Metadata loaded successfully');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unable to load metadata file';
@@ -503,18 +519,20 @@
 				error = 'File picker API is unavailable in this environment.';
 				return;
 			}
+			// Offer the format chosen in the save form (it always offered .json).
+			const chosen = saveFormRef ? new FormData(saveFormRef).get('save_format') : null;
+			const format: 'json' | 'csv' = chosen === 'csv' ? 'csv' : 'json';
+			const fileType: { description: string; accept: Record<string, string[]> } =
+				format === 'csv'
+					? { description: 'CSV file', accept: { 'text/csv': ['.csv'] } }
+					: { description: 'JSON file', accept: { 'application/json': ['.json'] } };
 			const handle = await picker({
-				suggestedName: `almasim-metadata-${formatDateStamp()}.json`,
-				types: [
-					{
-						description: 'JSON file',
-						accept: { 'application/json': ['.json'] }
-					}
-				]
+				suggestedName: `almasim-metadata-${formatDateStamp()}.${format}`,
+				types: [fileType]
 			});
 			localSaveHandle = handle;
 			localSaveFileName = handle.name || '';
-			setStatus(`Local save target selected: ${handle.name || 'metadata.json'}`);
+			setStatus(`Local save target selected: ${handle.name || `metadata.${format}`}`);
 		} catch (err) {
 			if (err instanceof DOMException && err.name === 'AbortError') {
 				return;

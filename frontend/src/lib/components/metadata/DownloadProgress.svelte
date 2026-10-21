@@ -49,38 +49,44 @@
 		}
 	}
 
-	// Poll every 2s while running
+	// Poll every 2 s while running. Each poll schedules the next only after it
+	// returns (setInterval let slow requests overlap), and a failed request is
+	// retried with backoff instead of ending the polling for good.
 	$effect(() => {
 		if (!jobId) return;
-		let timer: ReturnType<typeof setInterval>;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 		let stopped = false;
+		let failures = 0;
 
 		async function poll() {
 			try {
 				const s = await downloadApi.getJobStatus(jobId);
 				if (stopped) return;
 				status = s;
+				error = '';
+				failures = 0;
 				if (isActiveStatus(s.status)) {
 					updateSpeedAndEta(s.bytes_downloaded, s.total_bytes);
 				}
 				if (isTerminalStatus(s.status)) {
-					clearInterval(timer);
 					speedBytesPerSec = 0;
 					etaSeconds = null;
+					return;
 				}
 			} catch (e) {
 				if (stopped) return;
-				error = e instanceof Error ? e.message : 'Failed to fetch status';
-				clearInterval(timer);
+				failures += 1;
+				const reason = e instanceof Error ? e.message : 'Failed to fetch status';
+				error = `${reason} (retrying)`;
 			}
+			timer = setTimeout(poll, Math.min(2000 * 2 ** failures, 30000));
 		}
 
 		poll();
-		timer = setInterval(poll, 2000);
 
 		return () => {
 			stopped = true;
-			clearInterval(timer);
+			clearTimeout(timer);
 		};
 	});
 

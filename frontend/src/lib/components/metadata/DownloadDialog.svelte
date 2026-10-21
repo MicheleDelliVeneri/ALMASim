@@ -2,6 +2,7 @@
 	import type { MetadataRow } from '#lib/api/metadata.js';
 	import type { ResolveProductsResponse, DiskSpaceInfo } from '#lib/api/download.js';
 	import { downloadApi } from '#lib/api/download.js';
+	import { isAbortError } from '#lib/api/client.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
 	import { createLogger } from '#lib/logger.js';
 
@@ -93,11 +94,15 @@
 		}
 	});
 
-	// Re-check disk space when destination or filter changes
+	// Re-check disk space when destination or filter changes, once typing
+	// pauses: one request per keystroke let a slow earlier answer overwrite a
+	// newer one.
 	$effect(() => {
-		if (open && destination && filteredInfo.size > 0) {
-			checkDisk();
-		}
+		if (!(open && destination && filteredInfo.size > 0)) return;
+		const path = destination;
+		const size = filteredInfo.size;
+		const timer = setTimeout(() => checkDisk(path, size), 400);
+		return () => clearTimeout(timer);
 	});
 
 	// Reset state when closing
@@ -138,16 +143,23 @@
 		}
 	}
 
-	async function checkDisk() {
+	let diskCheck: AbortController | null = null;
+
+	async function checkDisk(path: string, size: number) {
+		diskCheck?.abort();
+		const controller = new AbortController();
+		diskCheck = controller;
 		diskSpaceLoading = true;
 		diskSpaceError = '';
 		try {
-			diskSpace = await downloadApi.checkDiskSpace(destination, filteredInfo.size);
+			const info = await downloadApi.checkDiskSpace(path, size, { signal: controller.signal });
+			if (diskCheck === controller) diskSpace = info;
 		} catch (e) {
+			if (isAbortError(e) || diskCheck !== controller) return;
 			diskSpaceError = e instanceof Error ? e.message : 'Failed to check disk space';
 			diskSpace = null;
 		} finally {
-			diskSpaceLoading = false;
+			if (diskCheck === controller) diskSpaceLoading = false;
 		}
 	}
 

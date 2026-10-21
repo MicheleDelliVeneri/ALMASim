@@ -1,6 +1,6 @@
 /** Download API types and functions */
 import type { components } from './schema';
-import { apiClient } from './client';
+import { apiClient, type RequestOptions } from './client';
 import type { MetadataResponse, MetadataRow } from './metadata';
 
 // Generated from the backend's OpenAPI schema (npm run gen:api, MADIV-28 T7.4).
@@ -47,11 +47,16 @@ export const downloadApi = {
 	},
 
 	/** Check disk space at a given path */
-	checkDiskSpace(path: string, neededBytes: number = 0): Promise<DiskSpaceInfo> {
-		return apiClient.post<DiskSpaceInfo>('/api/v1/downloads/disk-space', {
-			path,
-			needed_bytes: neededBytes
-		});
+	checkDiskSpace(
+		path: string,
+		neededBytes: number = 0,
+		options?: RequestOptions
+	): Promise<DiskSpaceInfo> {
+		return apiClient.post<DiskSpaceInfo>(
+			'/api/v1/downloads/disk-space',
+			{ path, needed_bytes: neededBytes },
+			options
+		);
 	},
 
 	/** Start a download job */

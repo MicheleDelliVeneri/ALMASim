@@ -150,7 +150,11 @@
 		loadingMetadata = next;
 		try {
 			const metadata = await downloadApi.loadJobMetadata(job.job_id);
-			writeCachedResults(metadata);
+			if (!writeCachedResults(metadata)) {
+				// The metadata page reads the cache: going there would show nothing.
+				error = `This download's metadata (${metadata.count} rows) is too large to open in the browser.`;
+				return;
+			}
 			void goto(resolve('/metadata'));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load metadata for this download';

@@ -83,6 +83,7 @@
 			);
 		} catch (err) {
 			logger.error({ err }, 'Failed to load combination file list');
+			error = `Could not list ${targetDir}: ${err instanceof Error ? err.message : 'unknown error'}`;
 			allFiles = [];
 		} finally {
 			fileListLoading = false;

@@ -53,6 +53,19 @@ describe('metadataCache', () => {
 		expect(readCachedResults(null)).toBeNull();
 	});
 
+	it('reports results that do not fit and drops the older ones', () => {
+		const store = new MemoryStorage();
+		expect(writeCachedResults({ data: [row], count: 1 }, store)).toBe(true);
+		const full = Object.assign(Object.create(store), {
+			setItem: () => {
+				throw new DOMException('quota', 'QuotaExceededError');
+			}
+		}) as Storage;
+		expect(writeCachedResults({ data: [row, row], count: 2 }, full)).toBe(false);
+		expect(readCachedResults(store)).toBeNull();
+		expect(writeCachedResults({ data: [row], count: 1 }, null)).toBe(false);
+	});
+
 	it('clears the entry', () => {
 		const store = new MemoryStorage();
 		writeCachedResults({ data: [row], count: 1 }, store);
