@@ -22,6 +22,10 @@ def safe_join(base: str | os.PathLike[str], raw: str | os.PathLike[str]) -> Path
         raise UnsafePathError("Path contains a null byte")
     root = os.path.realpath(os.path.expanduser(os.fspath(base)))
     full = os.path.realpath(os.path.join(root, os.path.expanduser(raw_text)))
-    if full != root and not full.startswith(root.rstrip(os.sep) + os.sep):
+    if full == root:
+        return Path(root)
+    # One plain prefix check on the resolved path: code scanning (CodeQL)
+    # recognises this form as the guard against path traversal.
+    if not full.startswith(root.rstrip(os.sep) + os.sep):
         raise UnsafePathError(f"{raw_text!r} is outside {root}")
     return Path(full)
