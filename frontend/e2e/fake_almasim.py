@@ -160,6 +160,19 @@ def simulation(argv: list[str]) -> None:
     say("simulated 1 run (fake)")
 
 
+def preview_integrate(argv: list[str]) -> None:
+    _source, out = positional(argv, 2)[:2]
+    write_fits(Path(out))
+    say(f"{out}: integrated (fake)")
+
+
+def preview_wiener(argv: list[str]) -> None:
+    out = Path(positional(argv, 2)[2])
+    for name in ("model", "restored", "residual"):
+        write_fits(out / f"wiener-{name}.fits", channels=8)
+    say("wiener (fake)")
+
+
 def doctor(argv: list[str]) -> None:
     say("ok    python     fake", "ok    slurm      fake")
     if "--slurm" in argv:  # long enough to cancel
@@ -175,6 +188,8 @@ COMMANDS = {
     ("image", "image-from-ms"): image_from_ms,
     ("image", "clean-quality"): clean_quality,
     ("simulation",): simulation,
+    ("preview", "integrate"): preview_integrate,
+    ("preview", "wiener"): preview_wiener,
     ("doctor",): doctor,
 }
 

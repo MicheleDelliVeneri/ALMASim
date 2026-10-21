@@ -13,7 +13,12 @@
 	import QualityView from '#lib/components/products/QualityView.svelte';
 	import ErrorMessage from '#lib/components/shared/ErrorMessage.svelte';
 	import Spinner from '#lib/components/shared/Spinner.svelte';
+	import StateChip from '#lib/components/jobs/StateChip.svelte';
+	import { jobs } from '#lib/stores/jobs.svelte.js';
+	import { toasts } from '#lib/toasts.svelte.js';
+	import { errorMessage } from '#lib/utils/errors.js';
 	import { formatBytes } from '#lib/utils/format.js';
+	import { RUN_DIR } from '#lib/utils/runDir.js';
 
 	const MAX_OPEN = 3;
 
@@ -29,6 +34,71 @@
 	const opened = $derived(page.url.searchParams.getAll('open').slice(0, MAX_OPEN));
 
 	const isFits = (name: string) => /\.fits?(\.gz)?$/i.test(name);
+
+	/** Previews computed as jobs, opened when they succeed. */
+	interface Preview {
+		id: string;
+		label: string;
+		/** What the job writes, in its run folder. */
+		result: (runDir: string) => string;
+	}
+	let previews = $state<Preview[]>([]);
+	const shown = new Set<string>();
+
+	async function startPreview(argv: string[], label: string, result: Preview['result']) {
+		try {
+			const { data } = await api.POST('/api/v2/jobs', { body: { argv, title: label } });
+			if (!data) return;
+			jobs.put(data);
+			previews = [...previews, { id: data.id, label, result }];
+			toasts.show(`${label}: started; it opens here when done.`, 'info');
+		} catch (err) {
+			toasts.show(`Could not start it: ${errorMessage(err)}`, 'danger');
+		}
+	}
+
+	function mapOf(path: string) {
+		const name = (path.split('/').pop() ?? 'product').replace(/\.(fits?|ms)$/i, '');
+		const file = `${name}-map.fits`;
+		void startPreview(
+			['preview', 'integrate', path, `${RUN_DIR}/${file}`],
+			`Map · ${name}`,
+			(dir) => join(dir, file)
+		);
+	}
+
+	/** A simulation's dirty and beam cubes in this folder, by run index. */
+	const wienerPairs = $derived.by(() => {
+		if (!listing) return [];
+		const names = new Set(listing.entries.map((e) => e.name));
+		return listing.entries
+			.map((e) => /^dirty-cube_(\d+)\.fits$/.exec(e.name)?.[1])
+			.filter((n): n is string => n !== undefined && names.has(`beam-cube_${n}.fits`))
+			.map((n) => ({
+				label: `simulation ${n}`,
+				dirty: join(listing!.path, `dirty-cube_${n}.fits`),
+				beam: join(listing!.path, `beam-cube_${n}.fits`)
+			}));
+	});
+
+	function wienerOf(pair: { label: string; dirty: string; beam: string }) {
+		void startPreview(
+			['preview', 'wiener', pair.dirty, pair.beam, RUN_DIR],
+			`Wiener · ${pair.label}`,
+			(dir) => join(dir, 'wiener-restored.fits')
+		);
+	}
+
+	// Open what a preview job made, once, when it succeeds.
+	$effect(() => {
+		for (const preview of previews) {
+			const run = jobs.get(preview.id);
+			if (run?.state === 'succeeded' && !shown.has(preview.id)) {
+				shown.add(preview.id);
+				open(preview.result(run.run_dir), true);
+			}
+		}
+	});
 	const join = (folder: string, name: string) => `${folder.replace(/\/+$/, '')}/${name}`;
 
 	function go(params: { dir?: string | null; open?: string[] }) {
@@ -137,6 +207,14 @@
 									onclick={() => listing && go({ dir: join(listing.path, entry.name) })}
 									><span aria-hidden="true">📁</span> {entry.name}</button
 								>
+								{#if /\.ms$/i.test(entry.name)}
+									<button
+										type="button"
+										class="shrink-0 text-xs text-accent hover:underline"
+										title="Grid the visibilities into a dirty image (a Slurm job)"
+										onclick={() => listing && mapOf(join(listing.path, entry.name))}>map</button
+									>
+								{/if}
 							{:else if isFits(entry.name)}
 								{@const path = join(listing.path, entry.name)}
 								<button
@@ -150,6 +228,12 @@
 									class="shrink-0 text-xs text-accent hover:underline"
 									title="Open beside the others"
 									onclick={() => open(path, true)}>+ compare</button
+								>
+								<button
+									type="button"
+									class="shrink-0 text-xs text-accent hover:underline"
+									title="Sum the channels into one image (a Slurm job)"
+									onclick={() => mapOf(path)}>map</button
 								>
 							{:else}
 								<span class="min-w-0 flex-1 truncate text-fg-muted">{entry.name}</span>
@@ -170,6 +254,31 @@
 		</nav>
 
 		<div class="flex min-w-0 flex-[999_1_36rem] flex-col gap-4">
+			{#if wienerPairs.length || previews.length}
+				<section class="alma-panel flex flex-col gap-3 rounded-lg p-5" aria-labelledby="pv-h">
+					<h2 id="pv-h" class="m-0 text-lg font-semibold">Previews</h2>
+					{#each wienerPairs as pair (pair.dirty)}
+						<div class="flex flex-wrap items-center gap-3 text-sm">
+							<button type="button" class="btn-secondary" onclick={() => wienerOf(pair)}
+								>Wiener reconstruction of {pair.label}</button
+							>
+							<span class="text-xs text-fg-muted"
+								>from its dirty and beam cubes: model, restored and residual, as a Slurm job</span
+							>
+						</div>
+					{/each}
+					{#each previews as preview (preview.id)}
+						{@const run = jobs.get(preview.id)}
+						<div class="flex flex-wrap items-center gap-3 text-sm">
+							{#if run}<StateChip state={run.state} />{/if}
+							<a href={resolve('/jobs/[id]', { id: preview.id })}>{preview.label}</a>
+							{#if run?.state === 'succeeded'}<span class="text-xs text-fg-muted">opened below</span
+								>{/if}
+						</div>
+					{/each}
+				</section>
+			{/if}
+
 			{#if quality}
 				<section class="alma-panel rounded-lg p-5" aria-labelledby="q-h">
 					<h2 id="q-h" class="mt-0 mb-3 text-lg font-semibold">How well it was cleaned</h2>

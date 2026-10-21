@@ -267,7 +267,7 @@ def _normalize_for_display(image: np.ndarray) -> np.ndarray:
     return np.zeros_like(image, dtype=np.uint8)
 
 
-def integrated_preview(
+def integrate_product(
     path: Path,
     method: str,
     *,
@@ -275,8 +275,12 @@ def integrated_preview(
     complex_component: str = "real",
     channel_start: int | None = None,
     channel_end: int | None = None,
-) -> dict:
-    """Load ``path``, integrate it along one axis and normalise it to a 0-255 image."""
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Load ``path`` (NPZ, FITS or an MS, gridded) and integrate it along one axis.
+
+    The 2D image, and what it is: shapes, statistics, the axis and the
+    channel window used.
+    """
     cube, cube_name, file_type = load_preview_cube(path)
     display_cube = project_complex_component(cube, complex_component=complex_component)
     axis = _resolve_integration_axis(display_cube, integration_axis)
@@ -287,7 +291,6 @@ def integrated_preview(
         channel_end=channel_end,
     )
     integrated = _integrate_cube(windowed_cube, method, axis=axis)
-    normalized = _normalize_for_display(integrated)
     stats = {
         "shape": list(display_cube.shape),
         "window_shape": list(windowed_cube.shape),
@@ -303,8 +306,29 @@ def integrated_preview(
         "channel_start": start,
         "channel_end": end,
     }
+    return integrated, stats
+
+
+def integrated_preview(
+    path: Path,
+    method: str,
+    *,
+    integration_axis: str | int | None = "auto",
+    complex_component: str = "real",
+    channel_start: int | None = None,
+    channel_end: int | None = None,
+) -> dict:
+    """Load ``path``, integrate it along one axis and normalise it to a 0-255 image."""
+    integrated, stats = integrate_product(
+        path,
+        method,
+        integration_axis=integration_axis,
+        complex_component=complex_component,
+        channel_start=channel_start,
+        channel_end=channel_end,
+    )
     return {
-        "image": normalized.tolist(),
+        "image": _normalize_for_display(integrated).tolist(),
         "stats": stats,
         "method": method,
     }
