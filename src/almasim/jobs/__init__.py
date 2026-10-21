@@ -14,6 +14,7 @@ from .model import (
     JobState,
     Resources,
     ResourcesError,
+    command_name,
     is_job_id,
     new_job_id,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "Resources",
     "ResourcesError",
     "RunStatus",
+    "command_name",
     "create_run_dir",
     "current_state",
     "is_job_id",

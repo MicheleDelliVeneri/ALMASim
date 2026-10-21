@@ -73,10 +73,13 @@ def test_a_job_round_trips_through_its_manifest_form():
     assert again.schema == MANIFEST_SCHEMA
 
 
-def test_the_command_is_the_words_before_the_first_option():
+def test_the_command_follows_the_cli_groups():
     assert _job().command == "image image-from-ms"
     assert _job(argv=["metadata", "--band", "3"]).command == "metadata"
-    assert _job(argv=["clean", "ms.ms"]).command == "clean ms.ms"
+    assert _job(argv=["metadata", "query", "--band", "3"]).command == "metadata"
+    assert _job(argv=["clean", "ms.ms"]).command == "clean"
+    assert _job(argv=["products", "--help"]).command == "products"
+    assert _job(argv=["--help"]).command == ""
 
 
 @pytest.mark.parametrize(
