@@ -8,14 +8,12 @@ from threading import Event, Thread
 from time import sleep
 from typing import Any
 
-import numpy as np
 import pandas as pd
 import typer
 from tqdm.auto import tqdm
 
 from ..services import astro
 from ..services.astro.spectral import sample_given_redshift
-from ..services.simulation.rng import run_rng
 from ..services.compute import create_backend
 from ..services.external_skymodel import EXTERNAL_SOURCE_TYPES, is_external_source_type
 from ..services.simulation import (
@@ -25,6 +23,7 @@ from ..services.simulation import (
     image_products,
     simulate_observation,
 )
+from ..services.simulation.rng import run_rng
 from ..skymodels.registry import SKYMODELS
 from ._shared import usage_error
 
