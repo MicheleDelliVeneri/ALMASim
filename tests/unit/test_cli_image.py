@@ -21,7 +21,7 @@ from almasim import cli, cli_image
 from almasim.services.imaging import batch_runner
 from almasim.services.ms.tables import intent_matches
 
-from ._fakes import FakeTable, patch_everywhere
+from ._fakes import FakeTable, flat_run_kwargs, patch_everywhere
 
 runner = CliRunner()
 
@@ -384,9 +384,9 @@ def test_batch_image_submits_commands_via_slurm_cluster(monkeypatch, tmp_path):
 
     captured: dict[str, Any] = {}
 
-    def _fake_run_imaging_tasks(tasks, **kwargs):
+    def _fake_run_imaging_tasks(tasks, imaging, execution, **kwargs):
         captured["tasks"] = tasks
-        captured.update(kwargs)
+        captured.update(flat_run_kwargs(imaging, execution, **kwargs))
         return []
 
     monkeypatch.setattr(cli_image, "run_imaging_tasks", _fake_run_imaging_tasks)
@@ -883,8 +883,10 @@ def _tasks(tmp_path: Path, n: int) -> list[cli_image.ImagingTask]:
 def _run(tasks, backend, monkeypatch, **overrides):
     monkeypatch.setattr("almasim.services.compute.create_backend", lambda *a, **k: backend)
     monkeypatch.setattr(batch_runner, "tqdm", _QuietTqdm)
-    kwargs = dict(
-        backend_kind="slurm",
+    from almasim.services.imaging.options import ExecOptions, ImagingOptions
+
+    execution = dict(
+        backend=overrides.pop("backend_kind", "slurm"),
         cores_per_task=4,
         node_cores=32,
         queue="q",
@@ -892,13 +894,15 @@ def _run(tasks, backend, monkeypatch, **overrides):
         walltime="01:00:00",
         memory="8GB",
         n_jobs=2,
-        scheduler_host=None,
-        scheduler_interface=None,
         task_timeout=10.0,
-        heartbeat_interval=1e9,
     )
-    kwargs.update(overrides)
-    return batch_runner.run_imaging_tasks(tasks, **kwargs)
+    for name in ("cores_per_task", "node_cores", "n_jobs", "continue_on_error"):
+        if name in overrides:
+            execution[name] = overrides.pop(name)
+    imaging = ImagingOptions(pbcor=overrides.pop("pbcor", False))
+    return batch_runner.run_imaging_tasks(
+        tasks, imaging, ExecOptions(**execution), heartbeat_interval=1e9, **overrides
+    )
 
 
 class _QuietTqdm:
@@ -1031,7 +1035,7 @@ def test_run_imaging_tasks_sync_backend_runs_in_process(tmp_path, monkeypatch):
 def test_image_from_ms_reports_failures_and_exits_one(monkeypatch, tmp_path):
     csv_path = _params_csv(tmp_path, rows=2)
 
-    def _fake_run(tasks, *, failures, **kwargs):
+    def _fake_run(tasks, imaging, execution, *, failures, **kwargs):
         failures.append(
             cli_image.TaskFailure(tasks[0].label, "WSClean exited with return code 1", "/l")
         )
