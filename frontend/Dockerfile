@@ -28,15 +28,14 @@ RUN npm ci --omit=dev
 
 # Copy built application from builder stage
 COPY --from=builder /app/build ./build
-COPY --from=builder /app/.svelte-kit ./.svelte-kit
 
 # Expose port
 EXPOSE 3000
 
-# Default backend URL — override at runtime with `-e API_URL=...`.
-# This is read by src/hooks.server.ts on every request and injected into the
-# served HTML, so the same image works against any backend without rebuilding.
-ENV API_URL=http://backend:8000
+# The API address as the BROWSER sees it (not a Compose service name: the
+# browser cannot resolve those). src/hooks.server.ts reads it on every request
+# and injects it into the page, so override it at runtime with -e API_URL=...
+ENV API_URL=http://localhost:8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
