@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "svelte-kit sync && vitest run",
+    "test:e2e": "playwright test",
     "gen:api": "npx --yes openapi-typescript@7.13.0 src/lib/api/openapi.json -o src/lib/api/schema.d.ts && npx --yes openapi-typescript@7.13.0 src/lib/api/v2/openapi.json --default-non-nullable false -o src/lib/api/v2/schema.d.ts && prettier --write src/lib/api/schema.d.ts src/lib/api/v2/schema.d.ts"
   },
   "dependencies": {
@@ -20,7 +21,9 @@
     "pino": "^10.4.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.49.1",
     "@sveltejs/adapter-static": "^4.0.0",
     "@sveltejs/kit": "^3.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

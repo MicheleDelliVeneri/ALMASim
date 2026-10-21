@@ -222,7 +222,7 @@
 			<div>
 				<button
 					type="button"
-					class="btn-primary bg-magenta hover:bg-accent"
+					class="btn-accent"
 					disabled={!rows.length || submitting}
 					onclick={submit}
 					>{submitting

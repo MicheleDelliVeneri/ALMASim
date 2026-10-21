@@ -118,3 +118,13 @@ def test_by_default_the_job_runs_the_almasim_cli(tmp_path):
     run_dir = _run_dir(tmp_path, argv=("--help",))
     assert run_job(run_dir) == 0
     assert "Usage" in (run_dir / STDOUT_NAME).read_text()
+
+
+def test_the_job_command_can_be_replaced_for_tests():
+    from almasim.jobs.wrapper import ALMASIM_COMMAND, job_command
+
+    assert job_command({}) == ALMASIM_COMMAND
+    assert job_command({"ALMASIM_JOB_COMMAND": "python '/x y/fake.py'"}) == (
+        "python",
+        "/x y/fake.py",
+    )

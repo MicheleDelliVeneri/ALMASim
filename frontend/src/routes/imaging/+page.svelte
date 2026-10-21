@@ -394,7 +394,7 @@
 			<div class="flex flex-wrap items-center gap-3">
 				<button
 					type="button"
-					class="btn-primary bg-magenta hover:bg-accent"
+					class="btn-accent"
 					disabled={busy || !outputRoot.trim() || !imaging}
 					onclick={startImaging}>Image {rows.length} window{rows.length === 1 ? '' : 's'}</button
 				>

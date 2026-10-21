@@ -383,9 +383,11 @@
 							{#if validateError}
 								<ErrorMessage error={validateError} title="Could not check the command" />
 							{:else if validation && !validation.ok}
-								<ul class="m-0 flex list-none flex-col gap-1 p-0 text-sm text-danger" role="alert">
-									{#each validation.problems as problem (problem)}<li>{problem}</li>{/each}
-								</ul>
+								<div role="alert">
+									<ul class="m-0 flex list-none flex-col gap-1 p-0 text-sm text-danger">
+										{#each validation.problems as problem (problem)}<li>{problem}</li>{/each}
+									</ul>
+								</div>
 							{:else if plan}
 								<p class="m-0 text-xs text-fg-muted">
 									{plan.executor === 'slurm'
@@ -406,7 +408,7 @@
 							</label>
 							<button
 								type="submit"
-								class="btn-primary bg-magenta hover:bg-accent"
+								class="btn-accent"
 								disabled={!validation?.ok || submitting || validating}
 							>
 								{submitting ? 'Submitting…' : 'Run'}

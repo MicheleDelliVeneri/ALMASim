@@ -266,9 +266,7 @@
 				<form class="flex flex-col gap-4" onsubmit={search}>
 					<CommandSections command={metadata} bind:values omit={['Output']} />
 					<div class="flex flex-wrap items-end gap-3">
-						<button type="submit" class="btn-primary bg-magenta hover:bg-accent" disabled={busy}
-							>Search the archive</button
-						>
+						<button type="submit" class="btn-accent" disabled={busy}>Search the archive</button>
 						<p class="m-0 text-xs text-fg-muted">
 							Runs <code>almasim metadata</code> as a job; the results land in its run folder.
 						</p>
@@ -428,7 +426,7 @@
 						<div>
 							<button
 								type="button"
-								class="btn-primary bg-magenta hover:bg-accent"
+								class="btn-accent"
 								disabled={busy ||
 									!destination.trim() ||
 									downloadBytes === 0 ||
