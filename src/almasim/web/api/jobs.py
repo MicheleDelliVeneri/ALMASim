@@ -30,7 +30,7 @@ from almasim.jobs.service import (
 )
 from almasim.jobs.wrapper import STDERR_NAME, STDOUT_NAME
 
-from .runs import run_json
+from .runs import LogSlice, Run, RunDetail, RunList, run_json
 
 router = APIRouter(prefix="/api/v2/jobs", tags=["jobs"])
 
@@ -52,7 +52,7 @@ def _run_dir(request: Request, run_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=Run)
 def submit(body: SubmitRequest, request: Request) -> dict[str, Any]:
     problems = validate(body.argv)
     if problems:
@@ -76,7 +76,7 @@ def submit(body: SubmitRequest, request: Request) -> dict[str, Any]:
     return run_json(run)
 
 
-@router.get("")
+@router.get("", response_model=RunList)
 def list_jobs(
     request: Request,
     owner: str = Query("me", description="`me`, `all`, or a user name."),
@@ -91,7 +91,7 @@ def list_jobs(
     return {"runs": [run_json(r) for r in runs], "user": getpass.getuser()}
 
 
-@router.get("/{run_id}")
+@router.get("/{run_id}", response_model=RunDetail)
 def get_job(run_id: str, request: Request) -> dict[str, Any]:
     run_dir = _run_dir(request, run_id)
     try:
@@ -109,7 +109,7 @@ def _fresh(run_dir):
     return view(run_dir, poll([job_id]).get(job_id) if job_id else None)
 
 
-@router.post("/{run_id}/cancel")
+@router.post("/{run_id}/cancel", response_model=Run)
 def cancel(run_id: str, request: Request) -> dict[str, Any]:
     try:
         run = cancel_run(_run_dir(request, run_id))
@@ -121,7 +121,7 @@ def cancel(run_id: str, request: Request) -> dict[str, Any]:
     return run_json(run)
 
 
-@router.post("/{run_id}/resubmit", status_code=201)
+@router.post("/{run_id}/resubmit", status_code=201, response_model=Run)
 def resubmit_job(run_id: str, request: Request) -> dict[str, Any]:
     try:
         run = resubmit(_run_dir(request, run_id), request.app.state.profile)
@@ -133,7 +133,7 @@ def resubmit_job(run_id: str, request: Request) -> dict[str, Any]:
     return run_json(run)
 
 
-@router.get("/{run_id}/log")
+@router.get("/{run_id}/log", response_model=LogSlice)
 def read_log(
     run_id: str,
     request: Request,

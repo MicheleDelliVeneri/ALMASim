@@ -17,7 +17,9 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.types import Scope
 
 from almasim.__version__ import __version__
 from almasim.jobs.profile import Profile, load_profile
@@ -36,6 +38,22 @@ install. The API is at <a href="/api/v2/health">/api/v2</a>.</p>"""
 _LOCKED = """<!doctype html><meta charset="utf-8"><title>ALMASim</title>
 <p>Open the link <code>almasim serve</code> printed (it carries the access
 token), or run <code>almasim serve --status</code> to see it again.</p>"""
+
+
+class AppFiles(StaticFiles):
+    """The built web app. Its pages are routed in the browser, so a path that
+    is not a file (``/jobs/01J…``) gets the app's fallback page; the browser
+    then shows the right page. API paths never fall back."""
+
+    FALLBACK = "200.html"
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404 or path.split("/", 1)[0] == "api":
+                raise
+            return await super().get_response(self.FALLBACK, scope)
 
 
 class TokenMiddleware(BaseHTTPMiddleware):
@@ -119,8 +137,8 @@ def create_app(
     app.include_router(cluster.router)
     app.include_router(events_router)
 
-    if static_dir is not None and (static_dir / "index.html").is_file():
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="web")
+    if static_dir is not None and (static_dir / AppFiles.FALLBACK).is_file():
+        app.mount("/", AppFiles(directory=static_dir, html=True), name="web")
     else:
 
         @app.get("/", response_class=HTMLResponse)

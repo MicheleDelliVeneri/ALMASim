@@ -13,7 +13,7 @@ import csv
 import math
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -28,6 +28,34 @@ MAX_ENTRIES = 5000
 MAX_TEXT = 1024 * 1024
 MAX_JSON = 4 * 1024 * 1024
 MAX_PLANE = 1024
+
+
+class Root(BaseModel):
+    path: str
+    exists: bool
+    runs: bool  # the runs root
+
+
+class Roots(BaseModel):
+    roots: list[Root]
+
+
+class Entry(BaseModel):
+    name: str
+    kind: Literal["folder", "file"]
+    size: int | None
+    modified: float
+
+
+class Listing(BaseModel):
+    path: str
+    parent: str | None
+    entries: list[Entry]
+    truncated: bool
+
+
+class Folder(BaseModel):
+    path: str
 
 
 def _roots(profile: Profile) -> list[Path]:
@@ -61,7 +89,7 @@ def _existing(profile: Profile, raw: str, *, folder: bool = False) -> Path:
     return path
 
 
-@router.get("/roots")
+@router.get("/roots", response_model=Roots)
 def roots(request: Request) -> dict[str, Any]:
     profile: Profile = request.app.state.profile
     runs_root = os.path.realpath(Path(profile.runs_root).expanduser())
@@ -77,7 +105,7 @@ def roots(request: Request) -> dict[str, Any]:
     }
 
 
-@router.get("/list")
+@router.get("/list", response_model=Listing)
 def list_folder(
     request: Request,
     path: str = Query(...),
@@ -118,7 +146,7 @@ class FolderRequest(BaseModel):
     path: str
 
 
-@router.post("/mkdir", status_code=201)
+@router.post("/mkdir", status_code=201, response_model=Folder)
 def make_folder(body: FolderRequest, request: Request) -> dict[str, str]:
     folder = resolve(request.app.state.profile, body.path)
     try:

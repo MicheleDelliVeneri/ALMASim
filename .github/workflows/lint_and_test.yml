@@ -56,7 +56,7 @@ jobs:
         run: npm ci
 
       - name: API types are current
-        run: npm run gen:api && git diff --exit-code src/lib/api/schema.d.ts
+        run: npm run gen:api && git diff --exit-code src/lib/api/schema.d.ts src/lib/api/v2/schema.d.ts
 
       - name: Type check
         run: npm run check

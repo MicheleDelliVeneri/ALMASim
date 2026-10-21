@@ -1,10 +1,11 @@
-"""The frontend's copy of the backend's OpenAPI schema is current (MADIV-28 T7.4).
+"""The frontend's copies of the OpenAPI schemas are current (MADIV-28 T7.4, U3.1).
 
 The frontend's API types (``schema.d.ts``) are generated from
-``frontend/src/lib/api/openapi.json``; after a backend schema change run
-``python scripts/generate_openapi.py`` and ``npm run gen:api``. The schema is
-built in a fresh interpreter: other tests stub backend modules the routes
-depend on.
+``frontend/src/lib/api/openapi.json`` (API v1, the old backend) and
+``frontend/src/lib/api/v2/openapi.json`` (API v2, the web console); after a
+schema change run ``python scripts/generate_openapi.py`` and
+``npm run gen:api``. The schemas are built in a fresh interpreter: other tests
+stub backend modules the routes depend on.
 """
 
 from __future__ import annotations
@@ -19,13 +20,15 @@ import pytest
 pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
-STORED = ROOT / "frontend" / "src" / "lib" / "api" / "openapi.json"
+API = ROOT / "frontend" / "src" / "lib" / "api"
+STORED = {"v1": API / "openapi.json", "v2": API / "v2" / "openapi.json"}
 
 
-def test_openapi_json_matches_the_backend():
+@pytest.mark.parametrize("version", sorted(STORED))
+def test_openapi_json_matches_the_server(version):
     pytest.importorskip("fastapi")
     result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "generate_openapi.py"), "--stdout"],
+        [sys.executable, str(ROOT / "scripts" / "generate_openapi.py"), "--stdout", version],
         capture_output=True,
         text=True,
         timeout=300,
@@ -33,7 +36,7 @@ def test_openapi_json_matches_the_backend():
     assert result.returncode == 0, result.stderr
     diff = "\n".join(
         difflib.unified_diff(
-            STORED.read_text(encoding="utf-8").splitlines(),
+            STORED[version].read_text(encoding="utf-8").splitlines(),
             result.stdout.splitlines(),
             lineterm="",
             n=1,
