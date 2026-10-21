@@ -14,9 +14,9 @@
 	let { values = $bindable() }: Props = $props();
 
 	const controlClass =
-		'w-full rounded-md border border-slate-600 bg-sunk px-3 py-2 text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500';
+		'w-full rounded-md border border-line-strong bg-sunk px-3 py-2 text-fg placeholder:text-fg-dim focus:outline-none focus:ring-2 focus:ring-magenta';
 	const disabledControlClass =
-		'w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-fg-dim placeholder:text-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-cyan-500';
+		'w-full rounded-md border border-line-strong bg-sunk px-3 py-2 text-fg-dim placeholder:text-fg-dim disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-magenta';
 
 	// Directory browser state
 	let browserOpen = $state(false);
@@ -32,12 +32,12 @@
 	}
 </script>
 
-<section class="space-y-4 rounded-lg border border-slate-700 bg-slate-950 p-6 shadow-panel">
-	<h2 class="text-xl font-semibold text-slate-100">Simulation Configuration</h2>
+<section class="space-y-4 rounded-lg border border-line-strong bg-surface p-6 shadow-panel">
+	<h2 class="text-xl font-semibold text-fg">Simulation Configuration</h2>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 		<div>
-			<label for="source_type" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="source_type" class="mb-1 block text-sm font-medium text-fg-muted">
 				Source Type
 			</label>
 			<select
@@ -57,7 +57,7 @@
 		</div>
 
 		<div>
-			<label for="n_pix" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="n_pix" class="mb-1 block text-sm font-medium text-fg-muted">
 				Spatial Pixels (n_pix × n_pix)
 			</label>
 			<input
@@ -81,7 +81,7 @@
 		</div>
 
 		<div>
-			<label for="n_channels" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="n_channels" class="mb-1 block text-sm font-medium text-fg-muted">
 				Spectral Channels
 			</label>
 			<input
@@ -107,7 +107,7 @@
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 		<div>
-			<label for="simulation_name" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="simulation_name" class="mb-1 block text-sm font-medium text-fg-muted">
 				Simulation Name
 			</label>
 			<input
@@ -122,7 +122,7 @@
 		</div>
 
 		<div>
-			<label for="output_dir" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="output_dir" class="mb-1 block text-sm font-medium text-fg-muted">
 				Output Directory
 			</label>
 			<div class="flex gap-2">
@@ -137,7 +137,7 @@
 				<button
 					type="button"
 					onclick={openBrowser}
-					class="rounded-md border border-slate-600 bg-sunk px-3 py-2 text-sm font-medium text-fg-muted hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+					class="rounded-md border border-line-strong bg-sunk px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover focus:outline-none focus:ring-2 focus:ring-magenta"
 					title="Browse for directory"
 				>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -154,7 +154,7 @@
 		</div>
 
 		<div>
-			<label for="num_simulations" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="num_simulations" class="mb-1 block text-sm font-medium text-fg-muted">
 				Number of Simulations
 			</label>
 			<input
@@ -173,7 +173,7 @@
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-5">
 		<div>
-			<label for="use_metadata_snr" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="use_metadata_snr" class="mb-1 block text-sm font-medium text-fg-muted">
 				SNR Source
 			</label>
 			<select
@@ -189,7 +189,7 @@
 		</div>
 
 		<div>
-			<label for="snr" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="snr" class="mb-1 block text-sm font-medium text-fg-muted">
 				Signal-to-Noise Ratio (SNR)
 			</label>
 			<input
@@ -211,7 +211,7 @@
 		</div>
 
 		<div>
-			<label for="use_metadata_pwv" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="use_metadata_pwv" class="mb-1 block text-sm font-medium text-fg-muted">
 				PWV Source
 			</label>
 			<select
@@ -227,7 +227,7 @@
 		</div>
 
 		<div>
-			<label for="pwv_override" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="pwv_override" class="mb-1 block text-sm font-medium text-fg-muted">
 				PWV Override (mm)
 			</label>
 			<input
@@ -247,7 +247,7 @@
 		</div>
 
 		<div>
-			<label for="save_mode" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="save_mode" class="mb-1 block text-sm font-medium text-fg-muted">
 				Image Save Mode
 			</label>
 			<select
@@ -264,7 +264,7 @@
 		</div>
 
 		<div>
-			<label for="ms_save_mode" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="ms_save_mode" class="mb-1 block text-sm font-medium text-fg-muted">
 				MS Save Mode
 			</label>
 			<select
@@ -281,7 +281,7 @@
 		</div>
 
 		<div>
-			<label for="n_lines" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="n_lines" class="mb-1 block text-sm font-medium text-fg-muted">
 				Number of Lines
 			</label>
 			<input
@@ -298,7 +298,7 @@
 		</div>
 
 		<div>
-			<label for="robust" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="robust" class="mb-1 block text-sm font-medium text-fg-muted">
 				Robust Weighting
 			</label>
 			<input
@@ -315,7 +315,7 @@
 		</div>
 
 		<div>
-			<label for="imaging_algorithm" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="imaging_algorithm" class="mb-1 block text-sm font-medium text-fg-muted">
 				Imaging Algorithm
 			</label>
 			<select
@@ -332,7 +332,7 @@
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-5">
 		<div>
-			<label for="source_offset_x_arcsec" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="source_offset_x_arcsec" class="mb-1 block text-sm font-medium text-fg-muted">
 				Source Offset X
 			</label>
 			<input
@@ -347,7 +347,7 @@
 		</div>
 
 		<div>
-			<label for="source_offset_y_arcsec" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="source_offset_y_arcsec" class="mb-1 block text-sm font-medium text-fg-muted">
 				Source Offset Y
 			</label>
 			<input
@@ -362,7 +362,7 @@
 		</div>
 
 		<div>
-			<label for="background_mode" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="background_mode" class="mb-1 block text-sm font-medium text-fg-muted">
 				Background Sky
 			</label>
 			<select
@@ -380,7 +380,7 @@
 		</div>
 
 		<div>
-			<label for="background_level" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="background_level" class="mb-1 block text-sm font-medium text-fg-muted">
 				Background Level
 			</label>
 			<input
@@ -397,7 +397,7 @@
 		</div>
 
 		<div>
-			<label for="background_seed" class="mb-1 block text-sm font-medium text-slate-300">
+			<label for="background_seed" class="mb-1 block text-sm font-medium text-fg-muted">
 				Background Seed
 			</label>
 			<input

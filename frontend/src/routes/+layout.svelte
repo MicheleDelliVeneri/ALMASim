@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '@fontsource-variable/noto-sans';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import type { Snippet } from 'svelte';
 	import '../app.css';
@@ -6,96 +8,67 @@
 	let { children }: { children: Snippet } = $props();
 
 	const navItems = [
-		{ href: '/', label: 'Overview', code: 'OVR' },
-		{ href: '/metadata', label: 'Metadata', code: 'META' },
-		{ href: '/data', label: 'Data', code: 'DATA' },
-		{ href: '/simulations', label: 'Simulations', code: 'SIM' },
-		{ href: '/combination', label: 'Combination', code: 'COMB' },
-		{ href: '/imaging', label: 'Imaging', code: 'IMG' },
-		{ href: '/visualizer', label: 'Visualizer', code: 'VIS' }
+		{ href: '/', label: 'Overview' },
+		{ href: '/metadata', label: 'Metadata' },
+		{ href: '/data', label: 'Data' },
+		{ href: '/simulations', label: 'Simulations' },
+		{ href: '/combination', label: 'Combination' },
+		{ href: '/imaging', label: 'Imaging' },
+		{ href: '/visualizer', label: 'Visualizer' }
 	] as const;
+
+	function current(href: string): boolean {
+		const path = page.url.pathname;
+		return href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`);
+	}
 </script>
 
-<div class="alma-shell min-h-screen text-gray-100">
-	<div class="flex min-h-screen">
-		<aside class="alma-glass hidden w-72 shrink-0 flex-col border-r border-gray-200/20 md:flex">
-			<div class="border-b border-gray-200/20 px-6 py-6">
-				<div class="alma-kicker">ALMA Simulator</div>
-				<div class="mt-3 flex items-center gap-3">
-					<img
-						src="/assets/almasim-icon.jpeg"
-						alt="ALMASim icon"
-						class="h-11 w-11 rounded border border-blue-300/30 object-cover"
-					/>
-					<div>
-						<div class="text-2xl font-bold tracking-tight text-gray-100">ALMASim</div>
-						<div class="text-xs text-fg-dim">A simulator for a more civilized age</div>
-					</div>
-				</div>
-			</div>
-
-			<nav class="flex-1 px-4 py-5">
-				{#each navItems as item (item.href)}
-					<a
-						href={resolve(item.href)}
-						class="group mb-2 flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-hover hover:text-white"
-						data-sveltekit-preload-data
-					>
-						<span
-							class="w-10 rounded border border-gray-200/20 bg-black/20 px-2 py-1 text-center font-mono text-[10px] text-cyan-200 group-hover:border-cyan-200/50"
-						>
-							{item.code}
-						</span>
-						<span>{item.label}</span>
-					</a>
-				{/each}
-			</nav>
-
-			<div class="border-t border-gray-200/20 px-6 py-5">
-				<div class="alma-chip rounded px-3 py-2 text-xs">
-					<div class="font-semibold uppercase tracking-wide">Runtime</div>
-					<div class="mt-1 text-gray-300">Simulation and data services</div>
-				</div>
-				<div class="mt-4 text-xs text-fg-dim">© {new Date().getFullYear()} ALMASim</div>
-			</div>
-		</aside>
-
-		<div class="flex min-w-0 flex-1 flex-col">
-			<header class="alma-glass sticky top-0 z-40 border-b border-gray-200/20 md:hidden">
-				<div class="flex items-center justify-between px-4 py-3">
-					<div class="flex items-center gap-3">
-						<img
-							src="/assets/almasim-icon.jpeg"
-							alt="ALMASim icon"
-							class="h-9 w-9 rounded border border-blue-300/30 object-cover"
-						/>
-						<div>
-							<div class="alma-kicker">ALMASim</div>
-							<div class="text-sm text-gray-300">ALMA Simulator</div>
-						</div>
-					</div>
-					<a href={resolve('/data')} class="alma-chip rounded px-3 py-1 text-xs font-semibold"
-						>DATA</a
-					>
-				</div>
-				<div class="flex gap-2 overflow-x-auto px-4 pb-3">
-					{#each navItems as item (item.href)}
-						<a
-							href={resolve(item.href)}
-							class="rounded border border-gray-200/20 px-3 py-1.5 text-xs text-gray-300"
-							data-sveltekit-preload-data
-						>
-							{item.label}
-						</a>
-					{/each}
-				</div>
-			</header>
-
-			<main class="min-w-0 flex-1 overflow-y-auto">
-				<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-					{@render children()}
-				</div>
-			</main>
+<div class="flex min-h-screen flex-col bg-canvas text-fg">
+	<header class="sticky top-0 z-40 bg-navy text-white">
+		<div class="flex h-16 items-center gap-4 px-4 sm:px-6">
+			<a href={resolve('/')} class="flex items-center gap-3 text-white no-underline">
+				<img src="/assets/skao-mark-white.png" alt="" class="h-8 w-8" />
+				<span class="text-xl font-light tracking-tight">ALMASim</span>
+				<span class="hidden text-xs font-medium uppercase tracking-wide text-navy-soft sm:inline"
+					>Web console</span
+				>
+			</a>
 		</div>
+		<nav
+			aria-label="Main"
+			class="flex gap-1 overflow-x-auto border-t border-white/10 px-2 py-2 md:hidden"
+		>
+			{#each navItems as item (item.href)}
+				<a
+					href={resolve(item.href)}
+					aria-current={current(item.href) ? 'page' : undefined}
+					class="shrink-0 rounded px-3 py-1.5 text-sm text-navy-soft aria-[current=page]:bg-white/15 aria-[current=page]:text-white"
+					data-sveltekit-preload-data>{item.label}</a
+				>
+			{/each}
+		</nav>
+	</header>
+
+	<div class="flex min-h-0 flex-1">
+		<nav
+			aria-label="Main"
+			class="hidden w-60 shrink-0 flex-col gap-0.5 border-r border-line bg-surface px-3 py-4 md:flex"
+		>
+			{#each navItems as item (item.href)}
+				<a
+					href={resolve(item.href)}
+					aria-current={current(item.href) ? 'page' : undefined}
+					class="rounded px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover hover:text-navy aria-[current=page]:bg-sunk aria-[current=page]:font-bold aria-[current=page]:text-navy"
+					data-sveltekit-preload-data>{item.label}</a
+				>
+			{/each}
+			<div class="mt-auto px-3 pt-6 text-xs text-fg-dim">© {new Date().getFullYear()} ALMASim</div>
+		</nav>
+
+		<main class="min-w-0 flex-1 overflow-y-auto">
+			<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+				{@render children()}
+			</div>
+		</main>
 	</div>
 </div>

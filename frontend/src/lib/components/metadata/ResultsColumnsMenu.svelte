@@ -104,7 +104,7 @@
 						/>
 					</svg>
 					{formatColumnName(col)}
-					<span class="ml-auto text-xs text-gray-300">pinned</span>
+					<span class="ml-auto text-xs text-fg-muted">pinned</span>
 				</div>
 			{/each}
 			<!-- Reorderable columns (drag up/down to reorder) -->
@@ -122,7 +122,7 @@
 					role="listitem"
 				>
 					<span
-						class="cursor-grab select-none text-gray-300 hover:text-gray-500"
+						class="cursor-grab select-none text-fg-muted hover:text-gray-500"
 						aria-label="Drag to reorder">⠇⠇</span
 					>
 					<input
@@ -133,7 +133,7 @@
 					/>
 					{formatColumnName(col)}
 					{#if !dataColumns.has(col)}
-						<span class="ml-auto text-xs text-gray-300">—</span>
+						<span class="ml-auto text-xs text-fg-muted">—</span>
 					{/if}
 				</label>
 			{/each}

@@ -69,8 +69,8 @@
 		<div class="alma-panel rounded-lg p-6 sm:p-8">
 			<div class="alma-kicker">ALMA Simulator</div>
 			<div class="mt-5 max-w-3xl">
-				<h1 class="text-4xl font-bold leading-tight text-gray-100 sm:text-5xl">ALMASim</h1>
-				<p class="mt-4 text-lg leading-8 text-gray-300">
+				<h1 class="text-4xl font-bold leading-tight text-fg sm:text-5xl">ALMASim</h1>
+				<p class="mt-4 text-lg leading-8 text-fg-muted">
 					A control surface for ALMA simulation workflows: select observations, download data
 					products, create MeasurementSets, run simulations, image outputs, and inspect results.
 				</p>
@@ -84,7 +84,7 @@
 				</a>
 				<a
 					href={resolve('/simulations')}
-					class="rounded border border-line px-4 py-2 text-sm font-semibold text-gray-200 hover:bg-hover"
+					class="rounded border border-line px-4 py-2 text-sm font-semibold text-navy hover:bg-hover"
 				>
 					Open Simulations
 				</a>
@@ -96,7 +96,7 @@
 				<div class="flex items-start justify-between gap-4">
 					<div class="min-w-0">
 						<div class="alma-kicker">Connection</div>
-						<div class="mt-2 text-2xl font-semibold text-gray-100">Backend</div>
+						<div class="mt-2 text-2xl font-semibold text-fg">Backend</div>
 					</div>
 					<span
 						class="shrink-0 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wide"
@@ -116,7 +116,7 @@
 					{#each workflowLinks as link (link.href)}
 						<a
 							href={resolve(link.href)}
-							class="flex items-center justify-between rounded border border-line px-3 py-2 text-sm text-gray-300 hover:bg-hover"
+							class="flex items-center justify-between rounded border border-line px-3 py-2 text-sm text-fg-muted hover:bg-hover"
 						>
 							<span>{link.label}</span>
 							<span class="text-fg-dim">Open</span>
@@ -137,11 +137,9 @@
 					<span class="font-mono text-xs text-fg-dim">{module.code}</span>
 					<span class="alma-chip rounded px-2 py-1 text-xs font-semibold">{module.metric}</span>
 				</div>
-				<h2 class="mt-5 text-xl font-semibold text-gray-100">{module.title}</h2>
+				<h2 class="mt-5 text-xl font-semibold text-fg">{module.title}</h2>
 				<p class="mt-3 text-sm leading-6 text-fg-dim">{module.description}</p>
-				<div class="mt-5 text-sm font-semibold text-accent group-hover:text-cyan-200">
-					Open module
-				</div>
+				<div class="mt-5 text-sm font-semibold text-accent group-hover:text-navy">Open module</div>
 			</a>
 		{/each}
 	</section>

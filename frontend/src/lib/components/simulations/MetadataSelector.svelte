@@ -84,7 +84,7 @@
 				>
 					Select All
 				</button>
-				<span class="text-gray-300">|</span>
+				<span class="text-fg-muted">|</span>
 				<button
 					type="button"
 					onclick={clearAll}
@@ -92,7 +92,7 @@
 				>
 					Clear
 				</button>
-				<span class="text-gray-300">|</span>
+				<span class="text-fg-muted">|</span>
 			{/if}
 			<a href={resolve('/metadata')} class="text-sm font-medium text-accent hover:text-accent">
 				Go to Metadata →
