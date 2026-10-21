@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+from tenacity import RetryError
 
 from almasim.services.metadata.tap.service import (
     ExclusionFilters,
@@ -389,7 +390,7 @@ def test_a_failed_query_forgets_the_mirror():
     with patch("almasim.services.metadata.tap.client.pyvo") as mock_pyvo:
         service = get_tap_service()
         service.search.side_effect = RuntimeError("mirror down")
-        with pytest.raises(Exception):
+        with pytest.raises(RetryError):
             search_with_retry.retry_with(stop=lambda _: True)(service, "SELECT 1")
         service.search.side_effect = None
         get_tap_service()

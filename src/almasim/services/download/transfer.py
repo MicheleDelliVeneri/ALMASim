@@ -9,8 +9,8 @@ import re
 import tarfile
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -58,12 +58,12 @@ def _has_tar_header(path: Path) -> bool:
     return True
 
 
-def _download_single_attempt(
+def _download_single_attempt(  # noqa: C901
     file_status: FileDownloadStatus,
     part_path: Path,
     *,
-    should_cancel: Optional[Callable[[], bool]] = None,
-    update_callback: Optional[Callable[[FileDownloadStatus], None]] = None,
+    should_cancel: Callable[[], bool] | None = None,
+    update_callback: Callable[[FileDownloadStatus], None] | None = None,
 ) -> bool:
     existing_bytes = part_path.stat().st_size if part_path.exists() else 0
     if existing_bytes > 0 and _starts_like_html(part_path, file_status.filename):
@@ -139,13 +139,13 @@ def _download_single_attempt(
     return True
 
 
-def _download_single_file(
+def _download_single_file(  # noqa: C901
     file_status: FileDownloadStatus,
     destination: Path,
     *,
-    should_cancel: Optional[Callable[[], bool]] = None,
-    update_callback: Optional[Callable[[FileDownloadStatus], None]] = None,
-    host_semaphores: Optional[Dict[str, threading.BoundedSemaphore]] = None,
+    should_cancel: Callable[[], bool] | None = None,
+    update_callback: Callable[[FileDownloadStatus], None] | None = None,
+    host_semaphores: dict[str, threading.BoundedSemaphore] | None = None,
 ) -> None:
     destination_path = destination / file_status.filename
     part_path = destination_path.with_suffix(destination_path.suffix + ".part")
@@ -176,7 +176,7 @@ def _download_single_file(
     file_status.status = "downloading"
     if update_callback is not None:
         update_callback(file_status)
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     host = urlsplit(file_status.access_url).netloc
     semaphore = host_semaphores.get(host) if host_semaphores else None
     if semaphore is not None:
@@ -194,7 +194,7 @@ def _download_single_file(
                     return
                 last_error = None
                 break
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - retried, then raised
                 last_error = exc
                 if attempt < _MAX_FILE_ATTEMPTS:
                     time.sleep(_RETRY_BACKOFF_BASE ** (attempt - 1))
@@ -227,13 +227,13 @@ def _download_single_file(
         update_callback(file_status)
 
 
-def _mirror_hosts() -> List[str]:
+def _mirror_hosts() -> list[str]:
     """Return the netloc of each known DataLink/TAP mirror."""
     return [urlsplit(base).netloc for base in _DATALINK_MIRRORS]
 
 
 def _distribute_across_mirrors(
-    statuses: List[FileDownloadStatus],
+    statuses: list[FileDownloadStatus],
 ) -> None:
     """Round-robin rewrite each ``access_url`` host across the known ALMA mirrors.
 

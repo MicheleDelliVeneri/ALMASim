@@ -55,9 +55,9 @@ def ensure_casa_runtime_data(
 
     if skip_update:
         raise RuntimeError(
-            "CASA runtime data is missing at {0}. Re-run without "
+            f"CASA runtime data is missing at {casa_data}. Re-run without "
             "--skip-casa-data-update or pass --casa-data-root pointing to a "
-            "populated data directory.".format(casa_data)
+            "populated data directory."
         )
 
     report(logger, logger_fn, f"Populating CASA runtime data: {casa_data}")

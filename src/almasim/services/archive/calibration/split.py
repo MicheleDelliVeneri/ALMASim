@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from ...casa import tools as casa_tools
 from ...markers import StageMarkers

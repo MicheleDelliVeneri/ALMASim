@@ -61,7 +61,7 @@ def _entity_id_to_filename(entity_id: str) -> str:
     return entity_id.strip().replace("://", "___").replace("/", "_")
 
 
-def verify_asdm_directory(asdm_path: str | os.PathLike[str]) -> None:
+def verify_asdm_directory(asdm_path: str | os.PathLike[str]) -> None:  # noqa: C901
     """Raise ``RuntimeError`` unless ``asdm_path`` is a complete ASDM.
 
     Directory existence is not evidence of completeness. An ASDM tar is

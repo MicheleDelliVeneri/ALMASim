@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
 
-def single_run_result(
-    per_config_results: list[dict[str, Any]], what: str
-) -> Optional[dict[str, Any]]:
+def single_run_result(per_config_results: list[dict[str, Any]], what: str) -> dict[str, Any] | None:
     """The combined result when there is one run (or None when there are several).
 
     Raises ``ValueError`` for an empty list.
@@ -24,7 +22,7 @@ def single_run_result(
     return combined
 
 
-def normalized_config_weights(n_runs: int, config_weights: Optional[list[float]]) -> np.ndarray:
+def normalized_config_weights(n_runs: int, config_weights: list[float] | None) -> np.ndarray:
     """Per-run weights summing to 1: negatives clipped, all-zero treated as equal."""
     if config_weights is None:
         config_weights = [1.0] * n_runs

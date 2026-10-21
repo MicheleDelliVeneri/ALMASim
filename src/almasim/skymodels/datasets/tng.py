@@ -6,7 +6,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import paramiko
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 try:  # pragma: no cover - exercised indirectly
     import pysftp
-except Exception as exc:  # pragma: no cover - import-time guard
+except Exception as exc:  # noqa: BLE001 - pysftp's dependencies fail in many ways  # pragma: no cover
     pysftp = None
     _PYSFTP_IMPORT_ERROR = exc
 else:
@@ -35,10 +35,10 @@ class RemoteMachine:
     host: str
     username: str
     ssh_key: Path
-    ssh_key_passphrase: Optional[str] = None
+    ssh_key_passphrase: str | None = None
 
 
-def _require_pysftp() -> "pysftp":  # type: ignore[name-defined]
+def _require_pysftp() -> pysftp:  # type: ignore[name-defined]
     """Require pysftp module, raising error if not available."""
     if pysftp is None:
         raise RuntimeError(
@@ -67,7 +67,7 @@ def _wget_tng(api_key: str, destination_file: Path) -> None:
 def download_tng_structure(
     api_key: str,
     destination: Path | str,
-    remote: Optional[RemoteMachine] = None,
+    remote: RemoteMachine | None = None,
 ) -> Path:
     """Download the Illustris TNG structure file locally or to a remote host."""
     destination = Path(destination).expanduser().resolve()

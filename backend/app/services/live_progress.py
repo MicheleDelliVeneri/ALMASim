@@ -7,15 +7,16 @@ lock and stamped ``updated_at`` by hand; :class:`LiveProgress` is that once.
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Generic, Iterator, Optional, TypeVar
+from typing import TypeVar
 
 from app.core.clock import utc_now
 
 T = TypeVar("T")
 
 
-class LiveProgress(Generic[T]):
+class LiveProgress[T]:
     """Jobs by id; :meth:`editing` changes one under the lock and stamps ``updated_at``."""
 
     def __init__(self) -> None:
@@ -27,7 +28,7 @@ class LiveProgress(Generic[T]):
             self._items[key] = item
             return item
 
-    def get(self, key: str) -> Optional[T]:
+    def get(self, key: str) -> T | None:
         with self._lock:
             return self._items.get(key)
 
@@ -41,7 +42,7 @@ class LiveProgress(Generic[T]):
             return list(self._items.values())
 
     @contextmanager
-    def editing(self, key: str) -> Iterator[Optional[T]]:
+    def editing(self, key: str) -> Iterator[T | None]:
         """The job (None when unknown), held under the lock; ``updated_at`` is stamped after."""
         with self._lock:
             item = self._items.get(key)

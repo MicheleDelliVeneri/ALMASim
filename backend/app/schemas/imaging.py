@@ -1,6 +1,6 @@
 """Schemas for the imaging preview endpoint (MADIV-28 T5.12)."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -53,12 +53,12 @@ class WienerPreviewMetadata(BaseModel):
     dirty_cube_path: str
     beam_cube_path: str
     beam_cube_name: str
-    clean_cube_path: Optional[str] = None
+    clean_cube_path: str | None = None
     epsilon: float
     model_cube_path: str
     restored_cube_path: str
     residual_cube_path: str
-    convolved_reference_path: Optional[str] = None
+    convolved_reference_path: str | None = None
 
 
 class WienerPreviewResponse(BaseModel):

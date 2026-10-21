@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import logging
 import tarfile
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import sleep, time
-from typing import Any, Optional, Protocol, Sequence
+from typing import Any, Protocol
 
 from tqdm.auto import tqdm
 
@@ -88,7 +89,7 @@ def _stage_log_path(output_root: Any, uid: str, stage: str) -> Path:
     return Path(str(output_root)).expanduser().resolve() / "logs" / f"{_safe_uid(uid)}.{stage}.log"
 
 
-def _compute_jobs_with_progress(
+def _compute_jobs_with_progress(  # noqa: C901
     *,
     backend: Any,
     jobs: list[Any],
@@ -96,8 +97,8 @@ def _compute_jobs_with_progress(
     stage_label: str,
     no_progress_timeout: float = _NO_PROGRESS_TIMEOUT_S,
     continue_on_error: bool = False,
-    log_paths: Optional[list[Path]] = None,
-    failures: Optional[list[TaskFailure]] = None,
+    log_paths: list[Path] | None = None,
+    failures: list[TaskFailure] | None = None,
     heartbeat_interval: float = _PROGRESS_HEARTBEAT_S,
 ) -> list[Any]:
     """Run a stage and show per-UID progress for asynchronous backends.
@@ -118,7 +119,7 @@ def _compute_jobs_with_progress(
     def _uid(index: int) -> str:
         return job_uids[index] if index < len(job_uids) else f"job-{index + 1}"
 
-    def _log_path(index: int) -> Optional[Path]:
+    def _log_path(index: int) -> Path | None:
         if log_paths is not None and index < len(log_paths):
             return log_paths[index]
         return None
@@ -161,7 +162,7 @@ def _compute_jobs_with_progress(
                         exc = future.exception()
                         if exc is not None:
                             error_text = str(exc)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - the job's own error is best effort
                         pass
                     _record_failure(index, error_text)
                     progress_bar.write(f"  {uid} error: {error_headline(error_text)}")
@@ -213,7 +214,7 @@ def _compute_jobs_with_progress(
             continue
         try:
             results.append(backend.gather([future])[0])
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a failed job is recorded, not raised
             failed.add(index)
             _record_failure(index, str(exc))
             results.append(None)
@@ -257,7 +258,7 @@ def _run_uid_stage(
 
     outputs: list[list[str]] = []
     total = len(job_uids)
-    for index, (uid, kwargs) in enumerate(zip(job_uids, job_kwargs), start=1):
+    for index, (uid, kwargs) in enumerate(zip(job_uids, job_kwargs, strict=True), start=1):
         log_path = log_paths[index - 1] if index - 1 < len(log_paths) else None
         echo(
             f"{stage_label} [{index}/{total}] starting {uid}"
@@ -333,7 +334,7 @@ def _unpack_single_uid(
     input_root: str,
     raw_output_root: str,
     asdm_uid: str,
-    casa_data_root: Optional[str],
+    casa_data_root: str | None,
     skip_casa_data_update: bool,
     overwrite: bool,
 ) -> list[str]:
@@ -417,7 +418,7 @@ def _calibrate_single_uid(
     raw_ms_root: str,
     calibrated_output_root: str,
     asdm_uid: str,
-    casa_data_root: Optional[str],
+    casa_data_root: str | None,
     skip_casa_data_update: bool,
     overwrite: bool,
     clean_intermediate: bool,
@@ -510,7 +511,7 @@ def _calibrate_single_uid(
 
 def _preflight_casa_data(
     output_root: Path,
-    casa_data_root: Optional[Path],
+    casa_data_root: Path | None,
     skip_casa_data_update: bool,
     echo: Echo = _log_echo,
 ) -> Path:
@@ -579,11 +580,11 @@ def _run_unpack_jobs(
     asdm_uids: list[str],
     postprocess_backend: str,
     postprocess_backend_kwargs: dict[str, Any],
-    casa_data_root: Optional[Path],
+    casa_data_root: Path | None,
     skip_casa_data_update: bool,
     overwrite_outputs: bool,
     continue_on_error: bool = True,
-    failures: Optional[list[TaskFailure]] = None,
+    failures: list[TaskFailure] | None = None,
     echo: Echo = _log_echo,
 ) -> list[str]:
     """Import ASDMs into raw MeasurementSets, one isolated subprocess per UID.
@@ -679,7 +680,7 @@ def _run_unpack_jobs(
     return outputs
 
 
-def _run_calibrate_jobs(
+def _run_calibrate_jobs(  # noqa: C901
     *,
     input_root: Path,
     raw_ms_root: Path,
@@ -687,12 +688,12 @@ def _run_calibrate_jobs(
     asdm_uids: list[str],
     postprocess_backend: str,
     postprocess_backend_kwargs: dict[str, Any],
-    casa_data_root: Optional[Path],
+    casa_data_root: Path | None,
     skip_casa_data_update: bool,
     overwrite_outputs: bool,
     clean_intermediate: bool,
     continue_on_error: bool = True,
-    failures: Optional[list[TaskFailure]] = None,
+    failures: list[TaskFailure] | None = None,
     keep_working_copies: bool = False,
     echo: Echo = _log_echo,
 ) -> list[str]:
@@ -962,7 +963,7 @@ def _run_extract_jobs(
     return extracted_files, []
 
 
-def _run_parallel_archive_jobs(
+def _run_parallel_archive_jobs(  # noqa: C901
     *,
     download_root: Path,
     archive_output_root: Path,
@@ -970,11 +971,11 @@ def _run_parallel_archive_jobs(
     generate_calibrated_visibilities: bool,
     postprocess_backend: str,
     postprocess_backend_kwargs: dict[str, Any],
-    casa_data_root: Optional[Path],
+    casa_data_root: Path | None,
     skip_casa_data_update: bool,
     overwrite_archive_outputs: bool,
     continue_on_error: bool = True,
-    failures: Optional[list[TaskFailure]] = None,
+    failures: list[TaskFailure] | None = None,
     keep_working_copies: bool = False,
     echo: Echo = _log_echo,
 ) -> tuple[list[str], list[str]]:
@@ -1044,7 +1045,7 @@ def _run_parallel_archive_jobs(
                 echo=echo,
             )
             calibrate_uids = []
-            for uid, result in zip(asdm_uids, unpack_results):
+            for uid, result in zip(asdm_uids, unpack_results, strict=True):
                 raw_outputs.extend(result)
                 if result:
                     calibrate_uids.append(uid)
@@ -1105,8 +1106,8 @@ def run_archive_stages(
     unpack_ms: bool = True,
     calibrate: bool = True,
     postprocess_backend: str = "sync",
-    postprocess_backend_kwargs: Optional[dict[str, Any]] = None,
-    casa_data_root: Optional[Path] = None,
+    postprocess_backend_kwargs: dict[str, Any] | None = None,
+    casa_data_root: Path | None = None,
     skip_casa_data_update: bool = False,
     overwrite: bool = False,
     keep_working_copies: bool = False,

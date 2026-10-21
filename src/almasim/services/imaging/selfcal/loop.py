@@ -8,8 +8,9 @@ from __future__ import annotations
 import os
 import re
 import shutil
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING
 
 from almasim.services.imaging.cube import (
     stack_channel_images,
@@ -125,7 +126,7 @@ def parse_selfcal_rounds(solints: Sequence[str]) -> list[tuple[str, str]]:
     return rounds
 
 
-def self_calibrate(
+def self_calibrate(  # noqa: C901
     ms_path: Path,
     continuum_command: list[str],
     *,
@@ -312,7 +313,7 @@ def _keep_gain_tables(
     return written
 
 
-def _selfcal_noise_products(
+def _selfcal_noise_products(  # noqa: C901
     ms_path: Path,
     *,
     continuum_command: Sequence[str] | None,

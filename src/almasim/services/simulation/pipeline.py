@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from time import gmtime, strftime
-from typing import Callable, Optional
 
 from .context import RunContext
 from .export import export_results
@@ -16,12 +16,12 @@ def run_simulation(
     params: SimulationParams,
     *,
     logger: LogFn = None,
-    status_callback: Optional[Callable[[str], None]] = None,
+    status_callback: Callable[[str], None] | None = None,
     progress_emitter=None,
     compute_backend=None,
     terminal_logger=None,
     robust: float = 0.0,
-    interferometer_progress_callback: Optional[Callable[[int], None]] = None,
+    interferometer_progress_callback: Callable[[int], None] | None = None,
     stop_requested: StopFn = False,
 ):
     """Execute the full ALMA simulation workflow."""

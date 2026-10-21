@@ -1,8 +1,9 @@
 """Metadata business logic service."""
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -22,12 +23,12 @@ logger = logging.getLogger(__name__)
 class MetadataService:
     """Service for managing metadata queries with database caching."""
 
-    def __init__(self, db: Optional[Session] = None):
+    def __init__(self, db: Session | None = None):
         """Initialize metadata service with optional database session."""
         self.db = db
         self.db_service = DatabaseService(db) if db else None
 
-    def get_science_types(self) -> Tuple[Sequence[str], Sequence[str]]:
+    def get_science_types(self) -> tuple[Sequence[str], Sequence[str]]:
         """
         Get science types and categories.
 
@@ -45,7 +46,7 @@ class MetadataService:
                         f"{len(keywords)} keywords, {len(categories)} categories"
                     )
                     return keywords, categories
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - the database is a cache
                 logger.warning(f"Failed to retrieve science types from database: {e}")
 
         # Fall back to TAP query
@@ -71,7 +72,7 @@ class MetadataService:
                 logger.info(
                     f"Cached {len(keywords)} keywords and {len(categories)} categories in database"
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - the database is a cache
                 logger.error(f"Failed to cache science types in database: {e}")
                 self.db.rollback()
 
@@ -80,8 +81,8 @@ class MetadataService:
     def query_by_science(
         self,
         params: ScienceQuery,
-        save_to: Optional[Path] = None,
-    ) -> List[Dict[str, Any]]:
+        save_to: Path | None = None,
+    ) -> list[dict[str, Any]]:
         """Query metadata by science parameters.
 
         First checks database cache, then queries ALMA TAP if needed.
@@ -93,7 +94,7 @@ class MetadataService:
 
         return self._run_fresh_tap_query(params, save_to)
 
-    def _try_cache_query(self, params: ScienceQuery) -> Optional[List[Dict[str, Any]]]:
+    def _try_cache_query(self, params: ScienceQuery) -> list[dict[str, Any]] | None:
         """Attempt to serve results from the DB cache. Returns None on miss or error."""
         if not self.db_service:
             return None
@@ -119,15 +120,15 @@ class MetadataService:
                 visible_columns=params.visible_columns,
             )
             return records
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - the database is a cache
             logger.warning(f"Database query failed: {e}, falling back to TAP")
             return None
 
     def _run_fresh_tap_query(
         self,
         params: ScienceQuery,
-        save_to: Optional[Path] = None,
-    ) -> List[Dict[str, Any]]:
+        save_to: Path | None = None,
+    ) -> list[dict[str, Any]]:
         """Run a fresh TAP query and optionally cache the results in the DB."""
         logger.info("Querying ALMA TAP archive")
         result_df = query_metadata_by_science(
@@ -140,7 +141,7 @@ class MetadataService:
             try:
                 self._cache_tap_results_in_db(result_df)
                 logger.info(f"Cached {len(result_df)} observations in database")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - the database is a cache
                 logger.error(f"Failed to cache TAP results in database: {e}")
         return result_df.to_dict("records") if result_df is not None else []
 
@@ -273,10 +274,10 @@ class MetadataService:
         try:
             new_df = result_df.iloc[new_indices]
             self._cache_tap_results_in_db(new_df)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - the database is a cache
             logger.error(f"Failed to cache background query results: {e}")
 
-    def load_metadata(self, metadata_path: Path) -> List[Dict[str, Any]]:
+    def load_metadata(self, metadata_path: Path) -> list[dict[str, Any]]:
         """
         Load metadata from CSV file.
 
@@ -289,12 +290,12 @@ class MetadataService:
             try:
                 self._cache_tap_results_in_db(result_df)
                 logger.info(f"Cached {len(result_df)} observations from CSV in database")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - the database is a cache
                 logger.error(f"Failed to cache CSV results in database: {e}")
 
         return result_df.to_dict("records") if result_df is not None else []
 
-    def _observations_to_dict(self, observations: List[Observation]) -> List[Dict[str, Any]]:
+    def _observations_to_dict(self, observations: list[Observation]) -> list[dict[str, Any]]:
         """Convert Observation objects to dict format matching TAP output."""
         return observations_to_metadata_records(
             observations,
@@ -331,11 +332,11 @@ class MetadataService:
             logger.error(f"Error caching TAP results: {e}", exc_info=True)
             try:
                 self.db.rollback()
-            except Exception:  # rollback may itself fail if the connection is gone
+            except Exception:  # noqa: BLE001 - rollback may itself fail if the connection is gone
                 logger.warning("Rollback failed; connection may already be closed")
             raise
 
-    def _upsert_row(self, importer, row_dict: Dict[str, Any], seen: set) -> int:
+    def _upsert_row(self, importer, row_dict: dict[str, Any], seen: set) -> int:
         """Insert or update one TAP row in the database.
 
         Returns 1 if written, 0 otherwise.
@@ -364,7 +365,7 @@ class MetadataService:
             if cat:
                 existing.scientific_category = importer.get_or_create_category(cat)
 
-    def _insert_new(self, importer, row_dict: Dict[str, Any], kw_str: str, cat_str: str) -> int:
+    def _insert_new(self, importer, row_dict: dict[str, Any], kw_str: str, cat_str: str) -> int:
         """Parse and insert a brand-new observation. Returns 1 on success, 0 on skip."""
         observation = importer.parse_csv_row(row_dict, "tap_query")
         if not observation:

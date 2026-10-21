@@ -1643,7 +1643,14 @@ def test_compute_imaging_parameters_one_row_per_target_field(monkeypatch):
 
     out = cli_image.compute_imaging_parameters(Path("x.ms.split.cal"))
 
-    rows = list(zip(out["spectral_window_id"], out["target_field_ids"], out["n_visibility_rows"]))
+    rows = list(
+        zip(
+            out["spectral_window_id"],
+            out["target_field_ids"],
+            out["n_visibility_rows"],
+            strict=True,
+        )
+    )
     assert rows == [(1, "2", 50), (1, "4", 40), (2, "2", 60)], "field 4 has no rows in SPW 2"
     assert list(out["field_name"]) == ["HOPS-358", "HOPS-373", "HOPS-358"]
     assert "field_id" not in out.columns, "the field id is written once, in target_field_ids"
@@ -1659,7 +1666,9 @@ def test_compute_imaging_parameters_all_spws_includes_calibrators(monkeypatch):
 
     out = cli_image.compute_imaging_parameters(Path("x.ms.split.cal"), science_only=False)
 
-    rows = list(zip(out["spectral_window_id"], out["target_field_ids"], out["field_name"]))
+    rows = list(
+        zip(out["spectral_window_id"], out["target_field_ids"], out["field_name"], strict=True)
+    )
     assert rows == [  # SPW 0 has no visibilities: no row
         (1, "0", "J0538-4405"),
         (1, "1", "J0552+0313"),
@@ -1702,7 +1711,7 @@ def test_compute_imaging_parameters_passes_intents_and_rejects_them_with_all_fie
 
     out = cli_image.compute_imaging_parameters(Path("x.ms"), intents=["CALIBRATE_PHASE#ON_SOURCE"])
     assert seen == [("CALIBRATE_PHASE#ON_SOURCE",)]
-    assert list(zip(out["spectral_window_id"], out["field_name"])) == [
+    assert list(zip(out["spectral_window_id"], out["field_name"], strict=True)) == [
         (1, "J0552+0313"),
         (2, "J0552+0313"),
     ]
@@ -1850,7 +1859,7 @@ def test_build_imaging_tasks_one_task_and_directory_per_field(tmp_path):
     assert skipped == 0
     assert [t.output_dir.name for t in tasks] == ["SPW-23_FIELD-2", "SPW-23_FIELD-4"]
     assert [t.field_ids for t in tasks] == [(2,), (4,)]
-    for task, field in zip(tasks, ("2", "4")):
+    for task, field in zip(tasks, ("2", "4"), strict=True):
         assert task.command[task.command.index("-field") + 1] == field
     assert len({t.label for t in tasks}) == 2
 

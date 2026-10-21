@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import sys
 import time
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional, Sequence
+from typing import Any
 
 # Backend future states that mean the task did not succeed.
 FAILED_FUTURE_STATES = {"error", "failed", "cancelled", "lost"}
@@ -26,7 +27,7 @@ class TaskFailure:
 
     label: str
     error: str
-    log_path: Optional[str] = None
+    log_path: str | None = None
 
 
 def error_headline(error: str, limit: int = 240) -> str:
@@ -39,8 +40,8 @@ def error_headline(error: str, limit: int = 240) -> str:
 
 
 def tail_line(
-    path: Path, *, modified_since: Optional[float] = None, max_bytes: int = 4096
-) -> Optional[str]:
+    path: Path, *, modified_since: float | None = None, max_bytes: int = 4096
+) -> str | None:
     """The last non-empty line of ``path``, reading only its last ``max_bytes``.
 
     A file last modified before ``modified_since`` (a ``time.time()`` stamp) is
@@ -61,7 +62,7 @@ def tail_line(
 
 
 def heartbeat_lines(
-    tasks: Iterable[tuple[str, Optional[Path]]], *, started_at: float
+    tasks: Iterable[tuple[str, Path | None]], *, started_at: float
 ) -> tuple[list[str], int]:
     """``[label] last log line`` for each task whose log was written since ``started_at``.
 

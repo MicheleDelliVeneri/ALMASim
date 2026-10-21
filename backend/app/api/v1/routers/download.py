@@ -78,11 +78,11 @@ def _browse_path(resolved_path) -> BrowseDirectoryResponse:
                     )
             except PermissionError:
                 continue
-    except PermissionError:
+    except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Permission denied: {resolved_path}",
-        )
+        ) from exc
 
     return BrowseDirectoryResponse(current=str(resolved_path), parent=parent, entries=entries)
 
@@ -115,7 +115,7 @@ def make_directory(path: str):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot create directory: {e}",
-        )
+        ) from e
 
     return _browse_path(target)
 
@@ -138,7 +138,7 @@ def resolve_download_products(body: ResolveProductsRequest):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to contact ALMA DataLink service: {e}",
-        )
+        ) from e
 
     # Build per-type breakdown
     by_type: dict = {}
@@ -181,7 +181,7 @@ def check_disk_space(body: CheckDiskSpaceRequest):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot access path: {e}",
-        )
+        ) from e
 
     return DiskSpaceInfo(
         path=body.path,
@@ -228,7 +228,7 @@ def start_download(body: StartDownloadRequest, background_tasks: BackgroundTasks
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to resolve products: {e}",
-        )
+        ) from e
 
     # Apply type filter
     products = filter_products(all_products, body.product_filter)
@@ -359,7 +359,7 @@ def cancel_download_job(job_id: str):
 def redownload_job(
     job_id: str,
     background_tasks: BackgroundTasks,
-    body: RedownloadRequest = RedownloadRequest(),
+    body: RedownloadRequest = RedownloadRequest(),  # noqa: B008 - FastAPI copies it per request
 ):
     """Re-download a previous job using the stored file records.
 
@@ -379,7 +379,7 @@ def redownload_job(
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Failed to resolve products: {e}",
-            )
+            ) from e
         products = filter_products(all_products, rec.product_filter or "all")
         if not products:
             raise HTTPException(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ._common import _ensure_directory, _load_kaggle_api, _run_with_c_locale
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 DEFAULT_GALAXY_ZOO_DATASET = "jaimetrickz/galaxy-zoo-2-images"
 
 
-def configure_kaggle_token(token: Optional[Path | str]) -> None:
+def configure_kaggle_token(token: Path | str | None) -> None:
     """Configure Kaggle credentials from an explicit token/credentials path.
 
     Handles both authentication schemes:
@@ -40,7 +40,7 @@ def configure_kaggle_token(token: Optional[Path | str]) -> None:
         # Legacy kaggle.json -> username/key
         try:
             creds = json.loads(text)
-        except Exception:
+        except ValueError:
             creds = None
         if isinstance(creds, dict) and creds.get("username") and creds.get("key"):
             os.environ["KAGGLE_USERNAME"] = str(creds["username"])
@@ -55,8 +55,8 @@ def configure_kaggle_token(token: Optional[Path | str]) -> None:
 
 
 def download_galaxy_zoo(
-    destination: Optional[Path | str] = None,
-    token: Optional[Path | str] = None,
+    destination: Path | str | None = None,
+    token: Path | str | None = None,
 ) -> Path:
     """Download the Galaxy Zoo 2 dataset via the Kaggle API.
 

@@ -31,8 +31,8 @@ import os
 import shutil
 import tarfile
 import uuid
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable, Optional
 
 EXTRACTION_TMP_PREFIX = ".extracting-"
 """Prefix of the hidden staging directories used while an archive is extracted.
@@ -126,7 +126,7 @@ def extract_tar_atomically(
     destination: str | os.PathLike[str],
     *,
     flat_archive_subdir: bool = True,
-    on_skipped_member: Optional[Callable[[str], None]] = None,
+    on_skipped_member: Callable[[str], None] | None = None,
 ) -> list[Path]:
     """Extract ``archive_path`` under ``destination`` so that no partial tree is
     ever visible at its final path.

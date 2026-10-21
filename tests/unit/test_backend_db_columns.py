@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("sqlalchemy")
 
-from sqlalchemy import create_engine, inspect, text  # noqa: E402
+from sqlalchemy import create_engine, inspect, text
 
 
 @pytest.mark.unit

@@ -73,7 +73,7 @@ def _forward_clean_command(*, ctx: typer.Context) -> None:
     clean_app.command(
         "clean",
         context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
-    )(getattr(module, "clean_command"))
+    )(module.clean_command)
     command = typer.main.get_command(clean_app)
     _invoke_click_command(command, args=list(ctx.args) or ["--help"], prog_name="almasim clean")
 

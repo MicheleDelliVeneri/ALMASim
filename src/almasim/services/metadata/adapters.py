@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ..instrument.array import derive_array_type
 from .tap.queries import ALL_COLUMNS
@@ -57,7 +58,7 @@ def observation_to_metadata_record(observation: Any) -> dict[str, Any]:
 
 def apply_visible_columns(
     records: Sequence[dict[str, Any]],
-    visible_columns: Optional[Sequence[str]] = None,
+    visible_columns: Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Restrict records to a visible column subset while preserving order."""
     if not visible_columns:
@@ -75,7 +76,7 @@ def apply_visible_columns(
 
 def observations_to_metadata_records(
     observations: Sequence[Any],
-    visible_columns: Optional[Sequence[str]] = None,
+    visible_columns: Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Serialize many observations to canonical metadata records."""
     records = [observation_to_metadata_record(observation) for observation in observations]

@@ -1,13 +1,12 @@
 """Simulation parameter writing functions."""
 
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 
 
 def write_sim_parameters(
-    path: Union[str, Path],
+    path: str | Path,
     source_name: str,
     member_ouid: str,
     ra: float,
@@ -28,14 +27,14 @@ def write_sim_parameters(
     cell_size: float,
     n_pix: int,
     n_channels: int,
-    snapshot: Optional[int],
-    subhalo: Optional[int],
+    snapshot: int | None,
+    subhalo: int | None,
     lum_infrared: float,
     fwhm_z: np.ndarray,
     source_type: str,
-    fwhm_x: Optional[float] = None,
-    fwhm_y: Optional[float] = None,
-    angle: Optional[float] = None,
+    fwhm_x: float | None = None,
+    fwhm_y: float | None = None,
+    angle: float | None = None,
 ) -> None:
     """
     Write simulation parameters to a text file.
@@ -120,7 +119,7 @@ def write_sim_parameters(
             f.write(f"Projection Angle: {angle}\n")
 
         for i, (line_name, line_freq, line_flux) in enumerate(
-            zip(line_names, line_frequencies, line_fluxes)
+            zip(line_names, line_frequencies, line_fluxes, strict=False)
         ):
             f.write(
                 f"Line: {line_name} - Frequency: {line_freq} GHz "

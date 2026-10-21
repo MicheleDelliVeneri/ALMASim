@@ -8,8 +8,9 @@ nine subtables share one code path.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -114,7 +115,7 @@ def main_table(ms_path: str, vt: Mapping[str, Any]) -> TableSpec:
 def antenna_table(
     antenna_names: Sequence[str],
     antenna_positions_m: np.ndarray,
-    dish_diameters_m: Optional[np.ndarray] = None,
+    dish_diameters_m: np.ndarray | None = None,
 ) -> TableSpec:
     """One row per antenna, with its own dish diameter (12 m each when not given)."""
     nant = len(antenna_names)

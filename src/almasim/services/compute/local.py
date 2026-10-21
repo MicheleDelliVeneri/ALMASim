@@ -1,8 +1,9 @@
 """Local computation backend (synchronous execution)."""
 
 import multiprocessing as mp
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
-from typing import Any, Callable, List, Optional
+from typing import Any
 
 from .base import ComputationBackend
 
@@ -39,7 +40,7 @@ class LocalBackend(ComputationBackend):
     Ideal for CPU-bound workloads like ALMA simulations.
     """
 
-    def __init__(self, n_workers: Optional[int] = None):
+    def __init__(self, n_workers: int | None = None):
         """Initialize local backend.
 
         Parameters
@@ -75,7 +76,7 @@ class LocalBackend(ComputationBackend):
             else:
                 return self.executor.submit(_execute_task, tasks)
 
-    def gather(self, futures: Any) -> List[Any]:
+    def gather(self, futures: Any) -> list[Any]:
         """Gather results from futures."""
         if isinstance(futures, list):
             return [f.result() if hasattr(f, "result") else f for f in futures]

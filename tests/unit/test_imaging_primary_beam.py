@@ -39,7 +39,7 @@ def _write_image(
 ) -> None:
     """A WSClean-like image: (STOKES, FREQ, DEC, RA), reference pixel in the middle."""
     header = fits.Header()
-    for axis, (ctype, n, crpix, cdelt, crval) in enumerate(
+    for axis, (ctype, _n, crpix, cdelt, crval) in enumerate(
         [
             ("RA---SIN", size, size // 2 + 1, -cell_arcsec / 3600, 10.0),
             ("DEC--SIN", size, size // 2 + 1, cell_arcsec / 3600, -30.0),

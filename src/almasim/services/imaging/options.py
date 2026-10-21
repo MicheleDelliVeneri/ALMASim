@@ -8,7 +8,7 @@ Frozen and picklable: the driver builds them once from the command line,
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from almasim.services.imaging.wsclean_plan import CUBE_PRODUCTS, CubeOptions
 
@@ -38,10 +38,10 @@ class ImagingOptions:
     """What each task of a run makes."""
 
     continuum: bool = True
-    cube: Optional[CubeOptions] = None
-    cube_products: Optional[tuple[str, ...]] = None
+    cube: CubeOptions | None = None
+    cube_products: tuple[str, ...] | None = None
     single_window: bool = True
-    max_weight: Optional[float] = None
+    max_weight: float | None = None
     contsub: bool = False
     uv_contsub: bool = False
     contsub_order: int = 1
@@ -73,7 +73,7 @@ class ImagingOptions:
         if not self.continuum and self.cube is None:
             raise ValueError("--no-continuum needs --cube: there would be nothing to image")
 
-    def task_kwargs(self, casa_data: Optional[str] = None) -> dict[str, Any]:
+    def task_kwargs(self, casa_data: str | None = None) -> dict[str, Any]:
         """``run_wsclean_task`` keyword arguments shared by every task."""
         return {
             "single_window": self.single_window,
@@ -100,16 +100,16 @@ class ExecOptions:
     cores_per_task: int = 10
     node_cores: int = 95
     queue: str = "normal"
-    project: Optional[str] = None
+    project: str | None = None
     walltime: str = "02:00:00"
     memory: str = "16GB"
     n_jobs: int = 1
-    scheduler_host: Optional[str] = None
-    scheduler_interface: Optional[str] = None
-    task_timeout: Optional[float] = None
+    scheduler_host: str | None = None
+    scheduler_interface: str | None = None
+    task_timeout: float | None = None
     task_retries: int = 3
     continue_on_error: bool = True
-    scratch_root: Optional[str] = None
+    scratch_root: str | None = None
 
     def validate(self) -> None:
         if self.backend not in ("sync", "slurm"):

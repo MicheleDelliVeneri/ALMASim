@@ -14,7 +14,7 @@ import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..paths import UnsafePathError, safe_join
 from .models import DataProduct
@@ -55,8 +55,8 @@ class RedownloadOptions:
     unpack_ms: bool
     generate_calibrated_visibilities: bool
     clean_intermediate_files: bool
-    archive_output_root: Optional[str]
-    casa_data_root: Optional[str]
+    archive_output_root: str | None
+    casa_data_root: str | None
     skip_casa_data_update: bool
 
 
@@ -93,7 +93,7 @@ def redownload_options(
     )
 
 
-def delete_job_files(record: Any) -> tuple[int, int]:
+def delete_job_files(record: Any) -> tuple[int, int]:  # noqa: C901
     """Delete a job's downloads (and leftover ``.part`` files) and the MSs it made.
 
     Only paths inside the job's destination are removed; a stored name that

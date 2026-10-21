@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -37,7 +37,7 @@ def generate_background_cube(
     channel_frequencies_hz: np.ndarray,
     cont_sens_jy: float,
     level: float = 1.0,
-    seed: Optional[int | Sequence[int]] = None,
+    seed: int | Sequence[int] | None = None,
 ) -> np.ndarray:
     """Generate an additive ALMA-band background cube in `(chan, y, x)` order.
 

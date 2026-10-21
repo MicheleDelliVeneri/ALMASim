@@ -41,7 +41,7 @@ def test_download_galaxy_zoo_structure(temp_data_dir):
         assert (
             temp_data_dir.exists() or "galaxy_zoo" in str(e).lower() or "kaggle" in str(e).lower()
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the downloaders raise library errors offline
         # Any other exception should be a valid error type
         assert len(str(e)) > 0  # Error message exists
 
@@ -62,7 +62,7 @@ def test_download_hubble_top100_structure(temp_data_dir):
         # These are expected errors (missing API key, network issues)
         # Verify the function at least tried to create the directory
         assert temp_data_dir.exists() or "hubble" in str(e).lower() or "kaggle" in str(e).lower()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the downloaders raise library errors offline
         # Any other exception should be a valid error type
         assert len(str(e)) > 0  # Error message exists
 
@@ -95,7 +95,7 @@ def test_download_tng_structure_local(temp_data_dir):
             or "wget" in str(e).lower()
             or "api" in str(e).lower()
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the downloaders raise library errors offline
         # Any other exception should be a valid error type
         assert len(str(e)) > 0  # Error message exists
 

@@ -1,6 +1,6 @@
 """Molecular cloud sky model implementation."""
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -117,9 +117,7 @@ def make_extended(
 
         if not full_powermap.shape[1] == imsize:
             raise ValueError(
-                "The full output should have a square shape. Instead has {}".format(
-                    full_powermap.shape
-                )
+                f"The full output should have a square shape. Instead has {full_powermap.shape}"
             )
 
         return np.fft.fftshift(full_powermap)
@@ -128,7 +126,7 @@ def make_extended(
     return newmap
 
 
-def molecular_cloud(n_px: int, rng: Optional[np.random.Generator] = None) -> np.ndarray:
+def molecular_cloud(n_px: int, rng: np.random.Generator | None = None) -> np.ndarray:
     """Generate a molecular cloud image; ``rng`` draws its shape (fresh entropy when None)."""
     rng = rng if rng is not None else np.random.default_rng()
     powerlaw = rng.random() * 3.0 + 1.5

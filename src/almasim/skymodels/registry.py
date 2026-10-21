@@ -9,7 +9,6 @@ dataset a family draws from. The builders themselves stay in the simulation
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 _STAR_FORMING = "SED_low_z_warm_star_forming_galaxy.dat"
 _TYPE2_AGN = "SED_low_z_type2_AGN.dat"
@@ -21,11 +20,11 @@ class SkyModelSpec:
 
     label: str
     # SED template under the brightness directory; None for an external input.
-    sed_template: Optional[str]
+    sed_template: str | None
     # Redshift used when the metadata gives none.
     default_redshift: float = 0.05
     # Image dataset the model draws its morphology from ("galaxy-zoo", "hubble-100").
-    dataset: Optional[str] = None
+    dataset: str | None = None
     # The cube comes from the user's file or component table, not from a model.
     external: bool = False
     # Offered by ``almasim simulation run --source-type``.

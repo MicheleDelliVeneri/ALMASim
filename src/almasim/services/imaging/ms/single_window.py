@@ -8,8 +8,8 @@ from __future__ import annotations
 import os
 import shutil
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from almasim.services.instrument.constants import DEFAULT_MAX_WEIGHT
 from almasim.services.ms.tables import (

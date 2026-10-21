@@ -1,6 +1,6 @@
 """Kubernetes computation backend using dask-kubernetes."""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 try:
     from dask.distributed import Client
@@ -20,11 +20,11 @@ class KubernetesBackend(DaskClientBackend):
 
     def __init__(
         self,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
         n_workers: int = 4,
-        image: Optional[str] = None,
-        resources: Optional[Dict[str, Any]] = None,
-        **kwargs: Dict[str, Any],
+        image: str | None = None,
+        resources: dict[str, Any] | None = None,
+        **kwargs: dict[str, Any],
     ):
         """Initialize Kubernetes backend.
 
@@ -52,8 +52,8 @@ class KubernetesBackend(DaskClientBackend):
         self.resources = resources or {}
         self.kwargs = kwargs
 
-        self.cluster: Optional[KubeCluster] = None
-        self.client: Optional[Client] = None
+        self.cluster: KubeCluster | None = None
+        self.client: Client | None = None
         self._start_cluster()
 
     def _start_cluster(self) -> None:

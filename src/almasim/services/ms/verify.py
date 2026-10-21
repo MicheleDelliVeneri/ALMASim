@@ -29,7 +29,7 @@ def measurement_set_row_count(ms_path: str | os.PathLike[str]) -> int:
     finally:
         try:
             tb.close()
-        except Exception:  # pragma: no cover - close failures are not actionable
+        except Exception:  # noqa: BLE001 - close failures are not actionable  # pragma: no cover
             pass
 
 
@@ -54,12 +54,12 @@ def empty_required_subtables(ms_path: str | os.PathLike[str]) -> list[str]:
         tb = table()
         try:
             rows = int(tb.nrows()) if tb.open(str(Path(ms_path) / name)) else 0
-        except Exception:
+        except Exception:  # noqa: BLE001 - an unreadable subtable counts as empty
             rows = 0
         finally:
             try:
                 tb.close()
-            except Exception:  # pragma: no cover - close failures are not actionable
+            except Exception:  # noqa: BLE001 - close failures are not actionable  # pragma: no cover
                 pass
         if rows <= 0:
             empty.append(name)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import pandas as pd
 import pyvo
@@ -25,7 +24,7 @@ from .adql import (  # noqa: F401  (re-exported)
     _build_inclusion_conditions,
     _like_or_clause,
 )
-from .client import (  # noqa: F401  (re-exported)
+from .client import (
     get_tap_service,
     reset_tap_service,
     search_with_retry,
@@ -151,8 +150,8 @@ def query_all_targets(targets):
 
 
 def query_by_science_type(
-    include: Optional[InclusionFilters] = None,
-    exclude: Optional[ExclusionFilters] = None,
+    include: InclusionFilters | None = None,
+    exclude: ExclusionFilters | None = None,
 ):
     """Query for all science observations filtered by inclusion and exclusion criteria.
 

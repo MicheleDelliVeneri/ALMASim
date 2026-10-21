@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 import shutil
 import tarfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from ...casa import tools as casa_tools
 from ...extraction import member_is_safe

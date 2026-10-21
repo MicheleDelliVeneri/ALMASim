@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from ..casa import tasks as casa_tasks
 from ..casa.environment import configure_casa_environment

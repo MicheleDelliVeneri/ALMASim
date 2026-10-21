@@ -1,7 +1,5 @@
 """Cached observations and their science keywords and categories."""
 
-from typing import List, Optional
-
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -17,23 +15,23 @@ class ObservationRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all_science_keywords(self) -> List[str]:
+    def get_all_science_keywords(self) -> list[str]:
         """Get all unique science keywords."""
         stmt = select(ScienceKeyword.keyword).order_by(ScienceKeyword.keyword)
         return [row[0] for row in self.db.execute(stmt).all()]
 
-    def get_all_scientific_categories(self) -> List[str]:
+    def get_all_scientific_categories(self) -> list[str]:
         """Get all unique scientific categories."""
         stmt = select(ScientificCategory.category).order_by(ScientificCategory.category)
         return [row[0] for row in self.db.execute(stmt).all()]
 
     def query_observations(
         self,
-        include: Optional[InclusionFilters] = None,
-        exclude: Optional[ExclusionFilters] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = 0,
-    ) -> List[Observation]:
+        include: InclusionFilters | None = None,
+        exclude: ExclusionFilters | None = None,
+        limit: int | None = None,
+        offset: int | None = 0,
+    ) -> list[Observation]:
         """The cached observations matching the same filters a TAP query takes."""
         stmt = observation_query(include, exclude)
         if offset:
@@ -42,7 +40,7 @@ class ObservationRepository:
             stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).unique().scalars().all())
 
-    def get_observation_by_member_uid(self, member_ous_uid: str) -> Optional[Observation]:
+    def get_observation_by_member_uid(self, member_ous_uid: str) -> Observation | None:
         """Get a single observation by member OUS UID."""
         stmt = select(Observation).where(Observation.member_ous_uid == member_ous_uid)
         return self.db.execute(stmt).scalar_one_or_none()

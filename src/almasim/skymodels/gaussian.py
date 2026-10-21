@@ -1,7 +1,7 @@
 """Gaussian sky model implementation."""
 
 import math
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from dask.distributed import Client
@@ -43,8 +43,8 @@ class GaussianSkyModel(SkyModel):
         angle: int,
         n_px: int,
         n_chan: int,
-        client: Optional[Client],
-        update_progress: Optional[Any] = None,
+        client: Client | None,
+        update_progress: Any | None = None,
     ):
         """
         Initialize Gaussian sky model.

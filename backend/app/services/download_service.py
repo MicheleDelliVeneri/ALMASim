@@ -4,7 +4,6 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
 
 from almasim.services.download import (
     DataProduct,
@@ -25,26 +24,26 @@ class DownloadJob:
 
     job_id: str
     destination: str
-    member_ous_uids: List[str] = field(default_factory=list)
-    metadata_rows: List[dict] = field(default_factory=list)
+    member_ous_uids: list[str] = field(default_factory=list)
+    metadata_rows: list[dict] = field(default_factory=list)
     product_filter: str = "all"
     unpack_ms: bool = False
     generate_calibrated_visibilities: bool = False
     clean_intermediate_files: bool = False
-    archive_output_root: Optional[str] = None
-    casa_data_root: Optional[str] = None
+    archive_output_root: str | None = None
+    casa_data_root: str | None = None
     skip_casa_data_update: bool = False
-    raw_measurement_sets: List[str] = field(default_factory=list)
-    calibrated_measurement_sets: List[str] = field(default_factory=list)
-    manifest_path: Optional[str] = None
+    raw_measurement_sets: list[str] = field(default_factory=list)
+    calibrated_measurement_sets: list[str] = field(default_factory=list)
+    manifest_path: str | None = None
     total_files: int = 0
     total_bytes: int = 0
     bytes_downloaded: int = 0
     files_completed: int = 0
     files_failed: int = 0
     status: str = "pending"
-    files: List[FileDownloadStatus] = field(default_factory=list)
-    error: Optional[str] = None
+    files: list[FileDownloadStatus] = field(default_factory=list)
+    error: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
 
@@ -94,11 +93,11 @@ class DownloadStore:
             db.close()
         return job
 
-    def get(self, job_id: str) -> Optional[DownloadJob]:
+    def get(self, job_id: str) -> DownloadJob | None:
         """Return an active job from memory."""
         return self._active.get(job_id)
 
-    def update(self, job_id: str, **kwargs) -> Optional[DownloadJob]:
+    def update(self, job_id: str, **kwargs) -> DownloadJob | None:
         """Update an active job in memory."""
         with self._active.editing(job_id) as job:
             if not job:
@@ -239,7 +238,7 @@ download_store = DownloadStore()
 
 def run_download_job(
     job_id: str,
-    products: List[DataProduct],
+    products: list[DataProduct],
     destination: str,
     max_parallel: int = 3,
     rate_limit_sec: float = 0.5,
@@ -247,8 +246,8 @@ def run_download_job(
     unpack_ms: bool = False,
     generate_calibrated_visibilities: bool = False,
     clean_intermediate_files: bool = False,
-    archive_output_root: Optional[str] = None,
-    casa_data_root: Optional[str] = None,
+    archive_output_root: str | None = None,
+    casa_data_root: str | None = None,
     skip_casa_data_update: bool = False,
 ) -> None:
     """Run a download job by delegating transfer work to shared services."""

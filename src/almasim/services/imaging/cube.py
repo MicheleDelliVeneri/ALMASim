@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from almasim.services.imaging.products import CUBE_NAME, LINE_MASK_FILENAME
 from almasim.services.imaging.wsclean.command import WSCleanCommand
@@ -16,7 +16,7 @@ from almasim.services.imaging.wsclean.command import WSCleanCommand
 _CHANNEL_FILE = re.compile(r"^(?P<prefix>.+)-(?P<channel>\d{4})-(?P<product>[a-z-]+)\.fits$")
 
 
-def stack_channel_images(
+def stack_channel_images(  # noqa: C901
     output_dir: str | os.PathLike[str],
     *,
     prefix: str = "wsclean",

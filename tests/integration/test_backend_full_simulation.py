@@ -273,7 +273,7 @@ def test_full_simulation_workflow(main_dir, temp_output_dir, sample_simulation_p
         output_files = list(temp_output_dir.glob("**/*"))
         assert len(output_files) > 0, "No output files created"
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the run needs data the CI runner may not have
         # If simulation fails, at least verify the service is set up correctly
         assert service.main_dir == main_dir
         assert service.output_dir == temp_output_dir

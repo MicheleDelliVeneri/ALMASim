@@ -7,8 +7,8 @@ objects, with the constants below shared between them.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple
 
 # Map human-friendly QA2 labels to ALMA TAP stored values
 QA2_STATUS_MAP = {
@@ -39,22 +39,22 @@ def qa2_codes(statuses: Iterable[str]) -> list[str]:
 class InclusionFilters:
     """Positive (include-only) filters for ALMA TAP science queries."""
 
-    science_keyword: Optional[List[str]] = None
-    scientific_category: Optional[List[str]] = None
-    band: Optional[List[int]] = None
-    fov_range: Optional[Tuple[float, float]] = None
-    time_resolution_range: Optional[Tuple[float, float]] = None
-    frequency_range: Optional[Tuple[float, float]] = None
-    source_name: Optional[str] = None
-    antenna_arrays: Optional[str] = None
-    array_type: Optional[List[str]] = None  # e.g. ['12m', '7m', 'TP']
-    array_configuration: Optional[List[str]] = None  # e.g. ['C-1', 'C-2']
-    angular_resolution_range: Optional[Tuple[float, float]] = None
-    observation_date_range: Optional[Tuple[str, str]] = None
-    qa2_status: Optional[List[str]] = None
-    obs_type: Optional[List[str]] = None
-    proposal_id_prefix: Optional[List[str]] = None  # e.g. ['2016.', '2017.']
-    proposal_id: Optional[List[str]] = None  # exact codes e.g. ['2019.1.00001.S']
+    science_keyword: list[str] | None = None
+    scientific_category: list[str] | None = None
+    band: list[int] | None = None
+    fov_range: tuple[float, float] | None = None
+    time_resolution_range: tuple[float, float] | None = None
+    frequency_range: tuple[float, float] | None = None
+    source_name: str | None = None
+    antenna_arrays: str | None = None
+    array_type: list[str] | None = None  # e.g. ['12m', '7m', 'TP']
+    array_configuration: list[str] | None = None  # e.g. ['C-1', 'C-2']
+    angular_resolution_range: tuple[float, float] | None = None
+    observation_date_range: tuple[str, str] | None = None
+    qa2_status: list[str] | None = None
+    obs_type: list[str] | None = None
+    proposal_id_prefix: list[str] | None = None  # e.g. ['2016.', '2017.']
+    proposal_id: list[str] | None = None  # exact codes e.g. ['2019.1.00001.S']
     public_only: bool = True  # default: only query non-proprietary data
     science_only: bool = True  # default: only science observations
     exclude_mosaic: bool = True  # default: exclude mosaic observations
@@ -64,8 +64,8 @@ class InclusionFilters:
 class ExclusionFilters:
     """Negative (exclude) filters for ALMA TAP science queries."""
 
-    science_keyword: Optional[List[str]] = None
-    scientific_category: Optional[List[str]] = None
-    source_name: Optional[List[str]] = None
-    obs_type: Optional[List[str]] = None
+    science_keyword: list[str] | None = None
+    scientific_category: list[str] | None = None
+    source_name: list[str] | None = None
+    obs_type: list[str] | None = None
     solar: bool = False  # exclude observations related to the Sun

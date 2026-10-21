@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ._common import _ensure_directory
 
@@ -14,8 +14,8 @@ DEFAULT_HUBBLE_DATASET = "redwankarimsony/top-100-hubble-telescope-images"
 
 
 def download_hubble_top100(
-    destination: Optional[Path | str] = None,
-    token: Optional[Path | str] = None,
+    destination: Path | str | None = None,
+    token: Path | str | None = None,
 ) -> Path:
     """Download the Hubble Top-100 dataset via Kaggle.
 

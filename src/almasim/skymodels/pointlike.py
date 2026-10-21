@@ -1,6 +1,6 @@
 """Pointlike sky model implementation."""
 
-from typing import Any, Optional
+from typing import Any
 
 import astropy.units as U
 import numpy as np
@@ -21,7 +21,7 @@ class PointlikeSkyModel(SkyModel):
         pos_z: list[int],
         fwhm_z: list[float],
         n_chan: int,
-        update_progress: Optional[Any] = None,
+        update_progress: Any | None = None,
     ):
         """
         Initialize pointlike sky model.

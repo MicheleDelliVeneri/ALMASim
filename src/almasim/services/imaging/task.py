@@ -8,8 +8,9 @@ from __future__ import annotations
 import os
 import shutil
 import time
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 from almasim.services.imaging.continuum import (
     subtract_continuum,
@@ -64,7 +65,7 @@ from almasim.services.runtime.env import (
 )
 
 
-def run_wsclean_task(
+def run_wsclean_task(  # noqa: C901
     *,
     command: Sequence[str],
     output_dir: str,
@@ -305,7 +306,7 @@ def run_wsclean_task(
             shutil.rmtree(single_window_ms, ignore_errors=True)
 
 
-def _run_and_mark(
+def _run_and_mark(  # noqa: C901
     task: TaskRun,
     *,
     commands: list[list[str]],

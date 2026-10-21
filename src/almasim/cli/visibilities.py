@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 import typer
 
@@ -26,8 +25,8 @@ visibilities_app.command("spw-overview")(cli_image.derive_parameters)
 
 
 @visibilities_app.command("flag-summary")
-def flag_summary(
-    inputs: List[Path] = typer.Argument(
+def flag_summary(  # noqa: C901
+    inputs: list[Path] = typer.Argument(
         ...,
         help=(
             "MeasurementSet(s) to summarise, or folders searched with --pattern. "

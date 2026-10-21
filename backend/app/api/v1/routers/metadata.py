@@ -49,7 +49,7 @@ def get_science_types(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch science types: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/query/start", response_model=MetadataQueryStartResponse)
@@ -73,7 +73,7 @@ def start_query(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start query: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/query/{query_id}/results", response_model=MetadataPageResponse)
@@ -127,7 +127,7 @@ def load_metadata(file_path: str, db: Session = Depends(get_db)) -> MetadataResp
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to load metadata: {str(e)}",
-        )
+        ) from e
 
 
 _SAVE_DETAIL = "Path must be within the outputs/query_results directory."
@@ -167,7 +167,7 @@ def save_metadata(payload: MetadataSaveRequest) -> MetadataSaveResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save metadata: {str(e)}",
-        )
+        ) from e
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ def list_query_presets(db: Session = Depends(get_db)) -> QueryPresetsResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list presets: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/presets", response_model=QueryPresetResponse, status_code=status.HTTP_201_CREATED)
@@ -217,7 +217,7 @@ def save_query_preset(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save preset: {str(e)}",
-        )
+        ) from e
 
 
 @router.delete("/presets/{name}", status_code=status.HTTP_204_NO_CONTENT)

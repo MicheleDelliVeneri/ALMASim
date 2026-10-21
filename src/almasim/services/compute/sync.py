@@ -1,6 +1,7 @@
 """In-process synchronous computation backend."""
 
-from typing import Any, Callable, List
+from collections.abc import Callable
+from typing import Any
 
 from .base import ComputationBackend
 
@@ -31,7 +32,7 @@ class SyncBackend(ComputationBackend):
             return [_compute_value(task) for task in tasks]
         return _compute_value(tasks)
 
-    def gather(self, futures: Any) -> List[Any]:
+    def gather(self, futures: Any) -> list[Any]:
         """Gather already-computed results."""
         if isinstance(futures, list):
             return futures

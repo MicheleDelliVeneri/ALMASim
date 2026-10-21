@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from time import sleep, time
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from tqdm import tqdm
 
@@ -75,14 +75,14 @@ def _record_imaging_failure(task: ImagingTask, error: str, failures: list[TaskFa
     failures.append(TaskFailure(task.label, error, str(log_path) if log_path.is_file() else None))
 
 
-def run_imaging_tasks(
+def run_imaging_tasks(  # noqa: C901
     tasks: list[ImagingTask],
     imaging: ImagingOptions,
     execution: ExecOptions,
     *,
     casa_data: str | None = None,
     echo: Echo = _log_echo,
-    failures: Optional[list[TaskFailure]] = None,
+    failures: list[TaskFailure] | None = None,
     heartbeat_interval: float = _IMAGING_HEARTBEAT_S,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
@@ -204,16 +204,16 @@ def run_imaging_tasks(
                         next_index = queued.pop(0)
                         pending[next_index] = _submit(tasks[next_index])
                     task = tasks[index]
-                    error: Optional[str] = None
+                    error: str | None = None
                     try:
                         task_error = future.exception()
                         error = str(task_error) if task_error is not None else None
-                    except Exception as future_error:  # lost/cancelled future
+                    except Exception as future_error:  # noqa: BLE001 - lost/cancelled future
                         error = str(future_error) or "task lost"
                     if error is None:
                         try:
                             results.append(future.result())
-                        except Exception as result_error:
+                        except Exception as result_error:  # noqa: BLE001 - recorded as the task's error
                             error = str(result_error)
                     if error is None:
                         bar.write(f"{stage_label} completed {task.label}")

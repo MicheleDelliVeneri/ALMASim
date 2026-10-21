@@ -1,7 +1,5 @@
 """Frequency support and utility functions for interferometry."""
 
-from typing import Tuple
-
 import astropy.units as U
 import numpy as np
 
@@ -26,9 +24,9 @@ def remove_non_numeric(text: str) -> str:
     return "".join(char for char in text if char in numbers)
 
 
-def freq_supp_extractor(
+def freq_supp_extractor(  # noqa: C901
     freq_sup: str, obs_freq: U.Quantity
-) -> Tuple[U.Quantity, U.Quantity, int, U.Quantity]:
+) -> tuple[U.Quantity, U.Quantity, int, U.Quantity]:
     """
     Extract frequency support parameters from a formatted string.
 

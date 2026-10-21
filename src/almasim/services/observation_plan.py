@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 
 from .instrument.array import antenna_array_type, dish_diameter_m
 from .instrument.array import derive_array_type as _derive_array_type
@@ -57,7 +58,7 @@ class ObservationConfig:
     array_type: str
     antenna_array: str
     total_time_s: float
-    correlator: Optional[str] = None
+    correlator: str | None = None
     antenna_diameter_m: float = DISH_DIAMETER_12M_M
 
     def as_dict(self) -> dict[str, Any]:
@@ -88,7 +89,7 @@ def _coerce_observation_config(
     raw_config: Any,
     *,
     default_time_s: float,
-    default_correlator: Optional[str],
+    default_correlator: str | None,
     index: int,
 ) -> ObservationConfig:
     """Normalize a user-supplied configuration mapping into a dataclass."""
@@ -131,11 +132,11 @@ def _coerce_observation_config(
 
 
 def normalize_observation_configs(
-    raw_configs: Optional[Iterable[Any]],
+    raw_configs: Iterable[Any] | None,
     *,
     default_antenna_array: str,
     default_time_s: float,
-    default_correlator: Optional[str] = None,
+    default_correlator: str | None = None,
 ) -> list[ObservationConfig]:
     """Build a normalized config list while preserving current single-config behavior."""
     if not raw_configs:

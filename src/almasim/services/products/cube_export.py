@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import h5py
 import numpy as np
@@ -92,7 +93,7 @@ _VISIBILITIES = "visibilities"
 _OPERATOR = "operator"
 
 
-def write_interferometry_products(
+def write_interferometry_products(  # noqa: C901
     output_dir: str | Path,
     *,
     idx: int,

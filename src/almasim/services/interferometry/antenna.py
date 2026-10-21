@@ -61,7 +61,7 @@ def estimate_alma_beam_size(central_frequency_ghz, max_baseline_km, return_value
         return beam_size_arcsec
 
 
-def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):
+def get_fov_from_band(band, antenna_diameter: int = 12, return_value=True):  # noqa: C901
     """
     This function returns the field of view of an ALMA band in arcseconds
     input:

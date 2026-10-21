@@ -1,7 +1,7 @@
 """Base class for sky model generation."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import astropy.units as U
 import numpy as np
@@ -89,9 +89,9 @@ class SkyModel(ABC):
         fwhm_z: list[float],
         n_px: int,
         n_chan: int,
-        client: Optional[Client] = None,
-        update_progress: Optional[Any] = None,
-        rng: Optional[np.random.Generator] = None,
+        client: Client | None = None,
+        update_progress: Any | None = None,
+        rng: np.random.Generator | None = None,
     ):
         """
         Initialize base sky model.

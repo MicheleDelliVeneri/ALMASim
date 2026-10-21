@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Sequence, cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -193,7 +194,7 @@ def compute_parameters(
             "included. Only (window, field) pairs with visibilities are listed."
         ),
     ),
-    intent: Optional[list[str]] = typer.Option(
+    intent: list[str] | None = typer.Option(
         None,
         "--intent",
         help=(
@@ -334,7 +335,7 @@ class ImageFromMsOptions:
     single_window: bool
     task_retries: int
     max_weight: float
-    scratch_dir: Optional[Path]
+    scratch_dir: Path | None
     continuum_restart: bool
     update_model: bool
     postprocess_backend: PostprocessBackend
@@ -356,7 +357,7 @@ class ImageFromMsOptions:
     selfcal_min_snr: float
     noise_products: bool
     pbcor: bool
-    casa_data_root: Optional[Path]
+    casa_data_root: Path | None
     uv_contsub: bool
     contsub_order: int
     spectral_sampling: float
@@ -474,7 +475,7 @@ def image_from_ms(
             "dominate the image; physical weights stay below ~1e3."
         ),
     ),
-    scratch_dir: Optional[Path] = typer.Option(
+    scratch_dir: Path | None = typer.Option(
         None,
         "--scratch-dir",
         help=(
@@ -598,7 +599,7 @@ def image_from_ms(
             "'image pb-correct' adds them to an existing run."
         ),
     ),
-    casa_data_root: Optional[Path] = typer.Option(
+    casa_data_root: Path | None = typer.Option(
         None,
         "--casa-data-root",
         help=(
@@ -870,7 +871,7 @@ def clean_quality(
         "--moments/--no-moments",
         help="Write the cube moment maps (quality/cube-*.fits) next to each task's images.",
     ),
-    summary: Optional[Path] = typer.Option(
+    summary: Path | None = typer.Option(
         None,
         "--summary",
         help="Summary CSV path (default <output_root>/clean-quality.csv).",
@@ -902,7 +903,7 @@ def clean_quality(
     for task in tqdm(tasks, desc="clean quality", unit="task"):
         try:
             results.append(assess_task(task, write_moments=moments))
-        except Exception as exc:  # one broken task must not hide the others
+        except Exception as exc:  # noqa: BLE001 - one broken task must not hide the others
             typer.echo(f"  {task}: {type(exc).__name__}: {exc}", err=True)
     if not results:
         fail(f"None of the {len(tasks)} task(s) under {root} could be assessed")
@@ -951,7 +952,7 @@ def pb_correct(
             if dish_diameter is None:
                 raise ValueError("the row has no fov_per_frequency/reference_frequency")
             done = pb_correct_task(outdir, dish_diameter, cutoff)
-        except Exception as exc:  # one broken task must not stop the others
+        except Exception as exc:  # noqa: BLE001 - one broken task must not stop the others
             failed += 1
             typer.echo(f"  {outdir}: {type(exc).__name__}: {exc}", err=True)
             continue
@@ -990,7 +991,7 @@ def image_set(
     task_retries: int = typer.Option(3, "--task-retries", min=0),
     single_window: bool = typer.Option(True, "--single-window-ms/--no-single-window-ms"),
     max_weight: float = typer.Option(10000.0, "--max-weight", min=0.0),
-    scratch_dir: Optional[Path] = typer.Option(None, "--scratch-dir"),
+    scratch_dir: Path | None = typer.Option(None, "--scratch-dir"),
     postprocess_backend: PostprocessBackend = Backend.slurm,
     slurm_queue: SlurmQueue = "normal",
     slurm_project: SlurmProject = None,

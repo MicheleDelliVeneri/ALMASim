@@ -146,7 +146,7 @@ def _install_fake_client(monkeypatch, script) -> _FakeClient:
 
 def _asdm_tar_bytes(uid: str = "uid___A002_X1_X1") -> bytes:
     asdm = (
-        f"2023.1.00001.S/science_goal.uid___A001_X1_X1/member.uid___A001_X1_X3/raw/{uid}.asdm.sdm"  # noqa: E501
+        f"2023.1.00001.S/science_goal.uid___A001_X1_X1/member.uid___A001_X1_X3/raw/{uid}.asdm.sdm"
     )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:

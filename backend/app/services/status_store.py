@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
 
 from app.core.clock import utc_now
 from app.services.live_progress import LiveProgress
@@ -17,9 +16,9 @@ class SimulationStatus:
     progress: float = 0.0
     current_step: str = ""
     message: str = ""
-    logs: List[str] = field(default_factory=list)
-    error: Optional[str] = None
-    output_dir: Optional[str] = None
+    logs: list[str] = field(default_factory=list)
+    error: str | None = None
+    output_dir: str | None = None
     cancelled: bool = False
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -35,14 +34,14 @@ class StatusStore(LiveProgress[SimulationStatus]):
     def update(
         self,
         simulation_id: str,
-        status: Optional[str] = None,
-        progress: Optional[float] = None,
-        current_step: Optional[str] = None,
-        message: Optional[str] = None,
-        log: Optional[str] = None,
-        error: Optional[str] = None,
-        output_dir: Optional[str] = None,
-    ) -> Optional[SimulationStatus]:
+        status: str | None = None,
+        progress: float | None = None,
+        current_step: str | None = None,
+        message: str | None = None,
+        log: str | None = None,
+        error: str | None = None,
+        output_dir: str | None = None,
+    ) -> SimulationStatus | None:
         """Update simulation status."""
         with self.editing(simulation_id) as sim_status:
             if not sim_status:
@@ -87,7 +86,7 @@ class StatusStore(LiveProgress[SimulationStatus]):
         """Delete simulation status."""
         return self.pop(simulation_id)
 
-    def list_all(self) -> List[SimulationStatus]:
+    def list_all(self) -> list[SimulationStatus]:
         """List all simulation statuses."""
         return self.values()
 
@@ -107,9 +106,9 @@ class QueryJobStatus:
 
     query_id: str
     status: str = "running"  # running | completed | failed | cancelled
-    rows: List[dict] = field(default_factory=list)
+    rows: list[dict] = field(default_factory=list)
     total: int = 0
-    error: Optional[str] = None
+    error: str | None = None
     cancelled: bool = False
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -130,7 +129,7 @@ class QueryStore(LiveProgress[QueryJobStatus]):
                 del self._items[qid]
         return self.put(query_id, QueryJobStatus(query_id=query_id))
 
-    def append_rows(self, query_id: str, rows: List[dict]) -> None:
+    def append_rows(self, query_id: str, rows: list[dict]) -> None:
         with self.editing(query_id) as job:
             if job:
                 job.rows.extend(rows)

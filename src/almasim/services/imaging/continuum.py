@@ -6,7 +6,8 @@ Moved out of archive_imaging.py (MADIV-28 module split).
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
@@ -235,7 +236,7 @@ def _channel_ranges(mask: np.ndarray) -> str:
     import numpy as np
 
     edges = np.flatnonzero(np.diff(np.concatenate(([0], mask.astype(int), [0]))))
-    return ";".join(f"{a}~{b - 1}" for a, b in zip(edges[::2], edges[1::2]))
+    return ";".join(f"{a}~{b - 1}" for a, b in zip(edges[::2], edges[1::2], strict=True))
 
 
 def _line_free_from_ranges(ranges: str, n_channels: int) -> np.ndarray:

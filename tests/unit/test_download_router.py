@@ -234,7 +234,7 @@ def test_resolve_download_products_raises_502_on_network_error(monkeypatch):
     from fastapi import HTTPException
 
     monkeypatch.setattr(
-        download_router, "resolve_products", MagicMock(side_effect=IOError("timeout"))
+        download_router, "resolve_products", MagicMock(side_effect=OSError("timeout"))
     )
     body = MagicMock()
     body.member_ous_uids = ["uid://A001/X1"]
@@ -293,7 +293,7 @@ def test_start_download_raises_400_for_empty_uids(monkeypatch):
 def test_start_download_raises_502_on_resolve_error(monkeypatch):
     from fastapi import HTTPException
 
-    monkeypatch.setattr(download_router, "resolve_products", MagicMock(side_effect=IOError("net")))
+    monkeypatch.setattr(download_router, "resolve_products", MagicMock(side_effect=OSError("net")))
     body = MagicMock()
     body.member_ous_uids = ["uid://A001/X1"]
 

@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 import numpy as np
 
 from ..instrument.constants import SPEED_OF_LIGHT_KM_S
 
 
-def beam_pixels(header, bmaj_deg: Optional[float] = None) -> float:
+def beam_pixels(header, bmaj_deg: float | None = None) -> float:
     """The beam major axis in pixels (``bmaj_deg``, else the header BMAJ); nan without a cell."""
     cell = abs(float(header.get("CDELT2", 0.0)))
     bmaj = float(header.get("BMAJ", 0.0)) if bmaj_deg is None else float(bmaj_deg)
     return bmaj / cell if cell else math.nan
 
 
-def frequency_axis(header, *, fallback_axis: Optional[int] = None) -> tuple[int, np.ndarray]:
+def frequency_axis(header, *, fallback_axis: int | None = None) -> tuple[int, np.ndarray]:
     """(FITS axis number, frequency of each plane in Hz) of the image's FREQ axis.
 
     Without a FREQ axis, ``fallback_axis`` is used as the spectral axis when
@@ -37,7 +36,7 @@ def frequency_axis(header, *, fallback_axis: Optional[int] = None) -> tuple[int,
     )
 
 
-def velocity_axis(header, *, fallback_axis: Optional[int] = None) -> tuple[np.ndarray, float]:
+def velocity_axis(header, *, fallback_axis: int | None = None) -> tuple[np.ndarray, float]:
     """Channel velocities (km/s, radio convention) and the channel width in km/s.
 
     The rest frequency is RESTFRQ, else the middle channel's frequency.

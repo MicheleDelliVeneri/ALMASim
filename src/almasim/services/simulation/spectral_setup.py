@@ -32,7 +32,7 @@ class SpectralSetup:
     lum_infrared: Any
 
 
-def resolve_spectral_setup(
+def resolve_spectral_setup(  # noqa: C901
     params: SimulationParams,
     geometry: CubeGeometry,
     cont_sens_jy: U.Quantity,

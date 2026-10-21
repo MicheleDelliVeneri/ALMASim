@@ -1,7 +1,7 @@
 """Sky models whose morphology is a real galaxy image (Galaxy Zoo, Hubble Top-100)."""
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -17,7 +17,7 @@ class ImageTemplateSkyModel(SkyModel):
     spread over it. Subclasses say how to list and read the images.
     """
 
-    def __init__(self, *, data_path: str, client: Optional[Any] = None, **inputs: Any):
+    def __init__(self, *, data_path: str, client: Any | None = None, **inputs: Any):
         super().__init__(client=client, **inputs)
         self.data_path = data_path
 

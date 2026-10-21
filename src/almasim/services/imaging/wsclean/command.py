@@ -8,9 +8,9 @@ where in the list an option sits.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Sequence
 
 # How many values each option this module removes or replaces takes.
 _ARITY = {

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Any, Optional
+from typing import Any
 
 import astropy.units as U
 import numpy as np
@@ -36,8 +36,8 @@ class InterferometerRun:
     save_mode: str
     persist: bool
     antenna_diameter_m: float
-    config_name: Optional[str]
-    array_type: Optional[str]
+    config_name: str | None
+    array_type: str | None
     imaging_algorithm: str
     spectral_window: Any
 
@@ -50,7 +50,7 @@ class InterferometerRun:
 class TotalPowerRun:
     """One total-power configuration of a run (MADIV-28 T5.8)."""
 
-    config_name: Optional[str]
+    config_name: str | None
     array_type: str
     antenna_array: str
     antenna_diameter_m: float

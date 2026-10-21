@@ -5,7 +5,7 @@ import pytest
 
 try:
     import casatools
-except Exception:
+except Exception:  # noqa: BLE001 - casatools may be installed but broken
     pytest.skip("casatools not available or not functional", allow_module_level=True)
 
 from almasim.services.ms.io import export_native_ms, read_native_ms

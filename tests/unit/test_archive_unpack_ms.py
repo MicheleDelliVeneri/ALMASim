@@ -313,8 +313,8 @@ def test_ensure_casa_runtime_data_calls_update_all_when_missing(tmp_path):
             with patch("casaconfig.update_all", mock_update_all):
                 try:
                     ensure_casa_runtime_data(casa_data, skip_update=False)
-                except Exception:
-                    pass  # we only care that the call was attempted
+                except Exception:  # noqa: BLE001 - only the call matters here
+                    pass
 
 
 # ===========================================================================

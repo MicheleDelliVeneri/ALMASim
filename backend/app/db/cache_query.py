@@ -1,7 +1,6 @@
 """The cache's answer to a metadata query: the same filters TAP takes (MADIV-28 T6.10)."""
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
@@ -17,7 +16,7 @@ from .models import Observation, ScienceKeyword, ScientificCategory
 
 
 def observation_query(
-    include: Optional[InclusionFilters] = None, exclude: Optional[ExclusionFilters] = None
+    include: InclusionFilters | None = None, exclude: ExclusionFilters | None = None
 ):
     """The select of cached observations matching ``include`` and not ``exclude``, newest first.
 
@@ -128,7 +127,7 @@ def _taxonomy_filters(stmt, p: InclusionFilters):
     return stmt, filters
 
 
-def _build_exclusion_filters(e: ExclusionFilters) -> list:
+def _build_exclusion_filters(e: ExclusionFilters) -> list:  # noqa: C901
     """Return a list of NOT conditions for the exclusion parameters."""
     from .models import observation_keywords
 

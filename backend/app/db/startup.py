@@ -24,7 +24,7 @@ def check_database_initialized() -> bool:
             result = db.execute(text("SELECT COUNT(*) FROM observations"))
             count = result.scalar()
             return count > 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the database is optional here
         logger.warning(f"Could not check database initialization status: {e}")
         return False
 
@@ -53,7 +53,7 @@ def initialize_database_on_startup(data_dir: Path) -> None:
         try:
             with new_session() as db:
                 JobRepository(db).reconcile_stale_jobs()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - the database is optional here
             logger.warning(f"Could not mark interrupted jobs as failed: {e}")
 
         # Check if database is already initialized

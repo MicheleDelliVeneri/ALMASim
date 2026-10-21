@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Any, Iterator, List, Optional, Sequence
+from typing import Any
 
 import typer
 from tqdm.auto import tqdm
@@ -162,7 +163,7 @@ def _download_products_with_progress(
 
 def _read_member_uids_from_metadata(
     metadata_csv: Path,
-    member_limit: Optional[int],
+    member_limit: int | None,
 ) -> list[str]:
     import pandas as pd
 
@@ -175,18 +176,18 @@ def _read_member_uids_from_metadata(
     return dedupe_keep_order(series.tolist())
 
 
-def _parse_uid_options(uids: Optional[List[str]]) -> list[str]:
+def _parse_uid_options(uids: list[str] | None) -> list[str]:
     """UIDs from repeated or comma-separated options, in order, without duplicates."""
     return dedupe_keep_order(split_csv_values(uids) or [])
 
 
 def _resolve_products_from_inputs(
     *,
-    products_csv: Optional[Path],
-    metadata_csv: Optional[Path],
-    member_ous_uid: Optional[List[str]],
-    member_limit: Optional[int],
-    save_products_csv_path: Optional[Path],
+    products_csv: Path | None,
+    metadata_csv: Path | None,
+    member_ous_uid: list[str] | None,
+    member_limit: int | None,
+    save_products_csv_path: Path | None,
 ) -> list[Any]:
     if products_csv is not None:
         loaded = load_products_csv(products_csv)
@@ -224,23 +225,23 @@ def _resolve_products_from_inputs(
 
 @products_app.command("resolve")
 def products_resolve(
-    metadata_csv: Optional[Path] = typer.Option(
+    metadata_csv: Path | None = typer.Option(
         None,
         "--metadata-csv",
         help="Metadata CSV containing member_ous_uid rows.",
     ),
-    member_ous_uid: Optional[List[str]] = typer.Option(
+    member_ous_uid: list[str] | None = typer.Option(
         None,
         "--member-ous-uid",
         help="Direct member_ous_uid values. Repeat or pass comma-separated values.",
     ),
-    member_limit: Optional[int] = typer.Option(
+    member_limit: int | None = typer.Option(
         None,
         "--member-limit",
         min=1,
         help="Max metadata member_ous_uid rows to read (default: unlimited).",
     ),
-    save_member_ous_uid_list: Optional[Path] = typer.Option(
+    save_member_ous_uid_list: Path | None = typer.Option(
         None,
         "--save-member-ous-uid-list",
         help="Optional text file to write extracted member_ous_uid list (one per line).",
@@ -279,7 +280,7 @@ def products_resolve(
 
 
 def _update_manifest_measurement_sets(
-    manifest_path: Optional[str], raw_mss: list[str], calibrated_mss: list[str]
+    manifest_path: str | None, raw_mss: list[str], calibrated_mss: list[str]
 ) -> None:
     """Record post-processing outputs in the download manifest written earlier."""
     if not manifest_path:
@@ -331,21 +332,21 @@ def _cleanup_after_download_postprocess(
 class DownloadOptions:
     """Every option of ``products download`` (MADIV-28 T3.8)."""
 
-    products_csv: Optional[Path]
-    metadata_csv: Optional[Path]
-    member_ous_uid: Optional[List[str]]
-    member_limit: Optional[int]
+    products_csv: Path | None
+    metadata_csv: Path | None
+    member_ous_uid: list[str] | None
+    member_limit: int | None
     product_filter: str
     skip_qa0_semipass: bool
-    qa0_report_root: Optional[Path]
-    save_products_csv_path: Optional[Path]
+    qa0_report_root: Path | None
+    save_products_csv_path: Path | None
     destination: Path
     max_parallel: int
     extract_tar: bool
     unpack_ms: bool
     generate_calibrated_visibilities: bool
-    archive_output_root: Optional[Path]
-    casa_data_root: Optional[Path]
+    archive_output_root: Path | None
+    casa_data_root: Path | None
     skip_casa_data_update: bool
     clean_intermediate_files: bool
     postprocess_backend: PostprocessBackend
@@ -363,22 +364,22 @@ class DownloadOptions:
 
 @products_app.command("download")
 def products_download(
-    products_csv: Optional[Path] = typer.Option(
+    products_csv: Path | None = typer.Option(
         None,
         "--products-csv",
         help="Previously resolved products CSV.",
     ),
-    metadata_csv: Optional[Path] = typer.Option(
+    metadata_csv: Path | None = typer.Option(
         None,
         "--metadata-csv",
         help="Metadata CSV containing member_ous_uid rows to resolve first.",
     ),
-    member_ous_uid: Optional[List[str]] = typer.Option(
+    member_ous_uid: list[str] | None = typer.Option(
         None,
         "--member-ous-uid",
         help="Direct member_ous_uid values. Repeat or pass comma-separated values.",
     ),
-    member_limit: Optional[int] = typer.Option(
+    member_limit: int | None = typer.Option(
         None,
         "--member-limit",
         min=1,
@@ -405,7 +406,7 @@ def products_download(
             "is kept."
         ),
     ),
-    qa0_report_root: Optional[Path] = typer.Option(
+    qa0_report_root: Path | None = typer.Option(
         None,
         "--qa0-report-root",
         help=(
@@ -413,7 +414,7 @@ def products_download(
             "(<project>/science_goal.*/group.*/member.*/qa/). Defaults to --destination."
         ),
     ),
-    save_products_csv_path: Optional[Path] = typer.Option(
+    save_products_csv_path: Path | None = typer.Option(
         default_output_path("resolved_products.csv"),
         "--save-products-csv",
         help="Save resolved products CSV before download.",
@@ -447,12 +448,12 @@ def products_download(
         "--generate-calibrated-visibilities",
         help="Apply delivered calibrations and write calibrated MeasurementSets.",
     ),
-    archive_output_root: Optional[Path] = typer.Option(
+    archive_output_root: Path | None = typer.Option(
         None,
         "--archive-output-root",
         help="Root directory for archive_ms raw_ms/calibrated_ms products.",
     ),
-    casa_data_root: Optional[Path] = typer.Option(
+    casa_data_root: Path | None = typer.Option(
         None,
         "--casa-data-root",
         help="Optional CASA runtime data directory.",
@@ -703,7 +704,7 @@ def products_extract(
         "--source-root",
         help="Directory containing downloaded archive files.",
     ),
-    destination: Optional[Path] = typer.Option(
+    destination: Path | None = typer.Option(
         None,
         "--destination",
         help="Extraction destination (defaults to --source-root).",
@@ -791,12 +792,12 @@ def products_unpack(
         "--output-root",
         help="Directory where raw MeasurementSets are written.",
     ),
-    asdm_uid: Optional[List[str]] = typer.Option(
+    asdm_uid: list[str] | None = typer.Option(
         None,
         "--asdm-uid",
         help="Optional ASDM UID(s) to process. Repeat or pass comma-separated values.",
     ),
-    casa_data_root: Optional[Path] = typer.Option(
+    casa_data_root: Path | None = typer.Option(
         None,
         "--casa-data-root",
         help="Optional CASA runtime data directory.",
@@ -885,12 +886,12 @@ def products_calibrate(
         "--output-root",
         help="Directory where calibrated MeasurementSets are written.",
     ),
-    asdm_uid: Optional[List[str]] = typer.Option(
+    asdm_uid: list[str] | None = typer.Option(
         None,
         "--asdm-uid",
         help="Optional UID(s) to calibrate. Repeat or pass comma-separated values.",
     ),
-    casa_data_root: Optional[Path] = typer.Option(
+    casa_data_root: Path | None = typer.Option(
         None,
         "--casa-data-root",
         help="Optional CASA runtime data directory.",

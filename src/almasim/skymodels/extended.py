@@ -2,7 +2,7 @@
 
 import os
 from itertools import product
-from typing import Any, Optional
+from typing import Any
 
 import astropy.cosmology.units as cu
 import astropy.units as U
@@ -39,7 +39,7 @@ def evaluate_pixel_spectrum(
     """Add up contributions of particles to the spectrum in a pixel."""
     result = list()
     rank, ij_pxs = ranks_and_ij_pxs
-    for i, ij_px in enumerate(ij_pxs):
+    for ij_px in ij_pxs:
         ij = np.array(ij_px)[..., np.newaxis] * U.pix
         mask = (np.abs(ij - pixcoords[:2]) <= kernel_sm_ranges).all(axis=0)
         weights = kernel_px_weights(pixcoords[:2, mask] - ij, mask=mask)
@@ -63,8 +63,8 @@ class MartiniMod(Martini):
     def _insert_source_in_cube(
         self,
         client: Client | _LocalClient,
-        update_progress: Optional[Any] = None,
-        terminal: Optional[Any] = None,
+        update_progress: Any | None = None,
+        terminal: Any | None = None,
     ):
         """Insert source into cube using parallel processing."""
         if self.spectral_model.spectra is None:
@@ -154,8 +154,8 @@ class MartiniMod(Martini):
 
 def insert_tng(
     client: Client | _LocalClient,
-    update_progress: Optional[Any],
-    terminal: Optional[Any],
+    update_progress: Any | None,
+    terminal: Any | None,
     n_px: int,
     n_channels: int,
     freq_sup: U.Quantity,
@@ -167,7 +167,7 @@ def insert_tng(
     tngpath: str,
     ra: U.Quantity,
     dec: U.Quantity,
-    api_key: Optional[str],
+    api_key: str | None,
     px_size: U.Quantity,
 ) -> MartiniMod:
     """Insert TNG source into a cube of ``n_px`` pixels of ``px_size``."""
@@ -225,11 +225,11 @@ class ExtendedSkyModel:
         redshift: float,
         ra: U.Quantity,
         dec: U.Quantity,
-        api_key: Optional[str],
-        client: Optional[Client],
-        update_progress: Optional[Any] = None,
-        terminal: Optional[Any] = None,
-        rng: Optional[np.random.Generator] = None,
+        api_key: str | None,
+        client: Client | None,
+        update_progress: Any | None = None,
+        terminal: Any | None = None,
+        rng: np.random.Generator | None = None,
     ):
         """
         Initialize Extended sky model.
@@ -283,9 +283,7 @@ class ExtendedSkyModel:
         # redshift cannot stall the loop below that moves it further out).
         distance = max(float(computed.to_value(U.Mpc)), _MIN_TNG_DISTANCE_MPC)
         if self.terminal is not None:
-            self.terminal.add_log(
-                "Computed a distance of {} for redshift {}".format(computed, redshift)
-            )
+            self.terminal.add_log(f"Computed a distance of {computed} for redshift {redshift}")
         M = insert_tng(
             self.client,
             self.update_progress,
@@ -306,7 +304,7 @@ class ExtendedSkyModel:
         )
         initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
         if self.terminal is not None:
-            self.terminal.add_log("Mass ratio: {}%".format(initial_mass_ratio))
+            self.terminal.add_log(f"Mass ratio: {initial_mass_ratio}%")
         mass_ratio = initial_mass_ratio
         while mass_ratio < 50:
             if mass_ratio < 10:
@@ -318,7 +316,7 @@ class ExtendedSkyModel:
             else:
                 distance = distance * 1.5
             if self.terminal is not None:
-                self.terminal.add_log("Injecting source at distance {}".format(distance))
+                self.terminal.add_log(f"Injecting source at distance {distance}")
             M = insert_tng(
                 self.client,
                 self.update_progress,
@@ -339,7 +337,7 @@ class ExtendedSkyModel:
             )
             mass_ratio = M.inserted_mass / M.source.input_mass * 100
             if self.terminal is not None:
-                self.terminal.add_log("Mass ratio: {}%".format(mass_ratio))
+                self.terminal.add_log(f"Mass ratio: {mass_ratio}%")
         if self.terminal is not None:
             self.terminal.add_log("Datacube generated, inserting source")
         return M.datacube

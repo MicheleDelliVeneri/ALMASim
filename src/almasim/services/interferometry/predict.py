@@ -7,7 +7,8 @@ MODEL_DATA) and the simulator's image-based path.
 from __future__ import annotations
 
 import os
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -34,9 +35,9 @@ def predict_visibilities(
     pixsize_x: float,
     pixsize_y: float,
     *,
-    weights: Optional[np.ndarray] = None,
+    weights: np.ndarray | None = None,
     epsilon: float = 1e-6,
-    nthreads: Optional[int] = None,
+    nthreads: int | None = None,
 ) -> np.ndarray:
     """Visibilities ``(nrows, nchan)`` of ``planes`` at ``uvw_m`` (metres) and ``freq_hz``.
 
@@ -52,7 +53,7 @@ def predict_visibilities(
     planes = np.asarray(planes)
     nthreads = ALMASIM_NTHREADS if nthreads is None else int(nthreads)
 
-    def predict(plane: np.ndarray, frequencies: np.ndarray, wgt: Optional[np.ndarray]) -> Any:
+    def predict(plane: np.ndarray, frequencies: np.ndarray, wgt: np.ndarray | None) -> Any:
         kwargs: dict[str, Any] = dict(
             uvw=uvw_m,
             freq=frequencies,
