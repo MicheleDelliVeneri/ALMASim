@@ -30,7 +30,8 @@ class CommandInfo:
     name: str
     summary: str
     help: str
-    executor: str
+    executor: str  # by default; a profile can move a command (policy.plan_job)
+    needs_internet: bool
     params: list[dict[str, Any]]
     extra_args: bool  # takes arguments it does not declare (clean passes them to WSClean)
 
@@ -143,7 +144,8 @@ def catalog() -> list[CommandInfo]:
                 name=name,
                 summary=(command.short_help or (command.help or "").split("\n\n")[0]).strip(),
                 help=(command.help or "").strip(),
-                executor="server" if name in NETWORK_COMMANDS else "slurm",
+                executor="slurm",
+                needs_internet=name in NETWORK_COMMANDS,
                 params=params,
                 extra_args=bool(command.context_settings.get("allow_extra_args")),
             )

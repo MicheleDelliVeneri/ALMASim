@@ -25,8 +25,8 @@ def _param(commands, command: str, flag: str) -> dict:
 def test_every_runnable_command_is_described_and_serialisable(commands):
     assert set(commands) == set(KNOWN_COMMANDS)
     json.dumps([asdict(c) for c in commands.values()])
-    assert commands["metadata"].executor == "server"
-    assert commands["image image-from-ms"].executor == "slurm"
+    assert commands["metadata"].executor == "slurm" and commands["metadata"].needs_internet
+    assert not commands["image image-from-ms"].needs_internet
     assert commands["image image-from-ms"].summary
 
 
