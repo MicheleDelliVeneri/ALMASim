@@ -7,6 +7,7 @@ old ``almasim.cli_<group>`` aliases were removed in MADIV-28 T8.4.
 from __future__ import annotations
 
 from importlib import import_module
+from pathlib import Path
 
 import click
 import typer
@@ -117,6 +118,26 @@ for _group in _GROUPS:
 def clean_command_proxy(ctx: typer.Context) -> None:
     """Run clean passthrough command."""
     _forward_clean_command(ctx=ctx)
+
+
+@app.command("doctor", help="Check that the job profile works on this machine.")
+def doctor_command(
+    slurm: bool = typer.Option(
+        False, "--slurm", help="Run the checks on a compute node (with srun), as a job sees them."
+    ),
+    site_profile: Path | None = typer.Option(
+        None, "--site-profile", help="Site profile (default: $ALMASIM_SITE_PROFILE)."
+    ),
+    profile: Path | None = typer.Option(
+        None,
+        "--profile",
+        help="User profile (default: $ALMASIM_PROFILE, else ~/.config/almasim/almasim.toml).",
+    ),
+) -> None:
+    """Check the runs root, Python, CASA, WSClean and Slurm the profile names."""
+    from .doctor import doctor
+
+    doctor(slurm, site_profile, profile)
 
 
 def main() -> None:
