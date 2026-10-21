@@ -110,7 +110,7 @@ $ almasim products download [OPTIONS]
 * `--metadata-csv <path>`: Metadata CSV containing member_ous_uid rows to resolve first.
 * `--member-ous-uid <str>`: Direct member_ous_uid values. Repeat or pass comma-separated values.
 * `--member-limit <int range>`: Max metadata member_ous_uid rows to read (default: unlimited).  [x>=1]
-* `--product-filter <str>`: Subset of resolved products to download. Choices: all, auxiliary, calibration, continuum, cubes, fits, other, qa_reports, raw, scripts, weblog.  [default: all]
+* `--product-filter <all|auxiliary|calibration|continuum|cubes|fits|other|qa_reports|raw|scripts|weblog>`: Subset of resolved products to download.  [default: all]
 * `--skip-qa0-semipass`: Skip raw ASDMs whose execution block is QA0 SemiPass, read from the <eb>.qa0_report.pdf in the member's extracted auxiliary delivery. ALMA never delivers calibration for these, so they can never be calibrated. Download and extract the auxiliary products first; a raw product without a readable report is kept.
 * `--qa0-report-root <path>`: Root holding the extracted auxiliary deliveries (<project>/science_goal.*/group.*/member.*/qa/). Defaults to --destination.
 * `--save-products-csv <path>`: Save resolved products CSV before download.  [default: ~/almasim_outputs/resolved_products.csv]
@@ -154,22 +154,22 @@ $ almasim simulation [OPTIONS]
 * `--output-dir <path>`: Directory for simulation outputs.  [default: ~/almasim_outputs/simulation]
 * `--input <path>`: External skymodel input. If a file is provided, it is reused for all rows. If a directory is provided, files are matched to each metadata row using member_ous_uid and group_ous_uid.
 * `--main-dir <path>`: Path to ALMASim data directory (defaults to src/almasim).  [default: <repo>/src/almasim]
-* `--source-type <str>`: Sky model family. Choices: point, gaussian, diffuse, galaxy-zoo, molecular, hubble-100.  [default: point]
+* `--source-type <point|gaussian|diffuse|galaxy-zoo|molecular|hubble-100|external-components|external-fits-cube|external-fits-image>`: Sky model family (the external ones take their cube from --input).  [default: point]
 * `--n-pix <int range>`: Spatial cube size override.  [default: 128; x>=1]
 * `--n-channels <int range>`: Channel count override.  [default: 32; x>=1]
 * `--n-lines <int range>`: Number of spectral lines to inject. Omit to use metadata default.  [x>=1]
 * `--seed <int>`: Base random seed for reproducible simulations. When running multiple simulations, each run uses seed + run_index.
 * `--simulations-per-row <int range>`: How many simulations to run for each selected metadata row.  [default: 1; x>=1]
-* `--imaging-algorithm <str>`: Channel imaging algorithm. Choices: legacy.  [default: legacy]
+* `--imaging-algorithm <legacy>`: Channel imaging algorithm.  [default: legacy]
 * `--robust <float>`: Robust weighting parameter for imaging.  [default: 0.0]
 * `--instrument-geometry <legacy|planner>`: Beam, field of view and cell: legacy (the metadata FOV, beam / 5) or planner (the imaging planner's: the primary beam's FOV, beam / 8).  [default: legacy]
 * `--background-level <float>`: Background sky level scaling factor (0 = no background).  [default: 0.0]
 * `--background-seed <int>`: Random seed for background sky generation.
 * `--inject-serendipitous`: Add a few random serendipitous sources around the target.
-* `--save-mode <str>`: Output save mode. Choices: memory, npz, h5, fits.  [default: memory]
+* `--save-mode <memory|npz|h5|fits>`: Output save mode.  [default: memory]
 * `--persist-standard-outputs`: Persist standard outputs in addition to ML shard.
 * `--ml-shard-path <path>`: Destination HDF5 shard path.  [default: ~/almasim_outputs/ddrm_training_sample.h5]
-* `--backend <str>`: Compute backend. Choices: sync, local.  [default: sync]
+* `--backend <sync|local>`: Compute backend.  [default: sync]
 * `--n-workers <int range>`: Worker count for local backend.  [default: 1; x>=1]
 * `--kaggle-token <path>`: Path to a Kaggle credentials file (JSON with username/key, e.g. kaggle.json or access_token) or the directory containing it, used to download morphology images for the galaxy-zoo / hubble-100 source types. Defaults to the standard Kaggle locations if omitted.
 * `--help`: Show this message and exit.

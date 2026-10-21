@@ -8,6 +8,7 @@ baseline became ~55 km and, with the km wavelengths, uv distances came out
 
 from __future__ import annotations
 
+import re
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -64,7 +65,9 @@ def test_the_cli_offers_only_legacy(tmp_path):
         ],
     )
     assert result.exit_code == 2
-    assert "--imaging-algorithm must be one of: legacy" in result.output
+    assert "'ducc0' is not one of 'legacy'" in " ".join(
+        re.sub(r"\x1b\[[0-9;]*m", "", result.output).replace("│", " ").split()
+    )
 
 
 def test_set_primary_beam_no_longer_writes_a_beam_into_the_header():

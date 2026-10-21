@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -80,6 +81,12 @@ def _stage_errors() -> Iterator[None]:
     except StageError as exc:
         fail(str(exc))
 
+
+# The product filter's choices as an enum, so typer checks them and the
+# console's catalogue lists them (MADIV-28 S2.2). PRODUCT_TYPES is a set: sorted.
+ProductFilter = StrEnum(  # type: ignore[misc]
+    "ProductFilter", {name: name for name in sorted(PRODUCT_TYPES)}
+)
 
 products_app = typer.Typer(
     help="Data product resolution and download commands.",
@@ -385,14 +392,10 @@ def products_download(
         min=1,
         help="Max metadata member_ous_uid rows to read (default: unlimited).",
     ),
-    product_filter: str = typer.Option(
-        "all",
+    product_filter: ProductFilter = typer.Option(
+        ProductFilter("all"),
         "--product-filter",
-        help=(
-            "Subset of resolved products to download. "
-            # PRODUCT_TYPES is a set, so it is sorted for a stable help text.
-            "Choices: all, " + ", ".join(sorted(PRODUCT_TYPES - {"all"})) + "."
-        ),
+        help="Subset of resolved products to download.",
         case_sensitive=False,
     ),
     skip_qa0_semipass: bool = typer.Option(
@@ -526,9 +529,7 @@ def products_download(
 
 def _select_download_products(o: DownloadOptions) -> list[Any]:
     """Validate the options and return the products to download (exits when there are none)."""
-    product_filter = o.product_filter.lower()
-    if product_filter not in PRODUCT_TYPES:
-        usage_error("Invalid --product-filter. Allowed values: " + ", ".join(sorted(PRODUCT_TYPES)))
+    product_filter = o.product_filter.lower()  # click checked the choice (MADIV-28 S2.2)
     if o.max_parallel > MAX_PARALLEL_TOTAL:
         typer.echo(
             "Requested --max-parallel="

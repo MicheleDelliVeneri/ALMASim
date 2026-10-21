@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tarfile
 from types import SimpleNamespace
 
@@ -71,7 +72,9 @@ def test_products_download_invalid_filter_exits():
     )
 
     assert result.exit_code == 2
-    assert "Invalid --product-filter" in result.output
+    assert "'not-a-type' is not one of 'all'" in " ".join(
+        re.sub(r"\x1b\[[0-9;]*m", "", result.output).replace("│", " ").split()
+    )
 
 
 def test_products_download_slurm_postprocess_path(tmp_path, monkeypatch):
