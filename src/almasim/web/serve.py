@@ -36,10 +36,11 @@ class ServerInfo:
     socket: str | None = None
     port: int | None = None
     bind: str = "127.0.0.1"  # the address it listens on, with a port
+    base_path: str = ""  # the URL prefix it is served under (Open OnDemand plan, O1)
 
     def url(self, local_port: int = LOCAL_PORT) -> str:
         port = local_port if self.socket else self.port
-        return f"http://localhost:{port}/?token={self.token}"
+        return f"http://localhost:{port}{self.base_path}/?token={self.token}"
 
     def ssh_line(self, local_port: int = LOCAL_PORT) -> str:
         user = os.environ.get("USER", "you")

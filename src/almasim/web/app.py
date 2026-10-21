@@ -4,23 +4,34 @@ The server runs as one user on a shared login node. It listens on a socket
 only that user can open (or on 127.0.0.1), and every request must also carry
 the token ``almasim serve`` printed: as the ``almasim_token`` cookie, which
 opening the printed link once sets, or as ``Authorization: Bearer <token>``.
+
+Behind a reverse proxy that passes its path prefix on (Open OnDemand's
+``/node/<host>/<port>/``), ``base_path`` serves everything under that prefix
+(Open OnDemand plan, O1).
 """
 
 from __future__ import annotations
 
 import hmac
 import os
+import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.types import Scope
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from almasim.__version__ import __version__
 from almasim.jobs.profile import Profile, load_profile
@@ -36,14 +47,38 @@ COOKIE = "almasim_token"
 STATIC_DIR = Path(__file__).parent / "static"
 CHECKOUT_BUILD = Path(__file__).resolve().parents[3] / "frontend" / "build"
 WEB_DIR_ENV = "ALMASIM_WEB_DIR"
+_BASE_PATH = re.compile(r"(/[A-Za-z0-9._~-]+)+")
 
 _NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>ALMASim</title>
 <p>The ALMASim web console is running, but its pages are not built into this
-install. The API is at <a href="/api/v2/health">/api/v2</a>.</p>"""
+install. The API is at <a href="{base}/api/v2/health">{base}/api/v2</a>.</p>"""
 
 _LOCKED = """<!doctype html><meta charset="utf-8"><title>ALMASim</title>
 <p>Open the link <code>almasim serve</code> printed (it carries the access
 token), or run <code>almasim serve --status</code> to see it again.</p>"""
+
+
+def normalize_base_path(value: str | None) -> str:
+    """``value`` as a URL prefix: "" for none, else ``/a/b`` (no slash at the end)."""
+    path = (value or "").strip().rstrip("/")
+    if not path:
+        return ""
+    if not _BASE_PATH.fullmatch(path) or any(p in (".", "..") for p in path.split("/")):
+        raise ValueError(f"{value!r} is not a URL path prefix (e.g. /node/host/8765)")
+    return path
+
+
+def with_base(html: str, base: str) -> str:
+    """The built page with its root paths moved under ``base``: SvelteKit's
+    base path (read at run time from the page's ``base: ""``), and the
+    scripts and images the page links from the root."""
+    if not base:
+        return html
+    return (
+        html.replace('base: ""', f'base: "{base}"', 1)
+        .replace('"/_app/', f'"{base}/_app/')
+        .replace('"/assets/', f'"{base}/assets/')
+    )
 
 
 class AppFiles(StaticFiles):
@@ -53,13 +88,47 @@ class AppFiles(StaticFiles):
 
     FALLBACK = "200.html"
 
+    def __init__(self, *, directory: Path, base: str = "") -> None:
+        super().__init__(directory=directory, html=True)
+        self.base = base
+
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             if exc.status_code != 404 or path.split("/", 1)[0] == "api":
                 raise
-            return await super().get_response(self.FALLBACK, scope)
+            if not self.base:
+                return await super().get_response(self.FALLBACK, scope)
+            page = (Path(str(self.directory)) / self.FALLBACK).read_text(encoding="utf-8")
+            return HTMLResponse(with_base(page, self.base))
+
+
+class BasePath:
+    """Serve the app under ``base``, for a proxy that passes the prefix on.
+
+    A request under it is routed as if the prefix were the root (ASGI's
+    ``root_path``); the bare prefix redirects to its folder, so the page's
+    relative links resolve; anything else is not this console's.
+    """
+
+    def __init__(self, app: ASGIApp, base: str) -> None:
+        self.app = app
+        self.base = base
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not self.base:
+            await self.app(scope, receive, send)
+            return
+        path = scope["path"]
+        if path == self.base:
+            query = scope.get("query_string", b"").decode()
+            target = self.base + "/" + (f"?{query}" if query else "")
+            await RedirectResponse(target, status_code=307)(scope, receive, send)
+        elif path.startswith(self.base + "/"):
+            await self.app({**scope, "root_path": self.base}, receive, send)
+        else:
+            await PlainTextResponse("Not found", status_code=404)(scope, receive, send)
 
 
 class TokenMiddleware(BaseHTTPMiddleware):
@@ -80,11 +149,18 @@ class TokenMiddleware(BaseHTTPMiddleware):
             if not self._valid(offered):
                 return HTMLResponse(_LOCKED, status_code=401)
             # Trade the link's token for a cookie, and drop it from the address bar.
+            # The cookie goes to this console's own prefix only: behind a shared
+            # proxy, other users' apps live under the same address.
             rest = {k: v for k, v in request.query_params.items() if k != "token"}
-            target = request.url.path + (f"?{urlencode(rest)}" if rest else "")
+            target = request.scope["path"] + (f"?{urlencode(rest)}" if rest else "")
             response = RedirectResponse(target, status_code=303)
             response.set_cookie(
-                COOKIE, self.token, httponly=True, samesite="strict", path="/", max_age=30 * 86400
+                COOKIE,
+                self.token,
+                httponly=True,
+                samesite="strict",
+                path=request.scope.get("root_path", "") + "/",
+                max_age=30 * 86400,
             )
             return response
 
@@ -93,7 +169,8 @@ class TokenMiddleware(BaseHTTPMiddleware):
             bearer[7:] if bearer.lower().startswith("bearer ") else None
         )
         if not self._valid(presented):
-            if request.url.path.startswith("/api/"):
+            route = request.scope["path"][len(request.scope.get("root_path", "")) :]
+            if route.startswith("/api/"):
                 return JSONResponse({"detail": "Not authenticated"}, status_code=401)
             return HTMLResponse(_LOCKED, status_code=401)
         return await call_next(request)
@@ -117,15 +194,18 @@ def create_app(
     *,
     profile: Profile | None = None,
     events_interval: float = 15.0,
+    base_path: str = "",
 ) -> FastAPI:
     """The console app, serving the built web app from ``static_dir`` (default: ``web_dir()``).
 
     ``profile`` is the job profile the server submits with (default: the
     one ``almasim`` reads from the environment); ``events_interval`` is how
-    often, in seconds, it looks at the runs between actions.
+    often, in seconds, it looks at the runs between actions; ``base_path``
+    is the URL prefix it is served under (default: the root).
     """
     if not token:
         raise ValueError("the console needs an access token")
+    base = normalize_base_path(base_path)
     profile = profile if profile is not None else load_profile()
     hub = EventHub(profile, interval=events_interval)
 
@@ -144,6 +224,7 @@ def create_app(
     app.state.events = hub
     app.state.cluster = cluster.ClusterView(profile)
     app.add_middleware(TokenMiddleware, token=token)
+    app.add_middleware(BasePath, base=base)  # added last: runs first
 
     @app.get("/api/v2/health")
     def health() -> dict[str, str]:
@@ -159,11 +240,11 @@ def create_app(
 
     static_dir = static_dir if static_dir is not None else web_dir()
     if static_dir is not None and (static_dir / AppFiles.FALLBACK).is_file():
-        app.mount("/", AppFiles(directory=static_dir, html=True), name="web")
+        app.mount("/", AppFiles(directory=static_dir, base=base), name="web")
     else:
 
         @app.get("/", response_class=HTMLResponse, include_in_schema=False)
         def not_built() -> str:
-            return _NOT_BUILT
+            return _NOT_BUILT.format(base=base)
 
     return app

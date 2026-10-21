@@ -11,8 +11,11 @@ async function chip(page: Page, state: string) {
 }
 
 test('run a command, follow its log, run it again', async ({ page }) => {
-	await page.goto('/run');
-	await page.getByRole('navigation', { name: 'Commands' }).getByRole('button', { name: 'doctor' }).click();
+	await page.goto('run');
+	await page
+		.getByRole('navigation', { name: 'Commands' })
+		.getByRole('button', { name: 'doctor' })
+		.click();
 	await page.getByRole('textbox', { name: /Title/ }).fill('e2e doctor');
 	await expect(page.getByText('Runs on the console server.')).toBeVisible();
 	await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -26,18 +29,23 @@ test('run a command, follow its log, run it again', async ({ page }) => {
 	await expect(page).not.toHaveURL(first);
 	await chip(page, 'Succeeded');
 
-	await page.goto('/jobs');
+	await page.goto('jobs');
 	await expect(page.getByRole('link', { name: 'e2e doctor' })).toHaveCount(2);
 });
 
 test('cancel a long run from its page', async ({ page }) => {
-	await page.goto('/run?command=doctor');
+	await page.goto('run?command=doctor');
 	await page.getByRole('checkbox', { name: /Slurm/ }).check();
 	await page.getByRole('textbox', { name: /Title/ }).fill('e2e long');
 	await expect(page.getByText('Runs on the console server.')).toBeVisible();
 	await page.getByRole('button', { name: 'Run', exact: true }).click();
 	await chip(page, 'Running');
-	await expect(page.getByRole('log').getByText(/waiting for the compute node/).first()).toBeVisible();
+	await expect(
+		page
+			.getByRole('log')
+			.getByText(/waiting for the compute node/)
+			.first()
+	).toBeVisible();
 
 	await page.getByRole('button', { name: 'Cancel job' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Cancel this job?' });
@@ -46,13 +54,16 @@ test('cancel a long run from its page', async ({ page }) => {
 
 	// A finished run of yours can go.
 	await page.getByRole('button', { name: 'Delete' }).click();
-	await page.getByRole('dialog', { name: 'Delete this run?' }).getByRole('button', { name: 'Delete' }).click();
+	await page
+		.getByRole('dialog', { name: 'Delete this run?' })
+		.getByRole('button', { name: 'Delete' })
+		.click();
 	await expect(page).toHaveURL(/\/jobs$/);
 	await expect(page.getByRole('link', { name: 'e2e long' })).toHaveCount(0);
 });
 
 test('search the archive, resolve the products and download them', async ({ page }) => {
-	await page.goto('/archive');
+	await page.goto('archive');
 	await page.getByRole('textbox', { name: /Project code/ }).fill('2023.1.00133.S');
 	await page.getByRole('button', { name: 'Search the archive' }).click();
 
@@ -73,7 +84,7 @@ test('search the archive, resolve the products and download them', async ({ page
 });
 
 test('image a folder, then look at the results', async ({ page }) => {
-	await page.goto('/imaging');
+	await page.goto('imaging');
 	await page.getByRole('textbox', { name: /Folder of calibrated/ }).fill(`${E2E_ROOT}/data/cal`);
 	await page.getByRole('button', { name: 'Work out the imaging parameters' }).click();
 

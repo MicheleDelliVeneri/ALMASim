@@ -117,6 +117,82 @@ def test_an_app_needs_a_token():
         create_app("")
 
 
+BASE = "/node/compute-node47/8765"
+# What SvelteKit's build puts in the fallback page (its runtime base, the
+# scripts and images it links from the root).
+BUILT_PAGE = """<link rel="icon" href="/assets/skao-mark.png" />
+<script>__sveltekit_x = { base: "", version: "1" };
+import("/_app/immutable/entry/start.js").then((kit) => kit.init(__sveltekit_x));</script>"""
+
+
+@pytest.fixture
+def prefixed(tmp_path) -> TestClient:
+    (tmp_path / "200.html").write_text(BUILT_PAGE)
+    (tmp_path / "_app").mkdir()
+    (tmp_path / "_app" / "start.js").write_text("start()")
+    app = create_app(TOKEN, static_dir=tmp_path, base_path=BASE + "/")
+    return TestClient(app, follow_redirects=False)
+
+
+def test_a_console_behind_a_prefix_answers_only_under_it(prefixed):
+    assert prefixed.get(BASE).headers["location"] == BASE + "/"
+    assert prefixed.get("/api/v2/health").status_code == 404
+    unauthenticated = prefixed.get(BASE + "/api/v2/health")
+    assert unauthenticated.status_code == 401 and unauthenticated.json()["detail"]
+
+
+def test_behind_a_prefix_the_cookie_stays_under_it(prefixed):
+    response = prefixed.get(f"{BASE}/?token={TOKEN}&dir=/data")
+    assert response.headers["location"] == f"{BASE}/?dir=%2Fdata"
+    assert f"Path={BASE}/" in response.headers["set-cookie"]
+    assert prefixed.get(BASE + "/api/v2/health").json()["status"] == "ok"
+
+
+def test_behind_a_prefix_the_page_loads_everything_from_under_it(prefixed):
+    prefixed.cookies.set(COOKIE, TOKEN)
+    page = prefixed.get(BASE + "/jobs/01JABCDEF").text
+    assert f'base: "{BASE}"' in page
+    assert f'import("{BASE}/_app/immutable/entry/start.js")' in page
+    assert f'href="{BASE}/assets/skao-mark.png"' in page
+    assert prefixed.get(BASE + "/_app/start.js").text == "start()"
+
+
+def test_without_a_build_the_note_links_under_the_prefix(tmp_path):
+    client = TestClient(create_app(TOKEN, static_dir=tmp_path, base_path=BASE))
+    client.cookies.set(COOKIE, TOKEN)
+    assert f'href="{BASE}/api/v2/health"' in client.get(BASE + "/").text
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("", ""), ("/", ""), (BASE + "/", BASE), ("/rnode/n1.example/9000", "/rnode/n1.example/9000")],
+)
+def test_base_paths_are_normalised(value, expected):
+    assert app_module.normalize_base_path(value) == expected
+
+
+@pytest.mark.parametrize("value", ["node/x", "/a/../b", "/a b", "/a?b", "/a//b"])
+def test_odd_base_paths_are_refused(value):
+    with pytest.raises(ValueError):
+        app_module.normalize_base_path(value)
+
+
+def test_the_printed_link_carries_the_prefix():
+    info = state.ServerInfo(pid=1, token="t", host="h", port=9000, base_path=BASE)
+    assert info.url() == f"http://localhost:9000{BASE}/?token=t"
+
+
+def test_a_bad_base_path_is_refused_before_serving(tmp_path):
+    from typer.testing import CliRunner
+
+    from almasim.cli import app as cli
+
+    result = CliRunner().invoke(
+        cli, ["serve", "--port", "8799", "--base-path", "/a/../b"], env={"HOME": str(tmp_path)}
+    )
+    assert result.exit_code != 0 and "--base-path" in result.output
+
+
 def test_the_server_record_is_private_and_forgets_dead_servers(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     info = state.ServerInfo(pid=os.getpid(), token="t", host="zwicky", socket="/s/serve.sock")

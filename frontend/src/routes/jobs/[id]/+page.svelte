@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, type RunDetail } from '#lib/api/v2/client.js';
+	import { consoleUrl } from '#lib/config.js';
 	import { clock } from '#lib/clock.svelte.js';
 	import LogView from '#lib/components/jobs/LogView.svelte';
 	import StateChip from '#lib/components/jobs/StateChip.svelte';
@@ -130,7 +131,7 @@
 	const time = (seconds: number | null | undefined) =>
 		seconds == null ? '—' : new Date(seconds * 1000).toLocaleString();
 	const fileHref = (dir: string, name: string) =>
-		`/api/v2/files/download?path=${encodeURIComponent(`${dir}/${name}`)}`;
+		`${consoleUrl()}/api/v2/files/download?path=${encodeURIComponent(`${dir}/${name}`)}`;
 </script>
 
 <svelte:head

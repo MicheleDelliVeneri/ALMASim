@@ -122,6 +122,16 @@ jobs:
           PYTHON: ${{ github.workspace }}/.venv/bin/python
         run: npx playwright test
 
+      # The same tests with the console under a URL prefix, as Open
+      # OnDemand's proxy serves it (/node/<host>/<port>).
+      - name: End-to-end tests under a URL prefix
+        working-directory: frontend
+        env:
+          ALMASIM: ${{ github.workspace }}/.venv/bin/almasim
+          PYTHON: ${{ github.workspace }}/.venv/bin/python
+          E2E_BASE_PATH: /node/e2e-host/8765
+        run: npx playwright test
+
       - name: Keep the traces of failed tests
         if: failure()
         uses: actions/upload-artifact@v7
