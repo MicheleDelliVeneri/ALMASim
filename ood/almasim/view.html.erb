@@ -1,0 +1,8 @@
+<%# The session card's Connect button: opens the console through the portal's
+    proxy, carrying the token once; the console trades it for a cookie. %>
+<form action="/node/<%= host %>/<%= port %>/" method="get" target="_blank">
+  <input type="hidden" name="token" value="<%= password %>">
+  <button class="btn btn-primary" type="submit">
+    <i class="fas fa-satellite-dish"></i> Connect to ALMASim
+  </button>
+</form>

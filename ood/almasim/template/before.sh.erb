@@ -1,0 +1,15 @@
+# Runs in the job before the console (Open OnDemand plan, O2, O3).
+# `host`, `port` and `password` go to the session's connection file, which
+# the Connect button (view.html.erb) reads.
+
+# A free port on this node for the console.
+port=$(find_port ${host})
+
+# The console's access token, fresh for this session.
+password="$(create_passwd 48)"
+
+# What the console needs from these, in its environment.
+export ALMASIM_PORT="${port}"
+export ALMASIM_TOKEN="${password}"
+# The path the portal's proxy forwards to this console, which it passes on.
+export ALMASIM_BASE_PATH="/node/${host}/${port}"

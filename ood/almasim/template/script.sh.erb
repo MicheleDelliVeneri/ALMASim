@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# The ALMASim console for this session: as this user, on this compute node,
+# reached through the portal's proxy (Open OnDemand plan, O3).
+
+source "<%= context.almasim_setup %>"
+
+# Listen on the node's address (the portal host forwards to it); the token
+# keeps everyone else out.
+export ALMASIM_SERVE_HOST=0.0.0.0
+
+exec almasim serve --managed --port "${ALMASIM_PORT}"
