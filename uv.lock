@@ -846,15 +846,15 @@ wheels = [
 
 [[package]]
 name = "hdecompose"
-version = "0.1.0"
+version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astropy" },
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/f4/d40899563e3bf18a6b62fc90759c255187c87750e7c486e71d825c930bf9/hdecompose-0.1.0.tar.gz", hash = "sha256:e894b4de54a932ee95b914507734e7bff6c4bc5ff27a1586f68cfb0c5ffc5b2e", size = 18199, upload-time = "2023-03-15T15:34:42.112Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/45/19f5927c2043098c31e3c94a4bd453787de1c77807d62889bcf484ef90f8/hdecompose-0.1.1.tar.gz", hash = "sha256:ed87a95adad3cb9ce37f146ae815ad0b4602211db57232792b49c17dff3fe0b5", size = 19244, upload-time = "2026-10-05T09:57:35.216Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/84/4cfe9206f90aaa067a73f6d0ab7d0db9e87bbbfe41d5b062d8dfc459c95d/hdecompose-0.1.0-py3-none-any.whl", hash = "sha256:93b3511be5c2f9a93c97b1396d543885fd16ac339ff9a5cb977f3b52e17001aa", size = 20710, upload-time = "2023-03-15T15:34:39.807Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/d2/85e490c6c73aa9e212b06dbfcce2704d261c971b3ccf780b964b31f43d25/hdecompose-0.1.1-py3-none-any.whl", hash = "sha256:c36be514598d3c6510cf916f7fcfaa18e44c15af64ff1d3bf4573b17f63572bf", size = 21618, upload-time = "2026-10-05T09:57:33.916Z" },
 ]
 
 [[package]]
