@@ -1,0 +1,58 @@
+# Site profile for the zwicky cluster (web console plan, J1.3).
+#
+# Point ALMASIM_SITE_PROFILE at this file (the shared install does), and put
+# your own overrides in ~/.config/almasim/almasim.toml. Check it with
+# `almasim doctor --slurm`, which runs the checks on a compute node.
+
+# Runs are group-readable here, so teammates' consoles list them.
+runs_root = "/SKAO_data/cycle11/almasim-runs"
+# Where the console may browse and write.
+roots = ["/SKAO_data/cycle11", "~"]
+
+[python]
+# The Python that runs jobs: it needs almasim and, for unpack and
+# calibrate, casatools and casatasks (they import in this conda env).
+executable = "~/.conda/envs/py312/bin/python"
+setup = ["export OPENBLAS_NUM_THREADS=1"]
+
+[tools]
+wsclean = "/SKAO_data/spack/opt/spack/linux-zen3/wsclean-3.7.20260424-a26g7w3hqrs4ec5ldmd4fjs4gdkg65rp/bin/wsclean"
+casa_data = "/SKAO_data/cycle11/.casa-data"
+
+[slurm]
+partition = "zwickyA-CPU"
+
+[slurm.partitions.zwickyA-CPU]
+cpus = 96
+memory = "770G"
+
+[slurm.partitions.zwickyB-CPU]
+cpus = 96
+memory = "380G"
+
+# Drivers: these commands submit their own Dask workers (--backend slurm),
+# so their own job is small and long.
+[commands."image image-from-ms"]
+cpus = 4
+memory = "16G"
+time = "2-00:00:00"
+
+[commands."visibilities unpack"]
+cpus = 4
+memory = "16G"
+time = "2-00:00:00"
+
+[commands."visibilities calibrate"]
+cpus = 4
+memory = "16G"
+time = "2-00:00:00"
+
+[commands."image clean-quality"]
+cpus = 8
+memory = "32G"
+time = "06:00:00"
+
+[commands.simulation]
+cpus = 16
+memory = "64G"
+time = "1-00:00:00"

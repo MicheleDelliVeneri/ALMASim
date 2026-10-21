@@ -548,3 +548,20 @@ $ almasim clean [OPTIONS]
 * `--cwd <path>`: Optional working directory for WSClean execution.
 * `--dry-run`: Print the WSClean command without running it.
 * `--help`: Show this message and exit.
+
+# `almasim doctor`
+
+Check the runs root, Python, CASA, WSClean and Slurm the profile names.
+
+**Usage**:
+
+```console
+$ almasim doctor [OPTIONS]
+```
+
+**Options**:
+
+* `--slurm`: Run the checks on a compute node (with srun), as a job sees them.
+* `--site-profile <path>`: Site profile (default: $ALMASIM_SITE_PROFILE).
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE, else ~/.config/almasim/almasim.toml).
+* `--help`: Show this message and exit.
