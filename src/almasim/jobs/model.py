@@ -58,6 +58,28 @@ def is_job_id(text: str) -> bool:
     return bool(_JOB_ID.fullmatch(text))
 
 
+# The CLI's shape (almasim.cli._GROUPS): groups whose subcommand is part of
+# the command's name, and single-command groups whose subcommand word users
+# may type or leave out (`almasim metadata query ...` is `metadata`).
+_MULTI_COMMAND_GROUPS = frozenset({"products", "visibilities", "image"})
+_SINGLE_COMMAND_GROUPS = {"metadata": "query", "simulation": "run", "predict": "ms-from-image"}
+
+
+def command_name(argv: list[str]) -> str:
+    """The command an ``almasim`` argv runs, as profiles and the policy name it.
+
+    ``["image", "image-from-ms", "p.csv"]`` is ``image image-from-ms``;
+    ``["metadata", "query", "--band", "3"]`` and ``["metadata", "--band", "3"]``
+    are ``metadata``; ``["clean", "ms.ms"]`` is ``clean``.
+    """
+    if not argv or argv[0].startswith("-"):
+        return ""
+    group = argv[0]
+    if group in _MULTI_COMMAND_GROUPS and len(argv) > 1 and not argv[1].startswith("-"):
+        return f"{group} {argv[1]}"
+    return group
+
+
 class ResourcesError(ValueError):
     """A resource request that Slurm would reject or that could inject directives."""
 
@@ -141,15 +163,8 @@ class Job:
 
     @property
     def command(self) -> str:
-        """The command's name, as ``almasim --help`` lists it (``image image-from-ms``)."""
-        words = []
-        for arg in self.argv:
-            if arg.startswith("-"):
-                break
-            words.append(arg)
-            if len(words) == 2:
-                break
-        return " ".join(words)
+        """The command's name (``image image-from-ms``, ``metadata``); see :func:`command_name`."""
+        return command_name(self.argv)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
