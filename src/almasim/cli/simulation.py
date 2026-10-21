@@ -47,6 +47,19 @@ _SAVE_MODES = ["memory", "npz", "h5", "fits"]
 _BACKEND_TYPES = ["sync", "local"]
 # "ducc0" is disabled until its uv geometry is fixed (MADIV-28 T1.3, T3.7).
 _IMAGING_ALGORITHMS = ["legacy"]
+
+# The choices as enums, so typer checks them and the console's catalogue can
+# list them (MADIV-28 S2.2). Members are str: the code receiving them is unchanged.
+SourceType = StrEnum(  # type: ignore[misc]
+    "SourceType", {name: name for name in _SOURCE_TYPES + sorted(EXTERNAL_SOURCE_TYPES)}
+)
+SaveMode = StrEnum("SaveMode", {name: name for name in _SAVE_MODES})  # type: ignore[misc]
+SimulationBackend = StrEnum(  # type: ignore[misc]
+    "SimulationBackend", {name: name for name in _BACKEND_TYPES}
+)
+ImagingAlgorithm = StrEnum(  # type: ignore[misc]
+    "ImagingAlgorithm", {name: name for name in _IMAGING_ALGORITHMS}
+)
 _EXTERNAL_INPUT_SUFFIXES = {".fits", ".fit", ".fts", ".fz"}
 
 
@@ -314,10 +327,10 @@ def simulation_run(
         "--main-dir",
         help="Path to ALMASim data directory (defaults to src/almasim).",
     ),
-    source_type: str = typer.Option(
-        "point",
+    source_type: SourceType = typer.Option(
+        SourceType("point"),
         "--source-type",
-        help="Sky model family. Choices: " + ", ".join(_SOURCE_TYPES) + ".",
+        help="Sky model family (the external ones take their cube from --input).",
         case_sensitive=False,
     ),
     n_pix: int = typer.Option(
@@ -352,10 +365,10 @@ def simulation_run(
         min=1,
         help="How many simulations to run for each selected metadata row.",
     ),
-    imaging_algorithm: str = typer.Option(
-        "legacy",
+    imaging_algorithm: ImagingAlgorithm = typer.Option(
+        ImagingAlgorithm("legacy"),
         "--imaging-algorithm",
-        help=("Channel imaging algorithm. Choices: " + ", ".join(_IMAGING_ALGORITHMS) + "."),
+        help="Channel imaging algorithm.",
         case_sensitive=False,
     ),
     robust: float = typer.Option(
@@ -387,10 +400,10 @@ def simulation_run(
         "--inject-serendipitous",
         help="Add a few random serendipitous sources around the target.",
     ),
-    save_mode: str = typer.Option(
-        "memory",
+    save_mode: SaveMode = typer.Option(
+        SaveMode("memory"),
         "--save-mode",
-        help="Output save mode. Choices: " + ", ".join(_SAVE_MODES) + ".",
+        help="Output save mode.",
         case_sensitive=False,
     ),
     persist_standard_outputs: bool = typer.Option(
@@ -403,10 +416,10 @@ def simulation_run(
         "--ml-shard-path",
         help="Destination HDF5 shard path.",
     ),
-    backend: str = typer.Option(
-        "sync",
+    backend: SimulationBackend = typer.Option(
+        SimulationBackend("sync"),
         "--backend",
-        help="Compute backend. Choices: " + ", ".join(_BACKEND_TYPES) + ".",
+        help="Compute backend.",
         case_sensitive=False,
     ),
     n_workers: int = typer.Option(
@@ -500,8 +513,10 @@ def simulation_run(
 
 
 def _validated_simulation_options(o: SimulationRunOptions) -> SimulationRunOptions:
-    """``o`` with its choices normalised; a usage error for anything invalid."""
-    source_types = _SOURCE_TYPES + sorted(EXTERNAL_SOURCE_TYPES)
+    """``o`` with its choices normalised; a usage error for anything invalid.
+
+    The choices themselves are checked by click (MADIV-28 S2.2).
+    """
     o = replace(
         o,
         source_type=o.source_type.lower(),
@@ -509,14 +524,6 @@ def _validated_simulation_options(o: SimulationRunOptions) -> SimulationRunOptio
         backend=o.backend.lower(),
         imaging_algorithm=o.imaging_algorithm.lower(),
     )
-    if o.source_type not in source_types:
-        usage_error("--source-type must be one of: " + ", ".join(source_types))
-    if o.save_mode not in _SAVE_MODES:
-        usage_error("--save-mode must be one of: " + ", ".join(_SAVE_MODES))
-    if o.backend not in _BACKEND_TYPES:
-        usage_error("--backend must be one of: " + ", ".join(_BACKEND_TYPES))
-    if o.imaging_algorithm not in _IMAGING_ALGORITHMS:
-        usage_error("--imaging-algorithm must be one of: " + ", ".join(_IMAGING_ALGORITHMS))
     if not o.metadata_path.exists():
         usage_error(f"--metadata-path not found: {o.metadata_path}")
     if o.input_path is not None and not o.input_path.expanduser().exists():

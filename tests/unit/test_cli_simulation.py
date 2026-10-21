@@ -64,7 +64,9 @@ def test_simulation_invalid_backend(tmp_path):
     )
 
     assert result.exit_code == 2
-    assert "--backend must be one of" in result.output
+    assert "'dask' is not one of 'sync', 'local'" in " ".join(
+        re.sub(r"\x1b\[[0-9;]*m", "", result.output).replace("│", " ").split()
+    )
 
 
 def test_simulation_run_csv_happy_path(monkeypatch, tmp_path):
@@ -173,7 +175,9 @@ def test_simulation_invalid_source_type_exits(tmp_path):
     )
 
     assert result.exit_code == 2
-    assert "--source-type must be one of" in result.output
+    assert "'not-a-source' is not one of" in " ".join(
+        re.sub(r"\x1b\[[0-9;]*m", "", result.output).replace("│", " ").split()
+    )
 
 
 def test_the_cli_uses_the_simulation_service_directly():

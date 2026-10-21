@@ -52,7 +52,7 @@ def test_resolve_needs_member_uids(tmp_path):
 
 def test_download_validates_its_options_and_reports_empty_results(monkeypatch):
     result = _invoke("products", "download", "--member-ous-uid", "uid://A", "--product-filter", "x")
-    assert result.exit_code == 2 and "Invalid --product-filter" in result.output
+    assert result.exit_code == 2 and "'x' is not one of 'all'" in _plain(result.output)
     result = _invoke(
         "products", "download", "--member-ous-uid", "uid://A", "--postprocess-backend", "dask"
     )
@@ -74,13 +74,13 @@ def test_simulation_run_checks_its_inputs(tmp_path):
     csv = tmp_path / "meta.csv"
     pd.DataFrame({"member_ous_uid": ["uid://A"]}).to_csv(csv, index=False)
     cases = [
-        (["--save-mode", "pickle"], "--save-mode must be one of"),
+        (["--save-mode", "pickle"], "'pickle' is not one of 'memory', 'npz', 'h5', 'fits'"),
         (["--input", tmp_path / "none.fits"], "--input not found"),
         (["--kaggle-token", tmp_path / "kaggle.json"], "--kaggle-token not found"),
     ]
     for extra, message in cases:
         result = _invoke("simulation", "run", "--metadata-path", csv, *extra)
-        assert result.exit_code == 2 and message in result.output, (extra, result.output)
+        assert result.exit_code == 2 and message in _plain(result.output), (extra, result.output)
     result = _invoke("simulation", "run", "--metadata-path", tmp_path / "missing.csv")
     assert result.exit_code == 2 and "--metadata-path not found" in result.output
 
