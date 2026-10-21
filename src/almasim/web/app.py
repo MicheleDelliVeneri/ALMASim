@@ -22,7 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from almasim.__version__ import __version__
 from almasim.jobs.profile import Profile, load_profile
 
-from .api import commands, files, jobs
+from .api import cluster, commands, files, jobs
 from .events import EventHub
 from .events import router as events_router
 
@@ -106,6 +106,7 @@ def create_app(
     )
     app.state.profile = profile
     app.state.events = hub
+    app.state.cluster = cluster.ClusterView(profile)
     app.add_middleware(TokenMiddleware, token=token)
 
     @app.get("/api/v2/health")
@@ -115,6 +116,7 @@ def create_app(
     app.include_router(commands.router)
     app.include_router(jobs.router)
     app.include_router(files.router)
+    app.include_router(cluster.router)
     app.include_router(events_router)
 
     if static_dir is not None and (static_dir / "index.html").is_file():
