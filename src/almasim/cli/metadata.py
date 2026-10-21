@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -65,6 +66,47 @@ def _build_query_summary(
     }
     active = {key: value for key, value in summary.items() if value not in (None, [], False)}
     return ", ".join(f"{key}={value}" for key, value in active.items())
+
+
+@dataclass(frozen=True)
+class MetadataQueryOptions:
+    """Every option of ``metadata`` (MADIV-28 T3.8)."""
+
+    source_name: Optional[str]
+    science_keyword: Optional[List[str]]
+    scientific_category: Optional[List[str]]
+    band: Optional[List[int]]
+    antenna_arrays: Optional[str]
+    array_type: Optional[List[str]]
+    array_configuration: Optional[List[str]]
+    angular_resolution_min: Optional[float]
+    angular_resolution_max: Optional[float]
+    observation_date_start: Optional[str]
+    observation_date_end: Optional[str]
+    qa2_status: Optional[List[str]]
+    obs_type: Optional[List[str]]
+    fov_min: Optional[float]
+    fov_max: Optional[float]
+    time_resolution_min: Optional[float]
+    time_resolution_max: Optional[float]
+    frequency_min: Optional[float]
+    frequency_max: Optional[float]
+    exclude_science_keyword: Optional[List[str]]
+    exclude_scientific_category: Optional[List[str]]
+    exclude_source_name: Optional[List[str]]
+    exclude_obs_type: Optional[List[str]]
+    exclude_solar: bool
+    cycles: Optional[List[int]]
+    project_codes: Optional[List[str]]
+    public_only: bool
+    science_only: bool
+    exclude_mosaic: bool
+    visible_columns: Optional[List[str]]
+    limit: Optional[int]
+    save_csv: Optional[Path]
+    save_products_csv: Optional[Path]
+    product_member_limit: Optional[int]
+    yes: bool
 
 
 @metadata_app.command("query")
@@ -257,22 +299,36 @@ def metadata_query(
     ),
 ) -> None:
     """Query ALMA metadata from TAP and save normalized CSV results."""
-    all_columns = ALL_COLUMNS
-    inclusion_filters = InclusionFilters
-    exclusion_filters = ExclusionFilters
+    options = MetadataQueryOptions(**locals())
+    include, exclude, output_columns = _query_filters(options)
+    if not options.yes:
+        message = (
+            "About to start ALMA TAP metadata query with "
+            + _build_query_summary(include, exclude, output_columns, options.limit)
+            + ". Continue?"
+        )
+        if not typer.confirm(message, default=True):
+            typer.echo("Query cancelled.")
+            raise typer.Exit(code=0)
+    typer.echo("Starting ALMA TAP metadata query...")
+    metadata = query_metadata_by_science(
+        include=include,
+        exclude=exclude,
+        visible_columns=output_columns,
+    )
+    if metadata.empty:
+        fail("No metadata rows matched the requested filters")
+    if options.limit is not None:
+        metadata = metadata.head(options.limit).reset_index(drop=True)
+    _save_and_report_metadata(options, metadata)
 
-    science_keywords = split_csv_values(science_keyword)
-    scientific_categories = split_csv_values(scientific_category)
-    array_types = split_csv_values(array_type)
-    array_configurations = split_csv_values(array_configuration)
-    qa2_status_values = split_csv_values(qa2_status)
-    obs_types = split_csv_values(obs_type)
-    exclude_science_keywords = split_csv_values(exclude_science_keyword)
-    exclude_scientific_categories = split_csv_values(exclude_scientific_category)
-    exclude_source_names = split_csv_values(exclude_source_name)
-    exclude_obs_types = split_csv_values(exclude_obs_type)
-    output_columns = split_csv_values(visible_columns)
 
+def _query_filters(
+    o: MetadataQueryOptions,
+) -> tuple[InclusionFilters, ExclusionFilters, Optional[list[str]]]:
+    """The query's inclusion and exclusion filters and output columns, validated."""
+    array_types = split_csv_values(o.array_type)
+    output_columns = split_csv_values(o.visible_columns)
     invalid_array_types = [
         value for value in (array_types or []) if value not in {"12m", "7m", "TP"}
     ]
@@ -282,99 +338,68 @@ def metadata_query(
             + ", ".join(invalid_array_types)
             + ". Allowed values: 12m, 7m, TP."
         )
-
-    invalid_columns = [column for column in (output_columns or []) if column not in all_columns]
+    invalid_columns = [column for column in (output_columns or []) if column not in ALL_COLUMNS]
     if invalid_columns:
         typer.echo(
             "Invalid --visible-column values: " + ", ".join(invalid_columns) + ".",
             err=True,
         )
-        usage_error("Allowed columns: " + ", ".join(all_columns))
+        usage_error("Allowed columns: " + ", ".join(ALL_COLUMNS))
 
-    angular_resolution_range = validate_range(
-        min_value=angular_resolution_min,
-        max_value=angular_resolution_max,
-        label="angular resolution range",
-    )
-    observation_date_range = validate_date_range(
-        start_date=observation_date_start,
-        end_date=observation_date_end,
-    )
-    fov_range = validate_range(min_value=fov_min, max_value=fov_max, label="FOV range")
-    time_resolution_range = validate_range(
-        min_value=time_resolution_min,
-        max_value=time_resolution_max,
-        label="time resolution range",
-    )
-    frequency_range = validate_range(
-        min_value=frequency_min,
-        max_value=frequency_max,
-        label="frequency range",
-    )
-
-    proposal_id_prefix = [f"{2012 + cycle}." for cycle in cycles] if cycles else None
-    project_code_list = split_csv_values(project_codes)
-
-    include = inclusion_filters(
-        science_keyword=science_keywords,
-        scientific_category=scientific_categories,
-        band=band,
-        source_name=source_name,
-        antenna_arrays=antenna_arrays,
+    include = InclusionFilters(
+        science_keyword=split_csv_values(o.science_keyword),
+        scientific_category=split_csv_values(o.scientific_category),
+        band=o.band,
+        source_name=o.source_name,
+        antenna_arrays=o.antenna_arrays,
         array_type=array_types,
-        array_configuration=array_configurations,
-        angular_resolution_range=angular_resolution_range,
-        observation_date_range=observation_date_range,
-        qa2_status=qa2_status_values,
-        obs_type=obs_types,
-        fov_range=fov_range,
-        time_resolution_range=time_resolution_range,
-        frequency_range=frequency_range,
-        proposal_id_prefix=proposal_id_prefix,
-        proposal_id=project_code_list,
-        public_only=public_only,
-        science_only=science_only,
-        exclude_mosaic=exclude_mosaic,
+        array_configuration=split_csv_values(o.array_configuration),
+        angular_resolution_range=validate_range(
+            min_value=o.angular_resolution_min,
+            max_value=o.angular_resolution_max,
+            label="angular resolution range",
+        ),
+        observation_date_range=validate_date_range(
+            start_date=o.observation_date_start,
+            end_date=o.observation_date_end,
+        ),
+        qa2_status=split_csv_values(o.qa2_status),
+        obs_type=split_csv_values(o.obs_type),
+        fov_range=validate_range(min_value=o.fov_min, max_value=o.fov_max, label="FOV range"),
+        time_resolution_range=validate_range(
+            min_value=o.time_resolution_min,
+            max_value=o.time_resolution_max,
+            label="time resolution range",
+        ),
+        frequency_range=validate_range(
+            min_value=o.frequency_min,
+            max_value=o.frequency_max,
+            label="frequency range",
+        ),
+        proposal_id_prefix=[f"{2012 + cycle}." for cycle in o.cycles] if o.cycles else None,
+        proposal_id=split_csv_values(o.project_codes),
+        public_only=o.public_only,
+        science_only=o.science_only,
+        exclude_mosaic=o.exclude_mosaic,
     )
-    exclude = exclusion_filters(
-        science_keyword=exclude_science_keywords,
-        scientific_category=exclude_scientific_categories,
-        source_name=exclude_source_names,
-        obs_type=exclude_obs_types,
-        solar=exclude_solar,
+    exclude = ExclusionFilters(
+        science_keyword=split_csv_values(o.exclude_science_keyword),
+        scientific_category=split_csv_values(o.exclude_scientific_category),
+        source_name=split_csv_values(o.exclude_source_name),
+        obs_type=split_csv_values(o.exclude_obs_type),
+        solar=o.exclude_solar,
     )
+    return include, exclude, output_columns
 
-    if not yes:
-        message = (
-            "About to start ALMA TAP metadata query with "
-            + _build_query_summary(include, exclude, output_columns, limit)
-            + ". Continue?"
-        )
-        if not typer.confirm(message, default=True):
-            typer.echo("Query cancelled.")
-            raise typer.Exit(code=0)
 
-    typer.echo("Starting ALMA TAP metadata query...")
-
-    metadata = query_metadata_by_science(
-        include=include,
-        exclude=exclude,
-        visible_columns=output_columns,
-    )
-    if metadata.empty:
-        fail("No metadata rows matched the requested filters")
-
-    if limit is not None:
-        metadata = metadata.head(limit).reset_index(drop=True)
-
+def _save_and_report_metadata(o: MetadataQueryOptions, metadata: Any) -> None:
+    """Save the rows, print a preview and, when asked, resolve their DataLink products."""
     output_csv = (
-        (save_csv or default_output_path("metadata_query_results.csv")).expanduser().resolve()
+        (o.save_csv or default_output_path("metadata_query_results.csv")).expanduser().resolve()
     )
     save_dataframe_csv(metadata, output_csv)
-
     typer.echo(f"Saved metadata CSV: {output_csv}")
     typer.echo(f"Metadata rows: {len(metadata)}")
-
     display_columns = [
         col
         for col in ("ALMA_source_name", "Band", "Freq", "member_ous_uid")
@@ -382,26 +407,24 @@ def metadata_query(
     ]
     if display_columns:
         typer.echo(metadata[display_columns].head(min(5, len(metadata))).to_string(index=False))
+    if o.save_products_csv is None:
+        return
+    if "member_ous_uid" not in metadata.columns:
+        fail("Queried metadata does not include member_ous_uid values")
+    member_series = metadata["member_ous_uid"].dropna().astype(str)
+    if o.product_member_limit is not None:
+        member_series = member_series.head(o.product_member_limit)
+    member_uids = member_series.tolist()
+    if not member_uids:
+        fail("Queried metadata does not include member_ous_uid values")
+    # DataLink rows, the format `products download --products-csv` reads
+    # (the TAP product rows saved here before could not be downloaded).
+    from . import products as cli_products
 
-    if save_products_csv is not None:
-        if "member_ous_uid" not in metadata.columns:
-            fail("Queried metadata does not include member_ous_uid values")
-
-        member_series = metadata["member_ous_uid"].dropna().astype(str)
-        if product_member_limit is not None:
-            member_series = member_series.head(product_member_limit)
-        member_uids = member_series.tolist()
-        if not member_uids:
-            fail("Queried metadata does not include member_ous_uid values")
-
-        # DataLink rows, the format `products download --products-csv` reads
-        # (the TAP product rows saved here before could not be downloaded).
-        from . import products as cli_products
-
-        cli_products._resolve_products_from_inputs(
-            products_csv=None,
-            metadata_csv=None,
-            member_ous_uid=member_uids,
-            member_limit=None,
-            save_products_csv_path=save_products_csv,
-        )
+    cli_products._resolve_products_from_inputs(
+        products_csv=None,
+        metadata_csv=None,
+        member_ous_uid=member_uids,
+        member_limit=None,
+        save_products_csv_path=o.save_products_csv,
+    )
