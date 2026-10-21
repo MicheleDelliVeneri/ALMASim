@@ -60,14 +60,21 @@ def run_job(run_dir: str | os.PathLike[str], command: Sequence[str] = ALMASIM_CO
 
     received: list[int] = []
     with (run_dir / STDOUT_NAME).open("ab") as out, (run_dir / STDERR_NAME).open("ab") as err:
-        child = subprocess.Popen(
-            [*command, *expand_run_dir(job.argv, run_dir.absolute())],
-            cwd=run_dir,
-            stdin=subprocess.DEVNULL,
-            stdout=out,
-            stderr=err,
-            start_new_session=True,  # its own process group, so a stop reaches all of it
-        )
+        try:
+            child = subprocess.Popen(
+                [*command, *expand_run_dir(job.argv, run_dir.absolute())],
+                cwd=run_dir,
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=err,
+                start_new_session=True,  # its own process group, so a stop reaches all of it
+            )
+        except OSError as exc:
+            # The command cannot start (missing, not executable): the run
+            # fails with the shell's exit code instead of staying "running".
+            err.write(f"almasim job: cannot start {command[0]}: {exc}\n".encode())
+            err.flush()
+            return _finish(run_dir, started, 127 if isinstance(exc, FileNotFoundError) else 126)
 
         def forward(signum: int, _frame: FrameType | None) -> None:
             received.append(signum)
@@ -87,6 +94,11 @@ def run_job(run_dir: str | os.PathLike[str], command: Sequence[str] = ALMASIM_CO
     if code < 0:  # the child died of a signal itself (e.g. the OOM killer's SIGKILL)
         stopped_by = stopped_by or signal.Signals(-code).name
         code = 128 - code
+    return _finish(run_dir, started, code, stopped_by)
+
+
+def _finish(run_dir: Path, started: RunStatus, code: int, stopped_by: str | None = None) -> int:
+    """Record that the run ended (when, its exit code, the signal) and return the code."""
     write_status(
         run_dir,
         RunStatus(
