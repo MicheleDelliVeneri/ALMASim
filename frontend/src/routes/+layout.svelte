@@ -17,6 +17,7 @@
 		{ href: '/simulations', label: 'Simulations' },
 		{ href: '/combination', label: 'Combination' },
 		{ href: '/imaging', label: 'Imaging' },
+		{ href: '/preview', label: 'Simulation preview' },
 		{ href: '/visualizer', label: 'Visualizer' }
 	] as const;
 

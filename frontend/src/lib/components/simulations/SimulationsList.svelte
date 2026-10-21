@@ -102,7 +102,7 @@
 			'Navigating to imaging'
 		);
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended
-		void goto(resolve('/imaging') + query);
+		void goto(resolve('/preview') + query);
 	}
 
 	function handleLocate(sim: SimulationSummary) {
