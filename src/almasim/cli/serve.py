@@ -29,33 +29,42 @@ def _print_access(info) -> None:
 
 def serve(port: int | None, status: bool, stop_server: bool) -> None:
     try:
-        import uvicorn
+        import uvicorn  # noqa: F401  (checked here, used by _run)
 
-        from almasim.web.app import create_app
+        from almasim.web import serve as state
     except ImportError:
         fail("The web console needs the web extra: pip install 'almasim[web]'")
-    from almasim.web import serve as state
-
     if status:
         info = state.read_info()
         if info is None:
             fail("No console is running (start one with: almasim serve)")
         _print_access(info)
-        return
-    if stop_server:
+    elif stop_server:
         info = state.stop()
         typer.echo("Stopped the console." if info else "No console was running.")
-        return
+    else:
+        _run(port)
+
+
+def _run(port: int | None) -> None:
+    import uvicorn
+
+    from almasim.jobs.profile import ProfileError, load_profile
+    from almasim.web import serve as state
+    from almasim.web.app import create_app
 
     running = state.read_info()
     if running is not None:
         typer.echo("A console is already running:", err=True)
         _print_access(running)
         raise typer.Exit(code=1)
+    try:
+        profile = load_profile()
+    except ProfileError as exc:
+        fail(str(exc))
 
     token = state.new_token()
-    folder = state.state_dir()
-    sock = None if port else folder / state.SOCKET_NAME
+    sock = None if port else state.state_dir() / state.SOCKET_NAME
     if sock is not None:
         if len(str(sock).encode()) > SOCKET_PATH_MAX:
             fail(f"{sock} is too long for a socket path; use --port instead")
@@ -71,7 +80,7 @@ def serve(port: int | None, status: bool, stop_server: bool) -> None:
     _print_access(info)
     os.umask(0o077)  # the socket file: this user only
     try:
-        app = create_app(token)
+        app = create_app(token, profile=profile)
         if port is None:
             uvicorn.run(app, uds=str(sock), log_level="warning")
         else:
