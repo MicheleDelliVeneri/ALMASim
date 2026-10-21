@@ -20,7 +20,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/app/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U almasim -d almasim"]
@@ -38,7 +38,7 @@ services:
     container_name: almasim-backend
     image: almasim-backend:latest
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - MAIN_DIR=/app/src/almasim
       - DATA_DIR=/app/data
@@ -81,7 +81,7 @@ services:
   # Frontend SvelteKit service (the build differs between the two modes)
   frontend:
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - VITE_API_URL=http://localhost:8000
     depends_on:
