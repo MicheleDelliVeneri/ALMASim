@@ -73,27 +73,32 @@ def run_job(run_dir: str | os.PathLike[str], command: Sequence[str] = ALMASIM_CO
             # The command cannot start (missing, not executable): the run
             # fails with the shell's exit code instead of staying "running".
             err.write(f"almasim job: cannot start {command[0]}: {exc}\n".encode())
-            code = 127 if isinstance(exc, FileNotFoundError) else 126
-        else:
+            err.flush()
+            return _finish(run_dir, started, 127 if isinstance(exc, FileNotFoundError) else 126)
 
-            def forward(signum: int, _frame: FrameType | None) -> None:
-                received.append(signum)
-                try:
-                    os.killpg(child.pid, signum)
-                except ProcessLookupError:
-                    pass
-
-            previous = {s: signal.signal(s, forward) for s in _FORWARDED}
+        def forward(signum: int, _frame: FrameType | None) -> None:
+            received.append(signum)
             try:
-                code = child.wait()
-            finally:
-                for s, handler in previous.items():
-                    signal.signal(s, handler)
+                os.killpg(child.pid, signum)
+            except ProcessLookupError:
+                pass
+
+        previous = {s: signal.signal(s, forward) for s in _FORWARDED}
+        try:
+            code = child.wait()
+        finally:
+            for s, handler in previous.items():
+                signal.signal(s, handler)
 
     stopped_by = signal.Signals(received[0]).name if received else None
     if code < 0:  # the child died of a signal itself (e.g. the OOM killer's SIGKILL)
         stopped_by = stopped_by or signal.Signals(-code).name
         code = 128 - code
+    return _finish(run_dir, started, code, stopped_by)
+
+
+def _finish(run_dir: Path, started: RunStatus, code: int, stopped_by: str | None = None) -> int:
+    """Record that the run ended (when, its exit code, the signal) and return the code."""
     write_status(
         run_dir,
         RunStatus(
