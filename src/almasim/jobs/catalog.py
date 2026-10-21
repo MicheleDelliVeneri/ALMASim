@@ -85,9 +85,13 @@ def _path_info(t: Any) -> dict[str, Any]:
     return {"type": "path", "path_kind": kind, "must_exist": bool(getattr(t, "exists", False))}
 
 
+# --help, and the shell-completion options Typer adds to single-command apps.
+_NOT_FORM_FIELDS = (None, "help", "install_completion", "show_completion")
+
+
 def describe_param(param: Any) -> dict[str, Any] | None:
     """One parameter as the console's form needs it; None for hidden ones."""
-    if getattr(param, "hidden", False) or param.name in (None, "help"):
+    if getattr(param, "hidden", False) or param.name in _NOT_FORM_FIELDS:
         return None
     is_option = param.param_type_name == "option"
     info: dict[str, Any] = {

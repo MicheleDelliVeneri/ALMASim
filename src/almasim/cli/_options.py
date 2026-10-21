@@ -47,32 +47,56 @@ PostprocessBackend = Annotated[
         "--postprocess-backend",
         case_sensitive=False,
         help="Where the tasks run: sync (this process, one at a time) or slurm (Slurm jobs).",
+        rich_help_panel="Cluster",
     ),
 ]
-SlurmQueue = Annotated[str, typer.Option("--slurm-queue", help="Slurm queue/partition.")]
-SlurmProject = Annotated[str | None, typer.Option("--slurm-project", help="Slurm project/account.")]
-SlurmWalltime = Annotated[
-    str, typer.Option("--slurm-walltime", help="Slurm walltime per worker job (HH:MM:SS).")
+SlurmQueue = Annotated[
+    str, typer.Option("--slurm-queue", help="Slurm queue/partition.", rich_help_panel="Cluster")
 ]
-SlurmMemory = Annotated[str, typer.Option("--slurm-memory", help="Memory per Slurm worker.")]
-SlurmCores = Annotated[int, typer.Option("--slurm-cores", min=1, help="Cores per Slurm worker.")]
+SlurmProject = Annotated[
+    str | None,
+    typer.Option("--slurm-project", help="Slurm project/account.", rich_help_panel="Cluster"),
+]
+SlurmWalltime = Annotated[
+    str,
+    typer.Option(
+        "--slurm-walltime",
+        help="Slurm walltime per worker job (HH:MM:SS).",
+        rich_help_panel="Cluster",
+    ),
+]
+SlurmMemory = Annotated[
+    str, typer.Option("--slurm-memory", help="Memory per Slurm worker.", rich_help_panel="Cluster")
+]
+SlurmCores = Annotated[
+    int,
+    typer.Option("--slurm-cores", min=1, help="Cores per Slurm worker.", rich_help_panel="Cluster"),
+]
 SchedulerHost = Annotated[
     str | None,
     typer.Option(
         "--scheduler-host",
         "--slurm-scheduler-host",
         help="Scheduler host advertised to the workers (default: this host).",
+        rich_help_panel="Cluster",
     ),
 ]
 SchedulerInterface = Annotated[
     str | None,
     typer.Option(
-        "--scheduler-interface", help="Scheduler/worker network interface (e.g. ib0, eth0)."
+        "--scheduler-interface",
+        help="Scheduler/worker network interface (e.g. ib0, eth0).",
+        rich_help_panel="Cluster",
     ),
 ]
 TaskTimeout = Annotated[
     float,
-    typer.Option("--task-timeout", min=1, help="Timeout in seconds for each worker-side command."),
+    typer.Option(
+        "--task-timeout",
+        min=1,
+        help="Timeout in seconds for each worker-side command.",
+        rich_help_panel="Cluster",
+    ),
 ]
 MaxCoresPerNode = Annotated[
     int,
@@ -80,6 +104,7 @@ MaxCoresPerNode = Annotated[
         "--max-cores-per-node",
         min=1,
         help="Cores per node, for the Slurm workers' resource accounting.",
+        rich_help_panel="Cluster",
     ),
 ]
 

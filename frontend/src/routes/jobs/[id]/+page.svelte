@@ -147,6 +147,10 @@
 			</div>
 			<div class="flex flex-wrap gap-2">
 				<button type="button" class="btn-secondary" onclick={copyCommand}>Copy command</button>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended -->
+				<a class="btn-secondary no-underline" href={`${resolve('/run')}?from=${run.id}`}
+					>Edit and run</a
+				>
 				{#if isMine}
 					<button type="button" class="btn-secondary" disabled={busy} onclick={runAgain}
 						>Run again</button

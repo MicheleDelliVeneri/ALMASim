@@ -375,28 +375,33 @@ def products_download(
         None,
         "--products-csv",
         help="Previously resolved products CSV.",
+        rich_help_panel="Selection",
     ),
     metadata_csv: Path | None = typer.Option(
         None,
         "--metadata-csv",
         help="Metadata CSV containing member_ous_uid rows to resolve first.",
+        rich_help_panel="Selection",
     ),
     member_ous_uid: list[str] | None = typer.Option(
         None,
         "--member-ous-uid",
         help="Direct member_ous_uid values. Repeat or pass comma-separated values.",
+        rich_help_panel="Selection",
     ),
     member_limit: int | None = typer.Option(
         None,
         "--member-limit",
         min=1,
         help="Max metadata member_ous_uid rows to read (default: unlimited).",
+        rich_help_panel="Selection",
     ),
     product_filter: ProductFilter = typer.Option(
         ProductFilter("all"),
         "--product-filter",
         help="Subset of resolved products to download.",
         case_sensitive=False,
+        rich_help_panel="Selection",
     ),
     skip_qa0_semipass: bool = typer.Option(
         False,
@@ -408,6 +413,7 @@ def products_download(
             "extract the auxiliary products first; a raw product without a readable report "
             "is kept."
         ),
+        rich_help_panel="Selection",
     ),
     qa0_report_root: Path | None = typer.Option(
         None,
@@ -416,16 +422,19 @@ def products_download(
             "Root holding the extracted auxiliary deliveries "
             "(<project>/science_goal.*/group.*/member.*/qa/). Defaults to --destination."
         ),
+        rich_help_panel="Selection",
     ),
     save_products_csv_path: Path | None = typer.Option(
         default_output_path("resolved_products.csv"),
         "--save-products-csv",
         help="Save resolved products CSV before download.",
+        rich_help_panel="Download",
     ),
     destination: Path = typer.Option(
         default_output_path("downloads"),
         "--destination",
         help="Directory for downloaded files.",
+        rich_help_panel="Download",
     ),
     max_parallel: int = typer.Option(
         3,
@@ -435,41 +444,49 @@ def products_download(
             "Max concurrent downloads across ALMA mirrors; capped at "
             f"{MAX_PARALLEL_TOTAL} ({MAX_PARALLEL_PER_MIRROR} per mirror)."
         ),
+        rich_help_panel="Download",
     ),
     extract_tar: bool = typer.Option(
         False,
         "--extract-tar",
         help="Extract downloaded tar/tgz archives.",
+        rich_help_panel="Post-processing",
     ),
     unpack_ms: bool = typer.Option(
         False,
         "--unpack-ms",
         help="Import extracted ASDMs into raw MeasurementSets.",
+        rich_help_panel="Post-processing",
     ),
     generate_calibrated_visibilities: bool = typer.Option(
         False,
         "--generate-calibrated-visibilities",
         help="Apply delivered calibrations and write calibrated MeasurementSets.",
+        rich_help_panel="Post-processing",
     ),
     archive_output_root: Path | None = typer.Option(
         None,
         "--archive-output-root",
         help="Root directory for archive_ms raw_ms/calibrated_ms products.",
+        rich_help_panel="Post-processing",
     ),
     casa_data_root: Path | None = typer.Option(
         None,
         "--casa-data-root",
         help="Optional CASA runtime data directory.",
+        rich_help_panel="CASA",
     ),
     skip_casa_data_update: bool = typer.Option(
         False,
         "--skip-casa-data-update",
         help="Do not auto-download CASA runtime data if missing.",
+        rich_help_panel="CASA",
     ),
     clean_intermediate_files: bool = typer.Option(
         False,
         "--clean-intermediate-files",
         help="Clean downloaded/intermediate raw files after calibrated outputs are created.",
+        rich_help_panel="Post-processing",
     ),
     postprocess_backend: PostprocessBackend = Backend.sync,
     slurm_queue: SlurmQueue = "normal",
@@ -482,11 +499,13 @@ def products_download(
         "--slurm-workers",
         min=0,
         help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
+        rich_help_panel="Cluster",
     ),
     overwrite_archive_outputs: bool = typer.Option(
         False,
         "--overwrite-archive-outputs",
         help="Overwrite existing raw/calibrated MS outputs.",
+        rich_help_panel="Post-processing",
     ),
     continue_on_error: bool = typer.Option(
         True,
@@ -495,6 +514,7 @@ def products_download(
             "Skip UIDs whose processing fails and carry on with the rest, then exit "
             "non-zero with a summary (default). --fail-fast aborts on the first failure."
         ),
+        rich_help_panel="Post-processing",
     ),
     keep_working_copies: bool = typer.Option(
         False,
@@ -503,12 +523,14 @@ def products_download(
             "Keep each UID's working directory (raw MS copy plus caltables, about 1.8x the "
             "raw MS) after its calibrated output is written. By default it is removed."
         ),
+        rich_help_panel="Post-processing",
     ),
     yes: bool = typer.Option(
         False,
         "--yes",
         "-y",
         help="Skip confirmation prompt and start download immediately.",
+        rich_help_panel="Download",
     ),
 ) -> None:
     """Download ALMA products and optionally unpack/calibrate archive data."""
@@ -704,21 +726,25 @@ def products_extract(
         default_output_path("downloads"),
         "--source-root",
         help="Directory containing downloaded archive files.",
+        rich_help_panel="Inputs",
     ),
     destination: Path | None = typer.Option(
         None,
         "--destination",
         help="Extraction destination (defaults to --source-root).",
+        rich_help_panel="Outputs",
     ),
     recursive: bool = typer.Option(
         True,
         "--recursive/--no-recursive",
         help="Recursively search --source-root for .tar/.tgz archives.",
+        rich_help_panel="Inputs",
     ),
     delete_archives: bool = typer.Option(
         False,
         "--delete-archives",
         help="Delete each archive after successful extraction.",
+        rich_help_panel="Outputs",
     ),
     postprocess_backend: PostprocessBackend = Backend.sync,
     slurm_queue: SlurmQueue = "normal",
@@ -731,12 +757,14 @@ def products_extract(
         "--slurm-workers",
         min=0,
         help="Number of Slurm workers. Pass 0 to spawn one worker per archive.",
+        rich_help_panel="Cluster",
     ),
     slurm_scheduler_host: SchedulerHost = None,
     skip_existing: bool = typer.Option(
         False,
         "--skip-existing",
         help="Skip archives that have already been extracted (detected via a .done marker file).",
+        rich_help_panel="Outputs",
     ),
 ) -> None:
     """Extract ALMA archive tarballs as a standalone step."""
@@ -786,27 +814,32 @@ def products_unpack(
         default_output_path("downloads"),
         "--input-root",
         help="Directory containing extracted ASDM directories.",
+        rich_help_panel="Inputs",
     ),
     output_root: Path = typer.Option(
         default_output_path("downloads") / "archive_ms" / "raw_ms",
         "--output-dir",
         "--output-root",
         help="Directory where raw MeasurementSets are written.",
+        rich_help_panel="Outputs",
     ),
     asdm_uid: list[str] | None = typer.Option(
         None,
         "--asdm-uid",
         help="Optional ASDM UID(s) to process. Repeat or pass comma-separated values.",
+        rich_help_panel="Inputs",
     ),
     casa_data_root: Path | None = typer.Option(
         None,
         "--casa-data-root",
         help="Optional CASA runtime data directory.",
+        rich_help_panel="CASA",
     ),
     skip_casa_data_update: bool = typer.Option(
         False,
         "--skip-casa-data-update",
         help="Do not auto-download CASA runtime data if missing.",
+        rich_help_panel="CASA",
     ),
     postprocess_backend: PostprocessBackend = Backend.sync,
     slurm_queue: SlurmQueue = "normal",
@@ -819,12 +852,14 @@ def products_unpack(
         "--slurm-workers",
         min=0,
         help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
+        rich_help_panel="Cluster",
     ),
     slurm_scheduler_host: SchedulerHost = None,
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
         help="Overwrite existing raw MS outputs.",
+        rich_help_panel="Outputs",
     ),
     continue_on_error: bool = typer.Option(
         True,
@@ -833,6 +868,7 @@ def products_unpack(
             "Skip UIDs whose processing fails and carry on with the rest, then exit "
             "non-zero with a summary (default). --fail-fast aborts on the first failure."
         ),
+        rich_help_panel="Outputs",
     ),
 ) -> None:
     """Import ASDM directories into raw MeasurementSets as a standalone step."""
@@ -875,32 +911,38 @@ def products_calibrate(
         default_output_path("downloads"),
         "--input-root",
         help="ALMA delivery root containing calibration products.",
+        rich_help_panel="Inputs",
     ),
     raw_ms_root: Path = typer.Option(
         default_output_path("downloads") / "archive_ms" / "raw_ms",
         "--raw-ms-root",
         help="Directory containing raw MeasurementSets.",
+        rich_help_panel="Inputs",
     ),
     output_root: Path = typer.Option(
         default_output_path("downloads") / "archive_ms" / "calibrated_ms",
         "--output-dir",
         "--output-root",
         help="Directory where calibrated MeasurementSets are written.",
+        rich_help_panel="Outputs",
     ),
     asdm_uid: list[str] | None = typer.Option(
         None,
         "--asdm-uid",
         help="Optional UID(s) to calibrate. Repeat or pass comma-separated values.",
+        rich_help_panel="Inputs",
     ),
     casa_data_root: Path | None = typer.Option(
         None,
         "--casa-data-root",
         help="Optional CASA runtime data directory.",
+        rich_help_panel="CASA",
     ),
     skip_casa_data_update: bool = typer.Option(
         False,
         "--skip-casa-data-update",
         help="Do not auto-download CASA runtime data if missing.",
+        rich_help_panel="CASA",
     ),
     postprocess_backend: PostprocessBackend = Backend.sync,
     slurm_queue: SlurmQueue = "normal",
@@ -913,17 +955,20 @@ def products_calibrate(
         "--slurm-workers",
         min=0,
         help="Number of Slurm workers for post-processing. Pass 0 to spawn one worker per UID.",
+        rich_help_panel="Cluster",
     ),
     slurm_scheduler_host: SchedulerHost = None,
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
         help="Overwrite existing calibrated MS outputs.",
+        rich_help_panel="Outputs",
     ),
     clean_intermediate_files: bool = typer.Option(
         False,
         "--clean-intermediate-files",
         help="Remove intermediate raw and working files after successful calibration.",
+        rich_help_panel="Outputs",
     ),
     continue_on_error: bool = typer.Option(
         True,
@@ -932,6 +977,7 @@ def products_calibrate(
             "Skip UIDs whose processing fails and carry on with the rest, then exit "
             "non-zero with a summary (default). --fail-fast aborts on the first failure."
         ),
+        rich_help_panel="Outputs",
     ),
     keep_working_copies: bool = typer.Option(
         False,
@@ -940,6 +986,7 @@ def products_calibrate(
             "Keep each UID's working directory (raw MS copy plus caltables, about 1.8x the "
             "raw MS) after its calibrated output is written. By default it is removed."
         ),
+        rich_help_panel="Outputs",
     ),
 ) -> None:
     """Create calibrated MeasurementSets as a standalone step."""

@@ -31,6 +31,18 @@ def test_every_runnable_command_is_described_and_serialisable(commands):
     assert commands["image image-from-ms"].summary
 
 
+def test_options_fall_into_the_clis_help_panels(commands):
+    """The form's sections; shell completion and --help are never fields."""
+    for command in commands.values():
+        names = {p["name"] for p in command.params}
+        assert not names & {"help", "install_completion", "show_completion"}, command.name
+    panels = {p["panel"] for p in commands["image image-from-ms"].params if p["kind"] == "option"}
+    assert {"Imaging", "Spectral cube", "Cluster", "Advanced"} <= panels
+    assert None not in panels
+    slurm_queue = _param(commands, "image image-from-ms", "--slurm-queue")
+    assert slurm_queue["panel"] == "Cluster"
+
+
 def test_the_executor_is_where_the_profile_runs_each_command():
     profile = Profile(executor="server", commands={"predict": CommandPolicy(executor="slurm")})
     executors = {c.name: c.executor for c in catalog(profile)}

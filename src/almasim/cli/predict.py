@@ -28,15 +28,24 @@ predict_app = typer.Typer(
 def ms_from_image(
     input_ms_or_folder: Path = typer.Argument(help="Single MS directory or folder of MSs"),
     output_directory: Path = typer.Argument(help="Directory containing model FITS products"),
-    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
-    num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
+    use_slurm: bool = typer.Option(
+        help="Whether or not to use slurm or not", default=True, rich_help_panel="Cluster"
+    ),
+    num_cores: int = typer.Option(
+        help="Number of cores per predict task", default=1, min=1, rich_help_panel="Cluster"
+    ),
     max_cores_per_node: MaxCoresPerNode = 95,
     slurm_queue: SlurmQueue = "normal",
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(
-        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+        1,
+        "--slurm-workers",
+        "--slurm-n-jobs",
+        min=1,
+        help="Number of Slurm workers (jobs).",
+        rich_help_panel="Cluster",
     ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
