@@ -23,6 +23,7 @@ import shutil
 import signal
 import subprocess
 import threading
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,7 +48,13 @@ class ProcessRef:
 
 
 def _start_time(pid: int) -> int | None:
-    """The process's start time, or None if it is gone or a zombie (ended, not reaped)."""
+    """The process's start time, or None if it is gone or a zombie (ended, not reaped).
+
+    From /proc on Linux (clock ticks since boot); elsewhere (macOS) from ``ps``
+    (seconds since the epoch, to the second).
+    """
+    if not Path("/proc/self/stat").exists():
+        return _start_time_from_ps(pid)
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
     except OSError:
@@ -57,6 +64,29 @@ def _start_time(pid: int) -> int | None:
     if fields[0] in ("Z", "X"):  # field 3: zombie or dead
         return None
     return int(fields[19])  # field 22 overall
+
+
+def _start_time_from_ps(pid: int) -> int | None:
+    try:
+        out = subprocess.run(
+            ["ps", "-o", "stat=,lstart=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            env={**os.environ, "LC_ALL": "C"},  # lstart's day and month names
+        ).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if not out:
+        return None
+    state, _, started = out.partition(" ")
+    if state.startswith("Z"):
+        return None
+    try:
+        return int(time.mktime(time.strptime(started.strip(), "%a %b %d %H:%M:%S %Y")))
+    except ValueError:
+        return None
 
 
 def read_process(run_dir: str | os.PathLike[str]) -> ProcessRef | None:

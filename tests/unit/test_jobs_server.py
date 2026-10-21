@@ -121,3 +121,11 @@ def test_a_process_that_vanished_without_a_report_is_lost(tmp_path):
         JobState.LOST,
         "its process ended without a report",
     )
+
+
+def test_without_proc_the_start_time_comes_from_ps():
+    """macOS has no /proc: ps gives the state and the start time."""
+    started = server._start_time_from_ps(os.getpid())
+    assert started is not None and abs(started - time.time()) < 86400
+    assert server._start_time_from_ps(os.getpid()) == started
+    assert server._start_time_from_ps(999999999) is None
