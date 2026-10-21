@@ -137,8 +137,8 @@ def test_the_archive_template_hands_files_from_step_to_step(tmp_path, profile):
     assert steps[3].argv[-1] == "--cube"
     assert steps[4].argv == ["image", "clean-quality", str(night / "images")]
     plans = [plan_job(s.argv, profile) for s in steps]
-    assert [p.executor for p in plans] == ["server", "server", "slurm", "slurm", "slurm"]
-    assert "--yes" in plans[1].argv  # downloads ask for confirmation otherwise
+    assert [p.executor for p in plans] == ["slurm"] * 5
+    assert "--yes" in plans[0].argv and "--yes" in plans[1].argv  # both ask otherwise
     assert plans[1].argv[plans[1].argv.index("--backend") + 1] == "slurm"
 
 

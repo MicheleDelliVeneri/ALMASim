@@ -12,8 +12,8 @@ from typing import Any
 # Bump when the manifest's fields change incompatibly; readers refuse newer.
 MANIFEST_SCHEMA = 1
 
-# Where a job runs: a Slurm batch job, or a process beside the server (the
-# commands that need the internet, which compute nodes do not have).
+# Where a job runs: a Slurm batch job, or a process beside the server (for
+# the commands that need the internet, on sites whose compute nodes have none).
 EXECUTORS = ("slurm", "server")
 
 

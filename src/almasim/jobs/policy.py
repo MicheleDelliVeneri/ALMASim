@@ -2,9 +2,11 @@
 
 ``plan_job`` turns an ``almasim`` command line into what to submit:
 
-- the executor: the server node for the commands that need the internet
-  (zwicky's compute nodes have none), Slurm for everything else; a profile's
-  ``[commands."<name>"] executor`` overrides it;
+- the executor: Slurm, for every command. zwicky's compute nodes reach the
+  ALMA archive, so queries and downloads run there too and nothing heavy
+  runs on the login node. A site whose compute nodes are offline sets
+  ``[commands."<name>"] executor = "server"`` for the commands in
+  NETWORK_COMMANDS;
 - the resources: the profile's defaults for the command, then the caller's;
 - the command line, with what the cluster needs filled in when the caller
   did not give it: the Slurm backend for the commands that fan out (their
@@ -24,6 +26,8 @@ from typing import Any
 from .model import Resources, command_name
 from .profile import Profile
 
+# The commands that need the internet: on Slurm by default, on the server
+# node only where a profile says so (compute nodes without internet).
 NETWORK_COMMANDS = frozenset({"metadata", "products resolve", "products download"})
 
 KNOWN_COMMANDS = frozenset(
@@ -58,6 +62,10 @@ _SKIP_CASA_UPDATE = frozenset(
     {"products download", "visibilities unpack", "visibilities calibrate"}
 )
 _WSCLEAN = frozenset({"image image-from-ms", "clean"})
+_CONFIRMS = frozenset({"metadata", "products download"})
+
+
+DEFAULT_EXECUTOR = "slurm"
 
 
 class PolicyError(ValueError):
@@ -114,7 +122,7 @@ def _fills(command: str, argv: list[str], executor: str, profile: Profile) -> li
         extra.append("--skip-casa-data-update")  # compute nodes cannot download it
     if command in _WSCLEAN and profile.wsclean and not has_option(argv, "--wsclean-bin"):
         extra += ["--wsclean-bin", profile.wsclean]
-    if command == "products download" and not has_option(argv, "--yes", "-y"):
+    if command in _CONFIRMS and not has_option(argv, "--yes", "-y"):
         extra.append("--yes")  # it asks for confirmation; a job has no terminal to answer
     return extra
 
@@ -129,7 +137,7 @@ def plan_job(
     if command not in KNOWN_COMMANDS:
         raise PolicyError(f"unknown command {' '.join(argv[:2])!r}")
     policy = profile.policy(command)
-    executor = policy.executor or ("server" if command in NETWORK_COMMANDS else "slurm")
+    executor = policy.executor or DEFAULT_EXECUTOR
     extra = [*_fills(command, argv, executor, profile), *policy.args]
     # Options after a "--" would be taken as positional arguments.
     cut = argv.index("--") if "--" in argv else len(argv)

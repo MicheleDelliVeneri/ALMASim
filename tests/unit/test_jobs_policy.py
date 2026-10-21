@@ -21,15 +21,27 @@ ZWICKY = Profile(
 )
 
 
-def test_network_commands_run_on_the_server_and_the_rest_on_slurm():
-    assert plan_job(["metadata", "--band", "3"], ZWICKY).executor == "server"
-    assert plan_job(["products", "resolve", "--member-ous-uid", "x"], ZWICKY).executor == "server"
-    assert plan_job(["image", "clean-quality", "/out"], ZWICKY).executor == "slurm"
+def test_every_command_runs_on_slurm_by_default():
+    """zwicky's compute nodes reach the ALMA archive: queries and downloads go there too."""
+    for argv in (
+        ["metadata", "--band", "3"],
+        ["products", "resolve", "--member-ous-uid", "x"],
+        ["products", "download", "--products-csv", "p.csv"],
+        ["image", "clean-quality", "/out"],
+    ):
+        assert plan_job(argv, ZWICKY).executor == "slurm", argv
 
 
-def test_a_profile_can_move_a_command():
-    profile = Profile(commands={"metadata": CommandPolicy(executor="slurm")})
-    assert plan_job(["metadata"], profile).executor == "slurm"
+def test_a_site_without_internet_on_compute_nodes_moves_them_to_the_server():
+    profile = Profile(commands={"metadata": CommandPolicy(executor="server")})
+    assert plan_job(["metadata"], profile).executor == "server"
+    assert plan_job(["image", "clean-quality", "/out"], profile).executor == "slurm"
+
+
+def test_commands_that_ask_for_confirmation_get_yes():
+    assert plan_job(["metadata", "--band", "3"], ZWICKY).argv[-1] == "--yes"
+    assert "--yes" not in plan_job(["image", "clean-quality", "/o"], ZWICKY).argv
+    assert plan_job(["metadata", "-y"], ZWICKY).argv.count("--yes") == 0
 
 
 def test_imaging_becomes_a_slurm_driver_with_the_profiles_tools():
@@ -64,13 +76,17 @@ def test_calibration_on_slurm_does_not_download_casa_data():
 
 def test_a_download_fans_out_only_for_its_post_processing():
     plain = plan_job(["products", "download", "--products-csv", "p.csv"], ZWICKY)
-    assert plain.executor == "server"
+    assert plain.executor == "slurm"
     assert "--backend" not in plain.argv
-    assert "--skip-casa-data-update" not in plain.argv  # the server node has the internet
 
     unpack = plan_job(["products", "download", "--products-csv", "p.csv", "--unpack-ms"], ZWICKY)
     assert unpack.argv[unpack.argv.index("--backend") + 1] == "slurm"
-    assert "--skip-casa-data-update" not in unpack.argv
+    # Jobs share one CASA data folder: they must not update it concurrently.
+    assert "--skip-casa-data-update" in unpack.argv
+
+    on_server = Profile(commands={"products download": CommandPolicy(executor="server")})
+    served = plan_job(["products", "download", "--products-csv", "p.csv"], on_server)
+    assert "--skip-casa-data-update" not in served.argv
 
 
 def test_predict_gets_the_partition_and_clean_the_wsclean_binary():

@@ -56,3 +56,16 @@ time = "06:00:00"
 cpus = 16
 memory = "64G"
 time = "1-00:00:00"
+
+# Queries and downloads run on Slurm too: zwicky's compute nodes reach the
+# ALMA archive. A download that unpacks and calibrates is a small driver
+# whose CASA work goes to its own Slurm workers.
+[commands.metadata]
+cpus = 1
+memory = "4G"
+time = "01:00:00"
+
+[commands."products download"]
+cpus = 4
+memory = "16G"
+time = "2-00:00:00"

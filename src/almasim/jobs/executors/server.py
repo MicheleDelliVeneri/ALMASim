@@ -1,8 +1,9 @@
 """Run jobs as processes beside the server (web console plan, J1.5).
 
-For the commands that need the internet (metadata, products resolve, the
-transfer part of products download): zwicky's compute nodes have none. They
-run on the node that hosts ``almasim serve``, so they must stay polite:
+For sites whose compute nodes have no internet: a profile can send the
+commands that need it (metadata, products resolve, products download) here,
+to the node that hosts ``almasim serve``. (zwicky's compute nodes reach the
+ALMA archive, so there everything runs on Slurm.) Jobs here stay polite:
 
 - at most ``max_running`` at a time; the rest wait as queued and
   ``start_queued`` starts them as slots free up;

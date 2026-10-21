@@ -1,8 +1,8 @@
 """Runs of ``almasim`` commands as jobs: one folder per run, shared by the CLI and the server.
 
 A job is one ``almasim`` command with its arguments, the resources it asked
-for and where it runs (a Slurm job, or a process beside the server for the
-commands that need the internet). Everything about it lives in its run
+for and where it runs (a Slurm job, or a process beside the server on sites whose compute
+nodes have no internet). Everything about it lives in its run
 folder, so the folder is the record: a restarted server, a teammate's
 server and the terminal all read the same files (web console plan, J1.1).
 """
