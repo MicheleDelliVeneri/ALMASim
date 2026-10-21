@@ -9,7 +9,7 @@ the observation and the image products, ``export`` writes them and
 
 from ..products.cube_export import write_ml_dataset_shard
 from .background import generate_background_cube
-from .context import RunContext
+from .context import RunContext, SimulationCancelled
 from .export import export_results
 from .geometry import (
     CubeGeometry,
@@ -26,6 +26,7 @@ __all__ = [
     "CubeGeometry",
     "LogFn",
     "RunContext",
+    "SimulationCancelled",
     "SimulationParams",
     "StopFn",
     "estimate_simulation_footprint",

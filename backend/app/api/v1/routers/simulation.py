@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import almasim.services.simulation as sim_service
+from almasim.scheduling.cluster import SlurmClusterBusyError
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
 from app.core.clock import as_utc
@@ -197,6 +198,14 @@ def create_simulation(
         )
     except HTTPException:
         raise
+    except SlurmClusterBusyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "A Slurm cluster with other settings is running for another simulation; "
+                "use the same settings or wait for it to finish"
+            ),
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

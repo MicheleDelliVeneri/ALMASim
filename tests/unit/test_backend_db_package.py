@@ -36,8 +36,9 @@ def test_download_store_persists_jobs_in_the_database(sqlite_sessions):
     from app.services.download_service import DownloadJob, DownloadStore
 
     store = DownloadStore()
-    job_id = uuid.uuid4()  # SQLite needs the UUID object; PostgreSQL also takes the string
-    store.create(DownloadJob(job_id=job_id, destination="/data/run"))  # type: ignore[arg-type]
+    job_id = str(uuid.uuid4())  # the routers carry ids as strings (W0.3)
+    store.create(DownloadJob(job_id=job_id, destination="/data/run"))
+    store.persist(job_id)
 
     assert [record.destination for record in store.list_all()] == ["/data/run"]
     assert store.update_in_db(job_id, status="completed") is True

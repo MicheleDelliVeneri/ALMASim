@@ -2,10 +2,15 @@
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import almasim
 from almasim.__version__ import __version__ as almasim_version
+
+# Relative DATA_DIR and OUTPUT_DIR are taken from here (backend/), as backend/run.sh
+# starts the server in this directory.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -29,8 +34,8 @@ class Settings(BaseSettings):
 
     # Paths
     MAIN_DIR: Path = Field(
-        default=Path("src/almasim"),
-        description="Main ALMASim package directory",
+        default=Path(almasim.__file__).resolve().parent,
+        description="Main ALMASim package directory (default: the installed package)",
     )
     DATA_DIR: Path = Field(
         default=Path("data"),
@@ -89,6 +94,19 @@ class Settings(BaseSettings):
         default_factory=list,
         description="Extra Dask scheduler addresses requests may use (JSON list)",
     )
+
+    @model_validator(mode="after")
+    def _absolute_dirs(self) -> "Settings":
+        """Resolve relative DATA_DIR and OUTPUT_DIR once, against backend/ (MADIV-28 W0.3).
+
+        Startup used to resolve DATA_DIR against backend/ while every other use
+        took it from the working directory.
+        """
+        for name in ("DATA_DIR", "OUTPUT_DIR"):
+            value = getattr(self, name)
+            if not value.is_absolute():
+                setattr(self, name, BACKEND_DIR / value)
+        return self
 
     def write_roots(self) -> list[Path]:
         """Directories request-supplied paths must lie under, in lookup order."""

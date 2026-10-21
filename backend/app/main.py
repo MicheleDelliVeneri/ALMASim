@@ -4,7 +4,6 @@ import logging
 
 # Import database initialization
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,8 +13,6 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.dependencies import close_compute_backend, get_compute_backend
 from app.db.startup import initialize_database_on_startup
-
-backend_dir = Path(__file__).parent.parent
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +25,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize database
     try:
-        data_dir = settings.DATA_DIR
-        if not data_dir.is_absolute():
-            # Make relative to backend directory
-            data_dir = backend_dir / data_dir
-
-        initialize_database_on_startup(data_dir)
+        initialize_database_on_startup(settings.DATA_DIR)
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}", exc_info=True)
         # Don't fail startup, but log the error

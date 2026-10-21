@@ -11,6 +11,14 @@ from ..utils import log_message
 from .params import LogFn, StopFn
 
 
+class SimulationCancelled(RuntimeError):
+    """Raised by :meth:`RunContext.check_cancelled` when the caller asked the run to stop.
+
+    A ``RuntimeError`` as before, so code that caught that keeps working; the
+    backend tells it from a failure by its type (MADIV-28 W0.3).
+    """
+
+
 @dataclass
 class RunContext:
     """Log, status, cancellation and random numbers for one run (MADIV-28 T5.1).
@@ -40,4 +48,4 @@ class RunContext:
     def check_cancelled(self) -> None:
         """Raise when the caller asked the run to stop."""
         if self.stopped():
-            raise RuntimeError("Simulation cancelled")
+            raise SimulationCancelled("Simulation cancelled")

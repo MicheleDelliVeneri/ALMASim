@@ -111,9 +111,6 @@ class SimulationService:
     ) -> None:
         """Run a simulation."""
 
-        class SimulationCancelledError(RuntimeError):
-            pass
-
         # Define simulation steps for progress tracking
         simulation_steps = [
             "Initializing",
@@ -128,7 +125,7 @@ class SimulationService:
 
         def check_cancelled() -> None:
             if status_store.is_cancelled(simulation_id):
-                raise SimulationCancelledError("Simulation cancelled")
+                raise sim_service.SimulationCancelled("Simulation cancelled")
 
         def status_callback(message: str):
             """Callback to update simulation status."""
@@ -241,7 +238,9 @@ class SimulationService:
                 current_step="Completed",
                 message="Simulation completed successfully",
             )
-        except SimulationCancelledError:
+        # The library raises the same error when its own stop_requested check
+        # fires; both mean the user cancelled, not that the run failed.
+        except sim_service.SimulationCancelled:
             status_store.update(
                 simulation_id,
                 status="cancelled",
@@ -272,7 +271,10 @@ class SimulationService:
                 error=error_msg,
                 message=f"Simulation failed: {error_msg}",
             )
-            log_callback(f"ERROR: {error_msg}")
+            # Not log_callback: it checks for cancellation and would raise again
+            # from inside this handler.
+            status_store.update(simulation_id, log=f"ERROR: {error_msg}")
+            self._persist_log(simulation_id, f"ERROR: {error_msg}", level="ERROR")
             raise
         finally:
             if self.owns_backend and self.compute_backend is not None:

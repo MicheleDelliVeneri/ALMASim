@@ -201,11 +201,18 @@ def run_subcommand(
     )
 
 
+class SlurmClusterBusyError(RuntimeError):
+    """The shared cluster is running with other settings (MADIV-28 W0.3)."""
+
+
 class SlurmDaskClusterSingleton:
     """Singleton manager for a Slurm-backed Dask cluster."""
 
     _instance: ClassVar[SlurmDaskClusterSingleton | None] = None
     _instance_lock: ClassVar[threading.Lock] = threading.Lock()
+    # How many get_instance() callers still use the cluster; the last
+    # release_instance() closes it (MADIV-28 W0.3).
+    _holders: ClassVar[int] = 0
 
     @staticmethod
     def _resolve_safe_log_directory(raw_log_directory: Any) -> str:
@@ -379,6 +386,7 @@ class SlurmDaskClusterSingleton:
                     scheduler_interface=scheduler_interface,
                     **cluster_kwargs,
                 )
+                cls._holders = 1
                 return cls._instance
 
             requested_signature = (
@@ -392,20 +400,41 @@ class SlurmDaskClusterSingleton:
                 scheduler_interface,
             )
             if cls._instance._config_signature != requested_signature:
-                raise RuntimeError(
+                raise SlurmClusterBusyError(
                     "SlurmDaskClusterSingleton already initialized with different settings. "
                     "Call close_instance() first if you need a different configuration."
                 )
+            cls._holders += 1
             return cls._instance
 
     @classmethod
-    def close_instance(cls) -> None:
-        """Close and clear the singleton cluster instance."""
+    def release_instance(cls) -> None:
+        """Give back one get_instance() hold; the last one closes the cluster.
+
+        Two simulations sharing the cluster used to close it under each
+        other: the first to finish called close_instance().
+        """
         with cls._instance_lock:
-            if cls._instance is not None:
-                cls._instance.client.close()
-                cls._instance.cluster.close()
-                cls._instance = None
+            if cls._instance is None:
+                return
+            cls._holders -= 1
+            if cls._holders > 0:
+                return
+            cls._close_locked()
+
+    @classmethod
+    def close_instance(cls) -> None:
+        """Close and clear the singleton cluster instance, whoever still holds it."""
+        with cls._instance_lock:
+            cls._close_locked()
+
+    @classmethod
+    def _close_locked(cls) -> None:
+        if cls._instance is not None:
+            cls._instance.client.close()
+            cls._instance.cluster.close()
+            cls._instance = None
+        cls._holders = 0
 
     def submit_callable(self, func: Callable[..., Any], *, cores: int, **kwargs: Any) -> Any:
         """Submit ``func(**kwargs)`` to a worker, reserving ``cores`` CPU resources.
