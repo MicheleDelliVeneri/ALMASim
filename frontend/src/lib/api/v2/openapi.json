@@ -304,6 +304,109 @@
         "title": "Defaults",
         "type": "object"
       },
+      "Effective": {
+        "description": "What the merged profile says, as the console uses it.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "casa_data": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Casa Data"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "executor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executor"
+          },
+          "partition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partition"
+          },
+          "partitions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Partitions",
+            "type": "array"
+          },
+          "python": {
+            "title": "Python",
+            "type": "string"
+          },
+          "roots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roots",
+            "type": "array"
+          },
+          "runs_root": {
+            "title": "Runs Root",
+            "type": "string"
+          },
+          "wsclean": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wsclean"
+          }
+        },
+        "required": [
+          "runs_root",
+          "roots",
+          "executor",
+          "partition",
+          "account",
+          "python",
+          "wsclean",
+          "casa_data",
+          "partitions",
+          "commands"
+        ],
+        "title": "Effective",
+        "type": "object"
+      },
       "Entry": {
         "properties": {
           "kind": {
@@ -1019,6 +1122,56 @@
         "title": "PlanResources",
         "type": "object"
       },
+      "ProfileFile": {
+        "properties": {
+          "exists": {
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "exists",
+          "text"
+        ],
+        "title": "ProfileFile",
+        "type": "object"
+      },
+      "Profiles": {
+        "properties": {
+          "effective": {
+            "$ref": "#/components/schemas/Effective"
+          },
+          "site": {
+            "$ref": "#/components/schemas/ProfileFile"
+          },
+          "user": {
+            "$ref": "#/components/schemas/ProfileFile"
+          }
+        },
+        "required": [
+          "site",
+          "user",
+          "effective"
+        ],
+        "title": "Profiles",
+        "type": "object"
+      },
       "QueuedJob": {
         "properties": {
           "cpus": {
@@ -1620,6 +1773,20 @@
           "size"
         ],
         "title": "TextSlice",
+        "type": "object"
+      },
+      "UserProfile": {
+        "properties": {
+          "text": {
+            "maxLength": 65536,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "UserProfile",
         "type": "object"
       },
       "Validation": {
@@ -2692,6 +2859,70 @@
         "summary": "Resubmit Job",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/api/v2/profile": {
+      "get": {
+        "description": "The site and user profiles' text, and what they add up to.",
+        "operationId": "get_profiles_api_v2_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profiles"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Profiles",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/v2/profile/user": {
+      "put": {
+        "description": "Replace your profile, if the new text makes a valid profile with the site's.",
+        "operationId": "put_user_profile_api_v2_profile_user_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profiles"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put User Profile",
+        "tags": [
+          "profile"
         ]
       }
     },

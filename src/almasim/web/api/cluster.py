@@ -97,6 +97,11 @@ class ClusterView:
         self._at = -1e9
         self._value: dict[str, Any] = {}
 
+    def forget(self) -> None:
+        """Read Slurm again next time (the profile changed)."""
+        with self._lock:
+            self._at = -1e9
+
     def get(self) -> dict[str, Any]:
         with self._lock:
             if time.monotonic() - self._at > self.cache_s:

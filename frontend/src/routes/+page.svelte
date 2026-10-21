@@ -1,146 +1,153 @@
+<!--
+	Home: your jobs, what needs your attention, the partitions' load, the
+	team's latest runs and your latest results. Live from the jobs store;
+	the cluster from /api/v2/cluster (cached 30 s on the console).
+-->
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
-	import { apiClient } from '#lib/api/client.js';
-	import { createLogger } from '#lib/logger.js';
+	import { api } from '#lib/api/v2/client.js';
+	import type { components } from '#lib/api/v2/schema.js';
+	import { clock } from '#lib/clock.svelte.js';
+	import RunsTable from '#lib/components/jobs/RunsTable.svelte';
+	import StateChip from '#lib/components/jobs/StateChip.svelte';
+	import Spinner from '#lib/components/shared/Spinner.svelte';
+	import { jobs } from '#lib/stores/jobs.svelte.js';
+	import { homeSummary } from '#lib/utils/home.js';
 
-	const logger = createLogger('routes/home');
+	type Cluster = components['schemas']['Cluster'];
 
-	let healthStatus = $state('checking');
-	let healthTone = $state('warn');
+	let cluster = $state<Cluster | null>(null);
 
-	const modules = [
-		{
-			href: '/archive',
-			code: '01',
-			title: 'Metadata',
-			description:
-				'Query ALMA observations and select real datasets for simulation or data processing.',
-			metric: 'TAP'
-		},
-		{
-			href: '/archive',
-			code: '02',
-			title: 'Data',
-			description:
-				'Download ALMA products, unpack raw MeasurementSets, and generate calibrated visibilities.',
-			metric: 'MS'
-		},
-		{
-			href: '/simulations',
-			code: '03',
-			title: 'Simulations',
-			description: 'Configure and run ALMA simulations from selected metadata and source models.',
-			metric: 'SIM'
-		},
-		{
-			href: '/visualizer',
-			code: '04',
-			title: 'Visualizer',
-			description: 'Inspect simulation outputs, image products, datacubes, and reconstructed data.',
-			metric: 'VIS'
-		}
-	] as const;
+	$effect(() => clock.use());
 
-	const workflowLinks = [
-		{ href: '/archive', label: 'Find observations' },
-		{ href: '/archive', label: 'Download products' },
-		{ href: '/simulations', label: 'Run simulations' },
-		{ href: '/imaging', label: 'Create images' }
-	] as const;
-
-	onMount(async () => {
-		logger.info('Home page mounted');
-		try {
-			const response = await apiClient.get<{ status: string }>('/health');
-			healthStatus = response.status === 'healthy' ? 'connected' : 'degraded';
-			healthTone = response.status === 'healthy' ? 'secondary' : 'secondary';
-			logger.info({ status: response.status }, 'API health check complete');
-		} catch (error) {
-			healthStatus = 'offline';
-			healthTone = 'error';
-			logger.error({ err: error }, 'API health check failed');
-		}
+	$effect(() => {
+		const load = () =>
+			api
+				.GET('/api/v2/cluster')
+				.then(({ data }) => (cluster = data ?? null))
+				.catch(() => (cluster = null));
+		void load();
+		const timer = setInterval(load, 60_000);
+		return () => clearInterval(timer);
 	});
+
+	const summary = $derived(homeSummary(jobs.list, jobs.user, clock.now));
+	const today = new Date().toLocaleDateString(undefined, {
+		weekday: 'long',
+		day: 'numeric',
+		month: 'long'
+	});
+	const productsOf = (dir: string) => `${resolve('/products')}?dir=${encodeURIComponent(dir)}`;
 </script>
 
-<div class="space-y-8">
-	<section class="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-		<div class="alma-panel rounded-lg p-6 sm:p-8">
-			<div class="alma-kicker">ALMA Simulator</div>
-			<div class="mt-5 max-w-3xl">
-				<h1 class="text-4xl font-bold leading-tight text-fg sm:text-5xl">ALMASim</h1>
-				<p class="mt-4 text-lg leading-8 text-fg-muted">
-					A control surface for ALMA simulation workflows: select observations, download data
-					products, create MeasurementSets, run simulations, image outputs, and inspect results.
-				</p>
-			</div>
-			<div class="mt-8 flex flex-wrap gap-3">
-				<a
-					href={resolve('/archive')}
-					class="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover"
-				>
-					Search the archive
-				</a>
-				<a
-					href={resolve('/simulations')}
-					class="rounded border border-line px-4 py-2 text-sm font-semibold text-navy hover:bg-hover"
-				>
-					Open Simulations
-				</a>
-			</div>
-		</div>
+<svelte:head><title>ALMASim</title></svelte:head>
 
-		<div class="alma-panel rounded-lg p-6">
-			<div class="border-b border-line pb-4">
-				<div class="flex items-start justify-between gap-4">
-					<div class="min-w-0">
-						<div class="alma-kicker">Connection</div>
-						<div class="mt-2 text-2xl font-semibold text-fg">Backend</div>
-					</div>
-					<span
-						class="shrink-0 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wide"
-						class:alma-chip={healthTone === 'secondary'}
-						class:bg-danger-soft={healthTone === 'error'}
-						class:text-danger={healthTone === 'error'}
-					>
-						{healthStatus}
-					</span>
-				</div>
-			</div>
-			<div class="mt-5 space-y-3">
-				<p class="text-sm leading-6 text-fg-dim">
-					This only reports whether the frontend can reach the ALMASim backend API.
-				</p>
-				<div class="grid gap-2">
-					{#each workflowLinks as link (link.href)}
-						<a
-							href={resolve(link.href)}
-							class="flex items-center justify-between rounded border border-line px-3 py-2 text-sm text-fg-muted hover:bg-hover"
-						>
-							<span>{link.label}</span>
-							<span class="text-fg-dim">Open</span>
-						</a>
-					{/each}
-				</div>
-			</div>
+<div class="flex flex-col gap-6">
+	<div class="flex flex-wrap items-end gap-4">
+		<div class="flex min-w-0 flex-1 basis-96 flex-col gap-1">
+			<p class="alma-kicker">{today}</p>
+			<h1 class="m-0 text-4xl leading-tight">{summary.headline}</h1>
 		</div>
-	</section>
-
-	<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-		{#each modules as module (module.href)}
-			<a
-				href={resolve(module.href)}
-				class="alma-panel group rounded-lg p-5 transition hover:border-cyan-300/50 hover:bg-hover"
+		<div class="flex flex-wrap gap-2">
+			<a class="btn-secondary no-underline" href={resolve('/archive')}>Search the archive</a>
+			<a class="btn-primary bg-magenta no-underline hover:bg-accent" href={resolve('/run')}
+				>New run</a
 			>
-				<div class="flex items-center justify-between">
-					<span class="font-mono text-xs text-fg-dim">{module.code}</span>
-					<span class="alma-chip rounded px-2 py-1 text-xs font-semibold">{module.metric}</span>
-				</div>
-				<h2 class="mt-5 text-xl font-semibold text-fg">{module.title}</h2>
-				<p class="mt-3 text-sm leading-6 text-fg-dim">{module.description}</p>
-				<div class="mt-5 text-sm font-semibold text-accent group-hover:text-navy">Open module</div>
-			</a>
-		{/each}
+		</div>
+	</div>
+
+	<section class="alma-panel overflow-hidden rounded-lg" aria-labelledby="h-mine">
+		<div class="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
+			<h2 id="h-mine" class="m-0 text-xl font-semibold">Your jobs</h2>
+			<span class="text-sm text-fg-muted">{jobs.connected ? 'live' : 'offline'}</span>
+			<a class="ml-auto text-sm font-medium" href={resolve('/jobs')}>All jobs</a>
+		</div>
+		{#if !jobs.loaded}
+			<p class="flex items-center gap-2 p-5 text-sm text-fg-muted"><Spinner /> Loading…</p>
+		{:else if summary.mine.length}
+			<div class="p-0 md:p-2"><RunsTable runs={summary.mine} now={clock.now} /></div>
+		{:else}
+			<p class="p-5 text-sm text-fg-muted">
+				No jobs yet. <a href={resolve('/run')}>Run a command</a>, or start from the
+				<a href={resolve('/archive')}>archive</a>.
+			</p>
+		{/if}
 	</section>
+
+	<div class="grid gap-6 md:grid-cols-2">
+		<section class="alma-panel flex flex-col gap-3 rounded-lg p-5" aria-labelledby="h-parts">
+			<h2 id="h-parts" class="m-0 text-xl font-semibold">Partitions</h2>
+			{#if !cluster}
+				<p class="flex items-center gap-2 text-sm text-fg-muted"><Spinner /> Asking Slurm…</p>
+			{:else if !cluster.available}
+				<p class="m-0 text-sm text-fg-muted">
+					No Slurm here: runs go to the console's own machine.
+				</p>
+			{:else}
+				{#each cluster.partitions.filter((p) => p.up) as p (p.name)}
+					<div class="grid grid-cols-[8rem_1fr_3rem] items-center gap-3">
+						<span class="truncate font-mono text-sm">{p.name}</span>
+						<div
+							class="h-2.5 overflow-hidden rounded-full bg-sunk"
+							role="meter"
+							aria-label="{p.name} busy"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							aria-valuenow={Math.round((p.load ?? 0) * 100)}
+						>
+							<div class="h-full bg-navy" style="width: {Math.round((p.load ?? 0) * 100)}%"></div>
+						</div>
+						<span class="text-right text-sm text-fg-muted">{Math.round((p.load ?? 0) * 100)}%</span>
+					</div>
+				{/each}
+				<p class="m-0 text-sm text-fg-muted">
+					Your queue: {cluster.queue.filter((j) => j.state === 'RUNNING').length} running,
+					{cluster.queue.filter((j) => j.state === 'PENDING').length} pending.
+					{#if cluster.defaults.partition}Default partition {cluster.defaults.partition}.{/if}
+				</p>
+			{/if}
+		</section>
+
+		<section class="alma-panel flex flex-col gap-3 rounded-lg p-5" aria-labelledby="h-team">
+			<div class="flex items-center gap-2">
+				<h2 id="h-team" class="m-0 text-xl font-semibold">Team runs</h2>
+				<span class="rounded-full bg-sunk px-2 py-0.5 text-xs text-fg-muted">read only</span>
+			</div>
+			{#each summary.team as run (run.id)}
+				<a
+					href={resolve('/jobs/[id]', { id: run.id })}
+					class="flex items-baseline gap-3 border-b border-sunk pb-2 text-fg no-underline"
+				>
+					<span class="w-28 shrink-0 truncate text-sm font-semibold text-fg-muted">{run.owner}</span
+					>
+					<span class="min-w-0 flex-1 truncate text-sm">{run.title || run.command}</span>
+					<StateChip state={run.state} />
+				</a>
+			{:else}
+				<p class="m-0 text-sm text-fg-muted">Nobody else has run anything lately.</p>
+			{/each}
+		</section>
+	</div>
+
+	{#if summary.results.length}
+		<section class="flex flex-col gap-3" aria-labelledby="h-results">
+			<h2 id="h-results" class="m-0 text-xl font-semibold">Recent results</h2>
+			<div class="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4">
+				{#each summary.results as run (run.id)}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended -->
+					<a
+						href={productsOf(run.run_dir)}
+						class="alma-panel flex flex-col gap-1.5 rounded-lg p-4 text-fg no-underline hover:border-line-strong"
+					>
+						<span class="font-semibold text-navy">{run.title || run.command}</span>
+						<span class="font-mono text-xs text-fg-muted">{run.command} · {run.short_id}</span>
+						<span class="text-xs text-fg-dim"
+							>{new Date((run.finished_at ?? run.created_at) * 1000).toLocaleString()}</span
+						>
+					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/each}
+			</div>
+		</section>
+	{/if}
 </div>

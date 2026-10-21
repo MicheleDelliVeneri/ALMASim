@@ -389,6 +389,46 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/v2/profile': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Profiles
+		 * @description The site and user profiles' text, and what they add up to.
+		 */
+		get: operations['get_profiles_api_v2_profile_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/api/v2/profile/user': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		/**
+		 * Put User Profile
+		 * @description Replace your profile, if the new text makes a valid profile with the site's.
+		 */
+		put: operations['put_user_profile_api_v2_profile_user_put'];
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/v2/simulation/estimate': {
 		parameters: {
 			query?: never;
@@ -520,6 +560,32 @@ export interface components {
 			account: string | null;
 			/** Partition */
 			partition: string | null;
+		};
+		/**
+		 * Effective
+		 * @description What the merged profile says, as the console uses it.
+		 */
+		Effective: {
+			/** Account */
+			account: string | null;
+			/** Casa Data */
+			casa_data: string | null;
+			/** Commands */
+			commands: string[];
+			/** Executor */
+			executor: string | null;
+			/** Partition */
+			partition: string | null;
+			/** Partitions */
+			partitions: string[];
+			/** Python */
+			python: string;
+			/** Roots */
+			roots: string[];
+			/** Runs Root */
+			runs_root: string;
+			/** Wsclean */
+			wsclean: string | null;
 		};
 		/** Entry */
 		Entry: {
@@ -755,6 +821,21 @@ export interface components {
 			/** Time */
 			time: string;
 		};
+		/** ProfileFile */
+		ProfileFile: {
+			/** Exists */
+			exists: boolean;
+			/** Path */
+			path: string | null;
+			/** Text */
+			text: string;
+		};
+		/** Profiles */
+		Profiles: {
+			effective: components['schemas']['Effective'];
+			site: components['schemas']['ProfileFile'];
+			user: components['schemas']['ProfileFile'];
+		};
 		/** QueuedJob */
 		QueuedJob: {
 			/** Cpus */
@@ -952,6 +1033,11 @@ export interface components {
 			path: string;
 			/** Size */
 			size: number;
+			/** Text */
+			text: string;
+		};
+		/** UserProfile */
+		UserProfile: {
 			/** Text */
 			text: string;
 		};
@@ -1627,6 +1713,59 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['Run'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_profiles_api_v2_profile_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Profiles'];
+				};
+			};
+		};
+	};
+	put_user_profile_api_v2_profile_user_put: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UserProfile'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Profiles'];
 				};
 			};
 			/** @description Validation Error */
