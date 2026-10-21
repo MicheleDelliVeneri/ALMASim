@@ -5,7 +5,7 @@
  *
  *   const { data } = await api.GET('/api/v2/jobs', { params: { query: { owner: 'all' } } });
  *
- * A failed request throws an `ApiRequestError` (as the v1 client does), so
+ * A failed request throws an `ApiRequestError` (`../client.ts`), so
  * `data` is always there when the call returns.
  */
 import createClient, { type Middleware } from 'openapi-fetch';

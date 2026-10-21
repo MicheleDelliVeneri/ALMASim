@@ -9,7 +9,7 @@
 
 ALMASim is a **library-first** Python environment for simulating ALMA observations, exploring ALMA metadata, downloading science products, and building ML-ready radio/mm-wave datasets.
 
-It provides reusable services in [`src/almasim`](src/almasim) that can be driven by CLI scripts, Jupyter notebooks, a FastAPI backend, or direct Python code — all through the same staged API.
+It provides reusable services in [`src/almasim`](src/almasim) that can be driven by the `almasim` command line, a web console, Jupyter notebooks, or direct Python code — all through the same staged API.
 
 ---
 
@@ -23,7 +23,7 @@ It provides reusable services in [`src/almasim`](src/almasim) that can be driven
 - [Skymodels](#skymodels)
 - [Compute Backends](#compute-backends)
 - [Metadata and Downloads](#metadata-and-downloads)
-- [Backend Service](#backend-service)
+- [Web Console](#web-console)
 - [Examples](#examples)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -76,12 +76,13 @@ src/almasim/          ← installable library  (pip install almasim)
     astro/            ← spectral lines, redshift, parameters
   skymodels/          ← source model implementations
 
-backend/              ← FastAPI service  (Docker: ghcr.io/…/almasim-backend)
-frontend/             ← Svelte UI  (requires Docker Compose)
+  cli/               ← the `almasim` command line
+  web/               ← the web console (`almasim serve`, API v2)
+frontend/             ← the console's pages (SvelteKit, built into the wheel)
 examples/             ← CLI scripts and Jupyter notebooks
 ```
 
-The library layer owns all domain logic. The backend is a thin adapter over library services. CLI scripts and notebooks call the same staged services directly.
+The library layer owns all domain logic. The CLI wraps the library services, and the web console runs CLI commands as jobs. Scripts and notebooks call the same staged services directly.
 
 ---
 
@@ -164,9 +165,9 @@ pip install uv
 uv sync --group dev
 ```
 
-### Backend service (Docker Compose)
+### Web console with Docker Compose (laptop)
 
-The FastAPI backend and Svelte frontend require Docker Compose:
+On a cluster, install the package and run `almasim serve` ([Web Console](#web-console)). On a laptop without Slurm, Docker Compose runs the console and its pages, with every command running in the console's container:
 
 ```bash
 git clone https://github.com/astromadiv/ALMASim.git
@@ -175,17 +176,17 @@ docker compose up
 ```
 
 `docker compose up` reads `docker-compose.yml` and the development
-`docker-compose.override.yml` (hot reload for the backend and the frontend).
+`docker-compose.override.yml` (hot reload for the console and the frontend).
 For the production builds, layer `docker-compose.prod.yml` on the base file
 instead: `make start-prod`, or
-`docker compose -f docker-compose.yml -f docker-compose.prod.yml up`.
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml up`. Then open http://localhost:3000.
 `make help` lists the other targets, including `make test`, `make lint` and
 `make typecheck` for local checks.
 
-The backend image is available pre-built from GHCR:
+The console image is available pre-built from GHCR:
 
 ```bash
-docker pull ghcr.io/michelledelliveneri/almasim-backend:latest
+docker pull ghcr.io/astromadiv/almasim-console:latest
 ```
 
 ---
@@ -337,28 +338,27 @@ Full reference: [Metadata docs](https://astromadiv.github.io/ALMASim/metadata.ht
 
 ---
 
-## Backend Service
+## Web Console
 
-The FastAPI backend exposes library services over HTTP and drives the Svelte frontend.
-
-| Endpoint group | Purpose |
-|---|---|
-| `/api/v1/metadata` | TAP queries and metadata management |
-| `/api/v1/simulation` | Simulation job submission and status |
-| `/api/v1/download` | Product resolution and download jobs |
-| `/api/v1/imaging` | Deconvolution and combination products |
-| `/api/v1/visualizer` | Output browsing and product inspection |
-| `/health` | Health check |
-| `/docs` | Interactive OpenAPI docs (Swagger UI) |
-
-Start locally for development:
+`almasim serve` runs a web console on a cluster's login node: one page to query the ALMA archive, start simulations, image measurement sets, run any `almasim` command as a Slurm job, follow jobs live and look at the products. Each user runs their own console and reaches it through an SSH tunnel:
 
 ```bash
-cd backend
-uv run uvicorn app.main:app --reload --port 8000
+# on the cluster's login node (in tmux or screen, so it outlives the SSH session)
+pip install "almasim[web]"     # or the site's shared install
+almasim doctor --slurm         # checks, on a compute node, what jobs need
+almasim serve                  # prints an ssh -L line and a link with your token
+
+# on your laptop: the printed tunnel, then open the printed link
+ssh -N -L 8765:/home/you/.almasim/serve.sock you@cluster.login
 ```
 
-Full reference: [Frontend docs](https://astromadiv.github.io/ALMASim/frontend.html)
+The console listens on a socket only you can open and asks for your token. `almasim serve --status` prints the link again and `almasim serve --stop` stops it; your jobs carry on either way.
+
+![The web console](https://raw.githubusercontent.com/astromadiv/ALMASim/main/docs/images/console/home.png)
+
+The console serves its pages and API v2 (`/api/v2`, OpenAPI docs at `/api/docs`) together, so a cluster needs no Node and no database: the runs live in run folders a team can share.
+
+Full reference: [Web console docs](https://astromadiv.github.io/ALMASim/console.html)
 
 ---
 
@@ -541,7 +541,7 @@ Full documentation: **[astromadiv.github.io/ALMASim](https://astromadiv.github.i
 | [Metadata](https://astromadiv.github.io/ALMASim/metadata.html) | TAP queries, filters |
 | [Downloads](https://astromadiv.github.io/ALMASim/downloads.html) | Product download workflow |
 | [Compute Backends](https://astromadiv.github.io/ALMASim/compute.html) | Sync, Dask, Slurm, Kubernetes |
-| [Frontend](https://astromadiv.github.io/ALMASim/frontend.html) | Svelte UI workflows |
+| [Web Console](https://astromadiv.github.io/ALMASim/console.html) | `almasim serve`: pages, jobs, shared runs |
 
 Build docs locally:
 
@@ -577,7 +577,7 @@ The release pipeline then:
 2. Runs the full lint + test suite
 3. Publishes wheel and sdist to PyPI via OIDC trusted publisher
 4. Creates a GitHub Release with auto-generated changelog and attached artifacts
-5. Builds and pushes the backend Docker image to GHCR
+5. Builds and pushes the console and frontend Docker images to GHCR
 
 > **One-time PyPI setup:** register a [trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) on PyPI with owner `astromadiv`, repo `ALMASim`, workflow `release.yml`, environment `pypi`.
 

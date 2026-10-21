@@ -1,10 +1,10 @@
-"""Load data products and turn them into 2D previews for the web UI.
+"""Load data products and integrate them into 2D previews.
 
-The visualizer and combination pages show any simulation or imaging product
+``almasim preview integrate`` turns any simulation or imaging product
 (``.npz``, FITS, or an MSv2 directory gridded into a dirty visibility cube)
-integrated along one axis; the deconvolution page previews its input and
-output cubes. Moved out of the backend routers and ``imaging.reconstruction``
-(MADIV-28 T6.7) so the library, not the web layer, owns the product formats.
+into a 2D map integrated along one axis, for the console's Products page.
+Moved out of the backend routers (MADIV-28 T6.7) so the library, not the web
+layer, owns the product formats.
 """
 
 from __future__ import annotations
@@ -32,18 +32,6 @@ def classify_product_path(path: Path) -> str | None:
         if lower.endswith(FITS_SUFFIXES):
             return "fits"
     return None
-
-
-def iter_supported_products(base_dir: Path) -> list[Path]:
-    supported: list[Path] = []
-    for pattern in ("*.npz", "*.fits", "*.fit", "*.fts"):
-        for p in base_dir.rglob(pattern):  # lgtm[py/path-injection]
-            if p.is_file():
-                supported.append(p)
-    for p in base_dir.rglob("*.ms"):  # lgtm[py/path-injection]
-        if p.is_dir():
-            supported.append(p)
-    return sorted(supported, key=lambda path: path.stat().st_mtime, reverse=True)
 
 
 def _coerce_regular_cube(data: np.ndarray) -> np.ndarray:
@@ -260,13 +248,6 @@ def _integrate_cube(cube: np.ndarray, method: str, *, axis: int) -> np.ndarray:
     return np.nan_to_num(integrated, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def _normalize_for_display(image: np.ndarray) -> np.ndarray:
-    if image.max() > image.min():
-        scaled = (image - image.min()) / (image.max() - image.min())
-        return (scaled * 255).astype(np.uint8)
-    return np.zeros_like(image, dtype=np.uint8)
-
-
 def integrate_product(
     path: Path,
     method: str,
@@ -307,108 +288,3 @@ def integrate_product(
         "channel_end": end,
     }
     return integrated, stats
-
-
-def integrated_preview(
-    path: Path,
-    method: str,
-    *,
-    integration_axis: str | int | None = "auto",
-    complex_component: str = "real",
-    channel_start: int | None = None,
-    channel_end: int | None = None,
-) -> dict:
-    """Load ``path``, integrate it along one axis and normalise it to a 0-255 image."""
-    integrated, stats = integrate_product(
-        path,
-        method,
-        integration_axis=integration_axis,
-        complex_component=complex_component,
-        channel_start=channel_start,
-        channel_end=channel_end,
-    )
-    return {
-        "image": _normalize_for_display(integrated).tolist(),
-        "stats": stats,
-        "method": method,
-    }
-
-
-# Deconvolution page (from imaging.reconstruction)
-
-
-def load_cube_from_npz(npz_path: str | Path) -> tuple[np.ndarray, str]:
-    """Load a cube from an NPZ file and normalize to `(chan, y, x)` layout."""
-    with np.load(npz_path) as data:
-        cube = None
-        cube_name = None
-        for name in [
-            "modelCube",
-            "dirtyCube",
-            "clean_cube",
-            "dirty_cube",
-            "beam_cube",
-            "component_cube",
-            "residual_cube",
-            "restored_cube",
-            "clean_beam_cube",
-            "convolved_reference_cube",
-        ]:
-            if name in data:
-                cube = data[name]
-                cube_name = name
-                break
-        if cube is None:
-            keys = list(data.keys())
-            if not keys:
-                raise ValueError("No arrays found in NPZ file")
-            cube_name = keys[0]
-            cube = data[cube_name]
-
-    cube = np.asarray(cube, dtype=np.float32)
-    if cube.ndim != 3:
-        raise ValueError(f"Expected 3D datacube, got {cube.ndim}D array")
-    if cube.shape[2] <= min(cube.shape[0], cube.shape[1]):
-        cube = np.transpose(cube, (2, 0, 1))
-    return cube, str(cube_name)
-
-
-def integrate_cube_preview(
-    cube: np.ndarray,
-    *,
-    method: str = "sum",
-    cube_name: str = "cube",
-) -> dict[str, Any]:
-    """Convert a channel-first cube into a normalized 2D preview payload."""
-    cube = np.asarray(cube, dtype=np.float32)
-    if cube.ndim != 3:
-        raise ValueError(f"Expected 3D datacube, got {cube.ndim}D array")
-    if method not in {"sum", "mean"}:
-        raise ValueError("method must be 'sum' or 'mean'")
-
-    if method == "sum":
-        integrated = np.sum(cube, axis=0)
-    else:
-        integrated = np.nanmean(cube, axis=0)
-
-    integrated = np.nan_to_num(integrated, nan=0.0, posinf=0.0, neginf=0.0)
-    if integrated.max() > integrated.min():
-        normalized = (
-            (integrated - integrated.min()) / (integrated.max() - integrated.min()) * 255.0
-        ).astype(np.uint8)
-    else:
-        normalized = np.zeros_like(integrated, dtype=np.uint8)
-
-    return {
-        "image": normalized.tolist(),
-        "stats": {
-            "shape": list(cube.shape),
-            "integrated_shape": list(integrated.shape),
-            "min": float(integrated.min()),
-            "max": float(integrated.max()),
-            "mean": float(integrated.mean()),
-            "std": float(integrated.std()),
-            "cube_name": cube_name,
-        },
-        "method": method,
-    }

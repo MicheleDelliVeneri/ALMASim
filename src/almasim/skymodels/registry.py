@@ -1,6 +1,6 @@
 """The sky-model families ALMASim can simulate, in one table (MADIV-28 T5.6).
 
-The CLI and the backend validate ``source_type`` against ``SKYMODELS``; the
+The CLI validates ``source_type`` against ``SKYMODELS``; the
 spectral setup takes the SED template from it, and the run fetches the image
 dataset a family draws from. The builders themselves stay in the simulation
 (``_create_sky_model``), which needs the run's state.

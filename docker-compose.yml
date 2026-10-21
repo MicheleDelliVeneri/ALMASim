@@ -1,90 +1,23 @@
-# The services shared by development and production.
+# The web console on a laptop, in two containers: the console (`almasim
+# serve`, API v2) and the web app's server, which forwards /api to it.
 #
 #   docker compose up                       development: this file plus
 #                                           docker-compose.override.yml (hot reload)
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
 #                                           production builds and resource limits
 #
-# `make start` and `make start-prod` run these.
+# Then open http://localhost:3000. `make start` and `make start-prod` run these.
+# On a cluster, use `almasim serve` itself instead (docs/console.md).
 
 services:
-  # PostgreSQL database service
-  postgres:
-    image: postgres:16-alpine
-    container_name: almasim-postgres
-    environment:
-      - POSTGRES_USER=almasim
-      - POSTGRES_PASSWORD=almasim_dev_password
-      - POSTGRES_DB=almasim
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/app/db/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "127.0.0.1:5432:5432"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U almasim -d almasim"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - almasim-network
-
-  # Backend FastAPI service
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: almasim-backend
-    image: almasim-backend:latest
-    ports:
-      - "127.0.0.1:8000:8000"
-    environment:
-      - MAIN_DIR=/app/src/almasim
-      - DATA_DIR=/app/data
-      - OUTPUT_DIR=/app/outputs
-      - TNG_DIR=/app/data/TNG100-1
-      - GALAXY_ZOO_DIR=/app/data/galaxy_zoo
-      - HUBBLE_DIR=/app/data/hubble
-      - DATABASE_URL=postgresql://almasim:almasim_dev_password@postgres:5432/almasim
-      # Request paths must lie under HOST_DIR, OUTPUT_DIR, DATA_DIR or these extra
-      # roots (JSON list), and Dask schedulers be DASK_SCHEDULER or listed here.
-      # - ALLOWED_ROOTS=["/SKAO_data"]
-      # - ALLOWED_SCHEDULERS=["tcp://scheduler-host:8786"]
-    volumes:
-      # Mount data directory for persistence (read-only for safety)
-      - ./data:/app/data:ro
-      # Mount outputs directory for simulation results
-      - ./backend/outputs:/app/outputs
-      # Mount host home directory so downloads land on the host filesystem
-      - ${HOME}:/host_home
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    networks:
-      - almasim-network
-
-  # The web console (`almasim serve`, API v2). Without Slurm here, it runs
-  # every command in this container with the server executor
-  # (examples/site-profiles/laptop.toml); runs land in the console_runs volume.
+  # The web console. Without Slurm here, it runs every command in this
+  # container with the server executor (examples/site-profiles/laptop.toml);
+  # runs land in the console_runs volume.
   console:
     build:
       context: .
-      dockerfile: backend/Dockerfile
-    image: almasim-backend:latest
+      dockerfile: Dockerfile.console
+    image: almasim-console:latest
     container_name: almasim-console
     working_dir: /app
     command: ["almasim", "serve", "--port", "8765"]
@@ -100,7 +33,7 @@ services:
     volumes:
       - ./examples:/app/examples:ro
       - ./data:/app/data:ro
-      - ./backend/outputs:/app/outputs
+      - ./outputs:/app/outputs
       - console_runs:/app/runs
     restart: unless-stopped
     healthcheck:
@@ -118,19 +51,15 @@ services:
     networks:
       - almasim-network
 
-  # Frontend SvelteKit service (the build differs between the two modes)
+  # The web app (the build differs between the two modes); it forwards /api
+  # to the console with the console's token (vite.config.ts).
   frontend:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      # Where the web app's server sends /api (vite.config.ts): API v1 to the
-      # backend, API v2 to the console, with the console's token.
-      - LEGACY_API_URL=http://backend:8000
       - ALMASIM_API_URL=http://console:8765
       - ALMASIM_TOKEN=${ALMASIM_TOKEN:-almasim-laptop-console}
     depends_on:
-      backend:
-        condition: service_healthy
       console:
         condition: service_healthy
     restart: unless-stopped
@@ -155,5 +84,4 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
   console_runs:

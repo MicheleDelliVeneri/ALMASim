@@ -4,5 +4,5 @@
 # dependency pins.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cat ci/image/Dockerfile pyproject.toml uv.lock backend/pyproject.toml \
+cat ci/image/Dockerfile pyproject.toml uv.lock \
     | sha256sum | cut -c1-16 | sed 's/^/deps-/'

@@ -10,14 +10,13 @@ COPY . .
 RUN npm run build
 
 # Production stage: `vite preview` serves the build and forwards /api to the
-# servers, as configured in vite.config.ts: /api/v1 to LEGACY_API_URL and
-# /api/v2 to ALMASIM_API_URL with ALMASIM_TOKEN. This is the compose set-up
-# for a laptop; on a cluster, `almasim serve` serves the same build itself
-# (it is packaged in the wheel) and no frontend container is needed.
+# console, as configured in vite.config.ts: /api/v2 to ALMASIM_API_URL with
+# ALMASIM_TOKEN. This is the compose set-up for a laptop; on a cluster,
+# `almasim serve` serves the same build itself (it is packaged in the wheel)
+# and no frontend container is needed.
 FROM builder AS production
 
-ENV LEGACY_API_URL=http://backend:8000 \
-    ALMASIM_API_URL=http://console:8765
+ENV ALMASIM_API_URL=http://console:8765
 
 EXPOSE 3000
 

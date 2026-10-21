@@ -14,9 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # uv.lock: dask/distributed on the workers must match the client. The project
 # itself is not installed; the client uploads its source to the workers.
 COPY pyproject.toml uv.lock README.md /tmp/almasim/
-COPY backend/pyproject.toml /tmp/almasim/backend/
 RUN cd /tmp/almasim \
-    && uv export --quiet --frozen --no-dev --no-emit-project --no-hashes --package almasim \
+    && uv export --quiet --frozen --no-dev --no-emit-project --no-hashes \
         --extra dashboard --output-file requirements.txt \
     && uv pip install --system --no-cache -r requirements.txt \
     && rm -rf /tmp/almasim

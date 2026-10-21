@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import ResultsColumnsMenu from '#lib/components/metadata/ResultsColumnsMenu.svelte';
+	import ResultsColumnsMenu from './ResultsColumnsMenu.svelte';
 	import {
 		DEFAULT_COLUMN_ORDER,
 		DEFAULT_HIDDEN,

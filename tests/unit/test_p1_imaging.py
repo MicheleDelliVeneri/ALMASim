@@ -15,7 +15,6 @@ from almasim.services.interferometry.total_power import (
     estimate_tp_beam_fwhm_arcsec,
     simulate_total_power_observation,
 )
-from almasim.services.products.preview import integrate_cube_preview
 
 
 @pytest.mark.unit
@@ -171,17 +170,3 @@ def test_convolve_cube_with_beam_matches_cube_shape():
     convolved = convolve_cube_with_beam(cube, beam_cube)
 
     assert convolved.shape == cube.shape
-
-
-@pytest.mark.unit
-def test_integrate_cube_preview_returns_image_and_stats():
-    """Preview integration should emit a normalized image payload."""
-    cube = np.ones((4, 8, 8), dtype=np.float32)
-
-    preview = integrate_cube_preview(cube, method="mean", cube_name="test_cube")
-
-    assert len(preview["image"]) == 8
-    assert len(preview["image"][0]) == 8
-    assert preview["stats"]["shape"] == [4, 8, 8]
-    assert preview["stats"]["cube_name"] == "test_cube"
-    assert preview["method"] == "mean"

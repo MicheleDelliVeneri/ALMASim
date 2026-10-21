@@ -9,6 +9,7 @@
 :maxdepth: 2
 
 quickstart
+cli
 console
 console_hub
 simulation
@@ -21,7 +22,6 @@ metadata
 downloads
 compute
 slurm_scheduler
-frontend
 fidelity_plan
 ```
 

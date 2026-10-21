@@ -1,8 +1,7 @@
-"""The one metadata filter model, for the TAP and the cache queries (MADIV-28 T6.1).
+"""The one metadata filter model, for the TAP queries (MADIV-28 T6.1).
 
 :class:`InclusionFilters` and :class:`ExclusionFilters` describe a query; the
-TAP builder (``tap.service``) and the backend's cache query translate the same
-objects, with the constants below shared between them.
+TAP builder (``tap.service``) translates them, with the constants below.
 """
 
 from __future__ import annotations

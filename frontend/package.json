@@ -13,12 +13,11 @@
     "format": "prettier --write .",
     "test": "svelte-kit sync && vitest run",
     "test:e2e": "playwright test",
-    "gen:api": "npx --yes openapi-typescript@7.13.0 src/lib/api/openapi.json -o src/lib/api/schema.d.ts && npx --yes openapi-typescript@7.13.0 src/lib/api/v2/openapi.json --default-non-nullable false -o src/lib/api/v2/schema.d.ts && prettier --write src/lib/api/schema.d.ts src/lib/api/v2/schema.d.ts"
+    "gen:api": "npx --yes openapi-typescript@7.13.0 src/lib/api/v2/openapi.json --default-non-nullable false -o src/lib/api/v2/schema.d.ts && prettier --write src/lib/api/v2/schema.d.ts"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans": "^5.3.0",
-    "openapi-fetch": "^0.17.0",
-    "pino": "^10.4.0"
+    "openapi-fetch": "^0.17.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

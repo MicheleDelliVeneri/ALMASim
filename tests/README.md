@@ -25,10 +25,9 @@ Tests for integration between modules:
 - `test_skymodel_workflow.py`, `test_interferometer_workflow.py` - end-to-end sky model and interferometer runs
 
 ### Integration Tests (`tests/integration/`)
-Backend API integration tests:
-- `test_backend_api.py` - FastAPI endpoint tests
-- `test_backend_simulation.py` - Backend simulation service tests
+Tests that reach outside the process:
 - `test_tap_live_query.py` - a live ALMA TAP query (marked `network`)
+- `test_jobs_slurm_live.py` - jobs on a real Slurm (skipped without one)
 
 ## Running Tests
 

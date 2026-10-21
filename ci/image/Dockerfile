@@ -69,9 +69,8 @@ ENV PATH=/opt/stack/bin:/opt/venv/bin:$PATH \
 # the checkout and run `uv sync --frozen`, which reuses this environment.
 WORKDIR /opt/almasim-lock
 COPY pyproject.toml uv.lock README.md ./
-COPY backend/pyproject.toml backend/pyproject.toml
 RUN uv python install 3.12 \
-    && uv sync --frozen --no-install-project --no-install-workspace \
+    && uv sync --frozen --no-install-project \
         --no-default-groups --group test --extra casa --extra ms-casacore
 
 # CASA runtime data (measures, geodetic), read-only at /opt/casa-data.

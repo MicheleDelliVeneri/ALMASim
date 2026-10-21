@@ -6,11 +6,8 @@
 # development override (hot reload) is not loaded.
 
 services:
-  postgres:
-    container_name: almasim-postgres-prod
-
-  backend:
-    container_name: almasim-backend-prod
+  console:
+    container_name: almasim-console-prod
     environment:
       - PYTHONOPTIMIZE=1
     deploy:
