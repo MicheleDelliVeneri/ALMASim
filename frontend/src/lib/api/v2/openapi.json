@@ -33,6 +33,107 @@
         "title": "Accounting",
         "type": "object"
       },
+      "Cluster": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "checked_at": {
+            "title": "Checked At",
+            "type": "number"
+          },
+          "configured": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Configured"
+            },
+            "title": "Configured",
+            "type": "object"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/Defaults"
+          },
+          "error": {
+            "default": "",
+            "title": "Error",
+            "type": "string"
+          },
+          "partitions": {
+            "items": {
+              "$ref": "#/components/schemas/Partition"
+            },
+            "title": "Partitions",
+            "type": "array"
+          },
+          "queue": {
+            "items": {
+              "$ref": "#/components/schemas/QueuedJob"
+            },
+            "title": "Queue",
+            "type": "array"
+          }
+        },
+        "required": [
+          "defaults",
+          "configured",
+          "checked_at",
+          "available",
+          "partitions",
+          "queue"
+        ],
+        "title": "Cluster",
+        "type": "object"
+      },
+      "Command": {
+        "properties": {
+          "executor": {
+            "enum": [
+              "slurm",
+              "server"
+            ],
+            "title": "Executor",
+            "type": "string"
+          },
+          "extra_args": {
+            "title": "Extra Args",
+            "type": "boolean"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "needs_internet": {
+            "title": "Needs Internet",
+            "type": "boolean"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/Param"
+            },
+            "title": "Params",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "help",
+          "executor",
+          "needs_internet",
+          "params",
+          "extra_args"
+        ],
+        "title": "Command",
+        "type": "object"
+      },
       "CommandLine": {
         "properties": {
           "argv": {
@@ -54,6 +155,111 @@
           "argv"
         ],
         "title": "CommandLine",
+        "type": "object"
+      },
+      "Configured": {
+        "description": "A partition's limits as the site profile states them.",
+        "properties": {
+          "cpus": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpus"
+          },
+          "max_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Time"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory"
+          }
+        },
+        "required": [
+          "cpus",
+          "memory",
+          "max_time"
+        ],
+        "title": "Configured",
+        "type": "object"
+      },
+      "CpuCounts": {
+        "properties": {
+          "allocated": {
+            "title": "Allocated",
+            "type": "integer"
+          },
+          "idle": {
+            "title": "Idle",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unavailable": {
+            "title": "Unavailable",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "allocated",
+          "idle",
+          "unavailable",
+          "total"
+        ],
+        "title": "CpuCounts",
+        "type": "object"
+      },
+      "Defaults": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "partition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partition"
+          }
+        },
+        "required": [
+          "partition",
+          "account"
+        ],
+        "title": "Defaults",
         "type": "object"
       },
       "Entry": {
@@ -212,6 +418,383 @@
           "size"
         ],
         "title": "LogSlice",
+        "type": "object"
+      },
+      "Param": {
+        "description": "One parameter of a command, as the form draws it (catalog.describe_param).",
+        "properties": {
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "option",
+              "argument"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "multiple": {
+            "title": "Multiple",
+            "type": "boolean"
+          },
+          "must_exist": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Must Exist"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "negative_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Negative Flags",
+            "type": "array"
+          },
+          "panel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel"
+          },
+          "path_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "file",
+                  "folder",
+                  "path"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Kind"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "boolean",
+              "choice",
+              "integer",
+              "number",
+              "path",
+              "string"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "flags",
+          "negative_flags",
+          "required",
+          "multiple",
+          "help",
+          "type"
+        ],
+        "title": "Param",
+        "type": "object"
+      },
+      "Partition": {
+        "properties": {
+          "cpus": {
+            "$ref": "#/components/schemas/CpuCounts"
+          },
+          "cpus_per_node": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpus Per Node"
+          },
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "load": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load"
+          },
+          "memory_mb_per_node": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Mb Per Node"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nodes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes"
+          },
+          "time_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Limit"
+          },
+          "up": {
+            "title": "Up",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "default",
+          "up",
+          "time_limit",
+          "nodes",
+          "cpus_per_node",
+          "memory_mb_per_node",
+          "cpus",
+          "load"
+        ],
+        "title": "Partition",
+        "type": "object"
+      },
+      "Plan": {
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Argv",
+            "type": "array"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "executor": {
+            "enum": [
+              "slurm",
+              "server"
+            ],
+            "title": "Executor",
+            "type": "string"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/PlanResources"
+          }
+        },
+        "required": [
+          "command",
+          "executor",
+          "argv",
+          "resources"
+        ],
+        "title": "Plan",
+        "type": "object"
+      },
+      "PlanResources": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "cpus": {
+            "title": "Cpus",
+            "type": "integer"
+          },
+          "memory": {
+            "title": "Memory",
+            "type": "string"
+          },
+          "partition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partition"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cpus",
+          "memory",
+          "time"
+        ],
+        "title": "PlanResources",
+        "type": "object"
+      },
+      "QueuedJob": {
+        "properties": {
+          "cpus": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpus"
+          },
+          "elapsed": {
+            "title": "Elapsed",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nodes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nodes"
+          },
+          "partition": {
+            "title": "Partition",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "time_limit": {
+            "title": "Time Limit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "elapsed",
+          "time_limit",
+          "partition",
+          "reason",
+          "nodes",
+          "cpus"
+        ],
+        "title": "QueuedJob",
         "type": "object"
       },
       "Root": {
@@ -721,6 +1304,38 @@
         "title": "TextSlice",
         "type": "object"
       },
+      "Validation": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Plan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "problems",
+          "plan"
+        ],
+        "title": "Validation",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -778,9 +1393,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cluster Api V2 Cluster Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Cluster"
                 }
               }
             },
@@ -803,8 +1416,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/Command"
                   },
                   "title": "Response List Commands Api V2 Commands Get",
                   "type": "array"
@@ -839,9 +1451,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Validate Command Api V2 Commands Validate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Validation"
                 }
               }
             },

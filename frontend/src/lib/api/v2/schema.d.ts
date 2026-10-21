@@ -385,6 +385,47 @@ export interface components {
 			/** Slurm Job Id */
 			slurm_job_id: string | null;
 		};
+		/** Cluster */
+		Cluster: {
+			/** Available */
+			available: boolean;
+			/** Checked At */
+			checked_at: number;
+			/** Configured */
+			configured: {
+				[key: string]: components['schemas']['Configured'];
+			};
+			defaults: components['schemas']['Defaults'];
+			/**
+			 * Error
+			 * @default
+			 */
+			error?: string;
+			/** Partitions */
+			partitions: components['schemas']['Partition'][];
+			/** Queue */
+			queue: components['schemas']['QueuedJob'][];
+		};
+		/** Command */
+		Command: {
+			/**
+			 * Executor
+			 * @enum {string}
+			 */
+			executor: 'slurm' | 'server';
+			/** Extra Args */
+			extra_args: boolean;
+			/** Help */
+			help: string;
+			/** Name */
+			name: string;
+			/** Needs Internet */
+			needs_internet: boolean;
+			/** Params */
+			params: components['schemas']['Param'][];
+			/** Summary */
+			summary: string;
+		};
 		/** CommandLine */
 		CommandLine: {
 			/**
@@ -396,6 +437,36 @@ export interface components {
 			resources?: {
 				[key: string]: unknown;
 			};
+		};
+		/**
+		 * Configured
+		 * @description A partition's limits as the site profile states them.
+		 */
+		Configured: {
+			/** Cpus */
+			cpus: number | null;
+			/** Max Time */
+			max_time: string | null;
+			/** Memory */
+			memory: string | null;
+		};
+		/** CpuCounts */
+		CpuCounts: {
+			/** Allocated */
+			allocated: number;
+			/** Idle */
+			idle: number;
+			/** Total */
+			total: number;
+			/** Unavailable */
+			unavailable: number;
+		};
+		/** Defaults */
+		Defaults: {
+			/** Account */
+			account: string | null;
+			/** Partition */
+			partition: string | null;
 		};
 		/** Entry */
 		Entry: {
@@ -453,6 +524,115 @@ export interface components {
 			size: number;
 			/** Text */
 			text: string;
+		};
+		/**
+		 * Param
+		 * @description One parameter of a command, as the form draws it (catalog.describe_param).
+		 */
+		Param: {
+			/** Choices */
+			choices?: string[] | null;
+			/** Default */
+			default?: unknown;
+			/** Flags */
+			flags: string[];
+			/** Help */
+			help: string;
+			/**
+			 * Kind
+			 * @enum {string}
+			 */
+			kind: 'option' | 'argument';
+			/** Max */
+			max?: number | null;
+			/** Min */
+			min?: number | null;
+			/** Multiple */
+			multiple: boolean;
+			/** Must Exist */
+			must_exist?: boolean | null;
+			/** Name */
+			name: string;
+			/** Negative Flags */
+			negative_flags: string[];
+			/** Panel */
+			panel?: string | null;
+			/** Path Kind */
+			path_kind?: ('file' | 'folder' | 'path') | null;
+			/** Required */
+			required: boolean;
+			/**
+			 * Type
+			 * @enum {string}
+			 */
+			type: 'boolean' | 'choice' | 'integer' | 'number' | 'path' | 'string';
+		};
+		/** Partition */
+		Partition: {
+			cpus: components['schemas']['CpuCounts'];
+			/** Cpus Per Node */
+			cpus_per_node: number | null;
+			/** Default */
+			default: boolean;
+			/** Load */
+			load: number | null;
+			/** Memory Mb Per Node */
+			memory_mb_per_node: number | null;
+			/** Name */
+			name: string;
+			/** Nodes */
+			nodes: number | null;
+			/** Time Limit */
+			time_limit: string | null;
+			/** Up */
+			up: boolean;
+		};
+		/** Plan */
+		Plan: {
+			/** Argv */
+			argv: string[];
+			/** Command */
+			command: string;
+			/**
+			 * Executor
+			 * @enum {string}
+			 */
+			executor: 'slurm' | 'server';
+			resources: components['schemas']['PlanResources'];
+		};
+		/** PlanResources */
+		PlanResources: {
+			/** Account */
+			account?: string | null;
+			/** Cpus */
+			cpus: number;
+			/** Memory */
+			memory: string;
+			/** Partition */
+			partition?: string | null;
+			/** Time */
+			time: string;
+		};
+		/** QueuedJob */
+		QueuedJob: {
+			/** Cpus */
+			cpus: number | null;
+			/** Elapsed */
+			elapsed: string;
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Nodes */
+			nodes: number | null;
+			/** Partition */
+			partition: string;
+			/** Reason */
+			reason: string;
+			/** State */
+			state: string;
+			/** Time Limit */
+			time_limit: string;
 		};
 		/** Root */
 		Root: {
@@ -619,6 +799,14 @@ export interface components {
 			/** Text */
 			text: string;
 		};
+		/** Validation */
+		Validation: {
+			/** Ok */
+			ok: boolean;
+			plan: components['schemas']['Plan'] | null;
+			/** Problems */
+			problems: string[];
+		};
 		/** ValidationError */
 		ValidationError: {
 			/** Context */
@@ -656,9 +844,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': {
-						[key: string]: unknown;
-					};
+					'application/json': components['schemas']['Cluster'];
 				};
 			};
 		};
@@ -678,9 +864,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': {
-						[key: string]: unknown;
-					}[];
+					'application/json': components['schemas']['Command'][];
 				};
 			};
 		};
@@ -704,9 +888,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': {
-						[key: string]: unknown;
-					};
+					'application/json': components['schemas']['Validation'];
 				};
 			};
 			/** @description Validation Error */

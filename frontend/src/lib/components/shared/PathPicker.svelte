@@ -1,7 +1,7 @@
 <!--
 	A path field with a browser over the console's folders (`/api/v2/files`):
 	the profile's roots and the runs root, nothing outside them. Type a path,
-	or browse to one; `kind` says whether a folder or a file is wanted.
+	or browse to one; `kind` says whether a folder, a file, or either is wanted.
 -->
 <script lang="ts">
 	import { api, type Listing, type Root } from '#lib/api/v2/client.js';
@@ -13,7 +13,9 @@
 	interface Props {
 		value: string;
 		label: string;
-		kind?: 'folder' | 'file';
+		/** The command-line flag the field sets, shown beside the label. */
+		flag?: string;
+		kind?: 'folder' | 'file' | 'path';
 		/** Offer "New folder" in the browser (folders only). */
 		allowCreate?: boolean;
 		required?: boolean;
@@ -25,6 +27,7 @@
 	let {
 		value = $bindable(''),
 		label,
+		flag,
 		kind = 'folder',
 		allowCreate = false,
 		required = false,
@@ -69,7 +72,10 @@
 			error = err;
 			return;
 		}
-		const start = kind === 'file' && value ? value.replace(/\/[^/]*$/, '') || '/' : value;
+		const start =
+			kind !== 'folder' && value && !value.endsWith('/')
+				? value.replace(/\/[^/]*$/, '') || '/'
+				: value;
 		const first = roots.find((root) => root.exists)?.path;
 		const target = start || first;
 		if (target) await browse(target);
@@ -94,7 +100,7 @@
 	}
 
 	function choose() {
-		if (kind === 'file') {
+		if (kind === 'file' || (kind === 'path' && chosenFile)) {
 			if (!chosenFile || !listing) return;
 			value = join(listing.path, chosenFile);
 		} else if (listing) {
@@ -105,7 +111,11 @@
 </script>
 
 <div>
-	<label for={fieldId} class="mb-1 block text-sm font-medium text-fg">{label}</label>
+	<label for={fieldId} class="mb-1 block text-sm font-medium text-fg"
+		>{label}{#if flag}
+			<code class="ml-1 inline-block text-xs font-normal whitespace-nowrap text-fg-dim">{flag}</code
+			>{/if}</label
+	>
 	<div class="flex gap-2">
 		<input
 			id={fieldId}
@@ -124,7 +134,11 @@
 
 {#if open}
 	<Dialog
-		title={kind === 'file' ? `Choose a file: ${label}` : `Choose a folder: ${label}`}
+		title={kind === 'file'
+			? `Choose a file: ${label}`
+			: kind === 'folder'
+				? `Choose a folder: ${label}`
+				: `Choose: ${label}`}
 		width="max-w-2xl"
 		onClose={() => (open = false)}
 	>
@@ -171,7 +185,7 @@
 								<span aria-hidden="true">📁</span>{entry.name}
 							</button>
 						</li>
-					{:else if kind === 'file'}
+					{:else if kind !== 'folder'}
 						<li>
 							<button
 								type="button"
@@ -224,7 +238,12 @@
 				type="button"
 				class="btn-primary"
 				disabled={!listing || (kind === 'file' && !chosenFile)}
-				onclick={choose}>{kind === 'file' ? 'Choose file' : 'Choose this folder'}</button
+				onclick={choose}
+				>{kind === 'file'
+					? 'Choose file'
+					: kind === 'path' && chosenFile
+						? 'Choose file'
+						: 'Choose this folder'}</button
 			>
 		{/snippet}
 	</Dialog>

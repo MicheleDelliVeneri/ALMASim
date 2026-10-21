@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -20,13 +20,64 @@ class CommandLine(BaseModel):
     resources: dict[str, Any] = Field(default_factory=dict)
 
 
-@router.get("")
+class Param(BaseModel):
+    """One parameter of a command, as the form draws it (catalog.describe_param)."""
+
+    name: str
+    kind: Literal["option", "argument"]
+    flags: list[str]
+    negative_flags: list[str]
+    required: bool
+    multiple: bool
+    default: Any = None
+    help: str
+    panel: str | None = None
+    type: Literal["boolean", "choice", "integer", "number", "path", "string"]
+    choices: list[str] | None = None
+    min: float | None = None
+    max: float | None = None
+    path_kind: Literal["file", "folder", "path"] | None = None
+    must_exist: bool | None = None
+
+
+class Command(BaseModel):
+    name: str
+    summary: str
+    help: str
+    executor: Literal["slurm", "server"]
+    needs_internet: bool
+    params: list[Param]
+    extra_args: bool
+
+
+class PlanResources(BaseModel):
+    partition: str | None = None
+    account: str | None = None
+    cpus: int
+    memory: str
+    time: str
+
+
+class Plan(BaseModel):
+    command: str
+    executor: Literal["slurm", "server"]
+    argv: list[str]
+    resources: PlanResources
+
+
+class Validation(BaseModel):
+    ok: bool
+    problems: list[str]
+    plan: Plan | None
+
+
+@router.get("", response_model=list[Command])
 def list_commands(request: Request) -> list[dict[str, Any]]:
     """Every command the console can run, with its parameters and where it runs."""
     return [asdict(c) for c in catalog(request.app.state.profile)]
 
 
-@router.post("/validate")
+@router.post("/validate", response_model=Validation)
 def validate_command(body: CommandLine, request: Request) -> dict[str, Any]:
     """What the CLI's parser says about ``argv``, and what would be submitted."""
     problems = validate(body.argv)

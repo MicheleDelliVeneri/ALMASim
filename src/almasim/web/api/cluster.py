@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Request
+from pydantic import BaseModel
 
 from almasim.jobs.profile import Profile
 
@@ -129,7 +130,61 @@ class ClusterView:
         }
 
 
-@router.get("/cluster")
+class CpuCounts(BaseModel):
+    allocated: int
+    idle: int
+    unavailable: int
+    total: int
+
+
+class Partition(BaseModel):
+    name: str
+    default: bool
+    up: bool
+    time_limit: str | None
+    nodes: int | None
+    cpus_per_node: int | None
+    memory_mb_per_node: int | None
+    cpus: CpuCounts
+    load: float | None
+
+
+class QueuedJob(BaseModel):
+    id: str
+    name: str
+    state: str
+    elapsed: str
+    time_limit: str
+    partition: str
+    reason: str
+    nodes: int | None
+    cpus: int | None
+
+
+class Defaults(BaseModel):
+    partition: str | None
+    account: str | None
+
+
+class Configured(BaseModel):
+    """A partition's limits as the site profile states them."""
+
+    cpus: int | None
+    memory: str | None
+    max_time: str | None
+
+
+class Cluster(BaseModel):
+    defaults: Defaults
+    configured: dict[str, Configured]
+    checked_at: float
+    available: bool
+    error: str = ""
+    partitions: list[Partition]
+    queue: list[QueuedJob]
+
+
+@router.get("/cluster", response_model=Cluster)
 def cluster(request: Request) -> dict[str, Any]:
     """Partitions with their CPU load, the profile's defaults and limits, and your queue."""
     return request.app.state.cluster.get()

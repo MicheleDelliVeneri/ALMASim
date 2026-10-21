@@ -296,22 +296,26 @@ def simulation_run(
         ...,
         "--metadata-path",
         help="CSV file with pre-fetched ALMA metadata rows (from 'almasim metadata query').",
+        rich_help_panel="Observation",
     ),
     row_idx: int | None = typer.Option(
         None,
         "--row-idx",
         min=0,
         help="Single metadata row index to simulate. Omit to simulate all rows.",
+        rich_help_panel="Observation",
     ),
     project_name: str = typer.Option(
         "sim_demo",
         "--project-name",
         help="Project name used in outputs.",
+        rich_help_panel="Output",
     ),
     output_dir: Path = typer.Option(
         Path.home() / "almasim_outputs" / "simulation",
         "--output-dir",
         help="Directory for simulation outputs.",
+        rich_help_panel="Output",
     ),
     input_path: Path | None = typer.Option(
         None,
@@ -321,35 +325,41 @@ def simulation_run(
             "If a directory is provided, files are matched to each metadata row using "
             "member_ous_uid and group_ous_uid."
         ),
+        rich_help_panel="Sky model",
     ),
     main_dir: Path = typer.Option(
         Path(__file__).resolve().parents[1],
         "--main-dir",
         help="Path to ALMASim data directory (defaults to src/almasim).",
+        rich_help_panel="Advanced",
     ),
     source_type: SourceType = typer.Option(
         SourceType("point"),
         "--source-type",
         help="Sky model family (the external ones take their cube from --input).",
         case_sensitive=False,
+        rich_help_panel="Sky model",
     ),
     n_pix: int = typer.Option(
         128,
         "--n-pix",
         min=1,
         help="Spatial cube size override.",
+        rich_help_panel="Sky model",
     ),
     n_channels: int = typer.Option(
         32,
         "--n-channels",
         min=1,
         help="Channel count override.",
+        rich_help_panel="Sky model",
     ),
     n_lines: int | None = typer.Option(
         None,
         "--n-lines",
         min=1,
         help="Number of spectral lines to inject. Omit to use metadata default.",
+        rich_help_panel="Sky model",
     ),
     seed: int | None = typer.Option(
         None,
@@ -358,23 +368,27 @@ def simulation_run(
             "Base random seed for reproducible simulations. When running multiple "
             "simulations, each run uses seed + run_index."
         ),
+        rich_help_panel="Advanced",
     ),
     simulations_per_row: int = typer.Option(
         1,
         "--simulations-per-row",
         min=1,
         help="How many simulations to run for each selected metadata row.",
+        rich_help_panel="Observation",
     ),
     imaging_algorithm: ImagingAlgorithm = typer.Option(
         ImagingAlgorithm("legacy"),
         "--imaging-algorithm",
         help="Channel imaging algorithm.",
         case_sensitive=False,
+        rich_help_panel="Imaging",
     ),
     robust: float = typer.Option(
         0.0,
         "--robust",
         help="Robust weighting parameter for imaging.",
+        rich_help_panel="Imaging",
     ),
     instrument_geometry: InstrumentGeometry = typer.Option(
         InstrumentGeometry.legacy,
@@ -384,49 +398,58 @@ def simulation_run(
             "Beam, field of view and cell: legacy (the metadata FOV, beam / 5) or planner "
             "(the imaging planner's: the primary beam's FOV, beam / 8)."
         ),
+        rich_help_panel="Observation",
     ),
     background_level: float = typer.Option(
         0.0,
         "--background-level",
         help="Background sky level scaling factor (0 = no background).",
+        rich_help_panel="Sky model",
     ),
     background_seed: int | None = typer.Option(
         None,
         "--background-seed",
         help="Random seed for background sky generation.",
+        rich_help_panel="Advanced",
     ),
     inject_serendipitous: bool = typer.Option(
         False,
         "--inject-serendipitous",
         help="Add a few random serendipitous sources around the target.",
+        rich_help_panel="Sky model",
     ),
     save_mode: SaveMode = typer.Option(
         SaveMode("memory"),
         "--save-mode",
         help="Output save mode.",
         case_sensitive=False,
+        rich_help_panel="Output",
     ),
     persist_standard_outputs: bool = typer.Option(
         False,
         "--persist-standard-outputs",
         help="Persist standard outputs in addition to ML shard.",
+        rich_help_panel="Output",
     ),
     ml_shard_path: Path = typer.Option(
         Path.home() / "almasim_outputs" / "ddrm_training_sample.h5",
         "--ml-shard-path",
         help="Destination HDF5 shard path.",
+        rich_help_panel="Output",
     ),
     backend: SimulationBackend = typer.Option(
         SimulationBackend("sync"),
         "--backend",
         help="Compute backend.",
         case_sensitive=False,
+        rich_help_panel="Cluster",
     ),
     n_workers: int = typer.Option(
         1,
         "--n-workers",
         min=1,
         help="Worker count for local backend.",
+        rich_help_panel="Cluster",
     ),
     kaggle_token: Path | None = typer.Option(
         None,
@@ -437,6 +460,7 @@ def simulation_run(
             "download morphology images for the galaxy-zoo / hubble-100 source "
             "types. Defaults to the standard Kaggle locations if omitted."
         ),
+        rich_help_panel="Sky model",
     ),
 ) -> None:
     """Run staged ALMASim simulation from a pre-queried metadata CSV."""

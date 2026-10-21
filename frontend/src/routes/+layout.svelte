@@ -11,6 +11,7 @@
 
 	const navItems = [
 		{ href: '/', label: 'Overview' },
+		{ href: '/run', label: 'Run a command' },
 		{ href: '/jobs', label: 'Jobs' },
 		{ href: '/metadata', label: 'Metadata' },
 		{ href: '/data', label: 'Data' },

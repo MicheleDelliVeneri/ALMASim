@@ -115,126 +115,151 @@ def metadata_query(
         None,
         "--source-name",
         help="Source-name substring filter.",
+        rich_help_panel="Target",
     ),
     science_keyword: list[str] | None = typer.Option(
         None,
         "--science-keyword",
         help="Science keyword(s) to include. Repeat or pass comma-separated values.",
+        rich_help_panel="Science",
     ),
     scientific_category: list[str] | None = typer.Option(
         None,
         "--scientific-category",
         help="Scientific category(ies) to include. Repeat or pass comma-separated values.",
+        rich_help_panel="Science",
     ),
     band: list[int] | None = typer.Option(
         None,
         "--band",
         help="ALMA band filter. Repeat for multiple values.",
+        rich_help_panel="Spectral setup",
     ),
     antenna_arrays: str | None = typer.Option(
         None,
         "--antenna-arrays",
         help="Raw antenna_arrays substring filter.",
+        rich_help_panel="Array",
     ),
     array_type: list[str] | None = typer.Option(
         None,
         "--array-type",
         help="Array type(s): 12m, 7m, TP. Repeat or pass comma-separated values.",
+        rich_help_panel="Array",
     ),
     array_configuration: list[str] | None = typer.Option(
         None,
         "--array-configuration",
         help="Array configuration(s) like C-1, C-2. Repeat or pass comma-separated values.",
+        rich_help_panel="Array",
     ),
     angular_resolution_min: float | None = typer.Option(
         None,
         "--angular-resolution-min",
         help="Minimum angular resolution (arcsec).",
+        rich_help_panel="Array",
     ),
     angular_resolution_max: float | None = typer.Option(
         None,
         "--angular-resolution-max",
         help="Maximum angular resolution (arcsec).",
+        rich_help_panel="Array",
     ),
     observation_date_start: str | None = typer.Option(
         None,
         "--observation-date-start",
         help="Observation date start (ISO date).",
+        rich_help_panel="Observation",
     ),
     observation_date_end: str | None = typer.Option(
         None,
         "--observation-date-end",
         help="Observation date end (ISO date).",
+        rich_help_panel="Observation",
     ),
     qa2_status: list[str] | None = typer.Option(
         None,
         "--qa2-status",
         help="QA2 status values: Pass, Fail, SemiPass, T, F, X.",
+        rich_help_panel="Observation",
     ),
     obs_type: list[str] | None = typer.Option(
         None,
         "--obs-type",
         help="Observation type(s) to include. Repeat or pass comma-separated values.",
+        rich_help_panel="Observation",
     ),
     fov_min: float | None = typer.Option(
         None,
         "--fov-min",
         help="Minimum FOV.",
+        rich_help_panel="Array",
     ),
     fov_max: float | None = typer.Option(
         None,
         "--fov-max",
         help="Maximum FOV.",
+        rich_help_panel="Array",
     ),
     time_resolution_min: float | None = typer.Option(
         None,
         "--time-resolution-min",
         help="Minimum time resolution.",
+        rich_help_panel="Observation",
     ),
     time_resolution_max: float | None = typer.Option(
         None,
         "--time-resolution-max",
         help="Maximum time resolution.",
+        rich_help_panel="Observation",
     ),
     frequency_min: float | None = typer.Option(
         None,
         "--frequency-min",
         help="Minimum frequency.",
+        rich_help_panel="Spectral setup",
     ),
     frequency_max: float | None = typer.Option(
         None,
         "--frequency-max",
         help="Maximum frequency.",
+        rich_help_panel="Spectral setup",
     ),
     exclude_science_keyword: list[str] | None = typer.Option(
         None,
         "--exclude-science-keyword",
         help="Science keyword(s) to exclude. Repeat or pass comma-separated values.",
+        rich_help_panel="Exclusions",
     ),
     exclude_scientific_category: list[str] | None = typer.Option(
         None,
         "--exclude-scientific-category",
         help="Scientific category(ies) to exclude. Repeat or pass comma-separated values.",
+        rich_help_panel="Exclusions",
     ),
     exclude_source_name: list[str] | None = typer.Option(
         None,
         "--exclude-source-name",
         help="Source-name substring(s) to exclude. Repeat or pass comma-separated values.",
+        rich_help_panel="Exclusions",
     ),
     exclude_obs_type: list[str] | None = typer.Option(
         None,
         "--exclude-obs-type",
         help="Observation type substring(s) to exclude. Repeat or pass comma-separated values.",
+        rich_help_panel="Exclusions",
     ),
     exclude_solar: bool = typer.Option(
         False,
         "--exclude-solar",
         help="Exclude solar observations.",
+        rich_help_panel="Exclusions",
     ),
     cycles: list[int] | None = typer.Option(
         None,
         "--cycle",
         help="ALMA cycle number(s). Cycle N maps to proposal_id prefix {2012+N}.",
+        rich_help_panel="Target",
     ),
     project_codes: list[str] | None = typer.Option(
         None,
@@ -243,37 +268,44 @@ def metadata_query(
             "Exact ALMA project code(s). Repeat for multiple or pass comma-separated values. "
             "Example: --project-code 2019.1.00001.S --project-code 2022.1.00333.S"
         ),
+        rich_help_panel="Target",
     ),
     public_only: bool = typer.Option(
         True,
         "--public-only/--include-proprietary",
         help="Restrict to public data (default: public only).",
+        rich_help_panel="Science",
     ),
     science_only: bool = typer.Option(
         True,
         "--science-only/--include-non-science",
         help="Restrict to science observations (default: science only).",
+        rich_help_panel="Science",
     ),
     exclude_mosaic: bool = typer.Option(
         True,
         "--exclude-mosaic/--include-mosaic",
         help="Exclude mosaic observations (default: excluded).",
+        rich_help_panel="Observation",
     ),
     visible_columns: list[str] | None = typer.Option(
         None,
         "--visible-column",
         help="Column(s) to include in output (ordered). Repeat this option per column.",
+        rich_help_panel="Output",
     ),
     limit: int | None = typer.Option(
         None,
         "--limit",
         min=1,
         help="Maximum number of metadata rows to keep. Defaults to unlimited.",
+        rich_help_panel="Output",
     ),
     save_csv: Path | None = typer.Option(
         None,
         "--save-csv",
         help="Destination CSV for normalized metadata rows.",
+        rich_help_panel="Output",
     ),
     save_products_csv: Path | None = typer.Option(
         None,
@@ -282,6 +314,7 @@ def metadata_query(
             "Optional destination CSV for the DataLink product rows of the queried "
             "member OUS UIDs, ready for `products download --products-csv`."
         ),
+        rich_help_panel="Output",
     ),
     product_member_limit: int | None = typer.Option(
         None,
@@ -290,12 +323,14 @@ def metadata_query(
         help=(
             "How many queried member OUS UIDs to resolve into product rows. Defaults to unlimited."
         ),
+        rich_help_panel="Output",
     ),
     yes: bool = typer.Option(
         False,
         "--yes",
         "-y",
         help="Skip confirmation prompt and start the query immediately.",
+        rich_help_panel="Output",
     ),
 ) -> None:
     """Query ALMA metadata from TAP and save normalized CSV results."""

@@ -378,11 +378,13 @@ def image_from_ms(
         help="Fraction of the FOV to image",
         default=1.5,
         min=1e-6,
+        rich_help_panel="Imaging",
     ),
     beam_sampling: float = typer.Option(
         help="Number of pixels to use to sample the synthetized beam. Could be fractional.",
         default=8,
         min=1e-6,
+        rich_help_panel="Imaging",
     ),
     # Compact-configuration images were ~12 beams wide: the source's sidelobes
     # filled them, inflated the noise WSClean cleaned to and left more source
@@ -398,6 +400,7 @@ def image_from_ms(
             "Make every image at least this many synthesized beams wide, whatever "
             "--fov-fraction gives (default 32; 0: no minimum)."
         ),
+        rich_help_panel="Imaging",
     ),
     multiscale: bool = typer.Option(
         False,
@@ -406,13 +409,17 @@ def image_from_ms(
             "Clean with WSClean's multi-scale algorithm (-multiscale) for extended emission. "
             "Off by default: it can diverge on bright sources in small images."
         ),
+        rich_help_panel="Imaging",
     ),
-    num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
+    num_cores: int = typer.Option(
+        help="Number of cores per imaging task", default=10, min=1, rich_help_panel="Cluster"
+    ),
     max_cores_per_node: MaxCoresPerNode = 95,
     wsclean_bin: str = typer.Option(
         "wsclean",
         "--wsclean-bin",
         help="Path or executable name of the WSClean binary the workers run.",
+        rich_help_panel="Advanced",
     ),
     auto_threshold: float = typer.Option(
         1.0,
@@ -423,6 +430,7 @@ def image_from_ms(
             "residual noise (WSClean -auto-threshold; default 1, inside the --auto-mask "
             "mask). 0 disables it and cleaning runs to -niter."
         ),
+        rich_help_panel="Imaging",
     ),
     auto_mask: float = typer.Option(
         3.0,
@@ -433,6 +441,7 @@ def image_from_ms(
             "then only inside the mask it found down to --auto-threshold. Must be above "
             "--auto-threshold; 0 disables masking."
         ),
+        rich_help_panel="Imaging",
     ),
     task_memory_gb: float = typer.Option(
         0.0,
@@ -443,6 +452,7 @@ def image_from_ms(
             "worker's Slurm allocation divided by the tasks per node. 0 (default) falls back "
             "to -mem <num-cores/max-cores-per-node> percent of the node."
         ),
+        rich_help_panel="Cluster",
     ),
     single_window: bool = typer.Option(
         True,
@@ -453,6 +463,7 @@ def image_from_ms(
             "reads out of bounds on multi-window ALMA sets and crashes about half the tasks; "
             "--no-single-window-ms images the original MS with -spws/-field instead."
         ),
+        rich_help_panel="Advanced",
     ),
     task_retries: int = typer.Option(
         3,
@@ -463,6 +474,7 @@ def image_from_ms(
             "marking it failed. WSClean 3.7's multi-threaded reordering crashes "
             "non-deterministically on some inputs; a crash costs seconds."
         ),
+        rich_help_panel="Advanced",
     ),
     max_weight: float = typer.Option(
         DEFAULT_MAX_WEIGHT,
@@ -474,6 +486,7 @@ def image_from_ms(
             "were never re-flagged carry WEIGHT ~1e5-1e8 with garbage amplitudes and would "
             "dominate the image; physical weights stay below ~1e3."
         ),
+        rich_help_panel="Advanced",
     ),
     scratch_dir: Path | None = typer.Option(
         None,
@@ -482,6 +495,7 @@ def image_from_ms(
             "Directory for WSClean's reordered visibilities (one sub-directory per task, "
             "removed afterwards). Default: the task's output directory."
         ),
+        rich_help_panel="Advanced",
     ),
     continuum_restart: bool = typer.Option(
         True,
@@ -492,6 +506,7 @@ def image_from_ms(
             "a bright source's sidelobes inflate the noise, misses its fainter parts "
             "(default; only with --single-window-ms, whose per-task copy gets MODEL_DATA)."
         ),
+        rich_help_panel="Imaging",
     ),
     update_model: bool = typer.Option(
         False,
@@ -501,6 +516,7 @@ def image_from_ms(
             "-update-model-required). Off by default: concurrent spectral-window tasks "
             "would write the same MS and every calibrated MS would grow."
         ),
+        rich_help_panel="Advanced",
     ),
     postprocess_backend: PostprocessBackend = Backend.slurm,
     slurm_queue: SlurmQueue = "normal",
@@ -508,7 +524,12 @@ def image_from_ms(
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(
-        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+        1,
+        "--slurm-workers",
+        "--slurm-n-jobs",
+        min=1,
+        help="Number of Slurm workers (jobs).",
+        rich_help_panel="Cluster",
     ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
@@ -521,11 +542,13 @@ def image_from_ms(
             "from before markers existed) and write its marker. Tasks with a marker are "
             "always skipped."
         ),
+        rich_help_panel="Outputs",
     ),
     overwrite_outputs: bool = typer.Option(
         False,
         "--overwrite-outputs",
         help="Redo every task, including the ones with a .done marker.",
+        rich_help_panel="Outputs",
     ),
     continue_on_error: bool = typer.Option(
         True,
@@ -535,6 +558,7 @@ def image_from_ms(
             "tasks are listed at the end and the command exits 1. --fail-fast stops at the "
             "first failure."
         ),
+        rich_help_panel="Outputs",
     ),
     continuum: bool = typer.Option(
         True,
@@ -543,6 +567,7 @@ def image_from_ms(
             "Make the continuum image of every window (wsclean-image.fits; default). "
             "--no-continuum with --cube adds cubes next to existing continuum images."
         ),
+        rich_help_panel="Imaging",
     ),
     cube: bool = typer.Option(
         False,
@@ -552,6 +577,7 @@ def image_from_ms(
             "count chosen per window by --spectral-sampling, --velocity-resolution and "
             "--max-cube-gb), stacked into wsclean-cube-<product>.fits."
         ),
+        rich_help_panel="Spectral cube",
     ),
     contsub: bool = typer.Option(
         False,
@@ -561,6 +587,7 @@ def image_from_ms(
             "a polynomial fitted along frequency per pixel, line channels found by 3-sigma "
             "clipping. Off by default. Needs --cube."
         ),
+        rich_help_panel="Continuum subtraction",
     ),
     selfcal: str = typer.Option(
         "",
@@ -572,12 +599,14 @@ def image_from_ms(
             "phase solution, e.g. 'inf,30s,ap:inf'. A round is kept only if the continuum "
             "S/N rises. Empty (default): off. Needs --continuum and --single-window-ms."
         ),
+        rich_help_panel="Self-calibration",
     ),
     selfcal_min_snr: float = typer.Option(
         20.0,
         "--selfcal-min-snr",
         min=0.0,
         help="Skip self-calibration when the initial continuum S/N is below this.",
+        rich_help_panel="Self-calibration",
     ),
     noise_products: bool = typer.Option(
         True,
@@ -588,6 +617,7 @@ def image_from_ms(
             "(residual + correction: all the data the model does not explain) and the gain "
             "tables in selfcal_gains/ (default)."
         ),
+        rich_help_panel="Quality products",
     ),
     pbcor: bool = typer.Option(
         False,
@@ -598,6 +628,7 @@ def image_from_ms(
             "wsclean[-cube]-image.pbcor.fits (blanked below 0.2). Off by default; "
             "'image pb-correct' adds them to an existing run."
         ),
+        rich_help_panel="Quality products",
     ),
     casa_data_root: Path | None = typer.Option(
         None,
@@ -606,6 +637,7 @@ def image_from_ms(
             "CASA runtime data for --selfcal (default <output>/.casa-data, downloaded once "
             "by the driver when missing, as the calibration stage does)."
         ),
+        rich_help_panel="Self-calibration",
     ),
     uv_contsub: bool = typer.Option(
         False,
@@ -617,6 +649,7 @@ def image_from_ms(
             "continuum and every cube product holds only the lines. Needs --cube and "
             "--single-window-ms; replaces --contsub."
         ),
+        rich_help_panel="Continuum subtraction",
     ),
     contsub_order: int = typer.Option(
         1,
@@ -627,6 +660,7 @@ def image_from_ms(
             "Continuum polynomial order for --contsub and --uv-contsub: 0 (constant) or 1 "
             "(linear, default)."
         ),
+        rich_help_panel="Continuum subtraction",
     ),
     spectral_sampling: float = typer.Option(
         2.0,
@@ -637,12 +671,14 @@ def image_from_ms(
             "--beam-sampling). 2 keeps the native channels of ALMA's Hanning-smoothed "
             "windows; 1 halves them."
         ),
+        rich_help_panel="Spectral cube",
     ),
     velocity_resolution: float = typer.Option(
         0.0,
         "--velocity-resolution",
         min=0.0,
         help="Narrowest cube channel in km/s at the window's reference frequency (0: no limit).",
+        rich_help_panel="Spectral cube",
     ),
     max_cube_gb: float = typer.Option(
         4.0,
@@ -653,6 +689,7 @@ def image_from_ms(
             "get fewer, wider channels. Channel counts are divisors of the native count, so "
             "every cube channel averages the same number of native channels."
         ),
+        rich_help_panel="Spectral cube",
     ),
     cube_products: str = typer.Option(
         ",".join(CUBE_PRODUCTS),
@@ -661,6 +698,7 @@ def image_from_ms(
             "Comma-separated cube products to keep: image, residual, psf, model, dirty "
             "(default: all five). The others are removed (dirty is not even made)."
         ),
+        rich_help_panel="Spectral cube",
     ),
     # On uid___A002_X10ded83_X6af4 SPW 16 joining cut the stacked line-free
     # residual from 12 % to 8 % of the image but raised the line channels'
@@ -673,6 +711,7 @@ def image_from_ms(
             "continuum too faint to clean channel by channel is cleaned too, but narrow "
             "lines are cleaned worse. Off by default. Needs --cube."
         ),
+        rich_help_panel="Spectral cube",
     ),
     cube_line_mask: bool = typer.Option(
         True,
@@ -683,6 +722,7 @@ def image_from_ms(
             "sum, are cleaned too (default; with --cube and --single-window-ms; ~2x the cube "
             "time)."
         ),
+        rich_help_panel="Spectral cube",
     ),
     cube_reorder: bool = typer.Option(
         True,
@@ -691,11 +731,13 @@ def image_from_ms(
             "Let WSClean reorder the single-window MS per channel for the cube (default). "
             "Without it WSClean re-reads the whole MS for every cube channel: ~25x slower."
         ),
+        rich_help_panel="Advanced",
     ),
     plan_only: bool = typer.Option(
         False,
         "--plan-only",
         help="Print the channel plan and the projected cube volume, then exit without imaging.",
+        rich_help_panel="Spectral cube",
     ),
 ):
     """Image every (MS, spectral window) row of a parameter CSV with WSClean.
@@ -975,37 +1017,56 @@ def image_set(
         help="Fraction of the FOV to image",
         default=1.5,
         min=1e-6,
+        rich_help_panel="Imaging",
     ),
     beam_sampling: float = typer.Option(
         help="Number of pixels to use to sample the synthetized beam. Could be fractional.",
         default=8,
         min=1e-6,
+        rich_help_panel="Imaging",
     ),
-    num_cores: int = typer.Option(help="Number of cores per imaging task", default=10, min=1),
+    num_cores: int = typer.Option(
+        help="Number of cores per imaging task", default=10, min=1, rich_help_panel="Cluster"
+    ),
     max_cores_per_node: MaxCoresPerNode = 95,
-    wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin"),
-    auto_threshold: float = typer.Option(1.0, "--auto-threshold", min=0.0),
-    auto_mask: float = typer.Option(3.0, "--auto-mask", min=0.0),
-    update_model: bool = typer.Option(False, "--update-model/--no-update-model"),
-    task_memory_gb: float = typer.Option(0.0, "--task-memory-gb", min=0.0),
-    task_retries: int = typer.Option(3, "--task-retries", min=0),
-    single_window: bool = typer.Option(True, "--single-window-ms/--no-single-window-ms"),
-    max_weight: float = typer.Option(10000.0, "--max-weight", min=0.0),
-    scratch_dir: Path | None = typer.Option(None, "--scratch-dir"),
+    wsclean_bin: str = typer.Option("wsclean", "--wsclean-bin", rich_help_panel="Advanced"),
+    auto_threshold: float = typer.Option(
+        1.0, "--auto-threshold", min=0.0, rich_help_panel="Imaging"
+    ),
+    auto_mask: float = typer.Option(3.0, "--auto-mask", min=0.0, rich_help_panel="Imaging"),
+    update_model: bool = typer.Option(
+        False, "--update-model/--no-update-model", rich_help_panel="Advanced"
+    ),
+    task_memory_gb: float = typer.Option(
+        0.0, "--task-memory-gb", min=0.0, rich_help_panel="Cluster"
+    ),
+    task_retries: int = typer.Option(3, "--task-retries", min=0, rich_help_panel="Advanced"),
+    single_window: bool = typer.Option(
+        True, "--single-window-ms/--no-single-window-ms", rich_help_panel="Advanced"
+    ),
+    max_weight: float = typer.Option(10000.0, "--max-weight", min=0.0, rich_help_panel="Advanced"),
+    scratch_dir: Path | None = typer.Option(None, "--scratch-dir", rich_help_panel="Advanced"),
     postprocess_backend: PostprocessBackend = Backend.slurm,
     slurm_queue: SlurmQueue = "normal",
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(
-        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+        1,
+        "--slurm-workers",
+        "--slurm-n-jobs",
+        min=1,
+        help="Number of Slurm workers (jobs).",
+        rich_help_panel="Cluster",
     ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
     task_timeout: TaskTimeout = 3600,
-    skip_existing: bool = typer.Option(False, "--skip-existing"),
-    overwrite_outputs: bool = typer.Option(False, "--overwrite-outputs"),
-    continue_on_error: bool = typer.Option(True, "--continue-on-error/--fail-fast"),
+    skip_existing: bool = typer.Option(False, "--skip-existing", rich_help_panel="Outputs"),
+    overwrite_outputs: bool = typer.Option(False, "--overwrite-outputs", rich_help_panel="Outputs"),
+    continue_on_error: bool = typer.Option(
+        True, "--continue-on-error/--fail-fast", rich_help_panel="Outputs"
+    ),
 ):
     """Alias of ``image-from-ms``."""
     image_from_ms(
@@ -1064,15 +1125,24 @@ def image_set(
 def ms_from_image(
     input_ms_or_folder: Path = typer.Argument(help="Single MS directory or folder of MSs"),
     output_directory: Path = typer.Argument(help="Directory containing model FITS products"),
-    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
-    num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
+    use_slurm: bool = typer.Option(
+        help="Whether or not to use slurm or not", default=True, rich_help_panel="Cluster"
+    ),
+    num_cores: int = typer.Option(
+        help="Number of cores per predict task", default=1, min=1, rich_help_panel="Cluster"
+    ),
     max_cores_per_node: MaxCoresPerNode = 95,
     slurm_queue: SlurmQueue = "normal",
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(
-        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+        1,
+        "--slurm-workers",
+        "--slurm-n-jobs",
+        min=1,
+        help="Number of Slurm workers (jobs).",
+        rich_help_panel="Cluster",
     ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
@@ -1205,15 +1275,24 @@ def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
 def predict_batch(
     imaging_parameters: Path = typer.Argument(..., help="Imaging parameter file"),
     output_directory: Path = typer.Argument(..., help="Output directory path"),
-    num_cores: int = typer.Option(help="Number of cores per predict task", default=1, min=1),
-    use_slurm: bool = typer.Option(help="Whether or not to use slurm or not", default=True),
+    num_cores: int = typer.Option(
+        help="Number of cores per predict task", default=1, min=1, rich_help_panel="Cluster"
+    ),
+    use_slurm: bool = typer.Option(
+        help="Whether or not to use slurm or not", default=True, rich_help_panel="Cluster"
+    ),
     max_cores_per_node: MaxCoresPerNode = 95,
     slurm_queue: SlurmQueue = "normal",
     slurm_project: SlurmProject = None,
     slurm_walltime: SlurmWalltime = "02:00:00",
     slurm_memory: SlurmMemory = "16GB",
     slurm_n_jobs: int = typer.Option(
-        1, "--slurm-workers", "--slurm-n-jobs", min=1, help="Number of Slurm workers (jobs)."
+        1,
+        "--slurm-workers",
+        "--slurm-n-jobs",
+        min=1,
+        help="Number of Slurm workers (jobs).",
+        rich_help_panel="Cluster",
     ),
     scheduler_host: SchedulerHost = None,
     scheduler_interface: SchedulerInterface = None,
