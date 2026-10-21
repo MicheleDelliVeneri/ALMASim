@@ -1,55 +1,55 @@
-# ALMASim Frontend
+# ALMASim frontend
 
-SolidStart frontend for ALMASim with TypeScript and Tailwind CSS.
-
-## Setup
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Set the backend URL (optional, only needed if not using the default):
-```bash
-# Dev: build-time fallback (Vite reads this and bakes it in only as a default)
-export VITE_API_URL=http://localhost:8000
-
-# Production / Docker: runtime override (read by hooks.server.ts on every
-# request and injected into the served HTML — no rebuild needed).
-export API_URL=http://backend:8000
-```
-
-3. Run development server:
-```bash
-npm run dev
-```
-
-4. Build for production:
-```bash
-npm run build
-```
-
-5. Start production server:
-```bash
-npm start
-```
+SvelteKit 3 (Svelte 5 runes) with TypeScript, Tailwind CSS 4 and Vite 8,
+served by `@sveltejs/adapter-node`. It talks to the FastAPI backend in
+`../backend`.
 
 ## Development
 
-- Development server: http://localhost:5173
-- API proxy: `/api` requests are proxied to `http://localhost:8000`
+Node 22.17 or newer.
 
-## Architecture
+```bash
+npm ci
+npm run dev        # http://localhost:3000
+```
 
-- **Routes** (`app/routes/`): SolidStart pages (file-based routing)
-- **API Client** (`app/lib/api/`): TypeScript client for backend API
-- **Components** (`app/components/`): Reusable Solid components
-- **Styling**: Tailwind CSS for modern, responsive design
+The backend address the browser uses comes from `API_URL`, read on every
+request by `src/hooks.server.ts` and injected into the page. Without it the
+build-time `VITE_API_URL`, then `http://localhost:8000`, is used
+(`src/lib/config.ts`). With Docker, `docker compose up` from the repository
+root starts the backend, the database and this dev server together.
 
-## Tech Stack
+## Checks
 
-- **SolidStart**: Full-stack framework built on SolidJS
-- **SolidJS**: Reactive UI library
-- **TypeScript**: Type-safe development
-- **Tailwind CSS**: Utility-first CSS framework
-- **Vite**: Fast build tool
+These are the commands CI runs (`.github/workflows/lint_and_test.yml`):
+
+```bash
+npm run gen:api    # regenerate src/lib/api/schema.d.ts from openapi.json
+npm run check      # svelte-check
+npm run lint       # eslint
+npx prettier --check src
+npm test           # vitest
+npm run build
+```
+
+`src/lib/api/openapi.json` is written by `scripts/generate_openapi.py` at the
+repository root and guarded by `tests/unit/test_openapi_snapshot.py`.
+
+## Production
+
+```bash
+npm run build
+API_URL=https://almasim.example.org/api-host node build
+```
+
+The image in `Dockerfile` does the same; `docker-compose.prod.yml` runs it.
+
+## Layout
+
+- `src/routes/`: pages (metadata, data, simulations, visualizer, combination,
+  imaging)
+- `src/lib/api/`: typed API client per backend router, plus the generated
+  `schema.d.ts`
+- `src/lib/components/`: components by area, and `shared/` for dialogs,
+  pickers and status badges
+- `src/lib/utils/`: pure TypeScript helpers, each with a Vitest test

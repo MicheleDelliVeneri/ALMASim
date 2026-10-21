@@ -29,10 +29,8 @@ services:
       # Mount source code for hot reload
       - ./frontend/src:/app/src
       - ./frontend/static:/app/static
-      - ./frontend/svelte.config.js:/app/svelte.config.js
       - ./frontend/vite.config.ts:/app/vite.config.ts
       - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./frontend/tailwind.config.js:/app/tailwind.config.js
       - ./frontend/postcss.config.js:/app/postcss.config.js
       # Exclude node_modules from volume mount
       - /app/node_modules

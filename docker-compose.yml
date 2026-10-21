@@ -47,7 +47,6 @@ services:
       - GALAXY_ZOO_DIR=/app/data/galaxy_zoo
       - HUBBLE_DIR=/app/data/hubble
       - DATABASE_URL=postgresql://almasim:almasim_dev_password@postgres:5432/almasim
-      - DOWNLOAD_DIR=/host_home
       # Request paths must lie under HOST_DIR, OUTPUT_DIR, DATA_DIR or these extra
       # roots (JSON list), and Dask schedulers be DASK_SCHEDULER or listed here.
       # - ALLOWED_ROOTS=["/SKAO_data"]
@@ -83,7 +82,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      # The address the browser uses for the API (read per request by
+      # frontend/src/hooks.server.ts and injected into the page).
+      - API_URL=http://localhost:8000
     depends_on:
       backend:
         condition: service_healthy
