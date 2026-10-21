@@ -117,10 +117,17 @@ def start(job: Job, run_dir: str | os.PathLike[str], profile: Profile) -> Proces
         raise ServerExecutorError(f"run {job.id} is a {job.executor} job, not a server job")
     run_dir = Path(run_dir)
     cmd = [*_polite_prefix(), profile.python, "-m", "almasim.jobs.wrapper", str(run_dir)]
+    # The job runs in its run folder: give it the profile files by absolute path.
+    env = dict(os.environ)
+    if profile.site_file is not None:
+        env["ALMASIM_SITE_PROFILE"] = str(profile.site_file)
+    if profile.user_file is not None:
+        env["ALMASIM_PROFILE"] = str(profile.user_file)
     with (run_dir / SERVER_OUT_NAME).open("ab") as out:
         process = subprocess.Popen(
             cmd,
             cwd=run_dir,
+            env=env,
             stdin=subprocess.DEVNULL,
             stdout=out,
             stderr=subprocess.STDOUT,

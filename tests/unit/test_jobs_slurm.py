@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -165,3 +166,10 @@ def test_a_job_that_completed_without_a_report_is_lost():
 
 def test_a_pending_job_not_yet_submitted_stays_pending():
     assert reconcile(_job(), RunStatus(), None) == (JobState.PENDING, "")
+
+
+def test_the_script_names_the_profile_files_by_absolute_path(tmp_path):
+    profile = Profile(site_file=Path("/etc/almasim/site.toml"), user_file=Path("/home/me/a b.toml"))
+    script = render_script(_job(), tmp_path, profile)
+    assert "export ALMASIM_SITE_PROFILE=/etc/almasim/site.toml" in script
+    assert "export ALMASIM_PROFILE='/home/me/a b.toml'" in script

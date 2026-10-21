@@ -129,3 +129,12 @@ def test_the_zwicky_example_profile_loads(tmp_path, monkeypatch):
     profile = load_profile(site=ROOT / "examples" / "site-profiles" / "zwicky.toml", environ={})
     assert profile.partition == "zwickyA-CPU"
     assert profile.resources_for("image image-from-ms").time == "2-00:00:00"
+
+
+def test_the_profile_files_are_kept_as_absolute_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write(tmp_path / "site.toml", SITE)
+    _write(tmp_path / "me.toml", "")
+    profile = load_profile(site="site.toml", user="me.toml", environ={})
+    assert profile.site_file == tmp_path / "site.toml"
+    assert profile.user_file == tmp_path / "me.toml"

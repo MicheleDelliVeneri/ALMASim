@@ -88,6 +88,7 @@ _GROUPS = (
     ("visibilities", ".visibilities", "visibilities_app", "Visibility processing commands."),
     ("predict", ".predict", "predict_app", "Model prediction commands."),
     ("image", ".image", "image_app", "Data product batch imaging."),
+    ("jobs", ".jobs", "jobs_app", "List, follow and control submitted runs."),
 )
 
 _FORWARDED = {
@@ -138,6 +139,50 @@ def doctor_command(
     from .doctor import doctor
 
     doctor(slurm, site_profile, profile)
+
+
+@app.command(
+    "submit",
+    help=(
+        "Run an almasim command as a job: on Slurm, or on this node for the commands that "
+        "need the internet. Options before the command are the job's; the rest is the "
+        "command, e.g. `almasim submit --cpus 8 image image-from-ms params.csv out --cube`."
+    ),
+    context_settings={"ignore_unknown_options": True, "allow_interspersed_args": False},
+)
+def submit_command(
+    command: list[str] = typer.Argument(..., help="The almasim command line to run."),
+    partition: str | None = typer.Option(None, "--partition", help="Slurm partition."),
+    account: str | None = typer.Option(None, "--account", help="Slurm account."),
+    cpus: int | None = typer.Option(None, "--cpus", min=1, help="CPUs for the job."),
+    memory: str | None = typer.Option(None, "--memory", help="Memory for the job, e.g. 16G."),
+    time_limit: str | None = typer.Option(
+        None, "--time", help="Time limit, e.g. 02:00:00 or 2-00:00:00."
+    ),
+    title: str = typer.Option("", "--title", help="A name for the run."),
+    wait: bool = typer.Option(
+        False, "--wait", help="Wait for the run to end; exit 1 unless it succeeded."
+    ),
+    profile: Path | None = typer.Option(
+        None,
+        "--profile",
+        help="User profile (default: $ALMASIM_PROFILE, else ~/.config/almasim/almasim.toml).",
+    ),
+) -> None:
+    """Submit ``almasim <command>`` with the profile's defaults and these overrides."""
+    from .jobs import submit
+
+    submit(
+        command,
+        partition=partition,
+        account=account,
+        cpus=cpus,
+        memory=memory,
+        time_limit=time_limit,
+        title=title,
+        wait=wait,
+        user_profile=profile,
+    )
 
 
 def main() -> None:

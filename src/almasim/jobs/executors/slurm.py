@@ -42,6 +42,16 @@ def _job_name(job: Job) -> str:
     return f"almasim-{words or 'job'}"[:64]
 
 
+def _profile_exports(profile: Profile) -> list[str]:
+    """The profile files as absolute paths, for commands in the job that read them."""
+    exports = []
+    if profile.site_file is not None:
+        exports.append(f"export ALMASIM_SITE_PROFILE={shlex.quote(str(profile.site_file))}")
+    if profile.user_file is not None:
+        exports.append(f"export ALMASIM_PROFILE={shlex.quote(str(profile.user_file))}")
+    return exports
+
+
 def render_script(job: Job, run_dir: Path, profile: Profile) -> str:
     """The batch script for ``job``. Every value in it was validated by Resources."""
     r = job.resources
@@ -62,6 +72,7 @@ def render_script(job: Job, run_dir: Path, profile: Profile) -> str:
         "",
         f"# almasim {shlex.join(job.argv)}",
         f"# run {job.id}, submitted by {job.owner}",
+        *_profile_exports(profile),
         *profile.setup,
         f"exec {shlex.quote(profile.python)} -m almasim.jobs.wrapper {shlex.quote(str(run_dir))}",
     ]

@@ -532,6 +532,123 @@ $ almasim image pb-correct [OPTIONS] {imaging_parameters} {output_directory}
 * `--cutoff <float range>`: Blank the corrected images where the beam's response is below this.  [default: 0.2; 0.001<=x<=0.999]
 * `--help`: Show this message and exit.
 
+# `almasim jobs`
+
+List, follow and control runs submitted with `almasim submit` or the web console.
+
+**Usage**:
+
+```console
+$ almasim jobs [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `list`: List runs, newest first.
+* `show`: Show one run: its command, resources,...
+* `logs`: Print a run's output.
+* `cancel`: Stop a run (yours only).
+* `resubmit`: Run the same command again, with the same...
+
+## `almasim jobs list`
+
+List runs, newest first.
+
+**Usage**:
+
+```console
+$ almasim jobs list [OPTIONS]
+```
+
+**Options**:
+
+* `--all`: Include the team's runs, not only yours.
+* `--limit <int range>`: How many runs to show, newest first.  [default: 20; x>=1]
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE or ~/.config/almasim).
+* `--help`: Show this message and exit.
+
+## `almasim jobs show`
+
+Show one run: its command, resources, state and files.
+
+**Usage**:
+
+```console
+$ almasim jobs show [OPTIONS] {run_id}
+```
+
+**Arguments**:
+
+* `run_id`: Run id, or its first or last characters.  [required]
+
+**Options**:
+
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE or ~/.config/almasim).
+* `--help`: Show this message and exit.
+
+## `almasim jobs logs`
+
+Print a run's output.
+
+**Usage**:
+
+```console
+$ almasim jobs logs [OPTIONS] {run_id}
+```
+
+**Arguments**:
+
+* `run_id`: Run id, or its first or last characters.  [required]
+
+**Options**:
+
+* `--stderr`: Show stderr.log instead of stdout.log.
+* `-f, --follow`: Keep printing until the run ends.
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE or ~/.config/almasim).
+* `--help`: Show this message and exit.
+
+## `almasim jobs cancel`
+
+Stop a run (yours only).
+
+**Usage**:
+
+```console
+$ almasim jobs cancel [OPTIONS] {run_id}
+```
+
+**Arguments**:
+
+* `run_id`: Run id, or its first or last characters.  [required]
+
+**Options**:
+
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE or ~/.config/almasim).
+* `--help`: Show this message and exit.
+
+## `almasim jobs resubmit`
+
+Run the same command again, with the same resources, as a new run.
+
+**Usage**:
+
+```console
+$ almasim jobs resubmit [OPTIONS] {run_id}
+```
+
+**Arguments**:
+
+* `run_id`: Run id, or its first or last characters.  [required]
+
+**Options**:
+
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE or ~/.config/almasim).
+* `--help`: Show this message and exit.
+
 # `almasim clean`
 
 Run WSClean and forward all extra arguments unchanged.
@@ -563,5 +680,31 @@ $ almasim doctor [OPTIONS]
 
 * `--slurm`: Run the checks on a compute node (with srun), as a job sees them.
 * `--site-profile <path>`: Site profile (default: $ALMASIM_SITE_PROFILE).
+* `--profile <path>`: User profile (default: $ALMASIM_PROFILE, else ~/.config/almasim/almasim.toml).
+* `--help`: Show this message and exit.
+
+# `almasim submit`
+
+Submit ``almasim <command>`` with the profile's defaults and these overrides.
+
+**Usage**:
+
+```console
+$ almasim submit [OPTIONS] {command}...
+```
+
+**Arguments**:
+
+* `command...`: The almasim command line to run.  [required]
+
+**Options**:
+
+* `--partition <str>`: Slurm partition.
+* `--account <str>`: Slurm account.
+* `--cpus <int range>`: CPUs for the job.  [x>=1]
+* `--memory <str>`: Memory for the job, e.g. 16G.
+* `--time <str>`: Time limit, e.g. 02:00:00 or 2-00:00:00.
+* `--title <str>`: A name for the run.
+* `--wait`: Wait for the run to end; exit 1 unless it succeeded.
 * `--profile <path>`: User profile (default: $ALMASIM_PROFILE, else ~/.config/almasim/almasim.toml).
 * `--help`: Show this message and exit.
