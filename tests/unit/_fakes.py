@@ -127,3 +127,29 @@ class FakeTask:
 
     def run(self, cmd, log):
         return self._run(cmd)
+
+
+def flat_run_kwargs(imaging, execution, **kwargs):
+    """What a fake ``run_imaging_tasks`` received, under the old keyword names (MADIV-28 T4.1)."""
+    flat = {
+        "backend_kind": execution.backend,
+        "cores_per_task": execution.cores_per_task,
+        "node_cores": execution.node_cores,
+        "queue": execution.queue,
+        "project": execution.project,
+        "walltime": execution.walltime,
+        "memory": execution.memory,
+        "n_jobs": execution.n_jobs,
+        "scheduler_host": execution.scheduler_host,
+        "scheduler_interface": execution.scheduler_interface,
+        "task_timeout": execution.task_timeout,
+        "task_retries": execution.task_retries,
+        "continue_on_error": execution.continue_on_error,
+        "scratch_root": execution.scratch_root,
+        "pbcor": imaging.pbcor,
+        **imaging.task_kwargs(kwargs.get("casa_data")),
+        "imaging": imaging,
+        "execution": execution,
+    }
+    flat.update(kwargs)
+    return flat

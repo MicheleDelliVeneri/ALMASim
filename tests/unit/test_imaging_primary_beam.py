@@ -16,7 +16,7 @@ from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging import primary_beam as pbm
 from almasim.services.imaging.task_run import TaskRun
 
-from ._fakes import patch_everywhere
+from ._fakes import flat_run_kwargs, patch_everywhere
 
 runner = CliRunner()
 C = pbm.SPEED_OF_LIGHT_M_S
@@ -311,7 +311,13 @@ def test_build_imaging_tasks_carries_the_dish_diameter(tmp_path):
 def test_image_from_ms_pbcor_is_opt_in(tmp_path, monkeypatch, flags, expected):
     csv = _params(tmp_path, [_param_row(1)])
     seen = {}
-    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    monkeypatch.setattr(
+        cli_image,
+        "run_imaging_tasks",
+        lambda tasks, imaging, execution, **k: seen.update(
+            flat_run_kwargs(imaging, execution, **k)
+        ),
+    )
     result = runner.invoke(
         cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
     )

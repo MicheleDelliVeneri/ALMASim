@@ -34,6 +34,7 @@ from almasim.services.imaging.ms_geometry import (  # noqa: F401  (moved; re-exp
     science_selection,
     spectral_window_properties,
 )
+from almasim.services.imaging.options import ExecOptions, ImagingOptions, SelfcalOptions
 from almasim.services.imaging.wsclean_plan import (  # noqa: F401  (moved; re-exported)
     CUBE_PRODUCTS,
     CubeOptions,
@@ -648,53 +649,79 @@ def image_from_ms(
     full WSClean output. A rerun skips the tasks with a ``.done`` marker and
     retries the rest, so an interrupted batch can simply be resubmitted.
     """
-    backend_kind = postprocess_backend.lower()
-
     # A 3-sigma stop without a mask left ~3 sigma of source in every channel's
     # residual: stacked over the 3537 line-free channels of uid___A002_X10ded83_X6af4
     # SPW 16 that was 7.9 sigma and 39 % of the image; masking to 3 and cleaning
     # to 1 sigma left 4.1 sigma and 16 % (2026-10-17).
     if 0 < auto_mask <= auto_threshold:
         raise typer.BadParameter("--auto-mask must be above --auto-threshold (or 0 to disable it)")
-    parameters = pd.read_csv(str(imaging_parameters))
-    cube_options: CubeOptions | None = None
-    products: tuple[str, ...] | None = None
-    if cube:
-        products = tuple(p.strip().lower() for p in cube_products.split(",") if p.strip())
-        unknown = sorted(set(products) - set(CUBE_PRODUCTS))
-        if "image" not in products or unknown:
-            raise typer.BadParameter(
-                f"--cube-products must include image and only name {', '.join(CUBE_PRODUCTS)}"
-                + (f" (unknown: {', '.join(unknown)})" if unknown else "")
-            )
-        cube_options = CubeOptions(
-            spectral_sampling=spectral_sampling,
-            velocity_resolution_km_s=velocity_resolution,
-            max_cube_gb=max_cube_gb,
-        )
-        parameters = add_spectral_columns(parameters)
-        _echo_cube_plan(
-            parameters, fov_fraction, beam_sampling, cube_options, products, min_beams_across
-        )
-    elif plan_only or contsub or join_channels or uv_contsub:
+    if plan_only and not cube:
         raise typer.BadParameter(
             "Options that need --cube: --plan-only, --contsub, --uv-contsub, --join-channels"
         )
-    if uv_contsub and contsub:
-        raise typer.BadParameter("--uv-contsub already removes the continuum: drop --contsub")
-    from ..services.imaging.archive_imaging import parse_selfcal_rounds
-
-    solints = [part.strip() for part in selfcal.split(",") if part.strip()]
+    imaging = ImagingOptions(
+        continuum=continuum,
+        cube=(
+            CubeOptions(
+                spectral_sampling=spectral_sampling,
+                velocity_resolution_km_s=velocity_resolution,
+                max_cube_gb=max_cube_gb,
+            )
+            if cube
+            else None
+        ),
+        cube_products=(
+            tuple(p.strip().lower() for p in cube_products.split(",") if p.strip())
+            if cube
+            else None
+        ),
+        single_window=single_window,
+        max_weight=max_weight if max_weight > 0 else None,
+        contsub=contsub,
+        uv_contsub=uv_contsub,
+        contsub_order=contsub_order,
+        join_channels=join_channels,
+        continuum_restart=continuum_restart,
+        cube_line_mask=cube_line_mask,
+        pbcor=pbcor,
+        selfcal=SelfcalOptions(
+            solints=tuple(part.strip() for part in selfcal.split(",") if part.strip()),
+            min_snr=selfcal_min_snr,
+            noise_products=noise_products,
+        ),
+    )
+    execution = ExecOptions(
+        backend=postprocess_backend.lower(),
+        cores_per_task=num_cores,
+        node_cores=max_cores_per_node,
+        queue=slurm_queue,
+        project=slurm_project,
+        walltime=slurm_walltime,
+        memory=slurm_memory,
+        n_jobs=slurm_n_jobs,
+        scheduler_host=scheduler_host,
+        scheduler_interface=scheduler_interface,
+        task_timeout=task_timeout,
+        task_retries=task_retries,
+        continue_on_error=continue_on_error,
+        scratch_root=str(scratch_dir) if scratch_dir is not None else None,
+    )
     try:
-        parse_selfcal_rounds(solints)
+        imaging.validate()
+        execution.validate()
     except ValueError as exc:
-        raise typer.BadParameter(f"--selfcal: {exc}") from exc
-    if solints and not (continuum and single_window):
-        raise typer.BadParameter("--selfcal needs --continuum and --single-window-ms")
-    if uv_contsub and not single_window:
-        raise typer.BadParameter("--uv-contsub needs --single-window-ms: it edits the copy")
-    if not continuum and not cube:
-        raise typer.BadParameter("--no-continuum needs --cube: there would be nothing to image")
+        raise typer.BadParameter(str(exc)) from exc
+    parameters = pd.read_csv(str(imaging_parameters))
+    if imaging.cube is not None:
+        parameters = add_spectral_columns(parameters)
+        _echo_cube_plan(
+            parameters,
+            fov_fraction,
+            beam_sampling,
+            imaging.cube,
+            imaging.cube_products or (),
+            min_beams_across,
+        )
     if plan_only:
         return
     tasks, skipped = build_imaging_tasks(
@@ -712,10 +739,10 @@ def image_from_ms(
         update_model=update_model,
         task_memory_gb=task_memory_gb if task_memory_gb > 0 else None,
         scratch_dir=str(scratch_dir) if scratch_dir is not None else None,
-        single_window=single_window,
-        continuum=continuum,
-        cube=cube_options,
-        cube_products=products,
+        single_window=imaging.single_window,
+        continuum=imaging.continuum,
+        cube=imaging.cube,
+        cube_products=imaging.cube_products,
         cube_reorder=cube_reorder,
         min_beams_across=min_beams_across,
         multiscale=multiscale,
@@ -727,7 +754,7 @@ def image_from_ms(
         typer.echo("All requested tasks are already imaged; nothing to do.")
         return
     casa_data: str | None = None
-    if solints:
+    if imaging.selfcal.solints:
         casa_data = str(_prepare_selfcal_casa_data(output_directory, casa_data_root))
     typer.echo(
         f"Imaging {len(tasks)} (MS, SPW, field) task(s); "
@@ -738,33 +765,10 @@ def image_from_ms(
     try:
         run_imaging_tasks(
             tasks,
-            backend_kind=backend_kind,
-            cores_per_task=num_cores,
-            node_cores=max_cores_per_node,
-            queue=slurm_queue,
-            project=slurm_project,
-            walltime=slurm_walltime,
-            memory=slurm_memory,
-            n_jobs=slurm_n_jobs,
-            scheduler_host=scheduler_host,
-            scheduler_interface=scheduler_interface,
-            task_timeout=task_timeout,
-            continue_on_error=continue_on_error,
-            failures=failures,
-            scratch_root=str(scratch_dir) if scratch_dir is not None else None,
-            task_retries=task_retries,
-            single_window=single_window,
-            max_weight=max_weight if max_weight > 0 else None,
-            cube_products=products,
-            contsub_order=contsub_order if contsub else None,
-            uv_contsub_order=contsub_order if uv_contsub else None,
-            selfcal_solints=solints or None,
-            selfcal_min_snr=selfcal_min_snr,
+            imaging,
+            execution,
             casa_data=casa_data,
-            continuum_restart=continuum_restart and single_window,
-            cube_line_mask=cube_line_mask and cube and single_window,
-            noise_products=noise_products,
-            pbcor=pbcor,
+            failures=failures,
             echo=typer.echo,
         )
     except ImagingRunAborted as exc:

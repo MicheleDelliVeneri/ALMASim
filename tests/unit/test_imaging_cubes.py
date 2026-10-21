@@ -18,7 +18,7 @@ from almasim import cli, cli_image
 from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging import cube as cube_module
 
-from ._fakes import FakeTask, patch_everywhere
+from ._fakes import FakeTask, flat_run_kwargs, patch_everywhere
 
 runner = CliRunner()
 
@@ -368,8 +368,8 @@ def test_image_from_ms_cube_keeps_every_product_and_contsub_is_opt_in(
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
 
-    def _run(tasks, **kwargs):
-        seen.update(kwargs, tasks=tasks)
+    def _run(tasks, imaging, execution, **kwargs):
+        seen.update(flat_run_kwargs(imaging, execution, **kwargs), tasks=tasks)
 
     monkeypatch.setattr(cli_image, "run_imaging_tasks", _run)
     result = runner.invoke(
@@ -610,7 +610,13 @@ def test_image_from_ms_passes_uv_contsub_order(tmp_path, monkeypatch):
     csv = tmp_path / "params.csv"
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
-    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    monkeypatch.setattr(
+        cli_image,
+        "run_imaging_tasks",
+        lambda tasks, imaging, execution, **k: seen.update(
+            flat_run_kwargs(imaging, execution, **k)
+        ),
+    )
     result = runner.invoke(
         cli.app,
         [
@@ -792,7 +798,13 @@ def test_image_from_ms_passes_selfcal_solints_and_casa_data(tmp_path, monkeypatc
     csv = tmp_path / "params.csv"
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
-    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    monkeypatch.setattr(
+        cli_image,
+        "run_imaging_tasks",
+        lambda tasks, imaging, execution, **k: seen.update(
+            flat_run_kwargs(imaging, execution, **k)
+        ),
+    )
     monkeypatch.setattr(
         cli_image, "_prepare_selfcal_casa_data", lambda out, root: Path(out) / ".casa-data"
     )
@@ -885,7 +897,13 @@ def test_image_from_ms_continuum_restart_default(tmp_path, monkeypatch, flags, e
     csv = tmp_path / "params.csv"
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
-    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    monkeypatch.setattr(
+        cli_image,
+        "run_imaging_tasks",
+        lambda tasks, imaging, execution, **k: seen.update(
+            flat_run_kwargs(imaging, execution, **k)
+        ),
+    )
     result = runner.invoke(
         cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
     )
@@ -1043,7 +1061,13 @@ def test_image_from_ms_cube_line_mask_default(tmp_path, monkeypatch, flags, expe
     csv = tmp_path / "params.csv"
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
-    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    monkeypatch.setattr(
+        cli_image,
+        "run_imaging_tasks",
+        lambda tasks, imaging, execution, **k: seen.update(
+            flat_run_kwargs(imaging, execution, **k)
+        ),
+    )
     result = runner.invoke(
         cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
     )
@@ -1143,7 +1167,13 @@ def test_image_from_ms_noise_products_default(tmp_path, monkeypatch, flags, expe
     csv = tmp_path / "params.csv"
     pd.DataFrame([_row()]).to_csv(csv, index=False)
     seen = {}
-    monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda tasks, **k: seen.update(k))
+    monkeypatch.setattr(
+        cli_image,
+        "run_imaging_tasks",
+        lambda tasks, imaging, execution, **k: seen.update(
+            flat_run_kwargs(imaging, execution, **k)
+        ),
+    )
     result = runner.invoke(
         cli.app, ["image", "image-from-ms", str(csv), str(tmp_path / "out"), *flags]
     )

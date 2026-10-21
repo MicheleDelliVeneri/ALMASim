@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import logging
 from time import sleep, time
-from typing import Any, Optional, Protocol, Sequence
+from typing import Any, Optional, Protocol
 
 from tqdm import tqdm
 
 from almasim.services.compute.progress import TaskFailure, error_headline, heartbeat_lines
+from almasim.services.imaging.options import ExecOptions, ImagingOptions
 from almasim.services.imaging.wsclean_plan import ImagingTask
 
 logger = logging.getLogger(__name__)
@@ -76,36 +77,13 @@ def _record_imaging_failure(task: ImagingTask, error: str, failures: list[TaskFa
 
 def run_imaging_tasks(
     tasks: list[ImagingTask],
+    imaging: ImagingOptions,
+    execution: ExecOptions,
     *,
-    backend_kind: str,
-    cores_per_task: int,
-    node_cores: int,
-    queue: str,
-    project: str | None,
-    walltime: str,
-    memory: str,
-    n_jobs: int,
-    scheduler_host: str | None,
-    scheduler_interface: str | None,
-    task_timeout: float | None,
+    casa_data: str | None = None,
     echo: Echo = _log_echo,
-    continue_on_error: bool = True,
     failures: Optional[list[TaskFailure]] = None,
     heartbeat_interval: float = _IMAGING_HEARTBEAT_S,
-    scratch_root: str | None = None,
-    task_retries: int = 3,
-    single_window: bool = True,
-    max_weight: float | None = None,
-    cube_products: Sequence[str] | None = None,
-    contsub_order: int | None = None,
-    uv_contsub_order: int | None = None,
-    selfcal_solints: Sequence[str] | None = None,
-    selfcal_min_snr: float = 20.0,
-    casa_data: str | None = None,
-    continuum_restart: bool = False,
-    cube_line_mask: bool = False,
-    noise_products: bool = False,
-    pbcor: bool = False,
 ) -> list[dict[str, Any]]:
     """Run WSClean tasks, one subprocess each, and never let one failure end the run.
 
@@ -116,6 +94,18 @@ def run_imaging_tasks(
     goes to ``echo`` (called like ``typer.echo``; the log by default).
     """
     from almasim.services.imaging.archive_imaging import imaging_log_path, run_wsclean_task
+
+    backend_kind, cores_per_task = execution.backend, execution.cores_per_task
+    n_jobs, node_cores = execution.n_jobs, execution.node_cores
+    continue_on_error = execution.continue_on_error
+    # The keyword arguments every task gets (MADIV-28 T4.1).
+    shared_kwargs: dict[str, Any] = {
+        "threads": cores_per_task,
+        "timeout": execution.task_timeout,
+        "scratch_root": execution.scratch_root,
+        "retries": execution.task_retries,
+        **imaging.task_kwargs(casa_data),
+    }
 
     if failures is None:
         failures = []
@@ -134,24 +124,10 @@ def run_imaging_tasks(
                         output_dir=str(task.output_dir),
                         ms_path=str(task.ms_path),
                         spw=task.spw,
-                        threads=cores_per_task,
-                        timeout=task_timeout,
-                        scratch_root=scratch_root,
-                        retries=task_retries,
-                        single_window=single_window,
                         field_ids=list(task.field_ids),
-                        max_weight=max_weight,
                         cube_command=task.cube_command,
-                        cube_products=cube_products,
-                        contsub_order=contsub_order,
-                        uv_contsub_order=uv_contsub_order,
-                        selfcal_solints=selfcal_solints,
-                        selfcal_min_snr=selfcal_min_snr,
-                        casa_data=casa_data,
-                        continuum_restart=continuum_restart,
-                        cube_line_mask=cube_line_mask,
-                        noise_products=noise_products,
-                        pb_dish_diameter=task.dish_diameter if pbcor else None,
+                        pb_dish_diameter=task.dish_diameter if imaging.pbcor else None,
+                        **shared_kwargs,
                     )
                 )
             except Exception as exc:
@@ -167,14 +143,14 @@ def run_imaging_tasks(
     started_at = time()
     with create_backend(
         "slurm",
-        queue=queue,
+        queue=execution.queue,
         node_cores=node_cores,
-        memory=memory,
-        walltime=walltime,
+        memory=execution.memory,
+        walltime=execution.walltime,
         n_workers=n_jobs,
-        project=project,
-        scheduler_host=scheduler_host,
-        scheduler_interface=scheduler_interface,
+        project=execution.project,
+        scheduler_host=execution.scheduler_host,
+        scheduler_interface=execution.scheduler_interface,
     ) as backend:
         # Dask assigns a resource-restricted task to a worker the moment it is
         # submitted and does not move it later (tasks last hours, so work
@@ -201,24 +177,10 @@ def run_imaging_tasks(
                 output_dir=str(task.output_dir),
                 ms_path=str(task.ms_path),
                 spw=task.spw,
-                threads=cores_per_task,
-                timeout=task_timeout,
-                scratch_root=scratch_root,
-                retries=task_retries,
-                single_window=single_window,
                 field_ids=list(task.field_ids),
-                max_weight=max_weight,
                 cube_command=task.cube_command,
-                cube_products=cube_products,
-                contsub_order=contsub_order,
-                uv_contsub_order=uv_contsub_order,
-                selfcal_solints=selfcal_solints,
-                selfcal_min_snr=selfcal_min_snr,
-                casa_data=casa_data,
-                continuum_restart=continuum_restart,
-                cube_line_mask=cube_line_mask,
-                noise_products=noise_products,
-                pb_dish_diameter=task.dish_diameter if pbcor else None,
+                pb_dish_diameter=task.dish_diameter if imaging.pbcor else None,
+                **shared_kwargs,
             )
 
         queued = list(range(len(tasks)))
