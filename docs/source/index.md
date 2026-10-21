@@ -21,7 +21,6 @@ metadata
 downloads
 compute
 slurm_scheduler
-frontend
 fidelity_plan
 ```
 

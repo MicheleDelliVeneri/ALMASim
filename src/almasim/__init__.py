@@ -23,5 +23,5 @@ __all__ = [
 __doc__ = """
 ALMASim provides headless building blocks for generating realistic ALMA
 observations.  The legacy PyQt GUI has been removed in favour of reusable
-services that can be orchestrated by CLIs, FastAPI backends, or notebooks.
+services that the CLI, the web console and notebooks orchestrate.
 """

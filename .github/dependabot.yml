@@ -28,7 +28,6 @@ updates:
   - package-ecosystem: "docker"
     directories:
       - "/"
-      - "/backend"
       - "/frontend"
       - "/.devcontainer"
     schedule:

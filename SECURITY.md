@@ -32,7 +32,8 @@ credited in the advisory unless they prefer otherwise.
 In scope:
 
 - the `almasim` Python package and its command-line interface;
-- the FastAPI backend (`backend/`) and the SvelteKit frontend (`frontend/`);
+- the web console (`almasim serve`, `src/almasim/web/`) and its pages
+  (`frontend/`);
 - the Docker images and compose files in this repository;
 - the GitHub Actions workflows in `.github/workflows/`.
 
@@ -55,10 +56,10 @@ Out of scope:
   expose the scheduler or dashboard ports to the internet, and use
   `--scheduler-host` / `--scheduler-interface` to bind to an internal
   interface where possible.
-- **Backend and frontend.** The web services are intended for trusted
-  networks. Put them behind an authenticating reverse proxy with TLS before
-  exposing them more widely, and never run them with development settings in
-  production.
+- **Web console.** `almasim serve` listens on a socket only its user can
+  open, or on a loopback port, and asks for a token. Reach it through an SSH
+  tunnel; do not bind it to a public interface. Behind anything wider, put an
+  authenticating reverse proxy with TLS in front of it.
 - **Credentials.** Never commit API keys, tokens or `kaggle.json`. In CI they
   are provided only through repository secrets. Use fine-grained tokens with
   the minimum permissions needed.

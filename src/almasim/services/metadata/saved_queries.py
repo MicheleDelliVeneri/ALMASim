@@ -1,7 +1,6 @@
 """Persist and recall named query filter presets.
 
-These are the CLI's presets, kept as JSON files (no backend required). The
-web UI keeps its presets in the backend database (``DatabaseService``).
+These are kept as JSON files, one per preset.
 
 JSON file format::
 

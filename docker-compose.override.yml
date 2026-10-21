@@ -1,19 +1,12 @@
 # Development additions to docker-compose.yml; `docker compose up` loads this
-# file automatically. The backend and frontend reload on source changes.
+# file automatically. The web app reloads on source changes; the console runs
+# the mounted source (restart it to pick up Python changes).
 
 services:
-  backend:
+  console:
     volumes:
-      # Mount source code for hot reload (no rebuild needed on code changes)
-      - ./backend/app:/app/backend/app
+      # The project is installed editable, so the mounted source is what runs.
       - ./src:/app/src
-    command: >
-      uvicorn app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
-      --reload-dir /app/backend
-      --reload-dir /app/src
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

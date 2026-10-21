@@ -1,1 +1,0 @@
-"""ALMASim FastAPI Backend Application."""

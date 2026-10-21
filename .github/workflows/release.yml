@@ -133,7 +133,7 @@ jobs:
           files: dist/*
 
   # ------------------------------------------------------------------
-  # 6. Build and push backend Docker image to GHCR
+  # 6. Build and push the console Docker image to GHCR (docker compose)
   # ------------------------------------------------------------------
   docker:
     needs: github-release
@@ -156,7 +156,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository_owner }}/almasim-backend
+          images: ghcr.io/${{ github.repository_owner }}/almasim-console
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -169,12 +169,12 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: backend/Dockerfile
+          file: Dockerfile.console
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-from: type=gha,scope=console
+          cache-to: type=gha,mode=max,scope=console
 
   # ------------------------------------------------------------------
   # 7. Build and push frontend Docker image to GHCR

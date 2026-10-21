@@ -13,7 +13,6 @@ on:
       - ci/image-tag.sh
       - pyproject.toml
       - uv.lock
-      - backend/pyproject.toml
       - .github/workflows/ci-image.yml
   pull_request:
     paths:
@@ -21,7 +20,6 @@ on:
       - ci/image-tag.sh
       - pyproject.toml
       - uv.lock
-      - backend/pyproject.toml
       - .github/workflows/ci-image.yml
   workflow_dispatch:
   workflow_call:

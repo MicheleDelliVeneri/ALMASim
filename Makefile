@@ -1,4 +1,4 @@
-.PHONY: help start start-detached stop restart restart-backend restart-frontend start-prod start-prod-detached stop-prod logs logs-backend logs-frontend ps status build build-prod clean shell-backend shell-frontend health test lint format typecheck check
+.PHONY: help start start-detached stop restart restart-console restart-frontend start-prod start-prod-detached stop-prod logs logs-console logs-frontend ps status build build-prod clean shell-console shell-frontend health test lint format typecheck check
 
 # Default target
 .DEFAULT_GOAL := help
@@ -21,11 +21,11 @@ help: ## Show this help message
 	@echo "  make check              - lint, typecheck and test"
 	@echo ""
 	@echo "Development Commands:"
-	@echo "  make start              - Start all services (frontend on :3000, backend on :8000)"
+	@echo "  make start              - Start all services (web app on :3000, console on :8765)"
 	@echo "  make start-detached     - Start all services in detached mode"
 	@echo "  make stop               - Stop all services"
 	@echo "  make restart            - Restart all services"
-	@echo "  make restart-backend    - Restart only backend service"
+	@echo "  make restart-console    - Restart only the console"
 	@echo "  make restart-frontend   - Restart only frontend service"
 	@echo ""
 	@echo "Production Commands:"
@@ -35,17 +35,17 @@ help: ## Show this help message
 	@echo ""
 	@echo "Logs & Monitoring:"
 	@echo "  make logs               - Follow logs for all services"
-	@echo "  make logs-backend       - Follow logs for backend only"
+	@echo "  make logs-console       - Follow logs for the console only"
 	@echo "  make logs-frontend      - Follow logs for frontend only"
 	@echo "  make ps                 - Show running containers"
 	@echo "  make status             - Show service status"
-	@echo "  make health             - Query the backend and frontend health endpoints"
+	@echo "  make health             - Query the console and web app health endpoints"
 	@echo ""
 	@echo "Build & Maintenance:"
 	@echo "  make build              - Build all Docker images"
 	@echo "  make build-prod         - Build production Docker images"
 	@echo "  make clean              - Stop and remove all containers, networks, and volumes"
-	@echo "  make shell-backend      - Open shell in backend container"
+	@echo "  make shell-console      - Open shell in the console container"
 	@echo "  make shell-frontend     - Open shell in frontend container"
 	@echo ""
 
@@ -69,14 +69,14 @@ check: lint typecheck test ## lint, typecheck and test
 # Local development targets
 start: ## Start all services with Docker (development mode with hot reload)
 	@echo "Starting ALMASim services with Docker..."
-	@echo "Backend API service will run on port 8000"
+	@echo "Console (API v2) will run on port 8765"
 	@echo "Frontend will run on port 3000 (with hot reload)"
 	@echo "Press Ctrl+C to stop both services"
 	@$(COMPOSE) up
 
 start-detached: ## Start all services in detached mode
 	@echo "Starting ALMASim services with Docker in detached mode..."
-	@echo "Backend API service will run on port 8000"
+	@echo "Console (API v2) will run on port 8765"
 	@echo "Frontend will run on port 3000 (with hot reload)"
 	@$(COMPOSE) up -d
 	@echo "Services started. Use 'make stop' to stop them."
@@ -92,10 +92,10 @@ restart: ## Restart all services
 	@$(COMPOSE) restart
 	@echo "Services restarted"
 
-restart-backend: ## Restart backend API service only
-	@echo "Restarting backend API service..."
-	@$(COMPOSE) restart backend
-	@echo "Backend service restarted"
+restart-console: ## Restart the console only
+	@echo "Restarting the console..."
+	@$(COMPOSE) restart console
+	@echo "Console restarted"
 
 restart-frontend: ## Restart frontend service only
 	@echo "Restarting frontend service..."
@@ -105,14 +105,14 @@ restart-frontend: ## Restart frontend service only
 # Production targets
 start-prod: ## Start all services in production mode
 	@echo "Starting ALMASim services in PRODUCTION mode..."
-	@echo "Backend API service will run on port 8000"
+	@echo "Console (API v2) will run on port 8765"
 	@echo "Frontend (production build) will run on port 3000"
 	@echo "Press Ctrl+C to stop both services"
 	@$(COMPOSE_PROD) up
 
 start-prod-detached: ## Start production services in detached mode
 	@echo "Starting ALMASim services in PRODUCTION mode (detached)..."
-	@echo "Backend API service will run on port 8000"
+	@echo "Console (API v2) will run on port 8765"
 	@echo "Frontend (production build) will run on port 3000"
 	@$(COMPOSE_PROD) up -d
 	@echo "Production services started. Use 'make stop-prod' to stop them."
@@ -126,8 +126,8 @@ stop-prod: ## Stop production services
 logs: ## Follow logs for all services
 	@$(COMPOSE) logs -f
 
-logs-backend: ## Follow logs for backend service only
-	@$(COMPOSE) logs -f backend
+logs-console: ## Follow logs for the console only
+	@$(COMPOSE) logs -f console
 
 logs-frontend: ## Follow logs for frontend service only
 	@$(COMPOSE) logs -f frontend
@@ -158,16 +158,16 @@ clean: ## Stop and remove all containers, networks, and volumes
 	@$(COMPOSE_PROD) down -v --remove-orphans 2>/dev/null || true
 	@echo "Cleanup complete"
 
-shell-backend: ## Open shell in backend container
-	@$(COMPOSE) exec backend /bin/sh
+shell-console: ## Open shell in the console container
+	@$(COMPOSE) exec console /bin/sh
 
 shell-frontend: ## Open shell in frontend container
 	@$(COMPOSE) exec frontend /bin/sh
 
 # Health checks
 health: ## Check health of all services
-	@echo "=== Backend Health ==="
-	@curl -s http://localhost:8000/health | python -m json.tool || echo "Backend not responding"
+	@echo "=== Console Health ==="
+	@curl -s -H "Authorization: Bearer $${ALMASIM_TOKEN:-almasim-laptop-console}" http://localhost:8765/api/v2/health || echo "Console not responding"
 	@echo ""
 	@echo "=== Frontend Health ==="
 	@curl -s -o /dev/null -w "Status: %{http_code}\n" http://localhost:3000 || echo "Frontend not responding"

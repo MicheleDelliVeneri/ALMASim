@@ -70,9 +70,6 @@ dev = [
     "fastapi",
     "uvicorn[standard]",
     "httpx",
-    "pydantic-settings",
-    "sqlalchemy>=2.0.0",
-    "alembic>=1.13.0",
     "ipykernel>=7.2.0",
     "marimo[lsp]>=0.10",
     "sphinx>=9.1.0",
@@ -86,9 +83,6 @@ test = [
     "fastapi",
     "uvicorn[standard]",
     "httpx",
-    "pydantic-settings",
-    "sqlalchemy>=2.0.0",
-    "alembic>=1.13.0",
 ]
 
 [build-system]
@@ -132,8 +126,8 @@ docstring-code-format = true
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src/almasim", "backend/app"]
-mypy_path = ["src", "backend"]
+files = ["src/almasim"]
+mypy_path = ["src"]
 explicit_package_bases = true
 ignore_missing_imports = true
 
@@ -141,10 +135,6 @@ ignore_missing_imports = true
 # enabled in CI. Remove a module from this list once its errors are fixed.
 [[tool.mypy.overrides]]
 module = [
-    "app.api.v1.routers.download",
-    "app.api.v1.routers.imaging",
-    "app.api.v1.routers.simulation",
-    "app.services.metadata_service",
     "almasim.cli",
     "almasim.cli.image",
     "almasim.cli.simulation",
@@ -163,18 +153,9 @@ module = [
     "almasim.services.interferometry.utils",
     "almasim.skymodels.datasets.tng",
     "almasim.skymodels.serendipitous",
-    # Surfaced when SQLAlchemy joined the test group (T1.12): the models use
-    # untyped Column attributes rather than Mapped[].
-    "app.db.models",
-    "app.db.service",
-    "app.db.cache_query",  # split out of app.db.service (T6.10)
-    "app.db.repositories.*",  # split out of app.db.service (T6.10)
-    "app.db.startup",
 ]
 ignore_errors = true
 
 [tool.uv]
 package = true
 
-[tool.uv.workspace]
-members = ["backend"]

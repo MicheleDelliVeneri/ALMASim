@@ -57,9 +57,10 @@ counted in the summary line so a wrong root is visible immediately. Do not use
 
 The service-level entry point is `almasim.services.archive.filter_products_by_qa0`.
 
-## Frontend and Backend
+## Web console
 
-The frontend exposes download workflows, while the backend acts as an adapter over the shared service layer.
+The console's Archive page (`docs/console.md`) resolves and downloads products by
+running the same `almasim download` commands as jobs.
 
 ## Example Scripts
 

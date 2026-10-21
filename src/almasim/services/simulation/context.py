@@ -15,7 +15,7 @@ class SimulationCancelled(RuntimeError):
     """Raised by :meth:`RunContext.check_cancelled` when the caller asked the run to stop.
 
     A ``RuntimeError`` as before, so code that caught that keeps working; the
-    backend tells it from a failure by its type (MADIV-28 W0.3).
+    caller tells it from a failure by its type (MADIV-28 W0.3).
     """
 
 

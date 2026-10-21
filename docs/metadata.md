@@ -41,8 +41,8 @@ The simulation page uses metadata rows as the main source of truth and only uses
 ALMASim supports metadata usage through:
 
 - Python services
-- backend API
-- frontend metadata page
+- the `almasim metadata` commands
+- the web console's Archive page
 - CLI example scripts
 - notebooks
 

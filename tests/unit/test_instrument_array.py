@@ -3,7 +3,6 @@
 import pytest
 
 from almasim.services.instrument.array import derive_array_type
-from almasim.services.metadata import derive_array_type as metadata_derive_array_type
 from almasim.services.metadata.tap.queries import _derive_array_type as queries_derive
 from almasim.services.observation_plan import derive_array_type as plan_derive_array_type
 
@@ -30,8 +29,7 @@ def test_derive_array_type(antennas, expected):
     assert derive_array_type(antennas) == expected
 
 
-def test_metadata_and_tap_use_the_shared_rule():
-    assert metadata_derive_array_type is derive_array_type
+def test_tap_uses_the_shared_rule():
     assert queries_derive is derive_array_type
 
 

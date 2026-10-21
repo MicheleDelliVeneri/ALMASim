@@ -31,14 +31,7 @@ function consoleProxy(): ProxyOptions {
 	};
 }
 
-/** The old backend (API v1, `uvicorn app.main:app`), until its pages are replaced. */
-const legacyProxy: ProxyOptions = {
-	target: process.env.LEGACY_API_URL ?? 'http://localhost:8000',
-	changeOrigin: true,
-	ws: true
-};
-
-const proxy = { '/api/v2': consoleProxy(), '/api/v1': legacyProxy };
+const proxy = { '/api/v2': consoleProxy() };
 
 export default defineConfig({
 	plugins: [

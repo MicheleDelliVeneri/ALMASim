@@ -1,8 +1,5 @@
 <script lang="ts">
-	import { createLogger } from '#lib/logger.js';
 	import { PINNED_COLUMNS, formatColumnName, moveColumn } from '#lib/utils/resultsTable.js';
-
-	const logger = createLogger('components/metadata/ResultsColumnsMenu');
 
 	interface Props {
 		/** The reorderable columns, in display order. */
@@ -28,10 +25,8 @@
 		const next = new Set(hiddenColumns);
 		if (next.has(col)) {
 			next.delete(col);
-			logger.debug({ col }, 'Column shown');
 		} else {
 			next.add(col);
-			logger.debug({ col }, 'Column hidden');
 		}
 		hiddenColumns = next;
 	}

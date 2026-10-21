@@ -1,4 +1,4 @@
-import { ApiRequestError, ApiTimeoutError } from '#lib/api/client.js';
+import { ApiRequestError } from '#lib/api/client.js';
 
 /** One readable sentence for anything a request or action threw. */
 export function errorMessage(error: unknown): string {
@@ -8,7 +8,6 @@ export function errorMessage(error: unknown): string {
 		}
 		return error.message;
 	}
-	if (error instanceof ApiTimeoutError) return error.message;
 	// fetch rejects with a TypeError when the server cannot be reached at all.
 	if (error instanceof TypeError) return 'Cannot reach the ALMASim server.';
 	if (error instanceof Error) return error.message || error.name;

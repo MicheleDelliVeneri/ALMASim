@@ -28,8 +28,8 @@ The current deterministic image-domain tools include:
 ## Wiener preview
 
 `wiener_preview()` (in `services/imaging/reconstruction`) is the interactive
-preview behind the backend's `POST /api/v1/imaging/preview` and the `Imaging`
-page. Per spectral slice it returns:
+preview behind `almasim preview wiener` and the console's Products page. Per
+spectral slice it returns:
 
 - the Wiener model (`wiener_deconvolve_cube`, regularised by `epsilon`)
 - the residual: the dirty cube minus the model convolved with the dirty beam
