@@ -189,6 +189,24 @@ def submit_command(
     )
 
 
+@app.command("serve", help="Run the web console on this machine (needs almasim[web]).")
+def serve_command(
+    port: int | None = typer.Option(
+        None,
+        "--port",
+        min=1024,
+        max=65535,
+        help="Listen on 127.0.0.1:<port> instead of a private socket in ~/.almasim.",
+    ),
+    status: bool = typer.Option(False, "--status", help="Show the running console's link."),
+    stop: bool = typer.Option(False, "--stop", help="Stop the running console."),
+) -> None:
+    """Serve the console; print the ssh tunnel line and the link with its access token."""
+    from .serve import serve
+
+    serve(port, status, stop)
+
+
 def main() -> None:
     """Run the ALMASim CLI application."""
     app()

@@ -79,6 +79,10 @@ dashboard = [
 ms-casacore = [
     { name = "python-casacore" },
 ]
+web = [
+    { name = "fastapi" },
+    { name = "uvicorn", extra = ["standard"] },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -121,6 +125,7 @@ requires-dist = [
     { name = "dask-jobqueue" },
     { name = "distributed" },
     { name = "ducc0" },
+    { name = "fastapi", marker = "extra == 'web'" },
     { name = "h5py" },
     { name = "hdecompose" },
     { name = "httpx" },
@@ -141,8 +146,9 @@ requires-dist = [
     { name = "tenacity" },
     { name = "tqdm" },
     { name = "typer" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'" },
 ]
-provides-extras = ["dashboard", "casa", "ms-casacore"]
+provides-extras = ["dashboard", "casa", "ms-casacore", "web"]
 
 [package.metadata.requires-dev]
 dev = [
