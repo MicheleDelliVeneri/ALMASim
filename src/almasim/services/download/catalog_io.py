@@ -35,7 +35,8 @@ def save_products_csv(products: List[DataProduct], output_path: Path | str) -> s
 def load_products_csv(input_path: Path | str) -> List[DataProduct]:
     """Load previously saved DataProduct rows from CSV."""
     input_path = Path(input_path).expanduser().resolve()
-    dataframe = pd.read_csv(input_path)
+    # Blank fields stay "": pandas would read them as NaN, which str() turns into "nan".
+    dataframe = pd.read_csv(input_path, keep_default_na=False)
     products = []
     for row in dataframe.to_dict(orient="records"):
         products.append(

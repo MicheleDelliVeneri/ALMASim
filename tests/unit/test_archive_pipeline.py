@@ -1,418 +1,22 @@
-"""Unit tests for ALMASim Typer CLI commands."""
+"""Archive stages: per-UID workers, progress and the Slurm/sync drivers (MADIV-28 T8.2).
+
+The code lives in services/archive/pipeline; these tests moved from test_cli.py.
+"""
 
 from __future__ import annotations
 
 import os
-import tarfile
 from pathlib import Path
-from types import SimpleNamespace
 
-import click
-import pandas as pd
 import pytest
-import typer
 from typer.testing import CliRunner
 
-from almasim import cli, cli_clean, cli_image, cli_metadata, cli_predict, cli_products
+from almasim import cli_products
 from almasim.services.archive import pipeline as archive_pipeline
 
 from ._fakes import fake_popen, patch_everywhere
 
 runner = CliRunner()
-
-
-def test_metadata_query_cancelled(monkeypatch):
-    """Metadata query should stop before TAP calls when user declines prompt."""
-    called = {"query": False}
-
-    def _fake_query(*args, **kwargs):
-        called["query"] = True
-        raise AssertionError("query_metadata_by_science should not be called")
-
-    monkeypatch.setattr(cli.typer, "confirm", lambda *args, **kwargs: False)
-    monkeypatch.setattr(cli_metadata, "query_metadata_by_science", _fake_query)
-
-    result = runner.invoke(cli.app, ["metadata", "query"])
-
-    assert result.exit_code == 0
-    assert "Query cancelled." in result.output
-    assert called["query"] is False
-
-
-def test_metadata_query_default_unlimited_rows(tmp_path, monkeypatch):
-    """When --limit is omitted, metadata rows should not be truncated."""
-    metadata = pd.DataFrame(
-        {
-            "ALMA_source_name": ["a", "b", "c"],
-            "Band": [6, 6, 6],
-            "Freq": [100.0, 101.0, 102.0],
-            "member_ous_uid": ["uid://1", "uid://2", "uid://3"],
-        }
-    )
-
-    monkeypatch.setattr(cli_metadata, "query_metadata_by_science", lambda **kwargs: metadata)
-
-    output_csv = tmp_path / "metadata.csv"
-    result = runner.invoke(
-        cli.app,
-        [
-            "metadata",
-            "query",
-            "--yes",
-            "--save-csv",
-            str(output_csv),
-        ],
-    )
-
-    assert result.exit_code == 0
-    saved = pd.read_csv(output_csv)
-    assert len(saved) == 3
-
-
-def test_products_resolve_extracts_member_uids(tmp_path, monkeypatch):
-    """Resolve should extract member_ous_uid values and write the list file."""
-    metadata_csv = tmp_path / "metadata.csv"
-    pd.DataFrame(
-        {
-            "member_ous_uid": ["uid://A", "uid://B", "uid://A", None],
-            "Band": [6, 7, 6, 3],
-        }
-    ).to_csv(metadata_csv, index=False)
-
-    captured: dict[str, object] = {}
-
-    def _fake_resolve(**kwargs):
-        captured.update(kwargs)
-        return [SimpleNamespace(), SimpleNamespace()]
-
-    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", _fake_resolve)
-
-    uid_list_path = tmp_path / "uids.txt"
-    products_csv = tmp_path / "products.csv"
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "resolve",
-            "--metadata-csv",
-            str(metadata_csv),
-            "--save-member-ous-uid-list",
-            str(uid_list_path),
-            "--save-products-csv",
-            str(products_csv),
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert uid_list_path.read_text(encoding="utf-8") == "uid://A\nuid://B\n"
-    assert captured["member_ous_uid"] == ["uid://A", "uid://B"]
-
-
-def test_metadata_query_saves_datalink_rows_that_download_reads(tmp_path, monkeypatch):
-    """--save-products-csv resolves DataLink for the queried UIDs (products-CSV schema)."""
-    metadata = pd.DataFrame({"Band": [6, 6, 6], "member_ous_uid": ["uid://1", None, "uid://3"]})
-    monkeypatch.setattr(cli_metadata, "query_metadata_by_science", lambda **kwargs: metadata)
-    captured: dict[str, object] = {}
-
-    def _fake_resolve(**kwargs):
-        captured.update(kwargs)
-        return []
-
-    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", _fake_resolve)
-    products_csv = tmp_path / "products.csv"
-    result = runner.invoke(
-        cli.app,
-        ["metadata", "query", "--yes", "--save-products-csv", str(products_csv)],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert captured["member_ous_uid"] == ["uid://1", "uid://3"]
-    assert captured["save_products_csv_path"] == products_csv
-
-
-def test_products_download_invalid_filter_exits():
-    """Invalid product filter should fail fast before resolution/download calls."""
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "download",
-            "--member-ous-uid",
-            "uid://A",
-            "--product-filter",
-            "not-a-type",
-        ],
-    )
-
-    assert result.exit_code == 2
-    assert "Invalid --product-filter" in result.output
-
-
-def test_products_download_slurm_postprocess_path(tmp_path, monkeypatch):
-    """Slurm mode should run download first, then post-process archive jobs."""
-    products = [SimpleNamespace(content_length=10)]
-
-    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", lambda **kwargs: products)
-    monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
-
-    destination = tmp_path / "downloads"
-    captured: dict[str, object] = {}
-
-    def _fake_download_products(*args, **kwargs):
-        captured.update(kwargs)
-        assert callable(kwargs["update_callback"])
-        destination.mkdir(parents=True, exist_ok=True)
-        return SimpleNamespace(
-            destination=str(destination),
-            files_completed=1,
-            files_failed=0,
-            manifest_path=str(destination / "download_manifest.json"),
-        )
-
-    monkeypatch.setattr(cli_products, "download_products", _fake_download_products)
-    monkeypatch.setattr(
-        cli_products,
-        "_run_parallel_archive_jobs",
-        lambda **kwargs: (["/tmp/raw.ms"], ["/tmp/cal.ms"]),
-    )
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "download",
-            "--member-ous-uid",
-            "uid://A",
-            "--yes",
-            "--postprocess-backend",
-            "slurm",
-            "--unpack-ms",
-            "--generate-calibrated-visibilities",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert callable(captured["update_callback"])
-    assert "Raw MS products:" in result.output
-    assert "Calibrated MS products:" in result.output
-
-
-def test_products_download_sync_path(tmp_path, monkeypatch):
-    """Sync mode should download first, then run per-UID archive stages like Slurm does."""
-    products = [SimpleNamespace(content_length=12)]
-    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", lambda **kwargs: products)
-    monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
-
-    captured: dict[str, object] = {}
-    stage_kwargs: dict[str, object] = {}
-
-    def _fake_download_products(*args, **kwargs):
-        captured.update(kwargs)
-        assert callable(kwargs["update_callback"])
-        return SimpleNamespace(
-            destination=str(tmp_path / "downloads"),
-            files_completed=1,
-            files_failed=0,
-            manifest_path=None,
-            raw_measurement_sets=[],
-            calibrated_measurement_sets=[],
-        )
-
-    def _fake_stages(**kwargs):
-        stage_kwargs.update(kwargs)
-        return (["/tmp/raw-a.ms"], [])
-
-    monkeypatch.setattr(cli_products, "download_products", _fake_download_products)
-    monkeypatch.setattr(cli_products, "_run_parallel_archive_jobs", _fake_stages)
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "download",
-            "--member-ous-uid",
-            "uid://A",
-            "--yes",
-            "--postprocess-backend",
-            "sync",
-            "--unpack-ms",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert callable(captured["update_callback"])
-    # In-process unpack/calibrate inside download_products is no longer used.
-    assert captured["unpack_ms"] is False
-    assert captured["generate_calibrated_visibilities"] is False
-    assert stage_kwargs["postprocess_backend"] == "sync"
-    assert stage_kwargs["postprocess_backend_kwargs"] == {}
-    assert stage_kwargs["unpack_ms"] is True
-    assert stage_kwargs["continue_on_error"] is True
-    assert "Raw MS products:" in result.output
-
-
-def test_products_download_sync_without_postprocess_keeps_single_call(tmp_path, monkeypatch):
-    """Plain downloads (no unpack/calibrate) still go through download_products alone."""
-    products = [SimpleNamespace(content_length=12)]
-    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", lambda **kwargs: products)
-    monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
-    monkeypatch.setattr(
-        cli_products,
-        "_run_parallel_archive_jobs",
-        lambda **kwargs: pytest.fail("no archive stages expected"),
-    )
-    monkeypatch.setattr(
-        cli_products,
-        "download_products",
-        lambda *args, **kwargs: SimpleNamespace(
-            destination=str(tmp_path / "downloads"),
-            files_completed=1,
-            files_failed=0,
-            manifest_path=None,
-            raw_measurement_sets=[],
-            calibrated_measurement_sets=[],
-        ),
-    )
-
-    result = runner.invoke(
-        cli.app, ["products", "download", "--member-ous-uid", "uid://A", "--yes"]
-    )
-    assert result.exit_code == 0
-
-
-def test_products_download_skip_qa0_semipass_filters_raw_products(tmp_path, monkeypatch):
-    """--skip-qa0-semipass drops SemiPass raw ASDMs and reports what it skipped."""
-    from almasim.services.archive import qa0
-
-    member = "uid://A001/X378a/X149"
-    member_dir = (
-        tmp_path
-        / "downloads"
-        / "2023.1.00879.S"
-        / "science_goal.uid___A001_X378a_X147"
-        / "group.uid___A001_X378a_X148"
-        / "member.uid___A001_X378a_X149"
-        / "qa"
-    )
-    member_dir.mkdir(parents=True)
-    for eb in ("uid___A002_X1_Xpass", "uid___A002_X1_Xsemi"):
-        (member_dir / f"{eb}.qa0_report.pdf").write_bytes(b"%PDF-1.4")
-
-    def fake_reader(path, eb_uid=""):
-        status = "SemiPass" if eb_uid.endswith("Xsemi") else "Pass"
-        return qa0.QA0Report(eb_uid, status, "SUCCESS", 1.0, "")
-
-    monkeypatch.setattr(qa0, "read_qa0_report", fake_reader)
-
-    raw_pass = SimpleNamespace(
-        product_type="raw",
-        uid=member,
-        filename="2023.1.00879.S_uid___A002_X1_Xpass.asdm.sdm.tar",
-        content_length=10,
-    )
-    raw_semi = SimpleNamespace(
-        product_type="raw",
-        uid=member,
-        filename="2023.1.00879.S_uid___A002_X1_Xsemi.asdm.sdm.tar",
-        content_length=2048,
-    )
-    monkeypatch.setattr(
-        cli_products, "_resolve_products_from_inputs", lambda **kwargs: [raw_pass, raw_semi]
-    )
-    captured: dict[str, object] = {}
-
-    def fake_download(products, *args, **kwargs):
-        captured["products"] = list(products)
-        return SimpleNamespace(
-            destination=str(tmp_path / "downloads"),
-            files_completed=1,
-            files_failed=0,
-            manifest_path=None,
-            raw_measurement_sets=[],
-            calibrated_measurement_sets=[],
-        )
-
-    monkeypatch.setattr(cli_products, "download_products", fake_download)
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "download",
-            "--member-ous-uid",
-            member,
-            "--product-filter",
-            "raw",
-            "--destination",
-            str(tmp_path / "downloads"),
-            "--skip-qa0-semipass",
-            "--yes",
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert "QA0 filter: skipped 1 SemiPass raw product(s)" in result.output
-    assert captured["products"] == [raw_pass]
-
-
-def test_products_download_sync_cleanup_only_when_no_failures(tmp_path, monkeypatch):
-    """--clean-intermediate-files runs after a fully successful sync post-processing run."""
-    products = [SimpleNamespace(content_length=12)]
-    monkeypatch.setattr(cli_products, "_resolve_products_from_inputs", lambda **kwargs: products)
-    monkeypatch.setattr(cli_products, "filter_products", lambda products, product_filter: products)
-    manifest = tmp_path / "downloads" / "download_manifest.json"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text('{"raw_measurement_sets": [], "calibrated_measurement_sets": []}')
-    monkeypatch.setattr(
-        cli_products,
-        "download_products",
-        lambda *args, **kwargs: SimpleNamespace(
-            destination=str(tmp_path / "downloads"),
-            files_completed=1,
-            files_failed=0,
-            manifest_path=str(manifest),
-            files=[],
-            extracted_files=[],
-        ),
-    )
-    cleaned: list[str] = []
-    monkeypatch.setattr(
-        cli_products, "_cleanup_after_download_postprocess", lambda **kwargs: cleaned.append("yes")
-    )
-
-    def _stages_ok(**kwargs):
-        return (["/raw/a.ms"], ["/cal/a.ms.split.cal"])
-
-    def _stages_failing(**kwargs):
-        kwargs["failures"].append(cli_products.TaskFailure("uid___B", "boom"))
-        return (["/raw/a.ms"], ["/cal/a.ms.split.cal"])
-
-    args = [
-        "products",
-        "download",
-        "--member-ous-uid",
-        "uid://A",
-        "--yes",
-        "--unpack-ms",
-        "--generate-calibrated-visibilities",
-        "--clean-intermediate-files",
-    ]
-
-    monkeypatch.setattr(cli_products, "_run_parallel_archive_jobs", _stages_ok)
-    result = runner.invoke(cli.app, args)
-    assert result.exit_code == 0
-    assert cleaned == ["yes"]
-    import json
-
-    assert json.loads(manifest.read_text())["calibrated_measurement_sets"] == [
-        "/cal/a.ms.split.cal"
-    ]
-
-    monkeypatch.setattr(cli_products, "_run_parallel_archive_jobs", _stages_failing)
-    result = runner.invoke(cli.app, args)
-    assert result.exit_code == 1
-    assert cleaned == ["yes"]  # not called a second time
-    assert "Skipping --clean-intermediate-files" in result.output
 
 
 class _FakeFuture:
@@ -443,6 +47,47 @@ class _FakeAsyncBackend:
         return self._gathered
 
 
+class _FakeFailingFuture(_FakeFuture):
+    def __init__(self, message: str):
+        super().__init__(done_after=1, status="error")
+        self._message = message
+
+    def exception(self):
+        return RuntimeError(self._message)
+
+
+class _FakePerFutureBackend:
+    """Async backend whose gather() works on single-future lists."""
+
+    def __init__(self, futures, results):
+        self._futures = futures
+        self._results = results
+
+    def compute(self, jobs, sync=True):
+        return self._futures
+
+    def gather(self, futures):
+        return [self._results[self._futures.index(future)] for future in futures]
+
+
+class _CrashingProcess:
+    """Child that prints a casacore abort and dies with SIGABRT (-6)."""
+
+    def __init__(self, lines: list[str] | None = None, return_code: int = -6):
+        self.stdout = iter(
+            lines
+            or [
+                "Extracting calibration tables\n",
+                "terminate called after throwing an instance of 'casacore::ArrayError'\n",
+                "  what():  minMax - Array has no elements\n",
+            ]
+        )
+        self._rc = return_code
+
+    def wait(self):
+        return self._rc
+
+
 def test_compute_jobs_with_progress_uses_async_and_gather(monkeypatch):
     """Slurm progress helper should compute async and gather futures."""
     backend = _FakeAsyncBackend(
@@ -462,27 +107,6 @@ def test_compute_jobs_with_progress_uses_async_and_gather(monkeypatch):
     assert backend.compute_sync_values == [False]
     assert backend.gather_called is True
     assert results == [["raw1.ms"], ["raw2.ms"]]
-
-
-def test_products_cli_uses_the_download_service(monkeypatch):
-    """The CLI uses the download service's limits and functions, not copies of them."""
-    import almasim.services.compute as compute_mod
-    import almasim.services.download as download
-
-    monkeypatch.setattr(compute_mod, "create_backend", lambda *args, **kwargs: (args, kwargs))
-    assert cli_products.create_backend("slurm", n_workers=2) == (("slurm",), {"n_workers": 2})
-    assert cli_products.MAX_PARALLEL_TOTAL == download.MAX_PARALLEL_TOTAL
-    assert cli_products.MAX_PARALLEL_PER_MIRROR == download.MAX_PARALLEL_PER_MIRROR
-    assert cli_products.PRODUCT_TYPES is download.PRODUCT_TYPES
-    for name in (
-        "download_products",
-        "filter_products",
-        "format_bytes",
-        "load_products_csv",
-        "resolve_products",
-        "save_products_csv",
-    ):
-        assert getattr(cli_products, name) is getattr(download, name)
 
 
 def test_preflight_casa_data_uses_resolved_path(monkeypatch, tmp_path):
@@ -646,77 +270,6 @@ def test_run_calibrate_jobs_slurm_preflights_and_submits(monkeypatch, tmp_path):
     assert captured["job_uids"] == ["uid://A"]
 
 
-def test_products_extract_standalone(tmp_path):
-    """Standalone extract should unpack tar archives from disk."""
-    source_root = tmp_path / "downloads"
-    source_root.mkdir(parents=True)
-    payload = source_root / "data.txt"
-    payload.write_text("hello", encoding="utf-8")
-    archive_path = source_root / "bundle.tar"
-    with tarfile.open(archive_path, "w") as archive:
-        archive.add(payload, arcname="nested/data.txt")
-    payload.unlink()
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "extract",
-            "--source-root",
-            str(source_root),
-            "--no-recursive",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert (source_root / "nested" / "data.txt").is_file()
-    assert "Extracted files: 1" in result.output
-
-
-def test_products_unpack_standalone(monkeypatch):
-    """Standalone unpack should delegate to unpack job runner and print outputs."""
-    monkeypatch.setattr(
-        cli_products,
-        "_run_unpack_jobs",
-        lambda **kwargs: ["/tmp/raw-a.ms", "/tmp/raw-b.ms"],
-    )
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "unpack",
-            "--asdm-uid",
-            "uid://A,uid://B",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert "Raw MS products: 2" in result.output
-
-
-def test_products_calibrate_standalone(monkeypatch):
-    """Standalone calibrate should delegate to calibrate job runner and print outputs."""
-    monkeypatch.setattr(
-        cli_products,
-        "_run_calibrate_jobs",
-        lambda **kwargs: ["/tmp/cal-a.ms"],
-    )
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "products",
-            "calibrate",
-            "--asdm-uid",
-            "uid://A",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert "Calibrated MS products: 1" in result.output
-
-
 def test_calibrate_single_uid_streams_logs_and_returns_expected_output(tmp_path, monkeypatch):
     """Calibration worker should stream subprocess logs and return the expected split.cal path."""
     calls = fake_popen(monkeypatch, ["first line\n", "second line\n"])
@@ -801,178 +354,6 @@ def test_calibrate_single_uid_raises_with_bounded_log_tail(tmp_path, monkeypatch
     assert "Last 200 log lines" in msg
     assert "line-0" not in msg
     assert "line-204" in msg
-
-
-def test_clean_passthrough_runs_wsclean(monkeypatch):
-    """Top-level clean command should forward unknown options to WSClean."""
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(cli_clean.shutil, "which", lambda executable: f"/usr/bin/{executable}")
-
-    def _fake_run(command, cwd=None, check=False):
-        captured["command"] = command
-        captured["cwd"] = cwd
-        captured["check"] = check
-        return SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(cli_clean.subprocess, "run", _fake_run)
-
-    result = runner.invoke(
-        cli.app,
-        [
-            "clean",
-            "--wsclean-bin",
-            "wsclean",
-            "--",
-            "-name",
-            "img",
-            "-niter",
-            "1000",
-            "input.ms",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert captured["command"] == [
-        "/usr/bin/wsclean",
-        "-name",
-        "img",
-        "-niter",
-        "1000",
-        "input.ms",
-    ]
-
-
-def test_metadata_cli_uses_the_tap_service_directly():
-    """No lazy contract: the CLI's names are the TAP service's own functions."""
-    from almasim.services.metadata import tap
-
-    assert cli_metadata.query_metadata_by_science is tap.query_metadata_by_science
-
-
-def test_metadata_query_invalid_visible_column_shows_allowed_columns():
-    """Metadata query should print allowed columns when visible columns are invalid."""
-    result = runner.invoke(
-        cli.app,
-        [
-            "metadata",
-            "query",
-            "--visible-column",
-            "not-a-real-column",
-            "--yes",
-        ],
-    )
-
-    assert result.exit_code == 2
-    assert "Allowed columns:" in result.output
-
-
-def test_invoke_click_command_raises_typer_exit_for_nonzero_int_result():
-    """Click command return codes should map to Typer exit codes."""
-
-    class _FakeClickCommand:
-        def main(self, **kwargs):
-            del kwargs
-            return 9
-
-    with pytest.raises(typer.Exit) as exc:
-        cli._invoke_click_command(_FakeClickCommand(), args=[], prog_name="almasim")
-
-    assert exc.value.exit_code == 9
-
-
-def test_invoke_click_command_maps_click_exit_to_typer_exit():
-    """Click Exit exceptions should be mapped to Typer Exit with same code."""
-
-    class _FakeClickCommand:
-        def main(self, **kwargs):
-            del kwargs
-            raise click.exceptions.Exit(3)
-
-    with pytest.raises(typer.Exit) as exc:
-        cli._invoke_click_command(_FakeClickCommand(), args=[], prog_name="almasim")
-
-    assert exc.value.exit_code == 3
-
-
-def test_predict_ms_from_image_single_ms_invokes_prediction(monkeypatch, tmp_path):
-    """predict ms-from-image should handle a single MS without slurm."""
-    ms_dir = tmp_path / "sample.ms"
-    ms_dir.mkdir()
-    out_dir = tmp_path / "models"
-    out_dir.mkdir()
-
-    captured: dict[str, object] = {}
-
-    def _fake_predict_all_models_for_ms(input_ms, output_directory):
-        captured["input_ms"] = input_ms
-        captured["output_directory"] = output_directory
-        return [output_directory / input_ms.stem / "SPW-0" / "sample.ms.predicted"]
-
-    monkeypatch.setattr(cli_predict, "_predict_all_models_for_ms", _fake_predict_all_models_for_ms)
-
-    result = runner.invoke(
-        cli.app,
-        ["predict", "ms-from-image", str(ms_dir), str(out_dir), "--no-use-slurm"],
-    )
-
-    assert result.exit_code == 0
-    assert captured["input_ms"] == ms_dir
-    assert captured["output_directory"] == out_dir
-
-
-def test_predict_ms_from_image_slurm_dispatches_one_job_per_ms(monkeypatch, tmp_path):
-    """predict ms-from-image should submit one Slurm command per MS in a folder."""
-    ms_dir = tmp_path / "inputs"
-    ms_dir.mkdir()
-    (ms_dir / "a.ms").mkdir()
-    (ms_dir / "b.ms").mkdir()
-    out_dir = tmp_path / "models"
-    out_dir.mkdir()
-
-    captured: dict[str, object] = {}
-
-    def _fake_run_with_slurm_cluster(*args, **kwargs):
-        captured["commands"] = args[0]
-
-    monkeypatch.setattr(cli_image, "_run_commands_with_slurm_cluster", _fake_run_with_slurm_cluster)
-
-    result = runner.invoke(
-        cli.app,
-        ["predict", "ms-from-image", str(ms_dir), str(out_dir)],
-    )
-
-    assert result.exit_code == 0
-    assert len(captured["commands"]) == 2
-    assert captured["commands"][0][1][:3] == ["almasim", "predict", "ms-from-image"]
-
-
-# ---------------------------------------------------------------------------
-# Skip-on-failure and per-UID logging for archive post-processing stages
-# ---------------------------------------------------------------------------
-
-
-class _FakeFailingFuture(_FakeFuture):
-    def __init__(self, message: str):
-        super().__init__(done_after=1, status="error")
-        self._message = message
-
-    def exception(self):
-        return RuntimeError(self._message)
-
-
-class _FakePerFutureBackend:
-    """Async backend whose gather() works on single-future lists."""
-
-    def __init__(self, futures, results):
-        self._futures = futures
-        self._results = results
-
-    def compute(self, jobs, sync=True):
-        return self._futures
-
-    def gather(self, futures):
-        return [self._results[self._futures.index(future)] for future in futures]
 
 
 def test_compute_jobs_with_progress_continue_on_error_skips_failed(monkeypatch):
@@ -1265,42 +646,6 @@ def test_calibrate_single_uid_writes_per_uid_log_file(tmp_path, monkeypatch):
     assert calls[0][1]["env"]["PYTHONUNBUFFERED"] == "1"
 
 
-def test_products_calibrate_exits_nonzero_with_failure_summary(monkeypatch):
-    """The command should list outputs, print skipped UIDs, and exit 1."""
-
-    def _fake_run(**kwargs):
-        kwargs["failures"].append(
-            cli_products.TaskFailure("uid___B", "Calibration failed for uid___B.", "/logs/b.log")
-        )
-        assert kwargs["continue_on_error"] is True
-        return ["/tmp/cal-a.ms"]
-
-    monkeypatch.setattr(cli_products, "_run_calibrate_jobs", _fake_run)
-
-    result = runner.invoke(cli.app, ["products", "calibrate", "--asdm-uid", "uid___A,uid___B"])
-
-    assert result.exit_code == 1
-    assert "Calibrated MS products: 1" in result.output
-    assert "1 UID(s) failed and were skipped" in result.output
-    assert "uid___B" in result.output
-    assert "/logs/b.log" in result.output
-
-
-def test_products_calibrate_fail_fast_flag_passthrough(monkeypatch):
-    """--fail-fast should disable continue_on_error."""
-    captured: dict[str, object] = {}
-
-    def _fake_run(**kwargs):
-        captured.update(kwargs)
-        return []
-
-    monkeypatch.setattr(cli_products, "_run_calibrate_jobs", _fake_run)
-    result = runner.invoke(cli.app, ["products", "calibrate", "--fail-fast"])
-
-    assert result.exit_code == 0
-    assert captured["continue_on_error"] is False
-
-
 def test_run_parallel_archive_jobs_skips_calibration_for_failed_unpack(monkeypatch, tmp_path):
     """UIDs whose unpack failed must not be submitted to the calibrate stage."""
 
@@ -1366,11 +711,6 @@ def test_tail_log_line_ignores_stale_logs(tmp_path):
     assert tail_line(log_path) == "last line"
     assert tail_line(log_path, modified_since=time() - 60) is None
     assert tail_line(tmp_path / "missing.log") is None
-
-
-# ---------------------------------------------------------------------------
-# Completed-calibration detection and working-copy handling
-# ---------------------------------------------------------------------------
 
 
 def test_partition_completed_calibrations_skips_marked_outputs(tmp_path):
@@ -1491,19 +831,6 @@ def test_calibrate_single_uid_forwards_keep_working_copies(tmp_path, monkeypatch
 
     assert "--keep-working-copies" not in calls[0][0]
     assert "--keep-working-copies" in calls[1][0]
-
-
-def test_products_calibrate_keep_working_copies_passthrough(monkeypatch):
-    """--keep-working-copies reaches the job runner."""
-    captured: dict[str, object] = {}
-    monkeypatch.setattr(
-        cli_products, "_run_calibrate_jobs", lambda **kwargs: captured.update(kwargs) or []
-    )
-
-    assert runner.invoke(cli.app, ["products", "calibrate"]).exit_code == 0
-    assert captured["keep_working_copies"] is False
-    assert runner.invoke(cli.app, ["products", "calibrate", "--keep-working-copies"]).exit_code == 0
-    assert captured["keep_working_copies"] is True
 
 
 def test_casa_bundled_lib_dir_precedes_system_paths(tmp_path, monkeypatch):
@@ -1647,31 +974,6 @@ def test_run_calibrate_jobs_sync_does_not_add_worker_args(monkeypatch, tmp_path)
     assert captured["postprocess_backend"] == "sync"
 
 
-# ---------------------------------------------------------------------------
-# A hard abort in the CASA child (casacore terminate(), OOM kill) must still
-# leave a failure marker behind: the in-process ``finally`` never ran, so the
-# subprocess wrapper is the only place that can write it.
-# ---------------------------------------------------------------------------
-
-
-class _CrashingProcess:
-    """Child that prints a casacore abort and dies with SIGABRT (-6)."""
-
-    def __init__(self, lines: list[str] | None = None, return_code: int = -6):
-        self.stdout = iter(
-            lines
-            or [
-                "Extracting calibration tables\n",
-                "terminate called after throwing an instance of 'casacore::ArrayError'\n",
-                "  what():  minMax - Array has no elements\n",
-            ]
-        )
-        self._rc = return_code
-
-    def wait(self):
-        return self._rc
-
-
 def test_calibrate_single_uid_hard_abort_writes_failure_marker(tmp_path, monkeypatch):
     import json
 
@@ -1755,56 +1057,6 @@ def test_unpack_single_uid_hard_abort_writes_failure_marker(tmp_path, monkeypatc
     payload = json.loads(marker.read_text())
     assert "return code -9" in payload["error"]
     assert not (output_root / "working" / f"{uid}.ms.done").exists()
-
-
-def test_cli_modules_are_the_package_modules():
-    """``almasim.cli_<group>`` names the module in ``almasim.cli`` (MADIV-28 T3.1)."""
-    import importlib
-
-    for old, new in [
-        ("cli_clean", "clean"),
-        ("cli_image", "image"),
-        ("cli_metadata", "metadata"),
-        ("cli_predict", "predict"),
-        ("cli_products", "products"),
-        ("cli_shared", "_shared"),
-        ("cli_simulation", "simulation"),
-        ("cli_visibilities", "visibilities"),
-    ]:
-        alias = importlib.import_module(f"almasim.{old}")
-        assert alias is importlib.import_module(f"almasim.cli.{new}"), old
-
-
-def test_simulation_main_dir_defaults_to_the_package_data():
-    """The default ``--main-dir`` is ``src/almasim``, where the data directories live."""
-    import inspect
-
-    from almasim.cli import simulation
-
-    default = inspect.signature(simulation.simulation_run).parameters["main_dir"].default.default
-    assert (default / "cli").is_dir() and default.name == "almasim"
-
-
-def test_python_m_almasim_cli_runs_the_app(monkeypatch, capsys):
-    """``python -m almasim.cli --help`` prints the command groups."""
-    import runpy
-    import sys
-
-    monkeypatch.setattr(sys, "argv", ["almasim", "--help"])
-    with pytest.raises(SystemExit) as info:
-        runpy.run_module("almasim.cli", run_name="__main__")
-    assert info.value.code == 0
-    assert "visibilities" in capsys.readouterr().out
-
-
-def test_stage_errors_map_to_exit_codes():
-    """StageError exits 1 and StageUsageError exits 2, with their messages."""
-    with pytest.raises(typer.Exit) as info, cli_products._stage_errors():
-        raise archive_pipeline.StageError("nothing to do")
-    assert info.value.exit_code == 1
-    with pytest.raises(typer.Exit) as info, cli_products._stage_errors():
-        raise archive_pipeline.StageUsageError("bad combination")
-    assert info.value.exit_code == 2
 
 
 def test_run_archive_stages_collects_failures(monkeypatch, tmp_path):

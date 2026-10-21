@@ -1,13 +1,18 @@
+"""SimulationParams from a sampled metadata row (MADIV-28 T8.2: moved from tests/)."""
+
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from almasim.services import astro
 from almasim.services.simulation import SimulationParams
 
+pytestmark = pytest.mark.unit
+
 
 def _sample_metadata_row():
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     main_dir = repo_root / "src" / "almasim"
     metadata = pd.read_csv(repo_root / "data" / "qso_metadata.csv")
     rest_frequency, _ = astro.get_line_info(main_dir)

@@ -5,11 +5,16 @@ This directory contains the test suite for ALMASim, organized into three categor
 ## Test Structure
 
 ### Unit Tests (`tests/unit/`)
-Tests for individual functions and classes in isolation:
-- `test_astro_*.py` - Astronomical utility functions
-- `test_interferometry_*.py` - Interferometry utilities
-- `test_skymodels_*.py` - Sky model classes
-- `test_services_utils.py` - Service utilities
+Tests for individual functions and classes in isolation. Each file is named
+after the module it tests, so the tree follows `src/almasim`:
+- `test_cli_<group>.py` - one per CLI command group (`cli/<group>.py`);
+  `test_cli_main.py` covers the entry point, `clean` and the `cli_*` aliases
+- `test_archive_*.py` - `services/archive` (`test_archive_pipeline.py`: the per-UID stages)
+- `test_imaging_*.py`, `test_interferometry_*.py`, `test_simulation_*.py`,
+  `test_skymodels_*.py`, `test_astro_*.py` - the matching services packages
+
+There are no tests at the top of `tests/`: every test belongs to one of the
+three categories.
 
 ### Component Tests (`tests/component/`)
 Tests for integration between modules:
@@ -17,11 +22,13 @@ Tests for integration between modules:
 - `test_spectral_processing.py` - Spectral data processing
 - `test_skymodel_integration.py` - Sky model integration
 - `test_simulation_workflow.py` - Simulation workflow
+- `test_skymodel_workflow.py`, `test_interferometer_workflow.py` - end-to-end sky model and interferometer runs
 
 ### Integration Tests (`tests/integration/`)
 Backend API integration tests:
 - `test_backend_api.py` - FastAPI endpoint tests
 - `test_backend_simulation.py` - Backend simulation service tests
+- `test_tap_live_query.py` - a live ALMA TAP query (marked `network`)
 
 ## Running Tests
 
