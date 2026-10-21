@@ -63,10 +63,19 @@ def test_api_clients_may_send_a_bearer_token(client):
 
 
 def test_the_built_web_app_is_served_when_present(tmp_path):
-    (tmp_path / "index.html").write_text("<p>console</p>")
+    (tmp_path / "200.html").write_text("<p>console</p>")
+    (tmp_path / "_app").mkdir()
+    (tmp_path / "_app" / "start.js").write_text("start()")
     app_client = TestClient(create_app(TOKEN, static_dir=tmp_path))
     app_client.cookies.set(COOKIE, TOKEN)
     assert "console" in app_client.get("/").text
+    assert app_client.get("/_app/start.js").text == "start()"
+    # Pages are routed in the browser: any other path gets the app's page...
+    deep = app_client.get("/jobs/01JABCDEF")
+    assert deep.status_code == 200 and "console" in deep.text
+    # ...but an unknown API path is still an API 404.
+    missing = app_client.get("/api/v2/nothing-here")
+    assert missing.status_code == 404 and "console" not in missing.text
 
 
 def test_an_app_needs_a_token():

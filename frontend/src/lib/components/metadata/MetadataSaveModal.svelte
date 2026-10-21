@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Dialog from '#lib/components/shared/Dialog.svelte';
 	import { supportsFilePicker } from '#lib/utils.js';
 
 	interface Props {
@@ -25,114 +26,88 @@
 </script>
 
 {#if open}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-		role="dialog"
-		aria-modal="true"
-	>
-		<div class="w-full max-w-lg rounded-lg bg-surface shadow-panel">
-			<header class="flex items-center justify-between border-b px-6 py-4">
-				<h2 class="text-lg font-semibold text-fg">Save Metadata</h2>
-				<button
-					type="button"
-					class="text-fg-dim hover:text-gray-800"
-					aria-label="Close"
-					onclick={onClose}
-				>
-					✕
-				</button>
-			</header>
-			<form bind:this={formRef} onsubmit={onSubmit} class="space-y-4 px-6 py-6">
-				<p class="text-sm text-fg-muted">
-					Save the current metadata result set to a backend-visible path (default:
-					<code class="rounded bg-surface px-1 py-0.5 text-xs text-fg">{defaultPath}</code>) or pick
-					a local destination on your machine.
+	<Dialog title="Save Metadata" {onClose}>
+		<form bind:this={formRef} onsubmit={onSubmit} class="space-y-4">
+			<p class="text-sm text-fg-muted">
+				Save the current metadata result set to a backend-visible path (default:
+				<code class="rounded bg-surface px-1 py-0.5 text-xs text-fg">{defaultPath}</code>) or pick a
+				local destination on your machine.
+			</p>
+
+			<fieldset class="space-y-2">
+				<legend class="text-sm font-medium text-fg-muted">Format</legend>
+				<div class="flex items-center gap-4">
+					<label class="flex items-center gap-2 text-sm text-fg-muted">
+						<input
+							type="radio"
+							name="save_format"
+							value="json"
+							checked
+							class="h-4 w-4 border-line"
+						/>
+						JSON
+					</label>
+					<label class="flex items-center gap-2 text-sm text-fg-muted">
+						<input type="radio" name="save_format" value="csv" class="h-4 w-4 border-line" />
+						CSV
+					</label>
+				</div>
+				<p class="text-xs text-fg-dim">
+					The file extension is set automatically from the chosen format.
 				</p>
+			</fieldset>
 
-				<fieldset class="space-y-2">
-					<legend class="text-sm font-medium text-fg-muted">Format</legend>
-					<div class="flex items-center gap-4">
-						<label class="flex items-center gap-2 text-sm text-fg-muted">
-							<input
-								type="radio"
-								name="save_format"
-								value="json"
-								checked
-								class="h-4 w-4 border-line text-fg focus:ring-gray-900"
-							/>
-							JSON
-						</label>
-						<label class="flex items-center gap-2 text-sm text-fg-muted">
-							<input
-								type="radio"
-								name="save_format"
-								value="csv"
-								class="h-4 w-4 border-line text-fg focus:ring-gray-900"
-							/>
-							CSV
-						</label>
+			<label class="block text-sm font-medium text-fg-muted" for="save_path">
+				Destination path
+				<input
+					type="text"
+					id="save_path"
+					name="save_path"
+					value={defaultPath}
+					placeholder={defaultPath}
+					class="mt-1 w-full rounded-md border border-line p-2"
+				/>
+			</label>
+			<div class="text-xs text-fg-dim">
+				We attempt to persist the file server-side; if that fails, a download starts in your
+				browser.
+			</div>
+
+			<div class="rounded-md border border-dashed border-line p-3">
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<div>
+						<p class="text-sm font-medium text-fg-muted">Local save location (optional)</p>
+						<p class="text-xs text-fg-dim">
+							{#if supportsFilePicker()}
+								{localFileName ? `Selected: ${localFileName}` : 'No local file chosen yet.'}
+							{:else}
+								Your browser will prompt for a download instead.
+							{/if}
+						</p>
 					</div>
-					<p class="text-xs text-fg-dim">
-						The file extension is set automatically from the chosen format.
-					</p>
-				</fieldset>
-
-				<label class="block text-sm font-medium text-fg-muted" for="save_path">
-					Destination path
-					<input
-						type="text"
-						id="save_path"
-						name="save_path"
-						value={defaultPath}
-						placeholder={defaultPath}
-						class="mt-1 w-full rounded-md border border-line p-2"
-					/>
-				</label>
-				<div class="text-xs text-fg-dim">
-					We attempt to persist the file server-side; if that fails, a download starts in your
-					browser.
-				</div>
-
-				<div class="rounded-md border border-dashed border-line p-3">
-					<div class="flex flex-wrap items-center justify-between gap-3">
-						<div>
-							<p class="text-sm font-medium text-fg-muted">Local save location (optional)</p>
-							<p class="text-xs text-fg-dim">
-								{#if supportsFilePicker()}
-									{localFileName ? `Selected: ${localFileName}` : 'No local file chosen yet.'}
-								{:else}
-									Your browser will prompt for a download instead.
-								{/if}
-							</p>
-						</div>
-						<button
-							type="button"
-							onclick={onChooseLocalPath}
-							disabled={!supportsFilePicker()}
-							class="rounded-md border border-line px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover disabled:cursor-not-allowed disabled:text-fg-dim"
-						>
-							Choose location
-						</button>
-					</div>
-				</div>
-
-				<div class="flex items-center justify-end gap-2">
 					<button
 						type="button"
-						class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
-						onclick={onClose}
+						onclick={onChooseLocalPath}
+						disabled={!supportsFilePicker()}
+						class="rounded-md border border-line px-3 py-2 text-sm font-medium text-fg-muted hover:bg-hover disabled:cursor-not-allowed disabled:text-fg-dim"
 					>
-						Cancel
-					</button>
-					<button
-						type="submit"
-						disabled={saving}
-						class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-blue-300"
-					>
-						{saving ? 'Saving...' : 'Save'}
+						Choose location
 					</button>
 				</div>
-			</form>
-		</div>
-	</div>
+			</div>
+
+			<div class="flex items-center justify-end gap-2">
+				<button
+					type="button"
+					class="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg-muted hover:bg-hover"
+					onclick={onClose}
+				>
+					Cancel
+				</button>
+				<button type="submit" disabled={saving} class="btn-primary">
+					{saving ? 'Saving...' : 'Save'}
+				</button>
+			</div>
+		</form>
+	</Dialog>
 {/if}

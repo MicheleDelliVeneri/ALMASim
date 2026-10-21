@@ -36,7 +36,12 @@ export function formatErrorDetail(detail: unknown): string {
 			})
 			.join('; ');
 	}
-	if (detail && typeof detail === 'object') return JSON.stringify(detail);
+	if (detail && typeof detail === 'object') {
+		// The console's command checks: {"problems": ["Missing argument 'OUT'.", ...]}
+		const problems = (detail as { problems?: unknown }).problems;
+		if (Array.isArray(problems)) return problems.map(String).join('; ');
+		return JSON.stringify(detail);
+	}
 	return '';
 }
 
@@ -68,7 +73,8 @@ export class ApiClient {
 
 	/** WebSocket URL of an endpoint (ws:// or wss:// to match the API base). */
 	socketUrl(endpoint: string): string {
-		return `${this.baseUrl.replace(/^http/, 'ws')}${endpoint}`;
+		const base = this.baseUrl || (typeof location === 'undefined' ? '' : location.origin);
+		return `${base.replace(/^http/, 'ws')}${endpoint}`;
 	}
 
 	private async request<T>(

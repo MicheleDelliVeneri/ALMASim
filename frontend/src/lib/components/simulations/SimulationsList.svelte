@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import Dialog from '#lib/components/shared/Dialog.svelte';
 	import StatusBadge from '#lib/components/shared/StatusBadge.svelte';
 	import { isActiveStatus, isTerminalStatus } from '#lib/utils/status.js';
 	import { createLogger } from '#lib/logger.js';
@@ -445,59 +446,41 @@
 </section>
 
 {#if logDialogOpen}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-		role="dialog"
-		aria-modal="true"
-	>
-		<div class="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-lg bg-surface shadow-panel">
-			<header class="flex items-start justify-between gap-4 border-b px-5 py-4">
-				<div class="min-w-0">
-					<h3 class="text-lg font-semibold text-fg">Simulation Logs</h3>
-					{#if selectedLogSimulation}
-						<p class="mt-1 truncate font-mono text-xs text-fg-dim">
-							{selectedLogSimulation.simulation_id}
-						</p>
+	<Dialog title="Simulation Logs" width="max-w-4xl" onClose={closeLogDialog}>
+		<div class="space-y-3">
+			{#if selectedLogSimulation}
+				<p class="truncate font-mono text-xs text-fg-dim">
+					{selectedLogSimulation.simulation_id}
+				</p>
+			{/if}
+			{#if selectedSimulationStatus}
+				<p class="text-sm text-fg-muted">
+					Status: <span class="font-medium">{selectedSimulationStatus.status}</span>
+					{#if selectedSimulationStatus.current_step}
+						| Step: <span class="font-medium">{selectedSimulationStatus.current_step}</span>
 					{/if}
-					{#if selectedSimulationStatus}
-						<p class="mt-1 text-sm text-fg-muted">
-							Status: <span class="font-medium">{selectedSimulationStatus.status}</span>
-							{#if selectedSimulationStatus.current_step}
-								| Step: <span class="font-medium">{selectedSimulationStatus.current_step}</span>
-							{/if}
-						</p>
+				</p>
+			{/if}
+
+			{#if logLoading}
+				<div class="rounded-md bg-sunk px-4 py-3 text-sm text-fg-muted">Loading logs…</div>
+			{/if}
+
+			{#if logError}
+				<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{logError}</div>
+			{/if}
+
+			<div class="overflow-hidden rounded-md border border-line bg-fg">
+				<div class="max-h-[55vh] overflow-y-auto p-4 font-mono text-xs leading-5 text-slate-100">
+					{#if selectedSimulationStatus?.logs && selectedSimulationStatus.logs.length > 0}
+						{#each selectedSimulationStatus.logs as line, i (i)}
+							<div class="whitespace-pre-wrap break-words">{line}</div>
+						{/each}
+					{:else if !logLoading}
+						<div class="text-slate-400">No logs recorded yet.</div>
 					{/if}
-				</div>
-				<button
-					type="button"
-					class="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-hover"
-					onclick={closeLogDialog}
-				>
-					Close
-				</button>
-			</header>
-
-			<div class="flex-1 space-y-3 overflow-hidden px-5 py-4">
-				{#if logLoading}
-					<div class="rounded-md bg-surface px-4 py-3 text-sm text-fg-muted">Loading logs…</div>
-				{/if}
-
-				{#if logError}
-					<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{logError}</div>
-				{/if}
-
-				<div class="overflow-hidden rounded-md border border-line bg-fg">
-					<div class="max-h-[55vh] overflow-y-auto p-4 font-mono text-xs leading-5 text-slate-100">
-						{#if selectedSimulationStatus?.logs && selectedSimulationStatus.logs.length > 0}
-							{#each selectedSimulationStatus.logs as line, i (i)}
-								<div class="whitespace-pre-wrap break-words">{line}</div>
-							{/each}
-						{:else if !logLoading}
-							<div class="text-fg-dim">No logs recorded yet.</div>
-						{/if}
-					</div>
 				</div>
 			</div>
 		</div>
-	</div>
+	</Dialog>
 {/if}

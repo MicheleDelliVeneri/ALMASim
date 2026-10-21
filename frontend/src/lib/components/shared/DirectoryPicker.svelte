@@ -3,7 +3,7 @@
 	import { downloadApi, type BrowseDirectoryResponse } from '#lib/api/download.js';
 	import { createLogger } from '#lib/logger.js';
 	import { childPath } from '#lib/utils/paths.js';
-	import Modal from './Modal.svelte';
+	import Dialog from './Dialog.svelte';
 	import Spinner from './Spinner.svelte';
 
 	const logger = createLogger('components/shared/DirectoryPicker');
@@ -17,7 +17,6 @@
 		selectLabel?: string;
 		/** Offer a "new folder" row in the current directory. */
 		allowCreate?: boolean;
-		layer?: string;
 	}
 
 	let {
@@ -26,8 +25,7 @@
 		onClose,
 		title = 'Select Directory',
 		selectLabel = 'Select this folder',
-		allowCreate = false,
-		layer = 'z-50'
+		allowCreate = false
 	}: Props = $props();
 
 	let result = $state<BrowseDirectoryResponse | null>(null);
@@ -78,7 +76,7 @@
 	});
 </script>
 
-<Modal {title} {onClose} {layer}>
+<Dialog {title} {onClose}>
 	<div class="space-y-3">
 		{#if error}
 			<div class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>
@@ -169,4 +167,4 @@
 			{selectLabel}
 		</button>
 	{/snippet}
-</Modal>
+</Dialog>
