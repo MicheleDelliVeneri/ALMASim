@@ -1,77 +1,60 @@
+"""A sky model with serendipitous sources, end to end (MADIV-28 T8.2: moved from tests/)."""
+
 from pathlib import Path
 
 import astropy.units as U
 import numpy as np
 import pandas as pd
-import pytest
 
 from almasim import skymodels
 from almasim.services import astro
-from almasim.services import interferometry as interferometer
-from almasim.services.astro.spectral import sample_given_redshift
 from almasim.services.interferometry import antenna as alma_antenna
 
 
-class InlineBackend:
-    """Minimal synchronous backend for tests."""
+class InlineClient:
+    """Minimal synchronous Dask-like client for tests."""
 
-    def scatter(self, data, broadcast: bool = False):
-        return data
-
-    def compute(self, tasks, sync: bool = True):
+    def compute(self, tasks):
         if isinstance(tasks, list):
             return [
-                (task() if callable(task) else task.compute() if hasattr(task, "compute") else task)
+                (task.compute(scheduler="synchronous") if hasattr(task, "compute") else task)
                 for task in tasks
             ]
-        return (
-            tasks() if callable(tasks) else tasks.compute() if hasattr(tasks, "compute") else tasks
-        )
+        return tasks.compute(scheduler="synchronous") if hasattr(tasks, "compute") else tasks
 
     def gather(self, futures):
         return futures if isinstance(futures, list) else [futures]
 
-    def delayed(self, func):
-        def delayed_decorator(*args, **kwargs):
-            return lambda: func(*args, **kwargs)
-
-        return delayed_decorator
-
-    def close(self):
-        return None
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
 
 def _load_metadata_row():
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     main_dir = repo_root / "src" / "almasim"
     metadata = pd.read_csv(repo_root / "data" / "qso_metadata.csv")
     rest_frequency, _ = astro.get_line_info(main_dir)
+    from almasim.services.astro.spectral import sample_given_redshift
+
     sample = sample_given_redshift(metadata, 1, rest_frequency, False, None)
     return main_dir, sample.iloc[0]
 
 
-@pytest.mark.slow
-def test_interferometer_runs(tmp_path):
+def test_skymodel_generation(tmp_path):
     main_dir, metadata = _load_metadata_row()
     antenna_array = metadata["antenna_arrays"]
     ra = metadata["RA"] * U.deg
     dec = metadata["Dec"] * U.deg
     fov = metadata["FOV"] * 3600 * U.arcsec
+    ang_res = metadata["Ang.res."] * U.arcsec
+    vel_res = metadata["Vel.res."] * U.km / U.s
     int_time = metadata["Int.Time"] * U.s
     freq = metadata["Freq"] * U.GHz
     freq_support = metadata["Freq.sup."]
     cont_sens = metadata["Cont_sens_mJybeam"] * U.mJy / (U.arcsec**2)
+    source_name = metadata["ALMA_source_name"]
+    member_ouid = metadata["member_ous_uid"]
 
     alma_antenna.generate_antenna_config_file_from_antenna_array(
         antenna_array, str(main_dir), str(main_dir.parent)
     )
-
     from almasim.services.interferometry.frequency import freq_supp_extractor
 
     band_range, central_freq, t_channels, delta_freq = freq_supp_extractor(freq_support, freq)
@@ -79,15 +62,14 @@ def test_interferometer_runs(tmp_path):
         alma_antenna.get_max_baseline_from_antenna_array(antenna_array, str(main_dir)) * U.km
     )
     beam_size = alma_antenna.estimate_alma_beam_size(central_freq, max_baseline, return_value=False)
-    beam_area = 1.1331 * beam_size**2
-    cont_sens_jy = (cont_sens * (np.pi * (beam_size / 2) ** 2)).to(U.Jy)
+    beam_solid_angle = np.pi * (beam_size / 2) ** 2
+    cont_sens_jy = (cont_sens * beam_solid_angle).to(U.Jy)
     cell_size = beam_size / 5
     n_pix = 128
-    n_channels = 64
+    n_channels = 32
 
     redshift = metadata["redshift"]
     lum_infrared = 1e10
-    source_type = "point"
     from almasim.services.astro.spectral import process_spectral_data
 
     (
@@ -104,7 +86,7 @@ def test_interferometer_runs(tmp_path):
         fwhm_z,
         lum_infrared,
     ) = process_spectral_data(
-        source_type,
+        "point",
         str(main_dir),
         redshift,
         central_freq.value,
@@ -119,11 +101,6 @@ def test_interferometer_runs(tmp_path):
         line_width_range=(50.0, 300.0),
     )
 
-    if n_channels_nw != n_channels:
-        freq_sup = freq_sup_nw * U.MHz
-        n_channels = n_channels_nw
-        band_range = n_channels * freq_sup
-
     datacube = skymodels.DataCube(
         n_px_x=n_pix,
         n_px_y=n_pix,
@@ -134,7 +111,6 @@ def test_interferometer_runs(tmp_path):
         ra=ra,
         dec=dec,
     )
-
     pos_x, pos_y, _ = datacube.wcs.sub(3).wcs_world2pix(ra, dec, central_freq, 0)
     pos_z = [int(index) for index in source_channel_index]
     model = skymodels.PointlikeSkyModel(
@@ -148,33 +124,65 @@ def test_interferometer_runs(tmp_path):
         n_chan=n_channels,
     )
     datacube = model.insert()
-    model = datacube._array.to_value(datacube._array.unit).T / beam_area.value
+    model = datacube._array.to_value(datacube._array.unit).T
+    assert model.shape[0] == n_channels
 
-    obs_date = metadata["Obs.date"]
-    header = skymodels.get_datacube_header(datacube, obs_date)
-    second2hour = 1 / 3600
-    snr = 1.3
-    with InlineBackend() as backend:
-        inter = interferometer.Interferometer(
-            idx=0,
-            skymodel=model,
-            backend=backend,
-            main_dir=str(main_dir),
-            output_dir=str(tmp_path),
-            ra=ra,
-            dec=dec,
-            central_freq=central_freq,
-            bandwidth=band_range,
-            fov=fov.value,
-            antenna_array=antenna_array,
-            noise=(np.min(line_fluxes) / beam_area.value) / snr,
-            snr=snr,
-            integration_time=int_time.value * second2hour,
-            observation_date=obs_date,
-            header=header,
-            save_mode="npz",
-            robust=0,
-        )
+    sim_params_path = tmp_path / "sim_params.txt"
+    astro.write_sim_parameters(
+        sim_params_path,
+        source_name,
+        member_ouid,
+        ra,
+        dec,
+        ang_res,
+        vel_res,
+        int_time,
+        metadata["Band"],
+        band_range,
+        central_freq,
+        redshift,
+        line_fluxes,
+        line_names,
+        line_frequency,
+        continum,
+        fov,
+        beam_size,
+        cell_size,
+        n_pix,
+        n_channels,
+        None,
+        None,
+        lum_infrared,
+        fwhm_z,
+        "point",
+        None,
+        None,
+        None,
+    )
+    assert sim_params_path.exists()
 
-        simulation_results = inter.run_interferometric_sim()
-        assert simulation_results is not None
+    pos_x = int(pos_x)
+    pos_y = int(pos_y)
+    fwhm_x = np.random.randint(3, 10)
+    fwhm_y = np.random.randint(3, 10)
+    fwhm_z_valid = [max(3.0, fz) for fz in fwhm_z]
+    datacube = skymodels.insert_serendipitous(
+        None,
+        InlineClient(),
+        None,
+        datacube,
+        continum,
+        cont_sens_jy.value,
+        line_fluxes,
+        line_names,
+        line_frequency,
+        delta_freq.value,
+        pos_z,
+        fwhm_x,
+        fwhm_y,
+        fwhm_z_valid,
+        n_pix,
+        n_channels,
+        sim_params_path,
+    )
+    assert n_channels in datacube._array.shape
