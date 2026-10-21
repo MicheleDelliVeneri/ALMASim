@@ -6,6 +6,60 @@ submits every command as a Slurm job (or, where the site profile says so,
 runs it on its own machine), and follows the runs live. Each user starts
 their own console; the runs live in run folders that a whole team can share.
 
+## Getting started (on zwicky)
+
+1. **Once:** use the shared install. Add to your `~/.bashrc` on the cluster:
+
+   ```bash
+   source /SKAO_data/cycle11/almasim/almasim.sh
+   ```
+
+   It puts `almasim` on your PATH and names the site profile. Check that
+   everything a job needs is there (the checks run on a compute node):
+
+   ```bash
+   almasim doctor --slurm
+   ```
+
+2. **Start your console** on the login node, in a `tmux` or `screen` session
+   so it outlives your SSH connection:
+
+   ```bash
+   almasim serve
+   ```
+
+   It prints an `ssh -L …` line and a link with your access token. Only you
+   can open the console's socket, and only with that token.
+
+3. **Open the tunnel** from your laptop with the printed line, e.g.
+
+   ```bash
+   ssh -N -L 8765:/home1/you/.almasim/serve.sock you@zwicky.login
+   ```
+
+   then open the printed link (`http://localhost:8765/?token=…`) in your
+   browser. The token is kept as a cookie, so later visits need only
+   `http://localhost:8765`. `almasim serve --status` shows the link again;
+   `almasim serve --stop` stops the console (your jobs carry on).
+
+4. **A first run:** *Run a command* → `doctor` → *Run*. It runs as a Slurm job;
+   its page shows its log live, the batch script, and Slurm's accounting.
+   *Archive*, *Imaging* and *Simulate* lead through the usual work: search
+   and download observations, image MeasurementSets, simulate observations.
+
+### Where results go
+
+- Each run has a **run folder** under the runs root
+  (`/SKAO_data/cycle11/almasim-runs/<day>/<run id>/`): its command line
+  (`job.json`), batch script, logs and status. *Files* on its job page lists
+  it; *Products* opens it.
+- A command's own outputs go where its options say: the output folder you
+  give *Imaging*, the destination you give *Archive*. *Simulate* keeps each
+  simulation's FITS products in its run folder (`outputs/`) unless you choose
+  another folder.
+- The terminal sees the same runs: `almasim jobs list`, `almasim jobs logs -f
+  <run>`, `almasim submit …`.
+
 ## A shared runs folder
 
 A team sees each other's runs when the site profile names one runs root
@@ -54,3 +108,30 @@ profile (`~/.config/almasim/almasim.toml`, or the console's Settings page):
 ```toml
 runs_root = "~/almasim-runs"
 ```
+
+## For administrators: the shared install
+
+One environment serves everyone: the Python every job runs (with almasim,
+its web console, casatools and casatasks, at the versions in `uv.lock`), a
+site profile pointing at it, and a file users source.
+
+```bash
+# on a compute node (it downloads Python and packages), from a checkout:
+cd frontend && npm ci && npm run build && cd ..
+scripts/install_shared.sh /SKAO_data/cycle11/almasim examples/site-profiles/zwicky.toml
+```
+
+It makes `env/` (the environment), `site.toml` (the template with that
+environment's Python filled in) and `almasim.sh` under the prefix, all
+group-writable. WSClean and the CASA data are not part of it: the site
+profile names the shared ones (`[tools]`).
+
+**Updating:** pull the new version, build the web app, and run the same
+command again (or pass a wheel from a release as the third argument). The
+environment is reinstalled in place and `site.toml` rewritten from the
+template, so change the template (`examples/site-profiles/zwicky.toml`), not
+`site.toml`. Update when no jobs are running (`squeue` for the team's
+users): a job loads almasim from the environment while it runs, so files
+replaced under it can break it. Running consoles keep the version they
+started with until their users restart them (`almasim serve --stop`, then
+`almasim serve`). Check with `almasim doctor --slurm` afterwards.
