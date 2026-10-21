@@ -7,10 +7,10 @@ import logging
 import shutil
 import threading
 import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional
 from urllib.parse import urlsplit
 
 from .models import DataProduct, DownloadSummary, FileDownloadStatus, format_bytes
@@ -26,7 +26,7 @@ from .transfer import (
 logger = logging.getLogger(__name__)
 
 
-def _extract_tar(tar_path: Path, destination: Path) -> List[str]:
+def _extract_tar(tar_path: Path, destination: Path) -> list[str]:
     """Extract a downloaded tar under ``destination`` and delete the tar.
 
     The extraction is atomic at the directory level (see
@@ -56,7 +56,7 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return False
 
 
-def _cleanup_download_inputs(
+def _cleanup_download_inputs(  # noqa: C901
     destination: Path,
     statuses: Iterable[FileDownloadStatus],
     extracted_files: Iterable[str],
@@ -113,8 +113,8 @@ def _cleanup_download_inputs(
             parent = parent.parent
 
 
-def download_products(
-    products: List[DataProduct],
+def download_products(  # noqa: C901
+    products: list[DataProduct],
     destination: Path | str,
     *,
     max_parallel: int = 3,
@@ -123,12 +123,12 @@ def download_products(
     unpack_ms: bool = False,
     generate_calibrated_visibilities: bool = False,
     clean_intermediate_files: bool = False,
-    archive_output_root: Optional[Path | str] = None,
-    casa_data_root: Optional[Path | str] = None,
+    archive_output_root: Path | str | None = None,
+    casa_data_root: Path | str | None = None,
     skip_casa_data_update: bool = False,
-    logger_fn: Optional[Callable[[str], None]] = None,
-    should_cancel: Optional[Callable[[], bool]] = None,
-    update_callback: Optional[Callable[[FileDownloadStatus], None]] = None,
+    logger_fn: Callable[[str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+    update_callback: Callable[[FileDownloadStatus], None] | None = None,
 ) -> DownloadSummary:
     """Download resolved products into a local directory."""
     destination_path = Path(destination).expanduser().resolve()
@@ -143,15 +143,15 @@ def download_products(
         for product in products
     ]
     _distribute_across_mirrors(statuses)
-    extracted_files: List[str] = []
-    extraction_failed: List[str] = []
-    raw_measurement_sets: List[str] = []
-    calibrated_measurement_sets: List[str] = []
+    extracted_files: list[str] = []
+    extraction_failed: list[str] = []
+    raw_measurement_sets: list[str] = []
+    calibrated_measurement_sets: list[str] = []
 
     # Spread requests across the ALMA mirrors but never exceed the per-mirror
     # cap recommended by the archive (10 concurrent transfers per TAP host).
     effective_parallel = max(1, min(int(max_parallel), MAX_PARALLEL_TOTAL))
-    host_semaphores: Dict[str, threading.BoundedSemaphore] = {
+    host_semaphores: dict[str, threading.BoundedSemaphore] = {
         host: threading.BoundedSemaphore(MAX_PARALLEL_PER_MIRROR) for host in _mirror_hosts()
     }
 
@@ -203,7 +203,7 @@ def download_products(
                 continue
             try:
                 extracted_files.extend(_extract_tar(tar_path, destination_path))
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - logged; the other tars go on
                 # Keep going: the other tars are fine and the failed one is
                 # still on disk. But say so loudly — a download that "completed"
                 # with an unextracted tar is exactly the kind of silent gap the

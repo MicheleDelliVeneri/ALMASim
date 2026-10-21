@@ -1,7 +1,6 @@
 """Simulation jobs and their logs."""
 
 import uuid
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,7 +18,7 @@ class SimulationRepository:
         self.db = db
 
     def create_simulation_job(
-        self, source_name: str, observation_id: Optional[int] = None, **kwargs
+        self, source_name: str, observation_id: int | None = None, **kwargs
     ) -> SimulationJob:
         """Create a new simulation job."""
         simulation = SimulationJob(source_name=source_name, observation_id=observation_id, **kwargs)
@@ -28,7 +27,7 @@ class SimulationRepository:
         self.db.refresh(simulation)
         return simulation
 
-    def get_simulation_by_id(self, simulation_id: uuid.UUID) -> Optional[SimulationJob]:
+    def get_simulation_by_id(self, simulation_id: uuid.UUID) -> SimulationJob | None:
         """Get a simulation job by its UUID."""
         return JobRepository(self.db).get(SimulationJob, simulation_id)
 
@@ -36,11 +35,11 @@ class SimulationRepository:
         self,
         simulation_id: uuid.UUID,
         status: str,
-        progress: Optional[float] = None,
-        current_step: Optional[str] = None,
-        message: Optional[str] = None,
-        error: Optional[str] = None,
-    ) -> Optional[SimulationJob]:
+        progress: float | None = None,
+        current_step: str | None = None,
+        message: str | None = None,
+        error: str | None = None,
+    ) -> SimulationJob | None:
         """Update simulation job status."""
         simulation = self.get_simulation_by_id(simulation_id)
         if not simulation:
@@ -86,7 +85,7 @@ class SimulationRepository:
         self,
         simulation_id: uuid.UUID,
         limit: int = 1000,
-    ) -> List[SimulationLog]:
+    ) -> list[SimulationLog]:
         """Get logs for a simulation."""
         stmt = (
             select(SimulationLog)
@@ -98,10 +97,10 @@ class SimulationRepository:
 
     def list_simulations(
         self,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[SimulationJob]:
+    ) -> list[SimulationJob]:
         """List simulation jobs with optional status filter."""
         if offset:
             stmt = select(SimulationJob).order_by(SimulationJob.created_at.desc())

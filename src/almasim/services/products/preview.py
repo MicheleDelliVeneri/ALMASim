@@ -119,7 +119,7 @@ def _infer_grid_size_from_companions(path: Path) -> int | None:
                     cube, _ = _load_npz_cube(candidate)
                 else:
                     cube, _ = _load_fits_cube(candidate)
-            except Exception:
+            except Exception:  # noqa: BLE001 - unreadable candidates are skipped
                 continue
             if cube.ndim == 3 and cube.shape[1] == cube.shape[2]:
                 return int(cube.shape[1])

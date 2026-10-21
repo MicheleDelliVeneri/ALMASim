@@ -29,7 +29,7 @@ def _patch_astropy_logger():
         def safe_disable(*args, **kwargs):
             try:
                 return original_disable(*args, **kwargs)
-            except Exception:
+            except Exception:  # noqa: BLE001 - astropy's logger may already be torn down
                 pass  # Ignore errors when disabling warnings
 
         astropy.logger.disable_warnings_logging = safe_disable

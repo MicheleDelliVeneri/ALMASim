@@ -17,9 +17,10 @@ import shlex
 import socket
 import subprocess
 import threading
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Mapping, Sequence
+from typing import Any, ClassVar
 
 from almasim.services.paths import UnsafePathError, safe_join
 
@@ -229,7 +230,7 @@ class SlurmDaskClusterSingleton:
             raise outside
         return str(log_directory)
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         queue: str,
         node_cores: int,

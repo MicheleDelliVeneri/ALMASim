@@ -129,7 +129,7 @@ def _json_default(value: Any) -> Any:
     return str(value)
 
 
-def _column_digest(table: Any, column: str) -> str:
+def _column_digest(table: Any, column: str) -> str:  # noqa: C901
     digest = hashlib.sha256()
     nrows = table.nrows()
     if nrows == 0:
@@ -390,7 +390,7 @@ def _is_table(path: Path) -> bool:
     return path.is_dir() and (path / "table.dat").exists()
 
 
-def compare_tree(
+def compare_tree(  # noqa: C901
     report: Report,
     new_root: Path,
     ref_root: Path,
@@ -458,7 +458,7 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--report", type=Path, help="Also write the report to this file.")
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
 

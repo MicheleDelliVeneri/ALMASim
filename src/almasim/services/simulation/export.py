@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -15,13 +16,13 @@ from .params import LogFn, SimulationParams
 from .stages import CleanCubeStage
 
 
-def export_results(
+def export_results(  # noqa: C901
     params: SimulationParams,
     clean_cube_stage: CleanCubeStage,
     simulation_results: dict[str, Any],
     *,
     logger: LogFn = None,
-    status_callback: Optional[Callable[[str], None]] = None,
+    status_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Persist optional file exports for simulation results."""
     ctx = RunContext(logger, status_callback, remote=bool(params.remote))

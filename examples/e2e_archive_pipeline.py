@@ -414,7 +414,7 @@ def _casa_check(mo):
 
         casa_available = True
         mo.callout(mo.md("CASA tools detected — Steps 4 and 5 will run."), kind="success")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CASA may be installed but broken
         casa_available = False
         mo.callout(
             mo.md(

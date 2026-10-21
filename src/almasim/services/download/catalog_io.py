@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 
@@ -14,7 +13,7 @@ from .models import DataProduct
 logger = logging.getLogger(__name__)
 
 
-def products_to_dataframe(products: List[DataProduct]) -> pd.DataFrame:
+def products_to_dataframe(products: list[DataProduct]) -> pd.DataFrame:
     """Convert DataProduct rows into a DataFrame."""
     rows = []
     for product in products:
@@ -24,7 +23,7 @@ def products_to_dataframe(products: List[DataProduct]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def save_products_csv(products: List[DataProduct], output_path: Path | str) -> str:
+def save_products_csv(products: list[DataProduct], output_path: Path | str) -> str:
     """Persist resolved DataLink products as CSV."""
     output_path = Path(output_path).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,7 +31,7 @@ def save_products_csv(products: List[DataProduct], output_path: Path | str) -> s
     return str(output_path)
 
 
-def load_products_csv(input_path: Path | str) -> List[DataProduct]:
+def load_products_csv(input_path: Path | str) -> list[DataProduct]:
     """Load previously saved DataProduct rows from CSV."""
     input_path = Path(input_path).expanduser().resolve()
     # Blank fields stay "": pandas would read them as NaN, which str() turns into "nan".

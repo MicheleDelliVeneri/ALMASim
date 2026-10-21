@@ -55,7 +55,7 @@ class QueryPreset:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "QueryPreset":
+    def from_dict(cls, data: dict[str, Any]) -> QueryPreset:
         return cls(
             name=data["name"],
             filters=data.get("filters", {}),
@@ -114,7 +114,7 @@ def list_presets(directory: Path | str) -> list[QueryPreset]:
     for p in sorted(directory.glob(f"*{_FILE_SUFFIX}")):
         try:
             presets.append(load_preset_from_path(p))
-        except Exception:
+        except Exception:  # noqa: BLE001 - unreadable presets are skipped
             pass
     presets.sort(key=lambda q: q.created_at, reverse=True)
     return presets

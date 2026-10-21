@@ -13,8 +13,9 @@ python-casacore's row-major layout (see :mod:`.schema`).
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator, Optional, Sequence
+from typing import Any
 
 TARGET_INTENT = "OBSERVE_TARGET"
 
@@ -25,7 +26,7 @@ def open_table(
     *,
     readonly: bool = True,
     shared: bool = False,
-    opener: Optional[Callable[..., Any]] = None,
+    opener: Callable[..., Any] | None = None,
 ) -> Iterator[Any]:
     """The casacore table at ``path``, closed when the block ends.
 

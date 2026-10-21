@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 from astropy.io import fits
@@ -176,7 +177,7 @@ def _align_cube_to_shape(cube: np.ndarray, target_shape: tuple[int, int, int]) -
 
     factors = tuple(
         target / current if current > 0 else 1.0
-        for current, target in zip(cube.shape, target_shape)
+        for current, target in zip(cube.shape, target_shape, strict=True)
     )
     resized = zoom(cube, zoom=factors, order=1)
     resized = np.asarray(resized, dtype=np.float32)
@@ -188,7 +189,7 @@ def _crop_or_pad_cube(cube: np.ndarray, target_shape: tuple[int, int, int]) -> n
     out = np.zeros(target_shape, dtype=np.float32)
     src_slices = []
     dst_slices = []
-    for current, target in zip(cube.shape, target_shape):
+    for current, target in zip(cube.shape, target_shape, strict=True):
         if current >= target:
             start = (current - target) // 2
             src_slices.append(slice(start, start + target))

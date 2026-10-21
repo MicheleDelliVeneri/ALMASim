@@ -1,7 +1,7 @@
 """Metadata-related schemas."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -14,66 +14,64 @@ class ScienceQuery:
 
     include: InclusionFilters
     exclude: ExclusionFilters
-    visible_columns: Optional[List[str]] = None
+    visible_columns: list[str] | None = None
 
 
 class MetadataQuery(BaseModel):
     """Metadata query parameters."""
 
     # --- Inclusion filters ---
-    source_name: Optional[str] = Field(None, description="Source name (partial match)")
-    science_keyword: Optional[Sequence[str]] = Field(
-        None, description="Science keywords to include"
-    )
-    scientific_category: Optional[Sequence[str]] = Field(
+    source_name: str | None = Field(None, description="Source name (partial match)")
+    science_keyword: Sequence[str] | None = Field(None, description="Science keywords to include")
+    scientific_category: Sequence[str] | None = Field(
         None, description="Scientific categories to include"
     )
-    bands: Optional[Sequence[int]] = Field(None, description="Band numbers to include")
-    antenna_arrays: Optional[str] = Field(
+    bands: Sequence[int] | None = Field(None, description="Band numbers to include")
+    antenna_arrays: str | None = Field(
         None, description="Antenna array raw string filter (partial match)"
     )
-    array_type: Optional[Sequence[str]] = Field(
+    array_type: Sequence[str] | None = Field(
         None,
         description=(
             "Array type(s) to include: '12m', '7m', 'TP' (matched via antenna prefix patterns)"
         ),
     )
-    array_configuration: Optional[Sequence[str]] = Field(
+    array_configuration: Sequence[str] | None = Field(
         None,
         description=(
             "Array configuration(s) to include, e.g. 'C-1', 'C-2' (matched in schedblock_name)"
         ),
     )
-    angular_resolution_range: Optional[tuple[float, float]] = Field(
+    angular_resolution_range: tuple[float, float] | None = Field(
         None, description="Angular resolution range (arcsec)"
     )
-    observation_date_range: Optional[tuple[str, str]] = Field(
+    observation_date_range: tuple[str, str] | None = Field(
         None, description="Observation date range (ISO date strings)"
     )
-    qa2_status: Optional[Sequence[str]] = Field(
+    qa2_status: Sequence[str] | None = Field(
         None,
         description="QA2 status values: 'Pass', 'Fail', 'SemiPass', or raw 'T'/'F'/'X'",
     )
-    obs_type: Optional[Sequence[str]] = Field(
+    obs_type: Sequence[str] | None = Field(
         None, description="Observation type(s) to include (partial match, OR logic)"
     )
-    fov_range: Optional[tuple[float, float]] = Field(None, description="FOV range")
-    time_resolution_range: Optional[tuple[float, float]] = Field(
+    fov_range: tuple[float, float] | None = Field(None, description="FOV range")
+    time_resolution_range: tuple[float, float] | None = Field(
         None, description="Time resolution range"
     )
-    frequency_range: Optional[tuple[float, float]] = Field(None, description="Frequency range")
+    frequency_range: tuple[float, float] | None = Field(None, description="Frequency range")
 
     # --- Exclusion filters ---
-    exclude_science_keyword: Optional[Sequence[str]] = Field(
+    exclude_science_keyword: Sequence[str] | None = Field(
         None, description="Science keywords to exclude"
     )
-    exclude_scientific_category: Optional[Sequence[str]] = Field(
+    exclude_scientific_category: Sequence[str] | None = Field(
         None, description="Scientific categories to exclude"
     )
-    exclude_source_name: Optional[Sequence[str]] = Field(
+    exclude_source_name: Sequence[str] | None = Field(
         None, description="Source name substrings to exclude"
     )
-    exclude_obs_type: Optional[Sequence[str]] = Field(
+    exclude_obs_type: Sequence[str] | None = Field(
         None, description="Observation type substrings to exclude"
     )
     exclude_solar: bool = Field(
@@ -84,7 +82,7 @@ class MetadataQuery(BaseModel):
     # --- Cycle / proposal_id filtering ---
     # Cycle N → year 2012+N → proposal_id prefix "{year}."
     # Pass cycle numbers (e.g. [4, 5, 6]) and they are converted to proposal_id prefixes.
-    cycles: Optional[Sequence[int]] = Field(
+    cycles: Sequence[int] | None = Field(
         None,
         description=(
             "ALMA cycle numbers to include (e.g. [4, 5, 6]). "
@@ -100,7 +98,7 @@ class MetadataQuery(BaseModel):
     exclude_mosaic: bool = Field(True, description="Exclude mosaic observations")
 
     # --- Output control ---
-    visible_columns: Optional[List[str]] = Field(
+    visible_columns: list[str] | None = Field(
         None,
         description=("Ordered subset of result columns to return. Pass null/omit for all columns."),
     )
@@ -171,7 +169,7 @@ class MetadataPageResponse(BaseModel):
     total_fetched: int
     done: bool
     status: str = "running"
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class MetadataSaveRequest(BaseModel):
@@ -190,7 +188,7 @@ class MetadataSaveResponse(BaseModel):
 
     path: str = Field(..., description="Resolved path where the data was stored")
     count: int = Field(..., description="Number of records saved")
-    message: Optional[str] = Field(default=None, description="Optional status message")
+    message: str | None = Field(default=None, description="Optional status message")
 
 
 class QueryPresetCreate(BaseModel):
@@ -215,4 +213,4 @@ class QueryPresetResponse(BaseModel):
 class QueryPresetsResponse(BaseModel):
     """List of saved query presets."""
 
-    presets: List[QueryPresetResponse]
+    presets: list[QueryPresetResponse]

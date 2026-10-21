@@ -1,6 +1,6 @@
 """Diffuse sky model implementation."""
 
-from typing import Any, Optional
+from typing import Any
 
 import nifty8 as ift
 import numpy as np
@@ -8,7 +8,7 @@ import numpy as np
 from .base import SkyModel
 
 
-def diffuse_signal(n_px: int, rng: Optional[np.random.Generator] = None) -> np.ndarray:
+def diffuse_signal(n_px: int, rng: np.random.Generator | None = None) -> np.ndarray:
     """Generate diffuse signal using NIFTY; ``rng`` seeds it (fresh entropy when None)."""
     rng = rng if rng is not None else np.random.default_rng()
     ift.random.push_sseq(int(rng.integers(1, 1001)))

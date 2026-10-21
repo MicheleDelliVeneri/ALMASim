@@ -7,8 +7,9 @@ columns the cube planning needs.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -88,13 +89,13 @@ def _field_scan(
         state_ids = np.asarray(main.getcol("STATE_ID"))
     unique_dd, counts = np.unique(dd_ids, return_counts=True)
     rows_per_spw: dict[int, int] = {}
-    for dd_id, count in zip(unique_dd, counts):
+    for dd_id, count in zip(unique_dd, counts, strict=True):
         spw = int(spw_of_dd[int(dd_id)])
         rows_per_spw[spw] = rows_per_spw.get(spw, 0) + int(count)
 
     rows_per_spw_field: dict[tuple[int, int], int] = {}
     pairs, pair_counts = np.unique(np.stack([dd_ids, field_ids]), axis=1, return_counts=True)
-    for (dd_id, field_id), count in zip(pairs.T, pair_counts):
+    for (dd_id, field_id), count in zip(pairs.T, pair_counts, strict=True):
         key = (int(spw_of_dd[int(dd_id)]), int(field_id))
         rows_per_spw_field[key] = rows_per_spw_field.get(key, 0) + int(count)
 
@@ -182,7 +183,7 @@ def image_pixels(
 def compute_imaging_parameters(
     input_ms: Path,
     science_only: bool = True,
-    intents: Optional[Sequence[str]] = None,
+    intents: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """WSClean geometry for ``input_ms``: one row per spectral window and field.
 

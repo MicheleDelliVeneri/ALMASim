@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Callable, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import astropy.units as U
 import numpy as np
@@ -25,7 +26,7 @@ from .visibility import assemble_visibility_table
 
 _logger = logging.getLogger(__name__)
 
-LogFn = Optional[Callable[[str], None]]
+LogFn = Callable[[str], None] | None
 
 
 class ProgressSignal:
@@ -34,7 +35,7 @@ class ProgressSignal:
     def __init__(self):
         self._subscribers: list[Callable[[int], None]] = []
 
-    def connect(self, callback: Optional[Callable[[int], None]]) -> None:
+    def connect(self, callback: Callable[[int], None] | None) -> None:
         """Connect a callback function to receive progress updates."""
         if callback is not None:
             self._subscribers.append(callback)
@@ -52,7 +53,7 @@ class Interferometer:
         self,
         idx: int,
         skymodel: np.ndarray,
-        backend: "ComputationBackend",
+        backend: ComputationBackend,
         main_dir: str,
         output_dir: str,
         ra: U.Quantity,
@@ -71,11 +72,11 @@ class Interferometer:
         imaging_algorithm: str = "legacy",
         persist: bool = True,
         antenna_diameter_m: float = 12.0,
-        config_name: Optional[str] = None,
-        array_type: Optional[str] = None,
+        config_name: str | None = None,
+        array_type: str | None = None,
         logger: LogFn = None,
-        spectral_window: Optional[SpectralWindow] = None,
-        noise_entropy: Optional[tuple[int, ...]] = None,
+        spectral_window: SpectralWindow | None = None,
+        noise_entropy: tuple[int, ...] | None = None,
     ):
         """
         Initialize interferometer.

@@ -1,7 +1,7 @@
 """Simulation-related schemas."""
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -15,12 +15,12 @@ class ObservationConfigInput(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    name: Optional[str] = None
-    array_type: Optional[Literal["12m", "7m", "TP"]] = None
-    antenna_array: Optional[str] = None
-    total_time_s: Optional[float] = None
-    correlator: Optional[str] = None
-    antenna_diameter_m: Optional[float] = None
+    name: str | None = None
+    array_type: Literal["12m", "7m", "TP"] | None = None
+    antenna_array: str | None = None
+    total_time_s: float | None = None
+    correlator: str | None = None
+    antenna_diameter_m: float | None = None
 
 
 class SimulationParamsBase(BaseModel):
@@ -42,29 +42,29 @@ class SimulationParamsBase(BaseModel):
     freq: float = Field(..., description="Frequency in GHz")
     freq_support: str = Field(..., description="Frequency support string")
     cont_sens: float = Field(..., description="Continuum sensitivity in mJy/beam")
-    line_sens_10kms: Optional[float] = Field(
+    line_sens_10kms: float | None = Field(
         default=None,
         description="Optional 10 km/s line sensitivity in mJy/beam",
     )
     antenna_array: str = Field(..., description="Antenna array configuration")
-    observation_configs: Optional[list[ObservationConfigInput]] = Field(
+    observation_configs: list[ObservationConfigInput] | None = Field(
         default=None,
         description="Optional multi-configuration single-pointing observation plan",
     )
     source_type: str = Field(default="point", description="Source type (see almasim SKYMODELS)")
-    n_pix: Optional[int] = Field(None, description="Number of pixels")
-    n_channels: Optional[int] = Field(None, description="Number of channels")
-    tng_api_key: Optional[str] = Field(None, description="TNG API key")
+    n_pix: int | None = Field(None, description="Number of pixels")
+    n_channels: int | None = Field(None, description="Number of channels")
+    tng_api_key: str | None = Field(None, description="TNG API key")
     ncpu: int = Field(default=4, description="Number of CPUs")
-    rest_frequency: Optional[Any] = Field(None, description="Rest frequency")
-    redshift: Optional[float] = Field(None, description="Redshift")
-    lum_infrared: Optional[float] = Field(None, description="Infrared luminosity")
-    snr: Optional[float] = Field(
+    rest_frequency: Any | None = Field(None, description="Rest frequency")
+    redshift: float | None = Field(None, description="Redshift")
+    lum_infrared: float | None = Field(None, description="Infrared luminosity")
+    snr: float | None = Field(
         default=None,
         description=("Optional manual signal-to-noise ratio override; leave null to auto-derive"),
     )
-    n_lines: Optional[int] = Field(None, description="Number of spectral lines")
-    line_names: Optional[Any] = Field(None, description="Line names")
+    n_lines: int | None = Field(None, description="Number of spectral lines")
+    line_names: Any | None = Field(None, description="Line names")
     save_mode: str = Field(
         default="fits", description="Image save mode: npz, fits, both, h5, or memory"
     )
@@ -75,7 +75,7 @@ class SimulationParamsBase(BaseModel):
         default=True,
         description="Whether to persist standard simulation outputs to disk",
     )
-    ml_dataset_path: Optional[str] = Field(
+    ml_dataset_path: str | None = Field(
         default=None,
         description="Optional HDF5 shard path for ML dataset export",
     )
@@ -85,22 +85,22 @@ class SimulationParamsBase(BaseModel):
         default="legacy",
         description="Imaging implementation (ducc0 is disabled until its uv geometry is fixed)",
     )
-    compute_backend: Optional[str] = Field(
+    compute_backend: str | None = Field(
         default="local",
         description=("Computation backend type: local, dask, slurm, or kubernetes"),
     )
-    compute_backend_config: Optional[dict] = Field(
+    compute_backend_config: dict | None = Field(
         default_factory=dict, description="Backend-specific configuration"
     )
     ground_temperature_k: float = Field(
         default=270.0,
         description="Ground temperature used by the PWV-aware noise model",
     )
-    correlator: Optional[str] = Field(
+    correlator: str | None = Field(
         default=None,
         description="Optional correlator label stored in the observation plan",
     )
-    elevation_deg: Optional[float] = Field(
+    elevation_deg: float | None = Field(
         default=None,
         description="Optional source elevation override for the noise model",
     )
@@ -120,22 +120,22 @@ class SimulationParamsBase(BaseModel):
         default=1.0,
         description="Relative amplitude for the simulated background sky",
     )
-    background_seed: Optional[int] = Field(
+    background_seed: int | None = Field(
         default=None,
         description="Optional random seed for reproducible background sky generation",
     )
-    seed: Optional[int] = Field(
+    seed: int | None = Field(
         default=None,
         description=(
             "Random seed for the whole run: sky, noise and background "
             "(none: fresh randomness every run)"
         ),
     )
-    external_skymodel_path: Optional[str] = Field(
+    external_skymodel_path: str | None = Field(
         default=None,
         description="Optional path to an external FITS image or FITS cube sky model",
     )
-    external_component_table_path: Optional[str] = Field(
+    external_component_table_path: str | None = Field(
         default=None,
         description=(
             "Optional path to a component-list-like source table for external-components mode"
@@ -149,7 +149,7 @@ class SimulationParamsBase(BaseModel):
         default="observation",
         description="External FITS header mode: observation or preserve",
     )
-    external_header_overrides: Optional[dict[str, Any]] = Field(
+    external_header_overrides: dict[str, Any] | None = Field(
         default=None,
         description="Optional FITS header keyword overrides applied to external models",
     )
@@ -157,7 +157,7 @@ class SimulationParamsBase(BaseModel):
         default=False,
         description="Whether to generate a native MeasurementSet `.ms` export",
     )
-    ms_export_dir: Optional[str] = Field(
+    ms_export_dir: str | None = Field(
         default=None,
         description=("Optional target directory for the native MeasurementSet `.ms` export"),
     )
@@ -176,19 +176,19 @@ class SimulationParamsCreate(SimulationParamsBase):
     """Simulation parameters for creation."""
 
     idx: int = Field(..., description="Simulation index")
-    main_dir: Optional[str] = Field(
+    main_dir: str | None = Field(
         None, description="Main directory path (uses settings if not provided)"
     )
-    output_dir: Optional[str] = Field(
+    output_dir: str | None = Field(
         None, description="Output directory path (uses settings if not provided)"
     )
-    tng_dir: Optional[str] = Field(
+    tng_dir: str | None = Field(
         None, description="TNG directory path (uses settings if not provided)"
     )
-    galaxy_zoo_dir: Optional[str] = Field(
+    galaxy_zoo_dir: str | None = Field(
         None, description="Galaxy Zoo directory path (uses settings if not provided)"
     )
-    hubble_dir: Optional[str] = Field(
+    hubble_dir: str | None = Field(
         None, description="Hubble directory path (uses settings if not provided)"
     )
 
@@ -198,8 +198,8 @@ class SimulationResponse(BaseModel):
 
     simulation_id: str = Field(..., description="Simulation ID")
     status: str = Field(..., description="Simulation status")
-    output_path: Optional[str] = Field(None, description="Output file path")
-    message: Optional[str] = Field(None, description="Status message")
+    output_path: str | None = Field(None, description="Output file path")
+    message: str | None = Field(None, description="Status message")
 
 
 class SimulationStatus(BaseModel):
@@ -207,11 +207,11 @@ class SimulationStatus(BaseModel):
 
     simulation_id: str = Field(..., description="Simulation ID")
     status: str = Field(..., description="Status")
-    progress: Optional[float] = Field(None, description="Progress percentage")
-    message: Optional[str] = Field(None, description="Status message")
-    current_step: Optional[str] = Field(None, description="Current simulation step")
-    logs: Optional[list[str]] = Field(None, description="Recent log entries")
-    error: Optional[str] = Field(None, description="Error message if failed")
+    progress: float | None = Field(None, description="Progress percentage")
+    message: str | None = Field(None, description="Status message")
+    current_step: str | None = Field(None, description="Current simulation step")
+    logs: list[str] | None = Field(None, description="Recent log entries")
+    error: str | None = Field(None, description="Error message if failed")
 
 
 class SimulationEstimate(BaseModel):
@@ -241,8 +241,8 @@ class SimulationSummary(BaseModel):
     message: str = Field(..., description="Status message")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
-    error: Optional[str] = Field(None, description="Error message if failed")
-    output_dir: Optional[str] = Field(None, description="Output directory path")
+    error: str | None = Field(None, description="Error message if failed")
+    output_dir: str | None = Field(None, description="Output directory path")
 
 
 class SimulationListResponse(BaseModel):

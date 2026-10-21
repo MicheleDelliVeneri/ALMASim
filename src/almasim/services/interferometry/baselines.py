@@ -1,7 +1,5 @@
 """Baseline preparation and management for interferometry."""
 
-from typing import Tuple
-
 import astropy.coordinates as coord
 import astropy.units as u
 import numpy as np
@@ -96,7 +94,7 @@ def prepare_baselines(
     Nant: int,
     nH: int,
     Hcov: list[float],
-) -> Tuple[
+) -> tuple[
     int,
     np.ndarray,
     np.ndarray,
@@ -107,7 +105,7 @@ def prepare_baselines(
     list,
     np.ndarray,
     np.ndarray,
-    Tuple[int, int],
+    tuple[int, int],
 ]:
     """
     Prepare baselines for an interferometer array.
@@ -209,7 +207,7 @@ def set_baselines(
     trdec: list[float],
     H: list,
     wavelength: list[float],
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Set baseline vectors and u-v coordinates.
 

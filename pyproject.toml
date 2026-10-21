@@ -101,11 +101,25 @@ line-length = 100
 exclude = ["node_modules", ".venv", "build", "htmlcov", "frontend"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "RUF100", "C901"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares parameters with a call in the default (so does Typer; see
+# the per-file ignores).
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Path",
+    "fastapi.Query",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "*.ipynb" = ["E501"]
 "examples/ImagingWithDucc0.py" = ["ALL"]
+# Typer declares options with typer.Option(...) in the default, and some
+# defaults (the output folders) are computed when the command is defined.
+"src/almasim/cli/*.py" = ["B008"]
 
 [tool.ruff.format]
 docstring-code-format = true

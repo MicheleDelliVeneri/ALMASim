@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -36,10 +36,10 @@ class JobRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get(self, model: JobModel, job_id: Any) -> Optional[Any]:
+    def get(self, model: JobModel, job_id: Any) -> Any | None:
         return self.db.execute(select(model).where(_key(model) == job_id)).scalar_one_or_none()
 
-    def list(self, model: JobModel, *, status: Optional[str] = None, limit: int = 100) -> list:
+    def list(self, model: JobModel, *, status: str | None = None, limit: int = 100) -> list:
         stmt = select(model).order_by(model.created_at.desc())
         if status:
             stmt = stmt.where(model.status == status)

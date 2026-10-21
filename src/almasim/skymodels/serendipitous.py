@@ -2,7 +2,7 @@
 
 import math
 from dataclasses import dataclass, fields
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from dask.distributed import Client
@@ -85,7 +85,7 @@ def get_iou_1d(bb1: dict, bb2: dict) -> float:
 
 
 def get_pos(
-    x_radius: int, y_radius: int, z_radius: int, rng: Optional[np.random.Generator] = None
+    x_radius: int, y_radius: int, z_radius: int, rng: np.random.Generator | None = None
 ) -> tuple:
     """Get random position within radius."""
     rng = rng if rng is not None else np.random.default_rng()
@@ -96,7 +96,7 @@ def get_pos(
 
 
 def sample_positions(
-    terminal: Optional[Any],
+    terminal: Any | None,
     pos_x: float,
     pos_y: float,
     pos_z: int,
@@ -111,7 +111,7 @@ def sample_positions(
     z_radius: float,
     sep_xy: int,
     sep_z: int,
-    rng: Optional[np.random.Generator] = None,
+    rng: np.random.Generator | None = None,
 ) -> list:
     """Sample positions for serendipitous sources."""
     sample = []
@@ -153,13 +153,13 @@ def sample_positions(
                     i += 1
                     n = 0
                     if terminal is not None:
-                        terminal.add_log("Found {}st component".format(len(sample)))
+                        terminal.add_log(f"Found {len(sample)}st component")
         else:
             spatial_distances = [distance_2d((new_p[0], new_p[1]), (p[0], p[1])) for p in sample]
             freq_distances = [distance_1d(new_p[2], p[2]) for p in sample]
             checks = [
                 spatial_dist < sep_xy or freq_dist < sep_z
-                for spatial_dist, freq_dist in zip(spatial_distances, freq_distances)
+                for spatial_dist, freq_dist in zip(spatial_distances, freq_distances, strict=True)
             ]
             if any(checks) is True:
                 n += 1
@@ -191,7 +191,7 @@ def sample_positions(
                 ]
                 checks = [
                     spatial_iou > 0.1 or freq_iou > 0.1
-                    for spatial_iou, freq_iou in zip(spatial_iou, freq_iou)
+                    for spatial_iou, freq_iou in zip(spatial_iou, freq_iou, strict=True)
                 ]
                 if any(checks) is True:
                     n += 1
@@ -201,7 +201,7 @@ def sample_positions(
                     n = 0
                     sample.append(new_p)
                     if terminal is not None:
-                        terminal.add_log("Found {}st component".format(len(sample)))
+                        terminal.add_log(f"Found {len(sample)}st component")
 
     return sample
 
@@ -214,7 +214,7 @@ def _uniform(rng: np.random.Generator, low: Any, high: Any, size: Any = None) ->
 
 
 def _randint_from(
-    low: int, high: Any, size: Any = None, rng: Optional[np.random.Generator] = None
+    low: int, high: Any, size: Any = None, rng: np.random.Generator | None = None
 ) -> Any:
     """``rng.integers(low, high, size)`` with ``high`` kept above ``low``.
 
@@ -229,9 +229,9 @@ def _randint_from(
 class SerendipitousConfig:
     """The arguments of :func:`insert_serendipitous` (MADIV-28 T5.8)."""
 
-    terminal: Optional[Any]
-    client: Optional[Client]
-    update_progress: Optional[Any]
+    terminal: Any | None
+    client: Client | None
+    update_progress: Any | None
     datacube: Any
     continum: np.ndarray
     cont_sens: float
@@ -245,18 +245,18 @@ class SerendipitousConfig:
     fwhm_zs: Any
     n_px: int
     n_chan: int
-    sim_params_path: Optional[str] = None
-    rng: Optional[np.random.Generator] = None
+    sim_params_path: str | None = None
+    rng: np.random.Generator | None = None
 
     def insert(self) -> Any:
         """The datacube with the serendipitous sources added."""
         return insert_serendipitous(**{f.name: getattr(self, f.name) for f in fields(self)})
 
 
-def insert_serendipitous(
-    terminal: Optional[Any],
-    client: Optional[Client],
-    update_progress: Optional[Any],
+def insert_serendipitous(  # noqa: C901
+    terminal: Any | None,
+    client: Client | None,
+    update_progress: Any | None,
     datacube: Any,
     continum: np.ndarray,
     cont_sens: float,
@@ -270,8 +270,8 @@ def insert_serendipitous(
     fwhm_zs: list[float],
     n_px: int,
     n_chan: int,
-    sim_params_path: Optional[str],
-    rng: Optional[np.random.Generator] = None,
+    sim_params_path: str | None,
+    rng: np.random.Generator | None = None,
 ) -> Any:
     """Insert serendipitous sources into datacube (``rng`` draws them; fresh entropy when None)."""
     rng = rng if rng is not None else np.random.default_rng()
@@ -331,19 +331,17 @@ def insert_serendipitous(
     params_handle = open(sim_params_path, "a") if sim_params_path is not None else None
     try:
         if params_handle is not None:
-            params_handle.write("\n Injected {} serendipitous sources\n".format(n_sources))
+            params_handle.write(f"\n Injected {n_sources} serendipitous sources\n")
 
         for c_id, choords in enumerate(sample_coords):
             n_line = n_lines[c_id]
             if terminal is not None:
-                terminal.add_log(
-                    "Simulating serendipitous source {} with {} lines".format(c_id + 1, n_line)
-                )
+                terminal.add_log(f"Simulating serendipitous source {c_id + 1} with {n_line} lines")
             s_line_fluxes = _uniform(rng, cont_sens, np.max(line_fluxes), n_line)
             s_line_names = line_names[:n_line]
             if terminal is not None:
-                for s_name, s_flux in zip(s_line_names, s_line_fluxes):
-                    terminal.add_log("Line {} Flux: {}".format(s_name, s_flux))
+                for s_name, s_flux in zip(s_line_names, s_line_fluxes, strict=False):
+                    terminal.add_log(f"Line {s_name} Flux: {s_flux}")
             pos_x, pos_y, pos_z = choords
             delta = pos_z - pos_zs[0]
             pos_z = np.array([pos + delta for pos in pos_zs])[:n_line]
@@ -356,11 +354,11 @@ def insert_serendipitous(
                 fwhmsz.append(_randint_from(2, rng.choice(fwhm_zs), rng=rng))
             s_continum = serendipitous_conts[c_id]
             if params_handle is not None:
-                params_handle.write("RA: {}\n".format(s_ra))
-                params_handle.write("DEC: {}\n".format(s_dec))
-                params_handle.write("FWHM_x (pixels): {}\n".format(fwhm_xs[c_id]))
-                params_handle.write("FWHM_y (pixels): {}\n".format(fwhm_ys[c_id]))
-                params_handle.write("Projection Angle: {}\n".format(pas[c_id]))
+                params_handle.write(f"RA: {s_ra}\n")
+                params_handle.write(f"DEC: {s_dec}\n")
+                params_handle.write(f"FWHM_x (pixels): {fwhm_xs[c_id]}\n")
+                params_handle.write(f"FWHM_y (pixels): {fwhm_ys[c_id]}\n")
+                params_handle.write(f"Projection Angle: {pas[c_id]}\n")
                 for i in range(len(s_freq)):
                     params_handle.write(
                         f"Line: {s_line_names[i]} - Frequency: {s_freq[i]} GHz "

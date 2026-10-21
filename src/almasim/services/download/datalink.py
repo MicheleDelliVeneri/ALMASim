@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable
 from xml.etree import ElementTree
 
 import httpx
@@ -21,7 +21,7 @@ _DATALINK_MIRRORS = [
 ]
 # ALMA recommends limiting concurrent downloads per TAP/DataLink mirror.
 _VOT_NS = "http://www.ivoa.net/xml/VOTable/v1.3"
-_SEMANTICS_MAP: Dict[str, str] = {
+_SEMANTICS_MAP: dict[str, str] = {
     "#progenitor": "raw",
     "#derivation": "fits",
     "#auxiliary": "auxiliary",
@@ -44,7 +44,7 @@ _SEMANTICS_MAP: Dict[str, str] = {
 }
 
 
-def _classify_product(url: str, content_type: str, semantics: str = "") -> str:
+def _classify_product(url: str, content_type: str, semantics: str = "") -> str:  # noqa: C901
     """Classify a product using VOTable semantics and URL patterns."""
     if semantics:
         sem_lower = semantics.lower().strip()
@@ -78,9 +78,9 @@ def _classify_product(url: str, content_type: str, semantics: str = "") -> str:
     return "other"
 
 
-def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
+def _parse_votable_results(xml_bytes: bytes, uid: str) -> list[DataProduct]:
     """Parse a DataLink VOTable response into DataProduct rows."""
-    products: List[DataProduct] = []
+    products: list[DataProduct] = []
     try:
         root = ElementTree.fromstring(xml_bytes)
     except ElementTree.ParseError:
@@ -97,7 +97,7 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
         fields = tbl.findall(f"{ns_prefix}FIELD") if tbl is not None else []
         col_names = [field.get("name", "").lower() for field in fields]
 
-        def col_idx(name: str) -> int:
+        def col_idx(name: str, col_names: list[str] = col_names) -> int:
             try:
                 return col_names.index(name.lower())
             except ValueError:
@@ -145,7 +145,7 @@ def _parse_votable_results(xml_bytes: bytes, uid: str) -> List[DataProduct]:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def _fetch_datalink(uid: str, mirror_base: str = _DATALINK_MIRRORS[0]) -> List[DataProduct]:
+def _fetch_datalink(uid: str, mirror_base: str = _DATALINK_MIRRORS[0]) -> list[DataProduct]:
     """Fetch DataLink results for a single member OUS UID."""
     url = f"{mirror_base}/datalink/sync?ID={uid}"
     with httpx.Client(timeout=60, follow_redirects=True) as client:
@@ -157,12 +157,12 @@ def _fetch_datalink(uid: str, mirror_base: str = _DATALINK_MIRRORS[0]) -> List[D
 def resolve_products(
     member_ous_uids: Iterable[str],
     mirror: str = _DATALINK_MIRRORS[0],
-) -> List[DataProduct]:
+) -> list[DataProduct]:
     """Resolve downloadable data products through ALMA DataLink."""
-    products: List[DataProduct] = []
+    products: list[DataProduct] = []
     member_uids = [str(uid) for uid in member_ous_uids]
     for uid in member_uids:
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for base in [mirror] + [
             candidate for candidate in _DATALINK_MIRRORS if candidate != mirror
         ]:
@@ -170,7 +170,7 @@ def resolve_products(
                 products.extend(_fetch_datalink(uid, base))
                 last_error = None
                 break
-            except Exception as exc:  # pragma: no cover - exercised in integration/network use
+            except Exception as exc:  # noqa: BLE001 - the next mirror is tried  # pragma: no cover
                 last_error = exc
                 logger.warning("DataLink fetch failed for %s on %s: %s", uid, base, exc)
         if last_error:
@@ -178,7 +178,7 @@ def resolve_products(
     return products
 
 
-def filter_products(products: List[DataProduct], product_filter: str = "all") -> List[DataProduct]:
+def filter_products(products: list[DataProduct], product_filter: str = "all") -> list[DataProduct]:
     """Return products matching the requested product type."""
     if product_filter == "all":
         return list(products)

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence
 
 import numpy as np
 from astropy.io import fits
@@ -45,10 +45,10 @@ class FitsCube:
 
     data: np.ndarray
     header: fits.Header
-    beams: Optional[list[ChannelBeam]] = None
+    beams: list[ChannelBeam] | None = None
 
 
-def read_image(path: str | os.PathLike[str], *, memmap: Optional[bool] = None) -> np.ndarray:
+def read_image(path: str | os.PathLike[str], *, memmap: bool | None = None) -> np.ndarray:
     """The image data of a FITS file: the primary HDU's, else the first extension's with data."""
     try:
         data = fits.getdata(path, memmap=memmap)
@@ -74,7 +74,7 @@ def read_cube(path: str | os.PathLike[str]) -> FitsCube:
             table = hdus["BEAMS"].data
             beams = [
                 ChannelBeam(float(bmaj) / 3600, float(bmin) / 3600, float(bpa))
-                for bmaj, bmin, bpa in zip(table["BMAJ"], table["BMIN"], table["BPA"])
+                for bmaj, bmin, bpa in zip(table["BMAJ"], table["BMIN"], table["BPA"], strict=True)
             ]
         return FitsCube(np.asarray(image.data), image.header.copy(), beams)
 
@@ -99,8 +99,8 @@ def beams_table(beams: Sequence[ChannelBeam]) -> fits.BinTableHDU:
 def write_cube(
     path: str | os.PathLike[str],
     data: np.ndarray,
-    header: Optional[fits.Header] = None,
-    beams: Optional[Sequence[ChannelBeam]] = None,
+    header: fits.Header | None = None,
+    beams: Sequence[ChannelBeam] | None = None,
 ) -> Path:
     """Write ``data`` with a copy of ``header``, atomically.
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, fields
-from typing import Any, Callable, Optional
+from typing import Any
 
 import astropy.units as U
 import numpy as np
@@ -67,7 +68,7 @@ class SimParamsRecord:
     cell_size: Any
     n_pix: int
     n_channels: int
-    snapshot: Optional[int]
+    snapshot: int | None
     subhalo: Any
     lum_infrared: Any
     fwhm_z: Any

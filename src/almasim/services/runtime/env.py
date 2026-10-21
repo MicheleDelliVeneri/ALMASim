@@ -11,7 +11,7 @@ job 5299, 2026-10-17).
 from __future__ import annotations
 
 import os
-from typing import Mapping
+from collections.abc import Mapping
 
 # Prefer the system C library over spack builds, but keep whatever the caller
 # had after it (same policy as the unpack/calibrate subprocess wrappers).

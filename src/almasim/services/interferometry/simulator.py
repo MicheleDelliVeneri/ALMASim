@@ -7,8 +7,9 @@ task is the config, the channel's image, its wavelength and its noise; the
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import numpy as np
 from astropy.io import fits
@@ -29,7 +30,7 @@ def picklable_header(header: Any) -> dict:
                 str(k): (v if isinstance(v, (int, float, bool, type(None))) else str(v))
                 for k, v in header.items()
             }
-    except Exception:
+    except Exception:  # noqa: BLE001 - an unlistable header is left out
         pass
     return {}
 

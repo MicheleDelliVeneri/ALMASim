@@ -1,7 +1,8 @@
 """Slurm computation backend using dask-jobqueue."""
 
+from collections.abc import Callable, Mapping, Sequence
 from time import monotonic
-from typing import Any, Callable, Mapping, Optional, Sequence, Union
+from typing import Any
 
 from almasim.scheduling.cluster import SLURM_DASK_AVAILABLE, SlurmDaskClusterSingleton
 
@@ -22,14 +23,14 @@ class SlurmBackend(DaskClientBackend):
     def __init__(
         self,
         queue: str = "normal",
-        project: Optional[str] = None,
+        project: str | None = None,
         walltime: str = "02:00:00",
         cores: int = 1,
-        node_cores: Optional[int] = None,
+        node_cores: int | None = None,
         memory: str = "4GB",
         n_workers: int = 4,
-        scheduler_host: Optional[str] = None,
-        scheduler_interface: Optional[str] = None,
+        scheduler_host: str | None = None,
+        scheduler_interface: str | None = None,
         **kwargs: Any,
     ):
         """Initialize Slurm backend.
@@ -80,10 +81,10 @@ class SlurmBackend(DaskClientBackend):
             job_extra_directives.append("--requeue")
         kwargs["job_extra_directives"] = job_extra_directives
         self.kwargs = kwargs
-        self._cluster_manager: Optional[SlurmDaskClusterSingleton] = None
+        self._cluster_manager: SlurmDaskClusterSingleton | None = None
 
-        self.cluster: Optional[Any] = None
-        self.client: Optional[Any] = None
+        self.cluster: Any | None = None
+        self.client: Any | None = None
         self._start_cluster()
 
     def _start_cluster(self) -> None:
@@ -105,11 +106,11 @@ class SlurmBackend(DaskClientBackend):
 
     def submit_subcommand(
         self,
-        command: Union[str, Sequence[str]],
+        command: str | Sequence[str],
         cores: int,
-        cwd: Optional[str] = None,
-        env: Optional[Mapping[str, str]] = None,
-        timeout: Optional[float] = None,
+        cwd: str | None = None,
+        env: Mapping[str, str] | None = None,
+        timeout: float | None = None,
         shell: bool = False,
     ) -> Any:
         """Submit a shell command to run on a Slurm worker.
@@ -134,7 +135,7 @@ class SlurmBackend(DaskClientBackend):
             raise RuntimeError("Dask cluster not initialized")
         return self._cluster_manager.submit_callable(func, cores=cores, **kwargs)
 
-    def wait_for_workers(self, n_workers: int, timeout: Optional[float] = None) -> int:
+    def wait_for_workers(self, n_workers: int, timeout: float | None = None) -> int:
         """Wait until ``n_workers`` workers have registered or ``timeout`` s pass.
 
         Returns the number registered; a timeout is not an error. Raises

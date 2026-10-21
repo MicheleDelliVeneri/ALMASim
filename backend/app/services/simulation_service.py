@@ -3,7 +3,7 @@
 import dataclasses
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import almasim.services.simulation as sim_service
 from almasim.services.compute.base import ComputationBackend
@@ -25,7 +25,7 @@ class SimulationService:
         tng_dir: Path,
         galaxy_zoo_dir: Path,
         hubble_dir: Path,
-        compute_backend: Optional[ComputationBackend] = None,
+        compute_backend: ComputationBackend | None = None,
         owns_backend: bool = False,
     ):
         """Initialize simulation service.
@@ -46,10 +46,10 @@ class SimulationService:
         simulation_id: str,
         *,
         status: str,
-        progress: Optional[float] = None,
-        current_step: Optional[str] = None,
-        message: Optional[str] = None,
-        error: Optional[str] = None,
+        progress: float | None = None,
+        current_step: str | None = None,
+        message: str | None = None,
+        error: str | None = None,
     ) -> None:
         """Persist simulation status in the database when available."""
         try:
@@ -62,11 +62,11 @@ class SimulationService:
                     message=message,
                     error=error,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001 - the database is optional here
             # Keep the in-memory status path working even if the DB is unavailable.
             return
 
-    def _safe_output_dir(self, user_dir: Optional[str]) -> Path:
+    def _safe_output_dir(self, user_dir: str | None) -> Path:
         """Return a validated output directory that must reside within the configured base."""
         if not user_dir:
             return self.output_dir
@@ -101,10 +101,10 @@ class SimulationService:
                     message=message,
                     level=level,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001 - the database is optional here
             return
 
-    def run_simulation(
+    def run_simulation(  # noqa: C901
         self,
         simulation_id: str,
         params: SimulationParamsCreate,

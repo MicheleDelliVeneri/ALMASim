@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -85,7 +85,7 @@ ALL_COLUMNS = [
 _derive_array_type = derive_array_type
 
 
-def _prepare_save_path(save_to: Optional[Path | str]) -> Optional[Path]:
+def _prepare_save_path(save_to: Path | str | None) -> Path | None:
     """Prepare a save path, creating parent directories if needed."""
     if save_to is None or save_to == "":
         return None
@@ -96,7 +96,7 @@ def _prepare_save_path(save_to: Optional[Path | str]) -> Optional[Path]:
 
 def _normalize_metadata(
     df: pd.DataFrame,
-    visible_columns: Optional[Sequence[str]] = None,
+    visible_columns: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Normalize metadata DataFrame with column renaming and ordering.
 
@@ -121,16 +121,16 @@ def _normalize_metadata(
     return normalized
 
 
-def query_science_types() -> Tuple[Sequence[str], Sequence[str]]:
+def query_science_types() -> tuple[Sequence[str], Sequence[str]]:
     """Return cached science keywords and categories from the ALMA TAP."""
     return get_science_types()
 
 
 def query_metadata_by_science(
-    include: Optional[InclusionFilters] = None,
-    exclude: Optional[ExclusionFilters] = None,
-    visible_columns: Optional[Sequence[str]] = None,
-    save_to: Optional[Path | str] = None,
+    include: InclusionFilters | None = None,
+    exclude: ExclusionFilters | None = None,
+    visible_columns: Sequence[str] | None = None,
+    save_to: Path | str | None = None,
 ) -> pd.DataFrame:
     """Query ALMA obscore metadata filtered by inclusion and exclusion criteria.
 
@@ -160,9 +160,9 @@ def query_metadata_by_science(
 
 
 def query_metadata_by_targets(
-    targets: Iterable[Tuple[str, str]],
-    visible_columns: Optional[Sequence[str]] = None,
-    save_to: Optional[Path | str] = None,
+    targets: Iterable[tuple[str, str]],
+    visible_columns: Sequence[str] | None = None,
+    save_to: Path | str | None = None,
 ) -> pd.DataFrame:
     """Query metadata for a pre-defined list of (target_name, member_ous_uid)."""
     df = _query_all_targets(list(targets))
@@ -174,7 +174,7 @@ def query_metadata_by_targets(
 
 
 def query_products(
-    member_ous_uids: List[str] | str,
+    member_ous_uids: list[str] | str,
 ) -> pd.DataFrame:
     """Return available data products for the given member OUS UID(s).
 

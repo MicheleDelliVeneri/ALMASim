@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
 
 import numpy as np
 
@@ -20,7 +20,7 @@ class RunContext:
     """
 
     logger: LogFn = None
-    status_callback: Optional[Callable[[str], None]] = None
+    status_callback: Callable[[str], None] | None = None
     stop_requested: StopFn = False
     remote: bool = False
     rng: np.random.Generator = field(default_factory=np.random.default_rng)

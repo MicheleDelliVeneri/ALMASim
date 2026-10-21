@@ -21,7 +21,7 @@ def _bundled_wsclean_candidates() -> list[Path]:
     ]
 
 
-def clean_command(
+def clean_command(  # noqa: C901
     ctx: typer.Context,
     wsclean_bin: str = typer.Option(
         "wsclean",

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 
 import astropy.units as U
 import numpy as np
@@ -37,7 +38,7 @@ class CleanCubeStage:
     model_cube: np.ndarray
     header: Any
     output_dir_abs: str
-    sim_output_dir: Optional[str]
+    sim_output_dir: str | None
     sim_params_payload: SimParamsRecord
     interferometer_kwargs: dict[str, Any]
     interferometer_runs: list[InterferometerRun]
@@ -47,16 +48,16 @@ class CleanCubeStage:
     channel_frequencies_hz: np.ndarray
     channel_width_hz: float
     cell_size_arcsec: float
-    background_cube: Optional[np.ndarray]
-    external_input_metadata: Optional[dict[str, Any]]
-    seed: Optional[int] = None
+    background_cube: np.ndarray | None
+    external_input_metadata: dict[str, Any] | None
+    seed: int | None = None
 
 
 def generate_clean_cube(
     params: SimulationParams,
     *,
     logger: LogFn = None,
-    status_callback: Optional[Callable[[str], None]] = None,
+    status_callback: Callable[[str], None] | None = None,
     progress_emitter=None,
     compute_backend=None,
     terminal_logger=None,
@@ -183,13 +184,13 @@ def generate_clean_cube(
     )
 
 
-def simulate_observation(
+def simulate_observation(  # noqa: C901
     clean_cube_stage: CleanCubeStage,
     *,
     compute_backend=None,
     robust: float = 0.0,
     terminal_logger=None,
-    interferometer_progress_callback: Optional[Callable[[int], None]] = None,
+    interferometer_progress_callback: Callable[[int], None] | None = None,
 ) -> dict[str, Any]:
     """Run the interferometric observation stage from a prepared clean cube.
 

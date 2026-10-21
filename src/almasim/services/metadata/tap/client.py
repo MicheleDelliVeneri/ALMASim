@@ -51,7 +51,7 @@ def get_tap_service(max_rounds: int = 2) -> pyvo.dal.TAPService:
                 logger.info("Connected to the ALMA TAP service at %s", url)
                 _connected_service = service
                 return service
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - the next mirror is tried
                 msg = f"{url}: {exc}"
                 errors.append(msg)
                 logger.warning("Could not connect to the ALMA TAP service at %s", msg)

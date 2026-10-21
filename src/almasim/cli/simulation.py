@@ -65,7 +65,7 @@ def _contains_token(name: str, compact_name: str, token: str | None) -> bool:
     return bool((normalized and normalized in compact_name) or (raw and raw in name))
 
 
-def _resolve_input_path_for_row(input_path: Path | None, row: pd.Series) -> Path | None:
+def _resolve_input_path_for_row(input_path: Path | None, row: pd.Series) -> Path | None:  # noqa: C901
     if input_path is None:
         return None
 

@@ -78,7 +78,7 @@ def _get_backend():
             return cls()
         except ImportError as exc:
             logger.debug("MS backend %s not installed: %s", cls.__name__, exc)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - logged; the next backend is tried
             # Installed but failing to import (e.g. casatools' runtime libraries):
             # say why before falling back instead of hiding it.
             logger.warning(

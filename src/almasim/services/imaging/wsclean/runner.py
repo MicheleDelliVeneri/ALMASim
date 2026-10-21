@@ -9,8 +9,8 @@ import shlex
 import subprocess
 import threading
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from almasim.services.runtime.child import error_line
 

@@ -15,9 +15,10 @@ does not discriminate: a SemiPass block frequently carries
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 __all__ = [
     "QA0FilterResult",
@@ -193,7 +194,7 @@ def filter_products_by_qa0(
             continue
         try:
             verdict = read(report, eb_uid)
-        except Exception:
+        except Exception:  # noqa: BLE001 - an unreadable report counts as unknown
             result.kept.append(product)
             result.unknown.append(product)
             continue

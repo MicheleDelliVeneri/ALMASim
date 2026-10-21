@@ -10,7 +10,7 @@ and the browser read the stored times as local.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Optional, overload
+from typing import overload
 
 
 def utc_now() -> datetime:
@@ -27,7 +27,7 @@ def db_now() -> datetime:
 def as_utc(value: datetime) -> datetime: ...
 @overload
 def as_utc(value: None) -> None: ...
-def as_utc(value: Optional[datetime]) -> Optional[datetime]:
+def as_utc(value: datetime | None) -> datetime | None:
     """``value`` as aware UTC; a naive value is a database time, already UTC."""
     if value is None or value.tzinfo is not None:
         return value

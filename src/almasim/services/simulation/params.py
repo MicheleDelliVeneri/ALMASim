@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Mapping, Optional, Union
+from typing import Any, ClassVar
 
 import pandas as pd
 
-LogFn = Optional[Callable[[str], None]]
-StopFn = Union[bool, Callable[[], bool]]
+LogFn = Callable[[str], None] | None
+StopFn = bool | Callable[[], bool]
 
 
 _FORBIDDEN_ROOTS = (Path("/proc"), Path("/sys"), Path("/dev"))
@@ -38,7 +39,7 @@ def _cpu_count(value: Any) -> int:
     return int(value if value is not None else (os.cpu_count() or 1))
 
 
-def _name_or_none(value: Any) -> Optional[str]:
+def _name_or_none(value: Any) -> str | None:
     return str(value) if value else None
 
 
@@ -80,43 +81,43 @@ class SimulationParams:
     freq_support: str = _coerced(str)
     cont_sens: float = _coerced(float)
     antenna_array: str = _coerced(str)
-    n_pix: Optional[float] = None
-    n_channels: Optional[int] = None
+    n_pix: float | None = None
+    n_channels: int | None = None
     source_type: str = _coerced(str, default="point")
-    tng_api_key: Optional[str] = None
-    ncpu: Optional[int] = _coerced(_cpu_count, default=None)
+    tng_api_key: str | None = None
+    ncpu: int | None = _coerced(_cpu_count, default=None)
     rest_frequency: Any = None
     redshift: Any = None
     lum_infrared: Any = None
-    snr: Optional[float] = None
+    snr: float | None = None
     n_lines: Any = None
     line_names: Any = None
     save_mode: str = _coerced(str, default="fits")
     persist: bool = _coerced(bool, default=True)
-    ml_dataset_path: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    ml_dataset_path: str | None = _coerced(_optional(_expand_path), default=None)
     inject_serendipitous: bool = _coerced(bool, default=False)
-    output_subdir_name: Optional[str] = _coerced(_name_or_none, default=None)
+    output_subdir_name: str | None = _coerced(_name_or_none, default=None)
     remote: bool = _coerced(bool, default=False)
-    observation_configs: Optional[Any] = None
+    observation_configs: Any | None = None
     ground_temperature_k: float = _coerced(float, default=270.0)
-    correlator: Optional[str] = None
-    elevation_deg: Optional[float] = None
-    line_sens_10kms: Optional[float] = _coerced(_optional(float), default=None)
+    correlator: str | None = None
+    elevation_deg: float | None = None
+    line_sens_10kms: float | None = _coerced(_optional(float), default=None)
     source_offset_x_arcsec: float = _coerced(float, default=0.0)
     source_offset_y_arcsec: float = _coerced(float, default=0.0)
     background_mode: str = _coerced(str, default="none")
     background_level: float = _coerced(float, default=1.0)
-    background_seed: Optional[int] = _coerced(_optional(int), default=None)
+    background_seed: int | None = _coerced(_optional(int), default=None)
     # Seeds every random draw of the run (sky, noise, background unless
     # background_seed is set; MADIV-28 T5.1); None draws fresh entropy.
-    seed: Optional[int] = _coerced(_optional(int), default=None)
-    external_skymodel_path: Optional[str] = _coerced(_optional(_expand_path), default=None)
-    external_component_table_path: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    seed: int | None = _coerced(_optional(int), default=None)
+    external_skymodel_path: str | None = _coerced(_optional(_expand_path), default=None)
+    external_component_table_path: str | None = _coerced(_optional(_expand_path), default=None)
     external_alignment_mode: str = _coerced(str, default="observation")
     external_header_mode: str = _coerced(str, default="observation")
-    external_header_overrides: Optional[dict[str, Any]] = None
+    external_header_overrides: dict[str, Any] | None = None
     ms_export: bool = _coerced(bool, default=False)
-    ms_export_dir: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    ms_export_dir: str | None = _coerced(_optional(_expand_path), default=None)
     ms_save_mode: str = _coerced(str, default="msv2")
     imaging_algorithm: str = _coerced(str, default="legacy")
     # "legacy": the metadata FOV, a fifth of the beam per cell. "planner": the
@@ -124,7 +125,7 @@ class SimulationParams:
     # beam's FOV, 8 cells per beam); MADIV-28 T2.11, until the golden
     # simulation outputs are re-baselined on it.
     instrument_geometry: str = _coerced(str, default="legacy")
-    kaggle_token: Optional[str] = _coerced(_optional(_expand_path), default=None)
+    kaggle_token: str | None = _coerced(_optional(_expand_path), default=None)
 
     def __post_init__(self) -> None:
         for spec in fields(self):
@@ -133,7 +134,7 @@ class SimulationParams:
                 setattr(self, spec.name, convert(getattr(self, spec.name)))
 
     @classmethod
-    def from_values(cls, **values: Any) -> "SimulationParams":
+    def from_values(cls, **values: Any) -> SimulationParams:
         """Build :class:`SimulationParams` from explicit values (same as the constructor).
 
         ``n_pix`` and ``n_channels`` may be ``None`` to allow downstream simulation
@@ -174,7 +175,7 @@ class SimulationParams:
     @classmethod
     def from_metadata_row(
         cls, row: pd.Series | Mapping[str, Any], **values: Any
-    ) -> "SimulationParams":
+    ) -> SimulationParams:
         """Build :class:`SimulationParams` from a metadata row plus explicit values.
 
         The row supplies the observation (``_ROW_COLUMNS``, all required) and

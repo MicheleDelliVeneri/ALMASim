@@ -1,7 +1,8 @@
 """Base computation backend interface."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 try:
     from dask import delayed as dask_delayed
@@ -55,7 +56,7 @@ class ComputationBackend(ABC):
         pass
 
     @abstractmethod
-    def gather(self, futures: Any) -> List[Any]:
+    def gather(self, futures: Any) -> list[Any]:
         """Gather results from futures.
 
         Parameters
@@ -122,7 +123,7 @@ class DaskClientBackend(ComputationBackend):
         """Compute tasks on the workers."""
         return self._require_client().compute(tasks, sync=sync)
 
-    def gather(self, futures: Any) -> List[Any]:
+    def gather(self, futures: Any) -> list[Any]:
         """Gather results from futures (a single future gives a one-item list)."""
         client = self._require_client()
         if isinstance(futures, list):

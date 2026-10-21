@@ -11,16 +11,16 @@ startup used to do on every start: the columns added to existing tables later
 cannot meet dropped. On a database 0001 created both are no-ops.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 from app.db.schema_upgrade import ADDED_COLUMNS
 
 revision: str = "0002"
-down_revision: Union[str, None] = "0001"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0001"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # Observation columns an incomplete TAP row may leave empty.
 NULLABLE_OBSERVATION_COLUMNS = ("ra", "dec", "target_name")

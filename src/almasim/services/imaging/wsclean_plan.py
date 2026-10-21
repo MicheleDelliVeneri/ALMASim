@@ -7,9 +7,9 @@ arguments, the task directories and the cube plan.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -156,8 +156,8 @@ class ImagingTask:
     output_dir: Path
     command: list[str]
     field_ids: tuple[int, ...] = ()
-    cube_command: Optional[list[str]] = None
-    dish_diameter: Optional[float] = None
+    cube_command: list[str] | None = None
+    dish_diameter: float | None = None
 
 
 def _field_arguments(row: pd.Series) -> list[str]:
@@ -173,7 +173,7 @@ def _field_arguments(row: pd.Series) -> list[str]:
     return ["-field", text]
 
 
-def row_dish_diameter(row: pd.Series) -> Optional[float]:
+def row_dish_diameter(row: pd.Series) -> float | None:
     """The dish diameter (m) behind a parameter row's ``fov_per_frequency``.
 
     ``compute_imaging_parameters`` sets it to the primary beam's half-power
@@ -295,7 +295,15 @@ def build_imaging_tasks(
                 skipped += 1
                 continue
 
-        def wsclean_command(name: str, with_cube: bool) -> list[str]:
+        # The loop variables are bound as defaults: ruff cannot see that the
+        # closure runs within this iteration only.
+        def wsclean_command(
+            name: str,
+            with_cube: bool,
+            row: pd.Series = row,
+            outdir: Path = outdir,
+            input_filename: Path = input_filename,
+        ) -> list[str]:
             command_args = imaging_parameter_to_command_arg(
                 row,
                 fov_fraction,
@@ -389,7 +397,7 @@ def cube_plan(
         lambda row: image_pixels(row, fov_fraction, beam_sampling, min_beams_across), axis=1
     )
     channels, wanted = [], []
-    for (_, row), n in zip(parameters.iterrows(), pixels):
+    for (_, row), n in zip(parameters.iterrows(), pixels, strict=True):
         channels.append(cube_channels(row, int(n), options))
         wanted.append(cube_channels(row, int(n), unlimited))
     plan = pd.DataFrame(

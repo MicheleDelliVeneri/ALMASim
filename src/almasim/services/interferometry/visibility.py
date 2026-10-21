@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 from astropy.time import Time
@@ -241,7 +242,7 @@ def concatenate_visibility_tables(tables: list[Mapping[str, Any]]) -> dict[str, 
     # to point at the 12 m antennas of the first table.
     offsets = np.cumsum([0] + [len(t["antenna_names"]) for t in tables[:-1]])
     shifted = {
-        key: [np.asarray(t[key]) + offset for t, offset in zip(tables, offsets)]
+        key: [np.asarray(t[key]) + offset for t, offset in zip(tables, offsets, strict=True)]
         for key in ("antenna1", "antenna2")
     }
     return {

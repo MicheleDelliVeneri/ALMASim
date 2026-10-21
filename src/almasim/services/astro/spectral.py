@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from math import ceil, pi
 from pathlib import Path
-from typing import Any, Callable, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, NamedTuple
 
 import astropy.units as U
 import numpy as np
@@ -18,17 +19,17 @@ from ..utils import log_message
 from .redshift import compute_redshift
 from .tng import redshift_to_snapshot
 
-LogFn = Optional[Callable[[str], None]]
+LogFn = Callable[[str], None] | None
 
 
-def sample_given_redshift(
+def sample_given_redshift(  # noqa: C901
     metadata: pd.DataFrame,
     n: int,
     rest_frequency,
     extended: bool,
-    zmax: Optional[float] = None,
+    zmax: float | None = None,
     logger: LogFn = None,
-    rng: Optional[np.random.Generator] = None,
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Filter and sample metadata entries based on redshift constraints (``rng`` samples)."""
     pd.options.mode.chained_assignment = None
@@ -55,7 +56,7 @@ def sample_given_redshift(
 
     redshifts = [
         compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz)
-        for source_freq, rest_frequency in zip(freqs, rest_frequencies)
+        for source_freq, rest_frequency in zip(freqs, rest_frequencies, strict=True)
     ]
     metadata.loc[:, "redshift"] = redshifts
     metadata["rest_frequency"] = rest_frequencies
@@ -155,8 +156,8 @@ def sed_reading(
     freq_min: float,
     freq_max: float,
     remote: bool,
-    lum_infrared: Optional[float] = None,
-    redshift: Optional[float] = None,
+    lum_infrared: float | None = None,
+    redshift: float | None = None,
     logger: LogFn = None,
 ):
     """Load and normalize SED templates for the requested source type."""
@@ -189,17 +190,17 @@ def sed_reading(
     return sed, flux_infrared, lum_infrared
 
 
-def find_compatible_lines(
+def find_compatible_lines(  # noqa: C901
     db_line: pd.DataFrame,
     source_freq: float,
-    redshift: Optional[float],
+    redshift: float | None,
     n: int,
-    line_names: Optional[Sequence[str]],
+    line_names: Sequence[str] | None,
     freq_min: float,
     freq_max: float,
     band_range: float,
-    line_width_range: Tuple[float, float],
-    rng: Optional[np.random.Generator] = None,
+    line_width_range: tuple[float, float],
+    rng: np.random.Generator | None = None,
 ):
     """Return a dataframe with the n spectral lines to simulate."""
     rng = rng if rng is not None else np.random.default_rng()
@@ -300,12 +301,12 @@ def process_spectral_data(
     n_channels: int,
     lum_infrared: float,
     cont_sens: float,
-    line_names: Optional[Sequence[str]] = None,
-    n_lines: Optional[int] = None,
+    line_names: Sequence[str] | None = None,
+    n_lines: int | None = None,
     remote: bool = False,
-    line_width_range: Tuple[float, float] = (50.0, 300.0),
+    line_width_range: tuple[float, float] = (50.0, 300.0),
     logger: LogFn = None,
-    rng: Optional[np.random.Generator] = None,
+    rng: np.random.Generator | None = None,
 ) -> SpectralResult:
     """Compute continua and emission lines for a simulated observation (``rng`` draws them)."""
     rng = rng if rng is not None else np.random.default_rng()
@@ -352,7 +353,7 @@ def process_spectral_data(
     line_names = filtered_lines["Line"].values
     cs = filtered_lines["c"].values
     cdeltas = filtered_lines["err_c"].values
-    line_ratios = np.array([rng.normal(c, cd) for c, cd in zip(cs, cdeltas)])
+    line_ratios = np.array([rng.normal(c, cd) for c, cd in zip(cs, cdeltas, strict=True)])
     line_frequencies = filtered_lines["shifted_freq(GHz)"].values
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1:
@@ -367,7 +368,7 @@ def process_spectral_data(
         np.array(
             [
                 new_cont_freq[line_index] + fwhm - new_cont_freq[line_index]
-                for fwhm, line_index in zip(fwhms_GHz, line_indexes)
+                for fwhm, line_index in zip(fwhms_GHz, line_indexes, strict=True)
             ]
         )
         * U.GHz

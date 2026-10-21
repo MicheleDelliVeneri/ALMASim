@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 import typer
 
@@ -33,8 +33,8 @@ metadata_app = typer.Typer(
 def _build_query_summary(
     include: Any,
     exclude: Any,
-    visible_columns: Optional[List[str]],
-    limit: Optional[int],
+    visible_columns: list[str] | None,
+    limit: int | None,
 ) -> str:
     summary: dict[str, Any] = {
         "source_name": include.source_name,
@@ -72,156 +72,156 @@ def _build_query_summary(
 class MetadataQueryOptions:
     """Every option of ``metadata`` (MADIV-28 T3.8)."""
 
-    source_name: Optional[str]
-    science_keyword: Optional[List[str]]
-    scientific_category: Optional[List[str]]
-    band: Optional[List[int]]
-    antenna_arrays: Optional[str]
-    array_type: Optional[List[str]]
-    array_configuration: Optional[List[str]]
-    angular_resolution_min: Optional[float]
-    angular_resolution_max: Optional[float]
-    observation_date_start: Optional[str]
-    observation_date_end: Optional[str]
-    qa2_status: Optional[List[str]]
-    obs_type: Optional[List[str]]
-    fov_min: Optional[float]
-    fov_max: Optional[float]
-    time_resolution_min: Optional[float]
-    time_resolution_max: Optional[float]
-    frequency_min: Optional[float]
-    frequency_max: Optional[float]
-    exclude_science_keyword: Optional[List[str]]
-    exclude_scientific_category: Optional[List[str]]
-    exclude_source_name: Optional[List[str]]
-    exclude_obs_type: Optional[List[str]]
+    source_name: str | None
+    science_keyword: list[str] | None
+    scientific_category: list[str] | None
+    band: list[int] | None
+    antenna_arrays: str | None
+    array_type: list[str] | None
+    array_configuration: list[str] | None
+    angular_resolution_min: float | None
+    angular_resolution_max: float | None
+    observation_date_start: str | None
+    observation_date_end: str | None
+    qa2_status: list[str] | None
+    obs_type: list[str] | None
+    fov_min: float | None
+    fov_max: float | None
+    time_resolution_min: float | None
+    time_resolution_max: float | None
+    frequency_min: float | None
+    frequency_max: float | None
+    exclude_science_keyword: list[str] | None
+    exclude_scientific_category: list[str] | None
+    exclude_source_name: list[str] | None
+    exclude_obs_type: list[str] | None
     exclude_solar: bool
-    cycles: Optional[List[int]]
-    project_codes: Optional[List[str]]
+    cycles: list[int] | None
+    project_codes: list[str] | None
     public_only: bool
     science_only: bool
     exclude_mosaic: bool
-    visible_columns: Optional[List[str]]
-    limit: Optional[int]
-    save_csv: Optional[Path]
-    save_products_csv: Optional[Path]
-    product_member_limit: Optional[int]
+    visible_columns: list[str] | None
+    limit: int | None
+    save_csv: Path | None
+    save_products_csv: Path | None
+    product_member_limit: int | None
     yes: bool
 
 
 @metadata_app.command("query")
 def metadata_query(
-    source_name: Optional[str] = typer.Option(
+    source_name: str | None = typer.Option(
         None,
         "--source-name",
         help="Source-name substring filter.",
     ),
-    science_keyword: Optional[List[str]] = typer.Option(
+    science_keyword: list[str] | None = typer.Option(
         None,
         "--science-keyword",
         help="Science keyword(s) to include. Repeat or pass comma-separated values.",
     ),
-    scientific_category: Optional[List[str]] = typer.Option(
+    scientific_category: list[str] | None = typer.Option(
         None,
         "--scientific-category",
         help="Scientific category(ies) to include. Repeat or pass comma-separated values.",
     ),
-    band: Optional[List[int]] = typer.Option(
+    band: list[int] | None = typer.Option(
         None,
         "--band",
         help="ALMA band filter. Repeat for multiple values.",
     ),
-    antenna_arrays: Optional[str] = typer.Option(
+    antenna_arrays: str | None = typer.Option(
         None,
         "--antenna-arrays",
         help="Raw antenna_arrays substring filter.",
     ),
-    array_type: Optional[List[str]] = typer.Option(
+    array_type: list[str] | None = typer.Option(
         None,
         "--array-type",
         help="Array type(s): 12m, 7m, TP. Repeat or pass comma-separated values.",
     ),
-    array_configuration: Optional[List[str]] = typer.Option(
+    array_configuration: list[str] | None = typer.Option(
         None,
         "--array-configuration",
         help="Array configuration(s) like C-1, C-2. Repeat or pass comma-separated values.",
     ),
-    angular_resolution_min: Optional[float] = typer.Option(
+    angular_resolution_min: float | None = typer.Option(
         None,
         "--angular-resolution-min",
         help="Minimum angular resolution (arcsec).",
     ),
-    angular_resolution_max: Optional[float] = typer.Option(
+    angular_resolution_max: float | None = typer.Option(
         None,
         "--angular-resolution-max",
         help="Maximum angular resolution (arcsec).",
     ),
-    observation_date_start: Optional[str] = typer.Option(
+    observation_date_start: str | None = typer.Option(
         None,
         "--observation-date-start",
         help="Observation date start (ISO date).",
     ),
-    observation_date_end: Optional[str] = typer.Option(
+    observation_date_end: str | None = typer.Option(
         None,
         "--observation-date-end",
         help="Observation date end (ISO date).",
     ),
-    qa2_status: Optional[List[str]] = typer.Option(
+    qa2_status: list[str] | None = typer.Option(
         None,
         "--qa2-status",
         help="QA2 status values: Pass, Fail, SemiPass, T, F, X.",
     ),
-    obs_type: Optional[List[str]] = typer.Option(
+    obs_type: list[str] | None = typer.Option(
         None,
         "--obs-type",
         help="Observation type(s) to include. Repeat or pass comma-separated values.",
     ),
-    fov_min: Optional[float] = typer.Option(
+    fov_min: float | None = typer.Option(
         None,
         "--fov-min",
         help="Minimum FOV.",
     ),
-    fov_max: Optional[float] = typer.Option(
+    fov_max: float | None = typer.Option(
         None,
         "--fov-max",
         help="Maximum FOV.",
     ),
-    time_resolution_min: Optional[float] = typer.Option(
+    time_resolution_min: float | None = typer.Option(
         None,
         "--time-resolution-min",
         help="Minimum time resolution.",
     ),
-    time_resolution_max: Optional[float] = typer.Option(
+    time_resolution_max: float | None = typer.Option(
         None,
         "--time-resolution-max",
         help="Maximum time resolution.",
     ),
-    frequency_min: Optional[float] = typer.Option(
+    frequency_min: float | None = typer.Option(
         None,
         "--frequency-min",
         help="Minimum frequency.",
     ),
-    frequency_max: Optional[float] = typer.Option(
+    frequency_max: float | None = typer.Option(
         None,
         "--frequency-max",
         help="Maximum frequency.",
     ),
-    exclude_science_keyword: Optional[List[str]] = typer.Option(
+    exclude_science_keyword: list[str] | None = typer.Option(
         None,
         "--exclude-science-keyword",
         help="Science keyword(s) to exclude. Repeat or pass comma-separated values.",
     ),
-    exclude_scientific_category: Optional[List[str]] = typer.Option(
+    exclude_scientific_category: list[str] | None = typer.Option(
         None,
         "--exclude-scientific-category",
         help="Scientific category(ies) to exclude. Repeat or pass comma-separated values.",
     ),
-    exclude_source_name: Optional[List[str]] = typer.Option(
+    exclude_source_name: list[str] | None = typer.Option(
         None,
         "--exclude-source-name",
         help="Source-name substring(s) to exclude. Repeat or pass comma-separated values.",
     ),
-    exclude_obs_type: Optional[List[str]] = typer.Option(
+    exclude_obs_type: list[str] | None = typer.Option(
         None,
         "--exclude-obs-type",
         help="Observation type substring(s) to exclude. Repeat or pass comma-separated values.",
@@ -231,12 +231,12 @@ def metadata_query(
         "--exclude-solar",
         help="Exclude solar observations.",
     ),
-    cycles: Optional[List[int]] = typer.Option(
+    cycles: list[int] | None = typer.Option(
         None,
         "--cycle",
         help="ALMA cycle number(s). Cycle N maps to proposal_id prefix {2012+N}.",
     ),
-    project_codes: Optional[List[str]] = typer.Option(
+    project_codes: list[str] | None = typer.Option(
         None,
         "--project-code",
         help=(
@@ -259,23 +259,23 @@ def metadata_query(
         "--exclude-mosaic/--include-mosaic",
         help="Exclude mosaic observations (default: excluded).",
     ),
-    visible_columns: Optional[List[str]] = typer.Option(
+    visible_columns: list[str] | None = typer.Option(
         None,
         "--visible-column",
         help="Column(s) to include in output (ordered). Repeat this option per column.",
     ),
-    limit: Optional[int] = typer.Option(
+    limit: int | None = typer.Option(
         None,
         "--limit",
         min=1,
         help="Maximum number of metadata rows to keep. Defaults to unlimited.",
     ),
-    save_csv: Optional[Path] = typer.Option(
+    save_csv: Path | None = typer.Option(
         None,
         "--save-csv",
         help="Destination CSV for normalized metadata rows.",
     ),
-    save_products_csv: Optional[Path] = typer.Option(
+    save_products_csv: Path | None = typer.Option(
         None,
         "--save-products-csv",
         help=(
@@ -283,7 +283,7 @@ def metadata_query(
             "member OUS UIDs, ready for `products download --products-csv`."
         ),
     ),
-    product_member_limit: Optional[int] = typer.Option(
+    product_member_limit: int | None = typer.Option(
         None,
         "--product-member-limit",
         min=1,
@@ -325,7 +325,7 @@ def metadata_query(
 
 def _query_filters(
     o: MetadataQueryOptions,
-) -> tuple[InclusionFilters, ExclusionFilters, Optional[list[str]]]:
+) -> tuple[InclusionFilters, ExclusionFilters, list[str] | None]:
     """The query's inclusion and exclusion filters and output columns, validated."""
     array_types = split_csv_values(o.array_type)
     output_columns = split_csv_values(o.visible_columns)

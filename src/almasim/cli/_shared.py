@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import List, NoReturn, Optional
+from typing import NoReturn
 
 import typer
 
@@ -17,7 +17,7 @@ def default_output_path(filename: str) -> Path:
     return Path.home() / "almasim_outputs" / filename
 
 
-def split_csv_values(values: Optional[List[str]]) -> Optional[List[str]]:
+def split_csv_values(values: list[str] | None) -> list[str] | None:
     """Split repeated/comma-separated option values while preserving order."""
     if not values:
         return None
@@ -27,10 +27,10 @@ def split_csv_values(values: Optional[List[str]]) -> Optional[List[str]]:
 
 def validate_range(
     *,
-    min_value: Optional[float],
-    max_value: Optional[float],
+    min_value: float | None,
+    max_value: float | None,
     label: str,
-) -> Optional[tuple[float, float]]:
+) -> tuple[float, float] | None:
     """Validate min/max pairs and return a typed range tuple."""
     if min_value is None and max_value is None:
         return None
@@ -48,9 +48,9 @@ def validate_range(
 
 def validate_date_range(
     *,
-    start_date: Optional[str],
-    end_date: Optional[str],
-) -> Optional[tuple[str, str]]:
+    start_date: str | None,
+    end_date: str | None,
+) -> tuple[str, str] | None:
     """Validate date start/end pairing and return date tuple."""
     if start_date is None and end_date is None:
         return None

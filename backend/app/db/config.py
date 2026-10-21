@@ -1,8 +1,8 @@
 """Database configuration and session management."""
 
+from collections.abc import Generator
 from contextlib import contextmanager
 from functools import lru_cache
-from typing import Generator
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker

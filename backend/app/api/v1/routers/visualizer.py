@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
@@ -36,7 +35,7 @@ def _build_integrated_response(path: Path, method: str, **options) -> JSONRespon
 
 
 @router.get("/files")
-def list_datacube_files(dir: Optional[str] = None) -> JSONResponse:
+def list_datacube_files(dir: str | None = None) -> JSONResponse:
     """List supported visualizer products in the given directory."""
     output_dir = _resolve_visualizer_path(dir, Path(settings.OUTPUT_DIR))
 
@@ -65,7 +64,7 @@ def list_datacube_files(dir: Optional[str] = None) -> JSONResponse:
                     "type": file_type,
                 }
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - unreadable files are left out
             continue
 
     return JSONResponse(
@@ -77,7 +76,7 @@ def list_datacube_files(dir: Optional[str] = None) -> JSONResponse:
 
 
 @router.get("/files/{file_path:path}")
-def get_datacube_file(file_path: str, dir: Optional[str] = None) -> FileResponse:
+def get_datacube_file(file_path: str, dir: str | None = None) -> FileResponse:
     """Get a visualizer file from the output directory."""
     sub = Path(dir) / file_path if dir else Path(file_path)
     resolved = _resolve_visualizer_path(sub, Path(settings.OUTPUT_DIR))
@@ -103,7 +102,7 @@ def get_datacube_file(file_path: str, dir: Optional[str] = None) -> FileResponse
 
 
 @router.post("/integrate")
-async def integrate_datacube(
+async def integrate_datacube(  # noqa: C901
     method: str = Form("sum"),
     integration_axis: str = Form("auto"),
     complex_component: str = Form("real"),

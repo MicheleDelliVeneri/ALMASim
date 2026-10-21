@@ -69,7 +69,7 @@ def _like_or_clause(column: str, values: list, negate: bool = False) -> str:
     return f"({join_op.join(clauses)})"
 
 
-def _build_inclusion_conditions(f: InclusionFilters) -> list:
+def _build_inclusion_conditions(f: InclusionFilters) -> list:  # noqa: C901
     """Translate an InclusionFilters object into a list of ADQL condition strings."""
     conds = []
 

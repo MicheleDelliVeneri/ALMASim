@@ -17,7 +17,7 @@ total-power simulation and the ``--pbcor`` correction all use it.
 from __future__ import annotations
 
 import math
-from functools import lru_cache
+from functools import cache
 from typing import Any
 
 import numpy as np
@@ -73,7 +73,7 @@ def _half_power_radius(dish_diameter: float, frequency_hz: float) -> float:
     return 0.5 * (low + high)
 
 
-@lru_cache(maxsize=None)
+@cache
 def airy_fwhm_factor(dish_diameter: float) -> float:
     """Half-power full width of this module's beam model, in units of lambda / D.
 

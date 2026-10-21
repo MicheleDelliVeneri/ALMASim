@@ -81,7 +81,7 @@ def test_flag_summary_flags_and_weights_per_field_and_spw(tmp_path):
     out = flag_summary(ms)
 
     assert list(out.columns) == SUMMARY_COLUMNS
-    assert list(zip(out["field_name"], out["spectral_window_id"])) == [
+    assert list(zip(out["field_name"], out["spectral_window_id"], strict=True)) == [
         ("J0552+0313", 25),
         ("HOPS-358", 25),
         ("HOPS-358", 27),

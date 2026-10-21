@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import typer
 
@@ -50,16 +50,14 @@ PostprocessBackend = Annotated[
     ),
 ]
 SlurmQueue = Annotated[str, typer.Option("--slurm-queue", help="Slurm queue/partition.")]
-SlurmProject = Annotated[
-    Optional[str], typer.Option("--slurm-project", help="Slurm project/account.")
-]
+SlurmProject = Annotated[str | None, typer.Option("--slurm-project", help="Slurm project/account.")]
 SlurmWalltime = Annotated[
     str, typer.Option("--slurm-walltime", help="Slurm walltime per worker job (HH:MM:SS).")
 ]
 SlurmMemory = Annotated[str, typer.Option("--slurm-memory", help="Memory per Slurm worker.")]
 SlurmCores = Annotated[int, typer.Option("--slurm-cores", min=1, help="Cores per Slurm worker.")]
 SchedulerHost = Annotated[
-    Optional[str],
+    str | None,
     typer.Option(
         "--scheduler-host",
         "--slurm-scheduler-host",
@@ -67,7 +65,7 @@ SchedulerHost = Annotated[
     ),
 ]
 SchedulerInterface = Annotated[
-    Optional[str],
+    str | None,
     typer.Option(
         "--scheduler-interface", help="Scheduler/worker network interface (e.g. ib0, eth0)."
     ),
@@ -91,13 +89,13 @@ class SlurmOptions:
     """The Slurm worker settings of a command, as compute-backend keyword arguments."""
 
     queue: str = "normal"
-    project: Optional[str] = None
+    project: str | None = None
     walltime: str = "02:00:00"
     memory: str = "16GB"
     n_workers: int = 1
-    cores: Optional[int] = None
-    scheduler_host: Optional[str] = None
-    scheduler_interface: Optional[str] = None
+    cores: int | None = None
+    scheduler_host: str | None = None
+    scheduler_interface: str | None = None
 
     def backend_kwargs(self) -> dict[str, Any]:
         """``create_backend("slurm", **kwargs)`` arguments; unset optional ones are left out."""

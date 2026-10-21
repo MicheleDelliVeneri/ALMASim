@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import astropy.units as U
 import numpy as np
@@ -33,19 +33,19 @@ class SkyCube:
     datacube: Any
     header: Any
     background_cube: np.ndarray
-    external_input_metadata: Optional[dict[str, Any]]
+    external_input_metadata: dict[str, Any] | None
     pos_x: float
     pos_y: float
     fwhm_x: Any
     fwhm_y: Any
     angle: Any
-    snapshot: Optional[int]
+    snapshot: int | None
     tng_subhaloid: Any
 
 
 def _get_client_from_backend(
-    compute_backend: Optional["ComputationBackend"],
-) -> Optional["Client"]:
+    compute_backend: ComputationBackend | None,
+) -> Client | None:
     """Extract Dask client from computation backend for backward compatibility.
 
     TODO: Update skymodels to use ComputationBackend directly.
@@ -58,7 +58,7 @@ def _get_client_from_backend(
     return None
 
 
-def _ensure_morphology_dataset(params: "SimulationParams", log: LogFn = None) -> None:
+def _ensure_morphology_dataset(params: SimulationParams, log: LogFn = None) -> None:
     """Ensure image assets exist for image-based sky models (galaxy-zoo / hubble).
 
     Downloads the morphology images from Kaggle when missing, using
@@ -71,7 +71,7 @@ def _ensure_morphology_dataset(params: "SimulationParams", log: LogFn = None) ->
         if log is not None:
             try:
                 log(msg)
-            except Exception:
+            except Exception:  # noqa: BLE001 - a failing log callback must not stop the run
                 pass
 
     dataset = SKYMODELS[st].dataset if st in SKYMODELS else None
@@ -100,14 +100,14 @@ def _create_sky_model(
     pos_x: float,
     pos_y: float,
     n_pix: int,
-    snapshot: Optional[int],
-    tng_subhaloid: Optional[int],
+    snapshot: int | None,
+    tng_subhaloid: int | None,
     redshift: float,
     ra: U.Quantity,
     dec: U.Quantity,
-    tng_api_key: Optional[str],
-    terminal_logger: Optional[Any],
-    client: Optional["Client"],
+    tng_api_key: str | None,
+    terminal_logger: Any | None,
+    client: Client | None,
     rng: np.random.Generator,
 ) -> Any:
     """Create and return the appropriate sky model based on source type."""
@@ -176,7 +176,7 @@ def _create_sky_model(
     return handler()
 
 
-def build_sky_cube(
+def build_sky_cube(  # noqa: C901
     params: SimulationParams,
     geometry: CubeGeometry,
     spectral: SpectralSetup,
@@ -214,7 +214,7 @@ def build_sky_cube(
         tng_subhaloid = None
 
     if isinstance(line_names, (list, np.ndarray)):
-        for line_name, line_flux in zip(line_names, line_fluxes):
+        for line_name, line_flux in zip(line_names, line_fluxes, strict=False):
             log(f"Simulating Line {line_name} Flux: {line_flux:.3e} at z {redshift}")
     elif line_names is not None:
         log(f"Simulating Line {line_names} Flux: {line_fluxes[0]} at z {redshift}")

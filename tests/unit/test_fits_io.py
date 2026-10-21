@@ -51,7 +51,7 @@ def test_write_cube_round_trips_channel_beams(tmp_path):
         assert list(hdus["BEAMS"].data["CHAN"]) == [0, 1, 2]
     cube = read_cube(path)
     assert cube.beams is not None
-    for read, written in zip(cube.beams, beams):
+    for read, written in zip(cube.beams, beams, strict=True):
         assert read.bmaj_deg == pytest.approx(written.bmaj_deg, rel=1e-6)
         assert read.bmin_deg == pytest.approx(written.bmin_deg, rel=1e-6)
         assert read.bpa_deg == pytest.approx(written.bpa_deg, rel=1e-6)

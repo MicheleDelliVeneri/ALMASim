@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import shutil
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from almasim.services.imaging.continuum import _channel_ranges, line_free_channels
 from almasim.services.imaging.ms.chunks import (

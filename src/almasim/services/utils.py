@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
-LogFn = Optional[Callable[[str], None]]
+LogFn = Callable[[str], None] | None
 
 _simulation_log = logging.getLogger("almasim.simulation")
 

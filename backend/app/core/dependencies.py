@@ -2,7 +2,6 @@
 
 import logging
 import threading
-from typing import Optional
 
 from almasim.services.compute.base import ComputationBackend
 from almasim.services.compute.factory import create_backend
@@ -10,7 +9,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_default_backend: Optional[ComputationBackend] = None
+_default_backend: ComputationBackend | None = None
 _default_lock = threading.Lock()
 
 
@@ -34,7 +33,7 @@ def _create_default_backend() -> ComputationBackend:
 
     try:
         return create_backend(backend_type, **backend_config)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - falls back to the local backend
         logger.warning(
             "Could not start the %s compute backend (%s: %s); using the local backend",
             backend_type,
@@ -65,5 +64,5 @@ def close_compute_backend() -> None:
     if backend is not None:
         try:
             backend.close()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - closing is best effort
             logger.warning("Closing the compute backend failed: %s", exc)

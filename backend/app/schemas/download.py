@@ -1,6 +1,6 @@
 """Download-related schemas."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -38,14 +38,14 @@ class BrowseDirectoryResponse(BaseModel):
     """Response for browsing server-side directories."""
 
     current: str = Field(..., description="Resolved absolute path of the directory")
-    parent: Optional[str] = Field(None, description="Parent directory path, None if at root")
-    entries: List[BrowseDirectoryEntry]
+    parent: str | None = Field(None, description="Parent directory path, None if at root")
+    entries: list[BrowseDirectoryEntry]
 
 
 class ResolveProductsRequest(BaseModel):
     """Request to list downloadable products for selected observations."""
 
-    member_ous_uids: List[str] = Field(
+    member_ous_uids: list[str] = Field(
         ..., description="List of member_ous_uid values to resolve products for"
     )
 
@@ -61,11 +61,11 @@ class ProductTypeSummary(BaseModel):
 class ResolveProductsResponse(BaseModel):
     """Response listing available products and size breakdown."""
 
-    products: List[DataProductInfo]
+    products: list[DataProductInfo]
     total_count: int
     total_size_bytes: int
     total_size_display: str = Field(..., description="Human-friendly size string")
-    by_type: Dict[str, ProductTypeSummary] = Field(
+    by_type: dict[str, ProductTypeSummary] = Field(
         ..., description="Count and size of the products of each type"
     )
 
@@ -93,7 +93,7 @@ class CheckDiskSpaceRequest(BaseModel):
 class StartDownloadRequest(BaseModel):
     """Request to start downloading selected products."""
 
-    member_ous_uids: List[str] = Field(..., description="List of member_ous_uid values")
+    member_ous_uids: list[str] = Field(..., description="List of member_ous_uid values")
     product_filter: str = Field(
         "all",
         description=(
@@ -129,11 +129,11 @@ class StartDownloadRequest(BaseModel):
             "and intermediate raw MS products"
         ),
     )
-    archive_output_root: Optional[str] = Field(
+    archive_output_root: str | None = Field(
         None,
         description="Optional root directory for raw_ms and calibrated_ms outputs",
     )
-    casa_data_root: Optional[str] = Field(
+    casa_data_root: str | None = Field(
         None,
         description="Optional CASA runtime data directory",
     )
@@ -141,7 +141,7 @@ class StartDownloadRequest(BaseModel):
         False,
         description="Skip CASA runtime data updates",
     )
-    selected_metadata: Optional[List[dict[str, Any]]] = Field(
+    selected_metadata: list[dict[str, Any]] | None = Field(
         None,
         description="Metadata rows associated with this download job",
     )
@@ -150,37 +150,37 @@ class StartDownloadRequest(BaseModel):
 class RedownloadRequest(BaseModel):
     """Request to re-download a previous job with new execution options."""
 
-    max_parallel: Optional[int] = Field(
+    max_parallel: int | None = Field(
         None,
         description="Maximum parallel download threads",
         ge=1,
         le=30,
     )
-    extract_tar: Optional[bool] = Field(
+    extract_tar: bool | None = Field(
         None,
         description="Extract tar archives after download and remove the archives",
     )
-    unpack_ms: Optional[bool] = Field(
+    unpack_ms: bool | None = Field(
         None,
         description="Create raw MeasurementSets after re-download",
     )
-    generate_calibrated_visibilities: Optional[bool] = Field(
+    generate_calibrated_visibilities: bool | None = Field(
         None,
         description="Create calibrated split MeasurementSets after re-download",
     )
-    clean_intermediate_files: Optional[bool] = Field(
+    clean_intermediate_files: bool | None = Field(
         None,
         description="After calibrated MS creation, keep only split calibrated products",
     )
-    archive_output_root: Optional[str] = Field(
+    archive_output_root: str | None = Field(
         None,
         description="Optional root directory for raw_ms and calibrated_ms outputs",
     )
-    casa_data_root: Optional[str] = Field(
+    casa_data_root: str | None = Field(
         None,
         description="Optional CASA runtime data directory",
     )
-    skip_casa_data_update: Optional[bool] = Field(
+    skip_casa_data_update: bool | None = Field(
         None,
         description="Skip CASA runtime data updates",
     )
@@ -250,7 +250,7 @@ class FileStatus(BaseModel):
     content_length: int
     bytes_downloaded: int
     status: str
-    error: Optional[str] = None
+    error: str | None = None
     progress: float = Field(..., description="Download progress 0.0 to 1.0")
 
     @classmethod
@@ -279,18 +279,18 @@ class DownloadJobStatus(BaseModel):
     total_bytes: int
     bytes_downloaded: int
     progress: float = Field(..., description="Overall progress 0.0 to 1.0")
-    error: Optional[str] = None
-    files: List[FileStatus] = []
-    raw_measurement_sets: List[str] = []
-    calibrated_measurement_sets: List[str] = []
-    manifest_path: Optional[str] = None
+    error: str | None = None
+    files: list[FileStatus] = []
+    raw_measurement_sets: list[str] = []
+    calibrated_measurement_sets: list[str] = []
+    manifest_path: str | None = None
     has_metadata: bool = False
     metadata_count: int = 0
     unpack_ms: bool = False
     generate_calibrated_visibilities: bool = False
     clean_intermediate_files: bool = False
-    archive_output_root: Optional[str] = None
-    casa_data_root: Optional[str] = None
+    archive_output_root: str | None = None
+    casa_data_root: str | None = None
     skip_casa_data_update: bool = False
 
     @classmethod
@@ -317,21 +317,21 @@ class DownloadJobSummary(BaseModel):
     files_failed: int
     progress: float
     created_at: str
-    member_ous_uids: List[str] = []
+    member_ous_uids: list[str] = []
     product_filter: str = "all"
     total_bytes: int = 0
     bytes_downloaded: int = 0
-    error: Optional[str] = None
-    raw_measurement_sets: List[str] = []
-    calibrated_measurement_sets: List[str] = []
-    manifest_path: Optional[str] = None
+    error: str | None = None
+    raw_measurement_sets: list[str] = []
+    calibrated_measurement_sets: list[str] = []
+    manifest_path: str | None = None
     has_metadata: bool = False
     metadata_count: int = 0
     unpack_ms: bool = False
     generate_calibrated_visibilities: bool = False
     clean_intermediate_files: bool = False
-    archive_output_root: Optional[str] = None
-    casa_data_root: Optional[str] = None
+    archive_output_root: str | None = None
+    casa_data_root: str | None = None
     skip_casa_data_update: bool = False
 
     @classmethod

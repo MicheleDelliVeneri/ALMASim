@@ -159,7 +159,7 @@ def main() -> int:
         )
         _print_slurm_debug_info()
         return 124
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a demo reports any failure
         print(f"Cluster startup/submit failed: {exc}")
         _print_slurm_debug_info()
         return 1

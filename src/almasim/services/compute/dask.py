@@ -5,7 +5,6 @@ import logging
 import os
 import tempfile
 import zipfile
-from typing import Optional
 
 try:
     from dask.distributed import Client, LocalCluster
@@ -26,8 +25,8 @@ class DaskBackend(DaskClientBackend):
 
     def __init__(
         self,
-        scheduler: Optional[str] = None,
-        n_workers: Optional[int] = None,
+        scheduler: str | None = None,
+        n_workers: int | None = None,
     ):
         """Initialize Dask backend.
 
@@ -45,8 +44,8 @@ class DaskBackend(DaskClientBackend):
 
         self.scheduler = scheduler
         self.n_workers = n_workers
-        self.client: Optional[Client] = None
-        self.cluster: Optional[LocalCluster] = None
+        self.client: Client | None = None
+        self.cluster: LocalCluster | None = None
         self._start_client()
 
     def _upload_package_to_workers(self) -> None:
@@ -89,13 +88,13 @@ class DaskBackend(DaskClientBackend):
                 logger.info("Uploaded almasim source to Dask workers")
             finally:
                 os.unlink(tmp_path)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best effort; logged
             logger.warning("Could not upload almasim source to workers: %s", exc)
             return
 
         # --- 2. Install missing runtime dependencies on each worker ---
         # Map pip package name → importable module name
-        _DEPS: "dict[str, str]" = {
+        _DEPS: dict[str, str] = {
             "matplotlib": "matplotlib",
             "astropy": "astropy",
             "numpy": "numpy",
@@ -131,7 +130,7 @@ class DaskBackend(DaskClientBackend):
             results = self.client.run(_install_missing, _DEPS)
             for worker, msg in results.items():
                 logger.info("Worker %s: %s", worker, msg)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best effort; logged
             logger.warning(
                 "Could not install deps on Dask workers: %s. "
                 "Ensure the worker environment has matplotlib, astropy, numpy, "

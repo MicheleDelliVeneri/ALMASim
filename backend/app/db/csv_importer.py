@@ -5,7 +5,6 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,8 +19,8 @@ class CSVImporter:
 
     def __init__(self, db: Session):
         self.db = db
-        self.keyword_cache: Dict[str, ScienceKeyword] = {}
-        self.category_cache: Dict[str, ScientificCategory] = {}
+        self.keyword_cache: dict[str, ScienceKeyword] = {}
+        self.category_cache: dict[str, ScientificCategory] = {}
 
     def get_or_create_keyword(self, keyword: str) -> ScienceKeyword:
         """Get or create a science keyword."""
@@ -55,7 +54,7 @@ class CSVImporter:
         self.category_cache[category] = cat_obj
         return cat_obj
 
-    def parse_csv_row(self, row: Dict[str, str], source_file: str) -> Optional[Observation]:
+    def parse_csv_row(self, row: dict[str, str], source_file: str) -> Observation | None:
         """Parse a CSV row into an Observation object."""
         try:
             # Check if observation already exists
@@ -128,7 +127,7 @@ class CSVImporter:
 
             return observation
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a bad row is logged and skipped
             logger.error(f"Error parsing row: {e}, row: {row}")
             return None
 
@@ -148,7 +147,7 @@ class CSVImporter:
         imported_count = 0
 
         try:
-            with open(csv_path, "r", encoding="utf-8") as f:
+            with open(csv_path, encoding="utf-8") as f:
                 reader = csv.DictReader(f)
 
                 for row in reader:
@@ -187,7 +186,7 @@ class CSVImporter:
         imported_count = 0
 
         try:
-            with open(json_path, "r", encoding="utf-8") as f:
+            with open(json_path, encoding="utf-8") as f:
                 data = json.load(f)
 
                 # Handle both wrapped format {"count": N, "data": [...]} and plain array
@@ -211,7 +210,7 @@ class CSVImporter:
 
         return imported_count
 
-    def import_data_directory(self, data_dir: Path) -> Dict[str, int]:
+    def import_data_directory(self, data_dir: Path) -> dict[str, int]:
         """
         Import all CSV and JSON files from the data directory.
 
@@ -225,7 +224,7 @@ class CSVImporter:
             try:
                 count = self.import_csv_file(csv_file)
                 results[csv_file.name] = count
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - a bad file is logged and skipped
                 logger.error(f"Failed to import {csv_file}: {e}")
                 results[csv_file.name] = 0
 
@@ -234,14 +233,14 @@ class CSVImporter:
             try:
                 count = self.import_json_file(json_file)
                 results[json_file.name] = count
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - a bad file is logged and skipped
                 logger.error(f"Failed to import {json_file}: {e}")
                 results[json_file.name] = 0
 
         return results
 
 
-def initialize_database_from_csv(db: Session, data_dir: Path) -> Dict[str, int]:
+def initialize_database_from_csv(db: Session, data_dir: Path) -> dict[str, int]:
     """
     Initialize database with data from CSV/JSON files.
 

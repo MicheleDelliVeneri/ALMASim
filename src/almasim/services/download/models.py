@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +34,8 @@ class FileDownloadStatus:
     content_length: int
     bytes_downloaded: int = 0
     status: str = "pending"
-    error: Optional[str] = None
-    sha256: Optional[str] = None
+    error: str | None = None
+    sha256: str | None = None
 
 
 @dataclass
@@ -48,13 +47,13 @@ class DownloadSummary:
     total_bytes: int
     files_completed: int
     files_failed: int
-    files: List[FileDownloadStatus] = field(default_factory=list)
-    extracted_files: List[str] = field(default_factory=list)
-    extraction_failed: List[str] = field(default_factory=list)
+    files: list[FileDownloadStatus] = field(default_factory=list)
+    extracted_files: list[str] = field(default_factory=list)
+    extraction_failed: list[str] = field(default_factory=list)
     """Tars that downloaded but could not be extracted; they are kept on disk."""
-    raw_measurement_sets: List[str] = field(default_factory=list)
-    calibrated_measurement_sets: List[str] = field(default_factory=list)
-    manifest_path: Optional[str] = None
+    raw_measurement_sets: list[str] = field(default_factory=list)
+    calibrated_measurement_sets: list[str] = field(default_factory=list)
+    manifest_path: str | None = None
 
 
 PRODUCT_TYPES = {

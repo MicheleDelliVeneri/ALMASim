@@ -78,7 +78,7 @@ def list_simulations(db: Session = Depends(get_db)) -> SimulationListResponse:
                 error=sim.error,
                 output_dir=sim.output_path,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001 - the database is optional here
         pass
 
     for sim in status_store.list_all():
@@ -196,7 +196,7 @@ def create_simulation(
                 message="Simulation queued successfully",
                 output_path=params.output_dir or str(settings.OUTPUT_DIR),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - the database is optional here
             pass
 
         # Create status entry
@@ -223,7 +223,7 @@ def create_simulation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create simulation: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/estimate", response_model=SimulationEstimate)
@@ -245,7 +245,7 @@ def estimate_simulation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to estimate simulation footprint: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/{simulation_id}/status", response_model=SimulationStatusSchema)
@@ -283,7 +283,7 @@ def get_simulation_status(
                 logs=logs,
                 error=job.error,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001 - the database is optional here
         pass
 
     raise HTTPException(
@@ -315,7 +315,7 @@ def cancel_simulation(
                 current_step="Cancelled",
                 message="Cancellation requested",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - the database is optional here
             pass
         return SimulationResponse(
             simulation_id=simulation_id,
@@ -325,7 +325,7 @@ def cancel_simulation(
 
     try:
         job = DatabaseService(db).get_simulation_by_id(uuid.UUID(simulation_id))
-    except Exception:
+    except Exception:  # noqa: BLE001 - the database is optional here
         job = None
 
     if job is None:
@@ -389,7 +389,7 @@ async def websocket_status(websocket: WebSocket, simulation_id: str):
 
     except WebSocketDisconnect:
         pass
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - sent to the client
         await websocket.send_json({"error": str(e)})
 
 
@@ -417,7 +417,7 @@ def test_dask_connection(body: DaskTestRequest):
         )
         client.close()
         return result
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - reported to the client
         return DaskTestResponse(
             ok=False,
             scheduler=body.scheduler,
