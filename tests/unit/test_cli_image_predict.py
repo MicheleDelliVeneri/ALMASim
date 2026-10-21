@@ -64,7 +64,8 @@ def _expected(uvw, plane, freqs):
         pixsize_x=CELL_RAD,
         pixsize_y=CELL_RAD,
         do_wgridding=True,
-        epsilon=1e-4,
+        # Near-exact reference; the prediction runs at epsilon 1e-6 (MADIV-28 T3.7).
+        epsilon=1e-10,
         nthreads=1,
     )
 

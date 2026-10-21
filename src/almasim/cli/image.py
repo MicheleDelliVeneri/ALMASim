@@ -1075,13 +1075,14 @@ def _model_planes(model: Path) -> tuple[np.ndarray, float, float]:
 def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
     """Copy ``input_ms`` to ``output_ms`` and write the model's visibilities to MODEL_DATA.
 
-    The visibilities are predicted with ducc0 at each spectral window's channel
-    frequencies (from the MS). A single-plane model (e.g. WSClean's MFS model)
-    is used for every channel; a cube model must have one plane per channel and
-    each channel is predicted from its own plane. The Stokes I model goes to
-    the parallel hands (XX = YY = I, or RR = LL = I); cross hands are zero.
+    The visibilities are predicted with ducc0 (``interferometry.predict``) at
+    each spectral window's channel frequencies (from the MS). A single-plane
+    model (e.g. WSClean's MFS model) is used for every channel; a cube model
+    must have one plane per channel and each channel is predicted from its
+    own plane. The Stokes I model goes to the parallel hands (XX = YY = I, or
+    RR = LL = I); cross hands are zero.
     """
-    from ducc0.wgridder import dirty2vis
+    from ..services.interferometry.predict import predict_visibilities
 
     typer.echo(f"Predicting visibilities from model: {model}")
     typer.echo(f"Copying measurement set: {input_ms} -> {output_ms}")
@@ -1130,26 +1131,7 @@ def predict_from_model(input_ms: Path, model: Path, output_ms: Path) -> None:
             rows = np.flatnonzero(ddids == dd)
             selection = main_table.selectrows(rows.tolist())
             uvw = selection.getcol("UVW").astype(np.float64)
-
-            def predict(plane: np.ndarray, frequencies: np.ndarray) -> np.ndarray:
-                return dirty2vis(
-                    uvw=uvw,
-                    freq=frequencies,
-                    dirty=plane,
-                    pixsize_x=pixsize_x,
-                    pixsize_y=pixsize_y,
-                    do_wgridding=True,
-                    epsilon=1e-4,
-                    nthreads=nthreads,
-                )
-
-            if len(planes) == 1:
-                vis = predict(planes[0], freq)
-            else:
-                vis = np.stack(
-                    [predict(planes[c], freq[c : c + 1])[:, 0] for c in range(len(freq))],
-                    axis=1,
-                )
+            vis = predict_visibilities(uvw, freq, planes, pixsize_x, pixsize_y, nthreads=nthreads)
             model_data = np.zeros(vis.shape + (len(hands),), dtype=np.complex64)
             model_data[:, :, hands] = vis[:, :, None]
             selection.putcol("MODEL_DATA", model_data)  # (nrows, nchan, ncorr)
