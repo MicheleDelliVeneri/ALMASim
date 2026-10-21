@@ -28,8 +28,9 @@ def sample_given_redshift(
     extended: bool,
     zmax: Optional[float] = None,
     logger: LogFn = None,
+    rng: Optional[np.random.Generator] = None,
 ) -> pd.DataFrame:
-    """Filter and sample metadata entries based on redshift constraints."""
+    """Filter and sample metadata entries based on redshift constraints (``rng`` samples)."""
     pd.options.mode.chained_assignment = None
     metadata = metadata.copy()
     if isinstance(rest_frequency, (np.ndarray, list)):
@@ -90,8 +91,10 @@ def sample_given_redshift(
         return metadata
     if len(metadata) < n:
         a_n = n - len(metadata)
-        return pd.concat([metadata, metadata.sample(a_n, replace=True)], ignore_index=True)
-    return metadata.sample(n, replace=False)
+        return pd.concat(
+            [metadata, metadata.sample(a_n, replace=True, random_state=rng)], ignore_index=True
+        )
+    return metadata.sample(n, replace=False, random_state=rng)
 
 
 def cont_finder(cont_frequencies, line_frequency):
@@ -196,14 +199,16 @@ def find_compatible_lines(
     freq_max: float,
     band_range: float,
     line_width_range: Tuple[float, float],
+    rng: Optional[np.random.Generator] = None,
 ):
     """Return a dataframe with the n spectral lines to simulate."""
+    rng = rng if rng is not None else np.random.default_rng()
     c_km_s = c.to(U.km / U.s)
     min_delta_v, max_delta_v = line_width_range
     db_line = db_line.copy()
     db_line["redshift"] = (db_line["freq(GHz)"].values - source_freq) / source_freq
     db_line = db_line.loc[~((db_line["redshift"] < 0) | (db_line["redshift"] > 20))]
-    delta_v = np.random.uniform(min_delta_v, max_delta_v, len(db_line)) * U.km / U.s
+    delta_v = rng.uniform(min_delta_v, max_delta_v, len(db_line)) * U.km / U.s
     db_line["shifted_freq(GHz)"] = db_line["freq(GHz)"] / (1 + db_line["redshift"])
     fwhms = 0.84 * (db_line["shifted_freq(GHz)"].values * (delta_v / c_km_s) * 1e9) * U.Hz
     db_line["delta_v"] = delta_v.value
@@ -244,8 +249,8 @@ def find_compatible_lines(
     if found_lines < n:
         if line_names is not None and len(line_names) > 0:
             raise ValueError("Not enough lines available to fit the requested configuration.")
-        df_line = db_line.sample(n - found_lines, replace=True)
-        df_line["shifted_freq(GHz)"] = np.random.uniform(freq_min, freq_max, len(df_line))
+        df_line = db_line.sample(n - found_lines, replace=True, random_state=rng)
+        df_line["shifted_freq(GHz)"] = rng.uniform(freq_min, freq_max, len(df_line))
         df_line["fwhm_GHz"] = (band_range / n) / 10
         df_line["Line"] = ["Unknown"] * len(df_line)
         compatible_lines = pd.concat((compatible_lines, df_line), ignore_index=True, sort=False)
@@ -300,8 +305,10 @@ def process_spectral_data(
     remote: bool = False,
     line_width_range: Tuple[float, float] = (50.0, 300.0),
     logger: LogFn = None,
+    rng: Optional[np.random.Generator] = None,
 ) -> SpectralResult:
-    """Compute continua and emission lines for a simulated observation."""
+    """Compute continua and emission lines for a simulated observation (``rng`` draws them)."""
+    rng = rng if rng is not None else np.random.default_rng()
     master_path = Path(master_path)
     freq_min = central_frequency - delta_freq / 2
     freq_max = central_frequency + delta_freq / 2
@@ -330,6 +337,7 @@ def process_spectral_data(
         freq_max,
         delta_freq,
         line_width_range,
+        rng,
     )
 
     cont_mask = (sed["GHz"] >= freq_min) & (sed["GHz"] <= freq_max)
@@ -344,7 +352,7 @@ def process_spectral_data(
     line_names = filtered_lines["Line"].values
     cs = filtered_lines["c"].values
     cdeltas = filtered_lines["err_c"].values
-    line_ratios = np.array([np.random.normal(c, cd) for c, cd in zip(cs, cdeltas)])
+    line_ratios = np.array([rng.normal(c, cd) for c, cd in zip(cs, cdeltas)])
     line_frequencies = filtered_lines["shifted_freq(GHz)"].values
     new_cont_freq = np.linspace(freq_min, freq_max, n_channels)
     if len(cont_fluxes) > 1:

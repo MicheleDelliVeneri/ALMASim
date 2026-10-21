@@ -229,6 +229,7 @@ class ExtendedSkyModel:
         client: Optional[Client],
         update_progress: Optional[Any] = None,
         terminal: Optional[Any] = None,
+        rng: Optional[np.random.Generator] = None,
     ):
         """
         Initialize Extended sky model.
@@ -269,11 +270,12 @@ class ExtendedSkyModel:
         self.client = client if client is not None else _LocalClient()
         self.update_progress = update_progress
         self.terminal = terminal
+        self.rng = rng if rng is not None else np.random.default_rng()
 
     def insert(self) -> Any:
         """Insert extended source into datacube."""
-        x_rot = np.random.randint(0, 360) * U.deg
-        y_rot = np.random.randint(0, 360) * U.deg
+        x_rot = int(self.rng.integers(0, 360)) * U.deg
+        y_rot = int(self.rng.integers(0, 360)) * U.deg
         tngpath = os.path.join(self.tngpath, TNG_SIMULATION, "output")
         redshift = self.redshift * cu.redshift
         computed = redshift.to(U.Mpc, cu.redshift_distance(WMAP9, kind="comoving"))

@@ -125,6 +125,7 @@ def resolve_spectral_setup(
                 line_names,
                 n_lines,
                 bool(params.remote),
+                rng=ctx.rng,
             )
         )
         # The channel count (returned unchanged), bandwidth, frequency support

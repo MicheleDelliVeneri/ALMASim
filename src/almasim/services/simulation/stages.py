@@ -19,6 +19,7 @@ from .geometry import resolve_cube_geometry
 from .metadata import SimParamsRecord, resolve_snr, sim_params_record, simulation_metadata
 from .params import LogFn, SimulationParams, StopFn
 from .planning import noise_reference, plan_observation_runs
+from .rng import run_rng, stream_entropy
 from .skymodel_stage import build_sky_cube
 from .spectral_setup import resolve_spectral_setup
 
@@ -57,7 +58,13 @@ def generate_clean_cube(
     stop_requested: StopFn = False,
 ) -> CleanCubeStage:
     """Generate the clean sky cube and derived observation metadata."""
-    ctx = RunContext(logger, status_callback, stop_requested, remote=bool(params.remote))
+    ctx = RunContext(
+        logger,
+        status_callback,
+        stop_requested,
+        remote=bool(params.remote),
+        rng=run_rng(params.seed, "sky"),
+    )
     log = ctx.log
     progress_adapter = as_progress_emitter(progress_emitter)
 
@@ -198,6 +205,7 @@ def simulate_observation(
             backend=compute_backend,
             robust=robust,
             logger=terminal_logger,
+            noise_entropy=stream_entropy(clean_cube_stage.seed, "interferometer", config_index),
             **interferometer_kwargs,
         )
         if interferometer_progress_callback is not None:
@@ -225,9 +233,8 @@ def simulate_observation(
         )
 
     tp_per_config_results = []
-    # One generator for every TP configuration, seeded from the simulation seed
-    # (it used to default to default_rng(0): identical noise in every run).
-    tp_rng = np.random.default_rng(clean_cube_stage.seed)
+    # One generator for every TP configuration, from the run's seed.
+    tp_rng = run_rng(clean_cube_stage.seed, "total_power")
     for tp_run in clean_cube_stage.total_power_runs:
         tp_result = uin.simulate_total_power_observation(
             clean_cube_stage.model_cube,

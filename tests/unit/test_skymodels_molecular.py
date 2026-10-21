@@ -220,7 +220,7 @@ def test_template_cube_equals_the_per_channel_computation_exactly(monkeypatch):
     from almasim.skymodels import channel_first
 
     template = np.random.default_rng(1).random((16, 16))
-    monkeypatch.setattr(molecular, "molecular_cloud", lambda n_px: template.copy())
+    monkeypatch.setattr(molecular, "molecular_cloud", lambda n_px, rng=None: template.copy())
     model = _make_model(n_px=16, n_chan=8)
     cube = channel_first(model.insert())
     normalised = (template - template.min()) * (1 / (template - template.min()).max())

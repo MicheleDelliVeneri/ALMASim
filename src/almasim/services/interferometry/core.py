@@ -75,6 +75,7 @@ class Interferometer:
         array_type: Optional[str] = None,
         logger: LogFn = None,
         spectral_window: Optional[SpectralWindow] = None,
+        noise_entropy: Optional[tuple[int, ...]] = None,
     ):
         """
         Initialize interferometer.
@@ -124,7 +125,11 @@ class Interferometer:
         spectral_window : SpectralWindow, optional
             The cube's channel grid, which the uv sampling and the visibility
             table use too; by default the band split into the cube's channels
+        noise_entropy : tuple of int, optional
+            Seeds the visibility noise and phase errors, one stream per channel
+            (MADIV-28 T5.1); fresh entropy when None
         """
+        self.noise_entropy = noise_entropy
         self.idx = idx
         self.skymodel = skymodel
         self.backend = backend
@@ -303,6 +308,7 @@ class Interferometer:
             header=picklable_header(self.header),
             robust=self.robust,
             scan_time_s=self.scan_time,
+            noise_entropy=self.noise_entropy,
         )
         wavelengths = [self.get_channel_wavelength(i)[0] for i in range(self.Nchan)]
         results_per_channel = image_channels(

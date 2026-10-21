@@ -36,7 +36,7 @@ def _make_model(
     )
 
 
-def _fake_diffuse_signal(n_px: int) -> np.ndarray:
+def _fake_diffuse_signal(n_px: int, rng=None) -> np.ndarray:
     """Reproducible fake diffuse signal without nifty8."""
     rng = np.random.default_rng(42)
     data = rng.random((n_px, n_px)).astype(np.float64)
@@ -97,7 +97,7 @@ def test_diffuse_insert_multiple_lines():
 def test_diffuse_insert_nan_handling():
     """insert() applies nan_to_num so NaNs in signal do not propagate."""
 
-    def signal_with_nan(n_px: int) -> np.ndarray:
+    def signal_with_nan(n_px: int, rng=None) -> np.ndarray:
         data = _fake_diffuse_signal(n_px)
         data[0, 0] = float("nan")
         # Re-normalize but keep NaN there

@@ -1,7 +1,6 @@
 """Diffuse sky model implementation."""
 
-import random
-from typing import Any
+from typing import Any, Optional
 
 import nifty8 as ift
 import numpy as np
@@ -9,9 +8,10 @@ import numpy as np
 from .base import SkyModel
 
 
-def diffuse_signal(n_px: int) -> np.ndarray:
-    """Generate diffuse signal using NIFTY."""
-    ift.random.push_sseq(random.randint(1, 1000))
+def diffuse_signal(n_px: int, rng: Optional[np.random.Generator] = None) -> np.ndarray:
+    """Generate diffuse signal using NIFTY; ``rng`` seeds it (fresh entropy when None)."""
+    rng = rng if rng is not None else np.random.default_rng()
+    ift.random.push_sseq(int(rng.integers(1, 1001)))
     space = ift.RGSpace((2 * n_px, 2 * n_px))
     args = {
         "offset_mean": 24,
@@ -36,7 +36,7 @@ class DiffuseSkyModel(SkyModel):
 
     def insert(self) -> Any:
         """Insert diffuse source into datacube."""
-        ts = diffuse_signal(self.n_px)
+        ts = diffuse_signal(self.n_px, self.rng)
         ts = np.nan_to_num(ts)
         ts -= np.min(ts)
         ts *= 1 / np.max(ts)

@@ -22,14 +22,16 @@ class ImageTemplateSkyModel(SkyModel):
         self.data_path = data_path
 
     def _image_files(self) -> np.ndarray:
-        return np.array(os.listdir(self.data_path))
+        # Sorted: the listing order depends on the filesystem, and the choice
+        # below must be the same for the same seed.
+        return np.array(sorted(os.listdir(self.data_path)))
 
     def _read_image(self, path: str) -> np.ndarray:
         raise NotImplementedError
 
     def insert(self) -> Any:
         """Insert the image-shaped source into the datacube."""
-        imfile = os.path.join(self.data_path, np.random.choice(self._image_files()))
+        imfile = os.path.join(self.data_path, self.rng.choice(self._image_files()))
         img = self._read_image(imfile).astype(np.float32)
         d3 = min(2, np.shape(img)[2])
         avimg = np.average(img[:, :, :d3], axis=2)

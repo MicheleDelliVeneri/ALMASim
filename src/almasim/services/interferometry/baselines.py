@@ -170,7 +170,9 @@ def prepare_baselines(
     return Nbas, B, basnum, basidx, antnum, Gains, Noise, H, u, v, ravelDims
 
 
-def set_noise(noise: float, Noise: np.ndarray) -> np.ndarray:
+def set_noise(
+    noise: float, Noise: np.ndarray, rng: np.random.Generator | None = None
+) -> np.ndarray:
     """
     Set noise values for baselines.
 
@@ -188,8 +190,9 @@ def set_noise(noise: float, Noise: np.ndarray) -> np.ndarray:
     """
     if noise < 0:
         raise ValueError("Noise must be non-negative")
+    rng = rng if rng is not None else np.random.default_rng()
     shape = Noise.shape
-    Noise[:] = np.random.normal(loc=0.0, scale=noise, size=shape) + 1.0j * np.random.normal(
+    Noise[:] = rng.normal(loc=0.0, scale=noise, size=shape) + 1.0j * rng.normal(
         loc=0.0, scale=noise, size=shape
     )
     return Noise
