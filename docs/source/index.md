@@ -9,6 +9,7 @@
 :maxdepth: 2
 
 quickstart
+cli
 console
 console_hub
 simulation

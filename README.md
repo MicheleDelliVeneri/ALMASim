@@ -343,9 +343,18 @@ Full reference: [Metadata docs](https://astromadiv.github.io/ALMASim/metadata.ht
 `almasim serve` runs a web console on a cluster's login node: one page to query the ALMA archive, start simulations, image measurement sets, run any `almasim` command as a Slurm job, follow jobs live and look at the products. Each user runs their own console and reaches it through an SSH tunnel:
 
 ```bash
-pip install "almasim[web]"
-almasim serve            # prints the link to open, with its token
+# on the cluster's login node (in tmux or screen, so it outlives the SSH session)
+pip install "almasim[web]"     # or the site's shared install
+almasim doctor --slurm         # checks, on a compute node, what jobs need
+almasim serve                  # prints an ssh -L line and a link with your token
+
+# on your laptop: the printed tunnel, then open the printed link
+ssh -N -L 8765:/home/you/.almasim/serve.sock you@cluster.login
 ```
+
+The console listens on a socket only you can open and asks for your token. `almasim serve --status` prints the link again and `almasim serve --stop` stops it; your jobs carry on either way.
+
+![The web console](https://raw.githubusercontent.com/astromadiv/ALMASim/main/docs/images/console/home.png)
 
 The console serves its pages and API v2 (`/api/v2`, OpenAPI docs at `/api/docs`) together, so a cluster needs no Node and no database: the runs live in run folders a team can share.
 
