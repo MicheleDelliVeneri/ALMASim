@@ -28,7 +28,7 @@ def test_lookup_is_case_insensitive_and_names_the_choices():
 
 
 def test_the_cli_and_the_external_list_come_from_the_registry():
-    from almasim import cli_simulation
+    from almasim.cli import simulation as cli_simulation
     from almasim.services.external_skymodel import EXTERNAL_SOURCE_TYPES
 
     assert cli_simulation._SOURCE_TYPES == [

@@ -107,7 +107,7 @@ def subtract_uv_continuum_subprocess(
     """Run ``subtract_uv_continuum`` in a child process, for the reason
     ``extract_single_window_ms_subprocess`` gives: casacore holds the GIL."""
     return call_in_child(
-        "almasim.services.imaging.archive_imaging:subtract_uv_continuum",
+        "almasim.services.imaging.uv_contsub:subtract_uv_continuum",
         {"ms_path": str(ms_path), "order": int(order)},
         what="continuum subtraction",
         env=wsclean_environment(1),

@@ -11,10 +11,14 @@ import pytest
 from astropy.io import fits
 from typer.testing import CliRunner
 
-from almasim import cli, cli_image
-from almasim.services.imaging import archive_imaging as ai
+from almasim import cli
+from almasim.cli import image as cli_image
+from almasim.services.imaging import markers as imaging_markers
 from almasim.services.imaging import primary_beam as pbm
+from almasim.services.imaging import products as imaging_products
+from almasim.services.imaging import task as imaging_task
 from almasim.services.imaging.task_run import TaskRun
+from almasim.services.imaging.wsclean import runner as imaging_wsclean_runner
 
 from ._fakes import flat_run_kwargs, patch_everywhere
 
@@ -172,26 +176,28 @@ def test_primary_beam_correct_rejects_bad_input(tmp_path):
 
 @pytest.mark.unit
 def test_pb_correct_task_corrects_what_is_there(tmp_path):
-    _write_image(tmp_path / ai.IMAGE_FILENAME)
-    corrected = ai.pb_correct_task(tmp_path, 7.0)
-    assert list(corrected) == [ai.IMAGE_FILENAME]
-    assert (tmp_path / ai.PB_FILENAME).is_file() and (tmp_path / ai.PBCOR_FILENAME).is_file()
-    assert not (tmp_path / ai.CUBE_PB_FILENAME).exists()
-    note = ai.pb_note(corrected[ai.IMAGE_FILENAME])
+    _write_image(tmp_path / imaging_products.IMAGE_FILENAME)
+    corrected = imaging_task.pb_correct_task(tmp_path, 7.0)
+    assert list(corrected) == [imaging_products.IMAGE_FILENAME]
+    assert (tmp_path / imaging_products.PB_FILENAME).is_file() and (
+        tmp_path / imaging_products.PBCOR_FILENAME
+    ).is_file()
+    assert not (tmp_path / imaging_products.CUBE_PB_FILENAME).exists()
+    note = imaging_task.pb_note(corrected[imaging_products.IMAGE_FILENAME])
     assert "Airy 6.25 m aperture" in note and "(7 m dish)" in note and "blanked below 0.2" in note
 
-    _write_image(tmp_path / ai.CUBE_IMAGE_FILENAME, channels=3)
-    assert list(ai.pb_correct_task(tmp_path, 12.0, cutoff=0.5)) == [
-        ai.IMAGE_FILENAME,
-        ai.CUBE_IMAGE_FILENAME,
+    _write_image(tmp_path / imaging_products.CUBE_IMAGE_FILENAME, channels=3)
+    assert list(imaging_task.pb_correct_task(tmp_path, 12.0, cutoff=0.5)) == [
+        imaging_products.IMAGE_FILENAME,
+        imaging_products.CUBE_IMAGE_FILENAME,
     ]
-    assert fits.getheader(tmp_path / ai.CUBE_PBCOR_FILENAME)["PBCUTOFF"] == 0.5
+    assert fits.getheader(tmp_path / imaging_products.CUBE_PBCOR_FILENAME)["PBCUTOFF"] == 0.5
 
 
 @pytest.mark.unit
 def test_run_wsclean_task_primary_beam_corrects_and_logs(tmp_path, monkeypatch):
     out = tmp_path / "ms" / "SPW-1"
-    stale = out / ai.PBCOR_FILENAME
+    stale = out / imaging_products.PBCOR_FILENAME
     out.mkdir(parents=True)
     stale.write_bytes(b"old")
     seen = {}
@@ -201,8 +207,8 @@ def test_run_wsclean_task_primary_beam_corrects_and_logs(tmp_path, monkeypatch):
         seen.update(kwargs)
         return {"ok": True}
 
-    patch_everywhere(monkeypatch, ai, "_run_and_mark", _fake_run_and_mark)
-    ai.run_wsclean_task(
+    patch_everywhere(monkeypatch, imaging_task, "_run_and_mark", _fake_run_and_mark)
+    imaging_task.run_wsclean_task(
         command=["wsclean", "-name", str(out / "wsclean"), "in.ms"],
         output_dir=str(out),
         ms_path="in.ms",
@@ -217,12 +223,12 @@ def test_run_wsclean_task_primary_beam_corrects_and_logs(tmp_path, monkeypatch):
 def _mark_inputs(tmp_path: Path) -> dict:
     out = tmp_path / "SPW-1"
     out.mkdir()
-    log = ai.imaging_log_path(out)
+    log = imaging_markers.imaging_log_path(out)
     log.write_text("")
     return dict(
         task=TaskRun(out=out, log_path=log, ms_path="in.ms", spw=1),
         commands=[["wsclean", "-name", str(out / "wsclean"), "in.ms"]],
-        required=[ai.IMAGE_FILENAME],
+        required=[imaging_products.IMAGE_FILENAME],
         started=0.0,
     )
 
@@ -233,13 +239,15 @@ def test_run_and_mark_writes_the_primary_beam_products(tmp_path, monkeypatch):
     out = kwargs["task"].out
     patch_everywhere(
         monkeypatch,
-        ai,
+        imaging_wsclean_runner,
         "_run_with_retries",
-        lambda cmd, out_, *a: _write_image(out_ / ai.IMAGE_FILENAME) or 1,
+        lambda cmd, out_, *a: _write_image(out_ / imaging_products.IMAGE_FILENAME) or 1,
     )
-    ai._run_and_mark(**kwargs, pb_dish_diameter=12.0)
-    assert (out / ai.PB_FILENAME).is_file() and (out / ai.PBCOR_FILENAME).is_file()
-    assert ai.imaging_marker_path(out).is_file()
+    imaging_task._run_and_mark(**kwargs, pb_dish_diameter=12.0)
+    assert (out / imaging_products.PB_FILENAME).is_file() and (
+        out / imaging_products.PBCOR_FILENAME
+    ).is_file()
+    assert imaging_markers.imaging_marker_path(out).is_file()
     log = kwargs["task"].log_path.read_text()
     assert "# primary-beam corrected wsclean-image.fits: Airy 10.7 m" in log
 
@@ -250,13 +258,13 @@ def test_run_and_mark_fails_the_task_when_the_correction_fails(tmp_path, monkeyp
     out = kwargs["task"].out
     patch_everywhere(
         monkeypatch,
-        ai,
+        imaging_wsclean_runner,
         "_run_with_retries",
-        lambda cmd, out_, *a: (out_ / ai.IMAGE_FILENAME).write_bytes(b"x"),
+        lambda cmd, out_, *a: (out_ / imaging_products.IMAGE_FILENAME).write_bytes(b"x"),
     )
     with pytest.raises(RuntimeError, match="Could not primary-beam correct"):
-        ai._run_and_mark(**kwargs, pb_dish_diameter=12.0)
-    assert not ai.imaging_marker_path(out).exists()
+        imaging_task._run_and_mark(**kwargs, pb_dish_diameter=12.0)
+    assert not imaging_markers.imaging_marker_path(out).exists()
 
 
 def _params(tmp_path: Path, rows: list[dict]) -> Path:
@@ -337,19 +345,19 @@ def test_pb_correct_command_corrects_finished_tasks(tmp_path):
     )
     for directory in (done, broken, missing_fov):
         directory.mkdir(parents=True)
-        ai.write_imaging_marker(directory, ms_path="x", spw=1)
-    _write_image(done / ai.IMAGE_FILENAME)
-    _write_image(missing_fov / ai.IMAGE_FILENAME)
-    (broken / ai.IMAGE_FILENAME).write_bytes(b"not a FITS file")
-    ai.imaging_log_path(done).write_text("# imaged\n")
+        imaging_markers.write_imaging_marker(directory, ms_path="x", spw=1)
+    _write_image(done / imaging_products.IMAGE_FILENAME)
+    _write_image(missing_fov / imaging_products.IMAGE_FILENAME)
+    (broken / imaging_products.IMAGE_FILENAME).write_bytes(b"not a FITS file")
+    imaging_markers.imaging_log_path(done).write_text("# imaged\n")
 
     result = runner.invoke(cli.app, ["image", "pb-correct", str(csv), str(root), "--cutoff", "0.3"])
 
     assert result.exit_code == 1, result.output
     assert "Primary-beam corrected 1 task(s); 1 not imaged, 2 failed." in result.output
     assert "no fov_per_frequency" in result.output
-    assert fits.getheader(done / ai.PBCOR_FILENAME)["PBCUTOFF"] == 0.3
-    log = ai.imaging_log_path(done).read_text()
+    assert fits.getheader(done / imaging_products.PBCOR_FILENAME)["PBCUTOFF"] == 0.3
+    log = imaging_markers.imaging_log_path(done).read_text()
     assert log.startswith("# imaged\n") and "(pb-correct): Airy 10.7 m" in log
 
 
@@ -359,11 +367,11 @@ def test_pb_correct_command_succeeds_when_everything_is_corrected(tmp_path):
     csv = _params(tmp_path, [_param_row(1)])
     directory = cli_image.task_directory(root, pd.Series(_param_row(1)))[0]
     directory.mkdir(parents=True)
-    ai.write_imaging_marker(directory, ms_path="x", spw=1)
-    _write_image(directory / ai.IMAGE_FILENAME)
+    imaging_markers.write_imaging_marker(directory, ms_path="x", spw=1)
+    _write_image(directory / imaging_products.IMAGE_FILENAME)
     result = runner.invoke(cli.app, ["image", "pb-correct", str(csv), str(root)])
     assert result.exit_code == 0, result.output
-    assert (directory / ai.PB_FILENAME).is_file()
+    assert (directory / imaging_products.PB_FILENAME).is_file()
 
 
 def _broken(*args, **kwargs):
@@ -375,11 +383,11 @@ def test_run_and_mark_keeps_the_cause_of_a_stacking_failure(tmp_path, monkeypatc
     import almasim.services.imaging.task as task
 
     kwargs = _mark_inputs(tmp_path)
-    kwargs["required"] = [ai.CUBE_IMAGE_FILENAME]
-    patch_everywhere(monkeypatch, ai, "_run_with_retries", lambda *a: 1)
+    kwargs["required"] = [imaging_products.CUBE_IMAGE_FILENAME]
+    patch_everywhere(monkeypatch, imaging_wsclean_runner, "_run_with_retries", lambda *a: 1)
     monkeypatch.setattr(task, "stack_channel_images", _broken)
     with pytest.raises(RuntimeError, match="Could not stack the channel images") as info:
-        ai._run_and_mark(**kwargs)
+        imaging_task._run_and_mark(**kwargs)
     assert isinstance(info.value.__cause__, ValueError)
 
 
@@ -388,18 +396,20 @@ def test_run_and_mark_keeps_the_cause_of_a_cube_continuum_failure(tmp_path, monk
     import almasim.services.imaging.task as task
 
     kwargs = _mark_inputs(tmp_path)
-    kwargs["required"] = [ai.CUBE_IMAGE_FILENAME]
-    patch_everywhere(monkeypatch, ai, "_run_with_retries", lambda *a: 1)
+    kwargs["required"] = [imaging_products.CUBE_IMAGE_FILENAME]
+    patch_everywhere(monkeypatch, imaging_wsclean_runner, "_run_with_retries", lambda *a: 1)
     monkeypatch.setattr(
         task,
         "stack_channel_images",
-        lambda out, prefix, keep: (out / ai.CUBE_IMAGE_FILENAME).write_bytes(b"x") and {},
+        lambda out, prefix, keep: (
+            (out / imaging_products.CUBE_IMAGE_FILENAME).write_bytes(b"x") and {}
+        ),
     )
     monkeypatch.setattr(task, "subtract_continuum", _broken)
     with pytest.raises(
         RuntimeError, match="Could not subtract the continuum from the cube"
     ) as info:
-        ai._run_and_mark(**kwargs, contsub_order=1)
+        imaging_task._run_and_mark(**kwargs, contsub_order=1)
     assert isinstance(info.value.__cause__, ValueError)
 
 
@@ -412,4 +422,4 @@ def test_task_run_fail_writes_the_failure_marker(tmp_path):
 
     assert task.retries == 0
     assert str(error) == f"WSClean exited with return code 1\nFull log: {log}"
-    assert ai.imaging_failure_marker_path(tmp_path).is_file()
+    assert imaging_markers.imaging_failure_marker_path(tmp_path).is_file()

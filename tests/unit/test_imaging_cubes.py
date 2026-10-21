@@ -14,9 +14,19 @@ import pytest
 from astropy.io import fits
 from typer.testing import CliRunner
 
-from almasim import cli, cli_image
-from almasim.services.imaging import archive_imaging as ai
+from almasim import cli
+from almasim.cli import image as cli_image
+from almasim.services.imaging import continuum as imaging_continuum
 from almasim.services.imaging import cube as cube_module
+from almasim.services.imaging import cube as imaging_cube
+from almasim.services.imaging import markers as imaging_markers
+from almasim.services.imaging import products as imaging_products
+from almasim.services.imaging import task as imaging_task
+from almasim.services.imaging import uv_contsub as imaging_uv_contsub
+from almasim.services.imaging.ms import single_window as imaging_ms_single_window
+from almasim.services.imaging.selfcal import loop as imaging_selfcal_loop
+from almasim.services.imaging.wsclean import command as imaging_wsclean_command
+from almasim.services.runtime import env as runtime_env
 
 from ._fakes import FakeTask, flat_run_kwargs, patch_everywhere
 
@@ -127,7 +137,9 @@ def test_stack_channel_images_builds_cubes_with_a_beam_table(tmp_path):
         _write_channel(tmp_path / f"wsclean-cube-{channel:04d}-model.fits", plane, freq)
     _write_channel(tmp_path / "wsclean-image.fits", np.zeros((4, 5)), 230e9)  # continuum
 
-    written = ai.stack_channel_images(tmp_path, prefix="wsclean-cube", keep=("image", "psf"))
+    written = imaging_cube.stack_channel_images(
+        tmp_path, prefix="wsclean-cube", keep=("image", "psf")
+    )
 
     assert written == {"image": 3, "psf": 3}
     assert sorted(p.name for p in tmp_path.iterdir()) == [
@@ -151,7 +163,7 @@ def test_stack_channel_images_rejects_uneven_channels(tmp_path):
     for channel, freq in enumerate((230e9, 230.001e9, 230.005e9)):
         _write_channel(tmp_path / f"w-{channel:04d}-image.fits", np.zeros((2, 2)), freq)
     with pytest.raises(RuntimeError, match="not evenly spaced"):
-        ai.stack_channel_images(tmp_path, prefix="w")
+        imaging_cube.stack_channel_images(tmp_path, prefix="w")
 
 
 def _cube_file(path: Path, cube: np.ndarray) -> Path:
@@ -173,7 +185,9 @@ def test_subtract_continuum_removes_the_continuum_and_keeps_the_line(tmp_path, o
     cube[10] = 0.0  # a fully flagged channel
     source = _cube_file(tmp_path / "cube.fits", cube)
 
-    fit = ai.subtract_continuum(source, tmp_path / "contsub.fits", order=order, rows_per_chunk=4)
+    fit = imaging_continuum.subtract_continuum(
+        source, tmp_path / "contsub.fits", order=order, rows_per_chunk=4
+    )
 
     result = fits.getdata(tmp_path / "contsub.fits")[0]
     assert np.isnan(result[10]).all(), "a blank channel stays blank"
@@ -237,7 +251,7 @@ def test_run_wsclean_task_makes_continuum_cube_and_contsub(tmp_path, monkeypatch
         tmp_path, cube=cli_image.CubeOptions(), cube_products=products, single_window=True
     )
 
-    result = ai.run_wsclean_task(
+    result = imaging_task.run_wsclean_task(
         command=task.command,
         cube_command=task.cube_command,
         output_dir=str(task.output_dir),
@@ -262,11 +276,13 @@ def test_run_wsclean_task_makes_continuum_cube_and_contsub(tmp_path, monkeypatch
     ]
     assert result["channels"] == 8
     assert fits.getdata(out / "wsclean-cube-image.fits").shape == (1, 8, 3, 3)
-    marker = json.loads(ai.imaging_marker_path(out).read_text())
+    marker = json.loads(imaging_markers.imaging_marker_path(out).read_text())
     assert len(marker["commands"]) == 2 and len(marker["images"]) == 3
-    assert ai.is_imaging_complete(out, (ai.IMAGE_FILENAME, ai.CUBE_IMAGE_FILENAME))
+    assert imaging_markers.is_imaging_complete(
+        out, (imaging_products.IMAGE_FILENAME, imaging_products.CUBE_IMAGE_FILENAME)
+    )
     assert "stacked channel images into cubes: image (8 channels)" in (
-        ai.imaging_log_path(out).read_text()
+        imaging_markers.imaging_log_path(out).read_text()
     )
 
 
@@ -275,20 +291,20 @@ def test_cube_only_run_adds_cubes_next_to_existing_continuum(tmp_path, monkeypat
     fake = _FakeCubeWsclean()
     monkeypatch.setattr(subprocess, "Popen", fake)
     (continuum_task,), _ = _tasks(tmp_path)
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=continuum_task.command,
         output_dir=str(continuum_task.output_dir),
         ms_path="x",
         spw=25,
         threads=2,
     )
-    continuum_bytes = (continuum_task.output_dir / ai.IMAGE_FILENAME).read_bytes()
+    continuum_bytes = (continuum_task.output_dir / imaging_products.IMAGE_FILENAME).read_bytes()
     assert _tasks(tmp_path) == ([], 1), "the continuum task is done"
 
     cube = cli_image.CubeOptions()
     (task,), skipped = _tasks(tmp_path, continuum=False, cube=cube)
     assert skipped == 0 and task.command == [], "only the cube is still missing"
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=task.command,
         cube_command=task.cube_command,
         output_dir=str(task.output_dir),
@@ -298,7 +314,7 @@ def test_cube_only_run_adds_cubes_next_to_existing_continuum(tmp_path, monkeypat
     )
 
     assert len(fake.calls) == 2
-    assert (task.output_dir / ai.IMAGE_FILENAME).read_bytes() == continuum_bytes
+    assert (task.output_dir / imaging_products.IMAGE_FILENAME).read_bytes() == continuum_bytes
     assert _tasks(tmp_path, continuum=False, cube=cube) == ([], 1)
     assert _tasks(tmp_path, cube=cube) == ([], 1), "continuum and cube both present"
 
@@ -447,7 +463,7 @@ def test_line_free_channels_drops_the_line_and_its_wings():
     usable = np.ones(spectrum.size, bool)
     usable[:5] = False  # flagged band edge
 
-    line_free = ai.line_free_channels(spectrum, usable)
+    line_free = imaging_continuum.line_free_channels(spectrum, usable)
 
     assert not line_free[:5].any(), "unusable channels are never line-free"
     assert not line_free[176:204].any(), "the line and its wings"
@@ -463,9 +479,9 @@ def test_line_free_channels_finds_faint_broad_wings_by_smoothing():
     spectrum[1000:1100] += 0.06  # 0.6 sigma per channel, 6 sigma over the 100 channels
     usable = np.ones(n, bool)
 
-    line_free = ai.line_free_channels(spectrum, usable)
+    line_free = imaging_continuum.line_free_channels(spectrum, usable)
     assert line_free[1000:1100].mean() < 0.2, "the wing is found on the smoothed spectrum"
-    single = ai.line_free_channels(spectrum, usable, widths=(1,))
+    single = imaging_continuum.line_free_channels(spectrum, usable, widths=(1,))
     assert single[1000:1100].mean() > 0.8, "channel by channel it is not"
 
 
@@ -488,7 +504,7 @@ def test_fit_uv_continuum_fits_each_row_over_the_line_free_channels(order):
     line_free = np.ones(n_channels, bool)
     line_free[28:36] = False
 
-    fitted = ai.fit_uv_continuum(data, weight, flag, line_free, order)
+    fitted = imaging_continuum.fit_uv_continuum(data, weight, flag, line_free, order)
 
     assert fitted.shape == data.shape and fitted.dtype == data.dtype
     assert np.all(fitted[0] == 0), "no usable channel: no continuum"
@@ -499,7 +515,7 @@ def test_fit_uv_continuum_fits_each_row_over_the_line_free_channels(order):
 @pytest.mark.unit
 def test_fit_uv_continuum_rejects_other_orders():
     with pytest.raises(ValueError, match="order"):
-        ai.fit_uv_continuum(
+        imaging_continuum.fit_uv_continuum(
             np.zeros((1, 4, 1)), np.ones((1, 4, 1)), np.zeros((1, 4, 1), bool), np.ones(4, bool), 2
         )
 
@@ -507,8 +523,8 @@ def test_fit_uv_continuum_rejects_other_orders():
 @pytest.mark.unit
 def test_channel_ranges_lists_runs_casa_style():
     mask = np.array([0, 1, 1, 0, 0, 1, 0, 1, 1, 1], bool)
-    assert ai._channel_ranges(mask) == "1~2;5~5;7~9"
-    assert ai._channel_ranges(np.zeros(4, bool)) == ""
+    assert imaging_continuum._channel_ranges(mask) == "1~2;5~5;7~9"
+    assert imaging_continuum._channel_ranges(np.zeros(4, bool)) == ""
 
 
 def _uv_task(tmp_path, monkeypatch, fit, **kwargs):
@@ -516,19 +532,19 @@ def _uv_task(tmp_path, monkeypatch, fit, **kwargs):
     monkeypatch.setattr(subprocess, "Popen", fake)
     patch_everywhere(
         monkeypatch,
-        ai,
+        imaging_ms_single_window,
         "extract_single_window_ms_subprocess",
         lambda *a, **k: {"rows": 10, "bytes": 0},
     )
     calls = []
     patch_everywhere(
         monkeypatch,
-        ai,
+        imaging_uv_contsub,
         "subtract_uv_continuum_subprocess",
         lambda ms, **k: calls.append((ms, k)) or fit,
     )
     (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=task.command,
         cube_command=task.cube_command,
         output_dir=str(task.output_dir),
@@ -539,7 +555,7 @@ def _uv_task(tmp_path, monkeypatch, fit, **kwargs):
         uv_contsub_order=1,
         **kwargs,
     )
-    return fake, calls, ai.imaging_log_path(task.output_dir).read_text()
+    return fake, calls, imaging_markers.imaging_log_path(task.output_dir).read_text()
 
 
 @pytest.mark.unit
@@ -558,8 +574,8 @@ def test_run_wsclean_task_images_continuum_and_lines_from_their_columns(tmp_path
     ((ms, kwargs),) = calls
     assert Path(ms).name == "spw25.single.ms" and kwargs["order"] == 1
     continuum, cube = fake.calls
-    assert continuum[continuum.index("-data-column") + 1] == ai.CONTINUUM_COLUMN
-    assert cube[cube.index("-data-column") + 1] == ai.LINE_COLUMN
+    assert continuum[continuum.index("-data-column") + 1] == imaging_products.CONTINUUM_COLUMN
+    assert cube[cube.index("-data-column") + 1] == imaging_products.LINE_COLUMN
     assert continuum[-1] == cube[-1] and continuum[-1].endswith("spw25.single.ms")
     assert "6 of 8 channels line-free (8 in the window), lines in channels 3~4" in log
 
@@ -576,7 +592,7 @@ def test_run_wsclean_task_keeps_the_data_when_too_few_channels_are_line_free(tmp
 @pytest.mark.unit
 def test_run_wsclean_task_uv_contsub_needs_a_single_window_cube():
     with pytest.raises(ValueError, match="single_window and a cube_command"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=["wsclean"],
             output_dir="x",
             ms_path="x",
@@ -662,10 +678,12 @@ def _run_selfcal(
             calls.append((function,))
         return {"spw": "0:0~9", "refant": "DA41", "line_free_channels": 10}
 
-    patch_everywhere(monkeypatch, ai, "_call_in_child", fake_call)
+    patch_everywhere(monkeypatch, imaging_selfcal_loop, "_call_in_child", fake_call)
     remaining = list(snrs)
-    patch_everywhere(monkeypatch, ai, "image_snr", lambda image, residual: remaining.pop(0))
-    patch_everywhere(monkeypatch, ai, "image_peak", lambda image: 1.0)
+    patch_everywhere(
+        monkeypatch, imaging_selfcal_loop, "image_snr", lambda image, residual: remaining.pop(0)
+    )
+    patch_everywhere(monkeypatch, imaging_selfcal_loop, "image_peak", lambda image: 1.0)
     images = []
 
     def fake_run(cmd):
@@ -675,7 +693,7 @@ def _run_selfcal(
         return 1
 
     with (tmp_path / "task.log").open("w") as log:
-        result = ai.self_calibrate(
+        result = imaging_selfcal_loop.self_calibrate(
             tmp_path / "spw.ms",
             ["wsclean", "-name", str(tmp_path / "wsclean"), "-no-update-model-required", "ms"],
             task=FakeTask(tmp_path, run=fake_run, fail=RuntimeError),
@@ -760,17 +778,17 @@ def test_self_calibrate_skips_faint_sources(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 def test_parse_selfcal_rounds():
-    assert ai.parse_selfcal_rounds(["inf", "30s", "ap:inf", "ap:60s"]) == [
+    assert imaging_selfcal_loop.parse_selfcal_rounds(["inf", "30s", "ap:inf", "ap:60s"]) == [
         ("p", "inf"),
         ("p", "30s"),
         ("ap", "inf"),
         ("ap", "60s"),
     ]
     with pytest.raises(ValueError, match="needs a phase round"):
-        ai.parse_selfcal_rounds(["ap:inf"])
+        imaging_selfcal_loop.parse_selfcal_rounds(["ap:inf"])
     for bad in ("fast", "a:inf", "ap:"):
         with pytest.raises(ValueError, match="self-calibration rounds are"):
-            ai.parse_selfcal_rounds([bad])
+            imaging_selfcal_loop.parse_selfcal_rounds([bad])
 
 
 @pytest.mark.unit
@@ -821,24 +839,24 @@ def test_image_from_ms_passes_selfcal_solints_and_casa_data(tmp_path, monkeypatc
 def test_casa_environment_puts_the_bundled_casatools_libraries_first():
     """One policy for every CASA child (T2.3): bundled libs, system libs, inherited."""
     base = {"LD_LIBRARY_PATH": "/opt/spack/lib", "PATH": "/bin"}
-    env = ai.casa_environment(base, bundled="/site/casatools/__casac__/lib")
+    env = runtime_env.casa_environment(base, bundled="/site/casatools/__casac__/lib")
     entries = env["LD_LIBRARY_PATH"].split(":")
     assert entries[0] == "/site/casatools/__casac__/lib" and entries[1] == "/lib64"
     assert entries[-1] == "/opt/spack/lib" and env["OMP_NUM_THREADS"] == "1"
-    without = ai.casa_environment({}, bundled=None)["LD_LIBRARY_PATH"]
+    without = runtime_env.casa_environment({}, bundled=None)["LD_LIBRARY_PATH"]
     assert without.startswith("/lib64:/usr/lib64:")
-    assert ai.wsclean_environment(1, base)["LD_LIBRARY_PATH"].startswith("/lib64")
+    assert runtime_env.wsclean_environment(1, base)["LD_LIBRARY_PATH"].startswith("/lib64")
 
 
 @pytest.mark.unit
 def test_continuum_restart_commands_write_the_model_then_continue():
-    first, second = ai.continuum_restart_commands(
+    first, second = imaging_wsclean_command.continuum_restart_commands(
         ["wsclean", "-name", "w", "-no-update-model-required", "x.ms"]
     )
     assert first == ["wsclean", "-name", "w", "-update-model-required", "x.ms"]
     assert second == ["wsclean", "-name", "w", "-update-model-required", "-continue", "x.ms"]
 
-    first, _ = ai.continuum_restart_commands(["wsclean", "-name", "w", "x.ms"])
+    first, _ = imaging_wsclean_command.continuum_restart_commands(["wsclean", "-name", "w", "x.ms"])
     assert first[-2:] == ["-update-model-required", "x.ms"]
 
 
@@ -848,13 +866,13 @@ def test_run_wsclean_task_cleans_the_continuum_in_two_passes(tmp_path, monkeypat
     monkeypatch.setattr(subprocess, "Popen", fake)
     patch_everywhere(
         monkeypatch,
-        ai,
+        imaging_ms_single_window,
         "extract_single_window_ms_subprocess",
         lambda *a, **k: {"rows": 1, "bytes": 0},
     )
     (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
 
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=task.command,
         cube_command=task.cube_command,
         output_dir=str(task.output_dir),
@@ -871,14 +889,14 @@ def test_run_wsclean_task_cleans_the_continuum_in_two_passes(tmp_path, monkeypat
     assert "-update-model-required" in first and "-continue" not in first
     assert second[-2] == "-continue" and second[-1] == first[-1]
     assert "-continue" not in cube and "-no-update-model-required" in cube
-    marker = json.loads(ai.imaging_marker_path(task.output_dir).read_text())
+    marker = json.loads(imaging_markers.imaging_marker_path(task.output_dir).read_text())
     assert len(marker["commands"]) == 3
 
 
 @pytest.mark.unit
 def test_continuum_restart_needs_the_single_window_copy():
     with pytest.raises(ValueError, match="needs single_window"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=["wsclean", "-name", "w", "x.ms"],
             output_dir="x",
             ms_path="x",
@@ -926,8 +944,11 @@ def test_both_continuum_passes_read_the_fitted_continuum(tmp_path, monkeypatch):
 
     first, second, cube = fake.calls
     for continuum in (first, second):
-        assert continuum[continuum.index("-data-column") + 1] == ai.CONTINUUM_COLUMN
-    assert "-continue" in second and cube[cube.index("-data-column") + 1] == ai.LINE_COLUMN
+        assert continuum[continuum.index("-data-column") + 1] == imaging_products.CONTINUUM_COLUMN
+    assert (
+        "-continue" in second
+        and cube[cube.index("-data-column") + 1] == imaging_products.LINE_COLUMN
+    )
 
 
 @pytest.mark.unit
@@ -959,7 +980,7 @@ def _line_channels(out, n_channels=40, size=64, seed=8):
 def test_line_mask_from_channels_finds_a_line_no_channel_shows(tmp_path):
     _line_channels(tmp_path)
 
-    pixels = ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits")
+    pixels = imaging_cube.line_mask_from_channels(tmp_path, tmp_path / "mask.fits")
 
     mask = fits.getdata(tmp_path / "mask.fits").squeeze().astype(bool)
     assert pixels == mask.sum() and mask[32, 20], "the blob is in the mask"
@@ -969,11 +990,11 @@ def test_line_mask_from_channels_finds_a_line_no_channel_shows(tmp_path):
 
 @pytest.mark.unit
 def test_line_mask_from_channels_without_channels_or_signal(tmp_path):
-    assert ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
+    assert imaging_cube.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
     for c in range(3):
         _write_channel(tmp_path / f"wsclean-cube-{c:04d}-image.fits", np.zeros((8, 8)), 230e9)
     (tmp_path / "mask.fits").write_text("stale mask from an earlier run")
-    assert ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
+    assert imaging_cube.line_mask_from_channels(tmp_path, tmp_path / "mask.fits") == 0
     assert not (tmp_path / "mask.fits").exists(), "no mask built, none left behind"
 
 
@@ -982,9 +1003,9 @@ def test_line_mask_pass_continues_inside_the_mask(tmp_path, monkeypatch):
     cube = ["wsclean", "-name", "c", "-auto-mask", "3.0", "-auto-threshold", "1.0", "x.ms"]
     with (tmp_path / "log").open("w") as log:
         monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 120)
-        second = ai._line_mask_pass(cube, tmp_path, log)
+        second = imaging_cube._line_mask_pass(cube, tmp_path, log)
         monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 0)
-        assert ai._line_mask_pass(cube, tmp_path, log) is None
+        assert imaging_cube._line_mask_pass(cube, tmp_path, log) is None
     assert second == [
         "wsclean",
         "-name",
@@ -992,7 +1013,7 @@ def test_line_mask_pass_continues_inside_the_mask(tmp_path, monkeypatch):
         "-auto-threshold",
         "1.0",
         "-fits-mask",
-        str(tmp_path / ai.LINE_MASK_FILENAME),
+        str(tmp_path / imaging_products.LINE_MASK_FILENAME),
         "-continue",
         "x.ms",
     ]
@@ -1006,14 +1027,14 @@ def test_run_wsclean_task_cleans_the_cube_again_inside_the_line_mask(tmp_path, m
     monkeypatch.setattr(subprocess, "Popen", fake)
     patch_everywhere(
         monkeypatch,
-        ai,
+        imaging_ms_single_window,
         "extract_single_window_ms_subprocess",
         lambda *a, **k: {"rows": 1, "bytes": 0},
     )
     monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 50)
     (task,), _ = _tasks(tmp_path, cube=cli_image.CubeOptions(), single_window=True)
 
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=task.command,
         cube_command=task.cube_command,
         output_dir=str(task.output_dir),
@@ -1028,7 +1049,7 @@ def test_run_wsclean_task_cleans_the_cube_again_inside_the_line_mask(tmp_path, m
     assert "-no-update-model-required" in continuum
     assert "-update-model-required" in cube and "-continue" not in cube
     assert second[-2] == "-continue" and "-fits-mask" in second and "-auto-mask" not in second
-    marker = json.loads(ai.imaging_marker_path(task.output_dir).read_text())
+    marker = json.loads(imaging_markers.imaging_marker_path(task.output_dir).read_text())
     assert len(marker["commands"]) == 3
     assert fits.getdata(task.output_dir / "wsclean-cube-image.fits").shape[1] == 8
 
@@ -1036,7 +1057,7 @@ def test_run_wsclean_task_cleans_the_cube_again_inside_the_line_mask(tmp_path, m
 @pytest.mark.unit
 def test_cube_line_mask_needs_the_single_window_copy():
     with pytest.raises(ValueError, match="cube_line_mask writes MODEL_DATA"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=[],
             cube_command=["wsclean", "-name", "c", "x.ms"],
             output_dir="x",
@@ -1082,7 +1103,7 @@ def test_line_mask_from_channels_without_a_pixel_scale_is_not_grown(tmp_path):
         plane = rng.normal(0, 1, (32, 32))
         plane[16, 16] += 3.0
         _write_channel(tmp_path / f"wsclean-cube-{c:04d}-image.fits", plane, 230e9, bmaj=1e-3)
-    pixels = ai.line_mask_from_channels(tmp_path, tmp_path / "mask.fits")
+    pixels = imaging_cube.line_mask_from_channels(tmp_path, tmp_path / "mask.fits")
     mask = fits.getdata(tmp_path / "mask.fits").squeeze().astype(bool)
     assert mask[16, 16] and pixels <= 5, "the source pixel, plus at most a stray noise peak"
 
@@ -1102,9 +1123,9 @@ def test_line_mask_pass_reads_the_line_column_too(tmp_path, monkeypatch):
     fake, _, _ = _uv_task(tmp_path, monkeypatch, fit, cube_line_mask=True)
 
     continuum, cube, second = fake.calls
-    assert continuum[continuum.index("-data-column") + 1] == ai.CONTINUUM_COLUMN
+    assert continuum[continuum.index("-data-column") + 1] == imaging_products.CONTINUUM_COLUMN
     for command in (cube, second):
-        assert command[command.index("-data-column") + 1] == ai.LINE_COLUMN
+        assert command[command.index("-data-column") + 1] == imaging_products.LINE_COLUMN
     assert "-continue" in second and "-fits-mask" in second
 
 
@@ -1116,12 +1137,12 @@ def test_line_mask_pass_zeroes_the_nan_models_of_empty_channels(tmp_path, monkey
     monkeypatch.setattr(cube_module, "line_mask_from_channels", lambda out, path: 10)
 
     with (tmp_path / "log").open("w") as log:
-        assert ai._line_mask_pass(["wsclean", "-name", "c", "x.ms"], tmp_path, log)
+        assert imaging_cube._line_mask_pass(["wsclean", "-name", "c", "x.ms"], tmp_path, log)
 
     assert np.all(fits.getdata(tmp_path / "wsclean-cube-0001-model.fits") == 0)
     assert np.all(fits.getdata(tmp_path / "wsclean-cube-0000-model.fits") == 1)
     assert "1 channel model(s) were NaN" in (tmp_path / "log").read_text()
-    assert ai._zero_non_finite_models(tmp_path) == 0, "nothing left to fix"
+    assert imaging_cube._zero_non_finite_models(tmp_path) == 0, "nothing left to fix"
 
 
 @pytest.mark.unit
@@ -1130,14 +1151,14 @@ def test_line_free_channels_on_a_noiseless_spectrum(order):
     spectrum = np.ones(128) if order == 0 else np.linspace(1.0, 1.2, 128)
     spectrum = spectrum.copy()
     spectrum[62:66] += 4.0
-    line_free = ai.line_free_channels(spectrum, np.ones(128, bool), order=order)
+    line_free = imaging_continuum.line_free_channels(spectrum, np.ones(128, bool), order=order)
     assert not line_free[62:66].any(), "zero spread must not hide the line"
     assert line_free[:50].all() and line_free[80:].all()
 
 
 @pytest.mark.unit
 def test_line_free_channels_on_a_short_spectrum():
-    line_free = ai.line_free_channels(
+    line_free = imaging_continuum.line_free_channels(
         np.array([1.0, 1.01, 1.02, 2.0]), np.ones(4, bool), order=0, grow=2
     )
     assert line_free.shape == (4,)
@@ -1148,7 +1169,7 @@ def test_self_calibrate_keeps_the_applied_gain_tables(tmp_path, monkeypatch):
     result, _, _, log = _run_selfcal(
         tmp_path, monkeypatch, [30.0, 45.0, 50.0], solints=("inf", "ap:inf")
     )
-    gains = tmp_path / ai.SELFCAL_GAINS_DIRNAME
+    gains = tmp_path / imaging_products.SELFCAL_GAINS_DIRNAME
     assert result["gains"] == ["phase.cal", "phase.csv", "amplitude.cal", "amplitude.csv"]
     assert (gains / "phase.cal").is_dir() and (gains / "amplitude.csv").is_file()
     assert "gains kept in selfcal_gains/" in log
@@ -1158,7 +1179,10 @@ def test_self_calibrate_keeps_the_applied_gain_tables(tmp_path, monkeypatch):
     result, _, _, _ = _run_selfcal(
         tmp_path / "rejected", monkeypatch, [30.0, 25.0], solints=("inf",)
     )
-    assert result["gains"] == [] and not (tmp_path / "rejected" / ai.SELFCAL_GAINS_DIRNAME).exists()
+    assert (
+        result["gains"] == []
+        and not (tmp_path / "rejected" / imaging_products.SELFCAL_GAINS_DIRNAME).exists()
+    )
 
 
 @pytest.mark.unit
@@ -1187,4 +1211,6 @@ def test_self_calibrate_keeps_no_gains_when_asked_not_to(tmp_path, monkeypatch):
         tmp_path, monkeypatch, [30.0, 45.0], solints=("inf",), keep_gains=False
     )
     assert result["applied"] and result["gains"] == []
-    assert not (tmp_path / ai.SELFCAL_GAINS_DIRNAME).exists() and "gains kept" not in log
+    assert (
+        not (tmp_path / imaging_products.SELFCAL_GAINS_DIRNAME).exists() and "gains kept" not in log
+    )

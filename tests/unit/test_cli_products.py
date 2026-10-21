@@ -10,7 +10,8 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from almasim import cli, cli_products
+from almasim import cli
+from almasim.cli import products as cli_products
 from almasim.services.archive import pipeline as archive_pipeline
 
 runner = CliRunner()

@@ -253,15 +253,14 @@ def build_imaging_tasks(
     markers existed and writes its marker. ``overwrite_outputs`` redoes
     everything.
     """
-    from almasim.services.imaging.archive_imaging import (
+    from almasim.services.imaging.markers import is_imaging_complete, write_imaging_marker
+    from almasim.services.imaging.products import (
         CUBE_IMAGE_FILENAME,
         CUBE_NAME,
         IMAGE_FILENAME,
+        SCRATCH_PLACEHOLDER,
         SINGLE_WINDOW_PLACEHOLDER,
-        is_imaging_complete,
-        write_imaging_marker,
     )
-    from almasim.services.imaging.products import SCRATCH_PLACEHOLDER
     from almasim.services.imaging.wsclean.command import WSCleanCommand
 
     if not continuum and cube is None:

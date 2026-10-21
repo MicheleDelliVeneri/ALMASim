@@ -8,7 +8,8 @@ from types import SimpleNamespace
 import pandas as pd
 from typer.testing import CliRunner
 
-from almasim import cli, cli_simulation
+from almasim import cli
+from almasim.cli import simulation as cli_simulation
 
 runner = CliRunner()
 

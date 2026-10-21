@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from almasim import cli_image
+from almasim.cli import image as cli_image
 
 tables = pytest.importorskip("casacore.tables")
 wgridder = pytest.importorskip("ducc0.wgridder")

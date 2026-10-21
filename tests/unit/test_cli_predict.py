@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from almasim import cli, cli_image, cli_predict
+from almasim import cli
+from almasim.cli import image as cli_image
+from almasim.cli import predict as cli_predict
 
 runner = CliRunner()
 

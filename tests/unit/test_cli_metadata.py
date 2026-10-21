@@ -5,7 +5,9 @@ from __future__ import annotations
 import pandas as pd
 from typer.testing import CliRunner
 
-from almasim import cli, cli_metadata, cli_products
+from almasim import cli
+from almasim.cli import metadata as cli_metadata
+from almasim.cli import products as cli_products
 
 runner = CliRunner()
 

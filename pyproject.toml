@@ -129,7 +129,6 @@ module = [
     "almasim.cli.image",
     "almasim.cli.simulation",
     "almasim.scheduling.cluster",
-    "almasim.services.archive.calibrate_ms",
     "almasim.services.archive.qa0",
     "almasim.services.astro.spectral",
     "almasim.services.compute.dask",

@@ -6,8 +6,9 @@ import json
 
 import pytest
 
-from almasim.services.archive import calibrate_ms, unpack_ms
-from almasim.services.imaging import archive_imaging
+from almasim.services.archive import calibration as archive_calibration
+from almasim.services.archive import unpack as archive_unpack
+from almasim.services.imaging import markers as imaging_markers
 from almasim.services.markers import StageMarkers
 
 pytestmark = pytest.mark.unit
@@ -37,31 +38,35 @@ def test_failure_creates_its_directory_and_records_the_log(tmp_path):
 
 
 def test_stage_payloads_keep_their_fields(tmp_path):
-    unpack_ms.write_raw_ms_failure_marker(tmp_path, "uid_A", "no rows")
-    unpack_ms.write_raw_ms_marker(tmp_path, "uid_A", rows=10)
-    assert set(json.loads(unpack_ms.raw_ms_marker_path(tmp_path, "uid_A").read_text())) == {
+    archive_unpack.write_raw_ms_failure_marker(tmp_path, "uid_A", "no rows")
+    archive_unpack.write_raw_ms_marker(tmp_path, "uid_A", rows=10)
+    assert set(json.loads(archive_unpack.raw_ms_marker_path(tmp_path, "uid_A").read_text())) == {
         "uid",
         "output",
         "rows",
         "completed_at",
     }
-    assert not unpack_ms.raw_ms_failure_marker_path(tmp_path, "uid_A").exists()
+    assert not archive_unpack.raw_ms_failure_marker_path(tmp_path, "uid_A").exists()
 
-    calibrate_ms.write_calibration_failure_marker(tmp_path, "uid_B", "no tables", stage="apply")
-    failed = json.loads(calibrate_ms.calibration_failure_marker_path(tmp_path, "uid_B").read_text())
+    archive_calibration.write_calibration_failure_marker(
+        tmp_path, "uid_B", "no tables", stage="apply"
+    )
+    failed = json.loads(
+        archive_calibration.calibration_failure_marker_path(tmp_path, "uid_B").read_text()
+    )
     assert set(failed) == {"uid", "stage", "error", "failed_at"} and failed["stage"] == "apply"
 
 
 def test_a_failed_image_task_drops_its_old_done_marker(tmp_path):
     out = tmp_path / "ms" / "SPW-3"
     out.mkdir(parents=True)
-    archive_imaging.write_imaging_marker(out, ms_path="a.ms", spw=3, seconds=1.25)
-    done = json.loads(archive_imaging.imaging_marker_path(out).read_text())
+    imaging_markers.write_imaging_marker(out, ms_path="a.ms", spw=3, seconds=1.25)
+    done = json.loads(imaging_markers.imaging_marker_path(out).read_text())
     assert done["seconds"] == 1.2 and done["spw"] == 3
 
-    archive_imaging.write_imaging_failure_marker(
+    imaging_markers.write_imaging_failure_marker(
         out, ms_path="a.ms", spw=3, error="x", returncode=2
     )
-    assert not archive_imaging.imaging_marker_path(out).exists()
-    failed = json.loads(archive_imaging.imaging_failure_marker_path(out).read_text())
+    assert not imaging_markers.imaging_marker_path(out).exists()
+    failed = json.loads(imaging_markers.imaging_failure_marker_path(out).read_text())
     assert set(failed) == {"ms", "spw", "stage", "output", "error", "failed_at", "returncode"}
