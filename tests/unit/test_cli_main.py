@@ -9,7 +9,8 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from almasim import cli, cli_clean
+from almasim import cli
+from almasim.cli import clean as cli_clean
 
 runner = CliRunner()
 
@@ -82,22 +83,23 @@ def test_invoke_click_command_maps_click_exit_to_typer_exit():
     assert exc.value.exit_code == 3
 
 
-def test_cli_modules_are_the_package_modules():
-    """``almasim.cli_<group>`` names the module in ``almasim.cli`` (MADIV-28 T3.1)."""
+def test_the_old_cli_module_aliases_are_gone():
+    """``almasim.cli_<group>`` were removed in MADIV-28 T8.4: use ``almasim.cli.<group>``."""
     import importlib
 
-    for old, new in [
-        ("cli_clean", "clean"),
-        ("cli_image", "image"),
-        ("cli_metadata", "metadata"),
-        ("cli_predict", "predict"),
-        ("cli_products", "products"),
-        ("cli_shared", "_shared"),
-        ("cli_simulation", "simulation"),
-        ("cli_visibilities", "visibilities"),
-    ]:
-        alias = importlib.import_module(f"almasim.{old}")
-        assert alias is importlib.import_module(f"almasim.cli.{new}"), old
+    for old in ("cli_image", "cli_products", "cli_shared", "cli_simulation"):
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(f"almasim.{old}")
+
+
+def test_child_process_targets_name_real_modules():
+    """Every function a child process runs lives where its target string says."""
+    import importlib
+
+    from almasim.services.imaging.selfcal import loop
+
+    for function, module in loop._CHILD_FUNCTIONS.items():
+        assert callable(getattr(importlib.import_module(module), function)), function
 
 
 def test_simulation_main_dir_defaults_to_the_package_data():

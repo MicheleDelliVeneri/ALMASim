@@ -8,7 +8,10 @@ import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
-from almasim import cli, cli_clean, cli_metadata, cli_products
+from almasim import cli
+from almasim.cli import clean as cli_clean
+from almasim.cli import metadata as cli_metadata
+from almasim.cli import products as cli_products
 
 pytestmark = pytest.mark.unit
 runner = CliRunner()

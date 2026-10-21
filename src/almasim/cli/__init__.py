@@ -1,7 +1,7 @@
 """ALMASim CLI entrypoint and lazy command registration.
 
 The command groups live in this package (``image``, ``products``, ...); the
-old ``almasim.cli_<group>`` modules are aliases of them (MADIV-28 T3.1).
+old ``almasim.cli_<group>`` aliases were removed in MADIV-28 T8.4.
 """
 
 from __future__ import annotations

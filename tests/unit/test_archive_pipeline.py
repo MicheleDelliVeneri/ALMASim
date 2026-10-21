@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from almasim import cli_products
+from almasim.cli import products as cli_products
 from almasim.services.archive import pipeline as archive_pipeline
 
 from ._fakes import fake_popen, patch_everywhere

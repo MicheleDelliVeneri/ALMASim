@@ -10,7 +10,9 @@ from __future__ import annotations
 import pytest
 import typer
 
-from almasim import cli_image, cli_products, cli_visibilities
+from almasim.cli import image as cli_image
+from almasim.cli import products as cli_products
+from almasim.cli import visibilities as cli_visibilities
 
 pytestmark = pytest.mark.unit
 

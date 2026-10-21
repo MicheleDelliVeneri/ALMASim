@@ -44,6 +44,21 @@ if TYPE_CHECKING:
     from almasim.services.imaging.task_run import TaskRun
 
 
+# The module each child-process function lives in (MADIV-28 T8.4: they were
+# all reached through the archive_imaging re-export module).
+_CHILD_FUNCTIONS = {
+    "adopt_corrected_data": "almasim.services.imaging.selfcal.casa_ops",
+    "casa_selfcal_apply": "almasim.services.imaging.selfcal.casa_ops",
+    "casa_selfcal_solve": "almasim.services.imaging.selfcal.casa_ops",
+    "export_gain_table": "almasim.services.imaging.selfcal.casa_ops",
+    "selfcal_prepare": "almasim.services.imaging.selfcal.casa_ops",
+    "selfcal_correction_columns": "almasim.services.imaging.selfcal.noise_products",
+    "drop_corrected_data": "almasim.services.imaging.uv_contsub",
+    "image_peak": "almasim.services.imaging.selfcal.loop",
+    "image_snr": "almasim.services.imaging.selfcal.loop",
+}
+
+
 def _call_in_child(
     function: str,
     kwargs: Mapping[str, object],
@@ -53,7 +68,7 @@ def _call_in_child(
     log_path: str | os.PathLike[str] | None = None,
     casa: bool = False,
 ) -> dict[str, object]:
-    """``function(**kwargs)`` of this module in a new Python process, its JSON result.
+    """``function(**kwargs)`` (named in ``_CHILD_FUNCTIONS``) in a child process; its JSON result.
 
     casacore and CASA hold the GIL for the whole call, which would freeze a
     Dask worker (see ``extract_single_window_ms_subprocess``), and
@@ -61,7 +76,7 @@ def _call_in_child(
     stderr is appended to ``log_path``; ``casa`` gives it ``casa_environment``.
     """
     return call_in_child(
-        f"almasim.services.imaging.archive_imaging:{function}",
+        f"{_CHILD_FUNCTIONS[function]}:{function}",
         kwargs,
         what=what,
         env=casa_environment() if casa else wsclean_environment(1),

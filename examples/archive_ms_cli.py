@@ -2,9 +2,9 @@
 
 This example runs both archive service stages:
 
-1. ASDM unpack/import to raw MeasurementSet via ``archive.unpack_ms``.
+1. ASDM unpack/import to raw MeasurementSet via ``archive.unpack``.
 2. Delivered calibration application and science-SPW split via
-   ``archive.calibrate_ms``.
+   ``archive.calibration``.
 """
 
 from __future__ import annotations

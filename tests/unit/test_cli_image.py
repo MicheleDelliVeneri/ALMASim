@@ -17,9 +17,15 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from almasim import cli, cli_image
+from almasim import cli
+from almasim.cli import image as cli_image
 from almasim.services.imaging import batch_runner
+from almasim.services.imaging import markers as imaging_markers
+from almasim.services.imaging import products as imaging_products
+from almasim.services.imaging import task as imaging_task
+from almasim.services.imaging.ms import single_window as imaging_ms_single_window
 from almasim.services.ms.tables import intent_matches
+from almasim.services.runtime import env as runtime_env
 
 from ._fakes import FakeTable, flat_run_kwargs, patch_everywhere
 
@@ -600,8 +606,6 @@ def test_predict_batch_skips_when_model_is_missing(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 # Imaging markers, the worker-side WSClean wrapper and the resilient runner.
 
-from almasim.services.imaging import archive_imaging as ai  # noqa: E402
-
 
 def _params_csv(tmp_path: Path, rows: int = 2) -> Path:
     csv_path = tmp_path / "params.csv"
@@ -635,7 +639,7 @@ class _FakeWsclean:
         self.calls.append({"cmd": list(cmd), **kwargs})
         outdir = Path(cmd[cmd.index("-name") + 1]).parent
         if self.returncode == 0 and self.write_image:
-            (outdir / ai.IMAGE_FILENAME).write_bytes(b"SIMPLE")
+            (outdir / imaging_products.IMAGE_FILENAME).write_bytes(b"SIMPLE")
         lines = self.lines
         rc = self.returncode
 
@@ -660,20 +664,22 @@ def _wsclean_cmd(outdir: Path) -> list[str]:
 @pytest.mark.unit
 def test_imaging_marker_paths_sit_next_to_the_spw_directory(tmp_path):
     outdir = tmp_path / "ms" / "SPW-3"
-    assert ai.imaging_marker_path(outdir) == tmp_path / "ms" / "SPW-3.done"
-    assert ai.imaging_failure_marker_path(outdir) == tmp_path / "ms" / "SPW-3.failed"
-    assert ai.imaging_log_path(outdir) == tmp_path / "ms" / "SPW-3.log"
-    assert not ai.is_imaging_complete(outdir)
+    assert imaging_markers.imaging_marker_path(outdir) == tmp_path / "ms" / "SPW-3.done"
+    assert imaging_markers.imaging_failure_marker_path(outdir) == tmp_path / "ms" / "SPW-3.failed"
+    assert imaging_markers.imaging_log_path(outdir) == tmp_path / "ms" / "SPW-3.log"
+    assert not imaging_markers.is_imaging_complete(outdir)
     outdir.mkdir(parents=True)
-    ai.write_imaging_marker(outdir, ms_path="in.ms", spw=3)
-    assert not ai.is_imaging_complete(outdir), "a marker without the image is not complete"
-    (outdir / ai.IMAGE_FILENAME).write_bytes(b"")
-    assert ai.is_imaging_complete(outdir)
+    imaging_markers.write_imaging_marker(outdir, ms_path="in.ms", spw=3)
+    assert not imaging_markers.is_imaging_complete(outdir), (
+        "a marker without the image is not complete"
+    )
+    (outdir / imaging_products.IMAGE_FILENAME).write_bytes(b"")
+    assert imaging_markers.is_imaging_complete(outdir)
 
 
 @pytest.mark.unit
 def test_wsclean_environment_pins_openblas_to_one_thread():
-    env = ai.wsclean_environment(6, base={"LD_LIBRARY_PATH": "/spack/lib", "PATH": "/bin"})
+    env = runtime_env.wsclean_environment(6, base={"LD_LIBRARY_PATH": "/spack/lib", "PATH": "/bin"})
     assert env["OPENBLAS_NUM_THREADS"] == "1"
     assert env["OMP_NUM_THREADS"] == "6"
     assert env["LD_LIBRARY_PATH"].startswith("/lib64:")
@@ -687,20 +693,20 @@ def test_run_wsclean_task_success_writes_done_marker_and_log(tmp_path, monkeypat
     monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
 
-    result = ai.run_wsclean_task(
+    result = imaging_task.run_wsclean_task(
         command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=4
     )
 
-    assert ai.is_imaging_complete(outdir)
-    assert result["image"] == str(outdir / ai.IMAGE_FILENAME)
-    payload = json.loads(ai.imaging_marker_path(outdir).read_text())
+    assert imaging_markers.is_imaging_complete(outdir)
+    assert result["image"] == str(outdir / imaging_products.IMAGE_FILENAME)
+    payload = json.loads(imaging_markers.imaging_marker_path(outdir).read_text())
     assert payload["spw"] == 1 and payload["ms"] == "in.ms" and "wsclean" in payload["command"]
-    log_text = ai.imaging_log_path(outdir).read_text()
+    log_text = imaging_markers.imaging_log_path(outdir).read_text()
     assert log_text.splitlines()[0].startswith("# wsclean -name")
     assert "Cleaning up temporary files" in log_text
     assert fake.calls[0]["env"]["OPENBLAS_NUM_THREADS"] == "1"
     assert fake.calls[0]["env"]["OMP_NUM_THREADS"] == "4"
-    assert not ai.imaging_failure_marker_path(outdir).exists()
+    assert not imaging_markers.imaging_failure_marker_path(outdir).exists()
 
 
 @pytest.mark.unit
@@ -714,18 +720,18 @@ def test_run_wsclean_task_hard_abort_writes_failure_marker(tmp_path, monkeypatch
     outdir = tmp_path / "ms" / "SPW-1"
 
     with pytest.raises(RuntimeError, match="return code -6"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=2
         )
 
-    marker = ai.imaging_failure_marker_path(outdir)
+    marker = imaging_markers.imaging_failure_marker_path(outdir)
     assert marker.is_file()
     payload = json.loads(marker.read_text())
     assert payload["returncode"] == -6
     assert "what():  std::bad_alloc" in payload["error"]
     assert Path(payload["log"]).is_file()
     assert payload["stage"] == "image"
-    assert not ai.imaging_marker_path(outdir).exists()
+    assert not imaging_markers.imaging_marker_path(outdir).exists()
 
 
 @pytest.mark.unit
@@ -740,16 +746,16 @@ def test_run_wsclean_task_removes_stale_files_of_a_previous_attempt(tmp_path, mo
     (outdir / "in.ms-part0000-I-w.tmp").write_bytes(b"x")
     (outdir / "spw1.single.ms").mkdir()
     (outdir / "spw1.single.ms" / "table.dat").write_bytes(b"x")
-    ai.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
+    imaging_markers.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
 
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=2
     )
 
     assert not list(outdir.glob("*.tmp"))
     assert not (outdir / "spw1.single.ms").exists()
-    assert ai.is_imaging_complete(outdir)
-    assert not ai.imaging_failure_marker_path(outdir).exists()
+    assert imaging_markers.is_imaging_complete(outdir)
+    assert not imaging_markers.imaging_failure_marker_path(outdir).exists()
 
 
 @pytest.mark.unit
@@ -758,10 +764,10 @@ def test_run_wsclean_task_without_image_is_a_failure(tmp_path, monkeypatch):
     outdir = tmp_path / "ms" / "SPW-2"
 
     with pytest.raises(RuntimeError, match="wrote no wsclean-image.fits"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=2, threads=2
         )
-    assert ai.imaging_failure_marker_path(outdir).is_file()
+    assert imaging_markers.imaging_failure_marker_path(outdir).is_file()
 
 
 @pytest.mark.unit
@@ -772,10 +778,10 @@ def test_run_wsclean_task_missing_binary_is_a_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", _no_binary)
     outdir = tmp_path / "ms" / "SPW-2"
     with pytest.raises(RuntimeError, match="Could not start wsclean"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=2, threads=2
         )
-    payload = json.loads(ai.imaging_failure_marker_path(outdir).read_text())
+    payload = json.loads(imaging_markers.imaging_failure_marker_path(outdir).read_text())
     assert "Could not start wsclean" in payload["error"]
 
 
@@ -783,14 +789,14 @@ def test_run_wsclean_task_missing_binary_is_a_failure(tmp_path, monkeypatch):
 def test_run_wsclean_task_replaces_stale_markers(tmp_path, monkeypatch):
     outdir = tmp_path / "ms" / "SPW-1"
     outdir.mkdir(parents=True)
-    ai.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
+    imaging_markers.write_imaging_failure_marker(outdir, ms_path="in.ms", spw=1, error="old")
     monkeypatch.setattr(subprocess, "Popen", _FakeWsclean(returncode=0))
 
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=_wsclean_cmd(outdir), output_dir=str(outdir), ms_path="in.ms", spw=1, threads=1
     )
-    assert ai.is_imaging_complete(outdir)
-    assert not ai.imaging_failure_marker_path(outdir).exists()
+    assert imaging_markers.is_imaging_complete(outdir)
+    assert not imaging_markers.imaging_failure_marker_path(outdir).exists()
 
 
 @pytest.mark.unit
@@ -800,11 +806,11 @@ def test_build_imaging_tasks_skips_done_and_grandfathers_images(tmp_path):
     out = tmp_path / "images"
     done_dir = out / "uid___A001_X1_X1.ms.split" / "SPW-0"
     done_dir.mkdir(parents=True)
-    (done_dir / ai.IMAGE_FILENAME).write_bytes(b"")
-    ai.write_imaging_marker(done_dir, ms_path="x", spw=0)
+    (done_dir / imaging_products.IMAGE_FILENAME).write_bytes(b"")
+    imaging_markers.write_imaging_marker(done_dir, ms_path="x", spw=0)
     legacy_dir = out / "uid___A001_X1_X1.ms.split" / "SPW-1"
     legacy_dir.mkdir(parents=True)
-    (legacy_dir / ai.IMAGE_FILENAME).write_bytes(b"")
+    (legacy_dir / imaging_products.IMAGE_FILENAME).write_bytes(b"")
 
     common = dict(fov_fraction=1.5, beam_sampling=8, num_cores=10, max_cores_per_node=95)
 
@@ -817,7 +823,9 @@ def test_build_imaging_tasks_skips_done_and_grandfathers_images(tmp_path):
     )
     assert skipped == 2
     assert [t.spw for t in tasks] == [2]
-    assert ai.imaging_marker_path(legacy_dir).is_file(), "grandfathered image gets its marker"
+    assert imaging_markers.imaging_marker_path(legacy_dir).is_file(), (
+        "grandfathered image gets its marker"
+    )
 
     tasks, skipped = cli_image.build_imaging_tasks(
         parameters, out, overwrite_outputs=True, **common
@@ -939,13 +947,15 @@ def test_run_imaging_tasks_continues_past_failures_and_marks_lost_tasks(tmp_path
     assert [f.label for f in failures] == ["ms_1"]
     assert "return code 1" in failures[0].error
     # the worker never wrote a marker for the lost task: the driver does it
-    payload = json.loads(ai.imaging_failure_marker_path(tasks[1].output_dir).read_text())
+    payload = json.loads(
+        imaging_markers.imaging_failure_marker_path(tasks[1].output_dir).read_text()
+    )
     assert payload["spw"] == 1 and "return code 1" in payload["error"]
-    assert not ai.imaging_failure_marker_path(tasks[0].output_dir).exists()
+    assert not imaging_markers.imaging_failure_marker_path(tasks[0].output_dir).exists()
     # resources and task kwargs both reach the backend
     assert backend.submitted[0]["cores"] == 4
     assert backend.submitted[0]["threads"] == 4
-    assert backend.submitted[0]["func"] is ai.run_wsclean_task
+    assert backend.submitted[0]["func"] is imaging_task.run_wsclean_task
     assert backend.submitted[0]["timeout"] == 10.0
 
 
@@ -1021,14 +1031,14 @@ def test_run_imaging_tasks_sync_backend_runs_in_process(tmp_path, monkeypatch):
             raise RuntimeError("no image")
         return {"spw": kwargs["spw"]}
 
-    patch_everywhere(monkeypatch, ai, "run_wsclean_task", _fake_task)
+    patch_everywhere(monkeypatch, imaging_task, "run_wsclean_task", _fake_task)
     failures: list[cli_image.TaskFailure] = []
     results = _run(tasks, None, monkeypatch, backend_kind="sync", failures=failures)
 
     assert results == [{"spw": 1}]
     assert [f.label for f in failures] == ["ms_0"]
     assert calls[0]["threads"] == 4
-    assert ai.imaging_failure_marker_path(tasks[0].output_dir).is_file()
+    assert imaging_markers.imaging_failure_marker_path(tasks[0].output_dir).is_file()
 
 
 @pytest.mark.unit
@@ -1065,8 +1075,8 @@ def test_image_from_ms_nothing_to_do_when_all_done(monkeypatch, tmp_path):
     out = tmp_path / "out"
     done_dir = out / "uid___A001_X1_X1.ms.split" / "SPW-0"
     done_dir.mkdir(parents=True)
-    (done_dir / ai.IMAGE_FILENAME).write_bytes(b"")
-    ai.write_imaging_marker(done_dir, ms_path="x", spw=0)
+    (done_dir / imaging_products.IMAGE_FILENAME).write_bytes(b"")
+    imaging_markers.write_imaging_marker(done_dir, ms_path="x", spw=0)
     monkeypatch.setattr(cli_image, "run_imaging_tasks", lambda *a, **k: pytest.fail("no run"))
 
     result = runner.invoke(cli.app, ["image", "image-from-ms", str(csv_path), str(out)])
@@ -1215,7 +1225,7 @@ def test_run_wsclean_task_uses_and_removes_scratch_dir(tmp_path, monkeypatch):
     scratch_root = tmp_path / "scratch"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
 
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=cmd,
         output_dir=str(outdir),
         ms_path="in.ms",
@@ -1227,7 +1237,7 @@ def test_run_wsclean_task_uses_and_removes_scratch_dir(tmp_path, monkeypatch):
     temp = Path(used[used.index("-temp-dir") + 1])
     assert temp.parent == scratch_root and temp.name.startswith("SPW-1-")
     assert not temp.exists(), "per-task scratch is removed after the run"
-    assert ai.is_imaging_complete(outdir)
+    assert imaging_markers.is_imaging_complete(outdir)
 
 
 @pytest.mark.unit
@@ -1237,7 +1247,7 @@ def test_run_wsclean_task_removes_scratch_dir_on_failure(tmp_path, monkeypatch):
     scratch_root = tmp_path / "scratch"
     cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-temp-dir", "__SCRATCH__", "in.ms"]
     with pytest.raises(RuntimeError):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=cmd,
             output_dir=str(outdir),
             ms_path="in.ms",
@@ -1246,7 +1256,7 @@ def test_run_wsclean_task_removes_scratch_dir_on_failure(tmp_path, monkeypatch):
             scratch_root=str(scratch_root),
         )
     assert list(scratch_root.iterdir()) == []
-    assert ai.imaging_failure_marker_path(outdir).is_file()
+    assert imaging_markers.imaging_failure_marker_path(outdir).is_file()
 
 
 class _FlakyWsclean:
@@ -1275,7 +1285,7 @@ def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", flaky)
     outdir = tmp_path / "ms" / "SPW-1"
 
-    result = ai.run_wsclean_task(
+    result = imaging_task.run_wsclean_task(
         command=_wsclean_cmd(outdir),
         output_dir=str(outdir),
         ms_path="in.ms",
@@ -1285,10 +1295,10 @@ def test_run_wsclean_task_retries_signal_crashes(tmp_path, monkeypatch):
     )
 
     assert flaky.calls == 3 and result["attempts"] == 3
-    assert ai.is_imaging_complete(outdir)
+    assert imaging_markers.is_imaging_complete(outdir)
     pads = [call["env"]["ALMASIM_WSCLEAN_PAD"] for call in flaky.envs]
     assert pads == ["", "x", "xx"], "each attempt shifts the environment layout"
-    log = ai.imaging_log_path(outdir).read_text()
+    log = imaging_markers.imaging_log_path(outdir).read_text()
     assert "# attempt 1 died with signal 11; retrying (3 left)" in log
     assert "# attempt 2 died with signal 11; retrying (2 left)" in log
     assert not list(outdir.glob("*.tmp")), "reorder leftovers are removed between attempts"
@@ -1300,7 +1310,7 @@ def test_run_wsclean_task_gives_up_after_retries(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", flaky)
     outdir = tmp_path / "ms" / "SPW-1"
     with pytest.raises(RuntimeError, match="after 3 attempts"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=_wsclean_cmd(outdir),
             output_dir=str(outdir),
             ms_path="in.ms",
@@ -1309,7 +1319,7 @@ def test_run_wsclean_task_gives_up_after_retries(tmp_path, monkeypatch):
             retries=2,
         )
     assert flaky.calls == 3
-    payload = json.loads(ai.imaging_failure_marker_path(outdir).read_text())
+    payload = json.loads(imaging_markers.imaging_failure_marker_path(outdir).read_text())
     assert payload["returncode"] == -11 and "after 3 attempts" in payload["error"]
 
 
@@ -1319,7 +1329,7 @@ def test_run_wsclean_task_does_not_retry_error_exits(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", fake)
     outdir = tmp_path / "ms" / "SPW-1"
     with pytest.raises(RuntimeError, match="return code 255"):
-        ai.run_wsclean_task(
+        imaging_task.run_wsclean_task(
             command=_wsclean_cmd(outdir),
             output_dir=str(outdir),
             ms_path="in.ms",
@@ -1353,7 +1363,7 @@ def test_build_imaging_tasks_single_window_default(tmp_path):
         max_cores_per_node=96,
     )
     cmd = tasks[0].command
-    assert cmd[-1] == ai.SINGLE_WINDOW_PLACEHOLDER
+    assert cmd[-1] == imaging_products.SINGLE_WINDOW_PLACEHOLDER
     assert "-no-reorder" in cmd and "-spws" not in cmd
     assert cmd[cmd.index("-field") + 1] == "2,3", "WSClean images field 0 unless told otherwise"
     assert tasks[0].field_ids == (2, 3) and tasks[0].spw == 5
@@ -1379,11 +1389,19 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
             "max_weight": max_weight,
         }
 
-    patch_everywhere(monkeypatch, ai, "extract_single_window_ms_subprocess", fake_extract)
+    patch_everywhere(
+        monkeypatch, imaging_ms_single_window, "extract_single_window_ms_subprocess", fake_extract
+    )
     outdir = tmp_path / "ms" / "SPW-5"
-    cmd = ["wsclean", "-name", str(outdir / "wsclean"), "-no-reorder", ai.SINGLE_WINDOW_PLACEHOLDER]
+    cmd = [
+        "wsclean",
+        "-name",
+        str(outdir / "wsclean"),
+        "-no-reorder",
+        imaging_products.SINGLE_WINDOW_PLACEHOLDER,
+    ]
 
-    ai.run_wsclean_task(
+    imaging_task.run_wsclean_task(
         command=cmd,
         output_dir=str(outdir),
         ms_path="/data/in.ms",
@@ -1392,12 +1410,20 @@ def test_run_wsclean_task_single_window_extracts_and_cleans_up(tmp_path, monkeyp
         single_window=True,
         field_ids=[2, 3],
     )
-    assert calls == [("/data/in.ms", 5, [2, 3], outdir / "spw5.single.ms", ai.DEFAULT_MAX_WEIGHT)]
+    assert calls == [
+        (
+            "/data/in.ms",
+            5,
+            [2, 3],
+            outdir / "spw5.single.ms",
+            imaging_ms_single_window.DEFAULT_MAX_WEIGHT,
+        )
+    ]
     used = fake.calls[0]["cmd"]
     assert used[-1] == str(outdir / "spw5.single.ms")
     assert not (outdir / "spw5.single.ms").exists(), "the per-task MS is removed afterwards"
-    assert ai.is_imaging_complete(outdir)
-    log_lines = ai.imaging_log_path(outdir).read_text().splitlines()
+    assert imaging_markers.is_imaging_complete(outdir)
+    log_lines = imaging_markers.imaging_log_path(outdir).read_text().splitlines()
     assert log_lines[0].startswith("# extracted spectral window 5 fields [2, 3]")
     assert "dropped 4 rows (28.6 %) with WEIGHT > 10000" in log_lines[0]
     assert log_lines[1].startswith("# wsclean -name")
@@ -1408,19 +1434,29 @@ def test_run_wsclean_task_single_window_extraction_failure_is_marked(tmp_path, m
     def failing_extract(*args, **kwargs):
         raise RuntimeError("No visibilities for spectral window 5")
 
-    patch_everywhere(monkeypatch, ai, "extract_single_window_ms_subprocess", failing_extract)
+    patch_everywhere(
+        monkeypatch,
+        imaging_ms_single_window,
+        "extract_single_window_ms_subprocess",
+        failing_extract,
+    )
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("WSClean must not run"))
     outdir = tmp_path / "ms" / "SPW-5"
     with pytest.raises(RuntimeError, match="Could not extract spectral window 5"):
-        ai.run_wsclean_task(
-            command=["wsclean", "-name", str(outdir / "wsclean"), ai.SINGLE_WINDOW_PLACEHOLDER],
+        imaging_task.run_wsclean_task(
+            command=[
+                "wsclean",
+                "-name",
+                str(outdir / "wsclean"),
+                imaging_products.SINGLE_WINDOW_PLACEHOLDER,
+            ],
             output_dir=str(outdir),
             ms_path="/data/in.ms",
             spw=5,
             threads=2,
             single_window=True,
         )
-    payload = json.loads(ai.imaging_failure_marker_path(outdir).read_text())
+    payload = json.loads(imaging_markers.imaging_failure_marker_path(outdir).read_text())
     assert "No visibilities" in payload["error"]
 
 
@@ -1450,7 +1486,7 @@ def test_extract_single_window_ms_retries_lock_file_errors_in_a_new_process(tmp_
     monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(time, "sleep", lambda s: None)
     log_path = tmp_path / "SPW-5.log"
-    result = ai.extract_single_window_ms_subprocess(
+    result = imaging_ms_single_window.extract_single_window_ms_subprocess(
         "in.ms", 5, [2], tmp_path / "out.ms", log_path=log_path, attempts=5, retry_seconds=0
     )
     assert len(children) == 3 and result["attempts"] == 3
@@ -1468,7 +1504,7 @@ def test_extract_single_window_ms_gives_up_after_the_last_lock_file_attempt(tmp_
     monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(time, "sleep", lambda s: None)
     with pytest.raises(RuntimeError, match="LockFile.cc"):
-        ai.extract_single_window_ms_subprocess(
+        imaging_ms_single_window.extract_single_window_ms_subprocess(
             "in.ms", 5, [2], tmp_path / "out.ms", attempts=3, retry_seconds=0
         )
     assert len(children) == 3
@@ -1484,7 +1520,7 @@ def test_extract_single_window_ms_does_not_retry_other_errors(tmp_path, monkeypa
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(RuntimeError, match="No visibilities"):
-        ai.extract_single_window_ms_subprocess(
+        imaging_ms_single_window.extract_single_window_ms_subprocess(
             "in.ms", 5, [2], tmp_path / "out.ms", attempts=5, retry_seconds=0
         )
     assert len(children) == 1
@@ -1497,7 +1533,7 @@ def test_extract_single_window_ms_runs_in_a_child_process(tmp_path):
     pytest.importorskip("casacore.tables")
     log_path = tmp_path / "SPW-5.log"
     with pytest.raises(RuntimeError, match="extraction exited with return code"):
-        ai.extract_single_window_ms_subprocess(
+        imaging_ms_single_window.extract_single_window_ms_subprocess(
             tmp_path / "missing.ms", 5, [2], tmp_path / "spw5.single.ms", log_path=log_path
         )
     assert "missing.ms" in log_path.read_text(), "the child's traceback lands in the task log"
@@ -1518,12 +1554,12 @@ def test_extract_single_window_ms_subprocess_reports_the_child_result(tmp_path, 
         return _Done()
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    result = ai.extract_single_window_ms_subprocess(
+    result = imaging_ms_single_window.extract_single_window_ms_subprocess(
         "/data/in.ms", 5, [2, 3], tmp_path / "out.ms", timeout=30, max_weight=500.0
     )
     assert seen["cmd"][0] == sys.executable and seen["cmd"][1] == "-c"
     assert json.loads(seen["cmd"][3]) == {
-        "target": "almasim.services.imaging.archive_imaging:extract_single_window_ms",
+        "target": "almasim.services.imaging.ms.single_window:extract_single_window_ms",
         "kwargs": {
             "ms_path": "/data/in.ms",
             "spw": 5,
@@ -1835,7 +1871,7 @@ def test_run_imaging_tasks_passes_the_dish_diameter_when_correcting(
 
     calls = []
     patch_everywhere(
-        monkeypatch, ai, "run_wsclean_task", lambda **kwargs: calls.append(kwargs) or {}
+        monkeypatch, imaging_task, "run_wsclean_task", lambda **kwargs: calls.append(kwargs) or {}
     )
     _run(tasks, None, monkeypatch, backend_kind="sync", pbcor=pbcor)
     assert calls[0]["pb_dish_diameter"] == expected

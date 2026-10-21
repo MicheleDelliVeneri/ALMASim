@@ -172,7 +172,7 @@ def extract_single_window_ms_subprocess(
     for attempt in range(1, max(int(attempts), 1) + 1):
         try:
             result = call_in_child(
-                "almasim.services.imaging.archive_imaging:extract_single_window_ms",
+                "almasim.services.imaging.ms.single_window:extract_single_window_ms",
                 kwargs,
                 what="extraction",
                 env=wsclean_environment(1),

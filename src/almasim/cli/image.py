@@ -935,12 +935,8 @@ def pb_correct(
     its continuum image and image cube, as image-from-ms --pbcor does, without
     imaging again. The dish diameter comes from the row's fov_per_frequency.
     """
-    from ..services.imaging.archive_imaging import (
-        imaging_log_path,
-        imaging_marker_path,
-        pb_correct_task,
-        pb_note,
-    )
+    from ..services.imaging.markers import imaging_log_path, imaging_marker_path
+    from ..services.imaging.task import pb_correct_task, pb_note
 
     parameters = pd.read_csv(str(imaging_parameters))
     root = Path(output_directory).expanduser().absolute()

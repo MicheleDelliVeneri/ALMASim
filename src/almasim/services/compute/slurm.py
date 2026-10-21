@@ -115,7 +115,7 @@ class SlurmBackend(DaskClientBackend):
         """Submit a shell command to run on a Slurm worker.
 
         Delegates to ``SlurmDaskClusterSingleton.submit_subcommand`` so that
-        both ``cli_image`` and ``cli_products`` go through the same code path.
+        both ``cli.image`` and ``cli.products`` go through the same code path.
         """
         if self._cluster_manager is None:
             raise RuntimeError("Dask cluster not initialized")

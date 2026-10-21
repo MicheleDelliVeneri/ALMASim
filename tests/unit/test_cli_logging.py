@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from almasim import cli_shared
+from almasim.cli import _shared as cli_shared
 from almasim.services import utils
 
 pytestmark = pytest.mark.unit

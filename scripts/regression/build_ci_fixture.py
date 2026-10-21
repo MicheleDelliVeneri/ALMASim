@@ -235,7 +235,7 @@ def try_asdm_round_trip(trimmed: Path, scratch: Path, args: argparse.Namespace) 
     # up the way the pipeline does (CASASITECONFIG, its own matplotlib cache);
     # without that the casatools import can hang.
     code = textwrap.dedent(f"""
-        from almasim.services.archive.unpack_ms import configure_casa_environment
+        from almasim.services.casa.environment import configure_casa_environment
         configure_casa_environment({str(scratch)!r}, {str(CASA_DATA)!r},
                                    log_file={str(scratch / "casa-exportasdm.log")!r})
         from casatasks import exportasdm

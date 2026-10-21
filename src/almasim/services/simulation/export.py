@@ -8,8 +8,8 @@ from typing import Any, Callable, Optional
 import numpy as np
 
 from ..interferometry import antenna as ual_antenna
+from ..ms.io import export_native_ms
 from ..products.cube_export import save_optional_cube, write_ml_dataset_shard
-from ..products.ms_io import export_native_ms
 from .context import RunContext
 from .params import LogFn, SimulationParams
 from .stages import CleanCubeStage

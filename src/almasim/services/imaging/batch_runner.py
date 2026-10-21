@@ -50,7 +50,7 @@ def _record_imaging_failure(task: ImagingTask, error: str, failures: list[TaskFa
     The worker-side wrapper writes the marker itself; this covers the cases
     where it never ran or was lost with its worker (walltime, node failure).
     """
-    from almasim.services.imaging.archive_imaging import (
+    from almasim.services.imaging.markers import (
         imaging_failure_marker_path,
         imaging_log_path,
         imaging_marker_path,
@@ -93,7 +93,8 @@ def run_imaging_tasks(
     the first failure stops the run with :class:`ImagingRunAborted`. Progress
     goes to ``echo`` (called like ``typer.echo``; the log by default).
     """
-    from almasim.services.imaging.archive_imaging import imaging_log_path, run_wsclean_task
+    from almasim.services.imaging.markers import imaging_log_path
+    from almasim.services.imaging.task import run_wsclean_task
 
     backend_kind, cores_per_task = execution.backend, execution.cores_per_task
     n_jobs, node_cores = execution.n_jobs, execution.node_cores

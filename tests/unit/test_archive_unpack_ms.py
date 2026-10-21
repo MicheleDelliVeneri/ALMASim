@@ -10,17 +10,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from almasim.services.archive.unpack_ms import (
-    asdm_name,
-    configure_casa_environment,
+from almasim.services.archive.asdm import asdm_name, find_asdm_directories, verify_asdm_directory
+from almasim.services.archive.unpack import (
     create_measurement_set,
     create_measurement_sets,
+    write_raw_ms_marker,
+)
+from almasim.services.casa import environment as casa_environment
+from almasim.services.casa.environment import configure_casa_environment
+from almasim.services.casa.runtime_data import (
     ensure_casa_runtime_data,
-    find_asdm_directories,
     find_existing_casa_data,
     has_casa_runtime_data,
-    verify_asdm_directory,
-    write_raw_ms_marker,
 )
 
 # ---------------------------------------------------------------------------
@@ -240,7 +241,7 @@ def test_configure_casa_environment_writes_a_per_process_config(tmp_path, monkey
 @pytest.mark.unit
 def test_configure_casa_environment_rewrites_in_place_and_cleans_up_at_exit(tmp_path):
     """A second call in the same process replaces the same file and registers one cleanup."""
-    from almasim.services.archive import unpack_ms
+    pass
 
     output_root = tmp_path / "output"
     configure_casa_environment(output_root, tmp_path / "casa-data", log_file=tmp_path / "a.log")
@@ -252,7 +253,7 @@ def test_configure_casa_environment_rewrites_in_place_and_cleans_up_at_exit(tmp_
     assert f"logfile = {str((tmp_path / 'b.log').resolve())!r}" in second.read_text(
         encoding="utf-8"
     )
-    assert second in unpack_ms._EXIT_CLEANUP
+    assert second in casa_environment._EXIT_CLEANUP
 
 
 @pytest.mark.unit
@@ -597,7 +598,7 @@ def test_configure_casa_environment_defaults_to_quiet_terminal(tmp_path):
 @pytest.mark.unit
 def test_raw_ms_marker_helpers(tmp_path):
     """The done marker records the row count and clears any stale failure marker."""
-    from almasim.services.archive.unpack_ms import (
+    from almasim.services.archive.unpack import (
         is_unpack_complete,
         raw_ms_failure_marker_path,
         raw_ms_marker_path,
@@ -632,7 +633,7 @@ def test_raw_ms_marker_helpers(tmp_path):
 @patch("almasim.services.ms.verify.measurement_set_row_count")
 def test_verify_measurement_set_rejects_zero_rows(mock_rows, tmp_path):
     """A 0-row MS is the signature of a killed importasdm and must not pass."""
-    from almasim.services.archive.unpack_ms import verify_measurement_set
+    from almasim.services.ms.verify import verify_measurement_set
 
     ms = tmp_path / "uid___A002_X1_X2.ms"
     ms.mkdir()
@@ -697,7 +698,7 @@ def test_failed_import_writes_failure_marker_and_no_done_marker(mock_rows, tmp_p
 @patch("almasim.services.ms.verify.measurement_set_row_count")
 def test_marked_ms_is_skipped_without_reopening_it(mock_rows, tmp_path):
     """Once marked, the fast path must not pay to reopen a multi-GB MS."""
-    from almasim.services.archive.unpack_ms import write_raw_ms_marker
+    from almasim.services.archive.unpack import write_raw_ms_marker
 
     asdm = _make_asdm(tmp_path / "input")
     output_root = tmp_path / "output"
@@ -839,7 +840,7 @@ def test_existing_ms_with_empty_subtables_is_reimported(mock_rows, mock_empty, t
 @patch("almasim.services.ms.verify.empty_required_subtables", return_value=["ANTENNA"])
 @patch("almasim.services.ms.verify.measurement_set_row_count", return_value=7)
 def test_verify_measurement_set_rejects_empty_subtables(mock_rows, mock_empty, tmp_path):
-    from almasim.services.archive.unpack_ms import verify_measurement_set
+    from almasim.services.ms.verify import verify_measurement_set
 
     ms = tmp_path / "uid___A002_X1_X2.ms"
     ms.mkdir()

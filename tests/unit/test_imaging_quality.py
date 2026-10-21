@@ -13,8 +13,8 @@ from astropy.io import fits
 from typer.testing import CliRunner
 
 from almasim import cli
-from almasim.services.imaging import archive_imaging as ai
 from almasim.services.imaging import fits_wcs, stats
+from almasim.services.imaging import products as imaging_products
 from almasim.services.imaging import quality as q
 
 runner = CliRunner()
@@ -87,7 +87,11 @@ def _task(root: Path, *, log_lines: bool = True, line_mask: bool = False, cube: 
         if line_mask:
             yy, xx = np.mgrid[:SIZE, :SIZE]
             mask = np.hypot(yy - SOURCE[0], xx - SOURCE[1]) <= 6
-            _write(task / ai.LINE_MASK_FILENAME, mask[None, None].astype(float), _header())
+            _write(
+                task / imaging_products.LINE_MASK_FILENAME,
+                mask[None, None].astype(float),
+                _header(),
+            )
     return task
 
 

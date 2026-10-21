@@ -8,10 +8,7 @@ try:
 except Exception:
     pytest.skip("casatools not available or not functional", allow_module_level=True)
 
-from almasim.services.products.ms_io import (  # noqa: E402
-    export_native_ms,
-    read_native_ms,
-)
+from almasim.services.ms.io import export_native_ms, read_native_ms
 
 # ---------------------------------------------------------------------------
 # Shared fixture — realistic, non-trivial sample data
