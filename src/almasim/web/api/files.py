@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 import math
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Literal
 
@@ -56,6 +57,23 @@ class Listing(BaseModel):
 
 class Folder(BaseModel):
     path: str
+
+
+class CsvPage(BaseModel):
+    path: str
+    columns: list[str]
+    rows: list[list[str]]
+    start: int
+    total: int
+
+
+class Space(BaseModel):
+    """Disk space where ``path`` is, or would be created (its nearest existing folder)."""
+
+    path: str
+    checked: str
+    free_bytes: int
+    total_bytes: int
 
 
 class TextSlice(BaseModel):
@@ -154,6 +172,22 @@ class FolderRequest(BaseModel):
     path: str
 
 
+@router.get("/space", response_model=Space)
+def space(request: Request, path: str = Query(...)) -> dict[str, Any]:
+    """Free and total bytes on the disk that holds ``path`` (it need not exist yet)."""
+    target = resolve(request.app.state.profile, path)
+    checked = target
+    while not checked.exists() and checked.parent != checked:
+        checked = checked.parent
+    usage = shutil.disk_usage(checked)
+    return {
+        "path": str(target),
+        "checked": str(checked),
+        "free_bytes": usage.free,
+        "total_bytes": usage.total,
+    }
+
+
 @router.post("/mkdir", status_code=201, response_model=Folder)
 def make_folder(body: FolderRequest, request: Request) -> dict[str, str]:
     folder = resolve(request.app.state.profile, body.path)
@@ -188,7 +222,7 @@ def read_text(
     }
 
 
-@router.get("/csv")
+@router.get("/csv", response_model=CsvPage)
 def read_csv(
     request: Request,
     path: str = Query(...),

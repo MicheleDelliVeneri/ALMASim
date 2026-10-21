@@ -226,6 +226,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/api/v2/files/space': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Space
+		 * @description Free and total bytes on the disk that holds ``path`` (it need not exist yet).
+		 */
+		get: operations['space_api_v2_files_space_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/api/v2/files/text': {
 		parameters: {
 			query?: never;
@@ -460,6 +480,19 @@ export interface components {
 			total: number;
 			/** Unavailable */
 			unavailable: number;
+		};
+		/** CsvPage */
+		CsvPage: {
+			/** Columns */
+			columns: string[];
+			/** Path */
+			path: string;
+			/** Rows */
+			rows: string[][];
+			/** Start */
+			start: number;
+			/** Total */
+			total: number;
 		};
 		/** Defaults */
 		Defaults: {
@@ -760,6 +793,20 @@ export interface components {
 			/** Time */
 			time: string;
 		};
+		/**
+		 * Space
+		 * @description Disk space where ``path`` is, or would be created (its nearest existing folder).
+		 */
+		Space: {
+			/** Checked */
+			checked: string;
+			/** Free Bytes */
+			free_bytes: number;
+			/** Path */
+			path: string;
+			/** Total Bytes */
+			total_bytes: number;
+		};
 		/** SubmitRequest */
 		SubmitRequest: {
 			/**
@@ -942,9 +989,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': {
-						[key: string]: unknown;
-					};
+					'application/json': components['schemas']['CsvPage'];
 				};
 			};
 			/** @description Validation Error */
@@ -1172,6 +1217,37 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['Roots'];
+				};
+			};
+		};
+	};
+	space_api_v2_files_space_get: {
+		parameters: {
+			query: {
+				path: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['Space'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
 				};
 			};
 		};
