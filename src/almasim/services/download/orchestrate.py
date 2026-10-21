@@ -213,11 +213,10 @@ def download_products(
                     logger_fn(f"Failed to extract {tar_path.name}: {exc}")
                 extraction_failed.append(str(tar_path))
 
+    archive_failures: list[str] = []
     if unpack_ms or generate_calibrated_visibilities:
-        from almasim.services.archive import (
-            create_calibrated_measurement_sets,
-            create_measurement_sets,
-        )
+        from almasim.services.archive import cleanup_intermediate_calibration_data
+        from almasim.services.archive.pipeline import run_archive_stages
 
         archive_root = (
             Path(archive_output_root).expanduser().resolve()
@@ -227,26 +226,33 @@ def download_products(
         raw_ms_root = archive_root / "raw_ms"
         calibrated_ms_root = archive_root / "calibrated_ms"
 
-        raw_paths = create_measurement_sets(
-            input_root=destination_path,
-            output_root=raw_ms_root,
-            casa_data_root=casa_data_root,
-            skip_casa_data_update=skip_casa_data_update,
-            logger_fn=logger_fn,
-        )
-        raw_measurement_sets = [str(path) for path in raw_paths]
+        def _echo(message: str, *, err: bool = False) -> None:
+            if logger_fn is not None:
+                logger_fn(message)
+            else:
+                (logger.error if err else logger.info)(message)
 
-        if generate_calibrated_visibilities:
-            calibrated_paths = create_calibrated_measurement_sets(
-                input_root=destination_path,
-                raw_ms_root=raw_ms_root,
-                output_root=calibrated_ms_root,
-                casa_data_root=casa_data_root,
-                skip_casa_data_update=skip_casa_data_update,
-                clean_intermediate=clean_intermediate_files,
+        # One subprocess per UID (MADIV-28 T3.5): a CASA crash on one
+        # execution block is a recorded failure, not the end of this process.
+        stages = run_archive_stages(
+            destination_path,
+            archive_root,
+            unpack_ms=True,
+            calibrate=generate_calibrated_visibilities,
+            casa_data_root=Path(casa_data_root) if casa_data_root else None,
+            skip_casa_data_update=skip_casa_data_update,
+            echo=_echo,
+        )
+        raw_measurement_sets = list(stages.raw_ms)
+        calibrated_measurement_sets = list(stages.calibrated_ms)
+        archive_failures = [f"{f.label}: {f.error}" for f in stages.failures]
+        if clean_intermediate_files and generate_calibrated_visibilities and stages.ok:
+            cleanup_intermediate_calibration_data(
+                raw_ms_root,
+                calibrated_ms_root,
+                [Path(path) for path in calibrated_measurement_sets],
                 logger_fn=logger_fn,
             )
-            calibrated_measurement_sets = [str(path) for path in calibrated_paths]
 
     files_completed = sum(1 for status in statuses if status.status == "completed")
     files_failed = sum(1 for status in statuses if status.status == "failed")
@@ -263,11 +269,19 @@ def download_products(
                 "extraction_failed": extraction_failed,
                 "raw_measurement_sets": raw_measurement_sets,
                 "calibrated_measurement_sets": calibrated_measurement_sets,
+                "archive_failures": archive_failures,
             },
             indent=2,
         ),
         encoding="utf-8",
     )
+
+    if archive_failures:
+        raise RuntimeError(
+            f"Archive post-processing failed for {len(archive_failures)} UID(s): "
+            + "; ".join(archive_failures)
+            + f" (manifest: {manifest_path})"
+        )
 
     if clean_intermediate_files and generate_calibrated_visibilities:
         _cleanup_download_inputs(

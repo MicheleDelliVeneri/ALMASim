@@ -55,3 +55,15 @@ def as_progress_emitter(callback):
     if hasattr(callback, "emit"):
         return callback
     return ProgressEmitterAdapter(callback)
+
+
+def dedupe_keep_order(values: list[str]) -> list[str]:
+    """Remove duplicates while preserving first-seen order."""
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
