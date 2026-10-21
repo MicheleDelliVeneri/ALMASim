@@ -44,15 +44,17 @@ def test_every_form_field_is_defined_and_used():
 
 
 def test_the_start_script_uses_only_options_serve_has():
-    from typer.testing import CliRunner
+    import typer
 
     from almasim.cli import app as cli
 
-    help_text = CliRunner().invoke(cli, ["serve", "--help"], terminal_width=200).output
+    # From the command itself, not its help (which colour codes break up).
+    serve = typer.main.get_command(cli).commands["serve"]
+    options = {name for param in serve.params for name in param.opts}
     script = _read("template/script.sh.erb")
     assert "almasim serve" in script
     for option in re.findall(r"(--[a-z][a-z-]+)", script):
-        assert option in help_text, option
+        assert option in options, option
 
 
 def test_the_console_and_the_connect_button_agree_on_the_path_and_token():
