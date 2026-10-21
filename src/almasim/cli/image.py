@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Sequence, cast
 
@@ -312,6 +313,60 @@ def _prepare_selfcal_casa_data(output_directory: Path, casa_data_root: Path | No
     typer.echo(f"Self-calibration CASA runtime data: {casa_data}")
     ensure_casa_runtime_data(casa_data, logger_fn=typer.echo)
     return casa_data
+
+
+@dataclass(frozen=True)
+class ImageFromMsOptions:
+    """Every option of ``image image-from-ms`` (MADIV-28 T3.8)."""
+
+    imaging_parameters: Path
+    output_directory: Path
+    fov_fraction: float
+    beam_sampling: float
+    min_beams_across: float
+    multiscale: bool
+    num_cores: int
+    max_cores_per_node: MaxCoresPerNode
+    wsclean_bin: str
+    auto_threshold: float
+    auto_mask: float
+    task_memory_gb: float
+    single_window: bool
+    task_retries: int
+    max_weight: float
+    scratch_dir: Optional[Path]
+    continuum_restart: bool
+    update_model: bool
+    postprocess_backend: PostprocessBackend
+    slurm_queue: SlurmQueue
+    slurm_project: SlurmProject
+    slurm_walltime: SlurmWalltime
+    slurm_memory: SlurmMemory
+    slurm_n_jobs: int
+    scheduler_host: SchedulerHost
+    scheduler_interface: SchedulerInterface
+    task_timeout: TaskTimeout
+    skip_existing: bool
+    overwrite_outputs: bool
+    continue_on_error: bool
+    continuum: bool
+    cube: bool
+    contsub: bool
+    selfcal: str
+    selfcal_min_snr: float
+    noise_products: bool
+    pbcor: bool
+    casa_data_root: Optional[Path]
+    uv_contsub: bool
+    contsub_order: int
+    spectral_sampling: float
+    velocity_resolution: float
+    max_cube_gb: float
+    cube_products: str
+    join_channels: bool
+    cube_line_mask: bool
+    cube_reorder: bool
+    plan_only: bool
 
 
 @image_app.command("image-from-ms")
@@ -649,113 +704,137 @@ def image_from_ms(
     full WSClean output. A rerun skips the tasks with a ``.done`` marker and
     retries the rest, so an interrupted batch can simply be resubmitted.
     """
+    o = ImageFromMsOptions(**locals())
+    imaging, execution = _image_from_ms_options(o)
+    tasks = _image_from_ms_tasks(o, imaging)
+    if tasks:
+        _run_image_from_ms(o, imaging, execution, tasks)
+
+
+def _image_from_ms_options(o: ImageFromMsOptions) -> tuple[ImagingOptions, ExecOptions]:
+    """What every task makes and where the tasks run, validated."""
     # A 3-sigma stop without a mask left ~3 sigma of source in every channel's
     # residual: stacked over the 3537 line-free channels of uid___A002_X10ded83_X6af4
     # SPW 16 that was 7.9 sigma and 39 % of the image; masking to 3 and cleaning
     # to 1 sigma left 4.1 sigma and 16 % (2026-10-17).
-    if 0 < auto_mask <= auto_threshold:
+    if 0 < o.auto_mask <= o.auto_threshold:
         raise typer.BadParameter("--auto-mask must be above --auto-threshold (or 0 to disable it)")
-    if plan_only and not cube:
+    if o.plan_only and not o.cube:
         raise typer.BadParameter(
             "Options that need --cube: --plan-only, --contsub, --uv-contsub, --join-channels"
         )
     imaging = ImagingOptions(
-        continuum=continuum,
+        continuum=o.continuum,
         cube=(
             CubeOptions(
-                spectral_sampling=spectral_sampling,
-                velocity_resolution_km_s=velocity_resolution,
-                max_cube_gb=max_cube_gb,
+                spectral_sampling=o.spectral_sampling,
+                velocity_resolution_km_s=o.velocity_resolution,
+                max_cube_gb=o.max_cube_gb,
             )
-            if cube
+            if o.cube
             else None
         ),
         cube_products=(
-            tuple(p.strip().lower() for p in cube_products.split(",") if p.strip())
-            if cube
+            tuple(p.strip().lower() for p in o.cube_products.split(",") if p.strip())
+            if o.cube
             else None
         ),
-        single_window=single_window,
-        max_weight=max_weight if max_weight > 0 else None,
-        contsub=contsub,
-        uv_contsub=uv_contsub,
-        contsub_order=contsub_order,
-        join_channels=join_channels,
-        continuum_restart=continuum_restart,
-        cube_line_mask=cube_line_mask,
-        pbcor=pbcor,
+        single_window=o.single_window,
+        max_weight=o.max_weight if o.max_weight > 0 else None,
+        contsub=o.contsub,
+        uv_contsub=o.uv_contsub,
+        contsub_order=o.contsub_order,
+        join_channels=o.join_channels,
+        continuum_restart=o.continuum_restart,
+        cube_line_mask=o.cube_line_mask,
+        pbcor=o.pbcor,
         selfcal=SelfcalOptions(
-            solints=tuple(part.strip() for part in selfcal.split(",") if part.strip()),
-            min_snr=selfcal_min_snr,
-            noise_products=noise_products,
+            solints=tuple(part.strip() for part in o.selfcal.split(",") if part.strip()),
+            min_snr=o.selfcal_min_snr,
+            noise_products=o.noise_products,
         ),
     )
     execution = ExecOptions(
-        backend=postprocess_backend.lower(),
-        cores_per_task=num_cores,
-        node_cores=max_cores_per_node,
-        queue=slurm_queue,
-        project=slurm_project,
-        walltime=slurm_walltime,
-        memory=slurm_memory,
-        n_jobs=slurm_n_jobs,
-        scheduler_host=scheduler_host,
-        scheduler_interface=scheduler_interface,
-        task_timeout=task_timeout,
-        task_retries=task_retries,
-        continue_on_error=continue_on_error,
-        scratch_root=str(scratch_dir) if scratch_dir is not None else None,
+        backend=o.postprocess_backend.lower(),
+        cores_per_task=o.num_cores,
+        node_cores=o.max_cores_per_node,
+        queue=o.slurm_queue,
+        project=o.slurm_project,
+        walltime=o.slurm_walltime,
+        memory=o.slurm_memory,
+        n_jobs=o.slurm_n_jobs,
+        scheduler_host=o.scheduler_host,
+        scheduler_interface=o.scheduler_interface,
+        task_timeout=o.task_timeout,
+        task_retries=o.task_retries,
+        continue_on_error=o.continue_on_error,
+        scratch_root=str(o.scratch_dir) if o.scratch_dir is not None else None,
     )
     try:
         imaging.validate()
         execution.validate()
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
-    parameters = pd.read_csv(str(imaging_parameters))
+    return imaging, execution
+
+
+def _image_from_ms_tasks(o: ImageFromMsOptions, imaging: ImagingOptions) -> list[ImagingTask]:
+    """The tasks still to image (none with --plan-only), after the cube plan is shown."""
+    parameters = pd.read_csv(str(o.imaging_parameters))
     if imaging.cube is not None:
         parameters = add_spectral_columns(parameters)
         _echo_cube_plan(
             parameters,
-            fov_fraction,
-            beam_sampling,
+            o.fov_fraction,
+            o.beam_sampling,
             imaging.cube,
             imaging.cube_products or (),
-            min_beams_across,
+            o.min_beams_across,
         )
-    if plan_only:
-        return
+    if o.plan_only:
+        return []
     tasks, skipped = build_imaging_tasks(
         parameters,
-        output_directory,
-        fov_fraction=fov_fraction,
-        beam_sampling=beam_sampling,
-        num_cores=num_cores,
-        max_cores_per_node=max_cores_per_node,
-        wsclean_bin=wsclean_bin,
-        overwrite_outputs=overwrite_outputs,
-        trust_existing_images=skip_existing,
-        auto_threshold=auto_threshold if auto_threshold > 0 else None,
-        auto_mask=auto_mask if auto_mask > 0 else None,
-        update_model=update_model,
-        task_memory_gb=task_memory_gb if task_memory_gb > 0 else None,
-        scratch_dir=str(scratch_dir) if scratch_dir is not None else None,
+        o.output_directory,
+        fov_fraction=o.fov_fraction,
+        beam_sampling=o.beam_sampling,
+        num_cores=o.num_cores,
+        max_cores_per_node=o.max_cores_per_node,
+        wsclean_bin=o.wsclean_bin,
+        overwrite_outputs=o.overwrite_outputs,
+        trust_existing_images=o.skip_existing,
+        auto_threshold=o.auto_threshold if o.auto_threshold > 0 else None,
+        auto_mask=o.auto_mask if o.auto_mask > 0 else None,
+        update_model=o.update_model,
+        task_memory_gb=o.task_memory_gb if o.task_memory_gb > 0 else None,
+        scratch_dir=str(o.scratch_dir) if o.scratch_dir is not None else None,
         single_window=imaging.single_window,
         continuum=imaging.continuum,
         cube=imaging.cube,
         cube_products=imaging.cube_products,
-        cube_reorder=cube_reorder,
-        min_beams_across=min_beams_across,
-        multiscale=multiscale,
-        join_channels=join_channels,
+        cube_reorder=o.cube_reorder,
+        min_beams_across=o.min_beams_across,
+        multiscale=o.multiscale,
+        join_channels=o.join_channels,
     )
     if skipped:
         typer.echo(f"Skipped {skipped} already-imaged SPW(s).")
     if not tasks:
         typer.echo("All requested tasks are already imaged; nothing to do.")
-        return
+        return []
+    return tasks
+
+
+def _run_image_from_ms(
+    o: ImageFromMsOptions,
+    imaging: ImagingOptions,
+    execution: ExecOptions,
+    tasks: list[ImagingTask],
+) -> None:
+    """Run the tasks and report them; exit 1 when any failed."""
     casa_data: str | None = None
     if imaging.selfcal.solints:
-        casa_data = str(_prepare_selfcal_casa_data(output_directory, casa_data_root))
+        casa_data = str(_prepare_selfcal_casa_data(o.output_directory, o.casa_data_root))
     typer.echo(
         f"Imaging {len(tasks)} (MS, SPW, field) task(s); "
         "per-task logs: <output>/<ms>/SPW-<n>[_FIELD-<id>].log"

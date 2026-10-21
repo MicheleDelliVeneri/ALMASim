@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 from threading import Event, Thread
@@ -246,6 +247,36 @@ def _build_simulation_params(
     )
 
 
+@dataclass(frozen=True)
+class SimulationRunOptions:
+    """Every option of ``simulation run`` (MADIV-28 T3.8)."""
+
+    metadata_path: Path
+    row_idx: int | None
+    project_name: str
+    output_dir: Path
+    input_path: Path | None
+    main_dir: Path
+    source_type: str
+    n_pix: int
+    n_channels: int
+    n_lines: int | None
+    seed: int | None
+    simulations_per_row: int
+    imaging_algorithm: str
+    robust: float
+    instrument_geometry: InstrumentGeometry
+    background_level: float
+    background_seed: int | None
+    inject_serendipitous: bool
+    save_mode: str
+    persist_standard_outputs: bool
+    ml_shard_path: Path
+    backend: str
+    n_workers: int
+    kaggle_token: Path | None
+
+
 @simulation_app.command("run")
 def simulation_run(
     metadata_path: Path = typer.Option(
@@ -396,168 +427,175 @@ def simulation_run(
     ),
 ) -> None:
     """Run staged ALMASim simulation from a pre-queried metadata CSV."""
-    source_types = _SOURCE_TYPES + sorted(EXTERNAL_SOURCE_TYPES)
-
-    source_type_normalized = source_type.lower()
-    if source_type_normalized not in source_types:
-        usage_error("--source-type must be one of: " + ", ".join(source_types))
-
-    save_mode_normalized = save_mode.lower()
-    if save_mode_normalized not in _SAVE_MODES:
-        usage_error("--save-mode must be one of: " + ", ".join(_SAVE_MODES))
-
-    backend_normalized = backend.lower()
-    if backend_normalized not in _BACKEND_TYPES:
-        usage_error("--backend must be one of: " + ", ".join(_BACKEND_TYPES))
-
-    imaging_algorithm_normalized = imaging_algorithm.lower()
-    if imaging_algorithm_normalized not in _IMAGING_ALGORITHMS:
-        usage_error("--imaging-algorithm must be one of: " + ", ".join(_IMAGING_ALGORITHMS))
-
-    if not metadata_path.exists():
-        usage_error(f"--metadata-path not found: {metadata_path}")
-    if input_path is not None and not input_path.expanduser().exists():
-        usage_error(f"--input not found: {input_path}")
-    if kaggle_token is not None and not kaggle_token.expanduser().exists():
-        usage_error(f"--kaggle-token not found: {kaggle_token}")
-
-    metadata = pd.read_csv(metadata_path)
+    options = _validated_simulation_options(SimulationRunOptions(**locals()))
+    o = options
+    metadata = pd.read_csv(o.metadata_path)
     total_rows = len(metadata)
     typer.echo(f"Metadata rows available: {total_rows}")
 
-    indices = [row_idx] if row_idx is not None else list(range(total_rows))
-    total_runs = len(indices) * simulations_per_row
+    indices = [o.row_idx] if o.row_idx is not None else list(range(total_rows))
+    total_runs = len(indices) * o.simulations_per_row
     typer.echo(f"Rows to simulate: {len(indices)}")
-    typer.echo(f"Simulations per row: {simulations_per_row}")
+    typer.echo(f"Simulations per row: {o.simulations_per_row}")
     typer.echo(f"Total simulations: {total_runs}")
 
-    main_dir_resolved = main_dir.expanduser().resolve()
-    output_dir_resolved = output_dir.expanduser().resolve()
-    ml_shard_resolved = ml_shard_path.expanduser().resolve()
-    persist_outputs = persist_standard_outputs or save_mode_normalized != "memory"
+    ml_shard_resolved = o.ml_shard_path.expanduser().resolve()
+    persist_outputs = o.persist_standard_outputs or o.save_mode != "memory"
+    backend_kwargs = {"n_workers": o.n_workers} if o.backend == "local" else {}
 
-    backend_kwargs: dict[str, int] = {}
-    if backend_normalized == "local":
-        backend_kwargs = {"n_workers": n_workers}
-
-    with create_backend(backend_normalized, **backend_kwargs) as compute_backend:
+    with create_backend(o.backend, **backend_kwargs) as compute_backend:
         run_number = 0
         for idx in indices:
-            for simulation_idx in range(simulations_per_row):
+            for simulation_idx in range(o.simulations_per_row):
                 run_number += 1
                 typer.echo(
                     f"\n--- Simulation {run_number}/{total_runs}: row {idx + 1}/{total_rows} "
-                    f"(index {idx}), repeat {simulation_idx + 1}/{simulations_per_row} ---"
+                    f"(index {idx}), repeat {simulation_idx + 1}/{o.simulations_per_row} ---"
                 )
-                run_idx = idx * simulations_per_row + simulation_idx
-                run_seed = seed + run_idx if seed is not None else None
+                run_idx = idx * o.simulations_per_row + simulation_idx
+                run_seed = o.seed + run_idx if o.seed is not None else None
                 if run_seed is not None:
                     typer.echo(f"Seed: {run_seed}")
-                run_ml_shard_path = (
-                    _path_with_suffix(
-                        ml_shard_resolved, f"row{idx:04d}", f"sim{simulation_idx:03d}"
-                    )
-                    if total_runs > 1
-                    else ml_shard_resolved
-                )
-                output_subdir_name = (
-                    f"{project_name}_{run_idx}" if persist_outputs and total_runs > 1 else None
-                )
                 params = _build_simulation_params(
                     metadata=metadata,
                     row_idx=idx,
                     run_idx=run_idx,
-                    main_dir=main_dir_resolved,
-                    output_dir=output_dir_resolved,
-                    project_name=project_name,
-                    source_type=source_type_normalized,
-                    save_mode=save_mode_normalized,
+                    main_dir=o.main_dir.expanduser().resolve(),
+                    output_dir=o.output_dir.expanduser().resolve(),
+                    project_name=o.project_name,
+                    source_type=o.source_type,
+                    save_mode=o.save_mode,
                     persist_standard_outputs=persist_outputs,
-                    ml_shard_path=run_ml_shard_path,
-                    n_pix=n_pix,
-                    n_channels=n_channels,
-                    n_lines=n_lines,
-                    imaging_algorithm=imaging_algorithm_normalized,
-                    background_level=background_level,
-                    background_seed=(background_seed if background_seed is not None else run_seed),
+                    ml_shard_path=(
+                        _path_with_suffix(
+                            ml_shard_resolved, f"row{idx:04d}", f"sim{simulation_idx:03d}"
+                        )
+                        if total_runs > 1
+                        else ml_shard_resolved
+                    ),
+                    n_pix=o.n_pix,
+                    n_channels=o.n_channels,
+                    n_lines=o.n_lines,
+                    imaging_algorithm=o.imaging_algorithm,
+                    background_level=o.background_level,
+                    background_seed=(
+                        o.background_seed if o.background_seed is not None else run_seed
+                    ),
                     seed=run_seed,
-                    instrument_geometry=str(instrument_geometry),
-                    inject_serendipitous=inject_serendipitous,
-                    output_subdir_name=output_subdir_name,
-                    input_path=input_path,
-                    kaggle_token=kaggle_token,
+                    instrument_geometry=str(o.instrument_geometry),
+                    inject_serendipitous=o.inject_serendipitous,
+                    output_subdir_name=(
+                        f"{o.project_name}_{run_idx}"
+                        if persist_outputs and total_runs > 1
+                        else None
+                    ),
+                    input_path=o.input_path,
+                    kaggle_token=o.kaggle_token,
+                )
+                _run_simulation_stages(
+                    o, params, compute_backend, label=f"Simulation {run_number}/{total_runs}"
                 )
 
-                with tqdm(
-                    total=100,
-                    desc=f"Simulation {run_number}/{total_runs}",
-                    unit="%",
-                    leave=True,
-                ) as progress_bar:
-                    logger = _progress_logger(progress_bar)
-                    is_sync_backend = backend_normalized == "sync"
-
-                    clean_stage = _run_stage_with_feedback(
-                        progress_bar,
-                        label="clean-cube",
-                        smooth_target=(34 if is_sync_backend else None),
-                        work=lambda: generate_clean_cube(
-                            params,
-                            logger=logger,
-                            compute_backend=compute_backend,
-                            progress_emitter=_progress_callback(progress_bar, 0, 35),
-                        ),
-                    )
-                    _update_progress(progress_bar, 35)
-                    logger(f"Clean cube shape: {clean_stage.model_cube.shape}")
-                    logger(f"Target ML shard: {params.ml_dataset_path}")
-
-                    simulation_results = _run_stage_with_feedback(
-                        progress_bar,
-                        label="observation",
-                        smooth_target=(89 if is_sync_backend else None),
-                        work=lambda: simulate_observation(
-                            clean_stage,
-                            compute_backend=compute_backend,
-                            robust=robust,
-                            terminal_logger=logger,
-                            interferometer_progress_callback=_progress_callback(
-                                progress_bar, 35, 55
-                            ),
-                        ),
-                    )
-                    logger(f"Dirty cube shape: {simulation_results['dirty_cube'].shape}")
-                    logger(f"UV mask cube shape: {simulation_results['uv_mask_cube'].shape}")
-
-                    # The image-domain products (interferometric, total-power and
-                    # combined image cubes), as run_simulation makes them.
-                    simulation_results = _run_stage_with_feedback(
-                        progress_bar,
-                        label="imaging",
-                        work=lambda: image_products(simulation_results),
-                    )
-                    _update_progress(progress_bar, 90)
-
-                    exported_results = _run_stage_with_feedback(
-                        progress_bar,
-                        label="export",
-                        work=lambda: export_results(
-                            params,
-                            clean_stage,
-                            simulation_results,
-                            logger=logger,
-                        ),
-                    )
-                    _update_progress(progress_bar, 100)
-                typer.echo(f"ML shard written to: {exported_results.get('ml_dataset_path')}")
-                if save_mode_normalized != "memory":
-                    for key in sorted(exported_results):
-                        if key in {"ml_dataset_path", "antenna_config_paths"}:
-                            continue
-                        if key.endswith("_path"):
-                            typer.echo(f"{key}: {exported_results[key]}")
-                        elif key.endswith("_paths"):
-                            for path in exported_results[key]:
-                                typer.echo(f"{key}: {path}")
-
     typer.echo(f"\nAll done. Simulated {total_runs} run(s) across {len(indices)} row(s).")
+
+
+def _validated_simulation_options(o: SimulationRunOptions) -> SimulationRunOptions:
+    """``o`` with its choices normalised; a usage error for anything invalid."""
+    source_types = _SOURCE_TYPES + sorted(EXTERNAL_SOURCE_TYPES)
+    o = replace(
+        o,
+        source_type=o.source_type.lower(),
+        save_mode=o.save_mode.lower(),
+        backend=o.backend.lower(),
+        imaging_algorithm=o.imaging_algorithm.lower(),
+    )
+    if o.source_type not in source_types:
+        usage_error("--source-type must be one of: " + ", ".join(source_types))
+    if o.save_mode not in _SAVE_MODES:
+        usage_error("--save-mode must be one of: " + ", ".join(_SAVE_MODES))
+    if o.backend not in _BACKEND_TYPES:
+        usage_error("--backend must be one of: " + ", ".join(_BACKEND_TYPES))
+    if o.imaging_algorithm not in _IMAGING_ALGORITHMS:
+        usage_error("--imaging-algorithm must be one of: " + ", ".join(_IMAGING_ALGORITHMS))
+    if not o.metadata_path.exists():
+        usage_error(f"--metadata-path not found: {o.metadata_path}")
+    if o.input_path is not None and not o.input_path.expanduser().exists():
+        usage_error(f"--input not found: {o.input_path}")
+    if o.kaggle_token is not None and not o.kaggle_token.expanduser().exists():
+        usage_error(f"--kaggle-token not found: {o.kaggle_token}")
+    return o
+
+
+def _run_simulation_stages(
+    o: SimulationRunOptions, params: SimulationParams, compute_backend: Any, *, label: str
+) -> None:
+    """The clean cube, observation, imaging and export of one run, with a progress bar."""
+    with tqdm(
+        total=100,
+        desc=label,
+        unit="%",
+        leave=True,
+    ) as progress_bar:
+        logger = _progress_logger(progress_bar)
+        is_sync_backend = o.backend == "sync"
+
+        clean_stage = _run_stage_with_feedback(
+            progress_bar,
+            label="clean-cube",
+            smooth_target=(34 if is_sync_backend else None),
+            work=lambda: generate_clean_cube(
+                params,
+                logger=logger,
+                compute_backend=compute_backend,
+                progress_emitter=_progress_callback(progress_bar, 0, 35),
+            ),
+        )
+        _update_progress(progress_bar, 35)
+        logger(f"Clean cube shape: {clean_stage.model_cube.shape}")
+        logger(f"Target ML shard: {params.ml_dataset_path}")
+
+        simulation_results = _run_stage_with_feedback(
+            progress_bar,
+            label="observation",
+            smooth_target=(89 if is_sync_backend else None),
+            work=lambda: simulate_observation(
+                clean_stage,
+                compute_backend=compute_backend,
+                robust=o.robust,
+                terminal_logger=logger,
+                interferometer_progress_callback=_progress_callback(progress_bar, 35, 55),
+            ),
+        )
+        logger(f"Dirty cube shape: {simulation_results['dirty_cube'].shape}")
+        logger(f"UV mask cube shape: {simulation_results['uv_mask_cube'].shape}")
+
+        # The image-domain products (interferometric, total-power and
+        # combined image cubes), as run_simulation makes them.
+        simulation_results = _run_stage_with_feedback(
+            progress_bar,
+            label="imaging",
+            work=lambda: image_products(simulation_results),
+        )
+        _update_progress(progress_bar, 90)
+
+        exported_results = _run_stage_with_feedback(
+            progress_bar,
+            label="export",
+            work=lambda: export_results(
+                params,
+                clean_stage,
+                simulation_results,
+                logger=logger,
+            ),
+        )
+        _update_progress(progress_bar, 100)
+    typer.echo(f"ML shard written to: {exported_results.get('ml_dataset_path')}")
+    if o.save_mode != "memory":
+        for key in sorted(exported_results):
+            if key in {"ml_dataset_path", "antenna_config_paths"}:
+                continue
+            if key.endswith("_path"):
+                typer.echo(f"{key}: {exported_results[key]}")
+            elif key.endswith("_paths"):
+                for path in exported_results[key]:
+                    typer.echo(f"{key}: {path}")

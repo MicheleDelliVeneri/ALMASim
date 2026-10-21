@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Any, Iterator, List, Optional
+from typing import Any, Iterator, List, Optional, Sequence
 
 import typer
 from tqdm.auto import tqdm
@@ -326,6 +327,40 @@ def _cleanup_after_download_postprocess(
     )
 
 
+@dataclass(frozen=True)
+class DownloadOptions:
+    """Every option of ``products download`` (MADIV-28 T3.8)."""
+
+    products_csv: Optional[Path]
+    metadata_csv: Optional[Path]
+    member_ous_uid: Optional[List[str]]
+    member_limit: Optional[int]
+    product_filter: str
+    skip_qa0_semipass: bool
+    qa0_report_root: Optional[Path]
+    save_products_csv_path: Optional[Path]
+    destination: Path
+    max_parallel: int
+    extract_tar: bool
+    unpack_ms: bool
+    generate_calibrated_visibilities: bool
+    archive_output_root: Optional[Path]
+    casa_data_root: Optional[Path]
+    skip_casa_data_update: bool
+    clean_intermediate_files: bool
+    postprocess_backend: PostprocessBackend
+    slurm_queue: SlurmQueue
+    slurm_project: SlurmProject
+    slurm_walltime: SlurmWalltime
+    slurm_cores: SlurmCores
+    slurm_memory: SlurmMemory
+    slurm_workers: int
+    overwrite_archive_outputs: bool
+    continue_on_error: bool
+    keep_working_copies: bool
+    yes: bool
+
+
 @products_app.command("download")
 def products_download(
     products_csv: Optional[Path] = typer.Option(
@@ -473,34 +508,48 @@ def products_download(
     ),
 ) -> None:
     """Download ALMA products and optionally unpack/calibrate archive data."""
-    product_filter_normalized = product_filter.lower()
-    if product_filter_normalized not in PRODUCT_TYPES:
+    options = DownloadOptions(**locals())
+    selected = _select_download_products(options)
+    if options.unpack_ms or options.generate_calibrated_visibilities:
+        _download_and_postprocess(options, selected)
+    else:
+        summary = _download_products_with_progress(
+            selected,
+            options.destination,
+            **_download_kwargs(options, postprocess_in_process=True),
+        )
+        _print_download_summary(
+            summary, summary.raw_measurement_sets, summary.calibrated_measurement_sets
+        )
+
+
+def _select_download_products(o: DownloadOptions) -> list[Any]:
+    """Validate the options and return the products to download (exits when there are none)."""
+    product_filter = o.product_filter.lower()
+    if product_filter not in PRODUCT_TYPES:
         usage_error("Invalid --product-filter. Allowed values: " + ", ".join(sorted(PRODUCT_TYPES)))
-
-    backend_normalized = postprocess_backend.lower()
-
-    if max_parallel > MAX_PARALLEL_TOTAL:
+    if o.max_parallel > MAX_PARALLEL_TOTAL:
         typer.echo(
             "Requested --max-parallel="
-            f"{max_parallel} exceeds cap; clamping to {MAX_PARALLEL_TOTAL}."
+            f"{o.max_parallel} exceeds cap; clamping to {MAX_PARALLEL_TOTAL}."
         )
-        max_parallel = MAX_PARALLEL_TOTAL
-
     products = _resolve_products_from_inputs(
-        products_csv=products_csv,
-        metadata_csv=metadata_csv,
-        member_ous_uid=member_ous_uid,
-        member_limit=member_limit,
-        save_products_csv_path=save_products_csv_path,
+        products_csv=o.products_csv,
+        metadata_csv=o.metadata_csv,
+        member_ous_uid=o.member_ous_uid,
+        member_limit=o.member_limit,
+        save_products_csv_path=o.save_products_csv_path,
     )
-    filtered = filter_products(products, product_filter_normalized)
+    filtered = filter_products(products, product_filter)
     if not filtered:
-        fail(f"No products matched --product-filter={product_filter_normalized}")
+        fail(f"No products matched --product-filter={product_filter}")
 
     typer.echo(f"Resolved products: {len(products)}")
-    if skip_qa0_semipass:
+    if o.skip_qa0_semipass:
         report_root = (
-            (qa0_report_root if qa0_report_root is not None else destination).expanduser().resolve()
+            (o.qa0_report_root if o.qa0_report_root is not None else o.destination)
+            .expanduser()
+            .resolve()
         )
         qa0_result = filter_products_by_qa0(filtered, report_root)
         typer.echo(
@@ -516,8 +565,7 @@ def products_download(
 
     total_bytes = sum(product.content_length for product in filtered)
     typer.echo(f"Selected for download: {len(filtered)} ({format_bytes(total_bytes)})")
-
-    if not yes:
+    if not o.yes:
         unknown_sizes = sum(1 for product in filtered if product.content_length <= 0)
         message = (
             f"About to download {len(filtered)} product(s), total size {format_bytes(total_bytes)}"
@@ -525,135 +573,126 @@ def products_download(
         if unknown_sizes:
             message += f" ({unknown_sizes} item(s) with unknown size)"
         message += ". Continue?"
-
         if not typer.confirm(message, default=True):
             typer.echo("Download cancelled.")
             raise typer.Exit(code=0)
-
-    needs_archive_postprocess = unpack_ms or generate_calibrated_visibilities
-    if generate_calibrated_visibilities and not unpack_ms:
+    if o.generate_calibrated_visibilities and not o.unpack_ms:
         typer.echo(
             "--generate-calibrated-visibilities without --unpack-ms "
             "expects existing raw_ms outputs.",
             err=True,
         )
+    return filtered
 
-    archive_root = (
-        archive_output_root.expanduser().resolve()
-        if archive_output_root is not None
-        else destination.expanduser().resolve() / "archive_ms"
+
+def _archive_root(o: DownloadOptions) -> Path:
+    if o.archive_output_root is not None:
+        return o.archive_output_root.expanduser().resolve()
+    return o.destination.expanduser().resolve() / "archive_ms"
+
+
+def _download_kwargs(o: DownloadOptions, *, postprocess_in_process: bool) -> dict[str, Any]:
+    """``download_products`` arguments; the archive stages run in the download only when asked."""
+    return {
+        "max_parallel": min(o.max_parallel, MAX_PARALLEL_TOTAL),
+        "extract_tar": o.extract_tar,
+        "unpack_ms": o.unpack_ms and postprocess_in_process,
+        "generate_calibrated_visibilities": (
+            o.generate_calibrated_visibilities and postprocess_in_process
+        ),
+        "clean_intermediate_files": o.clean_intermediate_files and postprocess_in_process,
+        "archive_output_root": _archive_root(o),
+        "casa_data_root": o.casa_data_root,
+        "skip_casa_data_update": o.skip_casa_data_update,
+        "logger_fn": typer.echo,
+    }
+
+
+def _download_and_postprocess(o: DownloadOptions, selected: list[Any]) -> None:
+    """Download, then unpack/calibrate one UID per subprocess (sync) or per Slurm task.
+
+    A CASA crash on one execution block then never aborts the run.
+    """
+    archive_root = _archive_root(o)
+    summary = _download_products_with_progress(
+        selected, o.destination, **_download_kwargs(o, postprocess_in_process=False)
     )
-
-    if needs_archive_postprocess:
-        # Download first, then unpack/calibrate one UID per subprocess (sync) or per
-        # Slurm task, so a CASA crash on one execution block never aborts the run.
-        summary = _download_products_with_progress(
-            filtered,
-            destination,
-            max_parallel=max_parallel,
-            extract_tar=extract_tar,
-            unpack_ms=False,
-            generate_calibrated_visibilities=False,
-            clean_intermediate_files=False,
+    backend = o.postprocess_backend.lower()
+    stage_failures: list[TaskFailure] = []
+    with _stage_errors():
+        raw_mss, calibrated_mss = _run_parallel_archive_jobs(
+            download_root=Path(summary.destination),
             archive_output_root=archive_root,
-            casa_data_root=casa_data_root,
-            skip_casa_data_update=skip_casa_data_update,
-            logger_fn=typer.echo,
+            unpack_ms=o.unpack_ms,
+            generate_calibrated_visibilities=o.generate_calibrated_visibilities,
+            postprocess_backend=backend,
+            postprocess_backend_kwargs=(
+                SlurmOptions(
+                    queue=o.slurm_queue,
+                    project=o.slurm_project,
+                    walltime=o.slurm_walltime,
+                    memory=o.slurm_memory,
+                    n_workers=o.slurm_workers,
+                    cores=o.slurm_cores,
+                ).backend_kwargs()
+                if backend == "slurm"
+                else {}
+            ),
+            casa_data_root=o.casa_data_root,
+            skip_casa_data_update=o.skip_casa_data_update,
+            overwrite_archive_outputs=o.overwrite_archive_outputs,
+            continue_on_error=o.continue_on_error,
+            failures=stage_failures,
+            keep_working_copies=o.keep_working_copies,
+            echo=typer.echo,
         )
-        stage_failures: list[TaskFailure] = []
-        with _stage_errors():
-            raw_mss, calibrated_mss = _run_parallel_archive_jobs(
-                download_root=Path(summary.destination),
-                archive_output_root=archive_root,
-                unpack_ms=unpack_ms,
-                generate_calibrated_visibilities=generate_calibrated_visibilities,
-                postprocess_backend=backend_normalized,
-                postprocess_backend_kwargs=(
-                    SlurmOptions(
-                        queue=slurm_queue,
-                        project=slurm_project,
-                        walltime=slurm_walltime,
-                        memory=slurm_memory,
-                        n_workers=slurm_workers,
-                        cores=slurm_cores,
-                    ).backend_kwargs()
-                    if backend_normalized == "slurm"
-                    else {}
-                ),
-                casa_data_root=casa_data_root,
-                skip_casa_data_update=skip_casa_data_update,
-                overwrite_archive_outputs=overwrite_archive_outputs,
-                continue_on_error=continue_on_error,
-                failures=stage_failures,
-                keep_working_copies=keep_working_copies,
-                echo=typer.echo,
-            )
-        _update_manifest_measurement_sets(summary.manifest_path, raw_mss, calibrated_mss)
-        typer.echo(f"Destination: {summary.destination}")
-        typer.echo(f"Completed: {summary.files_completed}")
-        typer.echo(f"Failed: {summary.files_failed}")
-        extraction_failed = getattr(summary, "extraction_failed", []) or []
-        if extraction_failed:
+    _update_manifest_measurement_sets(summary.manifest_path, raw_mss, calibrated_mss)
+    _print_download_summary(summary, raw_mss, calibrated_mss, show_extraction_failures=True)
+    if o.clean_intermediate_files and o.generate_calibrated_visibilities:
+        if stage_failures:
             typer.echo(
-                f"Extraction failed: {len(extraction_failed)} (tar kept on disk; "
-                "re-run `almasim products extract` on it)",
+                "Skipping --clean-intermediate-files because "
+                f"{len(stage_failures)} UID(s) failed; inputs are kept for a re-run.",
                 err=True,
             )
-            for tar_path in extraction_failed:
-                typer.echo(f"  {tar_path}", err=True)
-        if summary.manifest_path:
-            typer.echo(f"Manifest: {summary.manifest_path}")
-        if raw_mss:
-            typer.echo("Raw MS products:")
-            for raw_ms in raw_mss:
-                typer.echo(f"  {raw_ms}")
-        if calibrated_mss:
-            typer.echo("Calibrated MS products:")
-            for calibrated_ms in calibrated_mss:
-                typer.echo(f"  {calibrated_ms}")
-        if clean_intermediate_files and generate_calibrated_visibilities:
-            if stage_failures:
-                typer.echo(
-                    "Skipping --clean-intermediate-files because "
-                    f"{len(stage_failures)} UID(s) failed; inputs are kept for a re-run.",
-                    err=True,
-                )
-            else:
-                _cleanup_after_download_postprocess(
-                    summary=summary,
-                    destination=Path(summary.destination),
-                    archive_root=archive_root,
-                    calibrated_mss=calibrated_mss,
-                )
-        _exit_if_failures("Archive post-processing", stage_failures)
-        return
+        else:
+            _cleanup_after_download_postprocess(
+                summary=summary,
+                destination=Path(summary.destination),
+                archive_root=archive_root,
+                calibrated_mss=calibrated_mss,
+            )
+    _exit_if_failures("Archive post-processing", stage_failures)
 
-    summary = _download_products_with_progress(
-        filtered,
-        destination,
-        max_parallel=max_parallel,
-        extract_tar=extract_tar,
-        unpack_ms=unpack_ms,
-        generate_calibrated_visibilities=generate_calibrated_visibilities,
-        clean_intermediate_files=clean_intermediate_files,
-        archive_output_root=archive_root,
-        casa_data_root=casa_data_root,
-        skip_casa_data_update=skip_casa_data_update,
-        logger_fn=typer.echo,
-    )
 
+def _print_download_summary(
+    summary: Any,
+    raw_mss: Sequence[str],
+    calibrated_mss: Sequence[str],
+    *,
+    show_extraction_failures: bool = False,
+) -> None:
     typer.echo(f"Destination: {summary.destination}")
     typer.echo(f"Completed: {summary.files_completed}")
     typer.echo(f"Failed: {summary.files_failed}")
+    extraction_failed = getattr(summary, "extraction_failed", []) or []
+    if show_extraction_failures and extraction_failed:
+        typer.echo(
+            f"Extraction failed: {len(extraction_failed)} (tar kept on disk; "
+            "re-run `almasim products extract` on it)",
+            err=True,
+        )
+        for tar_path in extraction_failed:
+            typer.echo(f"  {tar_path}", err=True)
     if summary.manifest_path:
         typer.echo(f"Manifest: {summary.manifest_path}")
-    if summary.raw_measurement_sets:
+    if raw_mss:
         typer.echo("Raw MS products:")
-        for raw_ms in summary.raw_measurement_sets:
+        for raw_ms in raw_mss:
             typer.echo(f"  {raw_ms}")
-    if summary.calibrated_measurement_sets:
+    if calibrated_mss:
         typer.echo("Calibrated MS products:")
-        for calibrated_ms in summary.calibrated_measurement_sets:
+        for calibrated_ms in calibrated_mss:
             typer.echo(f"  {calibrated_ms}")
 
 
