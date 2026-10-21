@@ -23,8 +23,8 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
 
-  # Docker base images (FROM lines only; pip pins inside Dockerfile.dask
-  # are not updated by Dependabot and follow uv.lock).
+  # Docker base images (FROM lines only; Dockerfile.dask takes its Python
+  # packages from uv.lock).
   - package-ecosystem: "docker"
     directories:
       - "/"
