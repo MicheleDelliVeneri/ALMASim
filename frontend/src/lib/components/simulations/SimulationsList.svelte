@@ -72,18 +72,27 @@
 		const sim = simulations.find((entry) => entry.simulation_id === simulationId);
 		const query = sim?.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
 		logger.info({ simulationId, outputDir: sim?.output_dir }, 'Navigating to visualizer');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended
 		void goto(resolve('/visualizer') + query);
 	}
 
 	function handleCombination(sim: SimulationSummary) {
 		const query = sim.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
-		logger.info({ simulationId: sim.simulation_id, outputDir: sim.output_dir }, 'Navigating to combination');
+		logger.info(
+			{ simulationId: sim.simulation_id, outputDir: sim.output_dir },
+			'Navigating to combination'
+		);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended
 		void goto(resolve('/combination') + query);
 	}
 
 	function handleImaging(sim: SimulationSummary) {
 		const query = sim.output_dir ? `?dir=${encodeURIComponent(sim.output_dir)}` : '';
-		logger.info({ simulationId: sim.simulation_id, outputDir: sim.output_dir }, 'Navigating to imaging');
+		logger.info(
+			{ simulationId: sim.simulation_id, outputDir: sim.output_dir },
+			'Navigating to imaging'
+		);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the path is resolved; only the query string is appended
 		void goto(resolve('/imaging') + query);
 	}
 
@@ -142,7 +151,8 @@
 				selectedSimulationStatus = status;
 				logError = null;
 			},
-			(err) => logger.error({ err, simulationId }, 'Failed to parse simulation log websocket payload')
+			(err) =>
+				logger.error({ err, simulationId }, 'Failed to parse simulation log websocket payload')
 		);
 
 		socket.onerror = () => {
@@ -220,7 +230,9 @@
 
 	{#if loading && simulations.length === 0}
 		<div class="flex items-center justify-center py-8">
-			<div class="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+			<div
+				class="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"
+			></div>
 		</div>
 	{:else if error}
 		<div class="rounded-md bg-danger-soft p-4">
@@ -236,28 +248,46 @@
 			<table class="min-w-full divide-y divide-line">
 				<thead class="bg-surface">
 					<tr>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
+						<th
+							scope="col"
+							class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim"
+						>
 							ID
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
+						<th
+							scope="col"
+							class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim"
+						>
 							Status
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
+						<th
+							scope="col"
+							class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim"
+						>
 							Progress
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
+						<th
+							scope="col"
+							class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim"
+						>
 							Created
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
+						<th
+							scope="col"
+							class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim"
+						>
 							Updated
 						</th>
-						<th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim">
+						<th
+							scope="col"
+							class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-fg-dim"
+						>
 							Actions
 						</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-line bg-surface">
-					{#each simulations as sim}
+					{#each simulations as sim (sim.simulation_id)}
 						<tr class="hover:bg-hover">
 							<td class="whitespace-nowrap px-4 py-3 text-sm font-mono text-fg">
 								{sim.simulation_id.slice(0, 8)}...
@@ -292,8 +322,18 @@
 										title="Visualize results"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+											/>
 										</svg>
 									</button>
 									<button
@@ -303,7 +343,12 @@
 										title="View simulation logs"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H9l-4 3V7a2 2 0 012-2z" />
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M8 10h8M8 14h5M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H9l-4 3V7a2 2 0 012-2z"
+											/>
 										</svg>
 									</button>
 									<button
@@ -314,8 +359,18 @@
 										title="Open combination products"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h10M4 17h7" />
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12l2 2 4-4" />
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M4 7h16M4 12h10M4 17h7"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M15 12l2 2 4-4"
+											/>
 										</svg>
 									</button>
 									<button
@@ -326,8 +381,18 @@
 										title="Open imaging workflow"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M6 12h12M9 17h6" />
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9l3 3-3 3" />
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M3 7h18M6 12h12M9 17h6"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M17 9l3 3-3 3"
+											/>
 										</svg>
 									</button>
 									<button
@@ -337,7 +402,12 @@
 										title="Show file location"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+											/>
 										</svg>
 									</button>
 									<button
@@ -348,7 +418,12 @@
 										title="Cancel simulation"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18" />
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M6 6l12 12M18 6L6 18"
+											/>
 										</svg>
 									</button>
 								</div>
@@ -362,7 +437,11 @@
 </section>
 
 {#if logDialogOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+		role="dialog"
+		aria-modal="true"
+	>
 		<div class="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-lg bg-surface shadow-panel">
 			<header class="flex items-start justify-between gap-4 border-b px-5 py-4">
 				<div class="min-w-0">
@@ -402,7 +481,7 @@
 				<div class="overflow-hidden rounded-md border border-line bg-slate-950">
 					<div class="max-h-[55vh] overflow-y-auto p-4 font-mono text-xs leading-5 text-slate-100">
 						{#if selectedSimulationStatus?.logs && selectedSimulationStatus.logs.length > 0}
-							{#each selectedSimulationStatus.logs as line}
+							{#each selectedSimulationStatus.logs as line, i (i)}
 								<div class="whitespace-pre-wrap break-words">{line}</div>
 							{/each}
 						{:else if !logLoading}

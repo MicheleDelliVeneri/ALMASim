@@ -28,7 +28,10 @@
 
 	function updateSpeedAndEta(bytesDownloaded: number, totalBytes: number) {
 		const now = Date.now();
-		speedSamples = [...speedSamples.slice(-(SPEED_WINDOW - 1)), { time: now, bytes: bytesDownloaded }];
+		speedSamples = [
+			...speedSamples.slice(-(SPEED_WINDOW - 1)),
+			{ time: now, bytes: bytesDownloaded }
+		];
 
 		if (speedSamples.length >= 2) {
 			const oldest = speedSamples[0];
@@ -193,7 +196,7 @@
 		<!-- Per-file list (scrollable, compact) -->
 		{#if status.files.length > 0}
 			<div class="max-h-40 overflow-y-auto border-t border-line pt-2">
-				{#each status.files as file}
+				{#each status.files as file (file.filename)}
 					<div class="flex items-center gap-2 py-1 text-xs">
 						{#if file.status === 'completed'}
 							<span class="text-ok" title="Done">✓</span>

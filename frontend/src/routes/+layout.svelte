@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { Snippet } from 'svelte';
 	import '../app.css';
 
@@ -12,7 +13,7 @@
 		{ href: '/combination', label: 'Combination', code: 'COMB' },
 		{ href: '/imaging', label: 'Imaging', code: 'IMG' },
 		{ href: '/visualizer', label: 'Visualizer', code: 'VIS' }
-	];
+	] as const;
 </script>
 
 <div class="alma-shell min-h-screen text-gray-100">
@@ -28,19 +29,21 @@
 					/>
 					<div>
 						<div class="text-2xl font-bold tracking-tight text-gray-100">ALMASim</div>
-						<div class="text-xs text-fg-dim">A simulator for a more civilized age </div>
+						<div class="text-xs text-fg-dim">A simulator for a more civilized age</div>
 					</div>
 				</div>
 			</div>
 
 			<nav class="flex-1 px-4 py-5">
-				{#each navItems as item}
+				{#each navItems as item (item.href)}
 					<a
-						href={item.href}
+						href={resolve(item.href)}
 						class="group mb-2 flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-hover hover:text-white"
 						data-sveltekit-preload-data
 					>
-						<span class="w-10 rounded border border-gray-200/20 bg-black/20 px-2 py-1 text-center font-mono text-[10px] text-cyan-200 group-hover:border-cyan-200/50">
+						<span
+							class="w-10 rounded border border-gray-200/20 bg-black/20 px-2 py-1 text-center font-mono text-[10px] text-cyan-200 group-hover:border-cyan-200/50"
+						>
 							{item.code}
 						</span>
 						<span>{item.label}</span>
@@ -71,11 +74,17 @@
 							<div class="text-sm text-gray-300">ALMA Simulator</div>
 						</div>
 					</div>
-					<a href="/data" class="alma-chip rounded px-3 py-1 text-xs font-semibold">DATA</a>
+					<a href={resolve('/data')} class="alma-chip rounded px-3 py-1 text-xs font-semibold"
+						>DATA</a
+					>
 				</div>
 				<div class="flex gap-2 overflow-x-auto px-4 pb-3">
-					{#each navItems as item}
-						<a href={item.href} class="rounded border border-gray-200/20 px-3 py-1.5 text-xs text-gray-300" data-sveltekit-preload-data>
+					{#each navItems as item (item.href)}
+						<a
+							href={resolve(item.href)}
+							class="rounded border border-gray-200/20 px-3 py-1.5 text-xs text-gray-300"
+							data-sveltekit-preload-data
+						>
 							{item.label}
 						</a>
 					{/each}

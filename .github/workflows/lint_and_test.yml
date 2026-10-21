@@ -64,6 +64,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Formatting
+        run: npx prettier --check src
+
       - name: Unit tests
         run: npm test
 

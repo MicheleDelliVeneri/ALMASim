@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /*
  * Semantic colour tokens (MADIV-28 T7.6). Each --color-* gives Tailwind
@@ -53,7 +53,13 @@
 			linear-gradient(180deg, #0a0c10 0%, #111318 48%, #0c0e12 100%);
 		color: var(--color-fg);
 		font-family:
-			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			Inter,
+			ui-sans-serif,
+			system-ui,
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			sans-serif;
 	}
 
 	h1,
@@ -62,8 +68,14 @@
 	.font-semibold,
 	.font-bold {
 		font-family:
-			"Space Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-			"Segoe UI", sans-serif;
+			'Space Grotesk',
+			Inter,
+			ui-sans-serif,
+			system-ui,
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			sans-serif;
 		letter-spacing: 0;
 	}
 }
@@ -90,8 +102,14 @@
 	.alma-kicker {
 		color: var(--color-accent);
 		font-family:
-			"Space Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-			"Segoe UI", sans-serif;
+			'Space Grotesk',
+			Inter,
+			ui-sans-serif,
+			system-ui,
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			sans-serif;
 		font-size: 0.72rem;
 		font-weight: 700;
 		letter-spacing: 0.1em;

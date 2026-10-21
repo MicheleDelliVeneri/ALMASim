@@ -22,7 +22,7 @@
 		formRef = $bindable(),
 		presets = [],
 		presetsLoading = false,
-		onApplyPreset,
+		onApplyPreset
 	}: Props = $props();
 
 	type Tab = 'file' | 'preset';
@@ -68,9 +68,7 @@
 					>
 						From preset
 						{#if presets.length > 0}
-							<span
-								class="ml-1 rounded-full bg-surface px-2 py-0.5 text-xs text-fg-muted"
-							>
+							<span class="ml-1 rounded-full bg-surface px-2 py-0.5 text-xs text-fg-muted">
 								{presets.length}
 							</span>
 						{/if}
@@ -92,8 +90,8 @@
 							class="w-full rounded-md border border-line p-2 text-sm text-fg-muted file:mr-4 file:rounded file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
 						/>
 						<p class="text-xs text-fg-dim">
-							The file contents stay on your machine; we parse supported formats directly in
-							the browser.
+							The file contents stay on your machine; we parse supported formats directly in the
+							browser.
 						</p>
 					</div>
 

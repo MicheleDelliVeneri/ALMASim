@@ -17,9 +17,11 @@
 
 	// Warn when the user accidentally enters the dashboard port (8787) instead of scheduler port (8786)
 	const daskSchedulerAddr = $derived((backendConfig.scheduler as string) || '');
-	const daskPortWarning = $derived(/:8787\b/.test(daskSchedulerAddr)
-		? 'Port 8787 is the Dask dashboard — the scheduler typically listens on port 8786.'
-		: null);
+	const daskPortWarning = $derived(
+		/:8787\b/.test(daskSchedulerAddr)
+			? 'Port 8787 is the Dask dashboard — the scheduler typically listens on port 8786.'
+			: null
+	);
 	// Warn when localhost is used — the backend runs inside Docker so localhost resolves to the container, not the host
 	const daskLocalhostWarning = $derived(
 		/\/\/localhost\b/.test(daskSchedulerAddr)
@@ -156,8 +158,19 @@
 							>
 								{#if daskTesting}
 									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-										<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+										<circle
+											cx="12"
+											cy="12"
+											r="10"
+											stroke="currentColor"
+											stroke-width="3"
+											class="opacity-25"
+										/>
+										<path
+											fill="currentColor"
+											d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+											class="opacity-75"
+										/>
 									</svg>
 								{:else}
 									Test
@@ -165,22 +178,35 @@
 							</button>
 						</div>
 						<p class="mt-1 text-xs text-fg-dim">
-							Scheduler port is <span class="font-mono">8786</span>; dashboard is on <span class="font-mono">8787</span>. Leave empty for a local cluster.
+							Scheduler port is <span class="font-mono">8786</span>; dashboard is on
+							<span class="font-mono">8787</span>. Leave empty for a local cluster.
 						</p>
 
 						{#if daskPortWarning}
-							<div class="mt-1 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+							<div
+								class="mt-1 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800"
+							>
 								<svg class="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-									<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+									<path
+										fill-rule="evenodd"
+										d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+										clip-rule="evenodd"
+									/>
 								</svg>
 								{daskPortWarning}
 							</div>
 						{/if}
 
 						{#if daskLocalhostWarning}
-							<div class="mt-1 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+							<div
+								class="mt-1 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800"
+							>
 								<svg class="mt-0.5 h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-									<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+									<path
+										fill-rule="evenodd"
+										d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+										clip-rule="evenodd"
+									/>
 								</svg>
 								{daskLocalhostWarning}
 							</div>
@@ -188,10 +214,13 @@
 
 						<!-- Connection test result -->
 						{#if daskResult?.ok}
-							<div class="mt-2 flex items-center gap-2 rounded-md border border-ok-line bg-ok-soft px-3 py-2">
+							<div
+								class="mt-2 flex items-center gap-2 rounded-md border border-ok-line bg-ok-soft px-3 py-2"
+							>
 								<span class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
 								<span class="text-xs font-medium text-ok">
-									Connected — {daskResult.workers} worker{daskResult.workers !== 1 ? 's' : ''}, {daskResult.total_threads} threads, {daskResult.total_memory_gb} GB
+									Connected — {daskResult.workers} worker{daskResult.workers !== 1 ? 's' : ''}, {daskResult.total_threads}
+									threads, {daskResult.total_memory_gb} GB
 								</span>
 								<button
 									type="button"
@@ -200,10 +229,20 @@
 									title="Open Dask Dashboard"
 								>
 									<!-- Dask logo (simplified) -->
-									<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-										<path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-										<path d="M12 22V12" stroke="currentColor" stroke-width="2"/>
-										<path d="M3 7l9 5 9-5" stroke="currentColor" stroke-width="2"/>
+									<svg
+										class="h-3.5 w-3.5"
+										viewBox="0 0 24 24"
+										fill="none"
+										xmlns="http://www.w3.org/2000/svg"
+									>
+										<path
+											d="M12 2L3 7v10l9 5 9-5V7l-9-5z"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linejoin="round"
+										/>
+										<path d="M12 22V12" stroke="currentColor" stroke-width="2" />
+										<path d="M3 7l9 5 9-5" stroke="currentColor" stroke-width="2" />
 									</svg>
 									Dashboard
 								</button>
@@ -216,7 +255,11 @@
 								</div>
 								{#if /localhost/.test(daskSchedulerAddr) && /timeout|refused|connect/i.test(daskTestError)}
 									<p class="mt-1 pl-4 text-xs text-danger">
-										Tip: try <span class="font-mono font-semibold">tcp://host.docker.internal:8786</span> — the backend runs inside Docker and cannot reach your host via <span class="font-mono">localhost</span>.
+										Tip: try <span class="font-mono font-semibold"
+											>tcp://host.docker.internal:8786</span
+										>
+										— the backend runs inside Docker and cannot reach your host via
+										<span class="font-mono">localhost</span>.
 									</p>
 								{/if}
 							</div>

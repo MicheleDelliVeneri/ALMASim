@@ -221,7 +221,7 @@
 			{/if}
 		</div>
 		<div class="mt-2 flex flex-wrap gap-2">
-			{#each cycleOptions as opt}
+			{#each cycleOptions as opt (opt.cycle)}
 				<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
 					<input
 						type="checkbox"
@@ -248,7 +248,7 @@
 	<div>
 		<span class="text-sm font-medium text-fg-muted">Band</span>
 		<div class="mt-2 flex flex-wrap gap-2">
-			{#each bandOptions as band}
+			{#each bandOptions as band (band)}
 				<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
 					<input type="checkbox" name="bands" value={band} class="rounded border-line" />
 					<span>Band {band}</span>
@@ -262,7 +262,7 @@
 		<div>
 			<span class="text-sm font-medium text-fg-muted">Array Type</span>
 			<div class="mt-2 flex gap-4">
-				{#each arrayTypeOptions as atype}
+				{#each arrayTypeOptions as atype (atype)}
 					<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
 						<input type="checkbox" name="array_type" value={atype} class="rounded border-line" />
 						<span>{atype}</span>
@@ -318,7 +318,7 @@
 		<div>
 			<span class="text-sm font-medium text-fg-muted">QA2 Status</span>
 			<div class="mt-2 flex gap-4">
-				{#each qa2Options as qa2}
+				{#each qa2Options as qa2 (qa2.value)}
 					<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
 						<input
 							type="checkbox"
@@ -335,7 +335,7 @@
 			<div>
 				<span class="text-sm font-medium text-fg-muted">Project Type</span>
 				<div class="mt-2 flex flex-wrap gap-3">
-					{#each [['S', 'Science'], ['L', 'Large'], ['SV', 'Science Verification'], ['V', 'VLBI'], ['T', 'Target of Opportunity'], ['P', 'Phased Array']] as [val, lbl]}
+					{#each [['S', 'Science'], ['L', 'Large'], ['SV', 'Science Verification'], ['V', 'VLBI'], ['T', 'Target of Opportunity'], ['P', 'Phased Array']] as [val, lbl] (val)}
 						<label class="inline-flex items-center space-x-1 text-sm text-fg-muted">
 							<input type="checkbox" name="obs_type" value={val} class="rounded border-line" />
 							<span>{val} ({lbl})</span>

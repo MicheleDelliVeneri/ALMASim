@@ -57,7 +57,9 @@
 	</div>
 	<div class="mt-2">
 		<p class="text-xs text-fg-dim">
-			Product: {stats.cube_name} | Format: {(stats.format ?? 'array').toUpperCase()} | Component: {stats.complex_component ?? 'n/a'} | Method: {method} | Axis: {stats.integration_axis ?? 'n/a'} | Channels: {stats.channel_start ?? 'n/a'}–{stats.channel_end ?? 'n/a'}
+			Product: {stats.cube_name} | Format: {(stats.format ?? 'array').toUpperCase()} | Component: {stats.complex_component ??
+				'n/a'} | Method: {method} | Axis: {stats.integration_axis ?? 'n/a'} | Channels: {stats.channel_start ??
+				'n/a'}–{stats.channel_end ?? 'n/a'}
 		</p>
 	</div>
 </div>

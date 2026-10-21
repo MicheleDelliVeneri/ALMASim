@@ -9,7 +9,11 @@
 	import { createLogger } from '#lib/logger.js';
 	import { INITIAL_VIEW, applyView } from '#lib/utils/linkedViews.js';
 	import DirectoryPicker from '#lib/components/shared/DirectoryPicker.svelte';
-	import { imagingApi, type ImagePreviewPayload, type WienerPreviewResponse } from '#lib/api/imaging.js';
+	import {
+		imagingApi,
+		type ImagePreviewPayload,
+		type WienerPreviewResponse
+	} from '#lib/api/imaging.js';
 
 	const logger = createLogger('routes/imaging');
 	const DIRTY_PREFIX = 'dirty-cube_';
@@ -73,13 +77,7 @@
 
 	// The panels, in display order; the two references only when the run returns them.
 	const PANEL_SPECS: {
-		key:
-			| 'reference_clean'
-			| 'convolved_reference'
-			| 'dirty'
-			| 'model'
-			| 'restored'
-			| 'residual';
+		key: 'reference_clean' | 'convolved_reference' | 'dirty' | 'model' | 'restored' | 'residual';
 		id: string;
 		title: string;
 		description: string;
@@ -118,7 +116,8 @@
 			key: 'restored',
 			id: 'restored',
 			title: 'Restored Cube',
-			description: 'Wiener model convolved with the fitted clean beam and added back to the residual',
+			description:
+				'Wiener model convolved with the fitted clean beam and added back to the residual',
 			badgeClass: 'bg-accent-soft text-accent'
 		},
 		{
@@ -175,7 +174,10 @@
 				matchedCleanPath = '';
 				resetPanels();
 			}
-			logger.info({ outputDir: data.output_dir, count: allFiles.length }, 'Imaging file list loaded');
+			logger.info(
+				{ outputDir: data.output_dir, count: allFiles.length },
+				'Imaging file list loaded'
+			);
 		} catch (err) {
 			if (err instanceof ApiTimeoutError) {
 				error = 'Timed out while loading imaging files';
@@ -249,9 +251,7 @@
 
 	async function getDefaultOutputDir(): Promise<string | undefined> {
 		const requestedDir =
-			typeof window !== 'undefined'
-				? new URLSearchParams(window.location.search).get('dir')
-				: null;
+			typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('dir') : null;
 		if (requestedDir) return requestedDir;
 		return BROWSE_ROOT;
 	}
@@ -268,7 +268,9 @@
 			<div class="mb-4">
 				<h1 class="text-2xl font-bold text-fg">Imaging</h1>
 				<p class="mt-2 text-fg-muted">
-					Preview a Wiener deconvolution of saved dirty and beam cubes, inspect the restored cube, and compare it against the simulation clean cube and residuals. WSClean on the simulated MeasurementSet is the reference imaging.
+					Preview a Wiener deconvolution of saved dirty and beam cubes, inspect the restored cube,
+					and compare it against the simulation clean cube and residuals. WSClean on the simulated
+					MeasurementSet is the reference imaging.
 				</p>
 			</div>
 
@@ -294,15 +296,21 @@
 						<div class="mt-3 space-y-2 text-sm">
 							<div>
 								<p class="text-fg-dim">Dirty Cube</p>
-								<p class="truncate font-mono text-xs text-fg">{selectedDirtyPath || 'Not selected'}</p>
+								<p class="truncate font-mono text-xs text-fg">
+									{selectedDirtyPath || 'Not selected'}
+								</p>
 							</div>
 							<div>
 								<p class="text-fg-dim">Beam Cube</p>
-								<p class="truncate font-mono text-xs text-fg">{matchedBeamPath || 'No matching beam cube found'}</p>
+								<p class="truncate font-mono text-xs text-fg">
+									{matchedBeamPath || 'No matching beam cube found'}
+								</p>
 							</div>
 							<div>
 								<p class="text-fg-dim">Reference Clean Cube</p>
-								<p class="truncate font-mono text-xs text-fg">{matchedCleanPath || 'No matching clean cube found'}</p>
+								<p class="truncate font-mono text-xs text-fg">
+									{matchedCleanPath || 'No matching clean cube found'}
+								</p>
 							</div>
 						</div>
 					</div>
@@ -353,19 +361,26 @@
 					</div>
 
 					{#if runMetadata}
-						<div class="rounded-md border border-accent-line bg-accent-soft p-3 text-sm text-accent">
+						<div
+							class="rounded-md border border-accent-line bg-accent-soft p-3 text-sm text-accent"
+						>
 							<p>
 								Wiener preview with ε = <span class="font-semibold">{runMetadata.epsilon}</span>.
-								Compare the Wiener model with the original clean cube, and the restored cube with the convolved clean reference.
+								Compare the Wiener model with the original clean cube, and the restored cube with
+								the convolved clean reference.
 							</p>
 							<p class="mt-1">
-								For reference imaging, run WSClean on the simulated MeasurementSet (<code>almasim image image-from-ms</code>).
+								For reference imaging, run WSClean on the simulated MeasurementSet (<code
+									>almasim image image-from-ms</code
+								>).
 							</p>
 						</div>
 					{/if}
 
 					{#if error}
-						<div class="rounded-md border border-danger-line bg-danger-soft p-3 text-sm text-danger">
+						<div
+							class="rounded-md border border-danger-line bg-danger-soft p-3 text-sm text-danger"
+						>
 							{error}
 						</div>
 					{/if}
@@ -379,7 +394,9 @@
 					<div class="rounded-lg bg-surface p-6 shadow-panel">
 						<div class="mb-4 flex items-start justify-between gap-3">
 							<div class="min-w-0">
-								<span class={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${panel.badgeClass}`}>
+								<span
+									class={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${panel.badgeClass}`}
+								>
 									{panel.title}
 								</span>
 								<p class="mt-2 text-sm text-fg-muted">{panel.description}</p>

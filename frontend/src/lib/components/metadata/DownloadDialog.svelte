@@ -126,7 +126,10 @@
 		resolveError = '';
 		try {
 			resolved = await downloadApi.resolveProducts(memberOusUids);
-			logger.info({ totalCount: resolved.total_count, totalSize: resolved.total_size_display }, 'Products resolved');
+			logger.info(
+				{ totalCount: resolved.total_count, totalSize: resolved.total_size_display },
+				'Products resolved'
+			);
 		} catch (e) {
 			resolveError = e instanceof Error ? e.message : 'Failed to resolve products';
 			logger.error({ err: e }, 'Failed to resolve products');
@@ -233,8 +236,19 @@
 				{#if resolving}
 					<div class="flex items-center gap-2 text-sm text-fg-dim">
 						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" />
-							<path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75" />
+							<circle
+								cx="12"
+								cy="12"
+								r="10"
+								stroke="currentColor"
+								stroke-width="4"
+								class="opacity-25"
+							/>
+							<path
+								fill="currentColor"
+								d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+								class="opacity-75"
+							/>
 						</svg>
 						Resolving available products…
 					</div>
@@ -250,7 +264,7 @@
 							Product type
 						</label>
 						<div class="flex flex-wrap gap-2">
-							{#each productTypes as pt}
+							{#each productTypes as pt (pt.value)}
 								{@const typeInfo = pt.value === 'all' ? null : resolved.by_type[pt.value]}
 								{@const count = pt.value === 'all' ? resolved.total_count : (typeInfo?.count ?? 0)}
 								<button
@@ -338,8 +352,8 @@
 							class="w-full"
 						/>
 						<p class="text-xs text-fg-dim">
-							{maxParallel} simultaneous files (load is balanced across the ESO, NRAO and NAOJ
-							ALMA mirrors, capped at 10 per mirror)
+							{maxParallel} simultaneous files (load is balanced across the ESO, NRAO and NAOJ ALMA mirrors,
+							capped at 10 per mirror)
 						</p>
 					</div>
 
@@ -354,7 +368,8 @@
 						<span class="text-sm text-fg-muted">Extract tar archives after download</span>
 					</label>
 					<p class="text-xs text-fg-dim -mt-3 ml-6">
-						ALMA delivers data as .tar bundles. Enable this to automatically extract FITS files and remove the archives.
+						ALMA delivers data as .tar bundles. Enable this to automatically extract FITS files and
+						remove the archives.
 					</p>
 
 					<div class="space-y-3 rounded-md border border-line p-3">
@@ -426,7 +441,10 @@
 					</button>
 					<button
 						type="button"
-						disabled={!resolved || filteredInfo.count === 0 || starting || (diskSpace != null && !diskSpace.sufficient)}
+						disabled={!resolved ||
+							filteredInfo.count === 0 ||
+							starting ||
+							(diskSpace != null && !diskSpace.sufficient)}
 						class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:bg-green-300 disabled:cursor-not-allowed"
 						onclick={startDownload}
 					>

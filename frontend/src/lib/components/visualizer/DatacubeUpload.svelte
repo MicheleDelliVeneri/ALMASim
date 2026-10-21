@@ -39,7 +39,9 @@
 
 	<!-- File Upload -->
 	<div class="space-y-2">
-		<label for="datacube-upload" class="block text-sm font-medium text-fg-muted">Upload Product (.npz or FITS file)</label>
+		<label for="datacube-upload" class="block text-sm font-medium text-fg-muted"
+			>Upload Product (.npz or FITS file)</label
+		>
 		<div class="flex items-center space-x-4">
 			<input
 				id="datacube-upload"
@@ -54,7 +56,9 @@
 
 	<!-- Integration Method -->
 	<div class="space-y-2">
-		<label for="integration-method" class="block text-sm font-medium text-fg-muted">Integration Method</label>
+		<label for="integration-method" class="block text-sm font-medium text-fg-muted"
+			>Integration Method</label
+		>
 		<select
 			id="integration-method"
 			value={integrationMethod}
@@ -68,14 +72,14 @@
 	</div>
 
 	<div class="space-y-2">
-		<label for="complex-component" class="block text-sm font-medium text-fg-muted">Complex Component</label>
+		<label for="complex-component" class="block text-sm font-medium text-fg-muted"
+			>Complex Component</label
+		>
 		<select
 			id="complex-component"
 			value={complexComponent}
 			onchange={(e) =>
-				onComplexComponentChange(
-					e.currentTarget.value as 'real' | 'imag' | 'magnitude' | 'phase'
-				)}
+				onComplexComponentChange(e.currentTarget.value as 'real' | 'imag' | 'magnitude' | 'phase')}
 			disabled={loading}
 			class="rounded-md border border-line px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
 		>

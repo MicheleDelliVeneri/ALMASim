@@ -29,8 +29,17 @@
 		onDownload: (memberOusUids: string[], metadataRows: MetadataRow[]) => void;
 	}
 
-	let { results, resultsKey, loading, fetching, onClear, onLoad, onSave, saving, onDownload }: Props =
-		$props();
+	let {
+		results,
+		resultsKey,
+		loading,
+		fetching,
+		onClear,
+		onLoad,
+		onSave,
+		saving,
+		onDownload
+	}: Props = $props();
 
 	let isCollapsed = $state(false);
 
@@ -244,7 +253,12 @@
 					stroke="currentColor"
 					viewBox="0 0 24 24"
 				>
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M19 9l-7 7-7-7"
+					/>
 				</svg>
 			</button>
 			<div>
@@ -333,7 +347,11 @@
 		</div>
 
 		<!-- Main scroll container: vertical (capped height) + horizontal -->
-		<div bind:this={scrollContainer} class="overflow-auto" style="max-height: {CONTAINER_HEIGHT}px; overscroll-behavior: contain;">
+		<div
+			bind:this={scrollContainer}
+			class="overflow-auto"
+			style="max-height: {CONTAINER_HEIGHT}px; overscroll-behavior: contain;"
+		>
 			<table class="divide-y divide-line text-sm" style="min-width: max-content; width: 100%;">
 				<thead class="sticky top-0 z-10">
 					<!-- Column header row -->
@@ -353,7 +371,7 @@
 								/>
 							{/if}
 						</th>
-						{#each pinnedTableColumns as col, i}
+						{#each pinnedTableColumns as col, i (col)}
 							<th
 								bind:this={pinnedColEls[i]}
 								scope="col"
@@ -363,7 +381,7 @@
 								{formatColumnName(col)}
 							</th>
 						{/each}
-						{#each reorderableTableColumns as column}
+						{#each reorderableTableColumns as column (column)}
 							<th
 								scope="col"
 								class="whitespace-nowrap px-4 py-2 text-left font-semibold text-fg-muted cursor-grab select-none"
@@ -382,9 +400,14 @@
 					{#if results?.data?.length}
 						<tr class="bg-surface shadow-panel">
 							<!-- Empty cell for checkbox column -->
-							<th scope="col" class="sticky left-0 z-20 bg-surface px-2 py-1 border-r border-line"></th>
-							{#each pinnedTableColumns as column, i}
-								<th scope="col" class="sticky z-20 bg-surface px-2 py-1 border-r border-line" style="left: {pinnedLeft(i)}px;">
+							<th scope="col" class="sticky left-0 z-20 bg-surface px-2 py-1 border-r border-line"
+							></th>
+							{#each pinnedTableColumns as column, i (column)}
+								<th
+									scope="col"
+									class="sticky z-20 bg-surface px-2 py-1 border-r border-line"
+									style="left: {pinnedLeft(i)}px;"
+								>
 									<input
 										type="text"
 										placeholder="filter (* = wildcard)"
@@ -395,7 +418,7 @@
 									/>
 								</th>
 							{/each}
-							{#each reorderableTableColumns as column}
+							{#each reorderableTableColumns as column (column)}
 								<th scope="col" class="px-2 py-1">
 									<input
 										type="text"
@@ -415,7 +438,7 @@
 						<tr style="height: {rowWindow.topPad}px;" aria-hidden="true">
 							<td colspan={tableColumns.length + 1}></td>
 						</tr>
-						{#each visibleRows as row, vi}
+						{#each visibleRows as row, vi (rowWindow.start + vi)}
 							{@const dataIndex = filteredIndices[rowWindow.start + vi]}
 							{@const isSelected = selectedRowIndices.has(dataIndex)}
 							<tr
@@ -435,7 +458,7 @@
 										class="rounded border-line"
 									/>
 								</td>
-								{#each pinnedTableColumns as column, i}
+								{#each pinnedTableColumns as column, i (column)}
 									{@const displayValue = stringifyValue(row[column])}
 									<td
 										class="sticky z-[5] bg-surface px-4 align-middle border-r border-line group-hover:bg-gray-50"
@@ -450,7 +473,7 @@
 										</div>
 									</td>
 								{/each}
-								{#each reorderableTableColumns as column}
+								{#each reorderableTableColumns as column (column)}
 									{@const displayValue = stringifyValue(row[column])}
 									<td class="px-4 align-middle">
 										<div
@@ -469,16 +492,22 @@
 						</tr>
 					{:else if !loading && hasActiveFilters}
 						<tr>
-							<td colspan={tableColumns.length + 1} class="px-4 py-8 text-center text-sm text-fg-dim">
+							<td
+								colspan={tableColumns.length + 1}
+								class="px-4 py-8 text-center text-sm text-fg-dim"
+							>
 								No rows match the current filters.
 							</td>
 						</tr>
 					{:else}
-						{#each placeholderRows as placeholder}
+						{#each placeholderRows as placeholder (placeholder)}
 							<tr class="animate-pulse border-b border-line">
-								{#each tableColumns as column}
+								{#each tableColumns as column (column)}
 									<td class="px-4 py-3">
-										<div class="h-4 w-32 rounded bg-gray-200/80" aria-hidden={placeholder !== null && column.length >= 0}></div>
+										<div
+											class="h-4 w-32 rounded bg-gray-200/80"
+											aria-hidden={placeholder !== null && column.length >= 0}
+										></div>
 									</td>
 								{/each}
 							</tr>

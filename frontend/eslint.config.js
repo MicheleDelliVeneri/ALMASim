@@ -26,13 +26,10 @@ export default ts.config(
 		}
 	},
 	{
-		// New in eslint-plugin-svelte 3's recommended set; the code predates them.
+		// From eslint-plugin-svelte 3's recommended set.
 		rules: {
 			// Sets here are copied and reassigned (`s = new Set(s)`), which is already reactive.
-			'svelte/prefer-svelte-reactivity': 'off',
-			'svelte/require-each-key': 'warn',
-			// No `paths.base` is configured, so plain hrefs resolve correctly.
-			'svelte/no-navigation-without-resolve': 'warn'
+			'svelte/prefer-svelte-reactivity': 'off'
 		}
 	}
 );
