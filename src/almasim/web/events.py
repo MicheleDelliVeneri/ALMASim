@@ -2,10 +2,10 @@
 
 A background thread wakes every ``interval`` seconds (or at once when an
 action pokes it), moves this user's pipelines on, starts queued server
-jobs, and compares every listed run's state with the last look. Changes
-become numbered events; ``GET /api/v2/events`` streams them as server-sent
-events. A browser that reconnects sends the last number it saw
-(``Last-Event-ID``) and gets what it missed, or a fresh snapshot when that
+jobs, and compares every listed run's state with the last look. Changes, and
+runs that are gone, become numbered events; ``GET /api/v2/events`` streams
+them as server-sent events. A browser that reconnects sends the last number it
+saw (``Last-Event-ID``) and gets what it missed, or a fresh snapshot when that
 has scrolled out of the buffer.
 """
 
@@ -90,6 +90,12 @@ class EventHub:
                     event = {"type": "run", "run": run}
                     self.events.append((self.seq, event))
                     new.append(event)
+            # Deleted, or older than the runs followed: listeners forget them.
+            for run_id in self.states.keys() - current.keys():
+                self.seq += 1
+                event = {"type": "gone", "id": run_id}
+                self.events.append((self.seq, event))
+                new.append(event)
             self.states = current
         return new
 

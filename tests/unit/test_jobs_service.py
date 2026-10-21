@@ -116,6 +116,23 @@ def test_only_the_owner_cancels_and_only_unfinished_runs(profile, slurm):
         cancel_run(run.run_dir)
 
 
+def test_a_deleted_run_leaves_every_listing_and_leftovers_are_swept(profile, slurm):
+    from almasim.jobs.service import delete_run
+
+    run = submit_command(["image", "clean-quality", "/out"], profile)
+    (run.run_dir / "status.json").write_text('{"started_at": 1, "finished_at": 2, "exit_code": 0}')
+    # What an earlier delete could not remove (a file NFS kept while open).
+    stuck = run.run_dir.parent / ".deleted-01EARLIER"
+    stuck.mkdir()
+    (stuck / ".nfs0001").write_text("")
+
+    assert delete_run(run.run_dir) == run.job.id
+    assert not run.run_dir.exists() and not stuck.exists()
+    assert list_runs(profile) == []
+    with pytest.raises(RunError):
+        find_run(profile, run.job.id)
+
+
 def test_resubmit_repeats_the_command_and_resources(profile, slurm):
     first = submit_command(
         ["image", "clean-quality", "/out"], profile, resources={"cpus": 6}, params={"x": 1}
@@ -162,6 +179,23 @@ def test_the_cli_submits_lists_shows_and_cancels(tmp_path, monkeypatch, slurm):
 
     assert runner.invoke(cli.app, ["jobs", "cancel", run_dir.name]).exit_code == 0
     assert slurm.cancelled == ["4242"]
+
+
+def test_the_cli_deletes_a_finished_run_after_asking(tmp_path, monkeypatch, slurm):
+    from almasim.jobs import RunStatus, write_status
+
+    _cli_env(monkeypatch, tmp_path)
+    runner = CliRunner()
+    runner.invoke(cli.app, ["submit", "doctor"])
+    [run_dir] = list((tmp_path / "runs").glob("*/*"))
+    write_status(run_dir, RunStatus(started_at=1.0, finished_at=2.0, exit_code=0))
+
+    kept = runner.invoke(cli.app, ["jobs", "delete", run_dir.name], input="n\n")
+    assert kept.exit_code != 0 and run_dir.exists()
+    gone = runner.invoke(cli.app, ["jobs", "delete", run_dir.name, "--yes"])
+    assert gone.exit_code == 0, gone.output
+    assert f"Deleted run {short_id(run_dir.name)}" in gone.output
+    assert not run_dir.exists()
 
 
 def test_the_cli_refuses_unknown_commands(tmp_path, monkeypatch, slurm):

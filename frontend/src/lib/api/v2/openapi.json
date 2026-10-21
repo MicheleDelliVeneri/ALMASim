@@ -2615,6 +2615,40 @@
       }
     },
     "/api/v2/jobs/{run_id}": {
+      "delete": {
+        "description": "Remove a finished run's folder; only its owner may (409 otherwise).",
+        "operationId": "delete_api_v2_jobs__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete",
+        "tags": [
+          "jobs"
+        ]
+      },
       "get": {
         "operationId": "get_job_api_v2_jobs__run_id__get",
         "parameters": [

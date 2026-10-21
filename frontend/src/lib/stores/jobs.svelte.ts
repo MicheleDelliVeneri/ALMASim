@@ -79,6 +79,10 @@ export class JobsStore {
 			const { run } = JSON.parse(event.data) as { run: Run };
 			this.put(run);
 		});
+		stream.addEventListener('gone', (event) => {
+			const { id } = JSON.parse(event.data) as { id: string };
+			this.remove(id);
+		});
 		this.#stream = stream;
 	}
 
@@ -96,6 +100,11 @@ export class JobsStore {
 	/** A run a page just changed (submitted, cancelled), ahead of its event. */
 	put(run: Run): void {
 		this.runs[run.id] = run;
+	}
+
+	/** A run deleted, or older than the runs the console follows. */
+	remove(id: string): void {
+		delete this.runs[id];
 	}
 }
 

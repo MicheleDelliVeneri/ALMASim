@@ -206,6 +206,29 @@ def cancel_command(
     typer.echo(f"Cancelling run {short_id(run.job.id)}")
 
 
+@jobs_app.command("delete")
+def delete_command(
+    run_id: str = typer.Argument(..., help="Run id, or its first or last characters."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask first."),
+    user_profile: Path | None = ProfileOpt,
+) -> None:
+    """Remove a finished run's folder (yours only); outputs written elsewhere stay."""
+    from almasim.jobs.service import RunError, delete_run, find_run, short_id
+
+    profile = _profile(user_profile)
+    try:
+        run_dir = find_run(profile, run_id)
+    except RunError as exc:
+        fail(str(exc))
+    if not yes:
+        typer.confirm(f"Delete {run_dir} and everything in it?", abort=True)
+    try:
+        deleted = delete_run(run_dir)
+    except RunError as exc:
+        fail(str(exc))
+    typer.echo(f"Deleted run {short_id(deleted)}")
+
+
 @jobs_app.command("resubmit")
 def resubmit_command(
     run_id: str = typer.Argument(..., help="Run id, or its first or last characters."),

@@ -21,6 +21,7 @@
 	let loadError = $state<unknown>(null);
 	let tab = $state<Tab>('log');
 	let confirmingCancel = $state(false);
+	let confirmingDelete = $state(false);
 	let busy = $state(false);
 
 	$effect(() => clock.use());
@@ -83,6 +84,22 @@
 			toasts.show(`Could not run it again: ${errorMessage(err)}`, 'danger');
 		} finally {
 			busy = false;
+		}
+	}
+
+	async function remove() {
+		if (!run) return;
+		busy = true;
+		try {
+			await api.DELETE('/api/v2/jobs/{run_id}', { params: { path: { run_id: run.id } } });
+			jobs.remove(run.id);
+			toasts.show(`Deleted ${run.short_id}`, 'ok');
+			await goto(resolve('/jobs'));
+		} catch (err) {
+			toasts.show(`Could not delete it: ${errorMessage(err)}`, 'danger');
+		} finally {
+			busy = false;
+			confirmingDelete = false;
 		}
 	}
 
@@ -161,6 +178,13 @@
 							class="btn-secondary border-danger text-danger"
 							disabled={busy}
 							onclick={() => (confirmingCancel = true)}>Cancel job</button
+						>
+					{:else}
+						<button
+							type="button"
+							class="btn-secondary border-danger text-danger"
+							disabled={busy}
+							onclick={() => (confirmingDelete = true)}>Delete</button
 						>
 					{/if}
 				{/if}
@@ -369,6 +393,22 @@
 				>Keep it running</button
 			>
 			<button type="button" class="btn-danger" disabled={busy} onclick={cancel}>Cancel job</button>
+		{/snippet}
+	</Dialog>
+{/if}
+
+{#if confirmingDelete && run}
+	<Dialog title="Delete this run?" onClose={() => (confirmingDelete = false)}>
+		<p class="m-0 text-sm">
+			Its folder goes, with its logs, script and everything written there:
+			<code class="break-all">{run.run_dir}</code>. Outputs it wrote elsewhere stay. This cannot be
+			undone.
+		</p>
+		{#snippet footer()}
+			<button type="button" class="btn-ghost" onclick={() => (confirmingDelete = false)}
+				>Keep it</button
+			>
+			<button type="button" class="btn-danger" disabled={busy} onclick={remove}>Delete</button>
 		{/snippet}
 	</Dialog>
 {/if}

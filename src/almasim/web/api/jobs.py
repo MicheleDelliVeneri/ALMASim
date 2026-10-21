@@ -22,6 +22,7 @@ from almasim.jobs.rundir import ManifestError
 from almasim.jobs.service import (
     RunError,
     cancel_run,
+    delete_run,
     find_run,
     list_runs,
     resubmit,
@@ -107,6 +108,16 @@ def _fresh(run_dir):
 
     job_id = view(run_dir).job.slurm_job_id
     return view(run_dir, poll([job_id]).get(job_id) if job_id else None)
+
+
+@router.delete("/{run_id}", status_code=204)
+def delete(run_id: str, request: Request) -> None:
+    """Remove a finished run's folder; only its owner may (409 otherwise)."""
+    try:
+        delete_run(_run_dir(request, run_id))
+    except RunError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    request.app.state.events.poke()
 
 
 @router.post("/{run_id}/cancel", response_model=Run)

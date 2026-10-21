@@ -2,12 +2,14 @@
 
 Everything here works from the run folders under the profile's runs root,
 so the terminal and the web console see the same runs, and a teammate's
-runs in a shared root show up too (read only: only the owner may cancel).
+runs in a shared root show up too (read only: only the owner may cancel or
+delete).
 """
 
 from __future__ import annotations
 
 import getpass
+import shutil
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -47,6 +49,8 @@ class RunView:
 
 
 NOT_STARTED = "an earlier step did not succeed"
+# A deleted run's folder while it is being removed (delete_run).
+DELETED_PREFIX = ".deleted-"
 
 
 def submit_command(
@@ -232,6 +236,28 @@ def cancel_run(run_dir: Path, *, user: str | None = None) -> RunView:
         job.state = JobState.CANCELLED
         write_manifest(run_dir, job)
     return view(run_dir)
+
+
+def delete_run(run_dir: Path, *, user: str | None = None) -> str:
+    """Remove a finished run's folder (its manifest, logs and what it wrote there); its id.
+
+    Only the owner may, and only once it has ended: a run still queued or
+    running is cancelled first. Outputs written elsewhere stay.
+    """
+    run = view(run_dir, _ask(run_dir))  # Slurm knows best whether it has ended
+    job = run.job
+    _own(job, user)
+    if not run.state.finished:
+        raise RunError(f"run {job.id} has not finished; cancel it first")
+    # Out of every listing at once (they list job-id folders only), then
+    # removed. On NFS a file still open somewhere (a log a reader holds)
+    # lingers as .nfs* until closed, so the folder may not go yet: what is
+    # left is swept the next time a run of that day is deleted.
+    trash = run_dir.with_name(f"{DELETED_PREFIX}{run_dir.name}")
+    run_dir.rename(trash)
+    for leftover in run_dir.parent.glob(f"{DELETED_PREFIX}*"):
+        shutil.rmtree(leftover, ignore_errors=True)
+    return job.id
 
 
 def resubmit(run_dir: Path, profile: Profile, *, user: str | None = None) -> RunView:

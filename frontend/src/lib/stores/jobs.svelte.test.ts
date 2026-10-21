@@ -113,6 +113,9 @@ describe('JobsStore', () => {
 		streams[0].emit('snapshot', { user: 'astro', runs: [run('A', 'running', 1)] });
 		streams[0].emit('snapshot', { user: 'astro', runs: [run('B', 'queued', 2)] });
 		expect(Object.keys(store.runs)).toEqual(['B']);
+		streams[0].emit('gone', { type: 'gone', id: 'B' });
+		expect(store.get('B')).toBeUndefined();
+		expect(store.list).toEqual([]);
 	});
 
 	it('takes a run a page just changed', () => {

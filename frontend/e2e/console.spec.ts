@@ -43,6 +43,12 @@ test('cancel a long run from its page', async ({ page }) => {
 	const dialog = page.getByRole('dialog', { name: 'Cancel this job?' });
 	await dialog.getByRole('button', { name: 'Cancel job' }).click();
 	await chip(page, 'Cancelled');
+
+	// A finished run of yours can go.
+	await page.getByRole('button', { name: 'Delete' }).click();
+	await page.getByRole('dialog', { name: 'Delete this run?' }).getByRole('button', { name: 'Delete' }).click();
+	await expect(page).toHaveURL(/\/jobs$/);
+	await expect(page.getByRole('link', { name: 'e2e long' })).toHaveCount(0);
 });
 
 test('search the archive, resolve the products and download them', async ({ page }) => {
