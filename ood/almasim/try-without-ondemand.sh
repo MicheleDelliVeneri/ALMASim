@@ -31,7 +31,10 @@ cat > "$session/job.sh" <<JOB
 set -euo pipefail
 find_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("", 0)); print(s.getsockname()[1])'; }
 create_passwd() { python3 -c 'import secrets, string, sys; print("".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(int(sys.argv[1]))))' "\$1"; }
-host=\$(hostname)
+# The node's short name, as OnDemand's set_host is usually configured: the
+# login node (here) and a portal host resolve compute nodes by it, not by
+# the long name hostname gives.
+host=\$(hostname -s)
 source "$app/template/before.sh.erb"
 source "$setup"
 if ! almasim serve --managed --help >/dev/null 2>&1; then

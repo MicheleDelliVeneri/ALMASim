@@ -36,8 +36,12 @@ the session stops and says so. Stop a session with `scancel <job id>`.
 1. Set `cluster` and `almasim_setup` in `form.yml` for the site.
 2. Copy this folder to `/var/www/ood/apps/sys/almasim/` (a system app), or
    to `~/ondemand/dev/almasim/` to try it as one user first.
-3. The portal's `host_regex` must match the compute nodes' names, so its
-   proxy forwards to them.
+3. The portal's proxy forwards to `/node/<host>/<port>/`, so `<host>` must be a
+   name the portal host resolves, and `host_regex` must match it. On zwicky
+   the long names `hostname` gives (`compute-node47.zwicky.…`) do not even
+   resolve on the login node; the short ones do. So set the cluster's
+   `batch_connect.basic.set_host` to `host=$(hostname -s)`, and `host_regex`
+   to match `compute-node\d+`.
 
 Nothing else is needed: the console runs as the user, with the user's
 Slurm account and files, and stops when the session ends.
