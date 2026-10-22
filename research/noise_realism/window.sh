@@ -28,10 +28,12 @@ else
     $PY $N/counterpart.py make "$BASE" "$TASK" "$DATA" --errors "$ITER/ms/$NAME.errors.json" --seed "$SEED"
 fi
 $PY $N/window.py params "$I" "$DATA" > "$ITER/params/$NAME.csv"
+# Self-calibration as MADIV-16's, unless the config says otherwise ("" for none).
+SELFCAL=$($PY -c "import json,sys; print(json.load(open(sys.argv[1])).get('selfcal', 'inf,30s,ap:inf'))" "$ITER/config.json")
 $ALMASIM image image-from-ms "$ITER/params/$NAME.csv" "$ITER/cubes" \
     --wsclean-bin /SKAO_data/spack/opt/spack/linux-zen3/wsclean-3.7.20260424-a26g7w3hqrs4ec5ldmd4fjs4gdkg65rp/bin/wsclean \
     --num-cores "${SLURM_CPUS_PER_TASK:-8}" --task-memory-gb 40 --task-timeout 25200 --backend sync \
-    --cube --uv-contsub --selfcal inf,30s,ap:inf --casa-data-root /SKAO_data/cycle11/.casa-data
+    --cube --uv-contsub ${SELFCAL:+--selfcal "$SELFCAL"} --casa-data-root /SKAO_data/cycle11/.casa-data
 OUT=$(ls -d "$ITER"/cubes/"$(basename "$DATA" .ms)"*/SPW-0_FIELD-0 | head -1)
 $ALMASIM image clean-quality "$OUT"
 $PY $N/measure.py "$OUT" "$ITER/metrics/$NAME.json" > /dev/null
