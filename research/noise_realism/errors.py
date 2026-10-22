@@ -125,7 +125,9 @@ class AntennaGains:
         amp, phase = {}, {}
         for a in antennas:
             for s in scans:
-                amp[(a, s)] = rng.normal(0, model.gain_amp_rms, npol)
+                # Mostly common to the two polarisations, as the phase (the real
+                # windows' per-antenna amplitudes are measured on their sum).
+                amp[(a, s)] = rng.normal(0, model.gain_amp_rms) + rng.normal(0, model.gain_amp_rms / 4, npol)
                 common = rng.normal(0, np.radians(model.gain_phase_rms_deg))
                 phase[(a, s)] = common + rng.normal(0, np.radians(model.gain_phase_rms_deg) / 4, npol)
         return cls(

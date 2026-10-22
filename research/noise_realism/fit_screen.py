@@ -1,6 +1,7 @@
 """Measure each window's residual atmospheric phase from its visibilities.
 
-    python fit_screen.py UV_DIR BASE_CONFIG.json OUT_CONFIG.json
+    python fit_screen.py UV_DIR BASE_CONFIG.json OUT_CONFIG.json [NOISE_LABEL]
+    python fit_screen.py gains UV_DIR CONFIG.json OUT_CONFIG.json LABEL
 
 From uvcompare's per-(baseline, scan) data over model: the phase scatter of
 the real data beyond what thermal noise alone gives (the "thermal-profile"
@@ -17,6 +18,13 @@ window whose data rise above the model (ln|A| > 0.05 in any bin) has a model
 that does not match the source, and the loss there is not the atmosphere's:
 it gets no fast screen. Windows without enough bright baseline-scans (three
 bins) keep no screen.
+
+"gains": the per-antenna, per-scan amplitude scatter of the real data beyond
+that of the simulation LABEL (uvcompare's antenna_solve, compared on the
+same baseline-scans) is the antenna gain amplitude error left by the
+calibration (gain_amp_rms), added to the windows of CONFIG that have it.
+Run it on a comparison of the real data with the screens already fitted:
+the atmosphere's decorrelation also differs from antenna to antenna.
 """
 
 from __future__ import annotations
@@ -80,14 +88,37 @@ def _power_law(b: list, sigma: list, ghz: float) -> dict | None:
     }
 
 
-if __name__ == "__main__":
+def fit_gains(result: dict, label: str) -> float | None:
+    real, sim = result["real"], result[label]
+    if "ant_lnamp_rms" not in real or "ant_lnamp_rms" not in sim:
+        return None
+    excess = real["ant_lnamp_rms"] ** 2 - sim["ant_lnamp_rms"] ** 2
+    return round(float(np.sqrt(excess)), 4) if excess > 0 else None
+
+
+def gains_main(uv_dir: Path, config_path: Path, out: Path, label: str) -> None:
+    config = json.loads(config_path.read_text())
+    by_window = config.setdefault("by_window", {})
+    for f in sorted(uv_dir.glob("*.json")):
+        r = json.loads(f.read_text())
+        rms = fit_gains(r, label)
+        if rms:
+            by_window.setdefault(r["window"], {})["gain_amp_rms"] = rms
+        print(f"{r['source'][:24]:24s} {r['ghz']:6.1f} GHz  antenna amplitude: {rms or 'nothing to fit'}")
+    out.write_text(json.dumps(config, indent=1))
+
+
+if __name__ == "__main__" and sys.argv[1] == "gains":
+    gains_main(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), sys.argv[5])
+elif __name__ == "__main__":
     uv_dir, base, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+    noise_label = sys.argv[4] if len(sys.argv) > 4 else "thermal-profile"
     config = json.loads(base.read_text())
     config["by_window"] = {}
     fits = {}
     for f in sorted(uv_dir.glob("*.json")):
         r = json.loads(f.read_text())
-        slow, fast = fit(r), fit_fast(r)
+        slow, fast = fit(r, noise_label), fit_fast(r, noise_label)
         fits[r["window"]] = {"source": r["source"], "ghz": r["ghz"], "fit": slow, "fast": fast}
         entry = {}
         for label, result, key in (("scan", slow, "scan_screen"), ("fast", fast, "fast_screen")):
