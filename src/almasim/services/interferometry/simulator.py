@@ -96,6 +96,8 @@ def image_configured_channel(
     if model is not None and model.correlates_channels:
         shape = (config.Nant * (config.Nant - 1) // 2, config.nH)
         kernel = spectral_kernel(model.spectral_rho1, model.spectral_rho2)
+        if config.corruption_entropy is None:
+            raise ValueError("correlated channel noise needs the configuration's corruption_entropy")
         corrupted["noise_samples"] = correlated_noise(
             config.corruption_entropy, channel, shape, float(noise), kernel
         )
