@@ -22,7 +22,36 @@ from .tng import redshift_to_snapshot
 LogFn = Callable[[str], None] | None
 
 
-def sample_given_redshift(  # noqa: C901
+def with_redshifts(metadata: pd.DataFrame, rest_frequency) -> pd.DataFrame:
+    """``metadata`` with each row's line: the catalogue rest frequency nearest
+    at or above its ``Freq``, and the redshift that puts it there.
+
+    A row with no catalogue line at or above its frequency has no redshift
+    (NaN): no line can be placed there.
+    """
+    metadata = metadata.copy()
+    if isinstance(rest_frequency, (np.ndarray, list)):
+        rest_frequency = np.sort(np.array(rest_frequency))
+    else:
+        rest_frequency = np.array([rest_frequency])
+
+    closest_rest_frequencies = []
+    for freq in metadata["Freq"].values:
+        differences = rest_frequency - freq
+        differences[differences < 0] = 1e10
+        index_min = np.argmin(differences)
+        closest_rest_frequencies.append(rest_frequency[index_min])
+    rest_frequencies = np.array(closest_rest_frequencies)
+
+    metadata.loc[:, "redshift"] = [
+        compute_redshift(rest * U.GHz, freq * U.GHz) if rest >= freq else np.nan
+        for freq, rest in zip(metadata["Freq"].values, rest_frequencies, strict=True)
+    ]
+    metadata["rest_frequency"] = rest_frequencies
+    return metadata
+
+
+def sample_given_redshift(
     metadata: pd.DataFrame,
     n: int,
     rest_frequency,
@@ -33,33 +62,13 @@ def sample_given_redshift(  # noqa: C901
 ) -> pd.DataFrame:
     """Filter and sample metadata entries based on redshift constraints (``rng`` samples)."""
     pd.options.mode.chained_assignment = None
-    metadata = metadata.copy()
-    if isinstance(rest_frequency, (np.ndarray, list)):
-        rest_frequency = np.sort(np.array(rest_frequency))
-    else:
-        rest_frequency = np.array([rest_frequency])
-
     freqs = metadata["Freq"].values
     if logger is not None:
         log_message(logger, f"Max frequency recorded in metadata: {np.max(freqs)} GHz")
         log_message(logger, f"Min frequency recorded in metadata: {np.min(freqs)} GHz")
         log_message(logger, "Filtering metadata based on line catalogue...")
         log_message(logger, f"Remaining metadata: {len(metadata)}")
-
-    closest_rest_frequencies = []
-    for freq in freqs:
-        differences = rest_frequency - freq
-        differences[differences < 0] = 1e10
-        index_min = np.argmin(differences)
-        closest_rest_frequencies.append(rest_frequency[index_min])
-    rest_frequencies = np.array(closest_rest_frequencies)
-
-    redshifts = [
-        compute_redshift(rest_frequency * U.GHz, source_freq * U.GHz)
-        for source_freq, rest_frequency in zip(freqs, rest_frequencies, strict=True)
-    ]
-    metadata.loc[:, "redshift"] = redshifts
-    metadata["rest_frequency"] = rest_frequencies
+    metadata = with_redshifts(metadata, rest_frequency)
 
     n_metadata = 0
     z_save = zmax
