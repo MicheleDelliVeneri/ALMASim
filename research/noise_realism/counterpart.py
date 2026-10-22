@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -114,8 +115,31 @@ def measure_noise(base_ms: Path, rows: int = 60_000, seed: int = 0) -> dict:
     }
 
 
-def _model_planes(task_dir: Path, chan_freq: np.ndarray) -> tuple[np.ndarray, float, float]:
-    """Sky per MS channel (nchan, ny, nx): continuum plus the line plane at its frequency."""
+def _line_channels(task_dir: Path, nchan: int) -> np.ndarray:
+    """The window's line channels, as the real run's continuum subtraction found them
+    (its task log: "lines in channels a~b;c~d" or "none")."""
+    lines = np.zeros(nchan, dtype=bool)
+    log = task_dir.parent / f"{task_dir.name}.log"
+    for text in log.read_text(errors="replace").splitlines():
+        if "lines in channels" in text:
+            spec = text.rsplit("lines in channels", 1)[1].strip()
+            if spec != "none":
+                for part in spec.split(";"):
+                    lo, _, hi = part.partition("~")
+                    lines[int(lo) : int(hi or lo) + 1] = True
+    return lines
+
+
+def _model_planes(
+    task_dir: Path, chan_freq: np.ndarray, line: bool | str = True
+) -> tuple[np.ndarray, float, float]:
+    """Sky per MS channel (nchan, ny, nx): continuum plus the line plane at its frequency.
+
+    ``line``: True, the whole cube model; False, none; "masked", only in the line
+    channels and inside the line mask the real run found (the rest of the cube
+    model is noise that cleaning took for signal, which the counterpart's own
+    noise would add to).
+    """
     from astropy.io import fits
 
     def planes(path):
@@ -127,15 +151,21 @@ def _model_planes(task_dir: Path, chan_freq: np.ndarray) -> tuple[np.ndarray, fl
         return np.nan_to_num(data.reshape((-1,) + data.shape[-2:])), header
 
     cont, ch = planes(task_dir / "wsclean-model.fits")
-    line, lh = planes(task_dir / "wsclean-cube-model.fits")
-    if cont.shape[-2:] != line.shape[-2:]:
-        raise ValueError("continuum and cube models are on different grids")
-    centres = lh["CRVAL3"] + (np.arange(line.shape[0]) + 1 - lh["CRPIX3"]) * lh["CDELT3"]
-    width = abs(lh["CDELT3"])
-    idx = np.abs(chan_freq[:, None] - centres[None, :]).argmin(axis=1)
-    inside = np.abs(chan_freq - centres[idx]) <= width / 2 + 1.0
     sky = np.repeat(cont[:1], len(chan_freq), axis=0)
-    sky[inside] += line[idx[inside]]
+    if line:
+        cube, lh = planes(task_dir / "wsclean-cube-model.fits")
+        if cont.shape[-2:] != cube.shape[-2:]:
+            raise ValueError("continuum and cube models are on different grids")
+        centres = lh["CRVAL3"] + (np.arange(cube.shape[0]) + 1 - lh["CRPIX3"]) * lh["CDELT3"]
+        width = abs(lh["CDELT3"])
+        idx = np.abs(chan_freq[:, None] - centres[None, :]).argmin(axis=1)
+        inside = np.abs(chan_freq - centres[idx]) <= width / 2 + 1.0
+        if line == "masked":
+            mask_path = task_dir / "wsclean-cube-linemask.fits"
+            inside &= _line_channels(task_dir, len(chan_freq)) & mask_path.exists()
+            if mask_path.exists():
+                cube = cube * (planes(mask_path)[0][:1] > 0)
+        sky[inside] += cube[idx[inside]]
     # ducc0 reads a plane with its axes the other way round from FITS: handed a
     # FITS (y, x) array it images it rotated by 90 degrees, (y, x) -> (n - x, y).
     # This is the plane that WSClean images back where the FITS model has it
@@ -186,7 +216,8 @@ class Simulator:
             self.xy = _enu(np.asarray(ant.getcol("POSITION"), dtype=np.float64))
         self.hands = np.flatnonzero(np.isin(self.corr, list(PARALLEL)))
         self.npol = len(self.hands)
-        self.sky, self.px, self.py = _model_planes(task_dir, self.chan_freq)
+        # extra.line_model false: the continuum model only (no line emission).
+        self.sky, self.px, self.py = _model_planes(task_dir, self.chan_freq, model.extra.get("line_model", True))
         self.nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or os.cpu_count() or 1)
         self.kernel = (
             spectral_kernel(self.noise["rho1"], self.noise["rho2"])
@@ -313,6 +344,11 @@ def main(argv: list[str] | None = None) -> None:
     base.add_argument("spw", type=int)
     base.add_argument("field")
     base.add_argument("base_ms", type=Path)
+    split = sub.add_parser("split")
+    split.add_argument("real_ms", type=Path)
+    split.add_argument("spw", type=int)
+    split.add_argument("field")
+    split.add_argument("base_ms", type=Path)
     make = sub.add_parser("make")
     make.add_argument("base_ms", type=Path)
     make.add_argument("task_dir", type=Path)
@@ -320,9 +356,16 @@ def main(argv: list[str] | None = None) -> None:
     make.add_argument("--errors", type=Path, required=True)
     make.add_argument("--seed", type=int, required=True)
     args = parser.parse_args(argv)
-    if args.step == "base":
+    if args.step == "split":
+        split_window(args.real_ms, args.spw, args.field, args.base_ms)
+    elif args.step == "base":
         if not (args.base_ms / "table.dat").exists():
-            split_window(args.real_ms, args.spw, args.field, args.base_ms)
+            # CASA's split in a process of its own (it and python-casacore in one
+            # process abort), into a temporary name, so a crash leaves no half base.
+            partial = args.base_ms.with_name(args.base_ms.name + ".partial")
+            cmd = [sys.executable, __file__, "split", str(args.real_ms), str(args.spw), args.field, str(partial)]
+            subprocess.run(cmd, check=True)
+            partial.rename(args.base_ms)
         noise = measure_noise(args.base_ms)
         (args.base_ms / "noise.json").write_text(json.dumps(noise, indent=1))
         print(json.dumps(noise))

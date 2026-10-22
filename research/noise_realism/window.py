@@ -2,6 +2,9 @@
 
     python window.py info I          shell variables for window I (MS, SPW, FIELD, TASK, NAME)
     python window.py params I MS     its imaging-parameters row, with MS as the data
+    python window.py expensive       the indices of the windows not in the cheap subset
+
+NOISE_SET=all indexes all 100 windows instead of the cheap subset.
 """
 
 from __future__ import annotations
@@ -16,10 +19,12 @@ WINDOWS = "/SKAO_data/cycle11/MADIV-28/noise/windows.csv"
 
 
 def subset() -> pd.DataFrame:
-    """The cheap windows (under 60 Mvoxels and 40 GB of MS), by frequency."""
+    """The windows an iteration runs over, by frequency: the cheap ones (under 60
+    Mvoxels and 40 GB of MS), or all 100 when NOISE_SET=all."""
     w = pd.read_csv(WINDOWS)
-    cheap = w[(w.voxels_m < 60) & (w.ms_gb < 40)].sort_values("ghz").reset_index(drop=True)
-    return cheap
+    if os.environ.get("NOISE_SET", "cheap") != "all":
+        w = w[(w.voxels_m < 60) & (w.ms_gb < 40)]
+    return w.sort_values("ghz").reset_index(drop=True)
 
 
 def name(row) -> str:
@@ -27,7 +32,12 @@ def name(row) -> str:
 
 
 if __name__ == "__main__":
-    step, i = sys.argv[1], int(sys.argv[2])
+    step = sys.argv[1]
+    if step == "expensive":
+        w = subset()
+        print(",".join(str(i) for i in w.index[(w.voxels_m >= 60) | (w.ms_gb >= 40)]))
+        sys.exit()
+    i = int(sys.argv[2])
     row = subset().iloc[i]
     if step == "info":
         print(f"MS={row.ms} SPW={row.spw} FIELD={row.field} TASK={ROOT}/cubes/{row.task} NAME={name(row)}")
