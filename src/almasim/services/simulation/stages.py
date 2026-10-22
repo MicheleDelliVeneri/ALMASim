@@ -14,6 +14,7 @@ from ... import skymodels as usm
 from .. import interferometry as uin
 from ..imaging import build_image_products
 from ..instrument.constants import GAUSSIAN_BEAM_AREA
+from ..interferometry.corruptions import CorruptionModel
 from ..utils import as_progress_emitter
 from .context import RunContext
 from .geometry import resolve_cube_geometry
@@ -51,6 +52,7 @@ class CleanCubeStage:
     background_cube: np.ndarray | None
     external_input_metadata: dict[str, Any] | None
     seed: int | None = None
+    corruptions: CorruptionModel | None = None
 
 
 def generate_clean_cube(
@@ -165,6 +167,7 @@ def generate_clean_cube(
 
     return CleanCubeStage(
         seed=params.seed,
+        corruptions=CorruptionModel.from_mapping(params.corruptions),
         datacube=sky.datacube,
         model_cube=model,
         header=sky.header,
@@ -214,6 +217,7 @@ def simulate_observation(  # noqa: C901
             robust=robust,
             logger=terminal_logger,
             noise_entropy=stream_entropy(clean_cube_stage.seed, "interferometer", config_index),
+            corruptions=clean_cube_stage.corruptions,
             **run.interferometer_kwargs(),
         )
         if interferometer_progress_callback is not None:

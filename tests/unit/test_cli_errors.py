@@ -77,6 +77,8 @@ def test_simulation_run_checks_its_inputs(tmp_path):
         (["--save-mode", "pickle"], "'pickle' is not one of 'memory', 'npz', 'h5', 'fits'"),
         (["--input", tmp_path / "none.fits"], "--input not found"),
         (["--kaggle-token", tmp_path / "kaggle.json"], "--kaggle-token not found"),
+        (["--corruptions", "stormy"], "--corruptions"),
+        (["--corruptions", '{"gain_amplitude": 0.1}'], "unknown corruption parameter"),
     ]
     for extra, message in cases:
         result = _invoke("simulation", "run", "--metadata-path", csv, *extra)

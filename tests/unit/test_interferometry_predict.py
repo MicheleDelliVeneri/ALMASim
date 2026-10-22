@@ -22,6 +22,25 @@ def test_a_centred_point_has_flat_visibilities():
     np.testing.assert_allclose(vis, 2.0, atol=1e-4)
 
 
+def test_an_off_centre_point_lands_where_fits_has_it():
+    """A FITS plane (RA to the left) predicts the visibilities WSClean images back
+    at the same pixel: V = exp(+2 pi i (u l + v m)) in ALMA's (MS) uvw convention,
+    l = -(x - n/2) cell (east), m = (y - n/2) cell (north). Before the
+    correction it came back rotated by 90 degrees."""
+    pytest.importorskip("ducc0")
+    n, cell, freq = 64, 0.05 / 3600 * np.pi / 180, 230e9
+    plane = np.zeros((n, n))
+    y0, x0 = 20, 45
+    plane[y0, x0] = 1.0
+    uvw = _uvw(50)
+    uvw[:, 2] = 0.0
+    lam = 299_792_458.0 / freq
+    ell, em = -(x0 - n // 2) * cell, (y0 - n // 2) * cell
+    expected = np.exp(2j * np.pi * (uvw[:, 0] * ell + uvw[:, 1] * em) / lam)
+    vis = predict.predict_visibilities(uvw, [freq], plane, cell, cell, nthreads=1)[:, 0]
+    np.testing.assert_allclose(vis, expected, atol=1e-4)
+
+
 def test_a_cube_predicts_each_channel_from_its_plane():
     pytest.importorskip("ducc0")
     planes = np.zeros((3, 16, 16))

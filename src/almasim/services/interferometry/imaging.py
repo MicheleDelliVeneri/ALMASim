@@ -51,7 +51,6 @@ def _grid_uv(
     robust: float,
     nH: int,
     imsize: float,
-    rng: np.random.Generator,
 ) -> tuple:
     """Grid visibility measurements onto a discrete UV plane."""
     bas2change = range(Nbas)
@@ -67,13 +66,7 @@ def _grid_uv(
         pixV = np.rint(v[nb] / UVpixsize).flatten().astype(np.int32)
         goodpix = np.where(np.logical_and(np.abs(pixU) < Nphf, np.abs(pixV) < Nphf))[0]
 
-        # Add atmospheric phase errors
-        phase_nb = np.angle(Gains[nb, goodpix])
-        baseline_phases[nb] = phase_nb
-        phase_rms = np.std(phase_nb) if phase_nb.size > 1 else 0.0
-        if phase_rms > 0.0:
-            random_phase_error = rng.normal(scale=phase_rms)
-            Gains[nb] *= np.exp(1j * random_phase_error)
+        baseline_phases[nb] = np.angle(Gains[nb, goodpix])
 
         pU = pixU[goodpix] + Nphf
         pV = pixV[goodpix] + Nphf
@@ -245,11 +238,16 @@ def image_channel(
     robust: float,
     scan_time_s: float | None = None,
     rng: np.random.Generator | None = None,
+    gains: np.ndarray | None = None,
+    noise_samples: np.ndarray | None = None,
 ) -> tuple:
     """Process a single channel through interferometric simulation.
 
-    ``rng`` draws the visibility noise and the atmospheric phase errors
-    (fresh entropy when None).
+    ``rng`` draws the visibility noise (fresh entropy when None).
+    ``gains`` (baselines x integrations): what the calibration left on each
+    visibility (all ones when None); ``noise_samples``: this channel's noise,
+    when drawn outside (correlated with its neighbours), instead of white
+    noise from ``rng``.
     """
     rng = rng if rng is not None else np.random.default_rng()
     # Convert header dict back to FITS Header if needed (for pickling compatibility)
@@ -269,7 +267,12 @@ def image_channel(
     Nbas, B, basnum, basidx, antnum, Gains, Noise, H, u, v, ravelDims = prepare_baselines(
         Nant, nH, Hcov
     )
-    Noise = set_noise(noise, Noise, rng)
+    if noise_samples is not None:
+        Noise[:] = noise_samples
+    else:
+        Noise = set_noise(noise, Noise, rng)
+    if gains is not None:
+        Gains[:] = gains
     B, u, v = set_baselines(Nbas, antnum, B, u, v, antPos, trlat, trdec, H, wavelength)
     (
         pixpos,
@@ -293,7 +296,6 @@ def image_channel(
         robust,
         nH,
         imsize,
-        rng,
     )
     beam, beamScale, robustsamp, GrobustNoise, Grobustsamp = set_beam(
         robfac,
