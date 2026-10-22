@@ -141,15 +141,34 @@ def _line_channels(task_dir: Path, nchan: int) -> np.ndarray:
     return lines
 
 
+def _emission_mask(task_dir: Path, sigma: float = 5.0) -> np.ndarray:
+    """Where the real continuum image has emission: above ``sigma`` times its noise
+    (quality.json), widened by the beam's major axis. Outside it the clean model
+    is mostly noise peaks that cleaning took for sources."""
+    from astropy.io import fits
+    from scipy.ndimage import binary_dilation
+
+    with fits.open(task_dir / "wsclean-image.fits") as hdul:
+        image = np.asarray(hdul[0].data, dtype=np.float64)
+        cell_arcsec = abs(hdul[0].header["CDELT2"]) * 3600
+    while image.ndim > 2:
+        image = image[0]
+    continuum = json.loads((task_dir / "quality.json").read_text())["continuum"]
+    radius = max(1, int(round(continuum["beam_arcsec"][0] / cell_arcsec)))
+    y, x = np.ogrid[-radius : radius + 1, -radius : radius + 1]
+    return binary_dilation(np.nan_to_num(image) > sigma * continuum["noise_jy_beam"], x**2 + y**2 <= radius**2)
+
+
 def _model_planes(
-    task_dir: Path, chan_freq: np.ndarray, line: bool | str = True
+    task_dir: Path, chan_freq: np.ndarray, line: bool | str = True, continuum: bool | str = True
 ) -> tuple[np.ndarray, float, float]:
     """Sky per MS channel (nchan, ny, nx): continuum plus the line plane at its frequency.
 
     ``line``: True, the whole cube model; False, none; "masked", only in the line
     channels and inside the line mask the real run found (the rest of the cube
     model is noise that cleaning took for signal, which the counterpart's own
-    noise would add to).
+    noise would add to). ``continuum``: True, the whole continuum model;
+    "masked", only where the real image has emission (:func:`_emission_mask`).
     """
     from astropy.io import fits
 
@@ -162,6 +181,8 @@ def _model_planes(
         return np.nan_to_num(data.reshape((-1,) + data.shape[-2:])), header
 
     cont, ch = planes(task_dir / "wsclean-model.fits")
+    if continuum == "masked":
+        cont = cont * _emission_mask(task_dir)[None]
     sky = np.repeat(cont[:1], len(chan_freq), axis=0)
     if line:
         cube, lh = planes(task_dir / "wsclean-cube-model.fits")
@@ -228,7 +249,12 @@ class Simulator:
         self.hands = np.flatnonzero(np.isin(self.corr, list(PARALLEL)))
         self.npol = len(self.hands)
         # extra.line_model false: the continuum model only (no line emission).
-        self.sky, self.px, self.py = _model_planes(task_dir, self.chan_freq, model.extra.get("line_model", True))
+        self.sky, self.px, self.py = _model_planes(
+            task_dir,
+            self.chan_freq,
+            model.extra.get("line_model", True),
+            model.extra.get("continuum_model", True),
+        )
         self.nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or os.cpu_count() or 1)
         self.kernel = (
             spectral_kernel(self.noise["rho1"], self.noise["rho2"])
