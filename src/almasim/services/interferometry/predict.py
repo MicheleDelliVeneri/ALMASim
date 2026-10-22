@@ -28,6 +28,19 @@ def _ducc0_with_wgridder_fallback(func: Callable[..., Any], /, **kwargs: Any) ->
         raise
 
 
+def ducc0_plane(plane: np.ndarray) -> np.ndarray:
+    """A FITS-ordered image plane ``(ny, nx)`` (RA increasing to the left, as
+    FITS images are stored and WSClean writes them) as ducc0's wgridder takes
+    it: ducc0 reads its first axis the other way round, so a FITS plane handed
+    over as is comes back from imaging rotated by 90 degrees, (y, x) -> (n - x, y)
+    (checked by imaging predicted visibilities with WSClean). Flipped in y
+    about the reference pixel (n // 2: ducc0 takes even sizes only) and
+    transposed, it images where FITS has it.
+    """
+    plane = np.asarray(plane)
+    return np.swapaxes(np.roll(plane[..., ::-1, :], 1, axis=-2), -1, -2)
+
+
 def predict_visibilities(
     uvw_m: np.ndarray,
     freq_hz: np.ndarray,
@@ -42,9 +55,10 @@ def predict_visibilities(
     """Visibilities ``(nrows, nchan)`` of ``planes`` at ``uvw_m`` (metres) and ``freq_hz``.
 
     ``planes`` is one image ``(ny, nx)`` for every channel, or a cube
-    ``(nchan, ny, nx)`` with one plane per channel; pixel sizes are in
-    radians. ducc0's w-gridder runs with w-correction, falling back to 2D
-    gridding when the w range needs too many planes.
+    ``(nchan, ny, nx)`` with one plane per channel, in FITS order (as read
+    from a FITS file; see :func:`ducc0_plane`); pixel sizes are in radians.
+    ducc0's w-gridder runs with w-correction, falling back to 2D gridding
+    when the w range needs too many planes.
     """
     from ducc0.wgridder import dirty2vis
 
@@ -57,7 +71,8 @@ def predict_visibilities(
         kwargs: dict[str, Any] = dict(
             uvw=uvw_m,
             freq=frequencies,
-            dirty=np.ascontiguousarray(plane),
+            dirty=np.ascontiguousarray(ducc0_plane(plane)),
+            # ducc0's first axis is the FITS x (RA) axis once transposed.
             pixsize_x=pixsize_x,
             pixsize_y=pixsize_y,
             epsilon=epsilon,

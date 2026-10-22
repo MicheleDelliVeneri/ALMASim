@@ -322,7 +322,6 @@ def test_grid_uv_basic(sample_arrays, sample_npix):
         robust,
         nH,
         imsize,
-        np.random.default_rng(0),
     )
 
     (

@@ -48,6 +48,16 @@ def _coerced(convert: Callable[[Any], Any], **kwargs: Any) -> Any:
     return field(metadata={"coerce": convert}, **kwargs)
 
 
+def _corruption_mapping(value: Any) -> dict[str, Any] | None:
+    """A corruption model's fields from a preset, JSON, JSON file or mapping,
+    checked; None for none (also NaN, a table's empty cell)."""
+    from ..interferometry.corruptions import resolve_corruptions
+
+    if isinstance(value, float) and value != value:
+        return None
+    return resolve_corruptions(value)
+
+
 @dataclass
 class SimulationParams:
     """Everything one simulation run needs.
@@ -126,6 +136,10 @@ class SimulationParams:
     # simulation outputs are re-baselined on it.
     instrument_geometry: str = _coerced(str, default="legacy")
     kaggle_token: str | None = _coerced(_optional(_expand_path), default=None)
+    # What the visibilities carry besides white thermal noise: the fields of
+    # interferometry.corruptions.CorruptionModel (a mapping, its JSON, a JSON
+    # file or a preset name such as "alma"); None adds nothing (MADIV-28).
+    corruptions: dict[str, Any] | None = _coerced(_corruption_mapping, default=None)
 
     def __post_init__(self) -> None:
         for spec in fields(self):

@@ -36,6 +36,9 @@ class VisibilityTable:
     array_type: str | None = None
     # One dish diameter per antenna (m); 12 m each when unknown.
     antenna_diameters_m: np.ndarray | None = None
+    # Each row's scan (1, 2, ...) when the track is split into scans
+    # (corruptions.CorruptionModel.scan_length_s); one scan when None.
+    scan_number: np.ndarray | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Convert to a plain dict for serialization."""
@@ -61,6 +64,7 @@ class VisibilityTable:
             "observation_date": self.observation_date,
             "config_name": self.config_name,
             "array_type": self.array_type,
+            **({"scan_number": self.scan_number} if self.scan_number is not None else {}),
         }
 
 
@@ -144,8 +148,12 @@ def assemble_visibility_table(
     config_name: str | None = None,
     array_type: str | None = None,
     antenna_diameters_m: np.ndarray | None = None,
+    scan_length_s: float = 0.0,
 ) -> VisibilityTable:
-    """Assemble channel-wise row samples into an MS-like visibility table."""
+    """Assemble channel-wise row samples into an MS-like visibility table.
+
+    ``scan_length_s`` > 0 numbers the rows' scans, blocks of that length.
+    """
     if not channel_rows:
         raise ValueError("channel_rows must not be empty")
 
@@ -176,7 +184,11 @@ def assemble_visibility_table(
     weight = np.mean(weight_spectrum, axis=2).astype(np.float32)
     sigma = np.mean(sigma_spectrum, axis=2).astype(np.float32)
 
+    scan_number = None
+    if scan_length_s > 0:
+        scan_number = (time_offsets_s // float(scan_length_s)).astype(np.int32) + 1
     return VisibilityTable(
+        scan_number=scan_number,
         uvw_m=np.asarray(reference["uvw_m"], dtype=np.float64),
         antenna1=np.asarray(reference["antenna1"], dtype=np.int32),
         antenna2=np.asarray(reference["antenna2"], dtype=np.int32),
@@ -264,4 +276,18 @@ def concatenate_visibility_tables(tables: list[Mapping[str, Any]]) -> dict[str, 
         "observation_date": first["observation_date"],
         "config_name": first.get("config_name"),
         "array_type": first.get("array_type"),
+        **_scan_numbers(tables),
     }
+
+
+def _scan_numbers(tables: list[Mapping[str, Any]]) -> dict[str, np.ndarray]:
+    """The concatenated scan numbers, if any table has them (one scan for those without)."""
+    if all(t.get("scan_number") is None for t in tables):
+        return {}
+    columns = [
+        np.asarray(t["scan_number"])
+        if t.get("scan_number") is not None
+        else np.ones(len(t["antenna1"]), np.int32)
+        for t in tables
+    ]
+    return {"scan_number": np.concatenate(columns).astype(np.int32)}

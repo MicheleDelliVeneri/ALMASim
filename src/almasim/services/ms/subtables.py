@@ -86,7 +86,11 @@ def main_table(ms_path: str, vt: Mapping[str, Any]) -> TableSpec:
         "ARRAY_ID": np.zeros(nrows, dtype=np.int32),
         "OBSERVATION_ID": np.zeros(nrows, dtype=np.int32),
         "PROCESSOR_ID": np.full(nrows, -1, dtype=np.int32),
-        "SCAN_NUMBER": np.ones(nrows, dtype=np.int32),
+        "SCAN_NUMBER": (
+            np.asarray(vt["scan_number"], dtype=np.int32)
+            if vt.get("scan_number") is not None
+            else np.ones(nrows, dtype=np.int32)
+        ),
         "STATE_ID": np.zeros(nrows, dtype=np.int32),
         "FLAG_ROW": np.all(flag, axis=(1, 2)),
         # The visibility table's (nrows, ncorr, nchan) becomes (nrows, nchan, ncorr).

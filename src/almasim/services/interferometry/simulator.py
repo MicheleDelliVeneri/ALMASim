@@ -14,6 +14,13 @@ from typing import Any
 import numpy as np
 from astropy.io import fits
 
+from .corruptions import (
+    AntennaCorruptions,
+    CorruptionModel,
+    baseline_antennas,
+    correlated_noise,
+    spectral_kernel,
+)
 from .imaging import image_channel
 from .utils import sampling_to_uv_mask
 
@@ -60,6 +67,13 @@ class ChannelImagingConfig:
     scan_time_s: float
     # Seeds each channel's noise (MADIV-28 T5.1); None draws fresh entropy.
     noise_entropy: tuple[int, ...] | None = None
+    # What calibrated data carry besides white noise (corruptions.py): the
+    # model, and its antenna errors drawn once for all channels.
+    corruptions: CorruptionModel | None = None
+    antenna_corruptions: AntennaCorruptions | None = None
+    # Keys the white draws correlated noise is built from (set whenever the
+    # model correlates channels, seeded or not: every channel task needs them).
+    corruption_entropy: tuple[int, ...] | None = None
 
     def channel_rng(self, channel: int) -> np.random.Generator:
         """The generator of ``channel``: the same whichever worker images it."""
@@ -72,6 +86,23 @@ def image_configured_channel(
     config: ChannelImagingConfig, image: Any, wavelength: Any, noise: float, channel: int = 0
 ) -> tuple:
     """:func:`image_channel` of one channel with the shared ``config``."""
+    corrupted: dict[str, np.ndarray] = {}  # passed only when there are corruptions
+    if config.antenna_corruptions is not None:
+        wavelength_m = float(wavelength[2]) * 1e3  # the simulator's wavelengths are in km
+        corrupted["gains"] = config.antenna_corruptions.baseline_gains(
+            baseline_antennas(config.Nant), wavelength_m
+        )
+    model = config.corruptions
+    if model is not None and model.correlates_channels:
+        shape = (config.Nant * (config.Nant - 1) // 2, config.nH)
+        kernel = spectral_kernel(model.spectral_rho1, model.spectral_rho2)
+        if config.corruption_entropy is None:
+            raise ValueError(
+                "correlated channel noise needs the configuration's corruption_entropy"
+            )
+        corrupted["noise_samples"] = correlated_noise(
+            config.corruption_entropy, channel, shape, float(noise), kernel
+        )
     return image_channel(
         image,
         wavelength,
@@ -96,6 +127,7 @@ def image_configured_channel(
         config.robust,
         config.scan_time_s,
         rng=config.channel_rng(channel),
+        **corrupted,
     )
 
 

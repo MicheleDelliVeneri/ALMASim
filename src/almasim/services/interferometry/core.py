@@ -19,6 +19,7 @@ from ..instrument.constants import ALMA_LATITUDE_DEG, SPEED_OF_LIGHT_M_S
 from ..instrument.spectral_window import SpectralWindow
 from ..products.cube_export import write_interferometry_products
 from .antenna import read_array_layout
+from .corruptions import CorruptionModel, draw_antenna_corruptions
 from .observing import alma_location, clip_to_horizon, hour_angle_coverage, hour_angle_samples
 from .simulator import ChannelImagingConfig, image_channels, picklable_header, stack_channels
 from .utils import get_channel_wavelength
@@ -77,6 +78,7 @@ class Interferometer:
         logger: LogFn = None,
         spectral_window: SpectralWindow | None = None,
         noise_entropy: tuple[int, ...] | None = None,
+        corruptions: CorruptionModel | None = None,
     ):
         """
         Initialize interferometer.
@@ -127,10 +129,14 @@ class Interferometer:
             The cube's channel grid, which the uv sampling and the visibility
             table use too; by default the band split into the cube's channels
         noise_entropy : tuple of int, optional
-            Seeds the visibility noise and phase errors, one stream per channel
-            (MADIV-28 T5.1); fresh entropy when None
+            Seeds the visibility noise, one stream per channel, and the
+            corruptions (MADIV-28 T5.1); fresh entropy when None
+        corruptions : CorruptionModel, optional
+            What the calibrated visibilities carry besides white noise
+            (correlated channels, antenna gains, atmospheric phase); none when None
         """
         self.noise_entropy = noise_entropy
+        self.corruptions = corruptions
         self.idx = idx
         self.skymodel = skymodel
         self.backend = backend
@@ -287,6 +293,26 @@ class Interferometer:
         )
         return wavelength, fmtB
 
+    def _corruption_fields(self) -> dict:
+        """The corruption model, its antenna errors (drawn once, for every
+        channel) and the entropy correlated noise is keyed by."""
+        model = self.corruptions
+        if model is None:
+            return {}
+        # Streams of their own, apart from the per-channel noise streams.
+        if self.noise_entropy is not None:
+            entropy = (*self.noise_entropy, 1_000_000)
+        else:
+            entropy = tuple(int(x) for x in np.random.SeedSequence().generate_state(4))
+        fields = {"corruptions": model, "corruption_entropy": (*entropy, 2)}
+        if model.has_antenna_errors:
+            times_s = np.arange(self.nH) * float(self.scan_time)
+            antenna_xy_m = np.asarray(self.antPos, dtype=np.float64)[:, :2] * 1e3
+            fields["antenna_corruptions"] = draw_antenna_corruptions(
+                model, antenna_xy_m, times_s, np.random.default_rng((*entropy, 1))
+            )
+        return fields
+
     def run_interferometric_sim(self) -> dict:
         """Run interferometric simulation."""
         config = ChannelImagingConfig(
@@ -310,6 +336,7 @@ class Interferometer:
             robust=self.robust,
             scan_time_s=self.scan_time,
             noise_entropy=self.noise_entropy,
+            **self._corruption_fields(),
         )
         wavelengths = [self.get_channel_wavelength(i)[0] for i in range(self.Nchan)]
         results_per_channel = image_channels(
@@ -335,6 +362,7 @@ class Interferometer:
             config_name=self.config_name,
             array_type=self.array_type,
             antenna_diameters_m=np.full(len(self.antNames), self.antenna_diameter_m),
+            scan_length_s=self.corruptions.scan_length_s if self.corruptions is not None else 0.0,
         ).as_dict()
 
         # Save the results only when explicitly requested.

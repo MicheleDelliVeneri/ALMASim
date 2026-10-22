@@ -18,6 +18,7 @@ from ..services import astro
 from ..services.astro.spectral import with_redshifts
 from ..services.compute import create_backend
 from ..services.external_skymodel import EXTERNAL_SOURCE_TYPES, is_external_source_type
+from ..services.interferometry.corruptions import resolve_corruptions
 from ..services.simulation import (
     SimulationParams,
     export_results,
@@ -205,6 +206,7 @@ def _build_simulation_params(
     output_subdir_name: str | None,
     input_path: Path | None,
     kaggle_token: Path | None = None,
+    corruptions: str | None = None,
 ) -> SimulationParams:
     if not 0 <= row_idx < len(metadata):
         usage_error(f"--row-idx {row_idx} is out of range for {len(metadata)} metadata rows")
@@ -249,6 +251,7 @@ def _build_simulation_params(
         instrument_geometry=instrument_geometry,
         inject_serendipitous=inject_serendipitous,
         kaggle_token=kaggle_token,
+        corruptions=corruptions,
         # Disable MS export by default; requires casatools or python-casacore.
         ms_export=False,
         ms_save_mode="none",
@@ -283,6 +286,7 @@ class SimulationRunOptions:
     backend: str
     n_workers: int
     kaggle_token: Path | None
+    corruptions: str | None
 
 
 @simulation_app.command("run")
@@ -460,6 +464,17 @@ def simulation_run(
         ),
         rich_help_panel="Sky model",
     ),
+    corruptions: str | None = typer.Option(
+        None,
+        "--corruptions",
+        help=(
+            "What the visibilities carry besides white thermal noise: a preset "
+            "('alma': ALMA's channel-correlated noise, antenna gain errors and "
+            "residual atmospheric phase, as measured on real calibrated data; "
+            "'none'), a JSON object of CorruptionModel fields, or a JSON file."
+        ),
+        rich_help_panel="Advanced",
+    ),
 ) -> None:
     """Run staged ALMASim simulation from a pre-queried metadata CSV."""
     options = _validated_simulation_options(SimulationRunOptions(**locals()))
@@ -526,6 +541,7 @@ def simulation_run(
                     ),
                     input_path=o.input_path,
                     kaggle_token=o.kaggle_token,
+                    corruptions=o.corruptions,
                 )
                 _run_simulation_stages(
                     o, params, compute_backend, label=f"Simulation {run_number}/{total_runs}"
@@ -552,6 +568,10 @@ def _validated_simulation_options(o: SimulationRunOptions) -> SimulationRunOptio
         usage_error(f"--input not found: {o.input_path}")
     if o.kaggle_token is not None and not o.kaggle_token.expanduser().exists():
         usage_error(f"--kaggle-token not found: {o.kaggle_token}")
+    try:
+        resolve_corruptions(o.corruptions)
+    except (ValueError, TypeError) as exc:  # json.JSONDecodeError is a ValueError
+        usage_error(f"--corruptions: {exc}")
     return o
 
 
