@@ -143,6 +143,36 @@ def doctor_command(
 
 
 @app.command(
+    "update-shared",
+    help=(
+        "Update the team's shared install (the one this almasim runs from) to a git ref, "
+        "as a Slurm job: clone, build, reinstall, then doctor."
+    ),
+)
+def update_shared_command(
+    ref: str = typer.Option("main", "--ref", help="Branch, tag or commit to install."),
+    prefix: Path | None = typer.Option(
+        None, "--prefix", help="The install (default: the one this almasim runs from)."
+    ),
+    repo: str | None = typer.Option(
+        None, "--repo", help="Git URL to clone (default: the one the install recorded)."
+    ),
+    template: str | None = typer.Option(
+        None,
+        "--template",
+        help="Site profile template, relative to the repo (default: the recorded one).",
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Update even while runs are not finished (they may break)."
+    ),
+) -> None:
+    """Rebuild the shared install from ``ref`` with the recorded repo and template."""
+    from .update_shared import update_shared
+
+    update_shared(ref, prefix, repo, template, force)
+
+
+@app.command(
     "submit",
     help=(
         "Run an almasim command as a job on Slurm (or on this node, where the profile says "

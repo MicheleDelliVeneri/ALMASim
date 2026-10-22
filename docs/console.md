@@ -205,16 +205,32 @@ scripts/install_shared.sh /SKAO_data/cycle11/almasim examples/site-profiles/zwic
 ```
 
 It makes `env/` (the environment), `site.toml` (the template with that
-environment's Python filled in) and `almasim.sh` under the prefix, all
+environment's Python filled in), `almasim.sh` and `install.env` (the repo,
+commit and template it was built from) under the prefix, all
 group-writable. WSClean and the CASA data are not part of it: the site
 profile names the shared ones (`[tools]`).
 
-**Updating:** pull the new version, build the web app, and run the same
-command again (or pass a wheel from a release as the third argument). The
-environment is reinstalled in place and `site.toml` rewritten from the
+**Updating:** from the login node, with the install sourced:
+
+```bash
+source /SKAO_data/cycle11/almasim/almasim.sh
+almasim update-shared                 # to main; or --ref <branch, tag or commit>
+```
+
+It refuses while runs under the site's runs root are not finished (a job
+loads almasim from the environment while it runs, so files replaced under it
+can break it; `--force` updates anyway). Then it submits one Slurm job that
+clones the ref, builds the web app, runs that ref's `install_shared.sh` with
+the recorded template, and ends with `almasim doctor`; it waits for the job
+and prints the end of its log (`<prefix>/updates/<time>/update.log`). The job
+uses the `git`, `npm` and `uv` on your PATH. An install made before
+`install.env` existed needs `--repo` and `--template` once.
+
+The environment is reinstalled in place and `site.toml` rewritten from the
 template, so change the template (`examples/site-profiles/zwicky.toml`), not
-`site.toml`. Update when no jobs are running (`squeue` for the team's
-users): a job loads almasim from the environment while it runs, so files
-replaced under it can break it. Running consoles keep the version they
-started with until their users restart them (`almasim serve --stop`, then
-`almasim serve`). Check with `almasim doctor --slurm` afterwards.
+`site.toml`. Running consoles keep the version they started with until their
+users restart them (`almasim serve --stop`, then `almasim serve`).
+
+By hand, the same is: from a checkout of the new version, on a compute
+node, build the web app and run `install_shared.sh` again as above (or pass
+a release's wheel as the third argument).

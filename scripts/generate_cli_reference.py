@@ -61,6 +61,7 @@ def render() -> str:
     top = import_module("almasim.cli")
     singles = (
         ("doctor", top.doctor_command),
+        ("update-shared", top.update_shared_command),
         ("submit", top.submit_command),
         ("serve", top.serve_command),
     )

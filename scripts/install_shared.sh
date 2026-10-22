@@ -8,10 +8,13 @@
 #                 casatools/casatasks: the Python every job runs
 #   site.toml     the site profile: the template, with that Python filled in
 #   almasim.sh    what users source: puts almasim on PATH, names the profile
+#   install.env   where it came from (repo, commit, template), which
+#                 `almasim update-shared` builds the next version from
 #
 # The wheel (default: built here from this checkout, the web app included)
 # needs `npm run build` in frontend/ first. Run it again with a new wheel to
 # update: the environment is reinstalled in place, the profile rewritten.
+# Or let `almasim update-shared` do all of it from a git ref, as a Slurm job.
 # Needs uv, and internet to fetch Python and the packages (on zwicky: run it
 # on a compute node).
 set -euo pipefail
@@ -19,6 +22,7 @@ set -euo pipefail
 prefix=${1:?usage: install_shared.sh <prefix> <site profile template> [wheel]}
 template=${2:?usage: install_shared.sh <prefix> <site profile template> [wheel]}
 wheel=${3:-}
+given_wheel=$wheel
 repo=$(cd "$(dirname "$0")/.." && pwd)
 
 umask 002  # the group shares the install
@@ -48,6 +52,19 @@ cat > "$prefix/almasim.sh" <<SH
 export PATH="$prefix/env/bin:\$PATH"
 export ALMASIM_SITE_PROFILE="$prefix/site.toml"
 SH
+
+# The template relative to the repo, so the next update finds it in its clone.
+template_path=$(cd "$(dirname "$template")" && pwd)/$(basename "$template")
+case $template_path in
+  "$repo"/*) template_path=${template_path#"$repo"/} ;;
+esac
+commit=
+[ -n "$given_wheel" ] || commit=$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)
+cat > "$prefix/install.env" <<ENV
+repo=$(git -C "$repo" remote get-url origin 2>/dev/null || true)
+commit=$commit
+template=$template_path
+ENV
 
 version=$("$prefix/env/bin/python" -c "from almasim.__version__ import __version__; print(__version__)")
 echo "installed almasim $version in $prefix"
