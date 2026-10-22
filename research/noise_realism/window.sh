@@ -23,7 +23,8 @@ if [ "$MODE" = control ]; then
 else
     DATA=$ITER/ms/$NAME.ms
     SEED=$($PY -c "import json,sys,zlib; c=json.load(open(sys.argv[1])); print(c.get('seed',0)*1000003 + zlib.crc32(sys.argv[2].encode()) % 1000003)" "$ITER/config.json" "$NAME")
-    $PY -c "import json,sys; json.dump(json.load(open(sys.argv[1]))['errors'], open(sys.argv[2],'w'))" "$ITER/config.json" "$ITER/ms/$NAME.errors.json"
+    # The iteration's errors, with this window's own values (by_window) over them.
+    $PY -c "import json,sys; c=json.load(open(sys.argv[1])); e=dict(c['errors']); e.update(c.get('by_window',{}).get(sys.argv[3],{})); json.dump(e, open(sys.argv[2],'w'))" "$ITER/config.json" "$ITER/ms/$NAME.errors.json" "$NAME"
     $PY $N/counterpart.py make "$BASE" "$TASK" "$DATA" --errors "$ITER/ms/$NAME.errors.json" --seed "$SEED"
 fi
 $PY $N/window.py params "$I" "$DATA" > "$ITER/params/$NAME.csv"

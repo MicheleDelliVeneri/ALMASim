@@ -24,11 +24,14 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from almasim.services.interferometry.predict import predict_visibilities  # noqa: E402
 from errors import (  # noqa: E402
     C,
     AntennaGains,
     ErrorModel,
+    FastScreen,
     PhaseScreen,
+    ScanScreen,
     bandpass_factors,
     spectral_kernel,
     thermal_noise,
@@ -157,90 +160,145 @@ def _enu(positions_itrf: np.ndarray) -> np.ndarray:
     return np.stack([east, north], axis=1)
 
 
-def make_counterpart(
-    base_ms: Path, task_dir: Path, out_ms: Path, model: ErrorModel, seed: int
-) -> dict:
-    from almasim.services.interferometry.predict import predict_visibilities
+class Simulator:
+    """The counterpart of one window, chunk by chunk: the model visibilities,
+    and the same corrupted by the error model plus thermal noise.
 
-    table = _tables()
-    noise = json.loads((base_ms / "noise.json").read_text())
-    if out_ms.exists():
-        shutil.rmtree(out_ms)
-    shutil.copytree(base_ms, out_ms)
-    rng = np.random.default_rng(seed)
-    # The window and polarisation setup the rows use (the split MS has one data
-    # description; its polarisation row need not be the first).
-    with table(str(out_ms / "DATA_DESCRIPTION"), ack=False) as t:
-        spw_id, pol_id = int(t.getcell("SPECTRAL_WINDOW_ID", 0)), int(t.getcell("POLARIZATION_ID", 0))
-    with table(str(out_ms / "SPECTRAL_WINDOW"), ack=False) as t:
-        chan_freq = np.asarray(t.getcell("CHAN_FREQ", spw_id), dtype=np.float64)
-    with table(str(out_ms / "POLARIZATION"), ack=False) as t:
-        corr = np.asarray(t.getcell("CORR_TYPE", pol_id))
-    with table(str(out_ms / "ANTENNA"), ack=False) as t:
-        xy = _enu(np.asarray(t.getcol("POSITION"), dtype=np.float64))
-    hands = np.flatnonzero(np.isin(corr, list(PARALLEL)))
-    npol = len(hands)
-    sky, px, py = _model_planes(task_dir, chan_freq)
-    nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or os.cpu_count() or 1)
-    kernel = (
-        spectral_kernel(noise["rho1"], noise["rho2"])
-        if model.spectral_kernel == "measured"
-        else model.spectral_kernel
-    )
+    Opened on a table (the base MS, or a copy of it); every random draw comes
+    from one Generator seeded by ``seed``, in a fixed order (the antenna
+    gains, the screen, the bandpass, then each chunk's noise in row order).
+    """
 
-    with table(str(out_ms), readonly=False, ack=False) as t:
-        nrow = t.nrows()
+    def __init__(self, ms: Path, task_dir: Path, model: ErrorModel, seed: int, t) -> None:
+        table = _tables()
+        self.model = model
+        self.noise = json.loads((ms / "noise.json").read_text())
+        self.rng = np.random.default_rng(seed)
+        # The window and polarisation setup the rows use (the split MS has one data
+        # description; its polarisation row need not be the first).
+        with table(str(ms / "DATA_DESCRIPTION"), ack=False) as dd:
+            spw_id, pol_id = int(dd.getcell("SPECTRAL_WINDOW_ID", 0)), int(dd.getcell("POLARIZATION_ID", 0))
+        with table(str(ms / "SPECTRAL_WINDOW"), ack=False) as sw:
+            self.chan_freq = np.asarray(sw.getcell("CHAN_FREQ", spw_id), dtype=np.float64)
+        with table(str(ms / "POLARIZATION"), ack=False) as pol:
+            self.corr = np.asarray(pol.getcell("CORR_TYPE", pol_id))
+        with table(str(ms / "ANTENNA"), ack=False) as ant:
+            self.xy = _enu(np.asarray(ant.getcol("POSITION"), dtype=np.float64))
+        self.hands = np.flatnonzero(np.isin(self.corr, list(PARALLEL)))
+        self.npol = len(self.hands)
+        self.sky, self.px, self.py = _model_planes(task_dir, self.chan_freq)
+        self.nthreads = int(os.environ.get("SLURM_CPUS_PER_TASK") or os.cpu_count() or 1)
+        self.kernel = (
+            spectral_kernel(self.noise["rho1"], self.noise["rho2"])
+            if model.spectral_kernel == "measured"
+            else model.spectral_kernel
+        )
         scans = np.unique(t.getcol("SCAN_NUMBER"))
         times = t.getcol("TIME")
         antennas = np.union1d(np.unique(t.getcol("ANTENNA1")), np.unique(t.getcol("ANTENNA2")))
-        gains = AntennaGains.draw(rng, model, antennas, scans, npol)
-        screen = (
-            PhaseScreen(rng, model, xy, float(np.ptp(times)) + 1.0)
+        self.gains = AntennaGains.draw(self.rng, model, antennas, scans, self.npol)
+        self.screen = (
+            PhaseScreen(self.rng, model, self.xy, float(np.ptp(times)) + 1.0)
             if model.screen_path_um_1km > 0
             else None
         )
-        bandpass = (
-            bandpass_factors(rng, model, antennas, len(chan_freq), npol)
+        self.bandpass = (
+            bandpass_factors(self.rng, model, antennas, len(self.chan_freq), self.npol)
             if model.bandpass_amp_rms > 0 or model.bandpass_phase_rms_deg > 0
             else None
         )
+        # Drawn last (the scan screen, then the fast one), so the other models' draws stay as they were.
+        self.scan_screen = (
+            ScanScreen(self.rng, model, self.xy, scans) if model.scan_screen_path_um_1km > 0 else None
+        )
+        if model.fast_screen_path_um_1km > 0:
+            pairs = np.unique(np.stack([times, t.getcol("SCAN_NUMBER")]), axis=1)
+            self.fast_screen = FastScreen(self.rng, model, self.xy, pairs[0], pairs[1].astype(int))
+        else:
+            self.fast_screen = None
+
+    def weights(self, t, start: int, n: int) -> np.ndarray:
+        weight = t.getcol("WEIGHT", startrow=start, nrow=n)
+        if weight.shape[1] != len(self.corr):  # one weight per row, or per another setup
+            weight = np.repeat(weight.mean(axis=1, keepdims=True), len(self.corr), axis=1)
+        return weight
+
+    def chunk(
+        self, t, start: int, n: int, vis: np.ndarray | None = None
+    ) -> tuple[dict, np.ndarray, np.ndarray]:
+        """(the rows' columns, the model visibilities, the simulated data).
+
+        ``vis``: the model's visibilities for these rows, if already predicted.
+        """
+        model = self.model
+        cols = {
+            "uvw": t.getcol("UVW", startrow=start, nrow=n).astype(np.float64),
+            "a1": t.getcol("ANTENNA1", startrow=start, nrow=n),
+            "a2": t.getcol("ANTENNA2", startrow=start, nrow=n),
+            "scan": t.getcol("SCAN_NUMBER", startrow=start, nrow=n),
+            "time": t.getcol("TIME", startrow=start, nrow=n),
+            "weight": self.weights(t, start, n),
+        }
+        if vis is None:
+            vis = predict_visibilities(
+                cols["uvw"], self.chan_freq, self.sky, self.px, self.py, nthreads=self.nthreads
+            )
+        nchan, ncorr = len(self.chan_freq), len(self.corr)
+        clean = np.zeros((n, nchan, ncorr), dtype=np.complex64)
+        clean[:, :, self.hands] = vis[:, :, None]
+        data = np.zeros((n, nchan, ncorr), dtype=np.complex64)
+        factor = np.ones((n, nchan, self.npol), dtype=np.complex128)
+        a1, a2, scan, time = cols["a1"], cols["a2"], cols["scan"], cols["time"]
+        if model.gain_amp_rms > 0 or model.gain_phase_rms_deg > 0:
+            g1 = self.gains.factors(a1, scan, time, self.npol)
+            g2 = self.gains.factors(a2, scan, time, self.npol)
+            factor *= (g1 * np.conj(g2))[:, None, :]
+        if self.screen is not None:
+            dpath = self.screen.residual_path_m(self.xy[a1], time) - self.screen.residual_path_m(
+                self.xy[a2], time
+            )
+            factor *= np.exp(2j * np.pi * dpath[:, None] * self.chan_freq[None, :] / C)[:, :, None]
+        if self.scan_screen is not None:
+            dpath = self.scan_screen.path_m(a1, scan) - self.scan_screen.path_m(a2, scan)
+            factor *= np.exp(2j * np.pi * dpath[:, None] * self.chan_freq[None, :] / C)[:, :, None]
+        if self.fast_screen is not None:
+            dpath = self.fast_screen.path_m(a1, time) - self.fast_screen.path_m(a2, time)
+            factor *= np.exp(2j * np.pi * dpath[:, None] * self.chan_freq[None, :] / C)[:, :, None]
+        if self.bandpass is not None:
+            b1 = np.stack([self.bandpass[a] for a in a1])
+            b2 = np.stack([self.bandpass[a] for a in a2])
+            factor *= b1 * np.conj(b2)
+        data[:, :, self.hands] = (vis[:, :, None] * factor).astype(np.complex64)
+        if model.thermal:
+            weight = cols["weight"]
+            sigma = np.sqrt(self.noise["scale"] / np.where(weight > 0, weight, np.inf))
+            noise_cube = thermal_noise(self.rng, sigma * model.thermal_scale, nchan, self.kernel)
+            profile = self.noise.get("channel_profile", [])
+            if model.extra.get("channel_profile") and len(profile) == nchan:
+                noise_cube *= np.sqrt(np.asarray(profile, dtype=np.float32))[None, :, None]
+            data += noise_cube
+        return cols, clean, data
+
+
+def make_counterpart(
+    base_ms: Path, task_dir: Path, out_ms: Path, model: ErrorModel, seed: int
+) -> dict:
+    table = _tables()
+    if out_ms.exists():
+        shutil.rmtree(out_ms)
+    shutil.copytree(base_ms, out_ms)
+    with table(str(out_ms), readonly=False, ack=False) as t:
+        sim = Simulator(out_ms, task_dir, model, seed, t)
+        nrow = t.nrows()
         for start in range(0, nrow, CHUNK):
             n = min(CHUNK, nrow - start)
-            uvw = t.getcol("UVW", startrow=start, nrow=n).astype(np.float64)
-            a1 = t.getcol("ANTENNA1", startrow=start, nrow=n)
-            a2 = t.getcol("ANTENNA2", startrow=start, nrow=n)
-            scan = t.getcol("SCAN_NUMBER", startrow=start, nrow=n)
-            time = t.getcol("TIME", startrow=start, nrow=n)
-            weight = t.getcol("WEIGHT", startrow=start, nrow=n)
-            if weight.shape[1] != len(corr):  # one weight per row, or per another setup
-                weight = np.repeat(weight.mean(axis=1, keepdims=True), len(corr), axis=1)
-            vis = predict_visibilities(uvw, chan_freq, sky, px, py, nthreads=nthreads)
-            data = np.zeros((n, len(chan_freq), len(corr)), dtype=np.complex64)
-            factor = np.ones((n, len(chan_freq), npol), dtype=np.complex128)
-            if model.gain_amp_rms > 0 or model.gain_phase_rms_deg > 0:
-                g1 = gains.factors(a1, scan, time, npol)
-                g2 = gains.factors(a2, scan, time, npol)
-                factor *= (g1 * np.conj(g2))[:, None, :]
-            if screen is not None:
-                dpath = screen.residual_path_m(xy[a1], time) - screen.residual_path_m(xy[a2], time)
-                factor *= np.exp(2j * np.pi * dpath[:, None] * chan_freq[None, :] / C)[:, :, None]
-            if bandpass is not None:
-                b1 = np.stack([bandpass[a] for a in a1])
-                b2 = np.stack([bandpass[a] for a in a2])
-                factor *= b1 * np.conj(b2)
-            data[:, :, hands] = (vis[:, :, None] * factor).astype(np.complex64)
-            if model.thermal:
-                sigma = np.sqrt(noise["scale"] / np.where(weight > 0, weight, np.inf))
-                noise_cube = thermal_noise(rng, sigma * model.thermal_scale, len(chan_freq), kernel)
-                if model.extra.get("channel_profile") and len(noise.get("channel_profile", [])) == len(chan_freq):
-                    noise_cube *= np.sqrt(np.asarray(noise["channel_profile"], dtype=np.float32))[None, :, None]
-                data += noise_cube
+            _, _, data = sim.chunk(t, start, n)
             t.putcol("DATA", data, startrow=start, nrow=n)
     truth = {
         "seed": seed,
         "errors": model.__dict__,
-        "noise": noise,
-        "kernel": np.asarray(kernel).tolist() if not isinstance(kernel, str) else kernel,
+        "noise": sim.noise,
+        "kernel": np.asarray(sim.kernel).tolist() if not isinstance(sim.kernel, str) else sim.kernel,
         "rows": int(nrow),
     }
     (out_ms / "counterpart.json").write_text(json.dumps(truth, indent=1, default=str))

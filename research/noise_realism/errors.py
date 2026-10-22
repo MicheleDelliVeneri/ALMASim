@@ -43,6 +43,16 @@ class ErrorModel:
     screen_wind_mps: float = 10.0
     screen_cycle_s: float = 0.0  # phase-referencing cycle (0: no referencing)
     screen_outer_km: float = 3.0
+    # What phase referencing leaves, held for a scan: per scan, a fresh screen
+    # sampled at each antenna (the phase-transfer error, correlated in space).
+    scan_screen_path_um_1km: float = 0.0
+    scan_screen_slope: float = 5 / 6  # rms phase difference grows as (baseline)^slope
+    # What varies within a scan, faster than referencing follows: a screen per
+    # integration, correlated in time over fast_coherence_s, its per-scan mean
+    # removed (that is the scan screen's); decorrelates the scan's average.
+    fast_screen_path_um_1km: float = 0.0  # rms within-scan path difference, 1 km apart
+    fast_screen_slope: float = 5 / 6
+    fast_coherence_s: float = 10.0
     bandpass_amp_rms: float = 0.0  # fractional ripple across the window, per antenna
     bandpass_phase_rms_deg: float = 0.0
     bandpass_modes: int = 4  # Fourier modes of the ripple
@@ -197,6 +207,82 @@ class PhaseScreen:
         # path minus the path a cycle-length later in the flow, halved (interpolated).
         later = self.path_m(xy, time + self.cycle)
         return (path - later) / 2
+
+
+def kolmogorov_screen(
+    rng, extent_m: float, outer_km: float, step: float = 10.0, slope: float = 5 / 6, ref_m: float = 150.0
+) -> np.ndarray:
+    """A square turbulent screen covering ``extent_m`` whose rms difference grows
+    as separation^slope (power spectrum k^-(2 slope + 2): Kolmogorov's 5/3 + 2 =
+    11/3 for slope 5/6), up to the outer scale; scaled so that the rms
+    difference between points 1 km apart would be 1. The scale is set at
+    ``ref_m``, well inside the screen: the screen is periodic, so at separations
+    near its size its differences no longer grow."""
+    n = int(2 ** np.ceil(np.log2(max(extent_m, 2_500.0) / step)))
+    k = np.fft.fftfreq(n, step)
+    k2 = k[None, :] ** 2 + k[:, None] ** 2 + (1 / (outer_km * 1e3)) ** 2
+    amplitude = k2 ** (-(2 * slope + 2) / 4)  # sqrt of the power spectrum, as k^2 = |k|^2
+    screen = np.real(np.fft.ifft2(amplitude * (rng.standard_normal((n, n)) + 1j * rng.standard_normal((n, n)))))
+    sep = int(round(ref_m / step))
+    rms = np.sqrt((np.mean((screen[:, : n - sep] - screen[:, sep:]) ** 2) + np.mean((screen[: n - sep] - screen[sep:]) ** 2)) / 2)
+    return screen / rms * (ref_m / 1_000) ** slope
+
+
+class ScanScreen:
+    """Per scan and antenna, a residual path: a fresh screen per scan, sampled at the antennas."""
+
+    def __init__(self, rng, model: ErrorModel, positions_m: np.ndarray, scans) -> None:
+        origin = positions_m[:, :2].min(axis=0) - 500.0
+        extent = float(np.ptp(positions_m[:, :2], axis=0).max()) + 1_000.0
+        step = 10.0
+        ix = ((positions_m[:, 0] - origin[0]) / step).astype(int)
+        iy = ((positions_m[:, 1] - origin[1]) / step).astype(int)
+        self.index = {int(s): i for i, s in enumerate(scans)}
+        self.path = np.zeros((len(scans), len(positions_m)))
+        for i, _ in enumerate(scans):
+            screen = kolmogorov_screen(rng, extent, model.screen_outer_km, step, model.scan_screen_slope)
+            self.path[i] = screen[iy, ix] * model.scan_screen_path_um_1km * 1e-6
+
+    def path_m(self, ant: np.ndarray, scan: np.ndarray) -> np.ndarray:
+        rows = np.array([self.index[int(s)] for s in scan])
+        return self.path[rows, ant]
+
+
+class FastScreen:
+    """Per integration and antenna, the path that varies within a scan: a fresh
+    screen per integration, blended with the last one (correlated over
+    ``fast_coherence_s``), less each antenna's mean over the scan. Scaled so that
+    the rms within-scan path difference of the array's baselines follows the
+    model's power law (median over antenna pairs)."""
+
+    def __init__(self, rng, model: ErrorModel, positions_m: np.ndarray, times: np.ndarray, scans: np.ndarray):
+        origin = positions_m[:, :2].min(axis=0) - 500.0
+        extent = float(np.ptp(positions_m[:, :2], axis=0).max()) + 1_000.0
+        step = 10.0
+        ix = ((positions_m[:, 0] - origin[0]) / step).astype(int)
+        iy = ((positions_m[:, 1] - origin[1]) / step).astype(int)
+        order = np.argsort(times)
+        self.times, scans = times[order], scans[order]  # unique integrations, their scans
+        path = np.zeros((len(self.times), len(positions_m)))
+        for i, time in enumerate(self.times):
+            fresh = kolmogorov_screen(rng, extent, model.screen_outer_km, step, model.fast_screen_slope)[iy, ix]
+            if i and scans[i] == scans[i - 1]:
+                a = np.exp(-(time - self.times[i - 1]) / model.fast_coherence_s)
+                path[i] = a * path[i - 1] + np.sqrt(1 - a**2) * fresh
+            else:
+                path[i] = fresh
+        for s in np.unique(scans):
+            path[scans == s] -= path[scans == s].mean(axis=0)
+        i, j = np.triu_indices(len(positions_m), 1)
+        b = np.hypot(*(positions_m[i, :2] - positions_m[j, :2]).T)
+        keep = b > step
+        rms = np.sqrt(np.mean((path[:, i[keep]] - path[:, j[keep]]) ** 2, axis=0))
+        scale = np.median(rms / (b[keep] / 1_000) ** model.fast_screen_slope)
+        self.path = path * model.fast_screen_path_um_1km * 1e-6 / scale
+
+    def path_m(self, ant: np.ndarray, time: np.ndarray) -> np.ndarray:
+        rows = np.clip(np.searchsorted(self.times, time), 0, len(self.times) - 1)
+        return self.path[rows, ant]
 
 
 def bandpass_factors(rng, model: ErrorModel, antennas, nchan: int, npol: int) -> dict:
