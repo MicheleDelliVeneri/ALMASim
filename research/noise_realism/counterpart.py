@@ -67,50 +67,61 @@ def split_window(real_ms: Path, spw: int, field: str, base_ms: Path) -> None:
     )
 
 
-def measure_noise(base_ms: Path, rows: int = 60_000, seed: int = 0) -> dict:
+def measure_noise(base_ms: Path, samples: int = 40_000_000) -> dict:
     """Per-component noise variance against WEIGHT, from channel differences.
 
     Differences three channels apart remove the sky (smooth on that scale)
     and are uncorrelated even for Hanning-smoothed channels; one and two
     apart they show the correlation of neighbours:
     var(V_k - V_k+l) = 2 sigma^2 (1 - rho_l).
+
+    Rows are taken evenly over the whole observation (every n-th row, up to
+    about ``samples`` visibilities): one block of rows can sit at another
+    elevation or weather than the rest, where WEIGHT tracks the noise less well.
     """
     table = _tables()
     with table(str(base_ms), ack=False) as t:
         n = t.nrows()
-        rng = np.random.default_rng(seed)
-        start = int(rng.integers(0, max(n - rows, 1)))
-        data = t.getcol("DATA", startrow=start, nrow=rows)  # (nrow, nchan, ncorr)
-        flag = t.getcol("FLAG", startrow=start, nrow=rows)
-        weight = t.getcol("WEIGHT", startrow=start, nrow=rows)  # (nrow, ncorr)
-    good = ~flag
+        shape = t.getcell("DATA", 0).shape  # (nchan, ncorr)
+        step = max(1, int(np.ceil(n * shape[0] * shape[1] / samples)))
+        data = t.getcol("DATA", rowincr=step)  # (nrow, nchan, ncorr)
+        flag = t.getcol("FLAG", rowincr=step)
+        weight = t.getcol("WEIGHT", rowincr=step)  # (nrow, ncorr)
+        a1, a2 = t.getcol("ANTENNA1", rowincr=step), t.getcol("ANTENNA2", rowincr=step)
+    cross = a1 != a2
+    data, flag, weight = data[cross], flag[cross], weight[cross]
+    if weight.shape[1] != data.shape[2]:
+        weight = np.repeat(weight.mean(axis=1, keepdims=True), data.shape[2], axis=1)
+    good = ~flag & (weight[:, None, :] > 0)
 
     def lag_var(lag: int) -> np.ndarray:
+        """Per channel, the mean of |V_k - V_k+lag|^2 / 4 x WEIGHT: what the
+        noise variance would be at WEIGHT 1, less the correlation at that lag.
+        Values above 20 times their channel's median (a line's edge, RFI;
+        noise alone exceeds it once in a million) are left out."""
         diff = data[:, lag:] - data[:, :-lag]
         ok = good[:, lag:] & good[:, :-lag]
-        per_component = np.where(ok, (diff.real**2 + diff.imag**2) / 4, np.nan)
-        return np.nanmedian(per_component, axis=1)  # (nrow, ncorr), robust to lines
+        v = np.where(ok, (diff.real**2 + diff.imag**2) / 4 * weight[:, None, :], np.nan)
+        v = np.where(v > 20 * np.nanmedian(v, axis=(0, 2), keepdims=True), np.nan, v)
+        per_chan = np.nanmean(v, axis=(0, 2))  # n - lag pairs, centred between their channels
+        return np.pad(per_chan, ((lag + 1) // 2, lag // 2), mode="edge")
 
+    # Means, not medians: an image's noise is a weighted mean of the visibilities'
+    # variances. Lag 3 (uncorrelated even for Hanning-smoothed channels) gives the
+    # level and its variation across the window; lags 1 and 2 the correlation.
     var1, var2, var3 = lag_var(1), lag_var(2), lag_var(3)
-    # How the noise varies across the window (Tsys with frequency): the median over
-    # rows of each channel's lag-3 scatter against its row's weight, normalised.
-    diff3 = data[:, 3:] - data[:, :-3]
-    ok3 = good[:, 3:] & good[:, :-3]
-    per_chan = np.where(ok3, (diff3.real**2 + diff3.imag**2) / 4 * weight[:, None, :], np.nan)
-    profile = np.nanmedian(np.nanmedian(per_chan, axis=2), axis=0)
-    profile = np.concatenate([profile[:2], profile, profile[-1:]])  # lag-3 pairs: n - 3 values, centred
-    profile = np.where(np.isfinite(profile), profile, np.nanmedian(profile))
-    profile = profile / np.median(profile)
-    usable = np.isfinite(var3) & np.isfinite(var1) & (weight > 0)
-    # A median of a 2-dof chi-square scatter, back to its mean: / ln 2.
-    scale = float(np.median(var3[usable] * weight[usable]) / np.log(2))
-    rho1 = float(1 - np.median(var1[usable] / var3[usable]))
-    rho2 = float(1 - np.median(var2[usable] / var3[usable]))
+    usable = np.isfinite(var3) & np.isfinite(var1) & np.isfinite(var2)
+    scale = float(np.mean(var3[usable]))
+    rho1 = float(1 - np.mean(var1[usable]) / scale)
+    rho2 = float(1 - np.mean(var2[usable]) / scale)
+    profile = np.where(np.isfinite(var3), var3 / scale, 1.0)
     return {
         "scale": scale,
         "rho1": rho1,
         "rho2": rho2,
-        "rows_sampled": int(usable.sum()),
+        "rows_sampled": int(len(data)),
+        "row_step": step,
+        "estimator": "clipped mean",
         "channel_profile": [round(float(p), 4) for p in profile],
     }
 
@@ -349,6 +360,8 @@ def main(argv: list[str] | None = None) -> None:
     split.add_argument("spw", type=int)
     split.add_argument("field")
     split.add_argument("base_ms", type=Path)
+    measure = sub.add_parser("measure")
+    measure.add_argument("base_ms", type=Path)
     make = sub.add_parser("make")
     make.add_argument("base_ms", type=Path)
     make.add_argument("task_dir", type=Path)
@@ -358,6 +371,15 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.step == "split":
         split_window(args.real_ms, args.spw, args.field, args.base_ms)
+    elif args.step == "measure":
+        noise_path = args.base_ms / "noise.json"
+        if noise_path.exists():
+            previous = args.base_ms / "noise.block.json"  # the one-block estimate
+            if not previous.exists():
+                noise_path.rename(previous)
+        noise = measure_noise(args.base_ms)
+        noise_path.write_text(json.dumps(noise, indent=1))
+        print(json.dumps({k: noise[k] for k in ("scale", "rho1", "rho2", "rows_sampled", "row_step")}))
     elif args.step == "base":
         if not (args.base_ms / "table.dat").exists():
             # CASA's split in a process of its own (it and python-casacore in one
