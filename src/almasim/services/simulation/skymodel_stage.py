@@ -136,8 +136,6 @@ def _create_sky_model(
             ra=ra,
             dec=dec,
             api_key=tng_api_key,
-            client=client,
-            update_progress=common_params["update_progress"],
             terminal=terminal_logger,
             rng=rng,
         ),

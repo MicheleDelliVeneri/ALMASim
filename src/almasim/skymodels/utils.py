@@ -53,7 +53,6 @@ def gaussian(x: np.ndarray, amp: float, cen: float, fwhm: float) -> np.ndarray:
 def get_datacube_header(datacube, obs_date: str) -> fits.Header:
     """Generate FITS header for a datacube."""
     datacube.drop_pad()
-    datacube.freq_channels()
     wcs_header = datacube.wcs.to_header()
     wcs_header.rename_keyword("WCSAXES", "NAXIS")
     header = fits.Header()

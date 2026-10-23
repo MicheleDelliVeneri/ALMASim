@@ -32,8 +32,8 @@ dependencies = [
     "dask",
     "dask-jobqueue",
     "distributed",
-    "astromartini",
-    "Hdecompose",  # not imported directly: martini needs it for TNG sources
+    # parallel: numba threads the TNG insertion; tngsource: Hdecompose for TNG particles
+    "astromartini[parallel,tngsource]>=3,<4",
     "paramiko",
     "pysftp",
     "tenacity",

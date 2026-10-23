@@ -8,75 +8,39 @@ import astropy.units as U
 import numpy as np
 import pytest
 
-from almasim.skymodels.extended import (
-    ExtendedSkyModel,
-    evaluate_pixel_spectrum,
-    insert_pixel,
-)
-
-# ===========================================================================
-# insert_pixel (delayed helper)
-# ===========================================================================
+from almasim.skymodels.extended import ExtendedSkyModel, insert_source, inserted_hi_mass
 
 
-@pytest.mark.unit
-def test_insert_pixel_mutates_array():
-    """insert_pixel inserts data into the datacube array at the given slice."""
-    arr = np.zeros((4, 4, 8))
-    insertion_slice = np.s_[1, 2, :]
-    data = np.ones(8) * 7.0
-
-    # Call underlying function (dask delayed wraps it)
-    if hasattr(insert_pixel, "__wrapped__"):
-        insert_pixel.__wrapped__(arr, insertion_slice, data)
-    else:
-        import dask
-
-        dask.compute(insert_pixel(arr, insertion_slice, data))
-
-    # arr should now have the inserted values at [1,2,:]
-    # Note: dask.delayed doesn't mutate in place from compute — verify the call pattern
-    # Just check the function signature works without raising
-    assert True
+@pytest.fixture(autouse=True)
+def _mass_from_mock(monkeypatch):
+    """The mocked martini runs below carry their inserted mass as ``inserted_mass``."""
+    monkeypatch.setattr("almasim.skymodels.extended.inserted_hi_mass", lambda M: M.inserted_mass)
 
 
 # ===========================================================================
-# evaluate_pixel_spectrum (delayed helper)
+# insert_source (a real martini insertion, no TNG download)
 # ===========================================================================
 
 
 @pytest.mark.unit
-def test_evaluate_pixel_spectrum_returns_list():
-    """evaluate_pixel_spectrum returns a list of (slice, data) tuples."""
-    # Build minimal inputs
-    n_particles = 5
-    n_channels = 8
-    pixcoords = np.zeros((3, n_particles)) * U.pix
-    pixcoords[0] = np.linspace(0, 10, n_particles) * U.pix
-    pixcoords[1] = np.linspace(0, 10, n_particles) * U.pix
+def test_insert_source_puts_most_of_a_small_galaxy_in_the_cube(monkeypatch):
+    """martini grids a toy disc into the cube, and the mass bookkeeping sees it."""
+    from martini import demo_source
 
-    kernel_sm_ranges = np.ones((2, n_particles)) * 2 * U.pix
+    monkeypatch.undo()  # the real inserted_hi_mass, not _mass_from_mock's
+    np.random.seed(0)  # demo_source draws from the global generator
+    source = demo_source(N=200)
+    terminal = MagicMock()
 
-    def kernel_px_weights(delta_pix, mask):
-        return np.ones(np.sum(mask)) * U.pix**-2
+    M = insert_source(terminal, source, 64, 64, 95 * U.kHz, 20 * U.arcsec)
 
-    spectra = np.ones((n_particles, n_channels)) * U.Jy / U.pix**2
-
-    ranks_and_ij_pxs = (0, [(2, 3)])
-
-    if hasattr(evaluate_pixel_spectrum, "__wrapped__"):
-        result = evaluate_pixel_spectrum.__wrapped__(
-            ranks_and_ij_pxs,
-            pixcoords,
-            kernel_sm_ranges,
-            kernel_px_weights,
-            False,  # datacube_stokes_axis
-            spectra,
-        )
-        assert isinstance(result, list)
-    else:
-        # Dask delayed — just confirm callable
-        assert callable(evaluate_pixel_spectrum)
+    cube = M.datacube._array
+    assert cube.shape == (64, 64, 64)
+    assert cube.unit == U.Jy / U.arcsec**2
+    assert np.isfinite(cube.value).all() and cube.value.max() > 0
+    ratio = (inserted_hi_mass(M) / source.input_mass).to_value(U.one)
+    assert 0.5 < ratio < 1.05
+    assert "Mass in cube" in terminal.add_log.call_args.args[0]
 
 
 # ===========================================================================
@@ -90,7 +54,6 @@ def test_extended_skymodel_init_stores_attributes():
     mock_datacube = MagicMock()
     mock_datacube.n_px_x = 32
     mock_datacube.n_channels = 16
-    mock_client = MagicMock()
 
     model = ExtendedSkyModel(
         datacube=mock_datacube,
@@ -101,7 +64,6 @@ def test_extended_skymodel_init_stores_attributes():
         ra=10.0 * U.deg,
         dec=-5.0 * U.deg,
         api_key="test_key",
-        client=mock_client,
     )
 
     assert model.tngpath == "/tmp/tng"
@@ -109,12 +71,11 @@ def test_extended_skymodel_init_stores_attributes():
     assert model.subhalo_id == 42
     assert model.redshift == 0.3
     assert model.api_key == "test_key"
-    assert model.client is mock_client
 
 
 @pytest.mark.unit
 def test_extended_skymodel_init_optional_defaults():
-    """update_progress and terminal default to None."""
+    """terminal defaults to None."""
     mock_datacube = MagicMock()
     mock_datacube.n_px_x = 32
     mock_datacube.n_channels = 16
@@ -128,10 +89,8 @@ def test_extended_skymodel_init_optional_defaults():
         ra=10.0 * U.deg,
         dec=-5.0 * U.deg,
         api_key=None,
-        client=MagicMock(),
     )
 
-    assert model.update_progress is None
     assert model.terminal is None
 
 
@@ -148,7 +107,6 @@ def _build_extended_model_with_mocked_insert_tng(
     mock_datacube.n_px_x = 32
     mock_datacube.n_channels = 16
     mock_datacube.channel_width = 0.1 * U.GHz
-    mock_client = MagicMock()
     mock_terminal = MagicMock()
 
     model = ExtendedSkyModel(
@@ -160,7 +118,6 @@ def _build_extended_model_with_mocked_insert_tng(
         ra=10.0 * U.deg,
         dec=-5.0 * U.deg,
         api_key=None,
-        client=mock_client,
         terminal=mock_terminal,
     )
     return model, mass_ratio_sequence
@@ -241,7 +198,6 @@ def test_extended_skymodel_insert_no_terminal():
         ra=10.0 * U.deg,
         dec=-5.0 * U.deg,
         api_key=None,
-        client=MagicMock(),
         terminal=None,
     )
 
@@ -281,18 +237,6 @@ def test_extended_skymodel_insert_distance_scaling_low_mass_ratio():
 
 
 @pytest.mark.unit
-def test_insert_source_needs_initialised_spectra():
-    """Inserting before the spectra exist is an error, also under python -O."""
-    from types import SimpleNamespace
-
-    from almasim.skymodels.extended import MartiniMod
-
-    model = SimpleNamespace(spectral_model=SimpleNamespace(spectra=None))
-    with pytest.raises(RuntimeError, match="no spectra"):
-        MartiniMod._insert_source_in_cube(model, client=None)
-
-
-@pytest.mark.unit
 def test_extended_insert_uses_the_cube_cell_and_the_source_distance():
     """The TNG cube takes the run's pixel size, and the source starts at its own distance."""
     model, _ = _build_extended_model_with_mocked_insert_tng([60.0])
@@ -306,7 +250,7 @@ def test_extended_insert_uses_the_cube_cell_and_the_source_distance():
 
     args = mock_tng.call_args.args
     assert args[-1] == 0.25 * U.arcsec
-    distance = args[8]
+    distance = args[6]
     assert 1000 < distance < 1400, "comoving distance of z = 0.3, not a fixed 50 Mpc"
 
 
@@ -321,4 +265,4 @@ def test_extended_insert_starts_at_least_one_megaparsec_away():
     with patch("almasim.skymodels.extended.insert_tng", return_value=mock_M) as mock_tng:
         model.insert()
 
-    assert mock_tng.call_args.args[8] == 1.0
+    assert mock_tng.call_args.args[6] == 1.0
