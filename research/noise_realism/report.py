@@ -4,10 +4,10 @@ against the real windows, and real/simulated line images side by side.
     python report.py OUT_DIR
 
 Writes OUT_DIR/report.json (the rows the charts draw) and OUT_DIR/pairs/*.png.
-"Final" is the current model (noise measured across the whole track, the channel
-kernel and profile, line and continuum models masked to the real emission):
-iter-i16-masked-both for the 20 cheap windows, iter-f2-sim for the others as they
-finish. "Earlier" is iter-f1-sim (the same, with the continuum model unmasked).
+Only the latest model: iter-f2-sim for the faint windows (noise measured across
+the whole track, the channel kernel and profile, line and continuum models masked
+to the real emission) and iter-f2-bright for the bright ones (the same, plus each
+window's fitted atmosphere and antenna amplitudes); uvfinal/ for the visibilities.
 """
 
 from __future__ import annotations
@@ -53,24 +53,31 @@ def faint_windows() -> set[str]:
     return {line.split()[2] for line in lists if line.startswith("row ") and line.split()[1] in faint}
 
 
-def final_metrics() -> dict[str, dict]:
-    final = load(NOISE / "iter-i16-masked-both")
-    final.update(load(NOISE / "iter-f2-sim"))
+LATEST = {"faint": "iter-f2-sim", "bright": "iter-f2-bright"}
+
+
+def latest_metrics() -> dict[str, dict[str, dict]]:
+    """Per class (faint, bright), the latest counterparts' metrics by window."""
     faint = faint_windows()
-    return {w: m for w, m in final.items() if w in faint and w not in DIVERGED}
+    out = {}
+    for label, it in LATEST.items():
+        m = load(NOISE / it)
+        out[label] = {w: v for w, v in m.items() if w not in DIVERGED and (w in faint) == (label == "faint")}
+    return out
 
 
 def metric_rows(control: dict, sims: dict[str, dict]) -> list[dict]:
     rows = []
     for label, sim in sims.items():
+        if len(set(control) & set(sim)) < 6:
+            continue
         result = compare(control, sim)
         for metric, words in NOISE_METRICS.items():
             r = result["metrics"].get(metric)
             if r is None:
                 continue
-            windows = sorted(set(control) & set(sim))
             values = []
-            for w in windows:
+            for w in sorted(set(control) & set(sim)):
                 a, b = control[w].get(metric), sim[w].get(metric)
                 if a is None or b is None or not np.isfinite(a) or not np.isfinite(b):
                     continue
@@ -80,69 +87,74 @@ def metric_rows(control: dict, sims: dict[str, dict]) -> list[dict]:
                 else:
                     values.append(b - a)
             v = np.array(values)
-            rows.append(
-                {
-                    "model": label,
-                    "metric": words,
-                    "unit": "%" if r["kind"] == "log" else "abs",
-                    "n": int(len(v)),
-                    "median": round(float(np.median(v)), 4),
-                    "lo": round(float(np.percentile(v, 16)), 4),
-                    "hi": round(float(np.percentile(v, 84)), 4),
-                    "p": None if r["p"] is None else round(r["p"], 4),
-                }
-            )
+            rows.append({"windows": label, "metric": words, "unit": "%" if r["kind"] == "log" else "abs",
+                         "n": int(len(v)), "median": round(float(np.median(v)), 4),
+                         "lo": round(float(np.percentile(v, 16)), 4), "hi": round(float(np.percentile(v, 84)), 4),
+                         "p": None if r["p"] is None else round(r["p"], 4)})
     return rows
 
 
-def scatter_rows(control: dict, final: dict, earlier: dict) -> list[dict]:
+def scatter_rows(control: dict, sims: dict[str, dict]) -> list[dict]:
     rows = []
-    for w in sorted(control):
-        sim, model = (final[w], "final") if w in final else (earlier.get(w), "earlier")
-        if sim is None:
-            continue
-        for metric, key in (("cube", "q.cube.channel_noise_mjy"), ("continuum", "q.continuum.noise_jy_beam")):
-            a, b = control[w].get(key), sim.get(key)
-            if a and b and np.isfinite(a) and np.isfinite(b) and a > 0 and b > 0:
-                scale = 1.0 if metric == "cube" else 1e3  # both in mJy/beam
-                rows.append({"window": w, "kind": metric, "model": model, "real": a * scale, "sim": b * scale})
+    for label, sim in sims.items():
+        for w in sorted(set(control) & set(sim)):
+            for metric, key, scale in (("cube", "q.cube.channel_noise_mjy", 1.0),
+                                       ("continuum", "q.continuum.noise_jy_beam", 1e3)):  # mJy/beam
+                a, b = control[w].get(key), sim[w].get(key)
+                if a and b and np.isfinite(a) and np.isfinite(b) and a > 0 and b > 0:
+                    rows.append({"window": w, "kind": metric, "windows": label, "real": a * scale, "sim": b * scale})
     return rows
+
+
+UV_STATS = (
+    ("variance", "Variance against WEIGHT"),
+    ("kurtosis", "Excess kurtosis"),
+    ("channel_variance_spread", "Noise spread across channels"),
+    ("antenna_variance_spread", "Noise spread across antennas"),
+    ("time_lag1_corr", "Correlation of consecutive integrations"),
+)
+
+
+def _uv_results() -> list[dict]:
+    """uvfinal/*.json: each window's real visibilities against its latest counterpart."""
+    out = []
+    for f in sorted((NOISE / "uvfinal").glob("*.json"), key=lambda p: int(p.stem)):
+        r = json.loads(f.read_text())
+        label = next((k for k in r if isinstance(r[k], dict) and "variance" in r[k] and k != "real"), None)
+        if label:
+            out.append((r, label))
+    return out
 
 
 def uv_rows() -> list[dict]:
     rows = []
-    for f in sorted((NOISE / "uvfull").glob("*.json"), key=lambda p: int(p.stem)):
-        r = json.loads(f.read_text())
-        sim = r.get("thermal-profile-masked")
-        if sim is None:
-            continue
-        for key, words in (
-            ("variance", "Variance against WEIGHT"),
-            ("kurtosis", "Excess kurtosis"),
-            ("channel_variance_spread", "Noise spread across channels"),
-            ("antenna_variance_spread", "Noise spread across antennas"),
-            ("time_lag1_corr", "Correlation of consecutive integrations"),
-        ):
-            a, b = r["real"].get(key), sim.get(key)
+    faint = faint_windows()
+    for r, label in _uv_results():
+        for key, words in UV_STATS:
+            a, b = r["real"].get(key), r[label].get(key)
             if a is not None and b is not None:
                 rows.append({"window": r["window"], "source": r["source"], "ghz": round(r["ghz"], 1),
+                             "windows": "faint" if r["window"] in faint else "bright",
                              "stat": words, "real": round(a, 5), "sim": round(b, 5)})
     return rows
 
 
-def baseline_rows() -> list[dict]:
+def baseline_rows(count: int = 2) -> list[dict]:
+    """Phase scatter and amplitude loss by baseline, real and latest, for the bright
+    windows with the most bright baseline-scans."""
+    faint = faint_windows()
+    bright = [(sum(r["real"]["group_n"]), r, label) for r, label in _uv_results() if r["window"] not in faint]
     rows = []
-    for f in ("17.json", "19.json"):
-        r = json.loads((NOISE / "uv4" / f).read_text())
+    for _, r, label in sorted(bright, key=lambda x: -x[0])[:count]:
         edges = np.asarray(r["real"]["uv_edges_klambda"]) * 1e3
         lam = C_KMS * 1e3 / (r["ghz"] * 1e9)
         centres = np.sqrt(edges[:-1] * edges[1:]) * lam
-        for label, key in (("Real", "real"), ("Noise only", "thermal-profile"), ("Noise + atmosphere", "atmo-fit")):
+        for data, key in (("Real", "real"), ("Simulated", label)):
             for b, ph, la, n in zip(centres, r[key]["group_phase_rms_deg"], r[key]["group_lnamp_mean"],
                                     r["real"]["group_n"], strict=True):
                 if ph is None or n < 20:
                     continue
-                rows.append({"source": r["source"], "data": label, "baseline_m": round(float(b)),
+                rows.append({"source": r["source"], "data": data, "baseline_m": round(float(b)),
                              "phase_deg": round(ph, 2), "lnamp": round(la, 4)})
     return rows
 
@@ -180,7 +192,7 @@ def moment0(cube_dir: Path, ranges_hz: list[tuple[float, float]]):
     return cube[sel].sum(axis=0) * dv, int(sel.sum()), h
 
 
-def pairs(out: Path, control: dict, final: dict, earlier: dict, windows_csv: Path, count: int = 10) -> list[dict]:
+def pairs(out: Path, control: dict, windows_csv: Path, count: int = 10) -> list[dict]:
     """Moment 0 over the real line channels, real and simulated, for the windows with the strongest lines."""
     import matplotlib
 
@@ -196,7 +208,7 @@ def pairs(out: Path, control: dict, final: dict, earlier: dict, windows_csv: Pat
 
     # Every window with a simulated cube, the latest model's where there are several.
     sim_dirs = {}
-    for it in ("iter-f1-sim", "iter-i16-masked-both", "iter-f2-sim"):
+    for it in LATEST.values():
         for f in (NOISE / it / "cubes").glob("*/SPW-0_FIELD-0/wsclean-cube-image.fits"):
             if f.parent.parent.name not in DIVERGED:
                 sim_dirs[f.parent.parent.name] = it
@@ -234,7 +246,7 @@ def pairs(out: Path, control: dict, final: dict, earlier: dict, windows_csv: Pat
     meta = []
     for snr, name, hz, m_real, nsel in scored[:count]:
         sim_iter = sim_dirs[name]
-        model = "earlier" if sim_iter == "iter-f1-sim" else "final"
+        model = "bright" if sim_iter == "iter-f2-bright" else "faint"
         m_sim, _, h = moment0(NOISE / sim_iter / "cubes" / name / "SPW-0_FIELD-0", hz)
         # Noise of each moment map away from the line: outside the real line mask,
         # widened by 10 pixels (extended emission would otherwise raise it).
@@ -282,17 +294,16 @@ if __name__ == "__main__":
     out = Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
     control = load(NOISE / "iter-f0-control")
-    final = final_metrics()
-    earlier = {w: m for w, m in load(NOISE / "iter-f1-sim").items() if w not in DIVERGED}
+    latest = latest_metrics()
     report = {
-        "counts": {"real": len(control), "final": len(set(final) & set(control)),
-                   "earlier": len(set(earlier) & set(control)), "diverged": sorted(DIVERGED)},
-        "metrics": metric_rows(control, {"final": final, "earlier": earlier}),
-        "scatter": scatter_rows(control, final, earlier),
+        "counts": {"real": len(control), **{k: len(set(v) & set(control)) for k, v in latest.items()},
+                   "diverged": sorted(DIVERGED)},
+        "metrics": metric_rows(control, latest),
+        "scatter": scatter_rows(control, latest),
         "uv": uv_rows(),
         "baseline": baseline_rows(),
     }
-    report["pairs"] = pairs(out, control, final, earlier, NOISE / "windows.csv")
+    report["pairs"] = pairs(out, control, NOISE / "windows.csv")
     (out / "report.json").write_text(json.dumps(report, indent=1))
     print(json.dumps(report["counts"]), len(report["metrics"]), len(report["scatter"]), len(report["uv"]),
           len(report["baseline"]), len(report["pairs"]))
