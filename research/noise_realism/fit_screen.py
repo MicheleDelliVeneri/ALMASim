@@ -76,7 +76,14 @@ def _power_law(b: list, sigma: list, ghz: float) -> dict | None:
     if len(b) < 3:
         return None
     lam = C / (ghz * 1e9)
-    slope, intercept = np.polyfit(np.log(np.asarray(b) / 1_000), np.log(sigma), 1)
+    x, y = np.log(np.asarray(b) / 1_000), np.log(sigma)
+    slope, intercept = np.polyfit(x, y, 1)
+    # The screens take slopes in (0.05, 0.95); outside them (an excess that does
+    # not grow with baseline, or grows faster than turbulence can) the strength
+    # is refitted at the nearest allowed slope, to match the measured baselines.
+    if not 0.05 <= slope <= 0.95:
+        slope = min(max(slope, 0.05), 0.95)
+        intercept = float(np.mean(y - slope * x))
     sigma_1km = float(np.exp(intercept))
     return {
         "bins": len(b),
@@ -124,7 +131,7 @@ elif __name__ == "__main__":
         for label, result, key in (("scan", slow, "scan_screen"), ("fast", fast, "fast_screen")):
             if result:
                 entry[f"{key}_path_um_1km"] = result["path_um_1km"]
-                entry[f"{key}_slope"] = min(max(result["slope"], 0.05), 0.95)
+                entry[f"{key}_slope"] = result["slope"]
                 print(f"{r['source'][:24]:24s} {r['ghz']:6.1f} GHz  {label}: {result['path_um_1km']:6.1f} um at 1 km "
                       f"({result['phase_1km_deg']:5.1f} deg), slope {result['slope']:+.2f}, {result['bins']} bins "
                       f"{result['baseline_m'][0]}-{result['baseline_m'][-1]} m")
