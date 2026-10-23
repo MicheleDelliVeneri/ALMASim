@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -234,7 +234,7 @@ wheels = [
 
 [[package]]
 name = "astromartini"
-version = "2.1.18"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astropy" },
@@ -242,9 +242,9 @@ dependencies = [
     { name = "scipy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/91/faf2b77a77e0dfd336845c5119435ba58a409b0e48bfd0e3aab336b027f5/astromartini-2.1.18.tar.gz", hash = "sha256:84a3b677fba8c91e0df4d51384a498aa322618521bd1f2792696b632b28f16c2", size = 124609, upload-time = "2026-04-23T18:32:41.588Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/13/dc473581a3cd9cfeef0708b84807bbb298da3d52fefd1b0977bc3f653cfd/astromartini-3.0.0.tar.gz", hash = "sha256:898012973a5e06c1529a1c5f19ee0a158b8e755eb46172441c53fe900419c59e", size = 133633, upload-time = "2026-07-31T17:43:13.109Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/3a/96d1864b2de8db5effab6397f33f64b3c459442ab7323f047603ffcc8735/astromartini-2.1.18-py3-none-any.whl", hash = "sha256:8ba9f5901576df0ec192a0fea82c902e4076a30627bc0ba1204d98a35d377533", size = 115071, upload-time = "2026-04-23T18:32:39.407Z" },
+    { url = "https://files.pythonhosted.org/packages/50/8c/e92d506ab10287a554f4ff627a9a242e4c2662bf876c9a80df6e665f9f65/astromartini-3.0.0-py3-none-any.whl", hash = "sha256:b4115798400819a9f25f73b50da6bb6ed304a851021c8f4eb8f6846d662f2207", size = 122775, upload-time = "2026-07-31T17:43:11.588Z" },
 ]
 
 [[package]]
