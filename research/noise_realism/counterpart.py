@@ -162,7 +162,8 @@ def _emission_mask(task_dir: Path, sigma: float = 5.0) -> np.ndarray:
 def _model_planes(
     task_dir: Path, chan_freq: np.ndarray, line: bool | str = True, continuum: bool | str = True
 ) -> tuple[np.ndarray, float, float]:
-    """Sky per MS channel (nchan, ny, nx): continuum plus the line plane at its frequency.
+    """The distinct sky planes (nplane, ny, nx) and each MS channel's plane:
+    continuum plus the line plane at its frequency.
 
     ``line``: True, the whole cube model; False, none; "masked", only in the line
     channels and inside the line mask the real run found (the rest of the cube
@@ -183,7 +184,11 @@ def _model_planes(
     cont, ch = planes(task_dir / "wsclean-model.fits")
     if continuum == "masked":
         cont = cont * _emission_mask(task_dir)[None]
-    sky = np.repeat(cont[:1], len(chan_freq), axis=0)
+    # Each distinct plane once: the continuum (plane 0), and continuum plus each
+    # line plane a channel uses; plane_of maps every MS channel to its plane
+    # (one plane per native channel would take hundreds of GB on large windows).
+    distinct = [cont[0]]
+    plane_of = np.zeros(len(chan_freq), dtype=int)
     if line:
         cube, lh = planes(task_dir / "wsclean-cube-model.fits")
         if cont.shape[-2:] != cube.shape[-2:]:
@@ -197,14 +202,27 @@ def _model_planes(
             inside &= _line_channels(task_dir, len(chan_freq)) & mask_path.exists()
             if mask_path.exists():
                 cube = cube * (planes(mask_path)[0][:1] > 0)
-        sky[inside] += cube[idx[inside]]
+        for k in np.unique(idx[inside]):
+            if np.any(cube[k]):
+                distinct.append(cont[0] + cube[k])
+                plane_of[inside & (idx == k)] = len(distinct) - 1
     # ducc0 reads a plane with its axes the other way round from FITS: handed a
     # FITS (y, x) array it images it rotated by 90 degrees, (y, x) -> (n - x, y).
     # This is the plane that WSClean images back where the FITS model has it
     # (checked with a point source off centre; see orient/test.py in the notes).
-    sky = np.roll(sky[:, ::-1, :], 1, axis=1).transpose(0, 2, 1)
+    sky = np.roll(np.stack(distinct)[:, ::-1, :], 1, axis=1).transpose(0, 2, 1)
     deg = np.pi / 180
-    return sky, abs(ch["CDELT1"]) * deg, abs(ch["CDELT2"]) * deg
+    return sky, plane_of, abs(ch["CDELT1"]) * deg, abs(ch["CDELT2"]) * deg
+
+
+def _predict(uvw, chan_freq, sky, plane_of, px, py, nthreads) -> np.ndarray:
+    """Model visibilities (nrows, nchan): each group of channels from its shared plane."""
+    vis = np.zeros((len(uvw), len(chan_freq)), dtype=np.complex128)
+    for k in np.unique(plane_of):
+        chans = np.flatnonzero(plane_of == k)
+        if np.any(sky[k]):
+            vis[:, chans] = predict_visibilities(uvw, chan_freq[chans], sky[k], px, py, nthreads=nthreads)
+    return vis
 
 
 def _enu(positions_itrf: np.ndarray) -> np.ndarray:
@@ -249,7 +267,7 @@ class Simulator:
         self.hands = np.flatnonzero(np.isin(self.corr, list(PARALLEL)))
         self.npol = len(self.hands)
         # extra.line_model false: the continuum model only (no line emission).
-        self.sky, self.px, self.py = _model_planes(
+        self.sky, self.plane_of, self.px, self.py = _model_planes(
             task_dir,
             self.chan_freq,
             model.extra.get("line_model", True),
@@ -308,8 +326,8 @@ class Simulator:
             "weight": self.weights(t, start, n),
         }
         if vis is None:
-            vis = predict_visibilities(
-                cols["uvw"], self.chan_freq, self.sky, self.px, self.py, nthreads=self.nthreads
+            vis = _predict(
+                cols["uvw"], self.chan_freq, self.sky, self.plane_of, self.px, self.py, self.nthreads
             )
         nchan, ncorr = len(self.chan_freq), len(self.corr)
         clean = np.zeros((n, nchan, ncorr), dtype=np.complex64)
