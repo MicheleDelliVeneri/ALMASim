@@ -1,160 +1,77 @@
 """Extended (TNG) sky model implementation."""
 
 import os
-from itertools import product
 from typing import Any
 
 import astropy.cosmology.units as cu
 import astropy.units as U
+import numba
 import numpy as np
 from astropy.cosmology import WMAP9
-from dask import delayed
-from dask.distributed import Client
-from martini import DataCube, Martini
-from martini.sources import TNGSource
+from martini import DataCube, L_coords, Martini
+from martini.sources import SPHSource, TNGSource
 from martini.spectral_models import GaussianSpectrum
 from martini.sph_kernels import WendlandC2Kernel
 
-from .base import _LocalClient
+from almasim.services.interferometry.predict import ALMASIM_NTHREADS
+
 from .datasets.tng import TNG_SIMULATION
-from .utils import track_progress
 
 
-@delayed
-def insert_pixel(datacube_array, insertion_slice, insertion_data):
-    """Insert the spectrum for a single pixel into the datacube array."""
-    datacube_array[insertion_slice] = insertion_data
-    return
+def inserted_hi_mass(M: Martini) -> U.Quantity:
+    """The HI mass in ``M``'s cube, as martini reports it after insertion."""
+    cube = M.datacube
+    flux = (cube._array[cube.pad_mask] * cube.px_size**2).sum((0, 1)).squeeze().to_value(U.Jy)
+    widths = np.abs(np.diff(cube.velocity_channel_edges.to_value(U.km / U.s)))
+    return 2.36e5 * U.Msun * M.source.distance.to_value(U.Mpc) ** 2 * np.sum(flux * widths)
 
 
-@delayed
-def evaluate_pixel_spectrum(
-    ranks_and_ij_pxs,
-    pixcoords,
-    kernel_sm_ranges,
-    kernel_px_weights,
-    datacube_stokes_axis,
-    spectral_model_spectra,
-):
-    """Add up contributions of particles to the spectrum in a pixel."""
-    result = list()
-    rank, ij_pxs = ranks_and_ij_pxs
-    for ij_px in ij_pxs:
-        ij = np.array(ij_px)[..., np.newaxis] * U.pix
-        mask = (np.abs(ij - pixcoords[:2]) <= kernel_sm_ranges).all(axis=0)
-        weights = kernel_px_weights(pixcoords[:2, mask] - ij, mask=mask)
-        insertion_slice = (
-            np.s_[ij_px[0], ij_px[1], :, 0]
-            if datacube_stokes_axis
-            else np.s_[ij_px[0], ij_px[1], :]
+def insert_source(
+    terminal: Any | None,
+    source: SPHSource,
+    n_px: int,
+    n_channels: int,
+    freq_sup: U.Quantity,
+    px_size: U.Quantity,
+) -> Martini:
+    """Insert ``source`` into a cube of ``n_px`` pixels of ``px_size``.
+
+    martini threads the insertion with numba over ``ALMASIM_NTHREADS`` CPUs, at most
+    the CPUs this process may use (numba refuses more, e.g. a node's in a Slurm job).
+    """
+    datacube = DataCube(
+        n_px_x=n_px,
+        n_px_y=n_px,
+        n_channels=n_channels,
+        px_size=px_size,
+        channel_width=freq_sup,
+        spectral_centre=source.vsys,
+        ra=source.ra,
+        dec=source.dec,
+    )
+    M = Martini(
+        source=source,
+        datacube=datacube,
+        sph_kernel=WendlandC2Kernel(),
+        spectral_model=GaussianSpectrum(sigma="thermal"),
+        quiet=True,
+    )
+    # skip_validation: warn rather than fail where the kernel approximation is coarse.
+    M.insert_source_in_cube(
+        skip_validation=True, ncpu=min(ALMASIM_NTHREADS, numba.get_num_threads())
+    )
+    if terminal is not None:
+        flux = np.sum(M.datacube._array * M.datacube.px_size**2).to(U.Jy)
+        terminal.add_log(
+            f"Source inserted at {source.distance:.2f}.\n"
+            f"  Flux density in cube: {flux:.2e}\n"
+            f"  Mass in cube: {inserted_hi_mass(M):.2e}"
+            f" of {source.input_mass:.2e}"
         )
-        result.append(
-            (
-                insertion_slice,
-                (spectral_model_spectra[mask] * weights[..., np.newaxis]).sum(axis=-2),
-            )
-        )
-    return result
-
-
-class MartiniMod(Martini):
-    """Modified Martini class with parallel processing support."""
-
-    def _insert_source_in_cube(
-        self,
-        client: Client | _LocalClient,
-        update_progress: Any | None = None,
-        terminal: Any | None = None,
-    ):
-        """Insert source into cube using parallel processing."""
-        if self.spectral_model.spectra is None:
-            raise RuntimeError("the spectral model has no spectra; call init_spectra first")
-        self.sph_kernel._confirm_validation(noraise=True, quiet=True)
-
-        # Scatter the datacube array across the workers
-        scattered_array = client.scatter(self._datacube._array, broadcast=True)
-
-        ij_pxs = list(
-            product(
-                np.arange(self._datacube._array.shape[0]),
-                np.arange(self._datacube._array.shape[1]),
-            )
-        )
-
-        # Parallel execution with Dask (let Dask decide how to distribute the tasks)
-        delayed_results = []
-        # Split the pixel grid among workers
-        for icpu in range(len(ij_pxs)):
-            # Directly call the delayed method (no need for explicit dask.delayed)
-            delayed_result = evaluate_pixel_spectrum(
-                (icpu, [ij_pxs[icpu]]),
-                self.source.pixcoords,
-                self.sph_kernel.sm_ranges,
-                self.sph_kernel._px_weight,
-                self._datacube.stokes_axis,
-                self.spectral_model.spectra,
-            )
-            delayed_results.append(delayed_result)
-
-        # Compute all the delayed tasks in parallel
-        futures = client.compute(delayed_results)
-        track_progress(update_progress, futures)
-        # Process the results and insert into the scattered datacube array
-        for result in futures:
-            for insertion_slice, insertion_data in result:
-                insert_pixel(scattered_array, insertion_slice, insertion_data)
-
-        # Gather the results back to the local datacube array
-        self._datacube._array = client.gather(scattered_array)
-
-        # Final operations on the datacube
-        self._datacube._array = self._datacube._array.to(
-            U.Jy / U.arcsec**2, equivalencies=[self._datacube.arcsec2_to_pix]
-        )
-        pad_mask = (
-            np.s_[
-                self._datacube.padx : -self._datacube.padx,
-                self._datacube.pady : -self._datacube.pady,
-                ...,
-            ]
-            if self._datacube.padx > 0 and self._datacube.pady > 0
-            else np.s_[...]
-        )
-        inserted_flux_density = np.sum(
-            self._datacube._array[pad_mask] * self._datacube.px_size**2
-        ).to(U.Jy)
-        inserted_mass = (
-            2.36e5
-            * U.Msun
-            * self.source.distance.to_value(U.Mpc) ** 2
-            * np.sum(
-                (self._datacube._array[pad_mask] * self._datacube.px_size**2)
-                .sum((0, 1))
-                .squeeze()
-                .to_value(U.Jy)
-                * np.abs(np.diff(self._datacube.velocity_channel_edges)).to_value(U.km / U.s)
-            )
-        )
-        self.inserted_mass = inserted_mass
-        if terminal is not None:
-            terminal.add_log(
-                "Source inserted.\n"
-                f"  Flux density in cube: {inserted_flux_density:.2e}\n"
-                f"  Mass in cube (assuming distance {self.source.distance:.2f} and a"
-                f" spatially resolved source):"
-                f" {inserted_mass:.2e}"
-                f"    [{inserted_mass / self.source.input_mass * 100:.0f}%"
-                f" of initial source mass]\n"
-                f"  Maximum pixel: {self._datacube._array.max():.2e}\n"
-                "  Median non-zero pixel:"
-                f" {np.median(self._datacube._array[self._datacube._array > 0]):.2e}"
-            )
-        return
+    return M
 
 
 def insert_tng(
-    client: Client | _LocalClient,
-    update_progress: Any | None,
     terminal: Any | None,
     n_px: int,
     n_channels: int,
@@ -169,45 +86,20 @@ def insert_tng(
     dec: U.Quantity,
     api_key: str | None,
     px_size: U.Quantity,
-) -> MartiniMod:
-    """Insert TNG source into a cube of ``n_px`` pixels of ``px_size``."""
+) -> Martini:
+    """Insert a TNG subhalo, inclined by ``x_rot`` and turned by ``y_rot`` about its spin."""
     source = TNGSource(
         simulation=TNG_SIMULATION,
         snapNum=snapshot,
         subID=subhalo_id,
         cutout_dir=tngpath,
         distance=distance * U.Mpc,
-        rotation={"L_coords": (x_rot, y_rot)},
+        L_coords=L_coords(incl=x_rot, az_rot=y_rot),
         ra=ra,
         dec=dec,
         api_key=api_key,
     )
-
-    datacube = DataCube(
-        n_px_x=n_px,
-        n_px_y=n_px,
-        n_channels=n_channels,
-        px_size=px_size,
-        channel_width=freq_sup,
-        spectral_centre=source.vsys,
-        ra=source.ra,
-        dec=source.dec,
-    )
-    spectral_model = GaussianSpectrum(sigma="thermal")
-    sph_kernel = WendlandC2Kernel()
-    M = MartiniMod(
-        source=source,
-        datacube=datacube,
-        sph_kernel=sph_kernel,
-        spectral_model=spectral_model,
-        quiet=False,
-    )
-    M._insert_source_in_cube(
-        client,
-        update_progress,
-        terminal,
-    )
-    return M
+    return insert_source(terminal, source, n_px, n_channels, freq_sup, px_size)
 
 
 _MIN_TNG_DISTANCE_MPC = 1.0
@@ -226,8 +118,6 @@ class ExtendedSkyModel:
         ra: U.Quantity,
         dec: U.Quantity,
         api_key: str | None,
-        client: Client | None,
-        update_progress: Any | None = None,
         terminal: Any | None = None,
         rng: np.random.Generator | None = None,
     ):
@@ -252,10 +142,6 @@ class ExtendedSkyModel:
             Declination
         api_key : Optional[str]
             TNG API key
-        client : Client
-            Dask client for parallel processing
-        update_progress : Optional[Any]
-            Progress emitter callback
         terminal : Optional[Any]
             Terminal logger
         """
@@ -267,8 +153,6 @@ class ExtendedSkyModel:
         self.ra = ra
         self.dec = dec
         self.api_key = api_key
-        self.client = client if client is not None else _LocalClient()
-        self.update_progress = update_progress
         self.terminal = terminal
         self.rng = rng if rng is not None else np.random.default_rng()
 
@@ -285,8 +169,6 @@ class ExtendedSkyModel:
         if self.terminal is not None:
             self.terminal.add_log(f"Computed a distance of {computed} for redshift {redshift}")
         M = insert_tng(
-            self.client,
-            self.update_progress,
             self.terminal,
             self.datacube.n_px_x,
             self.datacube.n_channels,
@@ -302,7 +184,7 @@ class ExtendedSkyModel:
             self.api_key,
             self.datacube.px_size,
         )
-        initial_mass_ratio = M.inserted_mass / M.source.input_mass * 100
+        initial_mass_ratio = inserted_hi_mass(M) / M.source.input_mass * 100
         if self.terminal is not None:
             self.terminal.add_log(f"Mass ratio: {initial_mass_ratio}%")
         mass_ratio = initial_mass_ratio
@@ -318,8 +200,6 @@ class ExtendedSkyModel:
             if self.terminal is not None:
                 self.terminal.add_log(f"Injecting source at distance {distance}")
             M = insert_tng(
-                self.client,
-                self.update_progress,
                 self.terminal,
                 self.datacube.n_px_x,
                 self.datacube.n_channels,
@@ -335,7 +215,7 @@ class ExtendedSkyModel:
                 self.api_key,
                 self.datacube.px_size,
             )
-            mass_ratio = M.inserted_mass / M.source.input_mass * 100
+            mass_ratio = inserted_hi_mass(M) / M.source.input_mass * 100
             if self.terminal is not None:
                 self.terminal.add_log(f"Mass ratio: {mass_ratio}%")
         if self.terminal is not None:

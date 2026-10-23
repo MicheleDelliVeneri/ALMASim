@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -21,14 +21,13 @@ name = "almasim"
 version = "2.1.16"
 source = { editable = "." }
 dependencies = [
-    { name = "astromartini" },
+    { name = "astromartini", extra = ["parallel", "tngsource"] },
     { name = "astropy" },
     { name = "dask" },
     { name = "dask-jobqueue" },
     { name = "distributed" },
     { name = "ducc0" },
     { name = "h5py" },
-    { name = "hdecompose" },
     { name = "httpx" },
     { name = "imagecodecs" },
     { name = "kaggle" },
@@ -90,7 +89,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "astromartini" },
+    { name = "astromartini", extras = ["parallel", "tngsource"], specifier = ">=3,<4" },
     { name = "astropy" },
     { name = "bokeh", marker = "extra == 'dashboard'", specifier = ">=3.9.0" },
     { name = "casatasks", marker = "extra == 'casa'" },
@@ -101,7 +100,6 @@ requires-dist = [
     { name = "ducc0" },
     { name = "fastapi", marker = "extra == 'web'" },
     { name = "h5py" },
-    { name = "hdecompose" },
     { name = "httpx" },
     { name = "imagecodecs" },
     { name = "kaggle" },
@@ -234,7 +232,7 @@ wheels = [
 
 [[package]]
 name = "astromartini"
-version = "2.1.18"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astropy" },
@@ -242,9 +240,20 @@ dependencies = [
     { name = "scipy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/91/faf2b77a77e0dfd336845c5119435ba58a409b0e48bfd0e3aab336b027f5/astromartini-2.1.18.tar.gz", hash = "sha256:84a3b677fba8c91e0df4d51384a498aa322618521bd1f2792696b632b28f16c2", size = 124609, upload-time = "2026-04-23T18:32:41.588Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/13/dc473581a3cd9cfeef0708b84807bbb298da3d52fefd1b0977bc3f653cfd/astromartini-3.0.0.tar.gz", hash = "sha256:898012973a5e06c1529a1c5f19ee0a158b8e755eb46172441c53fe900419c59e", size = 133633, upload-time = "2026-07-31T17:43:13.109Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/3a/96d1864b2de8db5effab6397f33f64b3c459442ab7323f047603ffcc8735/astromartini-2.1.18-py3-none-any.whl", hash = "sha256:8ba9f5901576df0ec192a0fea82c902e4076a30627bc0ba1204d98a35d377533", size = 115071, upload-time = "2026-04-23T18:32:39.407Z" },
+    { url = "https://files.pythonhosted.org/packages/50/8c/e92d506ab10287a554f4ff627a9a242e4c2662bf876c9a80df6e665f9f65/astromartini-3.0.0-py3-none-any.whl", hash = "sha256:b4115798400819a9f25f73b50da6bb6ed304a851021c8f4eb8f6846d662f2207", size = 122775, upload-time = "2026-07-31T17:43:11.588Z" },
+]
+
+[package.optional-dependencies]
+parallel = [
+    { name = "numba" },
+]
+tngsource = [
+    { name = "h5py" },
+    { name = "hdecompose" },
+    { name = "requests" },
+    { name = "six" },
 ]
 
 [[package]]
@@ -1256,6 +1265,19 @@ wheels = [
 ]
 
 [[package]]
+name = "llvmlite"
+version = "0.50.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/c5/907cec40688a34eb489cded74d555e1ee4af8cf49d83e03dba2c2d4cfe27/llvmlite-0.50.0.tar.gz", hash = "sha256:f2a2cd6ec9ffcc1b7147dea0d7a49efebf17a2b434e0c2844fe175999d571eb4", size = 194522, upload-time = "2026-09-29T18:44:46.782Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/1f/2576416b3e9b73f77b8331b7f2e41ce5ae7bbff0489eb16d98099a71693c/llvmlite-0.50.0-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:55f50a6b7c0b8de88b05d6bc407d70a60486ce024013997dc97e202bd187c75b", size = 40534277, upload-time = "2026-09-29T18:42:56.244Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/c4/e86f30b2b09c310c02ffdd8afd00f7e127d365131d163c926c98fc3ece22/llvmlite-0.50.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:6e8df54380110ea5e9127386e739d2b0829cc6dfa4a24a9195226336c91b06d5", size = 58344485, upload-time = "2026-09-29T18:43:00.67Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/72/22b6449e15bec4cc86c62b659e6c625ab777d01e87aaec717ecef440f87a/llvmlite-0.50.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d501e5103076b9a14be885d2574dc2f6793171aa54a853d1244e011d476f1399", size = 59696588, upload-time = "2026-09-29T18:43:04.763Z" },
+    { url = "https://files.pythonhosted.org/packages/64/70/f395702c20b514363061055b5bdebe3513e544139e6d412a5c86e8ea0b30/llvmlite-0.50.0-cp312-cp312-win_amd64.whl", hash = "sha256:c20595cc3a76e3c85140fdafbf9246c732ddf8e0e646ba2f4e4881f87567300d", size = 41865553, upload-time = "2026-09-29T18:43:08.29Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/86/9cde7ac29e183e994dd2d67c998752c66ff6d714ca61837428e1896c3cc9/llvmlite-0.50.0-cp312-cp312-win_arm64.whl", hash = "sha256:4b78a8b669eda09ca1ff4c1a75003023912092974d3e771d1da0777f1b383bdf", size = 37441845, upload-time = "2026-09-29T18:43:12.054Z" },
+]
+
+[[package]]
 name = "locket"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1573,6 +1595,23 @@ wheels = [
 ]
 
 [[package]]
+name = "numba"
+version = "0.68.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "llvmlite" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/cd/e8280f9ffa30fea9fabc5341223701231fcc5d53a31f51419d42d4bec3a6/numba-0.68.0.tar.gz", hash = "sha256:8a781de54b980b98f43bff7f1093701b5f07c80d031c7cfa8a87493d8bf73f2d", size = 2855363, upload-time = "2026-09-30T15:05:44.721Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c5/cb/b6a39189f1f342baa04ad1055bb5f63ec4061ec1f80f6b34e90c68fe1e7f/numba-0.68.0-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:0fdaa2f0256862ebbcd9632ef01ba2a4b94e6d116029e5051a92340d4050a501", size = 2760509, upload-time = "2026-09-30T15:04:53.181Z" },
+    { url = "https://files.pythonhosted.org/packages/af/4d/aa2cefeef784c5695790931938944f76ee66d3c7c640f62326f64642f1c6/numba-0.68.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e3ee1f49b62efbbb804f731f2bd602bd1f8b8d3cc13009f25d69955675f82407", size = 3600404, upload-time = "2026-09-30T15:04:55.11Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/40/2211b4ff48cccfb21d4c38fb56788d7a975189883efb8d549be9d51aba7d/numba-0.68.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:51fe913a70fe9a7a0b193757ff977a9e96c82ae936ae388aec8990814fffdf9d", size = 3888027, upload-time = "2026-09-30T15:04:57.698Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/2b/1b1f8b118cec28513665d8a53ff4f037d6c05720bd9e6f32f947c93c367f/numba-0.68.0-cp312-cp312-win_amd64.whl", hash = "sha256:530961dc7e41ee358eca2b828baf7b645ce6fa466d778bb9dc73855dd103c4f7", size = 2830891, upload-time = "2026-09-30T15:04:59.747Z" },
+    { url = "https://files.pythonhosted.org/packages/97/0b/02626d27333ce1f67516a059e22d65f8f2309f227d3b828d2599183d5dc9/numba-0.68.0-cp312-cp312-win_arm64.whl", hash = "sha256:25aa7021e163701f9b3e8e77be81836a4b399500eef073d75bc906ad5eff46e9", size = 2812331, upload-time = "2026-09-30T15:05:01.802Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.5.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1673,7 +1712,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess" },
+    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
