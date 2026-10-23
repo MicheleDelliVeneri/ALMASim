@@ -220,6 +220,7 @@ def _predict(uvw, chan_freq, sky, plane_of, px, py, nthreads) -> np.ndarray:
     vis = np.zeros((len(uvw), len(chan_freq)), dtype=np.complex128)
     for k in np.unique(plane_of):
         chans = np.flatnonzero(plane_of == k)
+        chans = chans[np.argsort(chan_freq[chans])]  # ducc0 takes frequencies in ascending order
         if np.any(sky[k]):
             vis[:, chans] = predict_visibilities(uvw, chan_freq[chans], sky[k], px, py, nthreads=nthreads)
     return vis
