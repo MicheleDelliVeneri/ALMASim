@@ -67,7 +67,7 @@ def split_window(real_ms: Path, spw: int, field: str, base_ms: Path) -> None:
     )
 
 
-def measure_noise(base_ms: Path, samples: int = 40_000_000) -> dict:
+def measure_noise(base_ms: Path, samples: int = 40_000_000, exclude: np.ndarray | None = None) -> dict:
     """Per-component noise variance against WEIGHT, from channel differences.
 
     Differences three channels apart remove the sky (smooth on that scale)
@@ -78,6 +78,9 @@ def measure_noise(base_ms: Path, samples: int = 40_000_000) -> dict:
     Rows are taken evenly over the whole observation (every n-th row, up to
     about ``samples`` visibilities): one block of rows can sit at another
     elevation or weather than the rest, where WEIGHT tracks the noise less well.
+
+    ``exclude``: channels left out of the level and the correlation (the real
+    line channels: there the differences hold sky as well as noise).
     """
     table = _tables()
     with table(str(base_ms), ack=False) as t:
@@ -111,6 +114,8 @@ def measure_noise(base_ms: Path, samples: int = 40_000_000) -> dict:
     # level and its variation across the window; lags 1 and 2 the correlation.
     var1, var2, var3 = lag_var(1), lag_var(2), lag_var(3)
     usable = np.isfinite(var3) & np.isfinite(var1) & np.isfinite(var2)
+    if exclude is not None:
+        usable &= ~exclude
     scale = float(np.mean(var3[usable]))
     rho1 = float(1 - np.mean(var1[usable]) / scale)
     rho2 = float(1 - np.mean(var2[usable]) / scale)
@@ -124,6 +129,60 @@ def measure_noise(base_ms: Path, samples: int = 40_000_000) -> dict:
         "estimator": "clipped mean",
         "channel_profile": [round(float(p), 4) for p in profile],
     }
+
+
+def tsys_profile(real_ms: Path, spw: int, chan_freq: np.ndarray) -> np.ndarray:
+    """ALMA's own Tsys spectrum (SYSCAL) over the window, squared: how the noise
+    variance varies across it at fixed WEIGHT. The median over antennas and
+    times of the Tsys window on the same baseband that covers these channels,
+    the mean of its polarisations."""
+    table = _tables()
+    with table(str(real_ms / "SPECTRAL_WINDOW"), ack=False) as sw:
+        baseband = sw.getcell("BBC_NO", spw)
+        with table(str(real_ms / "SYSCAL"), ack=False) as sc:
+            ids = [int(k) for k in np.unique(sc.getcol("SPECTRAL_WINDOW_ID")) if sw.getcell("BBC_NO", int(k)) == baseband]
+            freqs = {k: np.asarray(sw.getcell("CHAN_FREQ", k)) for k in ids}
+            ids = [k for k in ids if freqs[k].min() <= chan_freq.max() and freqs[k].max() >= chan_freq.min()]
+            if not ids:
+                raise ValueError(f"no Tsys window covers spw {spw}")
+            with sc.query(f"SPECTRAL_WINDOW_ID == {ids[0]}") as sel:
+                tsys = sel.getcol("TSYS_SPECTRUM")  # (nrow, nchan, npol)
+    tsys = np.nanmedian(np.where(tsys > 0, tsys, np.nan), axis=0).mean(axis=-1)
+    # The Tsys window's own edge channels roll off (to tens of times the rest):
+    # left out, the science window's ends take the nearest kept value.
+    edge = max(2, tsys.size // 32)
+    keep = np.zeros(tsys.size, dtype=bool)
+    keep[edge:-edge] = True
+    f = freqs[ids[0]][keep]
+    order = np.argsort(f)
+    return np.interp(chan_freq, f[order], tsys[keep][order]) ** 2
+
+
+def remeasure(base_ms: Path, task_dir: Path, real_ms: Path, spw: int) -> dict:
+    """The noise outside the real line channels, its shape across the window from
+    SYSCAL (noise.tsys.json): the level, correlation and profile without the sky
+    that line channels add to the channel differences."""
+    from scipy.ndimage import binary_dilation
+
+    table = _tables()
+    with table(str(base_ms / "SPECTRAL_WINDOW"), ack=False) as sw:
+        chan_freq = np.asarray(sw.getcell("CHAN_FREQ", 0), dtype=np.float64)
+    nchan = chan_freq.size
+    lines = binary_dilation(_line_channels(task_dir, nchan), iterations=max(2, nchan // 100))
+    noise = measure_noise(base_ms, exclude=lines)
+    clean = ~lines
+    if clean.sum() < max(8, nchan // 10):
+        clean = np.ones(nchan, dtype=bool)  # a window that is line throughout: all of it
+    profile = tsys_profile(real_ms, spw, chan_freq)
+    var3 = np.asarray(noise["channel_profile"]) * noise["scale"]  # the measured level per channel
+    profile = profile / np.mean(profile[clean])
+    noise.update(
+        scale=float(np.mean(var3[clean]) / np.mean(profile[clean])),
+        channel_profile=[round(float(p), 4) for p in profile],
+        profile_source="SYSCAL Tsys^2",
+        line_channels_excluded=int(lines.sum()),
+    )
+    return noise
 
 
 def _line_channels(task_dir: Path, nchan: int) -> np.ndarray:
@@ -253,7 +312,9 @@ class Simulator:
     def __init__(self, ms: Path, task_dir: Path, model: ErrorModel, seed: int, t) -> None:
         table = _tables()
         self.model = model
-        self.noise = json.loads((ms / "noise.json").read_text())
+        # extra.noise "tsys": the level outside the line channels, the shape from SYSCAL.
+        noise_file = "noise.tsys.json" if model.extra.get("noise") == "tsys" else "noise.json"
+        self.noise = json.loads((ms / noise_file).read_text())
         self.rng = np.random.default_rng(seed)
         # The window and polarisation setup the rows use (the split MS has one data
         # description; its polarisation row need not be the first).
@@ -407,6 +468,11 @@ def main(argv: list[str] | None = None) -> None:
     split.add_argument("base_ms", type=Path)
     measure = sub.add_parser("measure")
     measure.add_argument("base_ms", type=Path)
+    re_measure = sub.add_parser("remeasure")
+    re_measure.add_argument("base_ms", type=Path)
+    re_measure.add_argument("task_dir", type=Path)
+    re_measure.add_argument("real_ms", type=Path)
+    re_measure.add_argument("spw", type=int)
     make = sub.add_parser("make")
     make.add_argument("base_ms", type=Path)
     make.add_argument("task_dir", type=Path)
@@ -425,6 +491,10 @@ def main(argv: list[str] | None = None) -> None:
         noise = measure_noise(args.base_ms)
         noise_path.write_text(json.dumps(noise, indent=1))
         print(json.dumps({k: noise[k] for k in ("scale", "rho1", "rho2", "rows_sampled", "row_step")}))
+    elif args.step == "remeasure":
+        noise = remeasure(args.base_ms, args.task_dir, args.real_ms, args.spw)
+        (args.base_ms / "noise.tsys.json").write_text(json.dumps(noise, indent=1))
+        print(json.dumps({k: noise[k] for k in ("scale", "rho1", "rho2", "line_channels_excluded")}))
     elif args.step == "base":
         if not (args.base_ms / "table.dat").exists():
             # CASA's split in a process of its own (it and python-casacore in one

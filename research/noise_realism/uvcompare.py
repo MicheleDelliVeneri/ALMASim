@@ -18,7 +18,12 @@ imaged counterpart used):
   atmospheric errors are not;
 - where the source is bright (|M| > 5 sigma): the scatter of the amplitude
   ratio and of the phase of V / M, by baseline length (decorrelation and
-  phase errors).
+  phase errors);
+- the variance of the channel-averaged residual (what a continuum image
+  averages: noise or sky correlated over many channels raises it, beyond the
+  neighbour correlation the simulation shares);
+- the spread of the variance per (antenna, scan) beyond its sampling noise:
+  antennas noisier, scan by scan, than their WEIGHT says.
 """
 
 from __future__ import annotations
@@ -64,6 +69,12 @@ class Stats:
         # Sums of WEIGHT z^2 and WEIGHT: the variance an image sees.
         self.wz2 = 0.0
         self.w = 0.0
+        # Channel-averaged residual: sums of |zbar|^2 / 2 and their count.
+        self.bb_z2 = 0.0
+        self.bb_n = 0
+        # Per (antenna, scan): sums of z^2 and their count.
+        self.as_z2: dict[int, float] = {}
+        self.as_n: dict[int, float] = {}
 
     def add(self, z, good, uvbin, a1, a2, cols, data, clean, sigma, norm2) -> None:
         """z, good: (nrow, nchan, npol); uvbin (nrow,); sigma, norm2 (nrow, npol).
@@ -96,6 +107,17 @@ class Stats:
         # Consecutive integrations of one baseline: the channel-averaged residual.
         nch = np.maximum(cnt.sum(axis=1), 1)  # (nrow, npol)
         zbar = np.where(good, z, 0).sum(axis=1) / np.sqrt(nch)
+        full = cnt.sum(axis=1) > 0.5 * z.shape[1]
+        self.bb_z2 += float((np.abs(zbar[full]) ** 2).sum() / 2)
+        self.bb_n += int(full.sum())
+        for a in (a1, a2):
+            akey = a.astype(np.int64) * 100_000 + cols["scan"].astype(np.int64)
+            keys, inverse = np.unique(akey, return_inverse=True)
+            z2k = np.bincount(inverse, per_row_z2, len(keys))
+            nk = np.bincount(inverse, per_row_n, len(keys))
+            for k, zz, nn in zip(keys.tolist(), z2k, nk, strict=True):
+                self.as_z2[k] = self.as_z2.get(k, 0.0) + zz
+                self.as_n[k] = self.as_n.get(k, 0.0) + nn
         key = a1.astype(np.int64) * 10_000 + a2
         order = np.lexsort((cols["time"], key))
         k, tm, sc, zb = key[order], cols["time"][order], cols["scan"][order], zbar[order]
@@ -179,6 +201,22 @@ class Stats:
             "nonclosing_phase_rms_deg": float(np.degrees(np.std(res_p))),
         }
 
+    def antenna_scan_spread(self) -> dict:
+        """The rms of each (antenna, scan)'s variance over the mean, less what its
+        number of samples alone gives (per component z^2 has variance 2)."""
+        n = np.array(list(self.as_n.values()))
+        v = np.array([self.as_z2[k] for k in self.as_n]) / np.maximum(n, 1)
+        keep = n > 100
+        if keep.sum() < 10:
+            return {}
+        ratio = v[keep] / np.average(v[keep], weights=n[keep])
+        observed = float(np.average((ratio - 1) ** 2, weights=n[keep]))
+        sampling = float(np.average(2.0 / n[keep], weights=n[keep]))
+        return {
+            "antenna_scan_spread": float(np.sqrt(max(observed - sampling, 0.0))),
+            "antenna_scan_spread_raw": float(np.sqrt(observed)),
+        }
+
     def result(self) -> dict:
         n = np.maximum(self.bin_n, 1)
         var = self.bin_z2 / n
@@ -204,6 +242,8 @@ class Stats:
             "bright_amp_mean": (self.ratio["la"] / rn).round(4).tolist(),
             "bright_phase_rms_deg": np.degrees(np.sqrt(self.ratio["ph2"] / rn)).round(3).tolist(),
             "variance_weighted": float(self.wz2 / self.w) if self.w else None,
+            "broadband_variance": float(self.bb_z2 / self.bb_n) if self.bb_n else None,
+            **self.antenna_scan_spread(),
             **self.group_result(),
             **self.group_result(min_den=25.0, groups=self.groups30, prefix="group30"),
             **self.antenna_solve(),

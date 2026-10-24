@@ -87,8 +87,20 @@ def spectral_kernel(rho1: float, rho2: float) -> np.ndarray:
 
     start = _HANNING if rho2 > 0.05 else np.array([0.0, 0.85, 0.5])
     h = fsolve(equations, start)
-    solved = np.max(np.abs(equations(h))) < 1e-4  # fsolve flags a start on the root as "no progress"
-    return h if solved else np.array([0.0, 1.0, 0.0])
+    if np.max(np.abs(equations(h))) < 1e-4:  # fsolve flags a start on the root as "no progress"
+        return h
+    # No 3-tap filter has these exactly: Hanning (2/3, 1/6) is on the edge of
+    # what one can give, and measured values scatter past it. The nearest one,
+    # unit norm. (Falling back to white noise here made a third of the windows
+    # white: their continuum 15% quieter, adjacent channels uncorrelated.)
+    from scipy.optimize import least_squares
+
+    def correlations(h):
+        g = h / np.linalg.norm(h)
+        return [g[0] * g[1] + g[1] * g[2] - rho1, g[0] * g[2] - rho2]
+
+    h = least_squares(correlations, _HANNING if rho2 > 0.05 else start).x
+    return h / np.linalg.norm(h)
 
 
 def thermal_noise(
