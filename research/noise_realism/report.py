@@ -7,7 +7,9 @@ Writes OUT_DIR/report.json (the rows the charts draw) and OUT_DIR/pairs/*.png.
 Only the latest model: iter-f2-sim for the faint windows (noise measured across
 the whole track, the channel kernel and profile, line and continuum models masked
 to the real emission) and iter-f2-bright for the bright ones (the same, plus each
-window's fitted atmosphere and antenna amplitudes); uvfinal/ for the visibilities.
+window's fitted atmosphere and antenna amplitudes), with iter-f3-sim and
+iter-f3-bright in their place for the 19 windows whose channel filter used to fall
+back to white noise; uvfinal/ (uvfinal3/ for those 19) for the visibilities.
 """
 
 from __future__ import annotations
@@ -53,15 +55,17 @@ def faint_windows() -> set[str]:
     return {line.split()[2] for line in lists if line.startswith("row ") and line.split()[1] in faint}
 
 
-LATEST = {"faint": "iter-f2-sim", "bright": "iter-f2-bright"}
+# Per class, the iterations of the latest model; a later one replaces an earlier
+# one's windows (iter-f3 reran the windows whose channel filter fell back to white).
+LATEST = {"faint": ("iter-f2-sim", "iter-f3-sim"), "bright": ("iter-f2-bright", "iter-f3-bright")}
 
 
 def latest_metrics() -> dict[str, dict[str, dict]]:
     """Per class (faint, bright), the latest counterparts' metrics by window."""
     faint = faint_windows()
     out = {}
-    for label, it in LATEST.items():
-        m = load(NOISE / it)
+    for label, its in LATEST.items():
+        m = {w: v for it in its for w, v in load(NOISE / it).items()}
         out[label] = {w: v for w, v in m.items() if w not in DIVERGED and (w in faint) == (label == "faint")}
     return out
 
@@ -116,9 +120,11 @@ UV_STATS = (
 
 
 def _uv_results() -> list[dict]:
-    """uvfinal/*.json: each window's real visibilities against its latest counterpart."""
+    """uvfinal/*.json: each window's real visibilities against its latest counterpart
+    (uvfinal3/ in place of uvfinal/ for the windows iter-f3 reran)."""
+    files = {f.stem: f for d in ("uvfinal", "uvfinal3") for f in (NOISE / d).glob("*.json")}
     out = []
-    for f in sorted((NOISE / "uvfinal").glob("*.json"), key=lambda p: int(p.stem)):
+    for f in sorted(files.values(), key=lambda p: int(p.stem)):
         r = json.loads(f.read_text())
         label = next((k for k in r if isinstance(r[k], dict) and "variance" in r[k] and k != "real"), None)
         if label:
@@ -208,7 +214,7 @@ def pairs(out: Path, control: dict, windows_csv: Path, count: int = 10) -> list[
 
     # Every window with a simulated cube, the latest model's where there are several.
     sim_dirs = {}
-    for it in LATEST.values():
+    for it in (it for its in LATEST.values() for it in its):
         for f in (NOISE / it / "cubes").glob("*/SPW-0_FIELD-0/wsclean-cube-image.fits"):
             if f.parent.parent.name not in DIVERGED:
                 sim_dirs[f.parent.parent.name] = it
@@ -246,7 +252,7 @@ def pairs(out: Path, control: dict, windows_csv: Path, count: int = 10) -> list[
     meta = []
     for snr, name, hz, m_real, nsel in scored[:count]:
         sim_iter = sim_dirs[name]
-        model = "bright" if sim_iter == "iter-f2-bright" else "faint"
+        model = "bright" if sim_iter in LATEST["bright"] else "faint"
         m_sim, _, h = moment0(NOISE / sim_iter / "cubes" / name / "SPW-0_FIELD-0", hz)
         # Noise of each moment map away from the line: outside the real line mask,
         # widened by 10 pixels (extended emission would otherwise raise it).
